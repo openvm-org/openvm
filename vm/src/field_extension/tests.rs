@@ -12,7 +12,7 @@ use rand::{seq::SliceRandom, Rng};
 use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
     arch::{
-        instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
+        instructions::FIELD_EXTENSION_INSTRUCTIONS,
         testing::{
             memory::{gen_address_space, gen_pointer},
             MachineChipTestBuilder,
@@ -47,9 +47,7 @@ fn field_extension_air_test() {
         assert!(address1.abs_diff(address2) >= 4);
 
         tester.write(as_d, address1, operand1);
-        if opcode != Opcode::BBE4INV {
-            tester.write(as_e, address2, operand2);
-        }
+        tester.write(as_e, address2, operand2);
 
         let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
 
@@ -113,16 +111,14 @@ fn field_extension_consistency_test() {
         let plonky_mul = a_ext.mul(b_ext);
         let plonky_div = a_ext.div(b_ext);
 
-        let my_add = FieldExtensionArithmetic::solve(Opcode::FE4ADD, a, b);
-        let my_sub = FieldExtensionArithmetic::solve(Opcode::FE4SUB, a, b);
-        let my_mul = FieldExtensionArithmetic::solve(Opcode::BBE4MUL, a, b);
+        let my_add = FieldExtensionArithmetic::add(a, b);
+        let my_sub = FieldExtensionArithmetic::subtract(a, b);
+        let my_mul = FieldExtensionArithmetic::multiply(a, b);
+        let my_div = FieldExtensionArithmetic::divide(a, b);
 
-        let b_inv = FieldExtensionArithmetic::solve(Opcode::BBE4INV, b, [F::zero(); 4]).unwrap();
-        let my_div = FieldExtensionArithmetic::solve(Opcode::BBE4MUL, a, b_inv);
-
-        assert_eq!(my_add.unwrap(), plonky_add.as_base_slice());
-        assert_eq!(my_sub.unwrap(), plonky_sub.as_base_slice());
-        assert_eq!(my_mul.unwrap(), plonky_mul.as_base_slice());
-        assert_eq!(my_div.unwrap(), plonky_div.as_base_slice());
+        assert_eq!(my_add, plonky_add.as_base_slice());
+        assert_eq!(my_sub, plonky_sub.as_base_slice());
+        assert_eq!(my_mul, plonky_mul.as_base_slice());
+        assert_eq!(my_div, plonky_div.as_base_slice());
     }
 }

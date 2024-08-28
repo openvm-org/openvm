@@ -325,11 +325,11 @@ pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::InvE(dst, src) => vec![inst(
-            BBE4INV,
+        AsmInstruction::DivE(dst, lhs, rhs) => vec![inst(
+            BBE4DIV,
             i32_f(dst),
-            i32_f(src),
-            i32_f(src),
+            i32_f(lhs),
+            i32_f(rhs),
             AS::Memory,
             AS::Memory,
         )],
@@ -676,7 +676,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::AddE(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::MulE(..)
-        | AsmInstruction::InvE(..) => {
+        | AsmInstruction::DivE(..) => {
             if options.field_extension_enabled {
                 convert_field_extension(instruction)
             } else {

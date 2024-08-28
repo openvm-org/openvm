@@ -25,28 +25,21 @@ pub const EXTENSION_DEGREE: usize = 4;
 
 /// Records an arithmetic operation that happened at run-time.
 #[derive(Clone, Debug)]
-pub struct FieldExtensionArithmeticRecord<F> {
+pub(crate) struct FieldExtensionArithmeticRecord<F> {
     /// Program counter
-    pub pc: usize,
+    pub(crate) pc: usize,
     /// Timestamp at start of instruction
-    pub timestamp: usize,
-    pub opcode: Opcode,
-    pub is_valid: bool,
-    // TODO[zach]: these entries are redundant with the memory accesses below.
-    pub op_a: F,
-    pub op_b: F,
-    pub op_c: F,
-    pub d: F,
-    pub e: F,
-    pub x: [F; EXTENSION_DEGREE],
-    pub y: [F; EXTENSION_DEGREE],
-    pub z: [F; EXTENSION_DEGREE],
+    pub(crate) timestamp: usize,
+    pub(crate) instruction: Instruction<F>,
+    pub(crate) x: [F; EXTENSION_DEGREE],
+    pub(crate) y: [F; EXTENSION_DEGREE],
+    pub(crate) z: [F; EXTENSION_DEGREE],
     /// Memory accesses for reading `x`.
-    pub x_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
+    pub(crate) x_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
     /// Memory accesses for reading `y`.
-    pub y_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
+    pub(crate) y_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
     /// Memory accesses for writing `z`.
-    pub z_writes: [MemoryAccess<1, F>; EXTENSION_DEGREE],
+    pub(crate) z_writes: [MemoryAccess<1, F>; EXTENSION_DEGREE],
 }
 
 /// A chip for performing arithmetic operations over the field extension
@@ -66,15 +59,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
     ) -> ExecutionState<usize> {
         self.process(instruction.clone(), from_state);
 
-        let timestamp_delta = if instruction.opcode == Opcode::BBE4INV {
-            2 * EXTENSION_DEGREE
-        } else {
-            3 * EXTENSION_DEGREE
-        };
-
         ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: from_state.timestamp + timestamp_delta,
+            timestamp: from_state.timestamp + Self::accesses_per_instruction(instruction.opcode),
         }
     }
 }
@@ -92,10 +79,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
 
     pub fn accesses_per_instruction(opcode: Opcode) -> usize {
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
-        match opcode {
-            Opcode::BBE4INV => 8,
-            _ => 12,
-        }
+        3 * EXTENSION_DEGREE
     }
 
     pub fn process(
@@ -118,11 +102,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         let x_reads = self.read_extension_element(d, op_b);
         let x: [F; EXTENSION_DEGREE] = array::from_fn(|i| proj(x_reads[i].op.cell.data));
 
-        let y_reads = if opcode == Opcode::BBE4INV {
-            array::from_fn(|_| MemoryAccess::disabled_read(self.memory.borrow().timestamp(), e))
-        } else {
-            self.read_extension_element(e, op_c)
-        };
+        let y_reads = self.read_extension_element(e, op_c);
         let y: [F; EXTENSION_DEGREE] = array::from_fn(|i| proj(y_reads[i].op.cell.data));
 
         let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
@@ -132,13 +112,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         self.records.push(FieldExtensionArithmeticRecord {
             timestamp: from_state.timestamp,
             pc: from_state.pc,
-            opcode,
-            is_valid: true,
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
+            instruction,
             x,
             y,
             z,
@@ -201,7 +175,7 @@ impl FieldExtensionArithmetic {
             Opcode::FE4ADD => Some(Self::add(x, y)),
             Opcode::FE4SUB => Some(Self::subtract(x, y)),
             Opcode::BBE4MUL => Some(Self::multiply(x, y)),
-            Opcode::BBE4INV => Some(Self::invert(x)),
+            Opcode::BBE4DIV => Some(Self::divide(x, y)),
             _ => None,
         }
     }
@@ -250,7 +224,14 @@ impl FieldExtensionArithmetic {
         ]
     }
 
-    fn invert<T: Field>(a: [T; EXTENSION_DEGREE]) -> [T; EXTENSION_DEGREE] {
+    pub(crate) fn divide<F: Field>(
+        x: [F; EXTENSION_DEGREE],
+        y: [F; EXTENSION_DEGREE],
+    ) -> [F; EXTENSION_DEGREE] {
+        Self::multiply(x, Self::invert(y))
+    }
+
+    pub(crate) fn invert<T: Field>(a: [T; EXTENSION_DEGREE]) -> [T; EXTENSION_DEGREE] {
         // Let a = (a0, a1, a2, a3) represent the element we want to invert.
         // Define a' = (a0, -a1, a2, -a3).  By construction, the product b = a * a' will have zero
         // degree-1 and degree-3 coefficients.

@@ -18,7 +18,6 @@ pub const MEMORY_TOP: i32 = (1 << 29) - 4;
 pub(crate) const HEAP_PTR: i32 = MEMORY_TOP - 4;
 /// Utility register.
 pub(crate) const A0: i32 = MEMORY_TOP - 8;
-pub(crate) const A4: i32 = MEMORY_TOP - 24;
 
 /// The memory location for the top of the stack.
 pub(crate) const STACK_TOP: i32 = MEMORY_TOP - 100;
@@ -209,26 +208,24 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::DivFIN(dst.fp(), lhs, rhs.fp()), debug_info);
                 }
                 DslIr::DivEIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::InvE(A0, rhs.fp()), debug_info.clone());
-                    self.assign_exti(A4, lhs, debug_info.clone());
-                    self.push(AsmInstruction::MulE(dst.fp(), A0, A4), debug_info);
+                    self.assign_exti(A0, lhs, debug_info.clone());
+                    self.push(AsmInstruction::DivE(dst.fp(), A0, rhs.fp()), debug_info);
                 }
                 DslIr::DivE(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::InvE(A0, rhs.fp()), debug_info.clone());
-                    self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), A0), debug_info);
+                    self.push(
+                        AsmInstruction::DivE(dst.fp(), lhs.fp(), rhs.fp()),
+                        debug_info,
+                    );
                 }
                 DslIr::DivEI(dst, lhs, rhs) => {
-                    self.assign_exti(A0, rhs.inverse(), debug_info.clone());
-                    self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), A0), debug_info);
+                    self.assign_exti(A0, rhs, debug_info.clone());
+                    self.push(AsmInstruction::DivE(dst.fp(), lhs.fp(), A0), debug_info);
                 }
                 DslIr::DivEF(dst, lhs, rhs) => {
                     self.div_ext_felt(dst, lhs, rhs, debug_info);
                 }
                 DslIr::DivEFI(dst, lhs, rhs) => {
                     self.mul_ext_felti(dst, lhs, rhs.inverse(), debug_info);
-                }
-                DslIr::InvE(dst, src) => {
-                    self.push(AsmInstruction::InvE(dst.fp(), src.fp()), debug_info);
                 }
                 DslIr::SubEF(dst, lhs, rhs) => {
                     self.sub_ext_felt(dst, lhs, rhs, debug_info);

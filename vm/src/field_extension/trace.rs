@@ -1,7 +1,7 @@
 use std::array;
 
 use afs_stark_backend::rap::AnyRap;
-use itertools::{all, Itertools};
+use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -17,10 +17,7 @@ use crate::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
         EXTENSION_DEGREE,
     },
-    memory::{
-        manager::{trace_builder::MemoryTraceBuilder, MemoryAccess},
-        OpType,
-    },
+    memory::{manager::MemoryAccess, OpType},
 };
 
 impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
@@ -70,55 +67,42 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         &self,
         record: FieldExtensionArithmeticRecord<F>,
     ) -> FieldExtensionArithmeticCols<F> {
-        let is_add = F::from_bool(record.opcode == Opcode::FE4ADD);
-        let is_sub = F::from_bool(record.opcode == Opcode::FE4SUB);
-        let is_mul = F::from_bool(record.opcode == Opcode::BBE4MUL);
-        let is_inv = F::from_bool(record.opcode == Opcode::BBE4INV);
+        let is_add = F::from_bool(record.instruction.opcode == Opcode::FE4ADD);
+        let is_sub = F::from_bool(record.instruction.opcode == Opcode::FE4SUB);
+        let is_mul = F::from_bool(record.instruction.opcode == Opcode::BBE4MUL);
+        let is_div = F::from_bool(record.instruction.opcode == Opcode::BBE4DIV);
 
         let FieldExtensionArithmeticRecord { x, y, z, .. } = record;
 
-        let inv = if all(x, |xi| xi == F::zero()) {
-            x
+        let divisor_inv = if record.instruction.opcode == Opcode::BBE4DIV {
+            FieldExtensionArithmetic::invert(record.y)
         } else {
-            FieldExtensionArithmetic::solve(Opcode::BBE4INV, x, y).unwrap()
+            [F::zero(); EXTENSION_DEGREE]
         };
 
-        let range_checker = self.memory.borrow().range_checker.clone();
-
-        let access_to_aux = |access| {
-            MemoryTraceBuilder::<F>::memory_access_to_checker_aux_cols(
-                &self.air.mem_oc,
-                range_checker.clone(),
-                &access,
-            )
-        };
+        let access_to_aux = |access| self.memory.borrow().make_access_cols(access);
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
-                opcode: F::from_canonical_usize(record.opcode as usize),
+                opcode: F::from_canonical_usize(record.instruction.opcode as usize),
                 pc: F::from_canonical_usize(record.pc),
                 timestamp: F::from_canonical_usize(record.timestamp),
-                op_a: record.op_a,
-                op_b: record.op_b,
-                op_c: record.op_c,
-                d: record.d,
-                e: record.e,
+                op_a: record.instruction.op_a,
+                op_b: record.instruction.op_b,
+                op_c: record.instruction.op_c,
+                d: record.instruction.d,
+                e: record.instruction.e,
                 x,
                 y,
                 z,
             },
             aux: FieldExtensionArithmeticAuxCols {
-                is_valid: F::from_bool(record.is_valid),
-                valid_y_read: if record.is_valid {
-                    F::one() - is_inv
-                } else {
-                    F::zero()
-                },
+                is_valid: F::one(),
                 is_add,
                 is_sub,
                 is_mul,
-                is_inv,
-                inv,
+                is_div,
+                divisor_inv,
                 read_x_aux_cols: record.x_reads.map(access_to_aux),
                 read_y_aux_cols: record.y_reads.map(access_to_aux),
                 write_aux_cols: record.z_writes.map(access_to_aux),
@@ -128,18 +112,13 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
 
     fn make_blank_row(&self) -> FieldExtensionArithmeticCols<F> {
         let timestamp = self.memory.borrow().timestamp();
-        let range_checker = self.memory.borrow().range_checker.clone();
 
         let make_aux_col = |op_type| {
             let access = match op_type {
                 OpType::Read => MemoryAccess::disabled_read(timestamp, F::one()),
                 OpType::Write => MemoryAccess::disabled_write(timestamp, F::one()),
             };
-            MemoryTraceBuilder::<F>::memory_access_to_checker_aux_cols(
-                &self.air.mem_oc,
-                range_checker.clone(),
-                &access,
-            )
+            self.memory.borrow().make_access_cols(access)
         };
 
         FieldExtensionArithmeticCols {
@@ -158,12 +137,11 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             },
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: F::zero(),
-                valid_y_read: F::zero(),
                 is_add: F::one(),
                 is_sub: F::zero(),
                 is_mul: F::zero(),
-                is_inv: F::zero(),
-                inv: [F::zero(); EXTENSION_DEGREE],
+                is_div: F::zero(),
+                divisor_inv: [F::zero(); EXTENSION_DEGREE],
                 read_x_aux_cols: array::from_fn(|_| make_aux_col(OpType::Read)),
                 read_y_aux_cols: array::from_fn(|_| make_aux_col(OpType::Read)),
                 write_aux_cols: array::from_fn(|_| make_aux_col(OpType::Write)),

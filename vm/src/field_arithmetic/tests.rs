@@ -130,7 +130,7 @@ fn field_arithmetic_air_zero_div_zero() {
     let trace = field_arithmetic_chip.generate_trace();
     let row = trace.row_slice(0).to_vec();
     let mut cols = FieldArithmeticCols::from_iter(&mut row.into_iter(), &field_arithmetic_chip.air);
-    cols.io.operand2.value = BabyBear::zero();
+    cols.io.y.value = BabyBear::zero();
     let trace = RowMajorMatrix::new(
         cols.flatten(),
         FieldArithmeticCols::<BabyBear>::get_width(&field_arithmetic_chip.air),
