@@ -67,6 +67,7 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
 
 pub struct TestCarryAir<const N: usize> {
     pub test_carry_sub_air: CheckCarryModToZeroSubAir,
+    pub modulus: BigUint,
     pub max_overflow_bits: usize,
     pub decomp: usize,
     pub num_limbs: usize,
@@ -113,12 +114,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let quotient =
-            (x.clone() * x.clone() + y.clone()) / self.test_carry_sub_air.modulus.clone();
-        let quotient_f: Vec<F> = big_uint_to_limbs(quotient.clone(), self.limb_bits)
-            .iter()
-            .map(|&x| F::from_canonical_usize(x))
-            .collect();
         let range_check = |bits: usize, value: usize| {
             let value = value as u32;
             if bits == self.decomp {
@@ -128,15 +123,19 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
             }
         };
+
+        let quotient = (x.clone() * x.clone() + y.clone()) / self.modulus.clone();
+        let q_limb = big_uint_to_limbs(quotient.clone(), self.limb_bits);
+        for &q in q_limb.iter() {
+            range_check(self.limb_bits, q);
+        }
+        let quotient_f: Vec<F> = q_limb.iter().map(|&x| F::from_canonical_usize(x)).collect();
         let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
         let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits, Some(2 * N));
         let q_overflow = OverflowInt::<isize>::from_big_uint(quotient, self.limb_bits, None);
         assert_eq!(q_overflow.limbs.len(), 1);
-        let p_overflow = OverflowInt::<isize>::from_big_uint(
-            self.test_carry_sub_air.modulus.clone(),
-            self.limb_bits,
-            Some(N * 2),
-        );
+        let p_overflow =
+            OverflowInt::<isize>::from_big_uint(self.modulus.clone(), self.limb_bits, Some(N * 2));
         let expr =
             x_overflow.clone() * x_overflow.clone() + y_overflow.clone() - p_overflow * q_overflow;
         let carries = expr.calculate_carries(self.limb_bits);
@@ -186,7 +185,7 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     let range_decomp = 16;
     let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
     let check_carry_sub_air = CheckCarryModToZeroSubAir::new(
-        prime,
+        prime.clone(),
         limb_bits,
         range_bus,
         range_decomp,
@@ -194,6 +193,7 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     );
     let test_air = TestCarryAir::<N> {
         test_carry_sub_air: check_carry_sub_air,
+        modulus: prime,
         max_overflow_bits,
         decomp: range_decomp,
         num_limbs,

@@ -5,7 +5,7 @@ use p3_field::AbstractField;
 
 use super::{
     check_carry_to_zero::{CheckCarryToZeroCols, CheckCarryToZeroSubAir},
-    utils::big_uint_to_limbs,
+    utils::{big_uint_to_limbs, range_check},
     OverflowInt,
 };
 
@@ -17,7 +17,6 @@ pub struct CheckCarryModToZeroCols<T> {
 }
 
 pub struct CheckCarryModToZeroSubAir {
-    pub modulus: BigUint,
     pub modulus_limbs: Vec<usize>,
 
     pub check_carry_to_zero: CheckCarryToZeroSubAir,
@@ -33,9 +32,8 @@ impl CheckCarryModToZeroSubAir {
     ) -> Self {
         let check_carry_to_zero =
             CheckCarryToZeroSubAir::new(limb_bits, range_checker_bus, decomp, max_overflow_bits);
-        let modulus_limbs = big_uint_to_limbs(modulus.clone(), limb_bits);
+        let modulus_limbs = big_uint_to_limbs(modulus, limb_bits);
         Self {
-            modulus,
             modulus_limbs,
             check_carry_to_zero,
         }
@@ -48,7 +46,15 @@ impl CheckCarryModToZeroSubAir {
         cols: CheckCarryModToZeroCols<AB::Var>,
     ) {
         let CheckCarryModToZeroCols { quotient, carries } = cols;
-        // todo: need to range check quotient?
+        for &q in quotient.iter() {
+            range_check(
+                builder,
+                self.check_carry_to_zero.range_checker_bus,
+                self.check_carry_to_zero.decomp,
+                self.check_carry_to_zero.limb_bits,
+                q,
+            );
+        }
         let overflow_q = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
             quotient,
             self.check_carry_to_zero.limb_bits,
@@ -63,10 +69,10 @@ impl CheckCarryModToZeroSubAir {
             self.check_carry_to_zero.limb_bits,
         );
 
-        let expr2 = expr - overflow_q * overflow_p;
+        let expr = expr - overflow_q * overflow_p;
         self.check_carry_to_zero.constrain_carry_to_zero(
             builder,
-            expr2,
+            expr,
             CheckCarryToZeroCols { carries },
         );
     }

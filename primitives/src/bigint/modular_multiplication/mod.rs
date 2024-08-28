@@ -154,7 +154,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
         //  todo: verify this is integer division
         let quotient = (x.clone() * y.clone()) / self.modulus.clone();
         let r = x.clone() * y.clone() - self.modulus.clone() * quotient.clone();
-        // Quotient is likely smaller, but padding it to the same size.
+        // Quotient and result can be smaller, but padding it to the same size.
         let quotient_f: Vec<F> = big_uint_to_limbs(quotient.clone(), self.limb_bits)
             .iter()
             .chain(repeat(&0))
@@ -163,6 +163,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
             .collect();
         let r_f: Vec<F> = big_uint_to_limbs(r.clone(), self.limb_bits)
             .iter()
+            .chain(repeat(&0))
+            .take(self.num_limbs)
             .map(|&x| F::from_canonical_usize(x))
             .collect();
         let range_check = |bits: usize, value: usize| {
@@ -187,6 +189,9 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
         );
         let q_overflow =
             OverflowInt::<isize>::from_big_uint(quotient, self.limb_bits, Some(self.num_limbs));
+        for &q in q_overflow.limbs.iter() {
+            range_check(self.limb_bits, q as usize);
+        }
         let expr = x_overflow.clone() * y_overflow.clone() - r_overflow - p_overflow * q_overflow;
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
@@ -220,13 +225,17 @@ mod test {
     use afs_test_utils::{
         config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng,
     };
-    use num_traits::{FromPrimitive, Zero};
+    use num_traits::{FromPrimitive, One, Zero};
     use p3_baby_bear::BabyBear;
+    use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_util::log2_ceil_usize;
     use rand::RngCore;
 
     use super::{super::utils::secp256k1_prime, *};
+    // 256 bit prime, 10 limb bits -> 26 limbs.
+    const LIMB_BITS: usize = 10;
+    const NUM_LIMB: usize = 26;
 
     fn evaluate_bigint(limbs: &[BabyBear], limb_bits: usize) -> BigUint {
         let mut res = BigUint::zero();
@@ -237,29 +246,49 @@ mod test {
         res
     }
 
-    // 256 bit prime, 10 limb bits -> 26 limbs.
-    fn test_x_mul_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
-        let limb_bits = 10;
-        let num_limbs = 26;
+    fn get_air_and_range_checker(
+        prime: BigUint,
+        limb_bits: usize,
+        num_limbs: usize,
+    ) -> (ModularMultiplicationAir, Arc<RangeCheckerGateChip>) {
         // The equation: x*y - p*q - r, with num_limbs N = 26
         // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N * 2 + 2^10
-        // overflow bits: limb_bits * 2 + log2(2N) => 26
-        let max_overflow_bits = limb_bits * 2 + log2_ceil_usize(2 * num_limbs);
+        let limb_max_abs = (1 << (2 * limb_bits)) * num_limbs * 2 + (1 << limb_bits);
+        // overflow bits: log(max_abs) => 26
+        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
 
         let range_bus = 1;
         let range_decomp = 17;
         let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
         let air = ModularMultiplicationAir::new(
-            prime.clone(),
+            prime,
             limb_bits,
             max_overflow_bits,
             num_limbs,
             range_bus,
             range_decomp,
         );
+        (air, range_checker)
+    }
+
+    fn generate_xy() -> (BigUint, BigUint) {
+        let mut rng = create_seeded_rng();
+        let len = 8; // in bytes -> 256 bits.
+        let x = (0..len).map(|_| rng.next_u32()).collect();
+        let x = BigUint::new(x);
+        let y = (0..len).map(|_| rng.next_u32()).collect();
+        let y = BigUint::new(y);
+        (x, y)
+    }
+
+    #[test]
+    fn test_x_mul_y() {
+        let prime = secp256k1_prime();
+        let (x, y) = generate_xy();
+
+        let (air, range_checker) = get_air_and_range_checker(prime.clone(), LIMB_BITS, NUM_LIMB);
         let expected_r = x.clone() * y.clone() % prime.clone();
         let expected_q = x.clone() * y.clone() / prime;
-
         let cols = air.generate_trace_row((x, y, range_checker.clone()));
         let ModularMultiplicationCols {
             x: _x,
@@ -268,8 +297,8 @@ mod test {
             r,
             carries: _carries,
         } = cols.clone();
-        let generated_r = evaluate_bigint(&r, limb_bits);
-        let generated_q = evaluate_bigint(&q, limb_bits);
+        let generated_r = evaluate_bigint(&r, LIMB_BITS);
+        let generated_q = evaluate_bigint(&q, LIMB_BITS);
         assert_eq!(generated_r, expected_r);
         assert_eq!(generated_q, expected_q);
 
@@ -282,15 +311,54 @@ mod test {
     }
 
     #[test]
-    fn test_mul_mod() {
+    fn test_x_mul_zero() {
         let prime = secp256k1_prime();
-        let mut rng = create_seeded_rng();
-        let len = 8; // in bytes -> 256 bits.
-        let x_bytes = (0..len).map(|_| rng.next_u32()).collect();
-        // do we need to make sure x y < prime?
-        let x = BigUint::new(x_bytes);
-        let y_bytes = (0..len).map(|_| rng.next_u32()).collect();
-        let y = BigUint::new(y_bytes);
-        test_x_mul_y_mod(x, y, prime);
+        let (x, _) = generate_xy();
+        let y = BigUint::zero();
+
+        let (air, range_checker) = get_air_and_range_checker(prime.clone(), LIMB_BITS, NUM_LIMB);
+        let cols = air.generate_trace_row((x, y, range_checker.clone()));
+
+        let row = cols.flatten();
+        let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
+        let range_trace = range_checker.generate_trace();
+
+        run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
+            .expect("Verification failed");
+    }
+
+    #[test]
+    fn test_x_mul_one() {
+        let prime = secp256k1_prime();
+        let (x, _) = generate_xy();
+        let y = BigUint::one();
+
+        let (air, range_checker) = get_air_and_range_checker(prime.clone(), LIMB_BITS, NUM_LIMB);
+        let cols = air.generate_trace_row((x, y, range_checker.clone()));
+
+        let row = cols.flatten();
+        let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
+        let range_trace = range_checker.generate_trace();
+
+        run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
+            .expect("Verification failed");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_x_mul_y_wrong_trace() {
+        let prime = secp256k1_prime();
+        let (x, y) = generate_xy();
+
+        let (air, range_checker) = get_air_and_range_checker(prime.clone(), LIMB_BITS, NUM_LIMB);
+        let cols = air.generate_trace_row((x, y, range_checker.clone()));
+
+        let row = cols.flatten();
+        let mut trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
+        trace.row_mut(0)[0] += BabyBear::one();
+        let range_trace = range_checker.generate_trace();
+
+        run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
+            .expect("Verification failed");
     }
 }
