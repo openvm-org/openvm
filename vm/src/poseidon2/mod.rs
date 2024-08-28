@@ -162,7 +162,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         let rhs = if opcode == COMP_POS2 {
             mem_trace_builder.read_elem(d, op_c)
         } else {
-            mem_trace_builder.disabled_read(d);
+            mem_trace_builder.disabled_op(d);
             mem_trace_builder.increment_clk();
             lhs + F::from_canonical_usize(CHUNK)
         };
@@ -185,7 +185,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
 
         // Generate disabled MemoryOfflineCheckerAuxCols in case len != WIDTH
         for _ in len..WIDTH {
-            mem_trace_builder.disabled_write(e);
+            mem_trace_builder.disabled_op(e);
             mem_trace_builder.increment_clk();
         }
 

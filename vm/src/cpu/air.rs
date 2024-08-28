@@ -11,8 +11,7 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    timestamp_delta, CpuOptions, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, INST_WIDTH,
-    WORD_SIZE,
+    timestamp_delta, CpuOptions, INST_WIDTH, WORD_SIZE,
 };
 use crate::{
     arch::{bus::ExecutionBus, instructions::Opcode::*},
@@ -95,16 +94,15 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         let CpuAuxCols {
             operation_flags,
             public_value_flags,
-            mem_ops,
+            reads,
+            writes,
             read0_equals_read1,
             is_equal_vec_aux,
             mem_oc_aux_cols,
         } = aux;
 
-        let read1 = &mem_ops[0];
-        let read2 = &mem_ops[1];
-        let read3 = &mem_ops[2];
-        let write = &mem_ops[CPU_MAX_READS_PER_CYCLE];
+        let [read1, read2, read3] = &reads;
+        let [write] = &writes;
 
         // assert that the start pc is correct
         builder.when_first_row().assert_eq(pc, start_pc);
@@ -357,25 +355,25 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
 
         let mut op_timestamp: AB::Expr = io.timestamp.into();
         let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, mem_oc_aux_cols);
-        for op in &mem_ops[0..CPU_MAX_READS_PER_CYCLE] {
+        for read in &reads {
             memory_bridge
                 .read::<AB::Expr>(
-                    MemoryAddress::new(op.addr_space, op.pointer),
-                    op.cell.data,
+                    MemoryAddress::new(read.addr_space, read.pointer),
+                    read.cell.data,
                     op_timestamp.clone(),
                 )
-                .eval(builder, op.enabled);
-            op_timestamp += op.enabled.into();
+                .eval(builder, read.enabled);
+            op_timestamp += read.enabled.into();
         }
-        for op in &mem_ops[CPU_MAX_READS_PER_CYCLE..CPU_MAX_ACCESSES_PER_CYCLE] {
+        for write in &writes {
             memory_bridge
                 .write(
-                    MemoryAddress::new(op.addr_space, op.pointer),
-                    op.cell.data,
+                    MemoryAddress::new(write.addr_space, write.pointer),
+                    write.cell.data,
                     op_timestamp.clone(),
                 )
-                .eval(builder, op.enabled);
-            op_timestamp += op.enabled.into();
+                .eval(builder, write.enabled);
+            op_timestamp += write.enabled.into();
         }
 
         // evaluate equality between read1 and read2

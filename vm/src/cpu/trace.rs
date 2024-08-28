@@ -1,5 +1,4 @@
 use std::{
-    array,
     collections::{BTreeMap, VecDeque},
     error::Error,
     fmt::Display,
@@ -16,8 +15,8 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    timestamp_delta, CpuChip, CpuState, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
-    CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+    timestamp_delta, CpuChip, CpuState, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE,
+    INST_WIDTH,
 };
 use crate::{
     arch::{
@@ -29,7 +28,7 @@ use crate::{
         },
     },
     cpu::WORD_SIZE,
-    memory::manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
+    memory::manager::trace_builder::MemoryTraceBuilder,
     vm::ExecutionSegment,
 };
 
@@ -259,60 +258,43 @@ impl<F: PrimeField32> CpuChip<F> {
 
             let mut next_pc = pc + F::one();
 
-            let mut mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] =
-                array::from_fn(|_| MemoryOperation::<1, F>::default());
+            let mut writes = vec![];
+            let mut reads = vec![];
             let mut mem_read_trace_builder = MemoryTraceBuilder::new(vm.memory_chip.clone());
             let mut mem_write_trace_builder = MemoryTraceBuilder::new(vm.memory_chip.clone());
-            let mut num_reads = 0;
-            let mut num_writes = 0;
 
             let prev_trace_cells = vm.current_trace_cells();
 
             macro_rules! read {
                 ($addr_space: expr, $pointer: expr) => {{
-                    num_reads += 1;
-                    assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
+                    assert!(reads.len() < CPU_MAX_READS_PER_CYCLE);
 
-                    mem_ops[num_reads - 1] =
-                        mem_read_trace_builder.read_cell($addr_space, $pointer);
-                    mem_ops[num_reads - 1].cell.data[0]
-                }};
-            }
-
-            macro_rules! disabled_read {
-                () => {{
-                    num_reads += 1;
-                    assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
-
-                    mem_ops[num_reads - 1] = mem_read_trace_builder.disabled_read(F::one());
+                    reads.push(mem_read_trace_builder.read_cell($addr_space, $pointer));
+                    reads[reads.len() - 1].cell.data[0]
                 }};
             }
 
             macro_rules! write {
                 ($addr_space: expr, $pointer: expr, $data: expr) => {{
-                    // First, finalize the read accesses
-                    while num_reads < CPU_MAX_READS_PER_CYCLE {
-                        disabled_read!();
+                    // finalize reads now for disabled timestamp considerations :(
+                    while reads.len() < CPU_MAX_READS_PER_CYCLE {
+                        reads.push(mem_write_trace_builder.disabled_op(F::one()));
                     }
 
-                    num_writes += 1;
-                    assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
+                    assert!(writes.len() < CPU_MAX_WRITES_PER_CYCLE);
 
-                    mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                        mem_write_trace_builder.write_cell($addr_space, $pointer, $data);
+                    writes.push(mem_write_trace_builder.write_cell($addr_space, $pointer, $data));
                 }};
             }
 
-            macro_rules! generate_disabled_ops {
+            macro_rules! finalize_accesses {
                 () => {{
-                    while num_reads < CPU_MAX_READS_PER_CYCLE {
-                        disabled_read!();
+                    while reads.len() < CPU_MAX_READS_PER_CYCLE {
+                        reads.push(mem_write_trace_builder.disabled_op(F::one()));
                     }
 
-                    while num_writes < CPU_MAX_WRITES_PER_CYCLE {
-                        num_writes += 1;
-                        mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                            mem_write_trace_builder.disabled_write(F::one());
+                    while writes.len() < CPU_MAX_WRITES_PER_CYCLE {
+                        writes.push(mem_write_trace_builder.disabled_op(F::one()));
                     }
                 }};
             }
@@ -324,7 +306,7 @@ impl<F: PrimeField32> CpuChip<F> {
             let mut public_value_flags = vec![F::zero(); num_public_values];
 
             if vm.executors.contains_key(&opcode) {
-                generate_disabled_ops!();
+                finalize_accesses!();
 
                 let executor = vm.executors.get_mut(&opcode).unwrap();
                 let next_state = InstructionExecutor::execute(
@@ -479,15 +461,7 @@ impl<F: PrimeField32> CpuChip<F> {
                     .or_insert(added_trace_cells);
             }
 
-            // Finalizing memory accesses
-            for mem_op in &mut mem_ops[num_reads..CPU_MAX_READS_PER_CYCLE] {
-                *mem_op = mem_read_trace_builder.disabled_read(F::one());
-            }
-            for mem_op in
-                &mut mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes..CPU_MAX_ACCESSES_PER_CYCLE]
-            {
-                *mem_op = mem_write_trace_builder.disabled_write(F::one());
-            }
+            finalize_accesses!();
 
             let mem_oc_aux_cols: Vec<_> = mem_read_trace_builder
                 .take_accesses_buffer()
@@ -503,7 +477,7 @@ impl<F: PrimeField32> CpuChip<F> {
 
             let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
                 &IsEqualVecAir::new(WORD_SIZE),
-                (mem_ops[0].cell.data.to_vec(), mem_ops[1].cell.data.to_vec()),
+                (reads[0].cell.data.to_vec(), reads[1].cell.data.to_vec()),
             );
 
             let read0_equals_read1 = is_equal_vec_cols.io.is_equal;
@@ -512,7 +486,8 @@ impl<F: PrimeField32> CpuChip<F> {
             let aux = CpuAuxCols {
                 operation_flags,
                 public_value_flags,
-                mem_ops,
+                reads: reads.try_into().unwrap(),
+                writes: writes.try_into().unwrap(),
                 read0_equals_read1,
                 is_equal_vec_aux,
                 mem_oc_aux_cols,

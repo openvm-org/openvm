@@ -109,7 +109,7 @@ fn volatile_memory_offline_checker_test() {
 
     let diff = mem_ops.len().next_power_of_two() - mem_ops.len();
     for _ in 0..diff {
-        mem_ops.push(mem_trace_builder.disabled_read(Val::one()));
+        mem_ops.push(mem_trace_builder.disabled_op(Val::one()));
     }
 
     let accesses_buffer = mem_trace_builder.take_accesses_buffer();

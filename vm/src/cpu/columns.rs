@@ -8,12 +8,16 @@ use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 
 use super::{
-    CpuAir, CpuChip, Opcode, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, WORD_SIZE,
+    CpuAir, CpuChip, Opcode, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
+    CPU_MAX_WRITES_PER_CYCLE, WORD_SIZE,
 };
 use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
     memory::{
-        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
+        manager::{
+            operation::{MemoryReadCols, MemoryWriteCols},
+            trace_builder::MemoryTraceBuilder,
+        },
         offline_checker::columns::MemoryOfflineCheckerAuxCols,
     },
 };
@@ -90,7 +94,8 @@ impl<T: Field> CpuIoCols<T> {
 pub struct CpuAuxCols<T> {
     pub operation_flags: BTreeMap<Opcode, T>,
     pub public_value_flags: Vec<T>,
-    pub mem_ops: [MemoryOperation<1, T>; CPU_MAX_ACCESSES_PER_CYCLE],
+    pub reads: [MemoryReadCols<1, T>; CPU_MAX_READS_PER_CYCLE],
+    pub writes: [MemoryWriteCols<1, T>; CPU_MAX_WRITES_PER_CYCLE],
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
     pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; CPU_MAX_ACCESSES_PER_CYCLE],
@@ -110,10 +115,15 @@ impl<T: Clone> CpuAuxCols<T> {
         end += cpu_air.options.num_public_values;
         let public_value_flags = slc[start..end].to_vec();
 
-        let mem_ops = array::from_fn(|_| {
+        let reads = array::from_fn(|_| {
             start = end;
-            end += MemoryOperation::<WORD_SIZE, T>::width();
-            MemoryOperation::<WORD_SIZE, T>::from_slice(&slc[start..end])
+            end += MemoryReadCols::<WORD_SIZE, T>::width();
+            MemoryReadCols::<WORD_SIZE, T>::from_slice(&slc[start..end])
+        });
+        let writes = array::from_fn(|_| {
+            start = end;
+            end += MemoryWriteCols::<WORD_SIZE, T>::width();
+            MemoryWriteCols::<WORD_SIZE, T>::from_slice(&slc[start..end])
         });
 
         start = end;
@@ -134,7 +144,8 @@ impl<T: Clone> CpuAuxCols<T> {
         Self {
             operation_flags,
             public_value_flags,
-            mem_ops,
+            reads,
+            writes,
             read0_equals_read1: beq_check,
             is_equal_vec_aux,
             mem_oc_aux_cols,
@@ -148,10 +159,16 @@ impl<T: Clone> CpuAuxCols<T> {
         }
         flattened.extend(self.public_value_flags.clone());
         flattened.extend(
-            self.mem_ops
+            self.reads
                 .iter()
                 .cloned()
-                .flat_map(MemoryOperation::<WORD_SIZE, T>::flatten),
+                .flat_map(MemoryReadCols::<WORD_SIZE, T>::flatten),
+        );
+        flattened.extend(
+            self.writes
+                .iter()
+                .cloned()
+                .flat_map(MemoryWriteCols::<WORD_SIZE, T>::flatten),
         );
         flattened.push(self.read0_equals_read1.clone());
         flattened.extend(self.is_equal_vec_aux.flatten());
@@ -167,11 +184,12 @@ impl<T: Clone> CpuAuxCols<T> {
     pub fn get_width(cpu_air: &CpuAir) -> usize {
         CORE_INSTRUCTIONS.len()
             + cpu_air.options.num_public_values
+            + CPU_MAX_READS_PER_CYCLE * MemoryReadCols::<WORD_SIZE, T>::width()
+            + CPU_MAX_WRITES_PER_CYCLE * MemoryWriteCols::<WORD_SIZE, T>::width()
             + CPU_MAX_ACCESSES_PER_CYCLE
-                * (MemoryOperation::<WORD_SIZE, T>::width()
-                    + MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(
-                        &cpu_air.memory_offline_checker,
-                    ))
+                * MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(
+                    &cpu_air.memory_offline_checker,
+                )
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
     }
@@ -185,22 +203,18 @@ impl<F: PrimeField32> CpuAuxCols<F> {
         }
 
         let mut mem_trace_builder = MemoryTraceBuilder::new(chip.memory_chip.clone());
-        let mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] = array::from_fn(|i| {
-            if i < CPU_MAX_READS_PER_CYCLE {
-                mem_trace_builder.disabled_read(F::one())
-            } else {
-                mem_trace_builder.disabled_write(F::one())
-            }
-        });
+        let reads = array::from_fn(|_| mem_trace_builder.disabled_op(F::one()));
+        let writes = array::from_fn(|_| mem_trace_builder.disabled_op(F::one()));
 
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
-            (mem_ops[0].cell.data.to_vec(), mem_ops[1].cell.data.to_vec()),
+            (reads[0].cell.data.to_vec(), reads[1].cell.data.to_vec()),
         );
         Self {
             operation_flags,
             public_value_flags: vec![F::zero(); chip.air.options.num_public_values],
-            mem_ops,
+            reads,
+            writes,
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
             mem_oc_aux_cols: mem_trace_builder.take_accesses_buffer().try_into().unwrap(),

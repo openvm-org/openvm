@@ -13,7 +13,7 @@ use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
 use crate::{
     arch::chips::MachineChip,
     memory::{
-        manager::operation::MemoryOperation,
+        manager::operation::MemoryAccessCols,
         offline_checker::{
             bridge::MemoryOfflineChecker,
             bus::MemoryBus,
@@ -353,7 +353,7 @@ impl<F: PrimeField32> MemoryChip<F> {
 
 #[derive(new, Clone, Debug, Default)]
 pub struct MemoryAccess<const WORD_SIZE: usize, T> {
-    pub op: MemoryOperation<WORD_SIZE, T>,
+    pub op: MemoryAccessCols<WORD_SIZE, T>,
     pub old_cell: AccessCell<WORD_SIZE, T>,
 }
 
@@ -365,7 +365,7 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
             "Disabled memory operation cannot be immediate"
         );
         MemoryAccess::<WORD_SIZE, T>::new(
-            MemoryOperation {
+            MemoryAccessCols {
                 addr_space,
                 pointer: T::zero(),
                 cell: AccessCell::new([T::zero(); WORD_SIZE], timestamp),
@@ -377,7 +377,7 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
 
     pub fn from_read(read: MemoryRead<WORD_SIZE, T>) -> Self {
         Self {
-            op: MemoryOperation {
+            op: MemoryAccessCols {
                 addr_space: read.address_space,
                 pointer: read.pointer,
                 cell: AccessCell::new(read.data, read.timestamp),
@@ -389,7 +389,7 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
 
     pub fn from_write(write: MemoryWrite<WORD_SIZE, T>) -> Self {
         Self {
-            op: MemoryOperation {
+            op: MemoryAccessCols {
                 addr_space: write.address_space,
                 pointer: write.pointer,
                 cell: AccessCell::new(write.data, write.timestamp),

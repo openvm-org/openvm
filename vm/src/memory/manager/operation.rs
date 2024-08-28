@@ -5,15 +5,18 @@ use p3_air::AirBuilder;
 
 use super::access_cell::AccessCell;
 
+pub type MemoryReadCols<const WORD_SIZE: usize, T> = MemoryAccessCols<WORD_SIZE, T>;
+pub type MemoryWriteCols<const WORD_SIZE: usize, T> = MemoryAccessCols<WORD_SIZE, T>;
+
 #[derive(Clone, Debug, PartialEq, Eq, Default, new)]
-pub struct MemoryOperation<const WORD_SIZE: usize, T> {
+pub struct MemoryAccessCols<const WORD_SIZE: usize, T> {
     pub addr_space: T,
     pub pointer: T,
     pub cell: AccessCell<WORD_SIZE, T>,
     pub enabled: T,
 }
 
-impl<const WORD_SIZE: usize, T: Clone> MemoryOperation<WORD_SIZE, T> {
+impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T]) -> Self {
         let ac_width = AccessCell::<WORD_SIZE, T>::width();
 
@@ -26,7 +29,7 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryOperation<WORD_SIZE, T> {
     }
 }
 
-impl<const WORD_SIZE: usize, T> MemoryOperation<WORD_SIZE, T> {
+impl<const WORD_SIZE: usize, T> MemoryAccessCols<WORD_SIZE, T> {
     pub fn flatten(self) -> Vec<T> {
         iter::once(self.addr_space)
             .chain(iter::once(self.pointer))
@@ -40,12 +43,12 @@ impl<const WORD_SIZE: usize, T> MemoryOperation<WORD_SIZE, T> {
     }
 }
 
-impl<const WORD_SIZE: usize, T> MemoryOperation<WORD_SIZE, T> {
-    pub fn into_expr<AB: AirBuilder>(self) -> MemoryOperation<WORD_SIZE, AB::Expr>
+impl<const WORD_SIZE: usize, T> MemoryAccessCols<WORD_SIZE, T> {
+    pub fn into_expr<AB: AirBuilder>(self) -> MemoryAccessCols<WORD_SIZE, AB::Expr>
     where
         T: Into<AB::Expr>,
     {
-        MemoryOperation::new(
+        MemoryAccessCols::new(
             self.addr_space.into(),
             self.pointer.into(),
             self.cell.into_expr::<AB>(),

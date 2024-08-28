@@ -1,6 +1,6 @@
 use p3_field::PrimeField32;
 
-use super::{operation::MemoryOperation, MemoryAccess, MemoryChipRef};
+use super::{operation::MemoryAccessCols, MemoryAccess, MemoryChipRef};
 use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 const WORD_SIZE: usize = 1;
@@ -23,7 +23,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         }
     }
 
-    pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryOperation<WORD_SIZE, F> {
+    pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryAccessCols<WORD_SIZE, F> {
         let read = self.memory_chip.borrow_mut().read(addr_space, pointer);
 
         let mem_access = MemoryAccess::from_read(read);
@@ -39,7 +39,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         addr_space: F,
         pointer: F,
         data: F,
-    ) -> MemoryOperation<WORD_SIZE, F> {
+    ) -> MemoryAccessCols<WORD_SIZE, F> {
         let write = self
             .memory_chip
             .borrow_mut()
@@ -57,17 +57,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         self.read_cell(addr_space, pointer).cell.data[0]
     }
 
-    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
-    pub fn disabled_read(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
-        self.disabled_op(addr_space)
-    }
-
-    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
-    pub fn disabled_write(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
-        self.disabled_op(addr_space)
-    }
-
-    pub fn disabled_op(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
+    pub fn disabled_op(&mut self, addr_space: F) -> MemoryAccessCols<WORD_SIZE, F> {
         debug_assert_ne!(
             addr_space,
             F::zero(),
