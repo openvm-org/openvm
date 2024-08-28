@@ -6,7 +6,6 @@ use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS};
 use p3_matrix::Matrix;
 
 use super::{
-    bridge::TIMESTAMP_OFFSET_FOR_OPCODE,
     columns::{KeccakMemoryCols, KeccakVmColsRef, NUM_KECCAK_OPCODE_COLS, NUM_KECCAK_SPONGE_COLS},
     KECCAK_RATE_BYTES,
 };
@@ -50,14 +49,21 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         self.eval_keccak_f(builder);
         self.constrain_padding(builder, local, next);
         self.constrain_consistency_across_rounds(builder, local, next);
-        self.constrain_block_transition(builder, local, next);
 
         let mem = KeccakMemoryCols::from_slice(&local.mem_oc, &self.mem_oc);
         // Interactions:
         self.constrain_absorb(builder, local, next);
-        self.eval_opcode_interactions(builder, local, mem.op_reads);
-        self.constrain_input_read(builder, local, mem.absorb_reads);
-        self.constrain_output_write(builder, local, mem.digest_writes);
+        let start_read_timestamp = self.eval_opcode_interactions(builder, local, mem.op_reads);
+        let start_write_timestamp =
+            self.constrain_input_read(builder, local, start_read_timestamp, mem.absorb_reads);
+        self.constrain_output_write(
+            builder,
+            local,
+            start_write_timestamp.clone(),
+            mem.digest_writes,
+        );
+
+        self.constrain_block_transition(builder, local, next, start_write_timestamp);
     }
 }
 
@@ -91,6 +97,7 @@ impl KeccakVmAir {
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
         next: KeccakVmColsRef<AB::Var>,
+        start_write_timestamp: AB::Expr,
     ) {
         // When we transition between blocks, if the next block isn't a new block
         // (this means it's not receiving a new opcode or starting a dummy block)
@@ -115,13 +122,9 @@ impl KeccakVmAir {
             next.opcode.src,
             local.opcode.src + AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
         );
-        // Advance timestamp by the number of memory accesses from reading
-        // dst, src and block input bytes.
-        block_transition.assert_eq(
-            next.opcode.start_timestamp,
-            local.opcode.start_timestamp
-                + AB::F::from_canonical_usize(TIMESTAMP_OFFSET_FOR_OPCODE + BLOCK_MEMORY_ACCESSES),
-        );
+        // Advance timestamp by the number of memory accesses from [if new start] reading
+        // `dst, src, len` and block input bytes.
+        block_transition.assert_eq(next.opcode.start_timestamp, start_write_timestamp);
         block_transition.assert_eq(
             next.opcode.len,
             local.opcode.len - AB::F::from_canonical_usize(KECCAK_RATE_BYTES),

@@ -130,7 +130,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 }
 
 impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
-    /// Called using `vm` and not `&self`. Reads two chunks from memory and generates a trace row for
+    /// Reads two chunks from memory and generates a trace row for
     /// the given instruction using the subair, storing it in `rows`. Then, writes output to memory,
     /// truncating if the instruction is a compression.
     ///
@@ -138,7 +138,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
     fn execute(
         &mut self,
         instruction: &Instruction<F>,
-        prev_state: ExecutionState<usize>,
+        from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
 
@@ -190,7 +190,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         }
 
         let io = Poseidon2VmAir::<WIDTH, F>::make_io_cols(
-            prev_state.map(F::from_canonical_usize),
+            from_state.map(F::from_canonical_usize),
             instruction.clone(),
         );
 
@@ -208,8 +208,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         self.rows.push(row);
 
         ExecutionState {
-            pc: prev_state.pc + 1,
-            timestamp: prev_state.timestamp + self.air.timestamp_delta(),
+            pc: from_state.pc + 1,
+            timestamp: from_state.timestamp + self.air.timestamp_delta(),
         }
     }
 }

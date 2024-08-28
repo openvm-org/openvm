@@ -12,16 +12,16 @@ use super::{
     KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S,
     NUM_ABSORB_ROUNDS,
 };
-use crate::memory::{
-    offline_checker::{bridge::MemoryBridge, columns::MemoryOfflineCheckerAuxCols},
-    MemoryAddress,
+use crate::{
+    arch::{
+        columns::{ExecutionState, InstructionCols},
+        instructions::Opcode,
+    },
+    memory::{
+        offline_checker::{bridge::MemoryBridge, columns::MemoryOfflineCheckerAuxCols},
+        MemoryAddress,
+    },
 };
-
-/// We need three memory accesses to read dst, src, len from memory.
-/// It seems harmless to just shift timestamp by this even in blocks
-/// where we don't do this memory access.
-/// See `eval_opcode_interactions`.
-pub(super) const TIMESTAMP_OFFSET_FOR_OPCODE: usize = KECCAK_EXECUTION_READS;
 
 impl KeccakVmAir {
     /// Constrain state transition between keccak-f permutations is valid absorb of input bytes.
@@ -113,14 +113,17 @@ impl KeccakVmAir {
     }
 
     /// Receive the opcode instruction itself on opcode bus.
-    /// Then does memory read to get `dst` and `src` from memory.
+    /// Then does memory read to get `dst, src, len` from memory.
+    ///
+    /// Returns `start_read_timestamp` which is only relevant when `local.opcode.is_enabled`.
+    /// Note that `start_read_timestamp` is a linear expression.
     pub fn eval_opcode_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
         mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_EXECUTION_READS],
-    ) {
-        let opcode = &local.opcode;
+    ) -> AB::Expr {
+        let opcode = local.opcode;
         // Only receive opcode if:
         // - enabled row (not dummy row)
         // - first round of block
@@ -128,59 +131,65 @@ impl KeccakVmAir {
         // Note this is degree 3, which results in quotient degree 2 if used
         // as `count` in interaction
         let should_receive = local.opcode.is_enabled * local.sponge.is_new_start;
-        // receive the opcode itself
-        builder.push_receive(
-            KECCAK256_BUS,
-            [
-                opcode.start_timestamp,
-                opcode.a,
-                opcode.b,
-                opcode.c,
-                opcode.d,
-                opcode.e,
-            ],
+
+        let timestamp_change: AB::Expr = Self::timestamp_change(opcode.len);
+        self.execution_bus.execute_increment_pc(
+            builder,
             should_receive.clone(),
+            ExecutionState::new(opcode.pc, opcode.start_timestamp),
+            timestamp_change,
+            InstructionCols::new(
+                AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
+                [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
+            ),
         );
 
+        let mut timestamp: AB::Expr = opcode.start_timestamp.into();
         let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
         // Only when it is an input do we want to do memory read for
         // dst <- word[a]_d, src <- word[b]_d
-        for (t_offset, ptr, addr_sp, value) in izip!(
-            [0, 1, 2],
+        for (ptr, addr_sp, value) in izip!(
             [opcode.a, opcode.b, opcode.c],
-            [opcode.d, opcode.d, opcode.d], // TODO use addr_sp = f for len
+            [opcode.d, opcode.d, opcode.f],
             [opcode.dst, opcode.src, opcode.len]
         ) {
-            let timestamp = opcode.start_timestamp + AB::F::from_canonical_usize(t_offset);
-
             memory_bridge
-                .read(MemoryAddress::new(addr_sp, ptr), [value], timestamp)
+                .read(MemoryAddress::new(addr_sp, ptr), [value], timestamp.clone())
                 .eval(builder, should_receive.clone());
+
+            // We only advance timestamp when new start, which means either it is
+            // the start of a new instruction execution,
+            // or opcode isn't enabled (in which case we don't care)
+            timestamp = timestamp + local.sponge.is_new_start;
         }
+        timestamp
     }
 
     /// Constrain reading the input as `block_bytes` from memory.
     /// Reads input based on `is_padding_byte`.
     /// Constrains timestamp transitions between blocks if input crosses blocks.
+    ///
+    /// Expects `start_read_timestamp` to be a linear expression.
+    /// Returns the `start_write_timestamp` which is the timestamp to start from
+    /// for writing digest to memory.
     pub fn constrain_input_read<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
+        start_read_timestamp: AB::Expr,
         mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_ABSORB_READS],
-    ) {
+    ) -> AB::Expr {
         let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
         // Only read input from memory when it is an opcode-related row
         // and only on the first round of block
         let is_input = local.opcode.is_enabled * local.inner.step_flags[0];
+
+        let mut timestamp = start_read_timestamp;
         // read `state` into `word[src + ...]_e`
         // iterator of state as u16:
         for (i, (input, is_padding)) in
             zip(local.sponge.block_bytes, local.sponge.is_padding_byte).enumerate()
         {
-            // reserve timestamp advances for opcode dst,src,len reads in
-            // eval_opcode_interactions, even if they don't always happen
-            let timestamp = local.opcode.start_timestamp
-                + AB::F::from_canonical_usize(TIMESTAMP_OFFSET_FOR_OPCODE + i);
             let ptr = local.opcode.src + AB::F::from_canonical_usize(i);
             // Only read byte i if it is not padding byte
             // This is constraint degree 3, which leads to quotient degree 2
@@ -188,18 +197,26 @@ impl KeccakVmAir {
             let count = is_input.clone() * not(is_padding);
 
             memory_bridge
-                .read(MemoryAddress::new(local.opcode.e, ptr), [input], timestamp)
+                .read(
+                    MemoryAddress::new(local.opcode.e, ptr),
+                    [input],
+                    timestamp.clone(),
+                )
                 .eval(builder, count);
+
+            timestamp = timestamp + AB::Expr::one();
         }
+        timestamp
     }
 
     pub fn constrain_output_write<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
+        start_write_timestamp: AB::Expr,
         mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_DIGEST_WRITES],
     ) {
-        let opcode = &local.opcode;
+        let opcode = local.opcode;
         let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
 
         let is_final_block = *local.sponge.is_padding_byte.last().unwrap();
@@ -211,10 +228,8 @@ impl KeccakVmAir {
         for x in 0..KECCAK_DIGEST_BYTES / 8 {
             for limb in 0..U64_LIMBS {
                 let index = x * U64_LIMBS + limb;
-                let timestamp = opcode.start_timestamp
-                    + AB::F::from_canonical_usize(
-                        TIMESTAMP_OFFSET_FOR_OPCODE + KECCAK_ABSORB_READS + index,
-                    );
+                let timestamp =
+                    start_write_timestamp.clone() + AB::Expr::from_canonical_usize(index);
                 let value = local.postimage(0, x, limb);
                 memory_bridge
                     .write(
@@ -228,5 +243,17 @@ impl KeccakVmAir {
                     .eval(builder, local.inner.export)
             }
         }
+    }
+
+    /// Amount to advance timestamp by after execution of one opcode instruction.
+    /// This is an upper bound dependant on the length `len` operand, which is unbounded.
+    pub fn timestamp_change<T: AbstractField>(len: impl Into<T>) -> T {
+        // execution reads only done on first row of multi-block
+        // digest writes only done on last row of multi-block
+        // add another KECCAK_ABSORB_READS to round up so we don't deal with padding
+        len.into()
+            + T::from_canonical_usize(
+                KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
+            )
     }
 }

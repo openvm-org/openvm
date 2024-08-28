@@ -48,6 +48,8 @@ pub struct KeccakVmColsMut<'a, T> {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
 pub struct KeccakOpcodeCols<T> {
+    /// Program counter
+    pub pc: T,
     /// True for all rows that are part of opcode execution.
     /// False on dummy rows only used to pad the height.
     pub is_enabled: T,

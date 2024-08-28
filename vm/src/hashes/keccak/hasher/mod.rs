@@ -1,7 +1,6 @@
 use std::{array::from_fn, sync::Arc};
 
-use afs_primitives::xor::{bus::XorBus, lookup::XorLookupChip};
-use bridge::{BLOCK_MEMORY_ACCESSES, TIMESTAMP_OFFSET_FOR_OPCODE};
+use afs_primitives::xor::lookup::XorLookupChip;
 use columns::KeccakOpcodeCols;
 use p3_field::PrimeField32;
 
@@ -15,7 +14,14 @@ pub use air::KeccakVmAir;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
 
-use crate::vm::ExecutionSegment;
+use crate::{
+    arch::{
+        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
+        instructions::Opcode,
+    },
+    cpu::trace::Instruction,
+    memory::manager::MemoryChipRef,
+};
 
 /// Memory reads to get dst, src, len
 const KECCAK_EXECUTION_READS: usize = 3;
@@ -51,9 +57,10 @@ pub const KECCAK_DIGEST_U16S: usize = KECCAK_DIGEST_BYTES / 2;
 #[derive(Clone, Debug)]
 pub struct KeccakVmChip<F: PrimeField32> {
     pub air: KeccakVmAir,
-    pub byte_xor_chip: Arc<XorLookupChip<8>>,
     /// IO and memory data necessary for each opcode call
     pub requests: Vec<(KeccakOpcodeCols<F>, Vec<KeccakInputBlock<F>>)>,
+    pub memory_chip: MemoryChipRef<F>,
+    pub byte_xor_chip: Arc<XorLookupChip<8>>,
 }
 
 #[derive(Clone, Debug)]
@@ -65,35 +72,40 @@ pub struct KeccakInputBlock<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> KeccakVmChip<F> {
-    #[allow(clippy::new_without_default)]
-    pub fn new(xor_bus: XorBus, byte_xor_chip: Arc<XorLookupChip<8>>) -> Self {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        memory_chip: MemoryChipRef<F>,
+        byte_xor_chip: Arc<XorLookupChip<8>>,
+    ) -> Self {
+        let mem_oc = memory_chip.borrow().make_offline_checker();
         Self {
-            air: KeccakVmAir::new(xor_bus),
+            air: KeccakVmAir::new(execution_bus, mem_oc, byte_xor_chip.bus()),
+            memory_chip,
             byte_xor_chip,
             requests: Vec::new(),
         }
     }
+}
 
-    /// Returns the new timestamp after instruction has finished execution
-    // TODO: only WORD_SIZE=1 works right now
-    pub fn execute<const WORD_SIZE: usize>(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
-        start_timestamp: usize,
-        instruction: Instruction<F>,
-    ) -> usize {
-        assert_eq!(WORD_SIZE, 1, "Only WORD_SIZE=1 supported for now");
+impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
+    fn execute(
+        &mut self,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<usize>,
+    ) -> ExecutionState<usize> {
         let Instruction {
             opcode,
-            op_a,
-            op_b,
-            op_c,
+            op_a: a,
+            op_b: b,
+            op_c: c,
             d,
             e,
-            debug: _debug,
+            op_f: f,
+            ..
         } = instruction;
-        debug_assert_eq!(opcode, OpCode::KECCAK256);
+        debug_assert_eq!(*opcode, Opcode::KECCAK256);
 
-        let mut timestamp = start_timestamp;
+        let mut timestamp = from_state.timestamp;
 
         let dst = vm.memory_chip.read_elem(timestamp, d, op_a);
         let mut src = vm.memory_chip.read_elem(timestamp + 1, d, op_b);

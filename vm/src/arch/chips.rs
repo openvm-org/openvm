@@ -24,7 +24,7 @@ pub trait InstructionExecutor<F> {
     fn execute(
         &mut self,
         instruction: &Instruction<F>,
-        prev_state: ExecutionState<usize>,
+        from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize>;
 }
 

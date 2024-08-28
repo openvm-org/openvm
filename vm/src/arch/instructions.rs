@@ -34,6 +34,7 @@ pub enum Opcode {
 
     PERM_POS2 = 40,
     COMP_POS2 = 41,
+    KECCAK256 = 42,
 
     /// Instruction to write the next hint word into memory.
     SHINTW = 50,
