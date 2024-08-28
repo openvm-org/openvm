@@ -8,8 +8,6 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::RngCore;
 
-const WORD_SIZE: usize = 1;
-
 fn secp256k1_coord_prime() -> BigUint {
     let mut result = BigUint::one() << 256;
     for power in [32, 9, 8, 7, 6, 4, 0] {

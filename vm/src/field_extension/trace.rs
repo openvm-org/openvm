@@ -17,10 +17,7 @@ use crate::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
         EXTENSION_DEGREE,
     },
-    memory::{
-        manager::{MemoryReadRecord, MemoryWriteRecord},
-        OpType,
-    },
+    memory::OpType,
 };
 
 impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
@@ -104,27 +101,26 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: record.x_reads.map(|read| memory.make_read_aux_cols(read)),
-                read_y_aux_cols: record.y_reads.map(|read| memory.make_read_aux_cols(read)),
+                read_x_aux_cols: record
+                    .x_reads
+                    .map(|read| memory.make_read_aux_cols(read, true)),
+                read_y_aux_cols: record
+                    .y_reads
+                    .map(|read| memory.make_read_aux_cols(read, true)),
                 write_aux_cols: record
                     .z_writes
-                    .map(|write| memory.make_write_aux_cols(write)),
+                    .map(|write| memory.make_write_aux_cols(write, true)),
             },
         }
     }
 
     fn make_blank_row(&self) -> FieldExtensionArithmeticCols<F> {
+        let memory_chip = self.memory_chip.borrow();
         let timestamp = self.memory_chip.borrow().timestamp();
 
         let make_aux_col = |op_type| match op_type {
-            OpType::Read => self
-                .memory_chip
-                .borrow()
-                .make_read_aux_cols(MemoryReadRecord::disabled(timestamp, F::one())),
-            OpType::Write => self
-                .memory_chip
-                .borrow()
-                .make_write_aux_cols(MemoryWriteRecord::disabled(timestamp, F::one())),
+            OpType::Read => memory_chip.make_disabled_read_aux_cols(),
+            OpType::Write => memory_chip.make_disabled_write_aux_cols(),
         };
 
         FieldExtensionArithmeticCols {

@@ -296,12 +296,8 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             writes: array::from_fn(|_| CpuMemoryAccessCols::disabled(timestamp)),
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
-            reads_aux_cols: array::from_fn(|_| {
-                memory_chip.make_disabled_read_aux_cols(timestamp, F::one())
-            }),
-            writes_aux_cols: array::from_fn(|_| {
-                memory_chip.make_disabled_read_aux_cols(timestamp, F::one())
-            }),
+            reads_aux_cols: array::from_fn(|_| memory_chip.make_disabled_read_aux_cols()),
+            writes_aux_cols: array::from_fn(|_| memory_chip.make_disabled_read_aux_cols()),
         }
     }
 }

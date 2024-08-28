@@ -26,7 +26,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
     pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryReadRecord<WORD_SIZE, F> {
         let mut memory_chip = self.memory_chip.borrow_mut();
         let read = memory_chip.read(addr_space, pointer);
-        let aux_cols = memory_chip.make_read_aux_cols(read.clone());
+        let aux_cols = memory_chip.make_read_aux_cols(read.clone(), true);
 
         self.accesses_buffer.push(aux_cols);
 
@@ -41,7 +41,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
     ) -> MemoryWriteRecord<WORD_SIZE, F> {
         let mut memory_chip = self.memory_chip.borrow_mut();
         let write = memory_chip.write(addr_space, pointer, data);
-        let aux_cols = memory_chip.make_write_aux_cols(write.clone());
+        let aux_cols = memory_chip.make_write_aux_cols(write.clone(), true);
 
         self.accesses_buffer.push(aux_cols);
 
@@ -52,20 +52,9 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         self.read_cell(addr_space, pointer).data[0]
     }
 
-    pub fn disabled_op(&mut self, addr_space: F) {
-        debug_assert_ne!(
-            addr_space,
-            F::zero(),
-            "Disabled memory operation cannot be immediate"
-        );
-        let memory_chip = self.memory_chip.borrow();
-        let aux_cols = memory_chip.make_aux_cols(
-            memory_chip.timestamp,
-            addr_space,
-            [F::zero(); WORD_SIZE],
-            F::zero(),
-        );
-        self.accesses_buffer.push(aux_cols)
+    pub fn disabled_op(&mut self) {
+        self.accesses_buffer
+            .push(self.memory_chip.borrow().make_disabled_write_aux_cols());
     }
 
     // TODO[jpw]: rename increment_timestamp

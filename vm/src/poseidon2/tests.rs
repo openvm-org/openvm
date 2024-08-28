@@ -9,9 +9,8 @@ use afs_test_utils::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
-use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
-use poseidon2_air::poseidon2::Poseidon2Config;
+use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 use rand::{Rng, RngCore};
 
 use super::{Poseidon2Chip, CHUNK, WIDTH};
@@ -21,6 +20,7 @@ use crate::{
         testing::{MachineChipTestBuilder, MachineChipTester},
     },
     cpu::trace::Instruction,
+    poseidon2::Poseidon2VmIoCols,
 };
 
 const ADDRESS_BITS: usize = 29;
@@ -142,7 +142,8 @@ fn poseidon2_chip_random_50_test_new() {
 #[test]
 fn poseidon2_negative_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = tester_with_random_poseidon2_ops(1);
+    let num_ops = 1;
+    let mut tester = tester_with_random_poseidon2_ops(num_ops);
 
     tester.test(get_engine).expect("Verification failed");
 
@@ -154,9 +155,13 @@ fn poseidon2_negative_test() {
         let trace = &mut tester.traces[1];
         let original_trace = trace.clone();
 
-        let width = rng.gen_range(24..trace.width() - 16);
-        let height = rng.gen_range(0..trace.height());
+        // avoid pranking IO cols or dst,lhs,rhs
+        let start_prank_col = Poseidon2VmIoCols::<u8>::get_width() + 3;
+        let end_prank_col = start_prank_col + Poseidon2Air::<16, BabyBear>::default().get_width();
+        let width = rng.gen_range(start_prank_col..end_prank_col);
+        let height = rng.gen_range(0..num_ops);
         let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
+        println!("Pranking row {height} column {width}");
         trace.row_mut(height)[width] += rand;
 
         let test_result = tester.test(get_engine);

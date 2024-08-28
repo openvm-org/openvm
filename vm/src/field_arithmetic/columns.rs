@@ -132,7 +132,7 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug, new)]
+#[derive(Clone, Copy, PartialEq, Debug, Default, new)]
 pub struct Operand<F> {
     pub address_space: F,
     pub address: F,

@@ -53,3 +53,15 @@ impl<const WORD_SIZE: usize, T> MemoryOperation<WORD_SIZE, T> {
         }
     }
 }
+
+impl<const N: usize, T: Default> Default for MemoryOperation<N, T> {
+    fn default() -> Self {
+        Self {
+            addr_space: T::default(),
+            pointer: T::default(),
+            timestamp: T::default(),
+            data: array::from_fn(|_| T::default()),
+            enabled: T::default(),
+        }
+    }
+}

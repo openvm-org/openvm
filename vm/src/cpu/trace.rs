@@ -431,7 +431,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 let mut reads_aux_cols = read_records
                     .iter()
                     .cloned()
-                    .map(|read| memory_chip.make_read_aux_cols(read))
+                    .map(|read| memory_chip.make_read_aux_cols(read, true))
                     .collect_vec();
 
                 // icky timestamp calculation for disabled reads
@@ -442,8 +442,7 @@ impl<F: PrimeField32> CpuChip<F> {
 
                 while read_cols.len() < CPU_MAX_READS_PER_CYCLE {
                     read_cols.push(CpuMemoryAccessCols::disabled(timestamp));
-                    reads_aux_cols
-                        .push(memory_chip.make_disabled_read_aux_cols(timestamp, F::one()));
+                    reads_aux_cols.push(memory_chip.make_disabled_read_aux_cols());
                 }
 
                 let timestamp = write_records
@@ -459,12 +458,11 @@ impl<F: PrimeField32> CpuChip<F> {
                 let mut writes_aux_cols = write_records
                     .iter()
                     .cloned()
-                    .map(|write| memory_chip.make_write_aux_cols(write))
+                    .map(|write| memory_chip.make_write_aux_cols(write, true))
                     .collect_vec();
                 while write_cols.len() < CPU_MAX_WRITES_PER_CYCLE {
                     write_cols.push(CpuMemoryAccessCols::disabled(timestamp));
-                    writes_aux_cols
-                        .push(memory_chip.make_disabled_write_aux_cols(timestamp, F::one()));
+                    writes_aux_cols.push(memory_chip.make_disabled_write_aux_cols());
                 }
 
                 let mut operation_flags = BTreeMap::new();

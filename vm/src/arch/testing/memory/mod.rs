@@ -92,7 +92,7 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
         let mut values = vec![F::zero(); height * width];
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, record) in values.chunks_mut(width).into_iter().zip(&self.records) {
+        for (row, record) in values.chunks_mut(width).zip(&self.records) {
             let row: &mut DummyMemoryInteractionCols<F, WORD_SIZE> = row.borrow_mut();
             row.address = record.address;
             row.data = record.data;

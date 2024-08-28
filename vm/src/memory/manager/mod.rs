@@ -55,11 +55,11 @@ impl<T: Copy> MemoryReadRecord<1, T> {
 
 impl<const N: usize, F: Field> MemoryReadRecord<N, F> {
     /// Will be deprecated.
-    pub fn disabled(timestamp: F, address_space: F) -> Self {
+    pub fn disabled() -> Self {
         Self {
-            address_space,
+            address_space: F::zero(),
             pointer: F::zero(),
-            timestamp,
+            timestamp: F::zero(),
             prev_timestamp: F::zero(),
             data: [F::zero(); N],
         }
@@ -86,11 +86,11 @@ pub struct MemoryWriteRecord<const N: usize, T> {
 
 impl<const N: usize, F: Field> MemoryWriteRecord<N, F> {
     /// Will be deprecated.
-    pub fn disabled(timestamp: F, address_space: F) -> Self {
+    pub fn disabled() -> Self {
         Self {
-            address_space,
+            address_space: F::zero(),
             pointer: F::zero(),
-            timestamp,
+            timestamp: F::zero(),
             prev_timestamp: F::zero(),
             data: [F::zero(); N],
             prev_data: [F::zero(); N],
@@ -213,7 +213,7 @@ impl<F: PrimeField32> MemoryChip<F> {
                 timestamp: F::zero(),
             });
         let (prev_timestamp, old_data) = (cell.timestamp, cell.value);
-        assert!(prev_timestamp < timestamp);
+        debug_assert!(prev_timestamp < timestamp);
 
         cell.timestamp = timestamp;
         cell.value = data;
@@ -246,41 +246,47 @@ impl<F: PrimeField32> MemoryChip<F> {
     pub fn make_read_aux_cols<const N: usize>(
         &self,
         read: MemoryReadRecord<N, F>,
+        is_valid: bool,
     ) -> MemoryReadAuxCols<N, F> {
-        self.make_aux_cols(
-            read.timestamp,
-            read.address_space,
-            read.data,
-            read.prev_timestamp,
-        )
+        // TODO[jpw] Remove this if chips refactored to never use Record for disabled
+        if is_valid {
+            self.make_aux_cols(
+                read.timestamp,
+                read.address_space,
+                read.data,
+                read.prev_timestamp,
+            )
+        } else {
+            self.make_disabled_read_aux_cols()
+        }
     }
 
-    pub fn make_disabled_read_aux_cols<const N: usize>(
-        &self,
-        timestamp: F,
-        address_space: F,
-    ) -> MemoryReadAuxCols<N, F> {
-        self.make_aux_cols(timestamp, address_space, [F::zero(); N], F::zero())
+    pub fn make_disabled_read_aux_cols<const N: usize>(&self) -> MemoryReadAuxCols<N, F> {
+        let width = MemoryReadAuxCols::<1, F>::width(&self.make_offline_checker());
+        MemoryReadAuxCols::from_slice(&vec![F::zero(); width])
     }
 
     pub fn make_write_aux_cols<const N: usize>(
         &self,
         write: MemoryWriteRecord<N, F>,
+        is_valid: bool,
     ) -> MemoryWriteAuxCols<N, F> {
-        self.make_aux_cols(
-            write.timestamp,
-            write.address_space,
-            write.prev_data,
-            write.prev_timestamp,
-        )
+        // TODO[jpw] Remove this if chips refactored to never use Record for disabled
+        if is_valid {
+            self.make_aux_cols(
+                write.timestamp,
+                write.address_space,
+                write.prev_data,
+                write.prev_timestamp,
+            )
+        } else {
+            self.make_disabled_write_aux_cols()
+        }
     }
 
-    pub fn make_disabled_write_aux_cols<const N: usize>(
-        &self,
-        timestamp: F,
-        address_space: F,
-    ) -> MemoryWriteAuxCols<N, F> {
-        self.make_aux_cols(timestamp, address_space, [F::zero(); N], F::zero())
+    pub fn make_disabled_write_aux_cols<const N: usize>(&self) -> MemoryWriteAuxCols<N, F> {
+        let width = MemoryWriteAuxCols::<1, F>::width(&self.make_offline_checker());
+        MemoryWriteAuxCols::from_slice(&vec![F::zero(); width])
     }
 
     fn make_aux_cols<const N: usize>(
@@ -292,8 +298,8 @@ impl<F: PrimeField32> MemoryChip<F> {
     ) -> MemoryOfflineCheckerAuxCols<N, F> {
         let timestamp_prev = prev_timestamp.as_canonical_u32();
         let timestamp = timestamp.as_canonical_u32();
-
         debug_assert!(timestamp_prev < timestamp);
+
         let offline_checker = self.make_offline_checker();
         let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
             &offline_checker.timestamp_lt_air,

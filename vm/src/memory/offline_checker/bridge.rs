@@ -6,7 +6,7 @@ use afs_primitives::{
         columns::{IsZeroCols, IsZeroIoCols},
         IsZeroAir,
     },
-    utils::implies,
+    utils::{and, implies, not},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;
@@ -200,6 +200,9 @@ impl MemoryOfflineChecker {
     ) {
         builder.assert_bool(op.enabled.clone());
 
+        // TODO[jpw] immediate checks should not be in memory bridge
+        // Currently: expected is that enabled = 0, is_immediate = 0, all aux = 0 works
+
         // Ensuring is_immediate is correct
         let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
             IsZeroIoCols::<AB::Expr>::new(op.addr_space.clone(), aux.is_immediate.into()),
@@ -207,18 +210,17 @@ impl MemoryOfflineChecker {
         );
 
         self.is_zero_air.subair_eval(
-            builder,
+            &mut builder.when(op.enabled.clone()), // when not enabled, allow aux to be all 0s no matter what
             addr_space_is_zero_cols.io,
             addr_space_is_zero_cols.inv,
         );
 
-        // immediate => enabled
-        builder.assert_one(implies(aux.is_immediate.into(), op.enabled.clone()));
-
         // is_immediate => read
-        if is_write {
-            builder.assert_zero(aux.is_immediate);
-        }
+        // if is_write {
+        //     builder
+        //         .when(op.enabled.clone())
+        //         .assert_zero(aux.is_immediate);
+        // }
 
         let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
             aux.prev_timestamp.into(),
@@ -226,10 +228,17 @@ impl MemoryOfflineChecker {
             aux.clk_lt.into(),
         );
 
-        self.timestamp_lt_air
-            .subair_eval(builder, clk_lt_io_cols, aux.clk_lt_aux);
+        self.timestamp_lt_air.conditional_eval(
+            builder,
+            clk_lt_io_cols,
+            aux.clk_lt_aux,
+            op.enabled.clone(),
+        );
 
-        builder.assert_one(implies(op.enabled.clone(), aux.clk_lt.into()));
+        builder.assert_one(implies(
+            and(op.enabled.clone(), not(aux.is_immediate.into())),
+            aux.clk_lt.into(),
+        ));
 
         // Ensuring that if op_type is Read, data_read is the same as data_write
         if !is_write {
@@ -239,9 +248,14 @@ impl MemoryOfflineChecker {
                     .assert_eq(op.data[i].clone(), aux.prev_data[i]);
             }
         }
+        builder
+            .when(aux.is_immediate)
+            .assert_eq(op.data[0].clone(), op.pointer.clone());
 
         // TODO[osama]: resolve is_immediate stuff
-        let count = op.enabled - aux.is_immediate.into();
+        // builder.assert_one(implies(aux.is_immediate.into(), op.enabled.clone()));
+        // TODO[jpw]: make this degree 1 after removing is_immediate
+        let count = op.enabled * not(aux.is_immediate.into());
         let address = MemoryAddress::new(op.addr_space, op.pointer);
         self.memory_bus
             .read(address.clone(), aux.prev_data, aux.prev_timestamp)

@@ -15,18 +15,16 @@ use crate::{
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     fn make_blank_row(&self) -> FieldArithmeticCols<F> {
-        let timestamp = self.memory_chip.borrow_mut().timestamp();
-
         self.generate_row(
             FieldArithmeticRecord {
                 opcode: Opcode::FADD,
                 from_state: ExecutionState {
                     pc: 0,
-                    timestamp: timestamp.as_canonical_u32() as usize,
+                    timestamp: 0,
                 },
-                x_read: MemoryReadRecord::disabled(timestamp, F::one()),
-                y_read: MemoryReadRecord::disabled(timestamp, F::one()),
-                z_write: MemoryWriteRecord::disabled(timestamp, F::one()),
+                x_read: MemoryReadRecord::disabled(),
+                y_read: MemoryReadRecord::disabled(),
+                z_write: MemoryWriteRecord::disabled(),
             },
             false,
         )
@@ -76,9 +74,9 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read),
-                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read),
-                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write),
+                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read, is_valid),
+                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read, is_valid),
+                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write, is_valid),
             },
         }
     }
