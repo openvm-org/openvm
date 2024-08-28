@@ -16,7 +16,7 @@ use super::{bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols};
 use crate::{
     cpu::RANGE_CHECKER_BUS,
     memory::{
-        manager::{access_cell::AccessCell, operation::MemoryAccessCols},
+        manager::{access_cell::AccessCell, operation::MemoryOperation},
         MemoryAddress,
     },
 };
@@ -131,7 +131,7 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryReadOperation<T, V, WORD
     where
         AB: InteractionBuilder<Var = V, Expr = T>,
     {
-        let op = MemoryAccessCols {
+        let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
             cell: AccessCell::new(self.data, self.timestamp),
@@ -163,7 +163,7 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryWriteOperation<T, V, WOR
     where
         AB: InteractionBuilder<Var = V, Expr = T>,
     {
-        let op = MemoryAccessCols {
+        let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
             cell: AccessCell::new(self.data, self.timestamp),
@@ -195,7 +195,7 @@ impl MemoryOfflineChecker {
     pub fn subair_eval<AB: InteractionBuilder, const WORD_SIZE: usize>(
         &self,
         builder: &mut AB,
-        op: MemoryAccessCols<WORD_SIZE, AB::Expr>,
+        op: MemoryOperation<WORD_SIZE, AB::Expr>,
         aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, AB::Var>,
         is_write: bool,
     ) {

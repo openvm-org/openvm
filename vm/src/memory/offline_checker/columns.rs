@@ -3,17 +3,17 @@ use std::iter;
 use afs_primitives::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
 
 use super::bridge::MemoryOfflineChecker;
-use crate::memory::manager::{access_cell::AccessCell, operation::MemoryAccessCols};
+use crate::memory::manager::{access_cell::AccessCell, operation::MemoryOperation};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryOfflineCheckerCols<const WORD_SIZE: usize, T> {
-    pub io: MemoryAccessCols<WORD_SIZE, T>,
+    pub io: MemoryOperation<WORD_SIZE, T>,
     pub aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, T>,
 }
 
 impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerCols<WORD_SIZE, T> {
     pub fn new(
-        io: MemoryAccessCols<WORD_SIZE, T>,
+        io: MemoryOperation<WORD_SIZE, T>,
         aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, T>,
     ) -> Self {
         Self { io, aux }
@@ -57,9 +57,9 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
 
 impl<const WORD_SIZE: usize, T: Clone> MemoryOfflineCheckerCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T]) -> Self {
-        let op_width = MemoryAccessCols::<WORD_SIZE, T>::width();
+        let op_width = MemoryOperation::<WORD_SIZE, T>::width();
         Self {
-            io: MemoryAccessCols::<WORD_SIZE, T>::from_slice(&slc[..op_width]),
+            io: MemoryOperation::<WORD_SIZE, T>::from_slice(&slc[..op_width]),
             aux: MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::from_slice(&slc[op_width..]),
         }
     }
@@ -75,7 +75,7 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerCols<WORD_SIZE, T> {
     }
 
     pub fn width(oc: &MemoryOfflineChecker) -> usize {
-        MemoryAccessCols::<WORD_SIZE, T>::width()
+        MemoryOperation::<WORD_SIZE, T>::width()
             + MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(oc)
     }
 }

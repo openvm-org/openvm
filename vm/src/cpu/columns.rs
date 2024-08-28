@@ -14,13 +14,13 @@ use super::{
 use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
     memory::{
-        manager::{
-            operation::{MemoryReadCols, MemoryWriteCols},
-            trace_builder::MemoryTraceBuilder,
-        },
+        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
         offline_checker::columns::MemoryOfflineCheckerAuxCols,
     },
 };
+
+pub type MemoryReadCols<const WORD_SIZE: usize, T> = MemoryOperation<WORD_SIZE, T>;
+pub type MemoryWriteCols<const WORD_SIZE: usize, T> = MemoryOperation<WORD_SIZE, T>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
