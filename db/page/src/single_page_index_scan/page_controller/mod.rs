@@ -401,7 +401,7 @@ where
         ];
 
         let mut challenger = engine.new_challenger();
-        verifier.verify(&mut challenger, &vk, &proof, &pis)
+        verifier.verify(&mut challenger, &vk, proof, &pis)
     }
 
     #[allow(clippy::too_many_arguments)]
