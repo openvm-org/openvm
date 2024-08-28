@@ -19,7 +19,6 @@ use crate::{
             bus::MemoryBus,
             columns::{MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
         },
-        OpType,
     },
     vm::config::MemoryConfig,
 };
@@ -359,7 +358,7 @@ pub struct MemoryAccess<const WORD_SIZE: usize, T> {
 }
 
 impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
-    fn disabled_op(timestamp: T, addr_space: T, op_type: OpType) -> MemoryAccess<WORD_SIZE, T> {
+    fn disabled_op(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
         debug_assert_ne!(
             addr_space,
             T::zero(),
@@ -369,7 +368,6 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
             MemoryOperation {
                 addr_space,
                 pointer: T::zero(),
-                op_type: T::from_canonical_u8(op_type as u8),
                 cell: AccessCell::new([T::zero(); WORD_SIZE], timestamp),
                 enabled: T::zero(),
             },
@@ -382,7 +380,6 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
             op: MemoryOperation {
                 addr_space: read.address_space,
                 pointer: read.pointer,
-                op_type: T::zero(),
                 cell: AccessCell::new(read.data, read.timestamp),
                 enabled: T::one(),
             },
@@ -395,7 +392,6 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
             op: MemoryOperation {
                 addr_space: write.address_space,
                 pointer: write.pointer,
-                op_type: T::one(),
                 cell: AccessCell::new(write.data, write.timestamp),
                 enabled: T::one(),
             },

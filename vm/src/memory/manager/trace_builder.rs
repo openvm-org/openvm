@@ -1,7 +1,7 @@
 use p3_field::PrimeField32;
 
 use super::{operation::MemoryOperation, MemoryAccess, MemoryChipRef};
-use crate::memory::{offline_checker::columns::MemoryOfflineCheckerAuxCols, OpType};
+use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 const WORD_SIZE: usize = 1;
 
@@ -59,22 +59,22 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
 
     // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
     pub fn disabled_read(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
-        self.disabled_op(addr_space, OpType::Read)
+        self.disabled_op(addr_space)
     }
 
     // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
     pub fn disabled_write(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
-        self.disabled_op(addr_space, OpType::Write)
+        self.disabled_op(addr_space)
     }
 
-    pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryOperation<WORD_SIZE, F> {
+    pub fn disabled_op(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
         debug_assert_ne!(
             addr_space,
             F::zero(),
             "Disabled memory operation cannot be immediate"
         );
         let clk = self.memory_chip.borrow().timestamp();
-        let mem_access = MemoryAccess::disabled_op(clk, addr_space, op_type);
+        let mem_access = MemoryAccess::disabled_op(clk, addr_space);
 
         self.accesses_buffer
             .push(self.aux_col_from_access(&mem_access));

@@ -45,7 +45,7 @@ impl<AB: InteractionBuilder> Air<AB> for OfflineCheckerDummyAir {
         let local = MemoryOfflineCheckerCols::<TEST_WORD_SIZE, AB::Var>::from_slice(&local);
 
         self.offline_checker
-            .subair_eval(builder, local.io.into_expr::<AB>(), local.aux);
+            .subair_eval(builder, local.io.into_expr::<AB>(), local.aux, true);
     }
 }
 

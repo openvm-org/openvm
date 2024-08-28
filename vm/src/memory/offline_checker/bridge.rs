@@ -134,11 +134,10 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryReadOperation<T, V, WORD
         let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
-            op_type: AB::Expr::from_bool(false),
             cell: AccessCell::new(self.data, self.timestamp),
             enabled: count.into(),
         };
-        self.offline_checker.subair_eval(builder, op, self.aux);
+        self.offline_checker.subair_eval(builder, op, self.aux, false);
     }
 }
 
@@ -166,11 +165,10 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryWriteOperation<T, V, WOR
         let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
-            op_type: AB::Expr::from_bool(true),
             cell: AccessCell::new(self.data, self.timestamp),
             enabled: count.into(),
         };
-        self.offline_checker.subair_eval(builder, op, self.aux);
+        self.offline_checker.subair_eval(builder, op, self.aux, true);
     }
 }
 
@@ -197,8 +195,8 @@ impl MemoryOfflineChecker {
         builder: &mut AB,
         op: MemoryOperation<WORD_SIZE, AB::Expr>,
         aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, AB::Var>,
+        is_write: bool,
     ) {
-        builder.assert_bool(op.op_type.clone());
         builder.assert_bool(op.enabled.clone());
 
         // Ensuring is_immediate is correct
@@ -217,10 +215,9 @@ impl MemoryOfflineChecker {
         builder.assert_one(implies(aux.is_immediate.into(), op.enabled.clone()));
 
         // is_immediate => read
-        builder.assert_one(implies(
-            aux.is_immediate.into(),
-            AB::Expr::one() - op.op_type.clone(),
-        ));
+        if is_write {
+            builder.assert_zero(aux.is_immediate);
+        }
 
         let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
             aux.old_cell.clk.into(),
@@ -234,11 +231,12 @@ impl MemoryOfflineChecker {
         builder.assert_one(implies(op.enabled.clone(), aux.clk_lt.into()));
 
         // Ensuring that if op_type is Read, data_read is the same as data_write
-        for i in 0..WORD_SIZE {
-            builder
-                .when(op.enabled.clone())
-                .when(AB::Expr::one() - op.op_type.clone())
-                .assert_eq(op.cell.data[i].clone(), aux.old_cell.data[i]);
+        if !is_write {
+            for i in 0..WORD_SIZE {
+                builder
+                    .when(op.enabled.clone())
+                    .assert_eq(op.cell.data[i].clone(), aux.old_cell.data[i]);
+            }
         }
 
         // TODO[osama]: resolve is_immediate stuff
