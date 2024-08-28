@@ -109,6 +109,7 @@ dependencies = [
  "snark-verifier-sdk",
  "stark-vm",
  "strum_macros",
+ "tracing",
  "zkhash",
 ]
 
