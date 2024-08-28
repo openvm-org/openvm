@@ -3,7 +3,7 @@ use std::sync::Arc;
 use afs_page::common::page::Page;
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
 use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
-use axdb_interface::{committed_page::CommittedPage, exec::AxdbExec, PCS_LOG_DEGREE};
+use axdb_interface::{committed_page::CommittedPage, controller::AxdbController, PCS_LOG_DEGREE};
 use datafusion::{
     arrow::datatypes::{DataType, Field, Schema},
     execution::context::SessionContext,
@@ -54,7 +54,7 @@ pub async fn test_wide_types() {
     println!("{:#?}", logical.clone());
 
     let engine = default_engine(PCS_LOG_DEGREE);
-    let mut afs = AxdbExec::new(ctx, logical, engine).await;
+    let mut afs = AxdbController::new(ctx, logical, engine).await;
     println!(
         "Flattened Axdb execution plan: {:?}",
         afs.axdb_execution_plan

@@ -17,7 +17,16 @@ use tracing::info;
 use super::{functionality::filter::FilterFn, AxdbNode, AxdbNodeExecutable};
 use crate::{committed_page::CommittedPage, expr::AxdbExpr};
 
-pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
+pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync>
+where
+    Val<SC>: PrimeField64,
+    PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+    PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Pcs: Send + Sync,
+    SC::Challenge: Send + Sync,
+{
     pub input: Arc<Mutex<AxdbNode<SC, E>>>,
     pub output: Option<CommittedPage<SC>>,
     pub predicate: AxdbExpr,

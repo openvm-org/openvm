@@ -10,6 +10,7 @@ use afs_stark_backend::{
 use afs_test_utils::engine::StarkEngine;
 use async_trait::async_trait;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::LogicalPlan};
+use enum_dispatch::enum_dispatch;
 use futures::lock::Mutex;
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
@@ -23,24 +24,11 @@ pub mod functionality;
 pub mod page_scan;
 pub mod projection;
 
-macro_rules! delegate_to_node {
-    ($self:ident, $method:ident, $ctx:expr, $engine:expr) => {
-        match $self {
-            AxdbNode::PageScan(ref mut page_scan) => page_scan.$method($ctx, $engine).await,
-            AxdbNode::Projection(ref mut projection) => projection.$method($ctx, $engine).await,
-            AxdbNode::Filter(ref mut filter) => filter.$method($ctx, $engine).await,
-        }
-    };
-    ($self:ident, $method:ident) => {
-        match $self {
-            AxdbNode::PageScan(page_scan) => page_scan.$method(),
-            AxdbNode::Projection(projection) => projection.$method(),
-            AxdbNode::Filter(filter) => filter.$method(),
-        }
-    };
-}
-
+/// The AxdbNodeExecutable trait defines the methods that each AxdbNode type must implement.
+/// These methods handle the execution, key generation, proof generation, verification of the node,
+/// and provide access to the values in the node.
 #[async_trait]
+#[enum_dispatch]
 pub trait AxdbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     /// Runs the node's execution logic without any cryptographic operations
     async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()>;
@@ -60,9 +48,19 @@ pub trait AxdbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC> + Send +
 
 /// AxdbNode is a wrapper around the node types that conform to the AxdbNodeExecutable trait.
 /// It provides conversion from DataFusion's LogicalPlan to the AxdbNode type. AxdbNodes are
-/// meant to be executed by the AxdbExec engine. They store the necessary information to handle
+/// meant to be executed by the AxdbController engine. They store the necessary information to handle
 /// the cryptographic operations for each type of AxdbNode operation.
-pub enum AxdbNode<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
+#[enum_dispatch(AxdbNodeExecutable<SC, E>)]
+pub enum AxdbNode<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync>
+where
+    Val<SC>: PrimeField64,
+    PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+    PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Pcs: Send + Sync,
+    SC::Challenge: Send + Sync,
+{
     PageScan(PageScan<SC, E>),
     Projection(Projection<SC, E>),
     Filter(Filter<SC, E>),
@@ -80,7 +78,7 @@ where
 {
     /// Converts a LogicalPlan tree to a flat AxdbNode vec. Some LogicalPlan nodes may convert to
     /// multiple AxdbNodes.
-    pub fn from(logical_plan: &LogicalPlan, inputs: Vec<Arc<Mutex<AxdbNode<SC, E>>>>) -> Self {
+    pub fn new(logical_plan: &LogicalPlan, inputs: Vec<Arc<Mutex<AxdbNode<SC, E>>>>) -> Self {
         match logical_plan {
             LogicalPlan::TableScan(table_scan) => {
                 let table_name = table_scan.table_name.to_string();
@@ -106,42 +104,18 @@ where
             _ => panic!("Invalid node type: {:?}", logical_plan),
         }
     }
-
-    /// Get the inputs to the node as a vector from left to right.
-    pub fn inputs(&self) -> Vec<&Arc<Mutex<AxdbNode<SC, E>>>> {
-        match self {
-            AxdbNode::PageScan(_) => vec![],
-            AxdbNode::Projection(projection) => vec![&projection.input],
-            AxdbNode::Filter(filter) => vec![&filter.input],
-        }
-    }
-
-    pub async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        delegate_to_node!(self, execute, ctx, engine)
-    }
-
-    pub async fn keygen(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        delegate_to_node!(self, keygen, ctx, engine)
-    }
-
-    pub async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        delegate_to_node!(self, prove, ctx, engine)
-    }
-
-    pub async fn verify(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        delegate_to_node!(self, verify, ctx, engine)
-    }
-
-    pub fn output(&self) -> &Option<CommittedPage<SC>> {
-        delegate_to_node!(self, output)
-    }
-
-    pub fn name(&self) -> &str {
-        delegate_to_node!(self, name)
-    }
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> Debug for AxdbNode<SC, E> {
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> Debug for AxdbNode<SC, E>
+where
+    Val<SC>: PrimeField64,
+    PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+    PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Pcs: Send + Sync,
+    SC::Challenge: Send + Sync,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AxdbNode::PageScan(page_scan) => {

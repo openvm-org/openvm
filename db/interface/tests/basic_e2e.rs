@@ -3,7 +3,8 @@ use std::sync::Arc;
 use afs_page::common::page::Page;
 use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
 use axdb_interface::{
-    committed_page, committed_page::CommittedPage, exec::AxdbExec, NUM_IDX_COLS, PCS_LOG_DEGREE,
+    committed_page, committed_page::CommittedPage, controller::AxdbController, NUM_IDX_COLS,
+    PCS_LOG_DEGREE,
 };
 use datafusion::{
     arrow::{
@@ -41,7 +42,7 @@ pub async fn test_basic_e2e() {
     let logical = ctx.state().create_logical_plan(sql.as_str()).await.unwrap();
 
     let engine = default_engine(PCS_LOG_DEGREE);
-    let mut axdb = AxdbExec::new(ctx, logical, engine).await;
+    let mut axdb = AxdbController::new(ctx, logical, engine).await;
     println!(
         "Flattened Axdb execution plan: {:?}",
         axdb.axdb_execution_plan
@@ -87,7 +88,7 @@ pub async fn test_page_scan_with_filter() {
     println!("{:#?}", logical.clone());
 
     let engine = default_engine(PCS_LOG_DEGREE);
-    let mut axdb = AxdbExec::new(ctx, logical, engine).await;
+    let mut axdb = AxdbController::new(ctx, logical, engine).await;
     println!(
         "Flattened Axdb execution plan: {:?}",
         axdb.axdb_execution_plan

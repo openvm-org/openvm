@@ -10,7 +10,7 @@ Contains information in `Axdb`'s `Page` format, with additional required DataFus
 
 An `AxdbNode` contains a pointer to another `AxdbNode` or a DataFusion `TableSource` that is a `CommittedPage`. `AxdbNode`s contain both the operation to execute, a way to store the appropriate cryptographic information, and the output of the operation in the node itself. Operations must be run in the order of `execute`, `keygen`, `prove`, and then `verify`.
 
-## AxdbExec
+## AxdbController
 
 Generates a flattened `AxdbNode` vector from a `LogicalPlan` tree root node and DataFusion `SessionContext`.
 

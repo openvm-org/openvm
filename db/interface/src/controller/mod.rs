@@ -12,18 +12,27 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info;
 
-use crate::node::AxdbNode;
+use crate::node::{AxdbNode, AxdbNodeExecutable};
 
 macro_rules! run_execution_plan {
     ($self:ident, $method:ident, $ctx:expr, $engine:expr) => {
         for node in &mut $self.axdb_execution_plan {
             let mut node = node.lock().await;
-            node.$method(&$self.ctx, &$self.engine).await?;
+            (&mut node).$method(&$self.ctx, &$self.engine).await?;
         }
     };
 }
 
-pub struct AxdbExec<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
+pub struct AxdbController<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync>
+where
+    Val<SC>: PrimeField64,
+    PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+    PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Pcs: Send + Sync,
+    SC::Challenge: Send + Sync,
+{
     /// The session context from DataFusion
     pub ctx: SessionContext,
     /// STARK engine used for cryptographic operations
@@ -32,7 +41,7 @@ pub struct AxdbExec<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     pub axdb_execution_plan: Vec<Arc<Mutex<AxdbNode<SC, E>>>>,
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxdbExec<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxdbController<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -101,7 +110,7 @@ where
         let inputs = root.inputs();
 
         if inputs.is_empty() {
-            let afs_node = Arc::new(Mutex::new(AxdbNode::from(root, vec![])));
+            let afs_node = Arc::new(Mutex::new(AxdbNode::new(root, vec![])));
             flattened.push(afs_node);
         } else {
             let mut input_indexes = vec![];
@@ -115,7 +124,7 @@ where
                 .iter()
                 .map(|i| Arc::clone(&flattened[*i]))
                 .collect::<Vec<Arc<Mutex<AxdbNode<SC, E>>>>>();
-            let afs_node = Arc::new(Mutex::new(AxdbNode::from(root, input_pointers)));
+            let afs_node = Arc::new(Mutex::new(AxdbNode::new(root, input_pointers)));
             flattened.push(afs_node);
         }
 

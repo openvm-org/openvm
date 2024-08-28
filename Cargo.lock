@@ -874,6 +874,7 @@ dependencies = [
  "bincode",
  "datafusion",
  "derivative",
+ "enum_dispatch",
  "futures",
  "hex",
  "p3-baby-bear",
