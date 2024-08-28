@@ -157,10 +157,7 @@ impl KeccakVmAir {
                 .read(MemoryAddress::new(addr_sp, ptr), [value], timestamp.clone())
                 .eval(builder, should_receive.clone());
 
-            // We only advance timestamp when new start, which means either it is
-            // the start of a new instruction execution,
-            // or opcode isn't enabled (in which case we don't care)
-            timestamp = timestamp + local.sponge.is_new_start;
+            timestamp = timestamp + AB::Expr::one();
         }
         timestamp
     }
@@ -248,10 +245,10 @@ impl KeccakVmAir {
     /// Amount to advance timestamp by after execution of one opcode instruction.
     /// This is an upper bound dependant on the length `len` operand, which is unbounded.
     pub fn timestamp_change<T: AbstractField>(len: impl Into<T>) -> T {
-        // execution reads only done on first row of multi-block
+        // actual number is ceil(len / 136) * (3 + 136) + KECCAK_DIGEST_WRITES
         // digest writes only done on last row of multi-block
         // add another KECCAK_ABSORB_READS to round up so we don't deal with padding
-        len.into()
+        len.into() * T::two()
             + T::from_canonical_usize(
                 KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
             )

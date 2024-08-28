@@ -64,8 +64,9 @@ pub struct KeccakVmChip<F: PrimeField32> {
 
 #[derive(Clone, Debug)]
 pub struct KeccakRecord<F> {
-    pub src_read: MemoryAccess<1, F>,
+    pub pc: F,
     pub dst_read: MemoryAccess<1, F>,
+    pub src_read: MemoryAccess<1, F>,
     pub len_read: MemoryAccess<1, F>,
     pub input_blocks: Vec<KeccakInputBlock<F>>,
     pub digest_writes: [MemoryAccess<1, F>; KECCAK_DIGEST_WRITES],
@@ -136,6 +137,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let mut hasher = Keccak::v256();
 
         for block_idx in 0..num_blocks {
+            if block_idx != 0 {
+                memory.increment_timestamp_by(F::from_canonical_usize(KECCAK_EXECUTION_READS));
+            }
             let mut bytes_read = Vec::with_capacity(KECCAK_RATE_BYTES);
             let bytes: [_; KECCAK_RATE_BYTES] = from_fn(|i| {
                 if i < remaining_len {
@@ -187,6 +191,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         tracing::trace!("[runtime] keccak256 output: {:?}", output);
 
         let record = KeccakRecord {
+            pc: F::from_canonical_usize(from_state.pc),
             src_read,
             dst_read,
             len_read,
@@ -236,5 +241,17 @@ impl<F: Copy> KeccakRecord<F> {
 
     pub fn start_timestamp(&self) -> F {
         self.src_read.op.cell.clk
+    }
+
+    pub fn src(&self) -> F {
+        self.src_read.op.cell.data[0]
+    }
+
+    pub fn dst(&self) -> F {
+        self.dst_read.op.cell.data[0]
+    }
+
+    pub fn len(&self) -> F {
+        self.len_read.op.cell.data[0]
     }
 }

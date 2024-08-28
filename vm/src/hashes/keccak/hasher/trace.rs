@@ -1,21 +1,33 @@
 use std::array::from_fn;
 
+use p3_air::BaseAir;
 use p3_field::PrimeField32;
-use p3_keccak_air::{generate_trace_rows, KeccakCols, NUM_KECCAK_COLS, NUM_ROUNDS, U64_LIMBS};
+use p3_keccak_air::{
+    generate_trace_rows, KeccakCols as KeccakPermCols, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS,
+    NUM_ROUNDS, U64_LIMBS,
+};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use tiny_keccak::keccakf;
 
-use super::KeccakVmChip;
-use crate::hashes::keccak::hasher::{
-    bridge::{BLOCK_MEMORY_ACCESSES, TIMESTAMP_OFFSET_FOR_OPCODE},
-    KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
+use super::{KeccakVmChip, KECCAK_DIGEST_WRITES};
+use crate::{
+    arch::chips::MachineChip,
+    hashes::keccak::hasher::{
+        columns::{KeccakMemoryCols, KeccakOpcodeCols, KeccakVmColsMut},
+        KECCAK_ABSORB_READS, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
+    },
+    memory::{
+        manager::{MemoryAccess, MemoryChip},
+        offline_checker::columns::MemoryWriteAuxCols,
+    },
 };
 
-impl<F: PrimeField32> KeccakVmChip<F> {
-    pub fn generate_trace(&mut self) -> RowMajorMatrix<F> {
-        let requests = std::mem::take(&mut self.requests);
-        let total_num_blocks: usize = requests.iter().map(|(_, block)| block.len()).sum();
+impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
+    /// This should only be called once. It takes all records from the chip state.
+    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+        let records = std::mem::take(&mut self.records);
+        let total_num_blocks: usize = records.iter().map(|r| r.input_blocks.len()).sum();
         let mut states = Vec::with_capacity(total_num_blocks);
         let mut opcode_blocks = Vec::with_capacity(total_num_blocks);
 
@@ -34,12 +46,32 @@ impl<F: PrimeField32> KeccakVmChip<F> {
                 }
             }
         }
+        struct AuxBlock<F>  {
+            diff: StateDiff,
+            op_reads: [MemoryAccess<1,F>; 3],
+            digest_writes: [MemoryAccess<1,F>; KECCAK_DIGEST_WRITES],
+        }
 
         // prepare the states
         let mut state: [u64; 25];
-        for (mut opcode, blocks) in requests {
+        for record in records {
             state = [0u64; 25];
-            for block in blocks {
+            let [a, b, c, d, e, f] = record.operands();
+            let mut opcode = KeccakOpcodeCols {
+                pc: record.pc,
+                is_enabled: F::one(),
+                start_timestamp: record.start_timestamp(),
+                a,
+                b,
+                c,
+                d,
+                e,
+                f,
+                dst: record.dst(),
+                src: record.src(),
+                len: record.len(),
+            };
+            for (idx, block) in record.input_blocks.into_iter().enumerate() {
                 // absorb
                 for (bytes, s) in block.padded_bytes.chunks_exact(8).zip(state.iter_mut()) {
                     // u64 <-> bytes conversion is little-endian
@@ -60,8 +92,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
                 opcode_blocks.push((opcode, diff, block));
                 opcode.len -= F::from_canonical_usize(KECCAK_RATE_BYTES);
                 opcode.src += F::from_canonical_usize(KECCAK_RATE_BYTES);
-                opcode.start_timestamp +=
-                    F::from_canonical_usize(TIMESTAMP_OFFSET_FOR_OPCODE + BLOCK_MEMORY_ACCESSES);
+                opcode.start_timestamp += F::from_canonical_usize(KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS);
             }
         }
 
@@ -72,46 +103,74 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         // Resize with dummy `is_opcode = 0`
         opcode_blocks.resize(num_blocks, Default::default());
 
+        let memory = self.memory_chip.borrow();
         // Use unsafe alignment so we can parallely write to the matrix
-        let mut trace = RowMajorMatrix::new(
-            vec![F::zero(); num_rows * NUM_KECCAK_VM_COLS],
-            NUM_KECCAK_VM_COLS,
-        );
-        let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<KeccakVmCols<F>>() };
-        assert!(prefix.is_empty(), "Alignment should match");
-        assert!(suffix.is_empty(), "Alignment should match");
-        assert_eq!(rows.len(), num_rows);
+        let trace_width = self.air.width();
+        let mut trace = RowMajorMatrix::new(vec![F::zero(); num_rows * trace_width], trace_width);
 
-        rows.par_chunks_mut(NUM_ROUNDS)
+        trace
+            .values
+            .par_chunks_mut(trace_width * NUM_ROUNDS)
             .zip(
                 p3_keccak_trace
                     .values
-                    .par_chunks(NUM_KECCAK_COLS * NUM_ROUNDS),
+                    .par_chunks(NUM_KECCAK_PERM_COLS * NUM_ROUNDS),
             )
             .zip(opcode_blocks.into_par_iter())
-            .for_each(|((rows, p3_keccak_mat), (opcode, diff, block))| {
-                for (row, p3_keccak_row) in rows
-                    .iter_mut()
-                    .zip(p3_keccak_mat.chunks_exact(NUM_KECCAK_COLS))
+            .for_each(|((rows, p3_keccak_mat), (opcode, diff, mut block))| {
+                let height = rows.len() / trace_width;
+                for (row_idx,(row, p3_keccak_row)) in rows
+                    .chunks_exact_mut(trace_width)
+                    .zip(p3_keccak_mat.chunks_exact(NUM_KECCAK_PERM_COLS)).enumerate()
                 {
-                    // Cast &mut KeccakCols<F> to &mut [F]:
-                    let inner_raw_ptr: *mut KeccakCols<F> = &mut row.inner as *mut _;
                     // Safety: `KeccakPermCols` **must** be the first field in `KeccakVmCols`
-                    let row_slice = unsafe {
-                        std::slice::from_raw_parts_mut(inner_raw_ptr as *mut F, NUM_KECCAK_COLS)
-                    };
-                    row_slice.copy_from_slice(p3_keccak_row);
-
-                    row.opcode = opcode;
+                    row[..NUM_KECCAK_PERM_COLS].copy_from_slice(p3_keccak_row);
+                    let mut row = KeccakVmColsMut::from_mut_slice(row);
+                    *row.opcode = opcode;
 
                     row.sponge.block_bytes = block.padded_bytes.map(F::from_canonical_u8);
                     for (i, is_padding) in row.sponge.is_padding_byte.iter_mut().enumerate() {
                         *is_padding = F::from_bool(i >= block.remaining_len);
                     }
+
+                    // Extend bytes_read with dummy reads to fixed length
+                    let absorb_reads = from_fn(|i| {
+                        if let Some(read) = block.bytes_read.get(i) {
+                            memory.make_access_cols(*read)
+                        } else {
+                            memory.make_access_cols(MemoryAccess::disabled_read(
+                                block.start_read_timestamp + F::from_canonical_usize(i),
+                                opcode.e,
+                            ))
+                        }
+                    });
+                    let start_write_timestamp =
+                        block.start_read_timestamp + F::from_canonical_usize(KECCAK_ABSORB_READS);
+
+                    let op_reads =
+                    let mem = KeccakMemoryCols {
+                        // Disabled. Only first row will have real read.
+                        // We don't advance timestamp for dummy reads
+                        op_reads: [opcode.d, opcode.d, opcode.f].map(|address_space| {
+                            memory.make_access_cols(MemoryAccess::disabled_read(
+                                opcode.start_timestamp,
+                                address_space,
+                            ))
+                        }),
+                        absorb_reads,
+                        digest_writes: disabled_write_chunk(
+                            &memory,
+                            start_write_timestamp,
+                            opcode.e,
+                        ),
+                    };
+                    row.mem_oc.copy_from_slice(&mem.flatten());
                 }
-                rows[0].sponge.is_new_start = F::from_bool(block.is_new_start);
-                rows[0].sponge.state_hi = diff.pre_hi.map(F::from_canonical_u8);
-                let last_row = rows.last_mut().unwrap();
+                let first_row = KeccakVmColsMut::from_mut_slice(&mut rows[..trace_width]);
+                first_row.sponge.is_new_start = F::from_bool(block.is_new_start);
+                first_row.sponge.state_hi = diff.pre_hi.map(F::from_canonical_u8);
+                let last_row =
+                    KeccakVmColsMut::from_mut_slice(&mut rows[(height - 1) * trace_width..]);
                 last_row.sponge.state_hi = diff.post_hi.map(F::from_canonical_u8);
                 last_row.inner.export =
                     opcode.is_enabled * F::from_bool(block.remaining_len < KECCAK_RATE_BYTES);
@@ -119,4 +178,17 @@ impl<F: PrimeField32> KeccakVmChip<F> {
 
         trace
     }
+}
+
+fn disabled_write_cols<F: PrimeField32, const N: usize>(
+    memory: &MemoryChip<F>,
+    start_timestamp: F,
+    address_space: F,
+) -> [MemoryWriteAuxCols<1, F>; N] {
+    from_fn(|i| {
+        memory.make_access_cols(MemoryAccess::disabled_write(
+            start_timestamp + F::from_canonical_usize(i),
+            address_space,
+        ))
+    })
 }

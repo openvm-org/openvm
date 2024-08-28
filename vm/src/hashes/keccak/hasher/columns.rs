@@ -201,4 +201,21 @@ impl<T> KeccakMemoryCols<T> {
             digest_writes,
         }
     }
+
+    pub fn flatten(self) -> Vec<T> {
+        self.op_reads
+            .into_iter()
+            .flat_map(|read| read.flatten())
+            .chain(
+                self.absorb_reads
+                    .into_iter()
+                    .flat_map(|read| read.flatten()),
+            )
+            .chain(
+                self.digest_writes
+                    .into_iter()
+                    .flat_map(|write| write.flatten()),
+            )
+            .collect()
+    }
 }

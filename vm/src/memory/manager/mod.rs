@@ -249,6 +249,10 @@ impl<F: PrimeField32> MemoryChip<F> {
         self.timestamp += F::one();
     }
 
+    pub fn increment_timestamp_by(&mut self, change: F) {
+        self.timestamp += change;
+    }
+
     pub fn timestamp(&self) -> F {
         self.timestamp
     }
