@@ -418,32 +418,6 @@ impl<F: PrimeField32> CpuChip<F> {
                 timestamp += timestamp_delta(opcode);
             }
 
-            let now_trace_cells = vm.current_trace_cells();
-            let added_trace_cells = now_trace_cells - prev_trace_cells;
-
-            if collect_metrics {
-                //vm.update_chip_metrics();
-                vm.collected_metrics
-                    .opcode_counts
-                    .entry(opcode.to_string())
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
-
-                if !dsl_instr.is_empty() {
-                    vm.collected_metrics
-                        .dsl_counts
-                        .entry(dsl_instr)
-                        .and_modify(|count| *count += 1)
-                        .or_insert(1);
-                }
-
-                vm.collected_metrics
-                    .opcode_trace_cells
-                    .entry(opcode.to_string())
-                    .and_modify(|count| *count += added_trace_cells)
-                    .or_insert(added_trace_cells);
-            }
-
             // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
             // and move this logic into generate_trace().
             {
@@ -519,6 +493,31 @@ impl<F: PrimeField32> CpuChip<F> {
 
                 let cols = CpuCols { io, aux };
                 vm.cpu_chip.borrow_mut().rows.push(cols.flatten());
+            }
+
+            let now_trace_cells = vm.current_trace_cells();
+            let added_trace_cells = now_trace_cells - prev_trace_cells;
+
+            if collect_metrics {
+                vm.collected_metrics
+                    .opcode_counts
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+
+                if !dsl_instr.is_empty() {
+                    vm.collected_metrics
+                        .dsl_counts
+                        .entry(dsl_instr)
+                        .and_modify(|count| *count += 1)
+                        .or_insert(1);
+                }
+
+                vm.collected_metrics
+                    .opcode_trace_cells
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += added_trace_cells)
+                    .or_insert(added_trace_cells);
             }
 
             pc = next_pc;
