@@ -14,15 +14,13 @@ use super::{
 use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
     memory::{
-        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
+        manager::trace_builder::MemoryTraceBuilder,
         offline_checker::columns::{
             MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols,
         },
     },
 };
-
-pub type MemoryReadCols<const WORD_SIZE: usize, T> = MemoryOperation<WORD_SIZE, T>;
-pub type MemoryWriteCols<const WORD_SIZE: usize, T> = MemoryOperation<WORD_SIZE, T>;
+use crate::memory::manager::operation::{MemoryReadCols, MemoryWriteCols};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -224,7 +222,7 @@ impl<F: PrimeField32> CpuAuxCols<F> {
 
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
-            (reads[0].cell.data.to_vec(), reads[1].cell.data.to_vec()),
+            (reads[0].data.to_vec(), reads[1].data.to_vec()),
         );
         Self {
             operation_flags,

@@ -270,7 +270,7 @@ impl<F: PrimeField32> CpuChip<F> {
                     assert!(reads.len() < CPU_MAX_READS_PER_CYCLE);
 
                     reads.push(mem_read_trace_builder.read_cell($addr_space, $pointer));
-                    reads[reads.len() - 1].cell.data[0]
+                    reads[reads.len() - 1].data[0]
                 }};
             }
 
@@ -480,7 +480,7 @@ impl<F: PrimeField32> CpuChip<F> {
 
             let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
                 &IsEqualVecAir::new(WORD_SIZE),
-                (reads[0].cell.data.to_vec(), reads[1].cell.data.to_vec()),
+                (reads[0].data.to_vec(), reads[1].data.to_vec()),
             );
 
             let read0_equals_read1 = is_equal_vec_cols.io.is_equal;

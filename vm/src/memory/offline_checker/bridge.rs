@@ -16,7 +16,7 @@ use super::{bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols};
 use crate::{
     cpu::RANGE_CHECKER_BUS,
     memory::{
-        manager::{access_cell::AccessCell, operation::MemoryOperation},
+        manager::operation::MemoryOperation,
         MemoryAddress,
     },
 };
@@ -134,7 +134,8 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryReadOperation<T, V, WORD
         let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
-            cell: AccessCell::new(self.data, self.timestamp),
+            timestamp: self.timestamp,
+            data: self.data,
             enabled: count.into(),
         };
         self.offline_checker
@@ -166,7 +167,8 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryWriteOperation<T, V, WOR
         let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
-            cell: AccessCell::new(self.data, self.timestamp),
+            timestamp: self.timestamp,
+            data: self.data,
             enabled: count.into(),
         };
         self.offline_checker
@@ -223,7 +225,7 @@ impl MemoryOfflineChecker {
 
         let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
             aux.old_cell.clk.into(),
-            op.cell.clk.clone(),
+            op.timestamp.clone(),
             aux.clk_lt.into(),
         );
 
@@ -237,7 +239,7 @@ impl MemoryOfflineChecker {
             for i in 0..WORD_SIZE {
                 builder
                     .when(op.enabled.clone())
-                    .assert_eq(op.cell.data[i].clone(), aux.old_cell.data[i]);
+                    .assert_eq(op.data[i].clone(), aux.old_cell.data[i]);
             }
         }
 
@@ -248,7 +250,7 @@ impl MemoryOfflineChecker {
             .read(address.clone(), aux.old_cell.data, aux.old_cell.clk)
             .eval(builder, count.clone());
         self.memory_bus
-            .write(address, op.cell.data, op.cell.clk)
+            .write(address, op.data, op.timestamp)
             .eval(builder, count);
     }
 }

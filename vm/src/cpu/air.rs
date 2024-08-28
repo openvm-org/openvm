@@ -143,13 +143,13 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         when_loadw.assert_eq(read1.pointer, c);
 
         when_loadw.assert_eq(read2.addr_space, e);
-        self.assert_compose(&mut when_loadw, read1.cell.data, read2.pointer - b);
+        self.assert_compose(&mut when_loadw, read1.data, read2.pointer - b);
 
         when_loadw.assert_eq(write.addr_space, d);
         when_loadw.assert_eq(write.pointer, a);
 
         for i in 0..WORD_SIZE {
-            when_loadw.assert_eq(write.cell.data[i], read2.cell.data[i]);
+            when_loadw.assert_eq(write.data[i], read2.data[i]);
         }
 
         when_loadw
@@ -170,9 +170,9 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         when_storew.assert_eq(read2.pointer, a);
 
         when_storew.assert_eq(write.addr_space, e);
-        self.assert_compose(&mut when_storew, read1.cell.data, write.pointer - b);
+        self.assert_compose(&mut when_storew, read1.data, write.pointer - b);
         for i in 0..WORD_SIZE {
-            when_storew.assert_eq(write.cell.data[i], read2.cell.data[i]);
+            when_storew.assert_eq(write.data[i], read2.data[i]);
         }
 
         when_storew
@@ -196,14 +196,14 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
 
         when_loadw2.assert_eq(read3.addr_space, e);
         let addr_diff =
-            from_fn::<AB::Expr, WORD_SIZE, _>(|i| read1.cell.data[i] + g * read2.cell.data[i]);
+            from_fn::<AB::Expr, WORD_SIZE, _>(|i| read1.data[i] + g * read2.data[i]);
         self.assert_compose(&mut when_loadw2, addr_diff, read3.pointer - b);
 
         when_loadw2.assert_eq(write.addr_space, d);
         when_loadw2.assert_eq(write.pointer, a);
 
         for i in 0..WORD_SIZE {
-            when_loadw2.assert_eq(write.cell.data[i], read3.cell.data[i]);
+            when_loadw2.assert_eq(write.data[i], read3.data[i]);
         }
 
         when_loadw2
@@ -229,10 +229,10 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
 
         when_storew2.assert_eq(write.addr_space, e);
         let addr_diff =
-            from_fn::<AB::Expr, WORD_SIZE, _>(|i| read1.cell.data[i] + g * read3.cell.data[i]);
+            from_fn::<AB::Expr, WORD_SIZE, _>(|i| read1.data[i] + g * read3.data[i]);
         self.assert_compose(&mut when_storew2, addr_diff, write.pointer - b);
         for i in 0..WORD_SIZE {
-            when_storew2.assert_eq(write.cell.data[i], read2.cell.data[i]);
+            when_storew2.assert_eq(write.data[i], read2.data[i]);
         }
 
         when_storew2
@@ -249,7 +249,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         when_shintw.assert_eq(read1.pointer, a);
 
         when_shintw.assert_eq(write.addr_space, e);
-        self.assert_compose(&mut when_shintw, read1.cell.data, write.pointer - b);
+        self.assert_compose(&mut when_shintw, read1.data, write.pointer - b);
 
         when_shintw
             .when_transition()
@@ -263,7 +263,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
 
         when_jal.assert_eq(write.addr_space, d);
         when_jal.assert_eq(write.pointer, a);
-        self.assert_compose(&mut when_jal, write.cell.data, pc + inst_width);
+        self.assert_compose(&mut when_jal, write.data, pc + inst_width);
 
         when_jal.when_transition().assert_eq(next_pc, pc + b);
 
@@ -343,8 +343,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         let mut when_publish = builder.when(publish_flag);
 
         when_publish.assert_one(sum_flags);
-        self.assert_compose(&mut when_publish, read1.cell.data, match_public_value_index);
-        self.assert_compose(&mut when_publish, read2.cell.data, match_public_value);
+        self.assert_compose(&mut when_publish, read1.data, match_public_value_index);
+        self.assert_compose(&mut when_publish, read2.data, match_public_value);
 
         when_publish.assert_eq(read1.addr_space, d);
         when_publish.assert_eq(read1.pointer, a);
@@ -360,7 +360,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
             memory_bridge
                 .read::<AB::Expr>(
                     MemoryAddress::new(read.addr_space, read.pointer),
-                    read.cell.data,
+                    read.data,
                     op_timestamp.clone(),
                 )
                 .eval(builder, read.enabled);
@@ -372,7 +372,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
             memory_bridge
                 .write(
                     MemoryAddress::new(write.addr_space, write.pointer),
-                    write.cell.data,
+                    write.data,
                     op_timestamp.clone(),
                 )
                 .eval(builder, write.enabled);
@@ -382,8 +382,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         // evaluate equality between read1 and read2
 
         let is_equal_vec_io_cols = IsEqualVecIoCols {
-            x: read1.cell.data.to_vec(),
-            y: read2.cell.data.to_vec(),
+            x: read1.data.to_vec(),
+            y: read2.data.to_vec(),
             is_equal: read0_equals_read1,
         };
         SubAir::eval(

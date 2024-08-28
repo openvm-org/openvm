@@ -54,7 +54,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
     }
 
     pub fn read_elem(&mut self, addr_space: F, pointer: F) -> F {
-        self.read_cell(addr_space, pointer).cell.data[0]
+        self.read_cell(addr_space, pointer).data[0]
     }
 
     pub fn disabled_op(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {

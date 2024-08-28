@@ -272,7 +272,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         memory_access: MemoryAccess<N, F>,
     ) -> MemoryOfflineCheckerAuxCols<N, F> {
         let timestamp_prev = memory_access.old_cell.clk.as_canonical_u32();
-        let timestamp = memory_access.op.cell.clk.as_canonical_u32();
+        let timestamp = memory_access.op.timestamp.as_canonical_u32();
 
         debug_assert!(timestamp_prev < timestamp);
         let offline_checker = self.make_offline_checker();
@@ -351,7 +351,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     // }
 }
 
-#[derive(new, Clone, Debug, Default)]
+#[derive(new, Clone, Debug)]
 pub struct MemoryAccess<const WORD_SIZE: usize, T> {
     pub op: MemoryOperation<WORD_SIZE, T>,
     pub old_cell: AccessCell<WORD_SIZE, T>,
@@ -368,7 +368,8 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
             MemoryOperation {
                 addr_space,
                 pointer: T::zero(),
-                cell: AccessCell::new([T::zero(); WORD_SIZE], timestamp),
+                timestamp,
+                data: [T::zero(); WORD_SIZE],
                 enabled: T::zero(),
             },
             AccessCell::new([T::zero(); WORD_SIZE], T::zero()),
@@ -380,7 +381,8 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
             op: MemoryOperation {
                 addr_space: read.address_space,
                 pointer: read.pointer,
-                cell: AccessCell::new(read.data, read.timestamp),
+                timestamp: read.timestamp,
+                data: read.data,
                 enabled: T::one(),
             },
             old_cell: AccessCell::new(read.data, read.prev_timestamp),
@@ -392,7 +394,8 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
             op: MemoryOperation {
                 addr_space: write.address_space,
                 pointer: write.pointer,
-                cell: AccessCell::new(write.data, write.timestamp),
+                timestamp: write.timestamp,
+                data: write.data,
                 enabled: T::one(),
             },
             old_cell: AccessCell::new(write.prev_data, write.prev_timestamp),
