@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, columns::ExecutionState, instructions::Opcode},
-    memory::manager::MemoryAccess,
+    memory::manager::{MemoryRead, MemoryWrite},
 };
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
@@ -24,9 +24,9 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                     pc: 0,
                     timestamp: timestamp.as_canonical_u32() as usize,
                 },
-                x_read: MemoryAccess::disabled_read(timestamp, F::one()),
-                y_read: MemoryAccess::disabled_read(timestamp, F::one()),
-                z_write: MemoryAccess::disabled_write(timestamp, F::one()),
+                x_read: MemoryRead::disabled(timestamp, F::one()),
+                y_read: MemoryRead::disabled(timestamp, F::one()),
+                z_write: MemoryWrite::disabled(timestamp, F::one()),
             },
             false,
         )
@@ -45,9 +45,9 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             z_write,
         } = record;
 
-        let [x] = x_read.op.cell.data;
-        let [y] = y_read.op.cell.data;
-        let [z] = z_write.op.cell.data;
+        let x = x_read.value();
+        let y = y_read.value();
+        let z = z_write.value();
 
         let is_add = F::from_bool(opcode == Opcode::FADD);
         let is_sub = F::from_bool(opcode == Opcode::FSUB);
@@ -59,13 +59,15 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             F::zero()
         };
 
+        let memory_chip = self.memory_chip.borrow();
+
         FieldArithmeticCols {
             io: FieldArithmeticIoCols {
                 opcode: F::from_canonical_u32(opcode as u32),
                 from_state: from_state.map(F::from_canonical_usize),
-                x: Operand::new(x_read.op.addr_space, x_read.op.pointer, x),
-                y: Operand::new(y_read.op.addr_space, y_read.op.pointer, y),
-                z: Operand::new(z_write.op.addr_space, z_write.op.pointer, z),
+                x: Operand::new(x_read.address_space, x_read.pointer, x),
+                y: Operand::new(y_read.address_space, y_read.pointer, y),
+                z: Operand::new(z_write.address_space, z_write.pointer, z),
             },
             aux: FieldArithmeticAuxCols {
                 is_valid: F::from_bool(is_valid),
@@ -74,9 +76,9 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: self.memory_chip.borrow().make_access_cols(x_read),
-                read_y_aux_cols: self.memory_chip.borrow().make_access_cols(y_read),
-                write_z_aux_cols: self.memory_chip.borrow().make_access_cols(z_write),
+                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read),
+                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read),
+                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write),
             },
         }
     }

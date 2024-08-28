@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, rc::Rc};
+use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of};
 
 use afs_stark_backend::rap::AnyRap;
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
@@ -11,7 +11,7 @@ use rand::{seq::SliceRandom, Rng};
 use crate::{
     arch::chips::MachineChip,
     memory::{
-        manager::{MemoryChip, MemoryChipRef},
+        manager::MemoryChipRef,
         offline_checker::bus::{MemoryBus, MemoryBusInteraction},
         MemoryAddress, OpType,
     },
@@ -47,31 +47,25 @@ impl<F: PrimeField32> MemoryTester<F> {
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let access = RefCell::borrow_mut(&self.chip).read(addr_space, pointer);
+        let read = RefCell::borrow_mut(&self.chip).read(addr_space, pointer);
         let address = MemoryAddress::new(addr_space, pointer);
-        self.records.push(
-            self.bus
-                .read(address, access.op.cell.data, access.old_cell.clk),
-        );
-        self.records.push(
-            self.bus
-                .write(address, access.op.cell.data, access.op.cell.clk),
-        );
-        access.op.cell.data[0]
+        self.records
+            .push(self.bus.read(address, read.data, read.prev_timestamp));
+        self.records
+            .push(self.bus.write(address, read.data, read.timestamp));
+        read.value()
     }
 
     pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let access = RefCell::borrow_mut(&self.chip).write(addr_space, pointer, value);
+        let write = RefCell::borrow_mut(&self.chip).write(addr_space, pointer, value);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(
             self.bus
-                .read(address, access.old_cell.data, access.old_cell.clk),
+                .read(address, write.prev_data, write.prev_timestamp),
         );
-        self.records.push(
-            self.bus
-                .write(address, access.op.cell.data, access.op.cell.clk),
-        );
+        self.records
+            .push(self.bus.write(address, write.data, write.timestamp));
     }
 
     pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {

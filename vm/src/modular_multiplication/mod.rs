@@ -104,23 +104,19 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             .memory_chip
             .borrow_mut()
             .read(instruction.d, instruction.op_a)
-            .op
-            .cell
-            .data[0];
+            .value();
+
         let address2 = vm
             .memory_chip
             .borrow_mut()
             .read(instruction.d, op_input_2)
-            .op
-            .cell
-            .data[0];
+            .value();
+
         let output_address = vm
             .memory_chip
             .borrow_mut()
             .read(instruction.d, op_result)
-            .op
-            .cell
-            .data[0];
+            .value();
 
         let chip: ModularArithmeticChip<F> = todo!();
         let air = &chip.air;
@@ -131,9 +127,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
                 vm.memory_chip
                     .borrow_mut()
                     .read(instruction.e, address1 + F::from_canonical_usize(i))
-                    .op
-                    .cell
-                    .data[0]
+                    .value()
             })
             .collect();
         let argument_2_elems = (0..num_elems)
@@ -141,11 +135,10 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
                 vm.memory_chip
                     .borrow_mut()
                     .read(instruction.e, address2 + F::from_canonical_usize(i))
-                    .op
-                    .cell
-                    .data[0]
+                    .value()
             })
             .collect();
+
         let argument_1 = elems_to_bigint(argument_1_elems, repr_bits);
         let argument_2 = elems_to_bigint(argument_2_elems, repr_bits);
         let result = match instruction.opcode {

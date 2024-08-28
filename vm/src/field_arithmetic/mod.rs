@@ -21,15 +21,15 @@ pub mod trace;
 
 pub use air::FieldArithmeticAir;
 
-use crate::memory::manager::{MemoryAccess, MemoryChipRef};
+use crate::memory::manager::{MemoryChipRef, MemoryRead, MemoryWrite};
 
 #[derive(Clone, Debug)]
 pub struct FieldArithmeticRecord<F> {
     pub opcode: Opcode,
     pub from_state: ExecutionState<usize>,
-    pub x_read: MemoryAccess<1, F>,
-    pub y_read: MemoryAccess<1, F>,
-    pub z_write: MemoryAccess<1, F>,
+    pub x_read: MemoryRead<1, F>,
+    pub y_read: MemoryRead<1, F>,
+    pub z_write: MemoryWrite<1, F>,
 }
 
 #[derive(Clone, Debug)]
@@ -73,14 +73,21 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
         } = instruction.clone();
         assert!(FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
 
-        let x_read = self.memory_chip.borrow_mut().read(x_as, x_address);
-        let y_read = self.memory_chip.borrow_mut().read(y_as, y_address);
+        let mut memory_chip = self.memory_chip.borrow_mut();
 
-        let x = x_read.op.cell.data[0];
-        let y = y_read.op.cell.data[0];
+        debug_assert_eq!(
+            from_state.timestamp,
+            memory_chip.timestamp().as_canonical_u32() as usize
+        );
+
+        let x_read = memory_chip.read(x_as, x_address);
+        let y_read = memory_chip.read(y_as, y_address);
+
+        let x = x_read.value();
+        let y = y_read.value();
         let z = FieldArithmetic::solve(opcode, (x, y)).unwrap();
 
-        let z_write = self.memory_chip.borrow_mut().write(z_as, z_address, z);
+        let z_write = memory_chip.write(z_as, z_address, z);
 
         self.records.push(FieldArithmeticRecord {
             opcode,

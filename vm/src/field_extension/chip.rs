@@ -14,10 +14,7 @@ use crate::{
     },
     cpu::trace::Instruction,
     field_extension::air::FieldExtensionArithmeticAir,
-    memory::{
-        manager::{MemoryAccess, MemoryChipRef},
-        offline_checker::bridge::proj,
-    },
+    memory::manager::{MemoryChipRef, MemoryRead, MemoryWrite},
 };
 
 pub const BETA: usize = 11;
@@ -35,11 +32,11 @@ pub(crate) struct FieldExtensionArithmeticRecord<F> {
     pub(crate) y: [F; EXTENSION_DEGREE],
     pub(crate) z: [F; EXTENSION_DEGREE],
     /// Memory accesses for reading `x`.
-    pub(crate) x_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
+    pub(crate) x_reads: [MemoryRead<1, F>; EXTENSION_DEGREE],
     /// Memory accesses for reading `y`.
-    pub(crate) y_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
+    pub(crate) y_reads: [MemoryRead<1, F>; EXTENSION_DEGREE],
     /// Memory accesses for writing `z`.
-    pub(crate) z_writes: [MemoryAccess<1, F>; EXTENSION_DEGREE],
+    pub(crate) z_writes: [MemoryWrite<1, F>; EXTENSION_DEGREE],
 }
 
 /// A chip for performing arithmetic operations over the field extension
@@ -47,7 +44,7 @@ pub(crate) struct FieldExtensionArithmeticRecord<F> {
 #[derive(Clone, Debug)]
 pub struct FieldExtensionArithmeticChip<F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir,
-    pub(crate) memory: MemoryChipRef<F>,
+    pub(crate) memory_chip: MemoryChipRef<F>,
     pub(crate) records: Vec<FieldExtensionArithmeticRecord<F>>,
 }
 
@@ -73,7 +70,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         Self {
             air,
             records: vec![],
-            memory,
+            memory_chip: memory,
         }
     }
 
@@ -100,10 +97,10 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
 
         let x_reads = self.read_extension_element(d, op_b);
-        let x: [F; EXTENSION_DEGREE] = array::from_fn(|i| proj(x_reads[i].op.cell.data));
+        let x: [F; EXTENSION_DEGREE] = array::from_fn(|i| x_reads[i].value());
 
         let y_reads = self.read_extension_element(e, op_c);
-        let y: [F; EXTENSION_DEGREE] = array::from_fn(|i| proj(y_reads[i].op.cell.data));
+        let y: [F; EXTENSION_DEGREE] = array::from_fn(|i| y_reads[i].value());
 
         let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
 
@@ -128,11 +125,11 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         &mut self,
         address_space: F,
         address: F,
-    ) -> [MemoryAccess<1, F>; EXTENSION_DEGREE] {
+    ) -> [MemoryRead<1, F>; EXTENSION_DEGREE] {
         assert_ne!(address_space, F::zero());
 
         array::from_fn(|i| {
-            self.memory
+            self.memory_chip
                 .borrow_mut()
                 .read(address_space, address + F::from_canonical_usize(i))
         })
@@ -143,11 +140,11 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         address_space: F,
         address: F,
         result: [F; EXTENSION_DEGREE],
-    ) -> [MemoryAccess<1, F>; EXTENSION_DEGREE] {
+    ) -> [MemoryWrite<1, F>; EXTENSION_DEGREE] {
         assert_ne!(address_space, F::zero());
 
         array::from_fn(|i| {
-            self.memory.borrow_mut().write(
+            self.memory_chip.borrow_mut().write(
                 address_space,
                 address + F::from_canonical_usize(i),
                 result[i],

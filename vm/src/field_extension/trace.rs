@@ -17,7 +17,10 @@ use crate::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
         EXTENSION_DEGREE,
     },
-    memory::{manager::MemoryAccess, OpType},
+    memory::{
+        manager::{MemoryRead, MemoryWrite},
+        OpType,
+    },
 };
 
 impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
@@ -80,7 +83,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             [F::zero(); EXTENSION_DEGREE]
         };
 
-        let access_to_aux = |access| self.memory.borrow().make_access_cols(access);
+        let memory = self.memory_chip.borrow();
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
@@ -103,22 +106,27 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: record.x_reads.map(access_to_aux),
-                read_y_aux_cols: record.y_reads.map(access_to_aux),
-                write_aux_cols: record.z_writes.map(access_to_aux),
+                read_x_aux_cols: record.x_reads.map(|read| memory.make_read_aux_cols(read)),
+                read_y_aux_cols: record.y_reads.map(|read| memory.make_read_aux_cols(read)),
+                write_aux_cols: record
+                    .z_writes
+                    .map(|write| memory.make_write_aux_cols(write)),
             },
         }
     }
 
     fn make_blank_row(&self) -> FieldExtensionArithmeticCols<F> {
-        let timestamp = self.memory.borrow().timestamp();
+        let timestamp = self.memory_chip.borrow().timestamp();
 
-        let make_aux_col = |op_type| {
-            let access = match op_type {
-                OpType::Read => MemoryAccess::disabled_read(timestamp, F::one()),
-                OpType::Write => MemoryAccess::disabled_write(timestamp, F::one()),
-            };
-            self.memory.borrow().make_access_cols(access)
+        let make_aux_col = |op_type| match op_type {
+            OpType::Read => self
+                .memory_chip
+                .borrow()
+                .make_read_aux_cols(MemoryRead::disabled(timestamp, F::one())),
+            OpType::Write => self
+                .memory_chip
+                .borrow()
+                .make_write_aux_cols(MemoryWrite::disabled(timestamp, F::one())),
         };
 
         FieldExtensionArithmeticCols {

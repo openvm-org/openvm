@@ -1,4 +1,4 @@
-use std::{array, collections::VecDeque};
+use std::collections::VecDeque;
 
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
@@ -251,14 +251,4 @@ impl MemoryOfflineChecker {
             .write(address, op.cell.data, op.cell.clk)
             .eval(builder, count);
     }
-}
-
-pub fn proj<F: AbstractField, const WORD_SIZE: usize>(x: [F; WORD_SIZE]) -> F {
-    x.into_iter().next().unwrap()
-}
-
-pub fn emb<F: AbstractField, const WORD_SIZE: usize>(x: F) -> [F; WORD_SIZE] {
-    let mut arr = array::from_fn(|_| F::zero());
-    arr[0] = x;
-    arr
 }
