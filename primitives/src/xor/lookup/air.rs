@@ -6,16 +6,11 @@ use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::columns::{XorLookupCols, XorLookupPreprocessedCols, NUM_XOR_LOOKUP_COLS};
+use crate::xor::bus::XorBus;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct XorLookupAir<const M: usize> {
-    pub bus_index: usize,
-}
-
-impl<const M: usize> XorLookupAir<M> {
-    pub fn new(bus_index: usize) -> Self {
-        Self { bus_index }
-    }
+    pub bus: XorBus,
 }
 
 impl<F: Field, const M: usize> BaseAir<F> for XorLookupAir<M> {
@@ -54,6 +49,9 @@ where
         let local = main.row_slice(0);
         let local: &XorLookupCols<AB::Var> = (*local).borrow();
 
-        self.eval_interactions(builder, *prep_local, *local);
+        // Omit creating separate bridge.rs file for brevity
+        self.bus
+            .receive(prep_local.x, prep_local.y, prep_local.z)
+            .eval(builder, local.mult);
     }
 }

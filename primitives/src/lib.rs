@@ -17,8 +17,5 @@ pub mod range_gate;
 pub mod sub_chip;
 pub mod sum;
 pub mod utils;
-pub mod xor_bits;
-pub mod xor_limbs;
-pub mod xor_lookup;
-// TODO: It will be easier to just re-write this
-// pub mod flat_hash;
+/// Different xor chip implementations
+pub mod xor;

@@ -32,7 +32,7 @@ jobs:
       - name: Run tests for primitives
         working-directory: primitives
         run: |
-          cargo test --features parallel
+          cargo test --features parallel --profile=fast
 
       - name: Run tests for poseidon2-air
         working-directory: poseidon2-air

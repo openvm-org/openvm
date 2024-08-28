@@ -12,7 +12,7 @@ use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 use xor_requester::XorRequesterChip;
 
-use crate::xor_bits::XorBitsChip;
+use crate::xor::{bits::XorBitsChip, bus::XorBus};
 
 pub mod xor_requester;
 
@@ -20,7 +20,7 @@ pub mod xor_requester;
 fn test_xor_bits_chip() {
     let mut rng = create_seeded_rng();
 
-    let bus_index = 0;
+    let bus = XorBus(0);
 
     const BITS: usize = 3;
     const MAX: u32 = 1 << BITS;
@@ -31,10 +31,10 @@ fn test_xor_bits_chip() {
     const LOG_NUM_REQUESTERS: usize = 3;
     const NUM_REQUESTERS: usize = 1 << LOG_NUM_REQUESTERS;
 
-    let xor_chip = Arc::new(XorBitsChip::<BITS>::new(bus_index, vec![]));
+    let xor_chip = Arc::new(XorBitsChip::<BITS>::new(bus, vec![]));
 
     let mut requesters = (0..NUM_REQUESTERS)
-        .map(|_| XorRequesterChip::new(bus_index, vec![], Arc::clone(&xor_chip)))
+        .map(|_| XorRequesterChip::new(bus, vec![], Arc::clone(&xor_chip)))
         .collect::<Vec<XorRequesterChip<BITS>>>();
 
     for requester in &mut requesters {
@@ -68,7 +68,7 @@ fn test_xor_bits_chip() {
 fn negative_test_xor_bits_chip() {
     let mut rng = create_seeded_rng();
 
-    let bus_index = 0;
+    let bus = XorBus(0);
 
     const BITS: usize = 3;
     const MAX: u32 = 1 << BITS;
@@ -76,7 +76,7 @@ fn negative_test_xor_bits_chip() {
     const LOG_XOR_REQUESTS: usize = 4;
     const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
 
-    let xor_chip = Arc::new(XorBitsChip::<BITS>::new(bus_index, vec![]));
+    let xor_chip = Arc::new(XorBitsChip::<BITS>::new(bus, vec![]));
 
     let dummy_requester = DummyInteractionAir::new(3, true, 0);
 

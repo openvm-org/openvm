@@ -1,4 +1,4 @@
-use afs_primitives::utils::not;
+use afs_primitives::{utils::not, xor::bus::XorBus};
 use afs_stark_backend::{air_builders::sub::SubAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
@@ -6,7 +6,7 @@ use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS};
 use p3_matrix::Matrix;
 
 use super::{
-    bridge::{BLOCK_MEMORY_ACCESSES, TIMESTAMP_OFFSET_FOR_OPCODE},
+    bridge::TIMESTAMP_OFFSET_FOR_OPCODE,
     columns::{KeccakMemoryCols, KeccakVmColsRef, NUM_KECCAK_OPCODE_COLS, NUM_KECCAK_SPONGE_COLS},
     KECCAK_RATE_BYTES,
 };
@@ -16,8 +16,8 @@ use crate::{arch::bus::ExecutionBus, memory::offline_checker::bridge::MemoryOffl
 pub struct KeccakVmAir {
     pub execution_bus: ExecutionBus,
     pub mem_oc: MemoryOfflineChecker,
-    /// The index for the bus to send 8-bit XOR requests to.
-    pub xor_bus_index: usize,
+    /// Bus to send 8-bit XOR requests to.
+    pub xor_bus: XorBus,
     // TODO: add configuration for enabling direct non-memory interactions
 }
 
@@ -52,11 +52,12 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         self.constrain_consistency_across_rounds(builder, local, next);
         self.constrain_block_transition(builder, local, next);
 
+        let mem = KeccakMemoryCols::from_slice(&local.mem_oc, &self.mem_oc);
         // Interactions:
         self.constrain_absorb(builder, local, next);
-        self.eval_opcode_interactions(builder, local);
-        self.constrain_input_read(builder, local);
-        self.constrain_output_write(builder, local);
+        self.eval_opcode_interactions(builder, local, mem.op_reads);
+        self.constrain_input_read(builder, local, mem.absorb_reads);
+        self.constrain_output_write(builder, local, mem.digest_writes);
     }
 }
 

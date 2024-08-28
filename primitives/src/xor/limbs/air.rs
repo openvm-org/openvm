@@ -6,17 +6,18 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::XorLimbsCols;
+use crate::xor::bus::XorBus;
 
 #[derive(Copy, Clone, Debug)]
 pub struct XorLimbsAir<const N: usize, const M: usize> {
     /// The bus where messages are of the form `(x, y, x ^ y)` where `x, y` _may_ either
     /// both have `M` bits or both have `N` bits.
-    pub bus_index: usize,
+    pub bus: XorBus,
 }
 
 impl<const N: usize, const M: usize> XorLimbsAir<N, M> {
-    pub fn new(bus_index: usize) -> Self {
-        Self { bus_index }
+    pub fn new(bus: XorBus) -> Self {
+        Self { bus }
     }
 }
 

@@ -1,5 +1,8 @@
 use core::mem::size_of;
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    array::from_fn,
+    borrow::{Borrow, BorrowMut},
+};
 
 use afs_derive::AlignedBorrow;
 use p3_air::AirBuilder;
@@ -177,5 +180,23 @@ impl<T> KeccakMemoryCols<T> {
     pub fn width(mem_oc: &MemoryOfflineChecker) -> usize {
         (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES)
             * MemoryOfflineCheckerAuxCols::<1, T>::width(mem_oc)
+    }
+
+    pub fn from_slice(slc: &[T], mem_oc: &MemoryOfflineChecker) -> Self
+    where
+        T: Clone,
+    {
+        let mut it = slc.iter().cloned();
+        let mut next =
+            || MemoryOfflineCheckerAuxCols::try_from_iter(&mut it, &mem_oc.timestamp_lt_air);
+        let op_reads = from_fn(|_| next());
+        let absorb_reads = from_fn(|_| next());
+        let digest_writes = from_fn(|_| next());
+
+        Self {
+            op_reads,
+            absorb_reads,
+            digest_writes,
+        }
     }
 }

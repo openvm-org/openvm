@@ -1,6 +1,6 @@
 use std::{array::from_fn, sync::Arc};
 
-use afs_primitives::xor_lookup::XorLookupChip;
+use afs_primitives::xor::{bus::XorBus, lookup::XorLookupChip};
 use bridge::{BLOCK_MEMORY_ACCESSES, TIMESTAMP_OFFSET_FOR_OPCODE};
 use columns::KeccakOpcodeCols;
 use p3_field::PrimeField32;
@@ -66,9 +66,9 @@ pub struct KeccakInputBlock<F: PrimeField32> {
 
 impl<F: PrimeField32> KeccakVmChip<F> {
     #[allow(clippy::new_without_default)]
-    pub fn new(xor_bus_index: usize, byte_xor_chip: Arc<XorLookupChip<8>>) -> Self {
+    pub fn new(xor_bus: XorBus, byte_xor_chip: Arc<XorLookupChip<8>>) -> Self {
         Self {
-            air: KeccakVmAir::new(xor_bus_index),
+            air: KeccakVmAir::new(xor_bus),
             byte_xor_chip,
             requests: Vec::new(),
         }

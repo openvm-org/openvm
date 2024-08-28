@@ -3,8 +3,9 @@ use std::sync::Arc;
 use air::XorBitsAir;
 use parking_lot::Mutex;
 
+use super::bus::XorBus;
+
 pub mod air;
-pub mod bridge;
 pub mod columns;
 pub mod trace;
 
@@ -22,9 +23,9 @@ pub struct XorBitsChip<const N: usize> {
 }
 
 impl<const N: usize> XorBitsChip<N> {
-    pub fn new(bus_index: usize, pairs: Vec<(u32, u32)>) -> Self {
+    pub fn new(bus: XorBus, pairs: Vec<(u32, u32)>) -> Self {
         Self {
-            air: XorBitsAir { bus_index },
+            air: XorBitsAir { bus },
             pairs: Arc::new(Mutex::new(pairs)),
         }
     }

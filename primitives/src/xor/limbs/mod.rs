@@ -3,7 +3,7 @@ use std::sync::Arc;
 use air::XorLimbsAir;
 use parking_lot::Mutex;
 
-use crate::xor_lookup::XorLookupChip;
+use super::{bus::XorBus, lookup::XorLookupChip};
 
 pub mod air;
 pub mod bridge;
@@ -25,11 +25,11 @@ pub struct XorLimbsChip<const N: usize, const M: usize> {
 }
 
 impl<const N: usize, const M: usize> XorLimbsChip<N, M> {
-    pub fn new(bus_index: usize, pairs: Vec<(u32, u32)>) -> Self {
+    pub fn new(bus: XorBus, pairs: Vec<(u32, u32)>) -> Self {
         Self {
-            air: XorLimbsAir { bus_index },
+            air: XorLimbsAir { bus },
             pairs: Arc::new(Mutex::new(pairs)),
-            xor_lookup_chip: XorLookupChip::<M>::new(bus_index),
+            xor_lookup_chip: XorLookupChip::<M>::new(bus),
         }
     }
 

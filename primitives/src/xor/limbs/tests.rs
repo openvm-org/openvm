@@ -11,13 +11,13 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
-use crate::xor_limbs::XorLimbsChip;
+use crate::xor::{bus::XorBus, limbs::XorLimbsChip};
 
 #[test]
 fn test_xor_limbs_chip() {
     let mut rng = create_seeded_rng();
 
-    let bus_index = 0;
+    let bus = XorBus(0);
 
     const N: usize = 6;
     const M: usize = 2;
@@ -28,7 +28,7 @@ fn test_xor_limbs_chip() {
     const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
     const NUM_REQUESTERS: usize = 1 << LOG_NUM_REQUESTERS;
 
-    let xor_chip = XorLimbsChip::<N, M>::new(bus_index, vec![]);
+    let xor_chip = XorLimbsChip::<N, M>::new(bus, vec![]);
 
     let requesters_lists = (0..NUM_REQUESTERS)
         .map(|_| {
@@ -89,7 +89,7 @@ fn test_xor_limbs_chip() {
 fn negative_test_xor_limbs_chip() {
     let mut rng = create_seeded_rng();
 
-    let bus_index = 0;
+    let bus = XorBus(0);
 
     const N: usize = 6;
     const M: usize = 2;
@@ -98,7 +98,7 @@ fn negative_test_xor_limbs_chip() {
     const MAX_INPUT: u32 = 1 << N;
     const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
 
-    let xor_chip = XorLimbsChip::<N, M>::new(bus_index, vec![]);
+    let xor_chip = XorLimbsChip::<N, M>::new(bus, vec![]);
 
     let pairs = (0..XOR_REQUESTS)
         .map(|_| {

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use air::XorRequesterAir;
 
-use crate::xor_bits::XorBitsChip;
+use crate::xor::{bits::XorBitsChip, bus::XorBus};
 
 pub mod air;
 pub mod columns;
@@ -17,16 +17,17 @@ pub struct XorRequesterChip<const N: usize> {
 }
 
 impl<const N: usize> XorRequesterChip<N> {
-    pub fn new(bus_index: usize, requests: Vec<(u32, u32)>, xor_chip: Arc<XorBitsChip<N>>) -> Self {
+    pub fn new(bus: XorBus, requests: Vec<(u32, u32)>, xor_chip: Arc<XorBitsChip<N>>) -> Self {
         Self {
-            air: XorRequesterAir { bus_index },
+            air: XorRequesterAir { bus },
             requests,
             xor_chip,
         }
     }
 
-    pub fn bus_index(&self) -> usize {
-        self.air.bus_index
+    /// The xor bus this chip interacts with
+    pub fn bus(&self) -> XorBus {
+        self.air.bus
     }
 
     pub fn add_request(&mut self, a: u32, b: u32) {

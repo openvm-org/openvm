@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, rc::Rc};
+use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of};
 
 use afs_stark_backend::rap::AnyRap;
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};

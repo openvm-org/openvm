@@ -9,7 +9,6 @@ use tiny_keccak::keccakf;
 use super::KeccakVmChip;
 use crate::hashes::keccak::hasher::{
     bridge::{BLOCK_MEMORY_ACCESSES, TIMESTAMP_OFFSET_FOR_OPCODE},
-    columns::{KeccakVmCols, NUM_KECCAK_VM_COLS},
     KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
 };
 

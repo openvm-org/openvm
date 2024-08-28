@@ -6,10 +6,11 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::{XorRequesterCols, NUM_XOR_REQUESTER_COLS};
+use crate::xor::bus::XorBus;
 
 #[derive(Copy, Clone, Debug)]
 pub struct XorRequesterAir {
-    pub bus_index: usize,
+    pub bus: XorBus,
 }
 
 impl<F: Field> BaseAir<F> for XorRequesterAir {
@@ -25,10 +26,8 @@ impl<AB: InteractionBuilder> Air<AB> for XorRequesterAir {
         let local: &XorRequesterCols<AB::Var> = (*local).borrow();
 
         // We do not implement SubAirBridge trait for brevity
-        builder.push_send(
-            self.bus_index,
-            vec![local.x, local.y, local.z],
-            AB::F::one(),
-        );
+        self.bus
+            .send(local.x, local.y, local.z)
+            .eval(builder, AB::F::one());
     }
 }

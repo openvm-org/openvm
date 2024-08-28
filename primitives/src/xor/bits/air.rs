@@ -7,20 +7,19 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::{XorBitCols, XorCols, XorIoCols};
-use crate::sub_chip::{AirConfig, SubAir};
+use crate::{
+    sub_chip::{AirConfig, SubAir},
+    xor::bus::XorBus,
+};
 
 /// AIR that computes the xor of two numbers of at most N bits each.
 /// This struct only implements SubAir.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct XorBitsAir<const N: usize> {
-    pub bus_index: usize,
+    pub bus: XorBus,
 }
 
 impl<const N: usize> XorBitsAir<N> {
-    pub fn new(bus_index: usize) -> Self {
-        Self { bus_index }
-    }
-
     pub fn calc_xor(&self, a: u32, b: u32) -> u32 {
         a ^ b
     }
@@ -71,6 +70,9 @@ impl<const N: usize, AB: InteractionBuilder> SubAir<AB> for XorBitsAir<N> {
             builder.assert_eq(x + y - AB::Expr::two() * x * y, z);
         }
 
-        self.eval_interactions(builder, io);
+        // Omit creating separate bridge.rs file for brevity
+        self.bus
+            .receive(io.x, io.y, io.z)
+            .eval(builder, AB::F::one());
     }
 }

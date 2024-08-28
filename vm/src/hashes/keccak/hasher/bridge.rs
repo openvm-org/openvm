@@ -8,32 +8,22 @@ use p3_field::AbstractField;
 use p3_keccak_air::U64_LIMBS;
 
 use super::{
-    columns::KeccakVmColsRef, KeccakVmAir, KECCAK_DIGEST_BYTES, KECCAK_RATE_BYTES,
-    KECCAK_RATE_U16S, KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
+    columns::KeccakVmColsRef, KeccakVmAir, KECCAK_ABSORB_READS, KECCAK_DIGEST_BYTES,
+    KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S,
+    NUM_ABSORB_ROUNDS,
+};
+use crate::memory::{
+    offline_checker::{bridge::MemoryBridge, columns::MemoryOfflineCheckerAuxCols},
+    MemoryAddress,
 };
 
 /// We need three memory accesses to read dst, src, len from memory.
 /// It seems harmless to just shift timestamp by this even in blocks
 /// where we don't do this memory access.
 /// See `eval_opcode_interactions`.
-pub(super) const TIMESTAMP_OFFSET_FOR_OPCODE: usize = 3;
-// This depends on WORD_SIZE
-pub(super) const BLOCK_MEMORY_ACCESSES: usize = KECCAK_RATE_BYTES;
+pub(super) const TIMESTAMP_OFFSET_FOR_OPCODE: usize = KECCAK_EXECUTION_READS;
 
 impl KeccakVmAir {
-    /// Add new send interaction to lookup (x, y, x ^ y) where x, y, z
-    /// will all be range checked to be 8-bits (assuming the bus is
-    /// received by an 8-bit xor chip).
-    fn send_xor<AB: InteractionBuilder>(
-        &self,
-        builder: &mut AB,
-        x: impl Into<AB::Expr>,
-        y: impl Into<AB::Expr>,
-        z: impl Into<AB::Expr>,
-        count: impl Into<AB::Expr>,
-    ) {
-        builder.push_send(self.xor_bus_index, [x.into(), y.into(), z.into()], count);
-    }
     /// Constrain state transition between keccak-f permutations is valid absorb of input bytes.
     /// The end-state in last round is given by `a_prime_prime_prime()` in `u16` limbs.
     /// The pre-state is given by `preimage` also in `u16` limbs.
@@ -95,9 +85,15 @@ impl KeccakVmAir {
             pre_absorb_state_bytes,
             post_absorb_state_bytes
         ) {
+            // Add new send interaction to lookup (x, y, x ^ y) where x, y, z
+            // will all be range checked to be 8-bits (assuming the bus is
+            // received by an 8-bit xor chip).
+
             // this should even work when `local` is the last row since
             // `next` becomes row 0 which `is_new_start`
-            self.send_xor(builder, input, pre, post, should_absorb.clone());
+            self.xor_bus
+                .send(input, pre, post)
+                .eval(builder, should_absorb.clone());
         }
         // constrain transition on the state outside rate
         let mut reset_builder = builder.when(local.is_new_start());
@@ -122,6 +118,7 @@ impl KeccakVmAir {
         &self,
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
+        mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_EXECUTION_READS],
     ) {
         let opcode = &local.opcode;
         // Only receive opcode if:
@@ -145,6 +142,7 @@ impl KeccakVmAir {
             should_receive.clone(),
         );
 
+        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
         // Only when it is an input do we want to do memory read for
         // dst <- word[a]_d, src <- word[b]_d
         for (t_offset, ptr, addr_sp, value) in izip!(
@@ -155,14 +153,9 @@ impl KeccakVmAir {
         ) {
             let timestamp = opcode.start_timestamp + AB::F::from_canonical_usize(t_offset);
 
-            Self::constrain_memory_read(
-                builder,
-                timestamp,
-                addr_sp,
-                ptr,
-                value,
-                should_receive.clone(),
-            );
+            memory_bridge
+                .read(MemoryAddress::new(addr_sp, ptr), [value], timestamp)
+                .eval(builder, should_receive.clone());
         }
     }
 
@@ -173,7 +166,9 @@ impl KeccakVmAir {
         &self,
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
+        mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_ABSORB_READS],
     ) {
+        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
         // Only read input from memory when it is an opcode-related row
         // and only on the first round of block
         let is_input = local.opcode.is_enabled * local.inner.step_flags[0];
@@ -182,7 +177,7 @@ impl KeccakVmAir {
         for (i, (input, is_padding)) in
             zip(local.sponge.block_bytes, local.sponge.is_padding_byte).enumerate()
         {
-            // reserve two timestamp advances for opcode dst,src reads in
+            // reserve timestamp advances for opcode dst,src,len reads in
             // eval_opcode_interactions, even if they don't always happen
             let timestamp = local.opcode.start_timestamp
                 + AB::F::from_canonical_usize(TIMESTAMP_OFFSET_FOR_OPCODE + i);
@@ -192,7 +187,9 @@ impl KeccakVmAir {
             // if used as `count` in interaction
             let count = is_input.clone() * not(is_padding);
 
-            Self::constrain_memory_read(builder, timestamp, local.opcode.e, ptr, input, count);
+            memory_bridge
+                .read(MemoryAddress::new(local.opcode.e, ptr), [input], timestamp)
+                .eval(builder, count);
         }
     }
 
@@ -200,8 +197,10 @@ impl KeccakVmAir {
         &self,
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
+        mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_DIGEST_WRITES],
     ) {
         let opcode = &local.opcode;
+        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
 
         let is_final_block = *local.sponge.is_padding_byte.last().unwrap();
         // since keccak-f AIR has this column, we might as well use it
@@ -212,64 +211,22 @@ impl KeccakVmAir {
         for x in 0..KECCAK_DIGEST_BYTES / 8 {
             for limb in 0..U64_LIMBS {
                 let index = x * U64_LIMBS + limb;
-                let timestamp = local.opcode.start_timestamp
+                let timestamp = opcode.start_timestamp
                     + AB::F::from_canonical_usize(
-                        TIMESTAMP_OFFSET_FOR_OPCODE + BLOCK_MEMORY_ACCESSES + index,
+                        TIMESTAMP_OFFSET_FOR_OPCODE + KECCAK_ABSORB_READS + index,
                     );
                 let value = local.postimage(0, x, limb);
-                Self::constrain_memory_write(
-                    builder,
-                    timestamp,
-                    local.opcode.e,
-                    local.opcode.dst + AB::F::from_canonical_usize(index),
-                    value,
-                    local.inner.export,
-                );
+                memory_bridge
+                    .write(
+                        MemoryAddress::new(
+                            opcode.e,
+                            opcode.dst + AB::F::from_canonical_usize(index),
+                        ),
+                        [value],
+                        timestamp,
+                    )
+                    .eval(builder, local.inner.export)
             }
         }
-    }
-
-    // TODO: this should be general interface of Memory
-    fn constrain_memory_read<AB: InteractionBuilder>(
-        builder: &mut AB,
-        timestamp: impl Into<AB::Expr>,
-        address_space: impl Into<AB::Expr>,
-        ptr: impl Into<AB::Expr>,
-        value: impl Into<AB::Expr>,
-        count: impl Into<AB::Expr>,
-    ) {
-        builder.push_send(
-            MEMORY_BUS,
-            [
-                timestamp.into(),
-                AB::Expr::from_bool(false), // read
-                address_space.into(),
-                ptr.into(),
-                value.into(),
-            ],
-            count,
-        );
-    }
-
-    // TODO: this should be general interface of Memory
-    fn constrain_memory_write<AB: InteractionBuilder>(
-        builder: &mut AB,
-        timestamp: impl Into<AB::Expr>,
-        address_space: impl Into<AB::Expr>,
-        ptr: impl Into<AB::Expr>,
-        value: impl Into<AB::Expr>,
-        count: impl Into<AB::Expr>,
-    ) {
-        builder.push_send(
-            MEMORY_BUS,
-            [
-                timestamp.into(),
-                AB::Expr::from_bool(true), // write
-                address_space.into(),
-                ptr.into(),
-                value.into(),
-            ],
-            count,
-        );
     }
 }
