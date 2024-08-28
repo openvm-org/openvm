@@ -15,8 +15,9 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    committed_page::CommittedPage, expr::AxdbExpr, utils::pk::PkUtil, BITS_PER_FE, PAGE_BUS_IDX,
-    RANGE_BUS_IDX, RANGE_CHECK_BITS,
+    common::{committed_page::CommittedPage, expr::AxdbExpr},
+    utils::pk::PkUtil,
+    BITS_PER_FE, PAGE_BUS_IDX, RANGE_BUS_IDX, RANGE_CHECK_BITS,
 };
 
 pub struct FilterFn<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {

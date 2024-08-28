@@ -14,7 +14,7 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
 use super::{AxdbNode, AxdbNodeExecutable};
-use crate::committed_page::CommittedPage;
+use crate::common::committed_page::CommittedPage;
 
 pub struct Projection<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync>
 where

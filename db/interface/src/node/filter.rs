@@ -15,7 +15,10 @@ use serde::{de::DeserializeOwned, Serialize};
 use tracing::info;
 
 use super::{functionality::filter::FilterFn, AxdbNode, AxdbNodeExecutable};
-use crate::{committed_page::CommittedPage, expr::AxdbExpr};
+use crate::{
+    common::{committed_page::CommittedPage, expr::AxdbExpr},
+    NUM_IDX_COLS,
+};
 
 pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync>
 where
@@ -50,10 +53,16 @@ where
         input
     }
 
-    fn page_stats(&self, page: &CommittedPage<SC>) -> (usize, usize, usize) {
-        let idx_len = page.page.idx_len();
-        let data_len = page.page.data_len();
-        let page_width = page.page.width();
+    fn page_stats(&self, cp: &CommittedPage<SC>) -> (usize, usize, usize) {
+        let schema = &cp.schema;
+        // TODO: handle different data types
+        // for field in schema.fields() {
+        //     let data_type = field.data_type();
+        //     let byte_len = data_type.primitive_width().unwrap();
+        // }
+        let idx_len = NUM_IDX_COLS;
+        let data_len = schema.fields().len() - NUM_IDX_COLS;
+        let page_width = 1 + idx_len + data_len;
         (idx_len, data_len, page_width)
     }
 }

@@ -5,7 +5,7 @@ use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::committed_page::CommittedPage;
+use crate::common::committed_page::CommittedPage;
 
 pub async fn get_record_batches(ctx: &SessionContext, name: &str) -> Result<Vec<RecordBatch>> {
     let df = ctx.table(name).await.unwrap();

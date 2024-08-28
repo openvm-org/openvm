@@ -2,7 +2,7 @@ use afs_page::single_page_index_scan::page_index_scan_input::Comp;
 use datafusion::{logical_expr::Expr, scalar::ScalarValue};
 
 use self::expressions::BinaryExpr;
-use crate::committed_page::column::Column;
+use crate::common::committed_page::column::Column;
 
 pub mod expressions;
 

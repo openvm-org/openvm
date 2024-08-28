@@ -3,8 +3,8 @@ use std::sync::Arc;
 use afs_page::common::page::Page;
 use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
 use axdb_interface::{
-    committed_page, committed_page::CommittedPage, controller::AxdbController, NUM_IDX_COLS,
-    PCS_LOG_DEGREE,
+    committed_page, common::committed_page::CommittedPage, controller::AxdbController,
+    NUM_IDX_COLS, PCS_LOG_DEGREE,
 };
 use datafusion::{
     arrow::{
@@ -48,11 +48,10 @@ pub async fn test_basic_e2e() {
         axdb.axdb_execution_plan
     );
 
-    axdb.execute().await.unwrap();
-
     // After running keygen once, you will not need to run it again for the same LogicalPlan
     axdb.keygen().await.unwrap();
 
+    axdb.execute().await.unwrap();
     axdb.prove().await.unwrap();
     axdb.verify().await.unwrap();
 

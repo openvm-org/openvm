@@ -17,7 +17,7 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
 use self::{filter::Filter, page_scan::PageScan, projection::Projection};
-use crate::{committed_page::CommittedPage, expr::AxdbExpr};
+use crate::common::{committed_page::CommittedPage, expr::AxdbExpr};
 
 pub mod filter;
 pub mod functionality;

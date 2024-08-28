@@ -15,7 +15,9 @@ use tracing::info;
 
 use super::{functionality::filter::FilterFn, AxdbNodeExecutable};
 use crate::{
-    committed_page::CommittedPage, expr::AxdbExpr, utils::table::get_record_batches, NUM_IDX_COLS,
+    common::{committed_page::CommittedPage, expr::AxdbExpr},
+    utils::table::get_record_batches,
+    NUM_IDX_COLS,
 };
 
 pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
