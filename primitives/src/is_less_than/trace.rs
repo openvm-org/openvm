@@ -72,7 +72,6 @@ impl IsLessThanAir {
             }
         }
 
-        *lt_aux_cols.lower = F::from_canonical_u32(lower_u32);
         lt_aux_cols
             .lower_decomp
             .clone_from_slice(lower_decomp.as_slice());
