@@ -253,6 +253,17 @@ impl<F: PrimeField32> MemoryChip<F> {
         self.timestamp
     }
 
+    /// Advance the timestamp forward to `to_timestamp`. This should be used when the memory
+    /// timestamp needs to sync up with the execution state because instruction execution
+    /// uses an upper bound on timestamp change.
+    pub fn jump_timestamp(&mut self, to_timestamp: F) {
+        debug_assert!(
+            self.timestamp <= to_timestamp,
+            "Should never jump back in time"
+        );
+        self.timestamp = to_timestamp;
+    }
+
     pub fn get_audit_air(&self) -> MemoryAuditAir {
         match &self.interface_chip {
             MemoryInterface::Volatile(chip) => chip.air.clone(),

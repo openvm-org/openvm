@@ -1,7 +1,6 @@
 use std::{array::from_fn, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
-use columns::KeccakOpcodeCols;
 use p3_field::PrimeField32;
 
 pub mod air;
@@ -20,7 +19,7 @@ use crate::{
         instructions::Opcode,
     },
     cpu::trace::Instruction,
-    memory::manager::MemoryChipRef,
+    memory::manager::{MemoryAccess, MemoryChipRef},
 };
 
 /// Memory reads to get dst, src, len
@@ -58,17 +57,28 @@ pub const KECCAK_DIGEST_U16S: usize = KECCAK_DIGEST_BYTES / 2;
 pub struct KeccakVmChip<F: PrimeField32> {
     pub air: KeccakVmAir,
     /// IO and memory data necessary for each opcode call
-    pub requests: Vec<(KeccakOpcodeCols<F>, Vec<KeccakInputBlock<F>>)>,
+    pub records: Vec<KeccakRecord<F>>,
     pub memory_chip: MemoryChipRef<F>,
     pub byte_xor_chip: Arc<XorLookupChip<8>>,
 }
 
 #[derive(Clone, Debug)]
-pub struct KeccakInputBlock<F: PrimeField32> {
+pub struct KeccakRecord<F> {
+    pub src_read: MemoryAccess<1, F>,
+    pub dst_read: MemoryAccess<1, F>,
+    pub len_read: MemoryAccess<1, F>,
+    pub input_blocks: Vec<KeccakInputBlock<F>>,
+    pub digest_writes: [MemoryAccess<1, F>; KECCAK_DIGEST_WRITES],
+}
+
+#[derive(Clone, Debug)]
+pub struct KeccakInputBlock<F> {
+    /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES].
+    pub bytes_read: Vec<MemoryAccess<1, F>>,
+    /// Bytes with padding. Can be derived from `bytes_read` but we store for convenience.
     pub padded_bytes: [u8; KECCAK_RATE_BYTES],
     pub remaining_len: usize,
     pub is_new_start: bool,
-    pub src: F,
 }
 
 impl<F: PrimeField32> KeccakVmChip<F> {
@@ -82,7 +92,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
             air: KeccakVmAir::new(execution_bus, mem_oc, byte_xor_chip.bus()),
             memory_chip,
             byte_xor_chip,
-            requests: Vec::new(),
+            records: Vec::new(),
         }
     }
 }
@@ -102,55 +112,50 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             e,
             op_f: f,
             ..
-        } = instruction;
-        debug_assert_eq!(*opcode, Opcode::KECCAK256);
+        } = instruction.clone();
+        debug_assert_eq!(opcode, Opcode::KECCAK256);
 
-        let mut timestamp = from_state.timestamp;
-
-        let dst = vm.memory_chip.read_elem(timestamp, d, op_a);
-        let mut src = vm.memory_chip.read_elem(timestamp + 1, d, op_b);
-        let len = vm.memory_chip.read_elem(timestamp + 2, d, op_c);
-
-        let opcode = KeccakOpcodeCols::new(
-            F::from_bool(true),
-            F::from_canonical_usize(start_timestamp),
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
-            dst,
-            src,
-            len,
+        let mut memory = self.memory_chip.borrow_mut();
+        debug_assert_eq!(
+            from_state.timestamp,
+            memory.timestamp().as_canonical_u32() as usize
         );
+
+        let dst_read = memory.read(d, a);
+        let src_read = memory.read(d, b);
+        let len_read = memory.read(f, c);
+
+        let dst = dst_read.op.cell.data[0];
+        let mut src = src_read.op.cell.data[0];
+        let len = len_read.op.cell.data[0];
         let byte_len = len.as_canonical_u32() as usize;
 
         let num_blocks = num_keccak_f(byte_len);
-        let mut input = Vec::with_capacity(num_blocks);
+        let mut input_blocks = Vec::with_capacity(num_blocks);
         let mut remaining_len = byte_len;
         let mut hasher = Keccak::v256();
 
         for block_idx in 0..num_blocks {
+            let mut bytes_read = Vec::with_capacity(KECCAK_RATE_BYTES);
             let bytes: [_; KECCAK_RATE_BYTES] = from_fn(|i| {
                 if i < remaining_len {
-                    vm.memory_chip
-                        .read_elem(
-                            timestamp + TIMESTAMP_OFFSET_FOR_OPCODE + i,
-                            e,
-                            src + F::from_canonical_usize(i),
-                        )
-                        .as_canonical_u32() as u8
+                    let byte_read = memory.read(e, src + F::from_canonical_usize(i));
+                    let byte = byte_read.op.cell.data[0]
+                        .as_canonical_u32()
+                        .try_into()
+                        .expect("Memory cell not a byte");
+                    bytes_read.push(byte_read);
+                    byte
                 } else {
                     0u8
                 }
             });
             let mut block = KeccakInputBlock {
+                bytes_read,
                 padded_bytes: bytes,
                 remaining_len,
                 is_new_start: block_idx == 0,
-                src,
             };
-            timestamp += TIMESTAMP_OFFSET_FOR_OPCODE + BLOCK_MEMORY_ACCESSES;
             if block_idx != num_blocks - 1 {
                 src += F::from_canonical_usize(KECCAK_RATE_BYTES);
                 remaining_len -= KECCAK_RATE_BYTES;
@@ -167,25 +172,39 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                     block.padded_bytes[KECCAK_RATE_BYTES - 1] = 0x80;
                 }
             }
-            input.push(block);
+            input_blocks.push(block);
         }
         let mut output = [0u8; 32];
         hasher.finalize(&mut output);
-        for i in 0..KECCAK_DIGEST_U16S {
+        let digest_writes: [_; KECCAK_DIGEST_U16S] = from_fn(|i| {
             let limb = output[2 * i] as u16 | (output[2 * i + 1] as u16) << 8;
-            vm.memory_chip.write_elem(
-                timestamp + i,
+            memory.write(
                 e,
                 dst + F::from_canonical_usize(i),
                 F::from_canonical_u16(limb),
-            );
-        }
+            )
+        });
         tracing::trace!("[runtime] keccak256 output: {:?}", output);
 
-        // Add the events to chip state for later trace generation usage
-        vm.keccak_chip.requests.push((opcode, input));
+        let record = KeccakRecord {
+            src_read,
+            dst_read,
+            len_read,
+            input_blocks,
+            digest_writes,
+        };
 
-        timestamp + KECCAK_DIGEST_U16S
+        // Add the events to chip state for later trace generation usage
+        self.records.push(record);
+
+        let timestamp_change = KeccakVmAir::timestamp_change::<F>(len).as_canonical_u32() as usize;
+        let to_timestamp = from_state.timestamp + timestamp_change;
+        memory.jump_timestamp(F::from_canonical_usize(to_timestamp));
+
+        ExecutionState {
+            pc: from_state.pc,
+            timestamp: to_timestamp,
+        }
     }
 }
 
@@ -199,7 +218,23 @@ impl<F: PrimeField32> Default for KeccakInputBlock<F> {
             padded_bytes,
             remaining_len: 0,
             is_new_start: true,
-            src: F::zero(),
+            bytes_read: Vec::new(),
         }
+    }
+}
+
+impl<F: Copy> KeccakRecord<F> {
+    pub fn operands(&self) -> [F; 6] {
+        let a = self.dst_read.op.pointer;
+        let b = self.src_read.op.pointer;
+        let c = self.len_read.op.pointer;
+        let d = self.dst_read.op.addr_space;
+        let e = self.digest_writes[0].op.addr_space;
+        let f = self.len_read.op.addr_space;
+        [a, b, c, d, e, f]
+    }
+
+    pub fn start_timestamp(&self) -> F {
+        self.src_read.op.cell.clk
     }
 }
