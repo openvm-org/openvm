@@ -3642,6 +3642,7 @@ dependencies = [
  "rand",
  "rand_xoshiro",
  "serde",
+ "strum_macros",
  "test-case",
  "toml",
  "tracing",

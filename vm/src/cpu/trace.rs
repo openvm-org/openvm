@@ -524,7 +524,8 @@ impl<F: PrimeField32> CpuChip<F> {
             pc = next_pc;
 
             clock_cycle += 1;
-            if opcode == TERMINATE {
+            if opcode == TERMINATE && collect_metrics {
+                vm.update_chip_metrics();
                 // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
                 collect_metrics = false;
             }
@@ -541,6 +542,9 @@ impl<F: PrimeField32> CpuChip<F> {
             if vm.should_segment() {
                 break;
             }
+        }
+        if collect_metrics {
+            vm.update_chip_metrics();
         }
 
         // Update CPU chip state with all changes from this segment.

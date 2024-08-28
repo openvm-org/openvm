@@ -8,6 +8,7 @@ use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
+use strum_macros::IntoStaticStr;
 
 use crate::{
     arch::columns::ExecutionState,
@@ -90,7 +91,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, IntoStaticStr)]
 #[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
     Cpu(Rc<RefCell<CpuChip<F>>>),

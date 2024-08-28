@@ -16,6 +16,7 @@ p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
 itertools.workspace = true
 tracing.workspace = true
+strum_macros = {workspace = true}
 
 poseidon2-air = { path = "../poseidon2-air", default-features = false }
 afs-primitives = { path = "../primitives", default-features = false }
