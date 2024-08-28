@@ -91,7 +91,7 @@ impl<F: PrimeField32> ExecutionTester<F> {
 }
 
 impl<F: Field> MachineChip<F> for ExecutionTester<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
         let mut values = vec![F::zero(); height * width];

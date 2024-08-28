@@ -25,9 +25,7 @@ use crate::{
 
 impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
-    ///
-    /// NOTE: may only be called once on a chip. TODO: make consume self or change behavior.
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    t fn generate_trace(mut self) -> RowMajorMatrix<F> {
         let curr_height = self.records.len();
         let correct_height = curr_height.next_power_of_two();
 

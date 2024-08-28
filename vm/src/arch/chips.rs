@@ -30,7 +30,7 @@ pub trait InstructionExecutor<F> {
 
 #[enum_dispatch]
 pub trait MachineChip<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F>;
+    fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>;
@@ -55,8 +55,11 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 }
 
 impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
-        self.borrow_mut().generate_trace()
+    fn generate_trace(self) -> RowMajorMatrix<F> {
+        match Rc::try_unwrap(self) {
+            Ok(ref_cell) => ref_cell.into_inner().generate_trace(),
+            Err(_) => panic!("cannot generate trace while other chips still hold a reference"),
+        }
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
@@ -100,8 +103,8 @@ pub enum MachineChipVariant<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> MachineChip<F> for Arc<RangeCheckerGateChip> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
-        RangeCheckerGateChip::generate_trace(self)
+    fn generate_trace(self) -> RowMajorMatrix<F> {
+        RangeCheckerGateChip::generate_trace(&self)
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>

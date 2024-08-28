@@ -10,7 +10,7 @@ use crate::{arch::chips::MachineChip, memory::manager::trace_builder::MemoryTrac
 
 impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH, F> {
     /// Generates final Poseidon2VmAir trace from cached rows.
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
         let correct_len = row_len.next_power_of_two();
         let diff = correct_len - row_len;

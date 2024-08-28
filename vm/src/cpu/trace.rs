@@ -574,7 +574,7 @@ impl<F: PrimeField32> CpuChip<F> {
 }
 
 impl<F: PrimeField32> MachineChip<F> for CpuChip<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(mut self) -> RowMajorMatrix<F> {
         if !self.state.is_done {
             self.pad_rows();
         }

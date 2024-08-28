@@ -86,7 +86,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
 
 impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
             .records
             .iter()

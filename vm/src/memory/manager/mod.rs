@@ -407,7 +407,7 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
 // TODO[jpw]: MemoryManager is taking the role of MemoryInterface here, which is weird.
 // Necessary right now because MemoryInterface doesn't own the final memory state.
 impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         self.generate_memory_interface_trace()
     }
 

@@ -101,10 +101,12 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             };
         }
 
+        // NOTE: The order of entries in `chips` must be a linear extension of the dependency DAG.
+        // That is, if chip A holds a strong reference to chip B, then A must precede B in `chips`.
+
         let mut chips = vec![
             MachineChipVariant::Cpu(cpu_chip.clone()),
             MachineChipVariant::Program(program_chip.clone()),
-            MachineChipVariant::Memory(memory_chip.clone()),
         ];
 
         if config.field_arithmetic_enabled {
@@ -156,8 +158,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         //     modular_arithmetic_chips.insert(modulus.clone(), air);
         // }
 
-        // TODO: Range checker should be last since other chips' trace generation (including dummy rows)
-        // affect RangeChecker's trace.
+        // Most chips have a reference to the memory chip, and the memory chip has a reference to
+        // the range checker chip.
+        chips.push(MachineChipVariant::Memory(memory_chip.clone()));
         chips.push(MachineChipVariant::RangeChecker(range_checker.clone()));
 
         Self {
@@ -192,11 +195,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             metrics: self.collected_metrics,
         };
 
+        // Drop all strong references to chips other than self.chips, which will be consumed next.
+        drop(self.executors);
+        drop(self.cpu_chip);
+        drop(self.program_chip);
+        drop(self.memory_chip);
+
         for mut chip in self.chips {
             if chip.current_trace_height() != 0 {
                 result.airs.push(chip.air());
-                result.traces.push(chip.generate_trace());
                 result.public_values.push(chip.generate_public_values());
+                result.traces.push(chip.generate_trace());
             }
         }
 
