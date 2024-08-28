@@ -25,6 +25,7 @@ num-traits = "0.2.19"
 # disable jemalloc to be compatible with afs-starkbackend
 snark-verifier-sdk = { workspace = true, optional = true }
 zkhash = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 p3-challenger = { workspace = true }
