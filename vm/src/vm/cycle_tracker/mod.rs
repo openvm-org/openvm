@@ -3,6 +3,8 @@ use std::{
     fmt::Display,
 };
 
+use afs_stark_backend::prover::metrics::format_number_with_underscores;
+
 use self::span::CycleTrackerSpan;
 use super::metrics::VmMetrics;
 use crate::vm::cycle_tracker::span::CanDiff;
@@ -118,14 +120,29 @@ impl Display for CycleTracker<VmMetrics> {
                 }
             }
 
-            writeln!(f, "span [{}] ({}):", name, num_spans)?;
+            writeln!(
+                f,
+                "span [{}] ({}):",
+                name,
+                format_number_with_underscores(num_spans)
+            )?;
             for (key, value) in &total_vm_metrics {
                 let avg_value = value / num_spans;
                 if num_spans == 1 {
-                    writeln!(f, "  - {}: {}", key, value)?;
+                    writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
                 } else {
-                    writeln!(f, "  - tot_{}: {}", key, value)?;
-                    writeln!(f, "  - avg_{}: {}", key, avg_value)?;
+                    writeln!(
+                        f,
+                        "  - tot_{}: {}",
+                        key,
+                        format_number_with_underscores(*value)
+                    )?;
+                    writeln!(
+                        f,
+                        "  - avg_{}: {}",
+                        key,
+                        format_number_with_underscores(avg_value)
+                    )?;
                 }
             }
 
@@ -135,7 +152,7 @@ impl Display for CycleTracker<VmMetrics> {
 
             for (key, value) in sorted_opcode_counts {
                 if *value > 0 {
-                    writeln!(f, "  - {}: {}", key, value)?;
+                    writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
                 }
             }
 
@@ -144,7 +161,7 @@ impl Display for CycleTracker<VmMetrics> {
 
             for (key, value) in sorted_dsl_counts {
                 if *value > 0 {
-                    writeln!(f, "  - {}: {}", key, value)?;
+                    writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
                 }
             }
 
@@ -154,7 +171,7 @@ impl Display for CycleTracker<VmMetrics> {
 
             for (key, value) in sorted_opcode_trace_cells {
                 if *value > 0 {
-                    writeln!(f, "  - {}: {}", key, value)?;
+                    writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
                 }
             }
 

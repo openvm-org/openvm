@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use afs_stark_backend::prover::metrics::format_number_with_underscores;
+
 use crate::vm::metrics::VmMetrics;
 
 #[derive(Debug, Clone)]
@@ -30,7 +32,7 @@ impl<M: CanDiff> CycleTrackerSpan<M> {
 impl Display for CycleTrackerSpan<VmMetrics> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (key, value) in &self.metrics.chip_metrics {
-            writeln!(f, "  - {}: {}", key, value)?;
+            writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
         }
 
         let mut sorted_opcode_counts: Vec<(&String, &usize)> =
@@ -39,7 +41,7 @@ impl Display for CycleTrackerSpan<VmMetrics> {
 
         for (key, value) in sorted_opcode_counts {
             if *value > 0 {
-                writeln!(f, "  - {}: {}", key, value)?;
+                writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
             }
         }
 
@@ -49,7 +51,7 @@ impl Display for CycleTrackerSpan<VmMetrics> {
 
         for (key, value) in sorted_dsl_counts {
             if *value > 0 {
-                writeln!(f, "  - {}: {}", key, value)?;
+                writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
             }
         }
 
@@ -59,7 +61,7 @@ impl Display for CycleTrackerSpan<VmMetrics> {
 
         for (key, value) in sorted_opcode_trace_cells {
             if *value > 0 {
-                writeln!(f, "  - {}: {}", key, value)?;
+                writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
             }
         }
 
