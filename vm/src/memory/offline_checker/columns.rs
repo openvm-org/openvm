@@ -1,11 +1,9 @@
-use std::iter;
+use std::{array, iter};
 
 use afs_primitives::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
 
 use super::bridge::MemoryOfflineChecker;
-use crate::memory::{
-    manager::access_cell::AccessCell, offline_checker::operation::MemoryOperation,
-};
+use crate::memory::offline_checker::operation::MemoryOperation;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryOfflineCheckerCols<const WORD_SIZE: usize, T> {
@@ -29,24 +27,27 @@ pub type MemoryWriteAuxCols<const WORD_SIZE: usize, T> = MemoryOfflineCheckerAux
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
     // TODO[jpw]: Remove this; read does not need old_data
-    pub old_cell: AccessCell<WORD_SIZE, T>,
-    pub is_immediate: T,
-    pub is_zero_aux: T,
+    pub(super) prev_data: [T; WORD_SIZE],
+    pub(super) prev_timestamp: T,
+    pub(super) is_immediate: T,
+    pub(super) is_zero_aux: T,
     // TODO[jpw]: IsLessThan should be optimized to AssertLessThan
-    pub clk_lt: T,
-    pub clk_lt_aux: IsLessThanAuxCols<T>,
+    pub(super) clk_lt: T,
+    pub(super) clk_lt_aux: IsLessThanAuxCols<T>,
 }
 
 impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
     pub fn new(
-        old_cell: AccessCell<WORD_SIZE, T>,
+        prev_data: [T; WORD_SIZE],
+        prev_timestamp: T,
         is_immediate: T,
         is_zero_aux: T,
         clk_lt: T,
         clk_lt_aux: IsLessThanAuxCols<T>,
     ) -> Self {
         Self {
-            old_cell,
+            prev_data,
+            prev_timestamp,
             is_immediate,
             is_zero_aux,
             clk_lt,
@@ -85,7 +86,8 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerCols<WORD_SIZE, T> {
 impl<const WORD_SIZE: usize, T: Clone> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
-            old_cell: AccessCell::from_slice(&slc[..WORD_SIZE + 1]),
+            prev_data: array::from_fn(|i| slc[i].clone()),
+            prev_timestamp: slc[WORD_SIZE].clone(),
             is_immediate: slc[WORD_SIZE + 1].clone(),
             is_zero_aux: slc[WORD_SIZE + 2].clone(),
             clk_lt: slc[WORD_SIZE + 3].clone(),
@@ -96,9 +98,9 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryOfflineCheckerAuxCols<WORD_SIZE, T>
 
 impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
     pub fn flatten(self) -> Vec<T> {
-        self.old_cell
-            .flatten()
+        self.prev_data
             .into_iter()
+            .chain(iter::once(self.prev_timestamp))
             .chain(iter::once(self.is_immediate))
             .chain(iter::once(self.is_zero_aux))
             .chain(iter::once(self.clk_lt))
@@ -108,7 +110,8 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
 
     pub fn try_from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
         Self {
-            old_cell: AccessCell::try_from_iter(iter),
+            prev_data: array::from_fn(|_| iter.next().unwrap()),
+            prev_timestamp: iter.next().unwrap(),
             is_immediate: iter.next().unwrap(),
             is_zero_aux: iter.next().unwrap(),
             clk_lt: iter.next().unwrap(),
@@ -117,8 +120,6 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
     }
 
     pub fn width(oc: &MemoryOfflineChecker) -> usize {
-        AccessCell::<WORD_SIZE, T>::width()
-            + 3
-            + IsLessThanAuxCols::<T>::width(&oc.timestamp_lt_air)
+        WORD_SIZE + 4 + IsLessThanAuxCols::<T>::width(&oc.timestamp_lt_air)
     }
 }

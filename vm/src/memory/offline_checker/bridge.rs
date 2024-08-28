@@ -221,7 +221,7 @@ impl MemoryOfflineChecker {
         }
 
         let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
-            aux.old_cell.clk.into(),
+            aux.prev_timestamp.into(),
             op.timestamp.clone(),
             aux.clk_lt.into(),
         );
@@ -236,7 +236,7 @@ impl MemoryOfflineChecker {
             for i in 0..WORD_SIZE {
                 builder
                     .when(op.enabled.clone())
-                    .assert_eq(op.data[i].clone(), aux.old_cell.data[i]);
+                    .assert_eq(op.data[i].clone(), aux.prev_data[i]);
             }
         }
 
@@ -244,7 +244,7 @@ impl MemoryOfflineChecker {
         let count = op.enabled - aux.is_immediate.into();
         let address = MemoryAddress::new(op.addr_space, op.pointer);
         self.memory_bus
-            .read(address.clone(), aux.old_cell.data, aux.old_cell.clk)
+            .read(address.clone(), aux.prev_data, aux.prev_timestamp)
             .eval(builder, count.clone());
         self.memory_bus
             .write(address, op.data, op.timestamp)

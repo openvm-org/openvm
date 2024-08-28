@@ -2,13 +2,12 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::rap::AnyRap;
-use derive_new::new;
 use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use self::{access_cell::AccessCell, interface::MemoryInterface};
+use self::interface::MemoryInterface;
 use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
 use crate::{
     arch::chips::MachineChip,
@@ -16,12 +15,10 @@ use crate::{
         bridge::MemoryOfflineChecker,
         bus::MemoryBus,
         columns::{MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
-        operation::MemoryOperation,
     },
     vm::config::MemoryConfig,
 };
 
-pub mod access_cell;
 pub mod dimensions;
 pub mod interface;
 pub mod trace_builder;
@@ -45,7 +42,7 @@ pub struct MemoryReadRecord<const N: usize, T> {
     /// The timestamp of the current read operation.
     pub timestamp: T,
     /// The timestamp of the previous batch access to this location.
-    pub prev_timestamp: T,
+    pub(crate) prev_timestamp: T,
     /// The data read from memory.
     pub data: [T; N],
 }
@@ -80,11 +77,11 @@ pub struct MemoryWriteRecord<const N: usize, T> {
     /// The timestamp of the current write operation.
     pub timestamp: T,
     /// The timestamp of the previous batch access to this location.
-    pub prev_timestamp: T,
+    pub(crate) prev_timestamp: T,
     /// The data to be written to memory.
     pub data: [T; N],
     /// The data that existed at the memory location during the previous batch access.
-    pub prev_data: [T; N],
+    pub(crate) prev_data: [T; N],
 }
 
 impl<const N: usize, F: Field> MemoryWriteRecord<N, F> {
@@ -218,7 +215,6 @@ impl<F: PrimeField32> MemoryChip<F> {
         let (prev_timestamp, old_data) = (cell.timestamp, cell.value);
         assert!(prev_timestamp < timestamp);
 
-        // Updating AccessCell
         cell.timestamp = timestamp;
         cell.value = data;
 
@@ -251,8 +247,12 @@ impl<F: PrimeField32> MemoryChip<F> {
         &self,
         read: MemoryReadRecord<N, F>,
     ) -> MemoryReadAuxCols<N, F> {
-        let access = MemoryAccess::from_read(read);
-        self.make_access_cols(access)
+        self.make_aux_cols(
+            read.timestamp,
+            read.address_space,
+            read.data,
+            read.prev_timestamp,
+        )
     }
 
     pub fn make_disabled_read_aux_cols<const N: usize>(
@@ -260,16 +260,19 @@ impl<F: PrimeField32> MemoryChip<F> {
         timestamp: F,
         address_space: F,
     ) -> MemoryReadAuxCols<N, F> {
-        let access = MemoryAccess::disabled_op(timestamp, address_space);
-        self.make_access_cols(access)
+        self.make_aux_cols(timestamp, address_space, [F::zero(); N], F::zero())
     }
 
     pub fn make_write_aux_cols<const N: usize>(
         &self,
         write: MemoryWriteRecord<N, F>,
     ) -> MemoryWriteAuxCols<N, F> {
-        let access = MemoryAccess::from_write(write);
-        self.make_access_cols(access)
+        self.make_aux_cols(
+            write.timestamp,
+            write.address_space,
+            write.prev_data,
+            write.prev_timestamp,
+        )
     }
 
     pub fn make_disabled_write_aux_cols<const N: usize>(
@@ -277,17 +280,18 @@ impl<F: PrimeField32> MemoryChip<F> {
         timestamp: F,
         address_space: F,
     ) -> MemoryWriteAuxCols<N, F> {
-        let access = MemoryAccess::disabled_op(timestamp, address_space);
-        self.make_access_cols(access)
+        self.make_aux_cols(timestamp, address_space, [F::zero(); N], F::zero())
     }
 
-    // TODO[zach]: remove
-    fn make_access_cols<const N: usize>(
+    fn make_aux_cols<const N: usize>(
         &self,
-        memory_access: MemoryAccess<N, F>,
+        timestamp: F,
+        address_space: F,
+        prev_data: [F; N],
+        prev_timestamp: F,
     ) -> MemoryOfflineCheckerAuxCols<N, F> {
-        let timestamp_prev = memory_access.old_cell.clk.as_canonical_u32();
-        let timestamp = memory_access.op.timestamp.as_canonical_u32();
+        let timestamp_prev = prev_timestamp.as_canonical_u32();
+        let timestamp = timestamp.as_canonical_u32();
 
         debug_assert!(timestamp_prev < timestamp);
         let offline_checker = self.make_offline_checker();
@@ -298,10 +302,11 @@ impl<F: PrimeField32> MemoryChip<F> {
 
         let addr_space_is_zero_cols = offline_checker
             .is_zero_air
-            .generate_trace_row(memory_access.op.addr_space);
+            .generate_trace_row(address_space);
 
         MemoryOfflineCheckerAuxCols::new(
-            memory_access.old_cell,
+            prev_data,
+            prev_timestamp,
             addr_space_is_zero_cols.io.is_zero,
             addr_space_is_zero_cols.inv,
             clk_lt_cols.io.less_than,
@@ -364,58 +369,6 @@ impl<F: PrimeField32> MemoryChip<F> {
     // pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
     //     self.write_word(timestamp, address_space, address, decompose(data));
     // }
-}
-
-#[derive(new, Clone, Debug)]
-pub struct MemoryAccess<const WORD_SIZE: usize, T> {
-    pub op: MemoryOperation<WORD_SIZE, T>,
-    pub old_cell: AccessCell<WORD_SIZE, T>,
-}
-
-impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
-    fn disabled_op(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
-        debug_assert_ne!(
-            addr_space,
-            T::zero(),
-            "Disabled memory operation cannot be immediate"
-        );
-        MemoryAccess::<WORD_SIZE, T>::new(
-            MemoryOperation {
-                addr_space,
-                pointer: T::zero(),
-                timestamp,
-                data: [T::zero(); WORD_SIZE],
-                enabled: T::zero(),
-            },
-            AccessCell::new([T::zero(); WORD_SIZE], T::zero()),
-        )
-    }
-
-    pub fn from_read(read: MemoryReadRecord<WORD_SIZE, T>) -> Self {
-        Self {
-            op: MemoryOperation {
-                addr_space: read.address_space,
-                pointer: read.pointer,
-                timestamp: read.timestamp,
-                data: read.data,
-                enabled: T::one(),
-            },
-            old_cell: AccessCell::new(read.data, read.prev_timestamp),
-        }
-    }
-
-    pub fn from_write(write: MemoryWriteRecord<WORD_SIZE, T>) -> Self {
-        Self {
-            op: MemoryOperation {
-                addr_space: write.address_space,
-                pointer: write.pointer,
-                timestamp: write.timestamp,
-                data: write.data,
-                enabled: T::one(),
-            },
-            old_cell: AccessCell::new(write.prev_data, write.prev_timestamp),
-        }
-    }
 }
 
 // TODO[jpw]: MemoryManager is taking the role of MemoryInterface here, which is weird.
