@@ -18,6 +18,7 @@ use crate::{
         manager::{dimensions::MemoryDimensions, trace_builder::MemoryTraceBuilder, MemoryChip},
         offline_checker::{
             bridge::MemoryOfflineChecker, bus::MemoryBus, columns::MemoryOfflineCheckerCols,
+            operation::MemoryOperation,
         },
     },
     vm::config::MemoryConfig,
@@ -89,7 +90,16 @@ fn volatile_memory_offline_checker_test() {
     // First, write to all addresses
     for (addr_space, pointer) in all_addresses.iter() {
         let value = Val::from_canonical_u32(rng.next_u32() % MAX_VAL);
-        mem_ops.push(mem_trace_builder.write_cell(*addr_space, *pointer, value));
+        mem_ops.push({
+            let write = mem_trace_builder.write_cell(*addr_space, *pointer, value);
+            MemoryOperation {
+                addr_space: write.address_space,
+                pointer: write.pointer,
+                timestamp: write.timestamp,
+                data: write.data,
+                enabled: Val::one(),
+            }
+        });
     }
 
     // Second, do some random memory accesses
@@ -99,9 +109,23 @@ fn volatile_memory_offline_checker_test() {
         let value = Val::from_canonical_u32(rng.next_u32() % MAX_VAL);
 
         let mem_op = if rng.gen_bool(0.5) {
-            mem_trace_builder.write_cell(addr_space, pointer, value)
+            let write = mem_trace_builder.write_cell(addr_space, pointer, value);
+            MemoryOperation {
+                addr_space: write.address_space,
+                pointer: write.pointer,
+                timestamp: write.timestamp,
+                data: write.data,
+                enabled: Val::one(),
+            }
         } else {
-            mem_trace_builder.read_cell(addr_space, pointer)
+            let read = mem_trace_builder.read_cell(addr_space, pointer);
+            MemoryOperation {
+                addr_space: read.address_space,
+                pointer: read.pointer,
+                timestamp: read.timestamp,
+                data: read.data,
+                enabled: Val::one(),
+            }
         };
 
         mem_ops.push(mem_op);
@@ -109,7 +133,14 @@ fn volatile_memory_offline_checker_test() {
 
     let diff = mem_ops.len().next_power_of_two() - mem_ops.len();
     for _ in 0..diff {
-        mem_ops.push(mem_trace_builder.disabled_op(Val::one()));
+        mem_trace_builder.disabled_op(Val::one());
+        mem_ops.push(MemoryOperation {
+            addr_space: Val::one(),
+            pointer: Val::zero(),
+            timestamp: memory_chip.borrow().timestamp(),
+            data: [Val::zero()],
+            enabled: Val::zero(),
+        });
     }
 
     let accesses_buffer = mem_trace_builder.take_accesses_buffer();
