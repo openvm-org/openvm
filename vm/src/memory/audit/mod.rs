@@ -15,13 +15,13 @@ pub mod trace;
 mod tests;
 
 #[derive(Clone, Debug)]
-pub struct MemoryAuditChip<const WORD_SIZE: usize, F: PrimeField32> {
-    pub air: MemoryAuditAir<WORD_SIZE>,
-    initial_memory: BTreeMap<(F, F), [F; WORD_SIZE]>,
+pub struct MemoryAuditChip<F: PrimeField32> {
+    pub air: MemoryAuditAir,
+    initial_memory: BTreeMap<(F, F), F>,
     range_checker: Arc<RangeCheckerGateChip>,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
+impl<F: PrimeField32> MemoryAuditChip<F> {
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
@@ -42,7 +42,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
         }
     }
 
-    pub fn touch_address(&mut self, addr_space: F, pointer: F, old_data: [F; WORD_SIZE]) {
+    pub fn touch_address(&mut self, addr_space: F, pointer: F, old_data: F) {
         self.initial_memory
             .entry((addr_space, pointer))
             .or_insert(old_data);

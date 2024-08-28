@@ -1,6 +1,4 @@
-mod outer;
-
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use afs_compiler::util::execute_and_prove_program;
 use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
@@ -19,7 +17,7 @@ use afs_test_utils::{
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::Val;
+use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
 
 use crate::{
@@ -28,35 +26,35 @@ use crate::{
     types::{new_from_inner_multi_vk, VerifierInput},
 };
 
-#[test]
-fn test_fibonacci() {
-    type SC = BabyBearPoseidon2Config;
-    type F = Val<SC>;
-
-    setup_tracing();
-
-    let fib_air = FibonacciAir {};
-    let n = 16;
-    let trace = generate_fib_trace_rows(n);
-    let pvs = vec![vec![
-        F::from_canonical_u32(0),
-        F::from_canonical_u32(1),
-        trace.get(n - 1, 1),
-    ]];
-
-    run_recursive_test(vec![&fib_air], vec![trace], pvs)
+pub(crate) struct StarkForTest<SC: StarkGenericConfig> {
+    pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
+    pub traces: Vec<RowMajorMatrix<BabyBear>>,
+    pub pvs: Vec<Vec<BabyBear>>,
 }
 
-#[test]
-fn test_interactions() {
-    type SC = BabyBearPoseidon2Config;
+pub(crate) fn fibonacci_stark_for_test<'a, SC: StarkGenericConfig>() -> StarkForTest<SC> {
+    setup_tracing();
 
+    let fib_air = Rc::new(FibonacciAir {});
+    let n = 16;
+    let trace = generate_fib_trace_rows::<BabyBear>(n);
+    let pvs = vec![vec![
+        BabyBear::from_canonical_u32(0),
+        BabyBear::from_canonical_u32(1),
+        trace.get(n - 1, 1),
+    ]];
+    StarkForTest {
+        any_raps: vec![fib_air.clone()],
+        traces: vec![trace],
+        pvs,
+    }
+}
+
+pub(crate) fn interaction_stark_for_test<'a, SC: StarkGenericConfig>() -> StarkForTest<SC> {
     const INPUT_BUS: usize = 0;
     const OUTPUT_BUS: usize = 1;
     const RANGE_BUS: usize = 2;
     const RANGE_MAX: u32 = 16;
-
-    setup_tracing();
 
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_BUS, RANGE_MAX));
     let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, 4, range_checker);
@@ -93,25 +91,45 @@ fn test_interactions() {
         receiver_air.field_width() + 1,
     );
     let range_checker_trace = sum_chip.range_checker.generate_trace();
+    let sum_air = Rc::new(sum_chip.air);
+    let sender_air = Rc::new(sender_air);
+    let receiver_air = Rc::new(receiver_air);
+    let range_checker_air = Rc::new(sum_chip.range_checker.air);
 
-    let any_raps: Vec<&dyn AnyRap<SC>> = vec![
-        &sum_chip.air,
-        &sender_air,
-        &receiver_air,
-        &sum_chip.range_checker.air,
-    ];
+    let any_raps: Vec<Rc<dyn AnyRap<SC>>> =
+        vec![sum_air, sender_air, receiver_air, range_checker_air];
     let traces = vec![sum_trace, sender_trace, receiver_trace, range_checker_trace];
     let pvs = vec![vec![], vec![], vec![], vec![]];
 
-    run_recursive_test(any_raps, traces, pvs)
+    StarkForTest {
+        any_raps,
+        traces,
+        pvs,
+    }
 }
 
-fn run_recursive_test(
-    // TODO: find way to not duplicate parameters
-    any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    traces: Vec<RowMajorMatrix<BabyBear>>,
-    pvs: Vec<Vec<BabyBear>>,
-) {
+#[test]
+fn test_fibonacci() {
+    setup_tracing();
+
+    run_recursive_test(&fibonacci_stark_for_test::<BabyBearPoseidon2Config>())
+}
+
+#[test]
+fn test_interactions() {
+    setup_tracing();
+
+    run_recursive_test(&interaction_stark_for_test::<BabyBearPoseidon2Config>())
+}
+
+fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2Config>) {
+    let StarkForTest {
+        any_raps,
+        traces,
+        pvs,
+    } = stark_for_test;
+    let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
+
     let num_pvs: Vec<usize> = pvs.iter().map(|pv| pv.len()).collect();
 
     let trace_heights: Vec<usize> = traces.iter().map(|t| t.height()).collect();

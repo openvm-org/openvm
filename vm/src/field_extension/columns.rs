@@ -5,10 +5,11 @@ use afs_primitives::is_less_than::IsLessThanAir;
 
 use crate::{
     field_extension::{air::FieldExtensionArithmeticAir, chip::EXTENSION_DEGREE},
-    memory::offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
+    memory::offline_checker::{
+        bridge::MemoryOfflineChecker,
+        columns::{MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+    },
 };
-
-const WORD_SIZE: usize = 1;
 
 /// Columns for field extension chip.
 ///
@@ -39,24 +40,22 @@ pub struct FieldExtensionArithmeticIoCols<T> {
 pub struct FieldExtensionArithmeticAuxCols<T> {
     /// Whether the row corresponds an actual event (vs a dummy row for padding).
     pub is_valid: T,
-    // Whether the y read occurs: is_valid * (1 - is_inv)
-    pub valid_y_read: T,
     // whether the opcode is FE4ADD
     pub is_add: T,
     // whether the opcode is FE4SUB
     pub is_sub: T,
     // whether the opcode is BBE4MUL
     pub is_mul: T,
-    // whether the opcode is BBE4INV
-    pub is_inv: T,
-    // the field extension inverse of x
-    pub inv: [T; EXTENSION_DEGREE],
+    // whether the opcode is BBE4DIV
+    pub is_div: T,
+    /// `divisor_inv` is y.inverse() when opcode is BBE4DIV and zero otherwise.
+    pub divisor_inv: [T; EXTENSION_DEGREE],
     /// The aux columns for the x reads.
-    pub read_x_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    pub read_x_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; EXTENSION_DEGREE],
     /// The aux columns for the y reads.
-    pub read_y_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    pub read_y_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; EXTENSION_DEGREE],
     /// The aux columns for the z writes.
-    pub write_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    pub write_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; EXTENSION_DEGREE],
 }
 
 impl<T> FieldExtensionArithmeticCols<T> {
@@ -84,21 +83,14 @@ impl<T> FieldExtensionArithmeticCols<T> {
             },
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: next(),
-                valid_y_read: next(),
                 is_add: next(),
                 is_sub: next(),
                 is_mul: next(),
-                is_inv: next(),
-                inv: array::from_fn(|_| next()),
-                read_x_aux_cols: array::from_fn(|_| {
-                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
-                }),
-                read_y_aux_cols: array::from_fn(|_| {
-                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
-                }),
-                write_aux_cols: array::from_fn(|_| {
-                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
-                }),
+                is_div: next(),
+                divisor_inv: array::from_fn(|_| next()),
+                read_x_aux_cols: array::from_fn(|_| MemoryReadAuxCols::try_from_iter(iter, lt_air)),
+                read_y_aux_cols: array::from_fn(|_| MemoryReadAuxCols::try_from_iter(iter, lt_air)),
+                write_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::try_from_iter(iter, lt_air)),
             },
         }
     }
@@ -141,7 +133,7 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<T> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
-        EXTENSION_DEGREE + 6 + 12 * MemoryOfflineCheckerAuxCols::<1, T>::width(oc)
+        EXTENSION_DEGREE + 5 + 12 * MemoryOfflineCheckerAuxCols::<1, T>::width(oc)
     }
 }
 
@@ -149,13 +141,12 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
     fn flatten(&self) -> Vec<T> {
         let mut result = vec![
             self.is_valid.clone(),
-            self.valid_y_read.clone(),
             self.is_add.clone(),
             self.is_sub.clone(),
             self.is_mul.clone(),
-            self.is_inv.clone(),
+            self.is_div.clone(),
         ];
-        result.extend_from_slice(&self.inv);
+        result.extend_from_slice(&self.divisor_inv);
         for mem_oc_aux_cols in self.read_x_aux_cols.iter().cloned() {
             result.extend(mem_oc_aux_cols.flatten());
         }

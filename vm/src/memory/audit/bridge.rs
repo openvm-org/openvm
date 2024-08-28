@@ -4,18 +4,18 @@ use p3_field::AbstractField;
 use super::{air::MemoryAuditAir, columns::AuditCols};
 use crate::memory::MemoryAddress;
 
-impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
+impl MemoryAuditAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: AuditCols<WORD_SIZE, AB::Var>,
+        local: AuditCols<AB::Var>,
     ) {
         let mult = AB::Expr::one() - local.is_extra;
         // Write the initial memory values at initial timestamps
         self.memory_bus
             .write(
                 MemoryAddress::new(local.addr_space, local.pointer),
-                local.initial_data,
+                [local.initial_data],
                 AB::Expr::zero(),
             )
             .eval(builder, mult.clone());

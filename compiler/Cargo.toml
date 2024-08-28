@@ -14,7 +14,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 p3-bn254-fr = { workspace = true }
 p3-baby-bear = { workspace = true }
-backtrace = "0.3.71"
+backtrace = { version = "0.3.71", features = ["serde"] }
 afs-test-utils = { path = "../test-utils" }
 stark-vm = { path = "../vm" }
 strum_macros = "0.26.4"
@@ -23,7 +23,7 @@ num-bigint-dig = "0.8.4"
 num-integer = "0.1.46"
 num-traits = "0.2.19"
 # disable jemalloc to be compatible with afs-starkbackend
-snark-verifier-sdk = { workspace = true }
+snark-verifier-sdk = { workspace = true, optional = true }
 zkhash = { workspace = true }
 
 [dev-dependencies]
@@ -32,3 +32,7 @@ p3-symmetric = { workspace = true }
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
 rand = "0.8.5"
+
+[features]
+default = []
+halo2-compiler = ["dep:snark-verifier-sdk"]

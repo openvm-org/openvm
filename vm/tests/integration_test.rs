@@ -243,7 +243,7 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
         Instruction::from_isize(FE4SUB, 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4MUL, 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4INV, 12, 0, 12, 1, 1),
+        Instruction::from_isize(BBE4DIV, 12, 0, 4, 1, 1),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 

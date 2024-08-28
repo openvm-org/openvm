@@ -43,9 +43,9 @@ impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH
 }
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     pub fn blank_row(&self) -> Poseidon2VmCols<WIDTH, F> {
-        let timestamp = self.memory_manager.borrow().timestamp();
+        let timestamp = self.memory_chip.borrow().timestamp();
         let mut blank = Poseidon2VmCols::<WIDTH, F>::blank_row(&self.air.inner, timestamp);
-        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_manager.clone());
+        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
         for _ in 0..3 {
             mem_trace_builder.disabled_read(blank.io.d);
             mem_trace_builder.increment_clk();

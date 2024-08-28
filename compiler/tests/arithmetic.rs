@@ -12,7 +12,6 @@ use stark_vm::{
     vm::{config::VmConfig, VirtualMachine},
 };
 
-#[allow(dead_code)]
 const WORD_SIZE: usize = 1;
 
 #[test]

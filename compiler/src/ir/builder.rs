@@ -2,6 +2,7 @@ use std::{iter::Zip, vec::IntoIter};
 
 use backtrace::Backtrace;
 use p3_field::AbstractField;
+use serde::{Deserialize, Serialize};
 
 use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
@@ -10,7 +11,7 @@ use super::{
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
 /// from another TracedVec, the traces are copied over.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TracedVec<T> {
     pub vec: Vec<T>,
     pub traces: Vec<Option<Backtrace>>,

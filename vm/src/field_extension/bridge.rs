@@ -89,7 +89,6 @@ impl FieldExtensionArithmeticAir {
             read_y_aux_cols,
             write_aux_cols,
             is_valid,
-            valid_y_read,
             ..
         } = aux;
 
@@ -112,7 +111,7 @@ impl FieldExtensionArithmeticAir {
             builder,
             self.mem_oc,
             &mut clk_offset,
-            valid_y_read.into(),
+            is_valid.into(),
             false,
             timestamp,
             e,
@@ -135,8 +134,7 @@ impl FieldExtensionArithmeticAir {
             write_aux_cols,
         );
 
-        let timestamp_delta =
-            (AB::Expr::two() + valid_y_read) * AB::Expr::from_canonical_usize(EXTENSION_DEGREE);
+        let timestamp_delta = AB::Expr::from_canonical_usize(3 * EXTENSION_DEGREE);
 
         self.execution_bus.execute_increment_pc(
             builder,
