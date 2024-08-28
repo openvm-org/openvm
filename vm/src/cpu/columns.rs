@@ -15,7 +15,9 @@ use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
     memory::{
         manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
-        offline_checker::columns::MemoryOfflineCheckerAuxCols,
+        offline_checker::columns::{
+            MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols,
+        },
     },
 };
 
@@ -98,7 +100,8 @@ pub struct CpuAuxCols<T> {
     pub writes: [MemoryWriteCols<1, T>; CPU_MAX_WRITES_PER_CYCLE],
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
-    pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; CPU_MAX_ACCESSES_PER_CYCLE],
+    pub reads_aux_cols: [MemoryReadAuxCols<1, T>; CPU_MAX_READS_PER_CYCLE],
+    pub writes_aux_cols: [MemoryWriteAuxCols<1, T>; CPU_MAX_WRITES_PER_CYCLE],
 }
 
 impl<T: Clone> CpuAuxCols<T> {
@@ -134,11 +137,15 @@ impl<T: Clone> CpuAuxCols<T> {
         end += IsEqualVecAuxCols::<T>::width(WORD_SIZE);
         let is_equal_vec_aux = IsEqualVecAuxCols::from_slice(&slc[start..end], WORD_SIZE);
 
-        let mem_oc_aux_cols = array::from_fn(|_| {
+        let reads_aux_cols = array::from_fn(|_| {
             start = end;
-            end +=
-                MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
-            MemoryOfflineCheckerAuxCols::from_slice(&slc[start..end])
+            end += MemoryReadAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
+            MemoryReadAuxCols::from_slice(&slc[start..end])
+        });
+        let writes_aux_cols = array::from_fn(|_| {
+            start = end;
+            end += MemoryWriteAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
+            MemoryWriteAuxCols::from_slice(&slc[start..end])
         });
 
         Self {
@@ -148,7 +155,8 @@ impl<T: Clone> CpuAuxCols<T> {
             writes,
             read0_equals_read1: beq_check,
             is_equal_vec_aux,
-            mem_oc_aux_cols,
+            reads_aux_cols,
+            writes_aux_cols,
         }
     }
 
@@ -173,10 +181,16 @@ impl<T: Clone> CpuAuxCols<T> {
         flattened.push(self.read0_equals_read1.clone());
         flattened.extend(self.is_equal_vec_aux.flatten());
         flattened.extend(
-            self.mem_oc_aux_cols
+            self.reads_aux_cols
                 .iter()
                 .cloned()
-                .flat_map(MemoryOfflineCheckerAuxCols::flatten),
+                .flat_map(MemoryReadAuxCols::flatten),
+        );
+        flattened.extend(
+            self.writes_aux_cols
+                .iter()
+                .cloned()
+                .flat_map(MemoryWriteAuxCols::flatten),
         );
         flattened
     }
@@ -202,9 +216,11 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             operation_flags.insert(opcode, F::from_bool(opcode == Opcode::NOP));
         }
 
-        let mut mem_trace_builder = MemoryTraceBuilder::new(chip.memory_chip.clone());
-        let reads = array::from_fn(|_| mem_trace_builder.disabled_op(F::one()));
-        let writes = array::from_fn(|_| mem_trace_builder.disabled_op(F::one()));
+        let mut mem_read_trace_builder = MemoryTraceBuilder::new(chip.memory_chip.clone());
+        let reads = array::from_fn(|_| mem_read_trace_builder.disabled_op(F::one()));
+
+        let mut mem_write_trace_builder = MemoryTraceBuilder::new(chip.memory_chip.clone());
+        let writes = array::from_fn(|_| mem_write_trace_builder.disabled_op(F::one()));
 
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
@@ -217,7 +233,14 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             writes,
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
-            mem_oc_aux_cols: mem_trace_builder.take_accesses_buffer().try_into().unwrap(),
+            reads_aux_cols: mem_read_trace_builder
+                .take_accesses_buffer()
+                .try_into()
+                .unwrap(),
+            writes_aux_cols: mem_write_trace_builder
+                .take_accesses_buffer()
+                .try_into()
+                .unwrap(),
         }
     }
 }

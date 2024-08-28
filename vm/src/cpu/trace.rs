@@ -278,7 +278,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 ($addr_space: expr, $pointer: expr, $data: expr) => {{
                     // finalize reads now for disabled timestamp considerations :(
                     while reads.len() < CPU_MAX_READS_PER_CYCLE {
-                        reads.push(mem_write_trace_builder.disabled_op(F::one()));
+                        reads.push(mem_read_trace_builder.disabled_op(F::one()));
                     }
 
                     assert!(writes.len() < CPU_MAX_WRITES_PER_CYCLE);
@@ -290,7 +290,7 @@ impl<F: PrimeField32> CpuChip<F> {
             macro_rules! finalize_accesses {
                 () => {{
                     while reads.len() < CPU_MAX_READS_PER_CYCLE {
-                        reads.push(mem_write_trace_builder.disabled_op(F::one()));
+                        reads.push(mem_read_trace_builder.disabled_op(F::one()));
                     }
 
                     while writes.len() < CPU_MAX_WRITES_PER_CYCLE {
@@ -463,12 +463,15 @@ impl<F: PrimeField32> CpuChip<F> {
 
             finalize_accesses!();
 
-            let mem_oc_aux_cols: Vec<_> = mem_read_trace_builder
+            let reads_aux_cols = mem_read_trace_builder
                 .take_accesses_buffer()
-                .into_iter()
-                .chain(mem_write_trace_builder.take_accesses_buffer())
-                .collect();
-            let mem_oc_aux_cols = mem_oc_aux_cols.try_into().unwrap();
+                .try_into()
+                .unwrap();
+
+            let writes_aux_cols = mem_write_trace_builder
+                .take_accesses_buffer()
+                .try_into()
+                .unwrap();
 
             let mut operation_flags = BTreeMap::new();
             for other_opcode in CORE_INSTRUCTIONS {
@@ -490,7 +493,8 @@ impl<F: PrimeField32> CpuChip<F> {
                 writes: writes.try_into().unwrap(),
                 read0_equals_read1,
                 is_equal_vec_aux,
-                mem_oc_aux_cols,
+                reads_aux_cols,
+                writes_aux_cols,
             };
 
             let cols = CpuCols { io, aux };

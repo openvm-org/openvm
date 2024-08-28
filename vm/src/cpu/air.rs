@@ -98,7 +98,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
             writes,
             read0_equals_read1,
             is_equal_vec_aux,
-            mem_oc_aux_cols,
+            reads_aux_cols,
+            writes_aux_cols,
         } = aux;
 
         let [read1, read2, read3] = &reads;
@@ -354,7 +355,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         // FIXME[zach]: Properly constrain op.enabled based on opcode.
 
         let mut op_timestamp: AB::Expr = io.timestamp.into();
-        let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, mem_oc_aux_cols);
+        let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, reads_aux_cols);
         for read in &reads {
             memory_bridge
                 .read::<AB::Expr>(
@@ -365,6 +366,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
                 .eval(builder, read.enabled);
             op_timestamp += read.enabled.into();
         }
+
+        let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, writes_aux_cols);
         for write in &writes {
             memory_bridge
                 .write(
