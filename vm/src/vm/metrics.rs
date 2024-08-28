@@ -40,7 +40,7 @@ impl Display for VmMetrics {
         writeln!(f)?;
 
         writeln!(f, "| Name | Value |")?;
-        writeln!(f, "|------|-------|")?;
+        writeln!(f, "|------|------:|")?;
         for (name, value) in self.chip_metrics.iter() {
             writeln!(
                 f,
@@ -53,7 +53,7 @@ impl Display for VmMetrics {
         writeln!(f)?;
         writeln!(f, "#### Opcode metrics")?;
         writeln!(f, "| Name | Frequency | Trace Cells Contributed |")?;
-        writeln!(f, "|------|-------|-----|")?;
+        writeln!(f, "|------|------:|-----:|")?;
         for (name, value) in opcode_counts.iter() {
             let cell_count = *self.opcode_trace_cells.get(name).unwrap_or(&0);
             writeln!(
@@ -80,7 +80,7 @@ impl Display for VmMetrics {
         writeln!(f, "### DSL counts")?;
         writeln!(f, "How many opcodes each DSL instruction generates:")?;
         writeln!(f, "| Name | Count |")?;
-        writeln!(f, "|------|-------|")?;
+        writeln!(f, "|------|------:|")?;
         for (name, value) in dsl_counts.iter() {
             writeln!(
                 f,
