@@ -58,7 +58,6 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
 
         FieldArithmeticCols {
             io: FieldArithmeticIoCols {
-                opcode: F::from_canonical_u32(opcode as u32),
                 from_state: from_state.map(F::from_canonical_usize),
                 x: Operand::new(x_read.address_space, x_read.pointer, x),
                 y: Operand::new(y_read.address_space, y_read.pointer, y),

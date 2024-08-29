@@ -68,11 +68,10 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
             expected_result += flag * result;
         }
         builder.assert_eq(flag_sum, aux.is_valid);
-        builder.assert_eq(io.opcode, expected_opcode);
         builder.assert_eq(z, expected_result);
 
         builder.assert_eq(aux.is_div, y * aux.divisor_inv);
 
-        self.eval_interactions(builder, io, aux);
+        self.eval_interactions(builder, io, aux, expected_opcode);
     }
 }

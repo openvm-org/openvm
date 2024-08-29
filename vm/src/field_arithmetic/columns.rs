@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::{iter, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use derive_new::new;
@@ -26,7 +26,6 @@ pub struct FieldArithmeticCols<T> {
 #[derive(Copy, Clone, Debug, Default, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticIoCols<T> {
-    pub opcode: T,
     pub from_state: ExecutionState<T>,
     pub x: Operand<T>,
     pub y: Operand<T>,
@@ -77,7 +76,6 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
     #[allow(clippy::should_implement_trait)]
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         Self {
-            opcode: iter.next().unwrap(),
             from_state: ExecutionState::from_iter(iter),
             x: Operand::from_iter(iter),
             y: Operand::from_iter(iter),
@@ -86,12 +84,12 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut result = vec![self.opcode.clone()];
-        result.extend(self.from_state.clone().flatten());
-        result.extend(self.x.flatten());
-        result.extend(self.y.flatten());
-        result.extend(self.z.flatten());
-        result
+        iter::empty()
+            .chain(self.from_state.clone().flatten())
+            .chain(self.x.flatten())
+            .chain(self.y.flatten())
+            .chain(self.z.flatten())
+            .collect()
     }
 }
 
