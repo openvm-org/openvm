@@ -1,6 +1,7 @@
 use std::{array, iter};
 
 use afs_primitives::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
+use p3_field::Field;
 
 use super::bridge::MemoryOfflineChecker;
 use crate::memory::offline_checker::operation::MemoryOperation;
@@ -121,5 +122,12 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
 
     pub fn width(oc: &MemoryOfflineChecker) -> usize {
         WORD_SIZE + 4 + IsLessThanAuxCols::<T>::width(&oc.timestamp_lt_air)
+    }
+}
+
+impl<const WORD_SIZE: usize, F: Field> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
+    pub fn disabled(mem_oc: MemoryOfflineChecker) -> Self {
+        let width = MemoryReadAuxCols::<1, F>::width(&mem_oc);
+        MemoryOfflineCheckerAuxCols::from_slice(&vec![F::zero(); width])
     }
 }

@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
-use p3_field::{Field, PrimeField32};
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
@@ -53,19 +53,6 @@ impl<T: Copy> MemoryReadRecord<1, T> {
     }
 }
 
-impl<const N: usize, F: Field> MemoryReadRecord<N, F> {
-    /// Will be deprecated.
-    pub fn disabled() -> Self {
-        Self {
-            address_space: F::zero(),
-            pointer: F::zero(),
-            timestamp: F::zero(),
-            prev_timestamp: F::zero(),
-            data: [F::zero(); N],
-        }
-    }
-}
-
 /// Represents a single or batch memory write operation.
 /// Can be used to generate [MemoryWriteAuxCols].
 #[derive(Clone, Debug)]
@@ -82,20 +69,6 @@ pub struct MemoryWriteRecord<const N: usize, T> {
     pub data: [T; N],
     /// The data that existed at the memory location during the previous batch access.
     pub(crate) prev_data: [T; N],
-}
-
-impl<const N: usize, F: Field> MemoryWriteRecord<N, F> {
-    /// Will be deprecated.
-    pub fn disabled() -> Self {
-        Self {
-            address_space: F::zero(),
-            pointer: F::zero(),
-            timestamp: F::zero(),
-            prev_timestamp: F::zero(),
-            data: [F::zero(); N],
-            prev_data: [F::zero(); N],
-        }
-    }
 }
 
 impl<T: Copy> MemoryWriteRecord<1, T> {
@@ -256,8 +229,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     }
 
     pub fn make_disabled_read_aux_cols<const N: usize>(&self) -> MemoryReadAuxCols<N, F> {
-        let width = MemoryReadAuxCols::<1, F>::width(&self.make_offline_checker());
-        MemoryReadAuxCols::from_slice(&vec![F::zero(); width])
+        MemoryReadAuxCols::disabled(self.make_offline_checker())
     }
 
     pub fn make_write_aux_cols<const N: usize>(
@@ -273,8 +245,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     }
 
     pub fn make_disabled_write_aux_cols<const N: usize>(&self) -> MemoryWriteAuxCols<N, F> {
-        let width = MemoryWriteAuxCols::<1, F>::width(&self.make_offline_checker());
-        MemoryWriteAuxCols::from_slice(&vec![F::zero(); width])
+        MemoryWriteAuxCols::disabled(self.make_offline_checker())
     }
 
     fn make_aux_cols<const N: usize>(

@@ -8,11 +8,13 @@ use super::{
     columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
     FieldArithmeticChip, FieldArithmeticRecord, Operand,
 };
-use crate::arch::{chips::MachineChip, instructions::Opcode};
+use crate::{
+    arch::{chips::MachineChip, instructions::Opcode},
+    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+};
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     fn make_blank_row(&self) -> FieldArithmeticCols<F> {
-        let memory_chip = self.memory_chip.borrow();
         FieldArithmeticCols {
             io: Default::default(),
             aux: FieldArithmeticAuxCols {
@@ -22,18 +24,14 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 is_mul: F::zero(),
                 is_div: F::zero(),
                 divisor_inv: F::zero(),
-                read_x_aux_cols: memory_chip.make_disabled_read_aux_cols(),
-                read_y_aux_cols: memory_chip.make_disabled_read_aux_cols(),
-                write_z_aux_cols: memory_chip.make_disabled_write_aux_cols(),
+                read_x_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                read_y_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
             },
         }
     }
 
-    fn generate_row(
-        &self,
-        record: FieldArithmeticRecord<F>,
-        is_valid: bool,
-    ) -> FieldArithmeticCols<F> {
+    fn record_to_cols(&self, record: FieldArithmeticRecord<F>) -> FieldArithmeticCols<F> {
         let FieldArithmeticRecord {
             opcode,
             from_state,
@@ -67,7 +65,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 z: Operand::new(z_write.address_space, z_write.pointer, z),
             },
             aux: FieldArithmeticAuxCols {
-                is_valid: F::from_bool(is_valid),
+                is_valid: F::one(),
                 is_add,
                 is_sub,
                 is_mul,
@@ -88,7 +86,7 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
             .records
             .iter()
             .cloned()
-            .flat_map(|op| self.generate_row(op, true).flatten())
+            .flat_map(|op| self.record_to_cols(op).flatten())
             .collect();
 
         let curr_height = self.records.len();
