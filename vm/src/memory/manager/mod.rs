@@ -246,19 +246,13 @@ impl<F: PrimeField32> MemoryChip<F> {
     pub fn make_read_aux_cols<const N: usize>(
         &self,
         read: MemoryReadRecord<N, F>,
-        is_valid: bool,
     ) -> MemoryReadAuxCols<N, F> {
-        // TODO[jpw] Remove this if chips refactored to never use Record for disabled
-        if is_valid {
-            self.make_aux_cols(
-                read.timestamp,
-                read.address_space,
-                read.data,
-                read.prev_timestamp,
-            )
-        } else {
-            self.make_disabled_read_aux_cols()
-        }
+        self.make_aux_cols(
+            read.timestamp,
+            read.address_space,
+            read.data,
+            read.prev_timestamp,
+        )
     }
 
     pub fn make_disabled_read_aux_cols<const N: usize>(&self) -> MemoryReadAuxCols<N, F> {
@@ -269,19 +263,13 @@ impl<F: PrimeField32> MemoryChip<F> {
     pub fn make_write_aux_cols<const N: usize>(
         &self,
         write: MemoryWriteRecord<N, F>,
-        is_valid: bool,
     ) -> MemoryWriteAuxCols<N, F> {
-        // TODO[jpw] Remove this if chips refactored to never use Record for disabled
-        if is_valid {
-            self.make_aux_cols(
-                write.timestamp,
-                write.address_space,
-                write.prev_data,
-                write.prev_timestamp,
-            )
-        } else {
-            self.make_disabled_write_aux_cols()
-        }
+        self.make_aux_cols(
+            write.timestamp,
+            write.address_space,
+            write.prev_data,
+            write.prev_timestamp,
+        )
     }
 
     pub fn make_disabled_write_aux_cols<const N: usize>(&self) -> MemoryWriteAuxCols<N, F> {

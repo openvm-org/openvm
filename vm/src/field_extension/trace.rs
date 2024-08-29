@@ -103,13 +103,13 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
                 divisor_inv,
                 read_x_aux_cols: record
                     .x_reads
-                    .map(|read| memory.make_read_aux_cols(read, true)),
+                    .map(|read| memory.make_read_aux_cols(read)),
                 read_y_aux_cols: record
                     .y_reads
-                    .map(|read| memory.make_read_aux_cols(read, true)),
+                    .map(|read| memory.make_read_aux_cols(read)),
                 write_aux_cols: record
                     .z_writes
-                    .map(|write| memory.make_write_aux_cols(write, true)),
+                    .map(|write| memory.make_write_aux_cols(write)),
             },
         }
     }

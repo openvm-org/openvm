@@ -10,30 +10,40 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, columns::ExecutionState, instructions::Opcode},
-    memory::manager::{MemoryReadRecord, MemoryWriteRecord},
 };
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     fn make_blank_row(&self) -> FieldArithmeticCols<F> {
-        self.generate_row(
-            FieldArithmeticRecord {
-                opcode: Opcode::FADD,
+        let memory_chip = self.memory_chip.borrow_mut();
+
+        FieldArithmeticCols {
+            io: FieldArithmeticIoCols {
+                opcode: F::from_canonical_u32(Opcode::FADD as u32),
                 from_state: ExecutionState {
-                    pc: 0,
-                    timestamp: 0,
+                    pc: F::zero(),
+                    timestamp: F::zero(),
                 },
-                x_read: MemoryReadRecord::disabled(),
-                y_read: MemoryReadRecord::disabled(),
-                z_write: MemoryWriteRecord::disabled(),
+                x: Operand::new(F::zero(), F::zero(), F::zero()),
+                y: Operand::new(F::zero(), F::zero(), F::zero()),
+                z: Operand::new(F::zero(), F::zero(), F::zero()),
             },
-            false,
-        )
+            aux: FieldArithmeticAuxCols {
+                is_valid: F::zero(),
+                is_add: F::one(),
+                is_sub: F::zero(),
+                is_mul: F::zero(),
+                is_div: F::zero(),
+                divisor_inv: F::zero(),
+                read_x_aux_cols: memory_chip.make_disabled_read_aux_cols(),
+                read_y_aux_cols: memory_chip.make_disabled_read_aux_cols(),
+                write_z_aux_cols: memory_chip.make_disabled_write_aux_cols(),
+            },
+        }
     }
 
-    fn generate_row(
+    fn record_to_cols(
         &self,
         record: FieldArithmeticRecord<F>,
-        is_valid: bool,
     ) -> FieldArithmeticCols<F> {
         let FieldArithmeticRecord {
             opcode,
@@ -68,15 +78,15 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 z: Operand::new(z_write.address_space, z_write.pointer, z),
             },
             aux: FieldArithmeticAuxCols {
-                is_valid: F::from_bool(is_valid),
+                is_valid: F::one(),
                 is_add,
                 is_sub,
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read, is_valid),
-                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read, is_valid),
-                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write, is_valid),
+                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read),
+                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read),
+                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write),
             },
         }
     }
@@ -89,7 +99,7 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
             .records
             .iter()
             .cloned()
-            .flat_map(|op| self.generate_row(op, true).flatten())
+            .flat_map(|op| self.record_to_cols(op).flatten())
             .collect();
 
         let curr_height = self.records.len();
