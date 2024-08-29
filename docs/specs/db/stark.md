@@ -54,10 +54,67 @@ For each logical operation `Op_l` (of which there is a finite list), we define a
 
 - Given committed dataframes `t_1, ..., t_n`, there is output committed dataframe `t_out` such that the logical table represented by `t_out` equals `Op_l` applied to the logical tables represented by `t_1, ..., t_n`, and the application of `Op_c` to `page_dir(t_1), ..., page_dir(t_n)` results in `page_dir(t_out)`.
 
-We claim, with proof by construction, that each logical operation (among a list of the common logical plan operations in a typical database) has a corresponding cryptographic operation.
+We claim, with proof by construction, that each logical operation (among a list of the common logical plan operations in a typical database) has a corresponding dataframe operation.
 
-More specifically, we define a cryptographic operation to mean a function in a VM where the input and output page directories are stored as arrays of page commitments in the VM's memory. The VM will have special opcodes where the operands are page commitments, and the opcodes take the form
+More specifically, we define a dataframe operation to mean a function in a **Database VM** where the input and output page directories are read/written as arrays of page commitments in the VM's memory. These arrays are treated as having _variable length_, so they are stored on the heap in memory. We construct the dataframe operation for a logical operation as follows:
 
-- Given committed pages `p_1, ..., p_m`, there exists `p_out` such that the opcode execution on `page_commit(p_1), ..., page_commit(p_m)` results in `page_commit(p_out)` and the physical page underlying `p_out` equals the output of execution of a table operation (e.g., `Filter`) on the physical pages underlying `p_1, ..., p_m`.
+The Database VM will have special opcodes, which we call page-level **execution opcodes**, which operate on
+committed pages. This means the opcodes take the form
 
-Call these opcodes page-level execution opcodes. Each such opcode will generate a STARK (using logup)that proves the execution of the operation on materialized physical pages. This is the only time the physical pages are materialized.
+- Given committed pages `p_1, ..., p_m`, there exists `p_out` such that the opcode execution on `page_commit(p_1), ..., page_commit(p_m)` results in `page_commit(p_out)` and the physical page underlying `p_out` equals the output of execution of a physical page operation (e.g., `Filter`) on the physical pages underlying `p_1, ..., p_m`.
+
+An execution opcode's spec depends on the physical page operation and the physical schema of each input page. The spec will _not_ depend on the concrete values in the input pages. The spec should also not depend on the height of the page, unless otherwise specified.
+
+We claim there is a finite number of classes of physical page operations such that each dataframe
+operations can be written as a function using a finite set of execution opcodes from these classes.
+Here by a class of physical page operations we mean an infinite collection of page operations that
+can all be described with the same spec (e.g., `Filter` on predicate) but with concrete instances
+of the operation depending on the physical schemas of the input pages as well as other parameters (e.g., the physical column indices to filter on). <!--TODO[jpw] more precise definition-->
+
+### Database VM Proving
+
+We describe how to prove the execution of a dataframe operation in such a VM using a
+STARK-aggregation framework.
+
+For each execution opcode, we generate a multi-trace STARK with logup interactions that proves the execution of the physical page operation on materialized physical pages. When `page_commit` is via the LDE Merkle tree, the physical pages are materialized as cached traces, and the page commitments
+(but not the pages themselves!) are contained in the proof of the STARK. In general, the requirement
+on the STARK is that the proof of the STARK contains the page commitments of all input and output committed pages -- these may be contained in the public values or the proof commitments.
+
+Our notion of _class_ of physical page operations corresponds directly to a class of STARKs that
+we can implement in a uniform way at the software engineering level.
+
+For each concrete instance of an execution opcode, the verifying key of the STARK becomes a unique
+identifier for the execution opcode. The verifying key embeds the spec of the execution opcode,
+including the physical schemas of the input and output pages.
+
+#### Aggregating execution into shared memory
+
+Given a collection of STARK proofs for execution opcodes (call these execution proofs),
+we will generate a STARK proof that verifies all execution proofs and writes
+`hash(vkey), input_page_commits, output_page_commit, query_input_values` to a persistent memory
+that will be **shared** with the Database VM.
+
+<!--TODO[jpw] query_input_values needs to be a commitment for this interface to be uniform. Spec it out -->
+
+This will be done by aggregating all execution proofs using a generalized
+tree-based aggregation strategy using a separate Aggregation VM. The aggregation strategy is not
+specific to the execution opcode context, and is instead [general](../aggregation.md). The general aggregation strategy, together with some memory merging logic in the internal tree nodes,
+allows the aggregation to write all verified proof outputs into persistent Aggregation VM memory
+in a dedicated address space. The commitment to this persistent memory will be a public value
+of the final aggregation proof. To achieve this general goal, there are two options:
+
+- The aggregation strategy is fully universal, where each node uses an Aggregation VM program that can verify any STARK vkey. In other words the verification program is fully dynamic. In this case the final aggregation circuit's vkey is independent of what execution opcodes are used and the entire framework is context free.
+- The aggregation strategy is execution specific. This means we start with a list of enabled execution vkeys, and each node uses an Aggregation VM program that has the verification programs for
+  each supported vkey compiled in. The Aggregation VM program only dynamically matches the execution vkey with the correct verification program to use. This approach likely has better performance than the fully universal approach.
+
+We will evaluate both approaches above and choose based on performance and versatility, but the
+rest of the architecture will not depend on this choice.
+
+The Aggregation VM and Database VM share the same memory architecture, so it is possible for the
+Database VM to load the **persistent shared memory** from the aggregation proof.
+
+**Conclusion:** assuming verification of execution aggregation proof, the Database VM will have
+access to a table of verified `hash(vkey), input_page_commits, output_page_commit, query_input_values` in a special address space in shared memory.
+Within the Database VM, calling an execution opcode is then simply a lookup into this table.
+
+#### Database VM runtime
