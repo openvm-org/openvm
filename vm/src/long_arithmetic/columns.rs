@@ -1,3 +1,5 @@
+use std::iter;
+
 use super::num_limbs;
 
 pub struct LongArithmeticCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
@@ -28,19 +30,14 @@ pub struct LongArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
     LongArithmeticCols<ARG_SIZE, LIMB_SIZE, T>
 {
-    pub fn from_slice(slc: &[T]) -> Self {
-        let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-
-        let io =
-            LongArithmeticIoCols::<ARG_SIZE, LIMB_SIZE, T>::from_slice(&slc[..3 * num_limbs + 3]);
-        let aux =
-            LongArithmeticAuxCols::<ARG_SIZE, LIMB_SIZE, T>::from_slice(&slc[3 * num_limbs + 3..]);
+    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
+        let io = LongArithmeticIoCols::<ARG_SIZE, LIMB_SIZE, T>::from_iterator(iter.by_ref());
+        let aux = LongArithmeticAuxCols::<ARG_SIZE, LIMB_SIZE, T>::from_iterator(iter.by_ref());
 
         Self { io, aux }
     }
-
-    pub fn flatten(&self) -> Vec<T> {
-        [self.io.flatten(), self.aux.flatten()].concat()
+    pub fn flatten(&self) -> impl Iterator<Item = &T> {
+        self.io.flatten().chain(self.aux.flatten())
     }
 
     pub const fn get_width() -> usize {
@@ -56,15 +53,15 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
         3 * num_limbs::<ARG_SIZE, LIMB_SIZE>() + 3
     }
 
-    pub fn from_slice(slc: &[T]) -> Self {
+    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 
-        let rcv_count = slc[0].clone();
-        let opcode = slc[1].clone();
-        let x_limbs = slc[2..2 + num_limbs].to_vec();
-        let y_limbs = slc[2 + num_limbs..2 + 2 * num_limbs].to_vec();
-        let z_limbs = slc[2 + 2 * num_limbs..2 + 3 * num_limbs].to_vec();
-        let cmp_result = slc[2 + 3 * num_limbs].clone();
+        let rcv_count = iter.next().unwrap();
+        let opcode = iter.next().unwrap();
+        let x_limbs = iter.by_ref().take(num_limbs).collect();
+        let y_limbs = iter.by_ref().take(num_limbs).collect();
+        let z_limbs = iter.by_ref().take(num_limbs).collect();
+        let cmp_result = iter.next().unwrap();
 
         Self {
             rcv_count,
@@ -76,15 +73,13 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        [
-            vec![self.rcv_count.clone(), self.opcode.clone()],
-            self.x_limbs.clone(),
-            self.y_limbs.clone(),
-            self.z_limbs.clone(),
-            vec![self.cmp_result.clone()],
-        ]
-        .concat()
+    pub fn flatten(&self) -> impl Iterator<Item = &T> {
+        iter::once(&self.rcv_count)
+            .chain(iter::once(&self.opcode))
+            .chain(self.x_limbs.iter())
+            .chain(self.y_limbs.iter())
+            .chain(self.z_limbs.iter())
+            .chain(iter::once(&self.cmp_result))
     }
 }
 
@@ -95,14 +90,14 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
         4 + num_limbs::<ARG_SIZE, LIMB_SIZE>()
     }
 
-    pub fn from_slice(slc: &[T]) -> Self {
+    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 
-        let opcode_add_flag = slc[0].clone();
-        let opcode_sub_flag = slc[1].clone();
-        let opcode_lt_flag = slc[2].clone();
-        let opcode_eq_flag = slc[3].clone();
-        let buffer = slc[4..4 + num_limbs].to_vec();
+        let opcode_add_flag = iter.next().unwrap();
+        let opcode_sub_flag = iter.next().unwrap();
+        let opcode_lt_flag = iter.next().unwrap();
+        let opcode_eq_flag = iter.next().unwrap();
+        let buffer = iter.by_ref().take(num_limbs).collect();
 
         Self {
             opcode_add_flag,
@@ -113,16 +108,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        [
-            vec![
-                self.opcode_add_flag.clone(),
-                self.opcode_sub_flag.clone(),
-                self.opcode_lt_flag.clone(),
-                self.opcode_eq_flag.clone(),
-            ],
-            self.buffer.clone(),
-        ]
-        .concat()
+    pub fn flatten(&self) -> impl Iterator<Item = &T> {
+        iter::once(&self.opcode_add_flag)
+            .chain(iter::once(&self.opcode_sub_flag))
+            .chain(iter::once(&self.opcode_lt_flag))
+            .chain(iter::once(&self.opcode_eq_flag))
+            .chain(self.buffer.iter())
     }
 }

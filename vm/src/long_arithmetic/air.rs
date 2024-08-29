@@ -37,9 +37,11 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
         let main = builder.main();
 
         let local = main.row_slice(0);
-        let local = (*local).borrow();
+        let local: &[AB::Var] = (*local).borrow();
 
-        let cols = LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_slice(local);
+        let cols = LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_iterator(
+            local.iter().copied(),
+        );
         let (io, aux) = (&cols.io, &cols.aux);
 
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();

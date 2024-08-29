@@ -39,6 +39,8 @@ pub fn create_row_from_values<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: 
         },
     }
     .flatten()
+    .copied()
+    .collect()
 }
 
 struct CalculationResult {
