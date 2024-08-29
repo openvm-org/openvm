@@ -431,7 +431,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 let mut reads_aux_cols = read_records
                     .iter()
                     .cloned()
-                    .map(|read| memory_chip.make_read_aux_cols(read, true))
+                    .map(|read| memory_chip.make_read_aux_cols(read))
                     .collect_vec();
 
                 // icky timestamp calculation for disabled reads
@@ -458,7 +458,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 let mut writes_aux_cols = write_records
                     .iter()
                     .cloned()
-                    .map(|write| memory_chip.make_write_aux_cols(write, true))
+                    .map(|write| memory_chip.make_write_aux_cols(write))
                     .collect_vec();
                 while write_cols.len() < CPU_MAX_WRITES_PER_CYCLE {
                     write_cols.push(CpuMemoryAccessCols::disabled(timestamp));

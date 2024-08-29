@@ -67,7 +67,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
             expected_opcode += flag * AB::Expr::from_canonical_u32(opcode as u32);
             expected_result += flag * result;
         }
-        builder.assert_one(flag_sum);
+        builder.assert_eq(flag_sum, aux.is_valid);
         builder.assert_eq(io.opcode, expected_opcode);
         builder.assert_eq(z, expected_result);
 

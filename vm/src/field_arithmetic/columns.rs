@@ -23,7 +23,7 @@ pub struct FieldArithmeticCols<T> {
     pub aux: FieldArithmeticAuxCols<T>,
 }
 
-#[derive(Copy, Clone, Debug, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, Default, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticIoCols<T> {
     pub opcode: T,
