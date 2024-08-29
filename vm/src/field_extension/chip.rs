@@ -131,7 +131,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         array::from_fn(|i| {
             self.memory_chip
                 .borrow_mut()
-                .read(address_space, address + F::from_canonical_usize(i))
+                .read_cell(address_space, address + F::from_canonical_usize(i))
         })
     }
 
@@ -144,7 +144,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         assert_ne!(address_space, F::zero());
 
         array::from_fn(|i| {
-            self.memory_chip.borrow_mut().write(
+            self.memory_chip.borrow_mut().write_cell(
                 address_space,
                 address + F::from_canonical_usize(i),
                 result[i],

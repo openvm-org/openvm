@@ -160,7 +160,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         )
     }
 
-    pub fn read(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<1, F> {
+    pub fn read_cell(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<1, F> {
         let timestamp = self.timestamp;
         self.timestamp += F::one();
 
@@ -199,7 +199,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         self.memory.get(&(addr_space, pointer)).unwrap().value
     }
 
-    pub fn write(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<1, F> {
+    pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<1, F> {
         assert_ne!(address_space, F::zero());
 
         let timestamp = self.timestamp;

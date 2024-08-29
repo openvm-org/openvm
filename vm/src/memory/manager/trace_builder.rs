@@ -25,7 +25,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
 
     pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryReadRecord<WORD_SIZE, F> {
         let mut memory_chip = self.memory_chip.borrow_mut();
-        let read = memory_chip.read(addr_space, pointer);
+        let read = memory_chip.read_cell(addr_space, pointer);
         let aux_cols = memory_chip.make_read_aux_cols(read.clone());
 
         self.accesses_buffer.push(aux_cols);
@@ -40,7 +40,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         data: F,
     ) -> MemoryWriteRecord<WORD_SIZE, F> {
         let mut memory_chip = self.memory_chip.borrow_mut();
-        let write = memory_chip.write(addr_space, pointer, data);
+        let write = memory_chip.write_cell(addr_space, pointer, data);
         let aux_cols = memory_chip.make_write_aux_cols(write.clone());
 
         self.accesses_buffer.push(aux_cols);

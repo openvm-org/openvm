@@ -103,19 +103,19 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
         let address1 = vm
             .memory_chip
             .borrow_mut()
-            .read(instruction.d, instruction.op_a)
+            .read_cell(instruction.d, instruction.op_a)
             .value();
 
         let address2 = vm
             .memory_chip
             .borrow_mut()
-            .read(instruction.d, op_input_2)
+            .read_cell(instruction.d, op_input_2)
             .value();
 
         let output_address = vm
             .memory_chip
             .borrow_mut()
-            .read(instruction.d, op_result)
+            .read_cell(instruction.d, op_result)
             .value();
 
         let chip: ModularArithmeticChip<F> = todo!();
@@ -126,7 +126,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             .map(|i| {
                 vm.memory_chip
                     .borrow_mut()
-                    .read(instruction.e, address1 + F::from_canonical_usize(i))
+                    .read_cell(instruction.e, address1 + F::from_canonical_usize(i))
                     .value()
             })
             .collect();
@@ -134,7 +134,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             .map(|i| {
                 vm.memory_chip
                     .borrow_mut()
-                    .read(instruction.e, address2 + F::from_canonical_usize(i))
+                    .read_cell(instruction.e, address2 + F::from_canonical_usize(i))
                     .value()
             })
             .collect();
@@ -159,7 +159,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
         } % modulus;
         let result_elems = bigint_to_elems(result, repr_bits, num_elems);
         for (i, &elem) in result_elems.iter().enumerate() {
-            vm.memory_chip.borrow_mut().write(
+            vm.memory_chip.borrow_mut().write_cell(
                 instruction.e,
                 output_address + F::from_canonical_usize(i),
                 elem,

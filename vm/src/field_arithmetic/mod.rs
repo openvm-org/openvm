@@ -80,14 +80,14 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             memory_chip.timestamp().as_canonical_u32() as usize
         );
 
-        let x_read = memory_chip.read(x_as, x_address);
-        let y_read = memory_chip.read(y_as, y_address);
+        let x_read = memory_chip.read_cell(x_as, x_address);
+        let y_read = memory_chip.read_cell(y_as, y_address);
 
         let x = x_read.value();
         let y = y_read.value();
         let z = FieldArithmetic::solve(opcode, (x, y)).unwrap();
 
-        let z_write = memory_chip.write(z_as, z_address, z);
+        let z_write = memory_chip.write_cell(z_as, z_address, z);
 
         self.records.push(FieldArithmeticRecord {
             opcode,

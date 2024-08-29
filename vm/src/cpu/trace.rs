@@ -271,7 +271,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 ($addr_space: expr, $pointer: expr) => {{
                     assert!(read_records.len() < CPU_MAX_READS_PER_CYCLE);
                     let mut memory_chip = vm.memory_chip.borrow_mut();
-                    read_records.push(memory_chip.read($addr_space, $pointer));
+                    read_records.push(memory_chip.read_cell($addr_space, $pointer));
                     read_records[read_records.len() - 1].data[0]
                 }};
             }
@@ -280,7 +280,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 ($addr_space: expr, $pointer: expr, $data: expr) => {{
                     assert!(write_records.len() < CPU_MAX_WRITES_PER_CYCLE);
                     let mut memory_chip = vm.memory_chip.borrow_mut();
-                    write_records.push(memory_chip.write($addr_space, $pointer, $data));
+                    write_records.push(memory_chip.write_cell($addr_space, $pointer, $data));
                 }};
             }
 

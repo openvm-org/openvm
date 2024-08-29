@@ -47,7 +47,7 @@ impl<F: PrimeField32> MemoryTester<F> {
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let read = RefCell::borrow_mut(&self.chip).read(addr_space, pointer);
+        let read = RefCell::borrow_mut(&self.chip).read_cell(addr_space, pointer);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records
             .push(self.bus.read(address, read.data, read.prev_timestamp));
@@ -58,7 +58,7 @@ impl<F: PrimeField32> MemoryTester<F> {
 
     pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let write = RefCell::borrow_mut(&self.chip).write(addr_space, pointer, value);
+        let write = RefCell::borrow_mut(&self.chip).write_cell(addr_space, pointer, value);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(
             self.bus
