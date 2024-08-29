@@ -44,7 +44,7 @@ impl Display for VmMetrics {
         for (name, value) in self.chip_metrics.iter() {
             writeln!(
                 f,
-                "| {:<20} | `{:<10}` |",
+                "| {:<20} | `{:>15}` |",
                 name,
                 format_number_with_underscores(*value)
             )?;
@@ -58,7 +58,7 @@ impl Display for VmMetrics {
             let cell_count = *self.opcode_trace_cells.get(name).unwrap_or(&0);
             writeln!(
                 f,
-                "| {:<20} | `{:<10}` | `{:<10}` |",
+                "| {:<20} | `{:>15}` | `{:>15}` |",
                 name,
                 format_number_with_underscores(*value),
                 format_number_with_underscores(cell_count)
@@ -69,7 +69,7 @@ impl Display for VmMetrics {
                 // this should never happen
                 writeln!(
                     f,
-                    "| {:<20} | 0 | `{:<10}` |",
+                    "| {:<20} | 0 | `{:>15}` |",
                     name,
                     format_number_with_underscores(*value)
                 )?;
@@ -84,7 +84,7 @@ impl Display for VmMetrics {
         for (name, value) in dsl_counts.iter() {
             writeln!(
                 f,
-                "| {:<20} | `{:<10}` |",
+                "| {:<20} | `{:>15}` |",
                 name,
                 format_number_with_underscores(*value)
             )?;
