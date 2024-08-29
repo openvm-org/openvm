@@ -7,26 +7,29 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::{columns::LongArithmeticCols, num_limbs};
-use crate::arch::instructions::Opcode;
+use crate::{
+    arch::{
+        bus::ExecutionBus,
+        instructions::{Opcode, LONG_ARITHMETIC_INSTRUCTIONS},
+    },
+    memory::offline_checker::bridge::MemoryOfflineChecker,
+};
 
 /// AIR for the long addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.
 #[derive(Copy, Clone, Debug)]
 pub struct LongArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
+    pub(super) execution_bus: ExecutionBus,
+    pub(super) mem_oc: MemoryOfflineChecker,
+
     pub bus: RangeCheckBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
     pub base_op: Opcode,
-}
-
-impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticAir<ARG_SIZE, LIMB_SIZE> {
-    pub fn new(bus: RangeCheckBus, base_op: Opcode) -> Self {
-        Self { bus, base_op }
-    }
 }
 
 impl<F: Field, const ARG_SIZE: usize, const LIMB_SIZE: usize> BaseAir<F>
     for LongArithmeticAir<ARG_SIZE, LIMB_SIZE>
 {
     fn width(&self) -> usize {
-        LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::get_width()
+        LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::get_width(self)
     }
 }
 
@@ -39,10 +42,11 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let cols = LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_iterator(
-            local.iter().copied(),
-        );
-        let (io, aux) = (&cols.io, &cols.aux);
+        let LongArithmeticCols { io, aux } =
+            LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_iterator(
+                local.iter().copied(),
+                self,
+            );
 
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 
@@ -55,15 +59,18 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
         for flag in flags {
             builder.assert_bool(flag);
         }
+
+        builder.assert_bool(aux.is_valid);
         builder.assert_eq(
-            [Opcode::ADD256, Opcode::SUB256, Opcode::LT256, Opcode::EQ256]
-                .map(|op| AB::Expr::from_canonical_u8(op as u8))
+            aux.is_valid,
+            flags
                 .iter()
-                .zip(flags)
-                .fold(AB::Expr::zero(), |acc, (op, flag)| acc + op.clone() * flag),
-            io.opcode,
+                .fold(AB::Expr::zero(), |acc, flag| acc + (*flag).into()),
         );
-        builder.assert_one(flags.iter().fold(AB::Expr::zero(), |acc, flag| acc + *flag));
+
+        let x_limbs = &io.x.data;
+        let y_limbs = &io.y.data;
+        let z_limbs = &io.z.data;
 
         for i in 0..num_limbs {
             // If we need to perform an arithmetic operation, we will use "buffer"
@@ -83,14 +90,14 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
 
             // lhs = +rhs if opcode_add_flag = 1,
             // lhs = -rhs if opcode_sub_flag = 1 or opcode_lt_flag = 1.
-            let lhs = io.y_limbs[i]
+            let lhs = y_limbs[i]
                 + if i > 0 {
                     aux.buffer[i - 1].into()
                 } else {
                     AB::Expr::zero()
                 }
                 - aux.buffer[i] * AB::Expr::from_canonical_u32(1 << LIMB_SIZE);
-            let rhs = io.z_limbs[i] - io.x_limbs[i];
+            let rhs = z_limbs[i] - x_limbs[i];
             builder
                 .when(aux.opcode_add_flag)
                 .assert_eq(lhs.clone(), rhs.clone());
@@ -114,16 +121,23 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
         // - cmp_result + sum_{i < num_limbs} (x[i] - y[i]) * buffer[i] = 1.
         let mut sum_eq: AB::Expr = io.cmp_result.into();
         for i in 0..num_limbs {
-            sum_eq += (io.x_limbs[i] - io.y_limbs[i]) * aux.buffer[i];
+            sum_eq += (x_limbs[i] - y_limbs[i]) * aux.buffer[i];
 
             builder
                 .when(aux.opcode_eq_flag)
-                .assert_zero(io.cmp_result * (io.x_limbs[i] - io.y_limbs[i]));
+                .assert_zero(io.cmp_result * (x_limbs[i] - y_limbs[i]));
         }
         builder
             .when(aux.opcode_eq_flag)
             .assert_zero(sum_eq - AB::Expr::one());
 
-        self.eval_interactions(builder, cols);
+        let expected_opcode = flags
+            .iter()
+            .zip(LONG_ARITHMETIC_INSTRUCTIONS)
+            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
+                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+            });
+
+        self.eval_interactions(builder, io, aux, expected_opcode);
     }
 }

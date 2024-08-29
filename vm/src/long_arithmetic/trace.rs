@@ -1,180 +1,137 @@
-use p3_field::{Field, PrimeField32};
+use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap};
+use p3_commit::PolynomialSpace;
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::Domain;
 
 use super::{
-    columns::{LongArithmeticAuxCols, LongArithmeticCols, LongArithmeticIoCols},
-    num_limbs, LongArithmeticChip, LongArithmeticOperation,
+    columns::{LongArithmeticAuxCols, LongArithmeticCols, LongArithmeticIoCols, MemoryData},
+    num_limbs, LongArithmeticChip, WriteRecord,
 };
-use crate::arch::instructions::Opcode;
+use crate::{
+    arch::{chips::MachineChip, instructions::Opcode},
+    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+};
 
-pub fn create_row_from_values<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Field>(
-    opcode: Opcode,
-    x: &[u32],
-    y: &[u32],
-    result_limbs: &[u32],
-    buffer_limbs: &[u32],
-    cmp_result: bool,
-) -> Vec<T> {
-    LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, T> {
-        io: LongArithmeticIoCols {
-            rcv_count: T::one(),
-            opcode: T::from_canonical_u8(opcode as u8),
-            x_limbs: x.iter().map(|x| T::from_canonical_u32(*x)).collect(),
-            y_limbs: y.iter().map(|x| T::from_canonical_u32(*x)).collect(),
-            z_limbs: result_limbs
-                .iter()
-                .map(|x| T::from_canonical_u32(*x))
-                .collect(),
-            cmp_result: T::from_canonical_u8(cmp_result as u8),
-        },
-        aux: LongArithmeticAuxCols {
-            opcode_add_flag: T::from_canonical_u8((opcode == Opcode::ADD256) as u8),
-            opcode_sub_flag: T::from_canonical_u8((opcode == Opcode::SUB256) as u8),
-            opcode_lt_flag: T::from_canonical_u8((opcode == Opcode::LT256) as u8),
-            opcode_eq_flag: T::from_canonical_u8((opcode == Opcode::EQ256) as u8),
-            buffer: buffer_limbs
-                .iter()
-                .map(|x| T::from_canonical_u32(*x))
-                .collect(),
-        },
-    }
-    .flatten()
-    .copied()
-    .collect()
-}
-
-struct CalculationResult {
-    result_limbs: Vec<u32>,
-    buffer_limbs: Vec<u32>,
-    cmp_result: bool,
-}
-
-impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE, LIMB_SIZE> {
-    fn calculate<F: PrimeField32>(opcode: Opcode, x: &[u32], y: &[u32]) -> CalculationResult {
-        match opcode {
-            Opcode::ADD256 => {
-                let (sum, carry) = Self::calc_sum(x, y);
-                CalculationResult {
-                    result_limbs: sum,
-                    buffer_limbs: carry,
-                    cmp_result: false,
-                }
-            }
-            Opcode::SUB256 => {
-                let (diff, carry) = Self::calc_diff(x, y);
-                CalculationResult {
-                    result_limbs: diff,
-                    buffer_limbs: carry,
-                    cmp_result: false,
-                }
-            }
-            Opcode::LT256 => {
-                let (diff, carry) = Self::calc_diff(x, y);
-                let cmp_result = *carry.last().unwrap() == 1;
-                CalculationResult {
-                    result_limbs: diff,
-                    buffer_limbs: carry,
-                    cmp_result,
-                }
-            }
-            Opcode::EQ256 => {
-                let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-                let mut inverse = vec![0u32; num_limbs];
-                for i in 0..num_limbs {
-                    if x[i] != y[i] {
-                        inverse[i] = (F::from_canonical_u32(x[i]) - F::from_canonical_u32(y[i]))
-                            .inverse()
-                            .as_canonical_u32();
-                        break;
-                    }
-                }
-                CalculationResult {
-                    result_limbs: vec![0u32; num_limbs],
-                    buffer_limbs: inverse,
-                    cmp_result: x.iter().zip(y).all(|(x, y)| x == y),
-                }
-            }
-            _ => unreachable!(),
-        }
+impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip<F>
+    for LongArithmeticChip<ARG_SIZE, LIMB_SIZE, F>
+{
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        Box::new(self.air)
     }
 
-    fn calc_sum(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
+    fn current_trace_height(&self) -> usize {
+        self.data.len()
+    }
+
+    fn trace_width(&self) -> usize {
+        LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::get_width(&self.air)
+    }
+
+    fn generate_trace(self) -> RowMajorMatrix<F> {
+        let memory_chip = self.memory_chip.borrow();
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-        let mut result = vec![0u32; num_limbs];
-        let mut carry = vec![0u32; num_limbs];
-        for i in 0..num_limbs {
-            result[i] = x[i] + y[i] + if i > 0 { carry[i - 1] } else { 0 };
-            carry[i] = result[i] >> LIMB_SIZE;
-            result[i] &= (1 << LIMB_SIZE) - 1;
-        }
-        (result, carry)
-    }
-
-    fn calc_diff(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
-        let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-        let mut result = vec![0u32; num_limbs];
-        let mut carry = vec![0u32; num_limbs];
-        for i in 0..num_limbs {
-            let rhs = y[i] + if i > 0 { carry[i - 1] } else { 0 };
-            if x[i] >= rhs {
-                result[i] = x[i] - rhs;
-                carry[i] = 0;
-            } else {
-                result[i] = x[i] + (1 << LIMB_SIZE) - rhs;
-                carry[i] = 1;
-            }
-        }
-        (result, carry)
-    }
-
-    pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
         let rows = self
-            .operations
+            .data
             .iter()
-            .map(|operation: &LongArithmeticOperation| {
-                let (opcode, x, y) = (operation.opcode, &operation.operand1, &operation.operand2);
-                let CalculationResult {
-                    result_limbs,
-                    buffer_limbs,
-                    cmp_result,
-                } = Self::calculate::<F>(opcode, x, y);
-
-                assert_eq!(ARG_SIZE % LIMB_SIZE, 0);
-
-                if opcode == Opcode::ADD256 || opcode == Opcode::SUB256 || opcode == Opcode::LT256 {
-                    for z in &result_limbs {
-                        self.range_checker_chip.add_count(*z);
+            .map(|operation| {
+                {
+                    LongArithmeticCols {
+                        io: LongArithmeticIoCols {
+                            from_state: operation.record.from_state.map(F::from_canonical_usize),
+                            x: MemoryData::<ARG_SIZE, LIMB_SIZE, F> {
+                                data: operation.record.x_read.data.to_vec(),
+                                address_space: operation.record.x_read.address_space,
+                                address: operation.record.x_read.pointer,
+                            },
+                            y: MemoryData {
+                                data: operation.record.y_read.data.to_vec(),
+                                address_space: operation.record.y_read.address_space,
+                                address: operation.record.y_read.pointer,
+                            },
+                            z: match &operation.record.z_write {
+                                WriteRecord::Long(z) => MemoryData {
+                                    data: z.data.to_vec(),
+                                    address_space: z.address_space,
+                                    address: z.pointer,
+                                },
+                                WriteRecord::Short(z) => MemoryData {
+                                    data: operation
+                                        .result
+                                        .iter()
+                                        .cloned()
+                                        .chain(std::iter::repeat(F::zero()))
+                                        .take(num_limbs)
+                                        .collect(),
+                                    address_space: z.address_space,
+                                    address: z.pointer,
+                                },
+                            },
+                            cmp_result: match &operation.record.z_write {
+                                WriteRecord::Long(_) => F::zero(),
+                                WriteRecord::Short(z) => z.data[0],
+                            },
+                        },
+                        aux: LongArithmeticAuxCols {
+                            is_valid: F::one(),
+                            opcode_add_flag: F::from_bool(
+                                operation.record.instruction.opcode == Opcode::ADD256,
+                            ),
+                            opcode_sub_flag: F::from_bool(
+                                operation.record.instruction.opcode == Opcode::SUB256,
+                            ),
+                            opcode_lt_flag: F::from_bool(
+                                operation.record.instruction.opcode == Opcode::LT256,
+                            ),
+                            opcode_eq_flag: F::from_bool(
+                                operation.record.instruction.opcode == Opcode::EQ256,
+                            ),
+                            buffer: operation.buffer.clone(),
+                            read_x_aux_cols: memory_chip
+                                .make_read_aux_cols(operation.record.x_read.clone()),
+                            read_y_aux_cols: memory_chip
+                                .make_read_aux_cols(operation.record.y_read.clone()),
+                            write_z_aux_cols: match &operation.record.z_write {
+                                WriteRecord::Long(z) => memory_chip.make_write_aux_cols(z.clone()),
+                                WriteRecord::Short(_) => memory_chip.make_disabled_write_aux_cols(),
+                            },
+                            write_cmp_aux_cols: match &operation.record.z_write {
+                                WriteRecord::Long(_) => memory_chip.make_disabled_write_aux_cols(),
+                                WriteRecord::Short(z) => memory_chip.make_write_aux_cols(z.clone()),
+                            },
+                        },
                     }
                 }
-                create_row_from_values::<ARG_SIZE, LIMB_SIZE, F>(
-                    opcode,
-                    x,
-                    y,
-                    &result_limbs,
-                    &buffer_limbs,
-                    cmp_result,
-                )
+                .flatten()
             })
             .collect::<Vec<_>>();
 
         let height = rows.len();
         let padded_height = height.next_power_of_two();
 
-        let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-
-        let blank_row = create_row_from_values::<ARG_SIZE, LIMB_SIZE, F>(
-            Opcode::ADD256,
-            &vec![0u32; num_limbs],
-            &vec![0u32; num_limbs],
-            &vec![0u32; num_limbs],
-            &vec![0u32; num_limbs],
-            false,
-        );
-        // set rcv_count to 0
-        let blank_row = [vec![F::zero()], blank_row[1..].to_vec()].concat();
+        let blank_row = LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, F> {
+            io: Default::default(),
+            aux: LongArithmeticAuxCols {
+                is_valid: Default::default(),
+                opcode_add_flag: Default::default(),
+                opcode_sub_flag: Default::default(),
+                opcode_lt_flag: Default::default(),
+                opcode_eq_flag: Default::default(),
+                buffer: vec![Default::default(); num_limbs],
+                read_x_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                read_y_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
+                write_cmp_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
+            },
+        }
+        .flatten();
         let width = blank_row.len();
 
         let mut padded_rows = rows;
+
         padded_rows.extend(std::iter::repeat(blank_row).take(padded_height - height));
 
         RowMajorMatrix::new(padded_rows.concat(), width)

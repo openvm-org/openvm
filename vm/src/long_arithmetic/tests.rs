@@ -3,15 +3,18 @@ use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
-use super::{trace::create_row_from_values, LongArithmeticChip};
-use crate::arch::instructions::Opcode;
+use super::{columns::LongArithmeticCols, CalculationResult, LongArithmetic, LongArithmeticChip};
+use crate::{
+    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
+    cpu::trace::Instruction,
+};
 
 type F = BabyBear;
 
-const OPCODES: [Opcode; 2] = [Opcode::ADD256, Opcode::SUB256];
+const OPCODES_ARITH: [Opcode; 2] = [Opcode::ADD256, Opcode::SUB256];
 
 fn generate_long_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
     rng: &mut StdRng,
@@ -23,85 +26,153 @@ fn generate_long_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
         .collect()
 }
 
-fn generate_add_sub_program<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
-    chip: &mut LongArithmeticChip<ARG_SIZE, LIMB_SIZE>,
-    len_ops: usize,
-) {
-    let mut rng = create_seeded_rng();
-    let opcodes = (0..len_ops)
-        .map(|_| OPCODES[rng.gen_range(0..OPCODES.len())])
-        .collect();
-    let operands = (0..len_ops)
-        .map(|_| {
-            (
-                generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng),
-                generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng),
-            )
-        })
-        .collect();
-    chip.request(opcodes, operands);
-}
-
 #[test]
-fn long_add_rand_air_test() {
-    let len_ops: usize = 15;
-    let bus = RangeCheckBus::new(0, 1 << 16);
-    let mut chip = LongArithmeticChip::<256, 16>::new(bus);
+fn long_arithmetic_rand_air_test() {
+    let num_ops: usize = 15;
+    let bus = RangeCheckBus::new(9, 1 << 16);
+    let address_space_range = || 1usize..=2;
+    let address_range = || 0usize..1 << 29;
+    const ARG_SIZE: usize = 256;
+    const LIMB_SIZE: usize = 16;
 
-    generate_add_sub_program(&mut chip, len_ops);
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip = LongArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
+        bus,
+        tester.execution_bus(),
+        tester.memory_chip(),
+    );
 
-    let trace = chip.generate_trace::<F>();
-    let range_trace = chip.range_checker_chip.generate_trace::<F>();
+    let mut rng = create_seeded_rng();
 
-    run_simple_test_no_pis(
-        vec![&chip.air, &chip.range_checker_chip.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    for _ in 0..num_ops {
+        let opcode = OPCODES_ARITH[rng.gen_range(0..OPCODES_ARITH.len())];
+        let operand1 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+        let operand2 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+
+        let result_as = rng.gen_range(address_space_range());
+        let as1 = rng.gen_range(address_space_range());
+        let as2 = rng.gen_range(address_space_range());
+        let address1 = rng.gen_range(address_range());
+        let address2 = rng.gen_range(address_range());
+        let result_address = rng.gen_range(address_range());
+
+        let operand1_f = operand1
+            .clone()
+            .into_iter()
+            .map(F::from_canonical_u32)
+            .collect::<Vec<_>>();
+        let operand2_f = operand2
+            .clone()
+            .into_iter()
+            .map(F::from_canonical_u32)
+            .collect::<Vec<_>>();
+
+        // TODO: 16 -> proper number
+        tester.write::<16>(as1, address1, operand1_f.as_slice().try_into().unwrap());
+        tester.write::<16>(as2, address2, operand2_f.as_slice().try_into().unwrap());
+
+        let result =
+            LongArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
+
+        tester.execute(
+            &mut chip,
+            Instruction::from_usize(
+                opcode,
+                [result_address, address1, address2, result_as, as1, as2],
+            ),
+        );
+        match result.0 {
+            CalculationResult::Long(result) => {
+                assert_eq!(
+                    result
+                        .into_iter()
+                        .map(F::from_canonical_u32)
+                        .collect::<Vec<_>>(),
+                    tester.read::<16>(result_as, result_address)
+                )
+            }
+            CalculationResult::Short(_) => unreachable!(),
+        }
+    }
+
+    let range_checker_chip = chip.range_checker_chip.clone();
+    let tester = tester
+        .build()
+        .load(chip)
+        .load(range_checker_chip)
+        .finalize();
+
+    tester.simple_test().expect("Verification failed");
 }
 
-// Given a fake trace of a single addition, which mostly consists of zeroes
-// except for a single position, setup a chip and provide this trace for it.
-// The chip will do what it would normally do for this addition query,
-// except the generated trace will be what we provide.
-fn setup_bad_long_arithmetic_test(
-    op: Opcode,
-    x1: u32,
-    y1: u32,
-    result1: u32,
-    buffer1: u32,
-    pos: usize,
-    cmp_result: bool,
-) -> (LongArithmeticChip<256, 16>, RowMajorMatrix<F>) {
-    let bus = RangeCheckBus::new(0, 1 << 16);
-    let mut chip = LongArithmeticChip::<256, 16>::new(bus);
-
-    let mut x = vec![0u32; 16];
-    let mut y = vec![0u32; 16];
-    let mut result = [0u32; 16];
-    let mut buffer = [0u32; 16];
-
-    x[pos] = x1;
-    y[pos] = y1;
-    result[pos] = result1;
-    buffer[pos] = buffer1;
-
-    chip.request(vec![op], vec![(x.clone(), y.clone())]);
-
-    chip.generate_trace::<F>();
-    let trace = create_row_from_values::<256, 16, F>(op, &x, &y, &result, &buffer, cmp_result);
-    let width = trace.len();
-    let trace = RowMajorMatrix::new(trace, width);
-
-    (chip, trace)
-}
-
+/// Given a fake trace of a single operation, setup a chip and run the test.
+/// We replace the "output" part of the trace, and we _may_ replace the interactions
+/// based on the desired output. We check that it produces the error we expect.
 fn run_bad_long_arithmetic_test(
-    chip: &LongArithmeticChip<256, 16>,
-    trace: RowMajorMatrix<F>,
+    op: Opcode,
+    x: Vec<u32>,
+    y: Vec<u32>,
+    z: Vec<u32>,
+    buffer: Vec<u32>,
+    cmp_result: bool,
+    replace_interactions: bool,
     expected_error: VerificationError,
 ) {
-    let range_trace = chip.range_checker_chip.generate_trace::<F>();
+    let mut tester = MachineChipTestBuilder::default();
+    let bus = RangeCheckBus::new(9, 1 << 16);
+    let mut chip =
+        LongArithmeticChip::<256, 16, F>::new(bus, tester.execution_bus(), tester.memory_chip());
+
+    let x_f = x
+        .iter()
+        .map(|v| F::from_canonical_u32(*v))
+        .collect::<Vec<_>>();
+    let y_f = y
+        .iter()
+        .map(|v| F::from_canonical_u32(*v))
+        .collect::<Vec<_>>();
+    tester.write::<16>(1, 0, x_f.as_slice().try_into().unwrap());
+    tester.write::<16>(1, 16, y_f.as_slice().try_into().unwrap());
+
+    tester.execute(
+        &mut chip,
+        Instruction::from_usize(
+            op,
+            [
+                0,  // result address
+                0,  // x address
+                16, // y address
+                2,  // result as
+                1,  // x as
+                1,  // y as
+            ],
+        ),
+    );
+
+    if let CalculationResult::Long(_) = LongArithmetic::<256, 16, F>::solve(op, (&x, &y)).0 {
+        if replace_interactions {
+            chip.range_checker_chip.clear();
+            for limb in z.iter() {
+                chip.range_checker_chip.add_count(*limb);
+            }
+        }
+    }
+
+    let air = chip.air;
+    let range_checker = chip.range_checker_chip.clone();
+    let range_air = range_checker.air;
+    let trace = chip.generate_trace();
+    let row = trace.row_slice(0).to_vec();
+    let mut cols = LongArithmeticCols::from_iterator(&mut row.into_iter(), &air);
+    cols.io.z.data = z.into_iter().map(F::from_canonical_u32).collect();
+    cols.aux.buffer = buffer.into_iter().map(F::from_canonical_u32).collect();
+    cols.io.cmp_result = F::from_bool(cmp_result);
+    let trace = RowMajorMatrix::new(
+        cols.flatten(),
+        LongArithmeticCols::<256, 16, F>::get_width(&air),
+    );
+
+    let range_trace = range_checker.generate_trace();
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -111,10 +182,7 @@ fn run_bad_long_arithmetic_test(
         &expected_error
     );
     assert_eq!(
-        run_simple_test_no_pis(
-            vec![&chip.air, &chip.range_checker_chip.air],
-            vec![trace, range_trace],
-        ),
+        run_simple_test_no_pis(vec![&air, &range_air], vec![trace, range_trace],),
         Err(expected_error),
         "{}",
         msg
@@ -123,182 +191,391 @@ fn run_bad_long_arithmetic_test(
 
 #[test]
 fn long_add_wrong_carry_air_test() {
-    let (chip, trace) = setup_bad_long_arithmetic_test(Opcode::ADD256, 1, 1, 3, 1, 1, false);
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+    run_bad_long_arithmetic_test(
+        Opcode::ADD256,
+        vec![1]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![1]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![3]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![1]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        false,
+        false,
+        VerificationError::OodEvaluationMismatch,
+    );
 }
 
 #[test]
 fn long_add_out_of_range_air_test() {
-    let (chip, trace) =
-        setup_bad_long_arithmetic_test(Opcode::ADD256, 65_000, 65_000, 130_000, 0, 1, false);
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::NonZeroCumulativeSum);
+    run_bad_long_arithmetic_test(
+        Opcode::ADD256,
+        vec![65_000]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![65_000]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![130_000]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![0]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        false,
+        false,
+        VerificationError::NonZeroCumulativeSum,
+    );
 }
 
 #[test]
 fn long_add_wrong_addition_air_test() {
-    let (chip, trace) = setup_bad_long_arithmetic_test(
+    run_bad_long_arithmetic_test(
         Opcode::ADD256,
-        65_000,
-        65_000,
-        130_000 - (1 << 16),
-        0,
-        1,
+        vec![65_000]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![65_000]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![130_000 - (1 << 16)]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![0]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
         false,
+        false,
+        VerificationError::OodEvaluationMismatch,
     );
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
 
 // We NEED to check that the carry is 0 or 1
 #[test]
 fn long_add_invalid_carry_air_test() {
     let bad_carry = F::from_canonical_u32(1 << 16).inverse().as_canonical_u32();
-    let bus = RangeCheckBus::new(0, 1 << 16);
-    let chip = LongArithmeticChip::<256, 16>::new(bus);
 
-    let mut x = [0u32; 16];
-    let mut y = [0u32; 16];
-    let mut sum = vec![0u32; 16];
-    let mut carry = [0u32; 16];
-
-    x[15] = 1;
-    y[15] = 1;
-    sum[15] = 1;
-    carry[15] = bad_carry;
-
-    for z in &sum {
-        chip.range_checker_chip.add_count(*z);
-    }
-
-    let op = Opcode::ADD256;
-    let trace = create_row_from_values::<256, 16, F>(op, &x, &y, &sum, &carry, false);
-    let width = trace.len();
-    let trace = RowMajorMatrix::new(trace, width);
-
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+    run_bad_long_arithmetic_test(
+        Opcode::ADD256,
+        vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
+        vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
+        vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
+        vec![0; 15]
+            .into_iter()
+            .chain(std::iter::once(bad_carry))
+            .collect(),
+        false,
+        true,
+        VerificationError::OodEvaluationMismatch,
+    );
 }
 
 #[test]
 fn long_sub_out_of_range_air_test() {
-    let (chip, trace) = setup_bad_long_arithmetic_test(
+    run_bad_long_arithmetic_test(
         Opcode::SUB256,
-        1,
-        2,
-        (-F::one()).as_canonical_u32(),
-        0,
-        1,
+        vec![1]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![2]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![F::neg_one().as_canonical_u32()]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![0]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
         false,
+        false,
+        VerificationError::NonZeroCumulativeSum,
     );
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::NonZeroCumulativeSum);
 }
 
 #[test]
 fn long_sub_wrong_subtraction_air_test() {
-    let (chip, trace) =
-        setup_bad_long_arithmetic_test(Opcode::SUB256, 1, 2, (1 << 16) - 1, 0, 1, false);
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+    run_bad_long_arithmetic_test(
+        Opcode::SUB256,
+        vec![1]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![2]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![(1 << 16) - 1]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![0]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        false,
+        false,
+        VerificationError::OodEvaluationMismatch,
+    );
 }
 
 #[test]
 fn long_sub_invalid_carry_air_test() {
     let bad_carry = F::from_canonical_u32(1 << 16).inverse().as_canonical_u32();
-    let bus = RangeCheckBus::new(0, 1 << 16);
-    let chip = LongArithmeticChip::<256, 16>::new(bus);
 
-    let mut x = [0u32; 16];
-    let mut y = [0u32; 16];
-    let mut sum = vec![0u32; 16];
-    let mut carry = [0u32; 16];
-
-    x[15] = 1;
-    y[15] = 1;
-    sum[15] = 1;
-    carry[15] = bad_carry;
-
-    for z in &sum {
-        chip.range_checker_chip.add_count(*z);
-    }
-
-    let op = Opcode::SUB256;
-    let trace = create_row_from_values::<256, 16, F>(op, &x, &y, &sum, &carry, false);
-    let width = trace.len();
-    let trace = RowMajorMatrix::new(trace, width);
-
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+    run_bad_long_arithmetic_test(
+        Opcode::SUB256,
+        vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
+        vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
+        vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
+        vec![0; 15]
+            .into_iter()
+            .chain(std::iter::once(bad_carry))
+            .collect(),
+        false,
+        true,
+        VerificationError::OodEvaluationMismatch,
+    );
 }
 
 #[test]
 fn long_lt_rand_air_test() {
-    let len_ops: usize = 15;
-    let bus = RangeCheckBus::new(0, 1 << 16);
-    let mut chip = LongArithmeticChip::<256, 16>::new(bus);
+    let num_ops: usize = 15;
+    let bus = RangeCheckBus::new(9, 1 << 16);
+    let address_space_range = || 1usize..=2;
+    let address_range = || 0usize..1 << 29;
+    const ARG_SIZE: usize = 256;
+    const LIMB_SIZE: usize = 16;
+
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip = LongArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
+        bus,
+        tester.execution_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
-    let operands = (0..len_ops)
-        .map(|_| {
-            (
-                generate_long_number::<256, 16>(&mut rng),
-                generate_long_number::<256, 16>(&mut rng),
-            )
-        })
-        .collect();
-    chip.request(vec![Opcode::LT256; len_ops], operands);
 
-    let trace = chip.generate_trace::<F>();
-    let range_trace = chip.range_checker_chip.generate_trace::<F>();
+    for _ in 0..num_ops {
+        let opcode = Opcode::LT256;
+        let operand1 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+        let operand2 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
 
-    run_simple_test_no_pis(
-        vec![&chip.air, &chip.range_checker_chip.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
-}
+        let result_as = rng.gen_range(address_space_range());
+        let as1 = rng.gen_range(address_space_range());
+        let as2 = rng.gen_range(address_space_range());
+        let address1 = rng.gen_range(address_range());
+        let address2 = rng.gen_range(address_range());
+        let result_address = rng.gen_range(address_range());
 
-#[test]
-fn long_lt_wrong_subtraction_test() {
-    let (chip, trace) =
-        setup_bad_long_arithmetic_test(Opcode::LT256, 65_000, 65_000, 1, 0, 1, false);
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
-}
+        let operand1_f = operand1
+            .clone()
+            .into_iter()
+            .map(F::from_canonical_u32)
+            .collect::<Vec<_>>();
+        let operand2_f = operand2
+            .clone()
+            .into_iter()
+            .map(F::from_canonical_u32)
+            .collect::<Vec<_>>();
 
-#[test]
-fn long_lt_wrong_carry_test() {
-    let (chip, trace) =
-        setup_bad_long_arithmetic_test(Opcode::LT256, 65_000, 65_000, 0, 1, 15, false);
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+        // TODO: 16 -> proper number
+        tester.write::<16>(as1, address1, operand1_f.as_slice().try_into().unwrap());
+        tester.write::<16>(as2, address2, operand2_f.as_slice().try_into().unwrap());
+
+        let result =
+            LongArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
+
+        tester.execute(
+            &mut chip,
+            Instruction::from_usize(
+                opcode,
+                [result_address, address1, address2, result_as, as1, as2],
+            ),
+        );
+        match result.0 {
+            CalculationResult::Long(_) => unreachable!(),
+            CalculationResult::Short(result) => {
+                assert_eq!(
+                    [F::from_bool(result)],
+                    tester.read::<1>(result_as, result_address)
+                )
+            }
+        }
+    }
+
+    let range_checker_chip = chip.range_checker_chip.clone();
+    let tester = tester
+        .build()
+        .load(chip)
+        .load(range_checker_chip)
+        .finalize();
+
+    tester.simple_test().expect("Verification failed");
 }
 
 #[test]
 fn long_eq_rand_air_test() {
-    let len_ops: usize = 15;
-    let bus = RangeCheckBus::new(0, 1 << 16);
-    let mut chip = LongArithmeticChip::<256, 16>::new(bus);
+    let num_ops: usize = 15;
+    let bus = RangeCheckBus::new(9, 1 << 16);
+    let address_space_range = || 1usize..=2;
+    let address_range = || 0usize..1 << 29;
+    const ARG_SIZE: usize = 256;
+    const LIMB_SIZE: usize = 16;
+
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip = LongArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
+        bus,
+        tester.execution_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
-    let operands = (0..len_ops)
-        .map(|_| {
-            let x = generate_long_number::<256, 16>(&mut rng);
-            let y = if rng.gen_bool(0.5) {
-                x.clone()
-            } else {
-                generate_long_number::<256, 16>(&mut rng)
-            };
-            (x, y)
-        })
-        .collect();
-    chip.request(vec![Opcode::EQ256; len_ops], operands);
 
-    let trace = chip.generate_trace::<F>();
-    let range_trace = chip.range_checker_chip.generate_trace::<F>();
+    for _ in 0..num_ops {
+        let opcode = Opcode::EQ256;
+        let operand1 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+        let operand2 = if rng.gen_bool(0.5) {
+            generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng)
+        } else {
+            operand1.clone()
+        };
 
-    run_simple_test_no_pis(
-        vec![&chip.air, &chip.range_checker_chip.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+        let result_as = rng.gen_range(address_space_range());
+        let as1 = rng.gen_range(address_space_range());
+        let as2 = rng.gen_range(address_space_range());
+        let address1 = rng.gen_range(address_range());
+        let address2 = rng.gen_range(address_range());
+        let result_address = rng.gen_range(address_range());
+
+        let operand1_f = operand1
+            .clone()
+            .into_iter()
+            .map(F::from_canonical_u32)
+            .collect::<Vec<_>>();
+        let operand2_f = operand2
+            .clone()
+            .into_iter()
+            .map(F::from_canonical_u32)
+            .collect::<Vec<_>>();
+
+        // TODO: 16 -> proper number
+        tester.write::<16>(as1, address1, operand1_f.as_slice().try_into().unwrap());
+        tester.write::<16>(as2, address2, operand2_f.as_slice().try_into().unwrap());
+
+        let result =
+            LongArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
+
+        tester.execute(
+            &mut chip,
+            Instruction::from_usize(
+                opcode,
+                [result_address, address1, address2, result_as, as1, as2],
+            ),
+        );
+        match result.0 {
+            CalculationResult::Long(_) => unreachable!(),
+            CalculationResult::Short(result) => {
+                assert_eq!(
+                    [F::from_bool(result)],
+                    tester.read::<1>(result_as, result_address)
+                )
+            }
+        }
+    }
+
+    let range_checker_chip = chip.range_checker_chip.clone();
+    let tester = tester
+        .build()
+        .load(chip)
+        .load(range_checker_chip)
+        .finalize();
+
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn long_lt_wrong_subtraction_test() {
+    run_bad_long_arithmetic_test(
+        Opcode::LT256,
+        vec![65_000]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![65_000]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![1]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        vec![0]
+            .into_iter()
+            .chain(std::iter::repeat(0).take(15))
+            .collect(),
+        false,
+        false,
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn long_lt_wrong_carry_test() {
+    run_bad_long_arithmetic_test(
+        Opcode::LT256,
+        vec![0; 15]
+            .into_iter()
+            .chain(std::iter::once(65_000))
+            .collect(),
+        vec![0; 15]
+            .into_iter()
+            .chain(std::iter::once(65_000))
+            .collect(),
+        vec![0; 15].into_iter().chain(std::iter::once(0)).collect(),
+        vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
+        true,
+        false,
+        VerificationError::OodEvaluationMismatch,
+    );
 }
 
 #[test]
 fn long_eq_wrong_positive_test() {
-    let (chip, trace) = setup_bad_long_arithmetic_test(Opcode::EQ256, 123, 456, 0, 0, 15, true);
-    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+    run_bad_long_arithmetic_test(
+        Opcode::EQ256,
+        vec![0; 15]
+            .into_iter()
+            .chain(std::iter::once(123))
+            .collect(),
+        vec![0; 15]
+            .into_iter()
+            .chain(std::iter::once(456))
+            .collect(),
+        vec![0; 15].into_iter().chain(std::iter::once(0)).collect(),
+        vec![0; 15].into_iter().chain(std::iter::once(0)).collect(),
+        true,
+        false,
+        VerificationError::OodEvaluationMismatch,
+    );
 }
