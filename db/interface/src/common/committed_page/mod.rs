@@ -14,14 +14,17 @@ use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use self::utils::{convert_columns_to_page_rows, convert_to_record_batch};
-use crate::{utils::generate_random_alpha_string, NUM_IDX_COLS};
+use self::utils::{convert_columns_to_page_rows, convert_to_record_batch, get_num_idx_fields};
+use crate::{utils::generate_random_alpha_string, BITS_PER_FE, NUM_IDX_COLS};
 
 pub mod column;
 pub mod execution_plan;
 pub mod table_provider;
 pub mod utils;
 
+/// A CommittedPage is a hybrid structure of Axiom's Page type and DataFusion's Schema type. It is used in
+/// every step of AxdbNode execution and contains the necessary information convert the Page data into a
+/// DataFusion RecordBatch.
 #[derive(Derivative, Serialize, Deserialize)]
 #[derivative(Clone(bound = "ProverTraceData<SC>: Clone"))]
 #[serde(bound(
@@ -29,9 +32,16 @@ pub mod utils;
     deserialize = "ProverTraceData<SC>: Deserialize<'de>"
 ))]
 pub struct CommittedPage<SC: StarkGenericConfig> {
+    /// The unique identifier for the page
     pub page_id: String,
+    /// The schema of the Page
     pub schema: Schema,
+    /// The number of Fields that are part of the Page's index. Counting from the leftmost Field. Note that
+    /// depending on the size of the Field, multiple columns may be used to represent that Field.
+    pub schema_num_idx_fields: usize,
+    /// The data represented as a Page
     pub page: Page,
+    /// The cached trace data from this node's execution
     pub cached_trace: Option<ProverTraceData<SC>>,
 }
 
@@ -47,19 +57,35 @@ where
 {
     pub fn new(schema: Schema, page: Page) -> Self {
         let page_id = generate_random_alpha_string(32);
+        let schema_num_idx_fields = get_num_idx_fields(&schema, page[0].idx.len(), BITS_PER_FE);
         Self {
             page_id,
             schema,
+            schema_num_idx_fields,
             page,
             cached_trace: None,
         }
     }
 
     pub fn new_with_page_id(page_id: &str, schema: Schema, page: Page) -> Self {
+        let schema_num_idx_fields = get_num_idx_fields(&schema, page[0].idx.len(), BITS_PER_FE);
         Self {
             page_id: page_id.to_string(),
             schema,
+            schema_num_idx_fields,
             page,
+            cached_trace: None,
+        }
+    }
+
+    pub fn for_keygen(schema: Schema, schema_num_idx_fields: usize) -> Self {
+        let page_id = generate_random_alpha_string(32);
+        let empty_page = Page::from_page_cols(vec![]);
+        Self {
+            page_id: page_id.to_string(),
+            schema,
+            schema_num_idx_fields,
+            page: empty_page,
             cached_trace: None,
         }
     }
@@ -74,6 +100,7 @@ where
                 .map(|(field, _)| field.clone())
                 .collect::<Vec<Field>>(),
         );
+        let schema_num_idx_fields = get_num_idx_fields(&schema, idx_len, BITS_PER_FE);
 
         let columns = cols.into_iter().map(|(_, values)| values).collect();
         let rows = convert_columns_to_page_rows(columns, alloc_rows);
@@ -82,6 +109,7 @@ where
         Self {
             page_id,
             schema,
+            schema_num_idx_fields,
             page,
             cached_trace: None,
         }
@@ -104,9 +132,11 @@ where
 
         // TODO: we will temporarily take the first NUM_IDX_COLS rows as the index and all other rows as the data fields
         let page = Page::from_2d_vec(&rows, NUM_IDX_COLS, columns.len() - NUM_IDX_COLS);
+        let schema_num_idx_fields = get_num_idx_fields(&schema, page[0].idx.len(), BITS_PER_FE);
         Self {
             page_id,
             schema,
+            schema_num_idx_fields,
             page,
             cached_trace: None,
         }
@@ -148,5 +178,17 @@ macro_rules! committed_page {
         let schema_path = std::fs::read($schema_path).unwrap();
         let schema: Schema = bincode::deserialize(&schema_path).unwrap();
         $crate::common::committed_page::CommittedPage::<$config>::new(schema, page)
+    }};
+}
+
+#[macro_export]
+macro_rules! keygen_schema {
+    ($schema_path:expr, $num_idx_fields:expr, $config:tt) => {{
+        let schema_path = std::fs::read($schema_path).unwrap();
+        let schema: Schema = bincode::deserialize(&schema_path).unwrap();
+        $crate::common::committed_page::CommittedPage::<$config>::for_keygen(
+            schema,
+            $num_idx_fields,
+        )
     }};
 }

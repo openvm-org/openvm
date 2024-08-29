@@ -12,6 +12,7 @@ use futures::lock::Mutex;
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
+use tracing::instrument;
 
 use super::{AxdbNode, AxdbNodeExecutable};
 use crate::common::committed_page::CommittedPage;
@@ -45,18 +46,22 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
+    #[instrument(level = "info", skip_all)]
     async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
         unimplemented!()
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn keygen(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
         unimplemented!()
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn prove(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
         unimplemented!()
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn verify(&self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
         unimplemented!()
     }

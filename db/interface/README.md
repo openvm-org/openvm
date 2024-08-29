@@ -23,7 +23,7 @@ Contains a way to convert DataFusion's `Expr` into an `AxdbExpr`, which is a sub
 The following test runs `execute`, `keygen`, `prove`, and `verify` on a `[PageScan, Filter]` execution strategy
 
 ```bash
-cargo test --release --package axdb-interface --test basic_e2e -- test_basic_e2e --exact --show-output
+cargo test --release --package axdb-interface --test integration -- test_basic_e2e --exact --show-output
 ```
 
 ### Generating a CommittedPage

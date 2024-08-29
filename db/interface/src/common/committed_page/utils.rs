@@ -84,3 +84,21 @@ pub fn convert_columns_to_page_rows(
     rows.extend(zero_rows);
     rows
 }
+
+/// Returns the number of Schema Fields that are part of the Page's index, based on the size of the Page's
+/// index columns.
+pub fn get_num_idx_fields(_schema: &Schema, idx_len: usize, _bits_per_fe: usize) -> usize {
+    // TODO: handle other data types
+    // let num_idx_fields = schema
+    //     .fields()
+    //     .iter()
+    //     .take(idx_len)
+    //     .map(|field| {
+    //         ((**field).data_type().primitive_width().unwrap() as f64 * 8.0) / bits_per_fe as f64
+    //     })
+    //     .sum::<f64>()
+    //     .ceil() as usize;
+    // num_idx_fields
+
+    idx_len
+}

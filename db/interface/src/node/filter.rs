@@ -12,7 +12,7 @@ use futures::lock::Mutex;
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
-use tracing::info;
+use tracing::instrument;
 
 use super::{functionality::filter::FilterFn, AxdbNode, AxdbNodeExecutable};
 use crate::{
@@ -79,27 +79,28 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
+    #[instrument(level = "info", skip_all)]
     async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
-        info!("execute Filter");
         let input = self.input_clone().await;
         let output = FilterFn::<SC, E>::execute(&self.predicate, input).await?;
         self.output = Some(output);
         Ok(())
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        info!("keygen Filter");
         let input = self.input_clone().await;
         let (idx_len, data_len, _page_width) = self.page_stats(&input);
         let pk = FilterFn::<SC, E>::keygen(engine, &self.predicate, self.name(), idx_len, data_len)
             .await?;
         self.pk = Some(pk);
 
+        self.output = Some(input);
         Ok(())
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn prove(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        info!("prove Filter");
         let input = self.input_clone().await;
         let output = self.output.as_ref().unwrap();
         let (idx_len, data_len, _page_width) = self.page_stats(&input);
@@ -117,8 +118,8 @@ where
         Ok(())
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn verify(&self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        info!("verify Filter");
         let input = self.input_clone().await;
         let (idx_len, data_len, _page_width) = self.page_stats(&input);
         let proof = self.proof.as_ref().unwrap();

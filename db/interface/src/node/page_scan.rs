@@ -11,7 +11,7 @@ use datafusion::{error::Result, execution::context::SessionContext, logical_expr
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
-use tracing::info;
+use tracing::instrument;
 
 use super::{functionality::filter::FilterFn, AxdbNodeExecutable};
 use crate::{
@@ -74,6 +74,20 @@ where
         (idx_len, data_len)
     }
 
+    async fn read_input(&self, ctx: &SessionContext) -> CommittedPage<SC> {
+        // Convert RecordBatches to a CommittedPage
+        // NOTE: only one RecordBatch is supported for now
+        let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
+        if record_batches.len() != 1 {
+            panic!(
+                "Unexpected number of record batches in PageScan: {}",
+                record_batches.len()
+            );
+        }
+        let rb = &record_batches[0];
+        CommittedPage::from_record_batch(rb.clone())
+    }
+
     fn filter_name(&self) -> String {
         format!("{}.{}", self.name(), "Filter")
     }
@@ -91,20 +105,9 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
+    #[instrument(level = "info", skip_all)]
     async fn execute(&mut self, ctx: &SessionContext, _engine: &E) -> Result<()> {
-        info!("execute PageScan");
-
-        // Convert RecordBatches to a CommittedPage
-        // NOTE: only one RecordBatch is supported for now
-        let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
-        if record_batches.len() != 1 {
-            panic!(
-                "Unexpected number of record batches in PageScan: {}",
-                record_batches.len()
-            );
-        }
-        let rb = &record_batches[0];
-        let mut committed_page = CommittedPage::from_record_batch(rb.clone());
+        let mut committed_page = self.read_input(ctx).await;
         self.filter_io.push(committed_page.clone());
 
         if !self.filters.is_empty() {
@@ -118,8 +121,9 @@ where
         Ok(())
     }
 
-    async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        info!("keygen PageScan");
+    #[instrument(level = "info", skip_all)]
+    async fn keygen(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
+        let committed_page = self.read_input(ctx).await;
         if !self.filters.is_empty() {
             // Since filtering does not change the Schema, we can use the same proving key for all filters on this PageScan node
             let filter = &self.filters[0];
@@ -133,11 +137,12 @@ where
             )
             .await?;
         }
+        self.output = Some(committed_page);
         Ok(())
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn prove(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        info!("prove PageScan");
         if !self.filters.is_empty() {
             for (i, filter) in self.filters.iter().enumerate() {
                 let proof = FilterFn::<SC, E>::prove(
@@ -156,8 +161,8 @@ where
         Ok(())
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn verify(&self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        info!("verify PageScan");
         if !self.filters.is_empty() {
             for (i, filter) in self.filters.iter().enumerate() {
                 FilterFn::<SC, E>::verify(

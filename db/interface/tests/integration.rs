@@ -4,7 +4,7 @@ use afs_page::common::page::Page;
 use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
 use axdb_interface::{
     committed_page, common::committed_page::CommittedPage, controller::AxdbController,
-    NUM_IDX_COLS, PCS_LOG_DEGREE,
+    keygen_schema, NUM_IDX_COLS, PCS_LOG_DEGREE,
 };
 use datafusion::{
     arrow::{
@@ -15,8 +15,36 @@ use datafusion::{
     logical_expr::{col, lit, table_scan},
 };
 
-#[tokio::test]
-pub async fn test_basic_e2e() {
+/// Runs keygen for a given schema (Page in CommittedPage is an empty page)
+pub async fn run_keygen() {
+    let ctx = SessionContext::new();
+
+    let cp = keygen_schema!(
+        "tests/data/example.schema.bin",
+        NUM_IDX_COLS,
+        BabyBearPoseidon2Config
+    );
+
+    let page_id = cp.page_id.clone();
+    ctx.register_table(page_id.clone(), Arc::new(cp.clone()))
+        .unwrap();
+
+    let sql = format!("SELECT a FROM {} WHERE a <= 10", page_id);
+    let logical = ctx.state().create_logical_plan(sql.as_str()).await.unwrap();
+
+    let engine = default_engine(PCS_LOG_DEGREE);
+    let mut axdb = AxdbController::new(ctx, logical, engine).await;
+    println!(
+        "Flattened Axdb execution plan: {:?}",
+        axdb.axdb_execution_plan
+    );
+
+    // After running keygen once, you will not need to run it again for the same LogicalPlan
+    axdb.keygen().await.unwrap();
+}
+
+/// Runs execute, prove, and verify on a CommittedPage (Page contains concrete data)
+pub async fn run_execute() {
     let ctx = SessionContext::new();
 
     // use datafusion::execution::options::CsvReadOptions;
@@ -48,15 +76,30 @@ pub async fn test_basic_e2e() {
         axdb.axdb_execution_plan
     );
 
-    // After running keygen once, you will not need to run it again for the same LogicalPlan
-    axdb.keygen().await.unwrap();
-
     axdb.execute().await.unwrap();
     axdb.prove().await.unwrap();
     axdb.verify().await.unwrap();
 
     let output = axdb.output().await.unwrap();
     println!("Output RecordBatch: {:?}", output);
+}
+
+#[tokio::test]
+pub async fn test_basic_e2e() {
+    run_keygen().await;
+    run_execute().await;
+}
+
+#[tokio::test]
+#[ignore]
+pub async fn test_keygen() {
+    run_keygen().await;
+}
+
+#[tokio::test]
+#[ignore]
+pub async fn test_execute() {
+    run_execute().await;
 }
 
 #[tokio::test]
