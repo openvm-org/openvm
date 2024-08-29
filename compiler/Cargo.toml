@@ -36,3 +36,4 @@ rand = "0.8.5"
 [features]
 default = []
 halo2-compiler = ["dep:snark-verifier-sdk"]
+parallel = ["stark-vm/parallel"]
