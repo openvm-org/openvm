@@ -82,8 +82,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
                 expected_result[j] += flag * result_part;
             }
         }
-        builder.assert_one(flag_sum);
-        builder.assert_eq(io.opcode, expected_opcode);
+        builder.assert_eq(flag_sum, aux.is_valid);
         for (z_j, expected_result_j) in izip!(io.z, expected_result) {
             builder.assert_eq(z_j, expected_result_j);
         }
@@ -101,6 +100,6 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
         }
 
         let local_cols = FieldExtensionArithmeticCols { aux, io };
-        self.eval_interactions(builder, local_cols);
+        self.eval_interactions(builder, local_cols, expected_opcode);
     }
 }

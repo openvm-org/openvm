@@ -1,4 +1,4 @@
-use std::array;
+use std::{array, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::is_less_than::IsLessThanAir;
@@ -20,10 +20,9 @@ pub struct FieldExtensionArithmeticCols<T> {
     pub aux: FieldExtensionArithmeticAuxCols<T>,
 }
 
-#[derive(AlignedBorrow)]
+#[derive(Copy, Clone, Debug, Default, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldExtensionArithmeticIoCols<T> {
-    pub opcode: T,
     pub pc: T,
     pub timestamp: T,
     pub op_a: T,
@@ -69,7 +68,6 @@ impl<T> FieldExtensionArithmeticCols<T> {
 
         Self {
             io: FieldExtensionArithmeticIoCols {
-                opcode: next(),
                 pc: next(),
                 timestamp: next(),
                 op_a: next(),
@@ -108,14 +106,13 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
 
 impl<T> FieldExtensionArithmeticIoCols<T> {
     pub fn get_width() -> usize {
-        (3 * EXTENSION_DEGREE) + 8
+        size_of::<FieldExtensionArithmeticIoCols<u8>>()
     }
 }
 
 impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
     fn flatten(&self) -> Vec<T> {
         let mut result = vec![
-            self.opcode.clone(),
             self.pc.clone(),
             self.timestamp.clone(),
             self.op_a.clone(),

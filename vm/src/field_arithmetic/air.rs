@@ -69,6 +69,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         }
         builder.assert_eq(flag_sum, aux.is_valid);
         builder.assert_eq(z, expected_result);
+        builder.assert_bool(aux.is_valid);
 
         builder.assert_eq(aux.is_div, y * aux.divisor_inv);
 

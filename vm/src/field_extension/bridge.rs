@@ -64,6 +64,7 @@ impl FieldExtensionArithmeticAir {
         &self,
         builder: &mut AB,
         local: FieldExtensionArithmeticCols<AB::Var>,
+        expected_opcode: AB::Expr,
     ) {
         let mut clk_offset = AB::Expr::zero();
 
@@ -71,7 +72,6 @@ impl FieldExtensionArithmeticAir {
 
         let FieldExtensionArithmeticIoCols {
             pc,
-            opcode,
             timestamp,
             op_a,
             op_b,
@@ -141,7 +141,7 @@ impl FieldExtensionArithmeticAir {
             aux.is_valid,
             ExecutionState::new(pc, timestamp),
             timestamp_delta,
-            InstructionCols::new(opcode, [op_a, op_b, op_c, d, e]),
+            InstructionCols::new(expected_opcode, [op_a, op_b, op_c, d, e]),
         );
     }
 }
