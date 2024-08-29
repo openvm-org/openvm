@@ -56,10 +56,13 @@ For each logical operation `Op_l` (of which there is a finite list), we define a
 
 We claim, with proof by construction, that each logical operation (among a list of the common logical plan operations in a typical database) has a corresponding dataframe operation.
 
-More specifically, we define a dataframe operation to mean a function in a **Database VM** where the input and output page directories are read/written as arrays of page commitments in the VM's memory. These arrays are treated as having _variable length_, so they are stored on the heap in memory. We construct the dataframe operation for a logical operation as follows:
+More specifically, we define a dataframe operation to mean a function in a **Database VM** where the input and output page directories are read/written as arrays of page commitments in the VM's memory. These arrays are treated as having _variable length_, so they are stored on the heap in memory.
+The Database VM will be a VM created using the [Modular VM framework](../vm/README.md) with
+continuations enabled.
 
-The Database VM will have special opcodes, which we call page-level **execution opcodes**, which operate on
-committed pages. This means the opcodes take the form
+We construct the dataframe operation for a logical operation as follows:
+
+The Database VM will have special opcodes, which we call page-level **execution opcodes**, which operate on committed pages. This means the opcodes take the form
 
 - Given committed pages `p_1, ..., p_m`, there exists `p_out` such that the opcode execution on `page_commit(p_1), ..., page_commit(p_m)` results in `page_commit(p_out)` and the physical page underlying `p_out` equals the output of execution of a physical page operation (e.g., `Filter`) on the physical pages underlying `p_1, ..., p_m`.
 
@@ -118,3 +121,59 @@ access to a table of verified `hash(vkey), input_page_commits, output_page_commi
 Within the Database VM, calling an execution opcode is then simply a lookup into this table.
 
 #### Database VM runtime
+
+In the previous section we assumed the aggregation has access to the collection of STARK proofs
+of each execution opcode. We describe how this is obtained.
+
+Each execution opcode must have a runtime implementation that can be run separately from the STARK proving. The runtime can be separate from trace generation and operates on physical pages.
+The only functional requirement on the runtime is that it generates the output physical page from the input physical pages according to the physical page operation spec.
+
+The Database VM runtime will be designed such that executing a dataframe operation in the runtime
+will call the runtime of each opcode (both execution opcodes and other traditional VM opcodes).
+The runtime will maintain a log of all execution opcodes called, together with the input and output
+physical pages from their runtimes.
+
+We will collect the STARK proofs of all execution opcodes needed in a dataframe operation in a
+fully offline fashion: given the dataframe operation, we execute the operation on physical dataframes via the Database VM runtime offline, ahead of any proving.
+The runtime logs will contain the logs of all execution opcode runtimes. We will generate
+STARK proofs of these execution opcodes fully in parallel.
+
+- Each execution opcode operates on committed pages. The opcode's runtime log supplies the physical page associated to the committed page. As part of proof generation, we run the `page_commit` function on the input physical pages to generate the input committed pages.
+
+The above approach results in the least scheduling complexity and best parallel proving latency
+as it removes execution opcode dependency considerations from dataframe operation. An alternative approach, which gives better overall cost (measured in terms of total serial proving time) is:
+
+- The Database VM runtime either (1) allows the program to annotate specific scheduling dependencies between opcodes (e.g., opcode A must complete before opcode B starts) similar to `await` semantics or (2) infers dependencies from memory read/writes. Using these dependencies, a scheduler creates a DAG for proving execution opcode STARKs, where the output committed page from opcode A is directly passed as the input committed page to opcode B. The scheduler then proves the STARKs in topological order.
+
+### Full Query Execution
+
+We have described how to construct dataframe operations in a Database VM which relies on a
+separate parallel aggregation strategy using Aggregation VMs. Using this framework, the full
+execution of a query can be expressed as a Database VM program which makes calls to
+dataframe operations. The query execution program is a serial traversal of the logical plan tree,
+from leaves to root, where dataframe operations are called as functions.
+
+To summarize, at the end we will have a function for query execution with inputs consisting of
+in-memory page directories and query input values, and output consisting of a page directory.
+To complete query execution, the Database VM program must compute `df_commit(input_page_dir[i])`
+for all input page directories and `df_commit(output_page_dir)` and expose these dataframe
+commitments as public values. The query input values are also exposed as public values.
+
+- An important detail is that the explicit calls to `df_commit` are only done on the inputs and outputs of the full query. The intermediate dataframes that arise within the query execution are
+  all handled via the VM's memory architecture.
+
+Since the Database VM has continuations, the query execution program can have variable unbounded
+number of clock cycles. The memory bandwidth needed by the query execution program itself is low,
+since all data-intensive operations are handled by the execution opcodes.
+
+There will be a final aggregation STARK circuit (also implemented via Aggregation VM program)
+that verifies
+
+1. the Database VM STARK circuit proving the query execution program
+2. the Aggregation VM STARK circuit proving the verification of all execution opcodes.
+   and constrains the shared memory between the two circuits above is equal.
+
+Note: above the `df_commit` is treated abstractly. It _may_ be possible to align the
+`df_commit` implementation with the commitment format used for the VM persistent memory itself.
+In this case, the final aggregation STARK can extract the IO dataframe commitments from the
+shared memory commitment itself.
