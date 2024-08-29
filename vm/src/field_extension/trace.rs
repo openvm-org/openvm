@@ -120,7 +120,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             io: FieldExtensionArithmeticIoCols::default(),
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: F::zero(),
-                is_add: F::one(),
+                is_add: F::zero(),
                 is_sub: F::zero(),
                 is_mul: F::zero(),
                 is_div: F::zero(),

@@ -30,7 +30,7 @@ fn field_extension_air_test() {
     let mut chip = FieldExtensionArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
 
     let mut rng = create_seeded_rng();
-    let num_ops: usize = 1 << 3;
+    let num_ops: usize = 7; // test padding with dummy row
 
     for _ in 0..num_ops {
         let opcode = *FIELD_EXTENSION_INSTRUCTIONS.choose(&mut rng).unwrap();
