@@ -1,3 +1,3 @@
 # Database
 
-- [STARK Architecture](./stark.md)
+- [Architecture Design](./design.md)
