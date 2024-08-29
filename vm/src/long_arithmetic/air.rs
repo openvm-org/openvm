@@ -7,17 +7,17 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::{columns::LongArithmeticCols, num_limbs};
-use crate::cpu::OpCode;
+use crate::arch::instructions::Opcode;
 
 /// AIR for the long addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.
 #[derive(Copy, Clone, Debug)]
 pub struct LongArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub bus_index: usize, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
-    pub base_op: OpCode,
+    pub base_op: Opcode,
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticAir<ARG_SIZE, LIMB_SIZE> {
-    pub fn new(bus_index: usize, base_op: OpCode) -> Self {
+    pub fn new(bus_index: usize, base_op: Opcode) -> Self {
         Self { bus_index, base_op }
     }
 }
@@ -54,7 +54,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
             builder.assert_bool(flag);
         }
         builder.assert_eq(
-            [OpCode::ADD256, OpCode::SUB256, OpCode::LT256, OpCode::EQ256]
+            [Opcode::ADD256, Opcode::SUB256, Opcode::LT256, Opcode::EQ256]
                 .map(|op| AB::Expr::from_canonical_u8(op as u8))
                 .iter()
                 .zip(flags)

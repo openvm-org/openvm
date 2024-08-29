@@ -2,11 +2,10 @@ use afs_compiler::{
     asm::AsmBuilder,
     conversion::CompilerOptions,
     ir::Var,
-    util::{display_program, execute_program_and_generate_traces},
+    util::{display_program, execute_program},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -43,7 +42,7 @@ fn test_cycle_tracker() {
     // after TERMINATE, so this CT_END opcode will not be executed
     builder.cycle_tracker_end("test_unclosed");
 
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+    let program = builder.compile_isa_with_options(CompilerOptions {
         compile_prints: false,
         enable_cycle_tracker: true,
         field_arithmetic_enabled: true,
@@ -56,5 +55,5 @@ fn test_cycle_tracker() {
     }
 
     display_program(&program.instructions);
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    execute_program(program, vec![]);
 }

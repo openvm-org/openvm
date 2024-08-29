@@ -1,124 +1,93 @@
-use std::array;
-
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, EXTENSION_DEGREE};
+use super::{
+    air::FieldExtensionArithmeticAir,
+    chip::EXT_DEG,
+    columns::{FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols},
+};
 use crate::{
-    cpu::FIELD_EXTENSION_BUS,
+    arch::columns::{ExecutionState, InstructionCols},
     field_extension::columns::FieldExtensionArithmeticAuxCols,
     memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
 };
 
-#[allow(clippy::too_many_arguments)]
-fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
-    builder: &mut AB,
-    memory_bridge: &mut MemoryBridge<AB::Var, WORD_SIZE>,
-    clk_offset: &mut AB::Expr,
-    is_enabled: AB::Expr,
-    is_write: bool,
-    clk: AB::Var,
-    addr_space: AB::Var,
-    address: AB::Var,
-    ext: [AB::Var; EXTENSION_DEGREE],
-) {
-    for (i, element) in ext.into_iter().enumerate() {
-        let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
-
-        let clk = clk + clk_offset.clone();
-        *clk_offset += is_enabled.clone();
-
-        if is_write {
-            memory_bridge
-                .write(
-                    MemoryAddress::new(addr_space, pointer),
-                    emb(element.into()),
-                    clk,
-                )
-                .eval(builder, is_enabled.clone());
-        } else {
-            memory_bridge
-                .read(
-                    MemoryAddress::new(addr_space, pointer),
-                    emb(element.into()),
-                    clk,
-                )
-                .eval(builder, is_enabled.clone());
-        }
-    }
-}
-
-fn emb<F: AbstractField, const WORD_SIZE: usize>(element: F) -> [F; WORD_SIZE] {
-    array::from_fn(|j| if j == 0 { element.clone() } else { F::zero() })
-}
-
-impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
+impl FieldExtensionArithmeticAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: FieldExtensionArithmeticCols<WORD_SIZE, AB::Var>,
+        local: FieldExtensionArithmeticCols<AB::Var>,
+        expected_opcode: AB::Expr,
     ) {
-        let mut clk_offset = AB::Expr::zero();
-
         let FieldExtensionArithmeticCols { io, aux } = local;
 
-        let FieldExtensionArithmeticAuxCols {
+        let FieldExtensionArithmeticIoCols {
+            pc,
+            timestamp,
             op_a,
             op_b,
             op_c,
             d,
             e,
-            mem_oc_aux_cols,
+            x,
+            y,
+            z,
+            ..
+        } = io;
+
+        let FieldExtensionArithmeticAuxCols {
+            read_x_aux_cols,
+            read_y_aux_cols,
+            write_aux_cols,
             is_valid,
             ..
         } = aux;
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_oc_aux_cols);
+        let mut memory_bridge = MemoryBridge::new(
+            self.mem_oc,
+            [read_x_aux_cols, read_y_aux_cols, write_aux_cols],
+        );
+
+        // TODO[zach]: Change to 1 after proper batch access support.
+        // The amount that timestamp increases after each access.
+        let delta_per_access = AB::F::from_canonical_usize(EXT_DEG);
+        let mut timestamp_delta = AB::Expr::zero();
 
         // Reads for x
-        eval_rw_interactions::<AB, WORD_SIZE>(
-            builder,
-            &mut memory_bridge,
-            &mut clk_offset,
-            aux.is_valid.into(),
-            false,
-            io.clk,
-            d,
-            op_b,
-            io.x,
-        );
+        memory_bridge
+            .read(MemoryAddress::new(d, op_b), x, timestamp)
+            .eval(builder, is_valid);
+
+        timestamp_delta += delta_per_access.into();
 
         // Reads for y
-        eval_rw_interactions::<AB, WORD_SIZE>(
-            builder,
-            &mut memory_bridge,
-            &mut clk_offset,
-            aux.valid_y_read.into(),
-            false,
-            io.clk,
-            e,
-            op_c,
-            io.y,
-        );
+        memory_bridge
+            .read(
+                MemoryAddress::new(e, op_c),
+                y,
+                timestamp + timestamp_delta.clone(),
+            )
+            .eval(builder, is_valid);
+
+        timestamp_delta += delta_per_access.into();
 
         // Writes for z
-        eval_rw_interactions::<AB, WORD_SIZE>(
-            builder,
-            &mut memory_bridge,
-            &mut clk_offset,
-            aux.is_valid.into(),
-            true,
-            io.clk,
-            d,
-            op_a,
-            io.z,
-        );
+        memory_bridge
+            .write(
+                MemoryAddress::new(d, op_a),
+                z,
+                timestamp + timestamp_delta.clone(),
+            )
+            .eval(builder, is_valid);
 
-        // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
-        builder.push_receive(
-            FIELD_EXTENSION_BUS,
-            [io.opcode, io.clk, op_a, op_b, op_c, d, e],
-            is_valid,
+        timestamp_delta += delta_per_access.into();
+
+        self.execution_bus.execute_increment_pc(
+            builder,
+            aux.is_valid,
+            ExecutionState::new(pc, timestamp),
+            timestamp_delta,
+            InstructionCols::new(expected_opcode, [op_a, op_b, op_c, d, e]),
         );
     }
 }

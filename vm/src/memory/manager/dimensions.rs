@@ -4,8 +4,11 @@ use derive_new::new;
 // and that each address space has 2^`address_height` addresses numbered starting from 0
 #[derive(Clone, Copy, new)]
 pub struct MemoryDimensions {
+    /// Address space height
     pub as_height: usize,
+    /// Pointer height
     pub address_height: usize,
+    /// Address space offset
     pub as_offset: usize,
 }
 

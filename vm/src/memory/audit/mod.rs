@@ -4,7 +4,7 @@ use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::PrimeField32;
 
 use self::air::MemoryAuditAir;
-use super::manager::access_cell::AccessCell;
+use crate::memory::offline_checker::bus::MemoryBus;
 
 pub mod air;
 pub mod bridge;
@@ -14,34 +14,38 @@ pub mod trace;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone)]
-pub struct MemoryAuditChip<const WORD_SIZE: usize, F: PrimeField32> {
-    pub air: MemoryAuditAir<WORD_SIZE>,
-    initial_memory: BTreeMap<(F, F), AccessCell<WORD_SIZE, F>>,
+#[derive(Clone, Debug)]
+pub struct MemoryAuditChip<F: PrimeField32> {
+    pub air: MemoryAuditAir,
+    initial_memory: BTreeMap<(F, F), F>,
     range_checker: Arc<RangeCheckerGateChip>,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
+impl<F: PrimeField32> MemoryAuditChip<F> {
     pub fn new(
+        memory_bus: MemoryBus,
         addr_space_max_bits: usize,
         pointer_max_bits: usize,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
-            air: MemoryAuditAir::new(addr_space_max_bits, pointer_max_bits, decomp),
+            air: MemoryAuditAir::new(
+                memory_bus,
+                addr_space_max_bits,
+                pointer_max_bits,
+                decomp,
+                false,
+            ),
             initial_memory: BTreeMap::new(),
             range_checker,
         }
     }
 
-    pub fn touch_address(&mut self, addr_space: F, pointer: F, old_data: [F; WORD_SIZE], clk: F) {
+    pub fn touch_address(&mut self, addr_space: F, pointer: F, old_data: F) {
         self.initial_memory
             .entry((addr_space, pointer))
-            .or_insert_with(|| AccessCell {
-                data: old_data,
-                clk,
-            });
+            .or_insert(old_data);
     }
 
     pub fn all_addresses(&self) -> Vec<(F, F)> {

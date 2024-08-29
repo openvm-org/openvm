@@ -1,73 +1,116 @@
-use p3_field::Field;
+use afs_stark_backend::rap::AnyRap;
+use p3_commit::PolynomialSpace;
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{
     columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
-    FieldArithmeticChip,
+    FieldArithmeticChip, FieldArithmeticRecord, Operand,
 };
-use crate::cpu::OpCode;
+use crate::{
+    arch::{chips::MachineChip, instructions::Opcode},
+    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+};
 
-/// Constructs a new set of columns (including auxiliary columns) given inputs.
-fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
-    let is_add = T::from_bool(op == OpCode::FADD);
-    let is_sub = T::from_bool(op == OpCode::FSUB);
-    let is_div = T::from_bool(op == OpCode::FDIV);
-    let is_mul = T::from_bool(op == OpCode::FMUL);
-    let divisor_inv = if op == OpCode::FDIV {
-        y.inverse()
-    } else {
-        T::zero()
-    };
+impl<F: PrimeField32> FieldArithmeticChip<F> {
+    fn make_blank_row(&self) -> FieldArithmeticCols<F> {
+        FieldArithmeticCols {
+            io: Default::default(),
+            aux: FieldArithmeticAuxCols {
+                is_valid: F::zero(),
+                is_add: F::zero(),
+                is_sub: F::zero(),
+                is_mul: F::zero(),
+                is_div: F::zero(),
+                divisor_inv: F::zero(),
+                read_x_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                read_y_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
+            },
+        }
+    }
 
-    let z = match op {
-        OpCode::FADD => x + y,
-        OpCode::FSUB => x - y,
-        OpCode::FMUL => x * y,
-        OpCode::FDIV => x * divisor_inv,
-        _ => panic!("unexpected opcode {}", op),
-    };
+    fn record_to_cols(&self, record: FieldArithmeticRecord<F>) -> FieldArithmeticCols<F> {
+        let FieldArithmeticRecord {
+            opcode,
+            from_state,
+            x_read,
+            y_read,
+            z_write,
+        } = record;
 
-    FieldArithmeticCols {
-        io: FieldArithmeticIoCols {
-            rcv_count: T::one(),
-            opcode: T::from_canonical_u32(op as u32),
-            x,
-            y,
-            z,
-        },
-        aux: FieldArithmeticAuxCols {
-            is_add,
-            is_sub,
-            is_mul,
-            is_div,
-            divisor_inv,
-        },
+        let x = x_read.value();
+        let y = y_read.value();
+        let z = z_write.value();
+
+        let is_add = F::from_bool(opcode == Opcode::FADD);
+        let is_sub = F::from_bool(opcode == Opcode::FSUB);
+        let is_div = F::from_bool(opcode == Opcode::FDIV);
+        let is_mul = F::from_bool(opcode == Opcode::FMUL);
+        let divisor_inv = if opcode == Opcode::FDIV {
+            y.inverse()
+        } else {
+            F::zero()
+        };
+
+        let memory_chip = self.memory_chip.borrow();
+
+        FieldArithmeticCols {
+            io: FieldArithmeticIoCols {
+                from_state: from_state.map(F::from_canonical_usize),
+                x: Operand::new(x_read.address_space, x_read.pointer, x),
+                y: Operand::new(y_read.address_space, y_read.pointer, y),
+                z: Operand::new(z_write.address_space, z_write.pointer, z),
+            },
+            aux: FieldArithmeticAuxCols {
+                is_valid: F::one(),
+                is_add,
+                is_sub,
+                is_mul,
+                is_div,
+                divisor_inv,
+                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read),
+                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read),
+                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write),
+            },
+        }
     }
 }
 
-impl<F: Field> FieldArithmeticChip<F> {
+impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
-    pub fn generate_trace(&self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
-            .operations
+            .records
             .iter()
-            .flat_map(|op| {
-                let cols = generate_cols(op.opcode, op.operand1, op.operand2);
-                cols.flatten()
-            })
+            .cloned()
+            .flat_map(|op| self.record_to_cols(op).flatten())
             .collect();
 
-        let empty_row: Vec<F> = FieldArithmeticCols::blank_row().flatten();
-        let curr_height = self.operations.len();
+        let curr_height = self.records.len();
         let correct_height = curr_height.next_power_of_two();
-        trace.extend(
-            empty_row
-                .iter()
-                .cloned()
-                .cycle()
-                .take((correct_height - curr_height) * FieldArithmeticCols::<F>::get_width()),
-        );
+        // TODO[jpw]: it is better to allocate the full 1d trace matrix first and then mutate buffers
+        let blank_row = self.make_blank_row().flatten();
+        let dummy_rows_flattened =
+            (0..correct_height - curr_height).flat_map(|_| blank_row.clone());
+        trace.extend(dummy_rows_flattened);
 
-        RowMajorMatrix::new(trace, FieldArithmeticCols::<F>::get_width())
+        RowMajorMatrix::new(trace, self.trace_width())
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        Box::new(self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.records.len()
+    }
+
+    fn trace_width(&self) -> usize {
+        FieldArithmeticCols::<F>::get_width(&self.air)
     }
 }

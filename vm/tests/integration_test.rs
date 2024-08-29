@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use afs_test_utils::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test},
@@ -8,16 +10,15 @@ use afs_test_utils::{
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use stark_vm::{
-    cpu::{trace::Instruction, OpCode::*},
+    arch::instructions::Opcode::*,
+    cpu::trace::Instruction,
     program::Program,
     vm::{
-        config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
-        ExecutionAndTraceGenerationResult, VirtualMachine,
+        config::{MemoryConfig, VmConfig},
+        VirtualMachine,
     },
 };
 
-const NUM_WORDS: usize = 8;
-const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 29;
 const DECOMP: usize = 5;
 
@@ -28,9 +29,7 @@ fn air_test(
     program: Program<BabyBear>,
     witness_stream: Vec<Vec<BabyBear>>,
 ) {
-    use stark_vm::vm::config::MemoryConfig;
-
-    let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(
+    let vm = VirtualMachine::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -38,22 +37,19 @@ fn air_test(
             perm_poseidon2_enabled: false,
             memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
-            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             ..Default::default()
         },
         program,
         witness_stream,
     );
 
-    let ExecutionAndTraceGenerationResult {
-        nonempty_chips: chips,
-        nonempty_traces: traces,
-        nonempty_pis: pis,
-        ..
-    } = vm.execute_and_generate_traces().unwrap();
-    let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
+    let result = vm.execute_and_generate().unwrap();
 
-    run_simple_test(chips, traces, pis).expect("Verification failed");
+    for segment_result in result.segment_results {
+        let airs = segment_result.airs.iter().map(Box::deref).collect();
+        run_simple_test(airs, segment_result.traces, segment_result.public_values)
+            .expect("Verification failed");
+    }
 }
 
 #[cfg(test)]
@@ -63,9 +59,7 @@ fn air_test_with_poseidon2(
     compress_poseidon2_enabled: bool,
     program: Program<BabyBear>,
 ) {
-    use stark_vm::vm::config::MemoryConfig;
-
-    let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(
+    let vm = VirtualMachine::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -73,20 +67,13 @@ fn air_test_with_poseidon2(
             perm_poseidon2_enabled: false,
             memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
-            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             ..Default::default()
         },
         program,
         vec![],
     );
 
-    let ExecutionAndTraceGenerationResult {
-        max_log_degree,
-        nonempty_chips: chips,
-        nonempty_traces: traces,
-        nonempty_pis: pis,
-        ..
-    } = vm.execute_and_generate_traces().unwrap();
+    let result = vm.execute_and_generate().unwrap();
 
     let perm = random_perm();
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
@@ -94,42 +81,14 @@ fn air_test_with_poseidon2(
     } else {
         fri_params_with_80_bits_of_security()[1]
     };
-    let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
-    engine
-        .run_simple_test(chips, traces, pis)
-        .expect("Verification failed");
-}
-
-#[cfg(test)]
-fn execution_test(
-    field_arithmetic_enabled: bool,
-    field_extension_enabled: bool,
-    program: Program<BabyBear>,
-    witness_stream: Vec<Vec<BabyBear>>,
-) {
-    let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(
-        VmConfig {
-            field_arithmetic_enabled,
-            field_extension_enabled,
-            compress_poseidon2_enabled: false,
-            perm_poseidon2_enabled: false,
-            memory_config: MemoryConfig {
-                addr_space_max_bits: LIMB_BITS,
-                pointer_max_bits: LIMB_BITS,
-                clk_max_bits: LIMB_BITS,
-                decomp: DECOMP,
-            },
-            num_public_values: 4,
-            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
-            ..Default::default()
-        },
-        program,
-        witness_stream,
-    );
-
-    vm.execute().unwrap();
+    for segment_result in result.segment_results {
+        let airs = segment_result.airs.iter().map(Box::deref).collect();
+        let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
+        engine
+            .run_simple_test(airs, segment_result.traces, segment_result.public_values)
+            .expect("Verification failed");
+    }
 }
 
 #[test]
@@ -161,7 +120,6 @@ fn test_vm_1() {
         debug_infos: vec![None; 5],
     };
 
-    execution_test(true, false, program.clone(), vec![]);
     air_test(true, false, program, vec![]);
 }
 
@@ -283,9 +241,10 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(STOREW, 1, 6, 0, 0, 1),
         Instruction::from_isize(STOREW, 2, 7, 0, 0, 1),
         Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
         Instruction::from_isize(FE4SUB, 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4MUL, 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4INV, 12, 0, 12, 1, 1),
+        Instruction::from_isize(BBE4DIV, 12, 0, 4, 1, 1),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 

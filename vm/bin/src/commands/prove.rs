@@ -1,4 +1,4 @@
-use std::{path::Path, time::Instant};
+use std::{ops::Deref, path::Path, time::Instant};
 
 use afs_stark_backend::{
     keygen::types::MultiStarkProvingKey, prover::trace::TraceCommitmentBuilder,
@@ -11,12 +11,12 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use stark_vm::{
     program::Program,
-    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
+    vm::{config::VmConfig, VirtualMachine},
 };
 
 use crate::{
     asm::parse_asm_file,
-    commands::{read_from_path, write_bytes, NUM_WORDS, WORD_SIZE},
+    commands::{read_from_path, write_bytes},
 };
 
 /// `afs prove` command
@@ -62,10 +62,17 @@ impl ProveCommand {
             instructions,
             debug_infos: vec![None; program_len],
         };
-        let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(config, program, vec![]);
+        let vm = VirtualMachine::new(config, program, vec![]);
 
-        let result = vm.execute_and_generate_traces()?;
-        let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree);
+        let result = vm.execute_and_generate()?;
+        assert_eq!(
+            result.segment_results.len(),
+            1,
+            "continuations not currently supported"
+        );
+        let result = result.segment_results.into_iter().next().unwrap();
+
+        let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree());
         let encoded_pk = read_from_path(&Path::new(&self.keys_folder.clone()).join("pk"))?;
         let pk: MultiStarkProvingKey<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_pk)?;
 
@@ -74,28 +81,17 @@ impl ProveCommand {
         let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-        let ExecutionAndTraceGenerationResult {
-            nonempty_traces: traces,
-            nonempty_chips: chips,
-            ..
-        } = result;
-        for trace in traces {
+        for trace in result.traces {
             trace_builder.load_trace(trace);
         }
         trace_builder.commit_current();
 
-        let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
-        let num_chips = chips.len();
+        let airs = result.airs.iter().map(Box::deref).collect();
 
-        let main_trace_data = trace_builder.view(&vk, chips);
+        let main_trace_data = trace_builder.view(&vk, airs);
 
         let mut challenger = engine.new_challenger();
-        let proof = prover.prove(
-            &mut challenger,
-            &pk,
-            main_trace_data,
-            &vec![vec![]; num_chips],
-        );
+        let proof = prover.prove(&mut challenger, &pk, main_trace_data, &result.public_values);
 
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
         let proof_path = Path::new(&self.asm_file_path.clone()).with_extension("prove.bin");

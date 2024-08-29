@@ -1,16 +1,16 @@
 use crate::modular_multiplication::{
-    bigint::air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationCols,
+    bigint::air::ModularArithmeticBigIntAir, columns::ModularMultiplicationCols,
 };
 
 // a * b = (p * q) + r
 
-pub struct ModularMultiplicationBigIntCols<T> {
+pub struct ModularArithmeticBigIntCols<T> {
     pub general: ModularMultiplicationCols<T>,
     pub carries: Vec<T>,
 }
 
-impl<T: Clone> ModularMultiplicationBigIntCols<T> {
-    pub fn from_slice(slc: &[T], air: &ModularMultiplicationBigIntAir) -> Self {
+impl<T: Clone> ModularArithmeticBigIntCols<T> {
+    pub fn from_slice(slc: &[T], air: &ModularArithmeticBigIntAir) -> Self {
         let mut start = 0;
         let mut end = 0;
 
@@ -31,7 +31,7 @@ impl<T: Clone> ModularMultiplicationBigIntCols<T> {
         result
     }
 
-    pub fn get_width(air: &ModularMultiplicationBigIntAir) -> usize {
+    pub fn get_width(air: &ModularArithmeticBigIntAir) -> usize {
         ModularMultiplicationCols::<T>::get_width(&air.limb_dimensions) + air.num_carries
     }
 }

@@ -7,6 +7,7 @@ description = "CLI for the STARK VM"
 
 [dependencies]
 p3-field = { workspace = true }
+p3-baby-bear = { workspace = true }
 afs-stark-backend = { path = "../../stark-backend", default-features = false }
 afs-test-utils = { path = "../../test-utils" }
 stark-vm = { path = "../" }
@@ -17,7 +18,6 @@ bincode = "1.3.3"
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }
-p3-baby-bear = { workspace = true }
 p3-challenger = { workspace = true }
 p3-dft = { workspace = true }
 p3-fri = { workspace = true }

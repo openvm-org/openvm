@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use afs_primitives::sub_chip::AirConfig;
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
@@ -7,8 +5,24 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
-use crate::cpu::OpCode::{FADD, FDIV, FMUL, FSUB};
+use super::columns::FieldArithmeticCols;
+use crate::{
+    arch::{
+        bus::ExecutionBus,
+        instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
+    },
+    memory::offline_checker::bridge::MemoryOfflineChecker,
+};
+
+#[derive(Clone, Copy, Debug)]
+pub struct FieldArithmeticAir {
+    pub(super) execution_bus: ExecutionBus,
+    pub(super) mem_oc: MemoryOfflineChecker,
+}
+
+impl FieldArithmeticAir {
+    pub const TIMESTAMP_DELTA: usize = 3;
+}
 
 impl AirConfig for FieldArithmeticAir {
     type Cols<T> = FieldArithmeticCols<T>;
@@ -16,7 +30,7 @@ impl AirConfig for FieldArithmeticAir {
 
 impl<F: Field> BaseAir<F> for FieldArithmeticAir {
     fn width(&self) -> usize {
-        FieldArithmeticCols::<F>::get_width()
+        FieldArithmeticCols::<F>::get_width(self)
     }
 }
 
@@ -24,18 +38,17 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local: &FieldArithmeticCols<_> = (*local).borrow();
+        let local = FieldArithmeticCols::from_iter(&mut local.iter().copied(), self);
 
         let FieldArithmeticCols { io, aux } = local;
 
+        let x = io.x.value;
+        let y = io.y.value;
+        let z = io.z.value;
+
         let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_div];
         let opcodes = [FADD, FSUB, FMUL, FDIV];
-        let results = [
-            io.x + io.y,
-            io.x - io.y,
-            io.x * io.y,
-            io.x * aux.divisor_inv,
-        ];
+        let results = [x + y, x - y, x * y, x * aux.divisor_inv];
 
         // Imposing the following constraints:
         // - Each flag in `flags` is a boolean.
@@ -54,12 +67,12 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
             expected_opcode += flag * AB::Expr::from_canonical_u32(opcode as u32);
             expected_result += flag * result;
         }
-        builder.assert_one(flag_sum);
-        builder.assert_eq(io.opcode, expected_opcode);
-        builder.assert_eq(io.z, expected_result);
+        builder.assert_eq(flag_sum, aux.is_valid);
+        builder.assert_eq(z, expected_result);
+        builder.assert_bool(aux.is_valid);
 
-        builder.assert_eq(aux.is_div, io.y * aux.divisor_inv);
+        builder.assert_eq(aux.is_div, y * aux.divisor_inv);
 
-        self.eval_interactions(builder, *io);
+        self.eval_interactions(builder, io, aux, expected_opcode);
     }
 }

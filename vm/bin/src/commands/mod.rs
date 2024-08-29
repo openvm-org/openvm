@@ -10,9 +10,6 @@ pub mod keygen;
 pub mod prove;
 pub mod verify;
 
-const NUM_WORDS: usize = 1;
-const WORD_SIZE: usize = 1;
-
 fn read_from_path(path: &Path) -> Result<Vec<u8>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);

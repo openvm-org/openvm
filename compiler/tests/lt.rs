@@ -11,6 +11,7 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 const WORD_SIZE: usize = 1;
 
 #[test]
+#[ignore = "currently disabled in vm"]
 fn test_compiler_less_than() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
@@ -26,7 +27,7 @@ fn test_compiler_less_than() {
 
     builder.halt();
 
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+    let program = builder.compile_isa_with_options(CompilerOptions {
         compile_prints: false,
         enable_cycle_tracker: true,
         field_arithmetic_enabled: true,

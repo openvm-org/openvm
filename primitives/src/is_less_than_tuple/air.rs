@@ -8,10 +8,7 @@ use p3_matrix::Matrix;
 use super::columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols};
 use crate::{
     is_equal_vec::IsEqualVecAir,
-    is_less_than::{
-        columns::{IsLessThanAuxCols, IsLessThanIoCols},
-        IsLessThanAir,
-    },
+    is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
     sub_chip::{AirConfig, SubAir},
 };
 
@@ -62,17 +59,18 @@ impl IsLessThanTupleAir {
         let y = io.y;
 
         // here we constrain that less_than[i] indicates whether x[i] < y[i] using the IsLessThan subchip for each i
-        for i in 0..x.len() {
+        for (i, lt_aux_cols) in aux.less_than_aux.into_iter().enumerate() {
             let x_val = x[i].clone();
             let y_val = y[i].clone();
 
             let lt_io_cols = IsLessThanIoCols::new(x_val, y_val, aux.less_than[i]);
-            let lt_aux_cols = IsLessThanAuxCols::new(
-                aux.less_than_aux[i].lower,
-                aux.less_than_aux[i].lower_decomp.clone(),
-            );
 
-            self.is_less_than_airs[i].eval_without_interactions(builder, lt_io_cols, lt_aux_cols);
+            self.is_less_than_airs[i].conditional_eval_without_interactions(
+                builder,
+                lt_io_cols,
+                lt_aux_cols,
+                AB::F::one(),
+            );
         }
 
         let mut prods = aux.is_equal_vec_aux.prods.clone();

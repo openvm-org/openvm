@@ -8,7 +8,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     modular_multiplication::{
-        bigint::{air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols},
+        bigint::{air::ModularArithmeticBigIntAir, columns::ModularArithmeticBigIntCols},
         columns::ModularMultiplicationCols,
         trace::generate_modular_multiplication_trace_row,
         FullLimbs,
@@ -17,7 +17,7 @@ use crate::{
     sub_chip::LocalTraceInstructions,
 };
 
-impl ModularMultiplicationBigIntAir {
+impl ModularArithmeticBigIntAir {
     pub fn generate_trace<F: PrimeField64>(
         &self,
         pairs: Vec<(BigUint, BigUint)>,
@@ -39,7 +39,7 @@ impl ModularMultiplicationBigIntAir {
     }
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationBigIntAir {
+impl<F: PrimeField64> LocalTraceInstructions<F> for ModularArithmeticBigIntAir {
     type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
@@ -113,6 +113,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationBigIntA
             &self.limb_dimensions,
         );
 
-        ModularMultiplicationBigIntCols { general, carries }
+        ModularArithmeticBigIntCols { general, carries }
     }
 }

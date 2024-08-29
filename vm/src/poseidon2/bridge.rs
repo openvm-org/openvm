@@ -1,13 +1,19 @@
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 
 use super::{
     air::Poseidon2VmAir,
     columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
 };
-use crate::cpu::{POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
+use crate::{
+    arch::{
+        columns::{ExecutionState, InstructionCols},
+        instructions::Opcode::PERM_POS2,
+    },
+    cpu::POSEIDON2_DIRECT_BUS,
+};
 
-impl<const WIDTH: usize, const WORD_SIZE: usize, F: Field> Poseidon2VmAir<WIDTH, WORD_SIZE, F> {
+impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
     /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
     ///
     /// Receives (clk, a, b, c, d, e, cmp) for opcodes, width exposed in `opcode_interaction_width()`
@@ -17,10 +23,16 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, F: Field> Poseidon2VmAir<WIDTH,
         &self,
         builder: &mut AB,
         io: Poseidon2VmIoCols<AB::Var>,
-        aux: &Poseidon2VmAuxCols<WIDTH, WORD_SIZE, AB::Var>,
+        aux: &Poseidon2VmAuxCols<WIDTH, AB::Var>,
     ) {
-        let fields = io.flatten().into_iter().skip(2);
-        builder.push_receive(POSEIDON2_BUS, fields, io.is_opcode);
+        let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
+        self.execution_bus.execute_increment_pc(
+            builder,
+            io.is_opcode,
+            ExecutionState::new(io.pc, io.timestamp),
+            AB::Expr::from_canonical_usize(3 + (2 * WIDTH)),
+            InstructionCols::new(opcode, [io.a, io.b, io.c, io.d, io.e]),
+        );
 
         // DIRECT
         if self.direct {

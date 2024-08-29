@@ -6,18 +6,17 @@ use afs_primitives::{
         columns::{IsZeroCols, IsZeroIoCols},
         IsZeroAir,
     },
-    utils::{and, implies},
+    utils::{and, implies, not},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::izip;
+use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
 use super::{bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols};
 use crate::{
-    cpu::{NEW_MEMORY_BUS, RANGE_CHECKER_BUS},
-    memory::{
-        manager::{access_cell::AccessCell, operation::MemoryOperation},
-        MemoryAddress,
-    },
+    cpu::RANGE_CHECKER_BUS,
+    memory::{offline_checker::operation::MemoryOperation, MemoryAddress},
 };
 
 /// The [MemoryBridge] can be created within any AIR evaluation function to be used as the
@@ -26,7 +25,7 @@ use crate::{
 ///
 /// ## Usage
 /// [MemoryBridge] must be initialized with the correct number of auxiliary columns to match the
-/// max number of memory operations to be constrained.
+/// exact number of memory operations to be constrained.
 #[derive(Clone, Debug)]
 // TODO: WORD_SIZE should not be here, refactor
 pub struct MemoryBridge<V, const WORD_SIZE: usize> {
@@ -60,10 +59,8 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
         data: [impl Into<T>; WORD_SIZE],
         timestamp: impl Into<T>,
     ) -> MemoryReadOperation<T, V, WORD_SIZE> {
-        let aux = self
-            .aux
-            .pop_front()
-            .expect("Exceeded max capacity of memory accesses");
+        let aux = self.aux.pop_front().expect("Overflowed memory accesses");
+
         MemoryReadOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
@@ -76,22 +73,31 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
     /// Prepare a logical memory write operation.
     #[must_use]
     pub fn write<T>(
-        // , const WORD_SIZE: usize>(
         &mut self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; WORD_SIZE],
         timestamp: impl Into<T>,
     ) -> MemoryWriteOperation<T, V, WORD_SIZE> {
-        let aux = self
-            .aux
-            .pop_front()
-            .expect("Exceeded max capacity of memory accesses");
+        let aux = self.aux.pop_front().expect("Overflowed memory accesses");
+
         MemoryWriteOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
             data: data.map(Into::into),
             timestamp: timestamp.into(),
             aux,
+        }
+    }
+}
+
+impl<V, const WORD_SIZE: usize> Drop for MemoryBridge<V, WORD_SIZE> {
+    fn drop(&mut self) {
+        // panic messes up rust backtrace
+        if !self.aux.is_empty() {
+            println!(
+                "[WARN] Underflowed memory accesses: {} remaining",
+                self.aux.len()
+            );
         }
     }
 }
@@ -126,11 +132,12 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryReadOperation<T, V, WORD
         let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
-            op_type: AB::Expr::from_bool(false),
-            cell: AccessCell::new(self.data, self.timestamp),
+            timestamp: self.timestamp,
+            data: self.data,
             enabled: count.into(),
         };
-        self.offline_checker.subair_eval(builder, op, self.aux);
+        self.offline_checker
+            .subair_eval(builder, op, self.aux, false);
     }
 }
 
@@ -158,11 +165,12 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryWriteOperation<T, V, WOR
         let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
-            op_type: AB::Expr::from_bool(true),
-            cell: AccessCell::new(self.data, self.timestamp),
+            timestamp: self.timestamp,
+            data: self.data,
             enabled: count.into(),
         };
-        self.offline_checker.subair_eval(builder, op, self.aux);
+        self.offline_checker
+            .subair_eval(builder, op, self.aux, true);
     }
 }
 
@@ -174,9 +182,9 @@ pub struct MemoryOfflineChecker {
 }
 
 impl MemoryOfflineChecker {
-    pub fn new(clk_max_bits: usize, decomp: usize) -> Self {
+    pub fn new(memory_bus: MemoryBus, clk_max_bits: usize, decomp: usize) -> Self {
         Self {
-            memory_bus: NEW_MEMORY_BUS,
+            memory_bus,
             timestamp_lt_air: IsLessThanAir::new(RANGE_CHECKER_BUS, clk_max_bits, decomp),
             is_zero_air: IsZeroAir,
         }
@@ -184,14 +192,17 @@ impl MemoryOfflineChecker {
 }
 
 impl MemoryOfflineChecker {
-    pub fn subair_eval<AB: InteractionBuilder, const WORD_SIZE: usize>(
+    pub fn subair_eval<AB: InteractionBuilder, const N: usize>(
         &self,
         builder: &mut AB,
-        op: MemoryOperation<WORD_SIZE, AB::Expr>,
-        aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, AB::Var>,
+        op: MemoryOperation<N, AB::Expr>,
+        aux: MemoryOfflineCheckerAuxCols<N, AB::Var>,
+        is_write: bool,
     ) {
-        builder.assert_bool(op.op_type.clone());
         builder.assert_bool(op.enabled.clone());
+
+        // TODO[jpw] immediate checks should not be in memory bridge
+        // Currently: expected is that enabled = 0, is_immediate = 0, all aux = 0 works
 
         // Ensuring is_immediate is correct
         let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
@@ -200,56 +211,72 @@ impl MemoryOfflineChecker {
         );
 
         self.is_zero_air.subair_eval(
-            builder,
+            &mut builder.when(op.enabled.clone()), // when not enabled, allow aux to be all 0s no matter what
             addr_space_is_zero_cols.io,
             addr_space_is_zero_cols.inv,
         );
 
-        // // immediate => enabled
-        // builder.assert_one(implies::<AB>(aux.is_immediate.into(), op.enabled.clone()));
-
-        // TODO[osama]: make this degree 2
         // is_immediate => read
-        builder.assert_one(implies(
-            and(op.enabled.clone(), aux.is_immediate.into()),
-            AB::Expr::one() - op.op_type.clone(),
-        ));
+        // if is_write {
+        //     builder
+        //         .when(op.enabled.clone())
+        //         .assert_zero(aux.is_immediate);
+        // }
 
-        let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
-            aux.old_cell.clk.into(),
-            op.cell.clk.clone(),
-            aux.clk_lt.into(),
-        );
-
-        self.timestamp_lt_air
-            .subair_eval(builder, clk_lt_io_cols, aux.clk_lt_aux);
-
-        // TODO[osama]: this should be reduced to degree 2
-        builder.assert_one(implies(
-            and(
-                op.enabled.clone(),
-                AB::Expr::one() - aux.is_immediate.into(),
-            ),
-            aux.clk_lt.into(),
-        ));
-
-        // Ensuring that if op_type is Read, data_read is the same as data_write
-        for i in 0..WORD_SIZE {
-            builder.assert_zero(
-                op.enabled.clone()
-                    * (AB::Expr::one() - op.op_type.clone())
-                    * (op.cell.data[i].clone() - aux.old_cell.data[i]),
+        for (prev_timestamp, clk_lt, clk_lt_aux) in
+            izip!(aux.prev_timestamps, aux.clk_lt, aux.clk_lt_aux)
+        {
+            let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
+                prev_timestamp.into(),
+                op.timestamp.clone(),
+                clk_lt.into(),
             );
+
+            self.timestamp_lt_air.conditional_eval(
+                builder,
+                clk_lt_io_cols,
+                clk_lt_aux,
+                op.enabled.clone(),
+            );
+
+            builder.assert_one(implies(
+                and(op.enabled.clone(), not(aux.is_immediate.into())),
+                clk_lt.into(),
+            ));
         }
 
+        // Ensuring that if op_type is Read, data_read is the same as data_write
+        if !is_write {
+            for i in 0..N {
+                builder
+                    .when(op.enabled.clone())
+                    .assert_eq(op.data[i].clone(), aux.prev_data[i]);
+            }
+        }
+        builder
+            .when(aux.is_immediate)
+            .assert_eq(op.data[0].clone(), op.pointer.clone());
+
         // TODO[osama]: resolve is_immediate stuff
-        let count = op.enabled * (AB::Expr::one() - aux.is_immediate.into());
-        let address = MemoryAddress::new(op.addr_space, op.pointer);
-        self.memory_bus
-            .read(address.clone(), aux.old_cell.data, aux.old_cell.clk)
-            .eval(builder, count.clone());
-        self.memory_bus
-            .write(address, op.cell.data, op.cell.clk)
-            .eval(builder, count);
+        // builder.assert_one(implies(aux.is_immediate.into(), op.enabled.clone()));
+        // TODO[jpw]: make this degree 1 after removing is_immediate
+        let count = op.enabled * not(aux.is_immediate.into());
+
+        for i in 0..N {
+            let address = MemoryAddress::new(
+                op.addr_space.clone(),
+                op.pointer.clone() + AB::Expr::from_canonical_usize(i),
+            );
+            self.memory_bus
+                .read(address.clone(), [aux.prev_data[i]], aux.prev_timestamps[i])
+                .eval(builder, count.clone());
+            self.memory_bus
+                .write(
+                    address,
+                    [op.data[i].clone()],
+                    op.timestamp.clone() + AB::Expr::from_canonical_usize(i),
+                )
+                .eval(builder, count.clone());
+        }
     }
 }

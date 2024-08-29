@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
-use afs_recursion::{stark::DynRapForRecursion, types::InnerConfig};
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::{
     config::{
@@ -67,14 +66,8 @@ fn test_interactions() {
         &receiver_air,
         &sum_chip.range_checker.air,
     ];
-    let rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>> = vec![
-        &sum_chip.air,
-        &sender_air,
-        &receiver_air,
-        &sum_chip.range_checker.air,
-    ];
     let traces = vec![sum_trace, sender_trace, receiver_trace, range_checker_trace];
     let pvs = vec![vec![], vec![], vec![], vec![]];
 
-    common::run_recursive_test(any_raps, rec_raps, traces, pvs, default_fri_params())
+    common::run_recursive_test(any_raps, traces, pvs, default_fri_params())
 }

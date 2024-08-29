@@ -1,7 +1,15 @@
-use itertools::Itertools;
-use p3_field::Field;
+use p3_field::{Field, PrimeField32};
 
-use crate::cpu::{trace::isize_to_field, OpCode};
+use crate::{
+    arch::{
+        bus::ExecutionBus,
+        chips::InstructionExecutor,
+        columns::ExecutionState,
+        instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
+    },
+    cpu::trace::Instruction,
+    field_arithmetic::columns::Operand,
+};
 
 #[cfg(test)]
 pub mod tests;
@@ -11,51 +19,103 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-/// Field arithmetic chip.
-///
-/// Carries information about opcodes (currently 6..=9) and bus index (currently 2).
+pub use air::FieldArithmeticAir;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct ArithmeticOperation<F> {
-    pub opcode: OpCode,
-    pub operand1: F,
-    pub operand2: F,
-    pub result: F,
+use crate::memory::manager::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord};
+
+#[derive(Clone, Debug)]
+pub struct FieldArithmeticRecord<F> {
+    pub opcode: Opcode,
+    pub from_state: ExecutionState<usize>,
+    pub x_read: MemoryReadRecord<1, F>,
+    pub y_read: MemoryReadRecord<1, F>,
+    pub z_write: MemoryWriteRecord<1, F>,
 }
 
-impl<F: Field> ArithmeticOperation<F> {
-    pub fn from_isize(opcode: OpCode, operand1: isize, operand2: isize, result: isize) -> Self {
+#[derive(Clone, Debug)]
+pub struct FieldArithmeticChip<F: PrimeField32> {
+    pub air: FieldArithmeticAir,
+    pub records: Vec<FieldArithmeticRecord<F>>,
+
+    pub memory_chip: MemoryChipRef<F>,
+}
+
+impl<F: PrimeField32> FieldArithmeticChip<F> {
+    #[allow(clippy::new_without_default)]
+    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<F>) -> Self {
+        let mem_oc = memory_chip.borrow().make_offline_checker();
         Self {
-            opcode,
-            operand1: isize_to_field::<F>(operand1),
-            operand2: isize_to_field::<F>(operand2),
-            result: isize_to_field::<F>(result),
+            air: FieldArithmeticAir {
+                execution_bus,
+                mem_oc,
+            },
+            records: vec![],
+            memory_chip,
         }
     }
+}
 
-    pub fn to_vec(&self) -> Vec<F> {
-        vec![
-            F::from_canonical_usize(self.opcode as usize),
-            self.operand1,
-            self.operand2,
-            self.result,
-        ]
+impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
+    fn execute(
+        &mut self,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<usize>,
+    ) -> ExecutionState<usize> {
+        let Instruction {
+            opcode,
+            op_a: z_address,
+            op_b: x_address,
+            op_c: y_address,
+            d: z_as,
+            e: x_as,
+            op_f: y_as,
+            ..
+        } = instruction.clone();
+        assert!(FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
+
+        let mut memory_chip = self.memory_chip.borrow_mut();
+
+        debug_assert_eq!(
+            from_state.timestamp,
+            memory_chip.timestamp().as_canonical_u32() as usize
+        );
+
+        let x_read = memory_chip.read_cell(x_as, x_address);
+        let y_read = memory_chip.read_cell(y_as, y_address);
+
+        let x = x_read.value();
+        let y = y_read.value();
+        let z = FieldArithmetic::solve(opcode, (x, y)).unwrap();
+
+        let z_write = memory_chip.write_cell(z_as, z_address, z);
+
+        self.records.push(FieldArithmeticRecord {
+            opcode,
+            from_state,
+            x_read,
+            y_read,
+            z_write,
+        });
+        tracing::trace!("op = {:?}", self.records.last().unwrap());
+
+        ExecutionState {
+            pc: from_state.pc + 1,
+            timestamp: from_state.timestamp + FieldArithmeticAir::TIMESTAMP_DELTA,
+        }
     }
 }
 
-#[derive(Default, Clone, Copy)]
-pub struct FieldArithmeticAir {}
-
-impl FieldArithmeticAir {
+pub struct FieldArithmetic;
+impl FieldArithmetic {
     /// Evaluates given opcode using given operands.
     ///
     /// Returns None for non-arithmetic operations.
-    fn solve<T: Field>(op: OpCode, operands: (T, T)) -> Option<T> {
+    fn solve<T: Field>(op: Opcode, operands: (T, T)) -> Option<T> {
         match op {
-            OpCode::FADD => Some(operands.0 + operands.1),
-            OpCode::FSUB => Some(operands.0 - operands.1),
-            OpCode::FMUL => Some(operands.0 * operands.1),
-            OpCode::FDIV => {
+            Opcode::FADD => Some(operands.0 + operands.1),
+            Opcode::FSUB => Some(operands.0 - operands.1),
+            Opcode::FMUL => Some(operands.0 * operands.1),
+            Opcode::FDIV => {
                 if operands.1 == T::zero() {
                     None
                 } else {
@@ -64,41 +124,5 @@ impl FieldArithmeticAir {
             }
             _ => unreachable!(),
         }
-    }
-}
-
-pub struct FieldArithmeticChip<F: Field> {
-    pub air: FieldArithmeticAir,
-    pub operations: Vec<ArithmeticOperation<F>>,
-}
-
-impl<F: Field> FieldArithmeticChip<F> {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self {
-            air: FieldArithmeticAir {},
-            operations: vec![],
-        }
-    }
-
-    pub fn calculate(&mut self, op: OpCode, operands: (F, F)) -> F {
-        let result = FieldArithmeticAir::solve::<F>(op, operands).unwrap();
-        self.operations.push(ArithmeticOperation {
-            opcode: op,
-            operand1: operands.0,
-            operand2: operands.1,
-            result,
-        });
-        result
-    }
-
-    pub fn request(&mut self, ops: Vec<OpCode>, operands_vec: Vec<(F, F)>) {
-        for (op, operands) in ops.iter().zip_eq(operands_vec.iter()) {
-            self.calculate(*op, *operands);
-        }
-    }
-
-    pub fn current_height(&self) -> usize {
-        self.operations.len()
     }
 }

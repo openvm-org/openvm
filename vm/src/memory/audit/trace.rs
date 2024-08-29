@@ -5,33 +5,40 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::MemoryAuditChip;
-use crate::memory::{audit::columns::AuditCols, manager::access_cell::AccessCell};
+use crate::memory::{audit::columns::AuditCols, manager::TimestampedValue};
 
-impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
+impl<F: PrimeField32> MemoryAuditChip<F> {
     pub fn generate_trace(
         &self,
         // TODO[osama]: consider making a struct for address
-        final_memory: &BTreeMap<(F, F), AccessCell<WORD_SIZE, F>>,
+        final_memory: &BTreeMap<(F, F), TimestampedValue<F>>,
     ) -> RowMajorMatrix<F> {
         let trace_height = self.initial_memory.len().next_power_of_two();
-
+        self.generate_trace_with_height(final_memory, trace_height)
+    }
+    pub fn generate_trace_with_height(
+        &self,
+        // TODO[osama]: consider making a struct for address
+        final_memory: &BTreeMap<(F, F), TimestampedValue<F>>,
+        trace_height: usize,
+    ) -> RowMajorMatrix<F> {
         let gen_row = |prev_idx: Vec<u32>,
                        cur_idx: Vec<u32>,
-                       data_read: [F; WORD_SIZE],
-                       clk_read: F,
-                       data_write: [F; WORD_SIZE],
-                       clk_write: F,
+                       final_data: F,
+                       final_timestamp: F,
+                       initial_data: F,
                        is_extra: F| {
             let lt_cols = LocalTraceInstructions::generate_trace_row(
                 &self.air.addr_lt_air,
                 (prev_idx, cur_idx.clone(), self.range_checker.clone()),
             );
 
-            AuditCols::<WORD_SIZE, F>::new(
+            AuditCols::<F>::new(
                 F::from_canonical_u32(cur_idx[0]),
                 F::from_canonical_u32(cur_idx[1]),
-                AccessCell::<WORD_SIZE, F>::new(data_write, clk_write),
-                AccessCell::<WORD_SIZE, F>::new(data_read, clk_read),
+                initial_data,
+                final_data,
+                final_timestamp,
                 is_extra,
                 lt_cols.io.tuple_less_than,
                 lt_cols.aux,
@@ -40,17 +47,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
 
         let mut rows_concat = Vec::with_capacity(trace_height * self.air.air_width());
         let mut prev_idx = vec![0, 0];
-        for (
-            addr,
-            AccessCell {
-                clk: clk_write,
-                data: data_write,
-            },
-        ) in self.initial_memory.iter()
-        {
-            let AccessCell {
-                clk: clk_read,
-                data: data_read,
+        for (addr, initial_data) in self.initial_memory.iter() {
+            let TimestampedValue {
+                timestamp: final_clk,
+                value: final_data,
             } = final_memory.get(addr).unwrap();
 
             let cur_idx = vec![addr.0.as_canonical_u32(), addr.1.as_canonical_u32()];
@@ -59,10 +59,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
                 gen_row(
                     prev_idx,
                     cur_idx.clone(),
-                    *data_read,
-                    *clk_read,
-                    *data_write,
-                    *clk_write,
+                    *final_data,
+                    *final_clk,
+                    *initial_data,
                     F::zero(),
                 )
                 .flatten(),
@@ -72,7 +71,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
         }
 
         let dummy_idx = vec![0, 0];
-        let dummy_data = [F::zero(); WORD_SIZE];
+        let dummy_data = F::zero();
         let dummy_clk = F::zero();
 
         while rows_concat.len() < trace_height * self.air.air_width() {
@@ -83,7 +82,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
                     dummy_data,
                     dummy_clk,
                     dummy_data,
-                    dummy_clk,
                     F::one(),
                 )
                 .flatten(),

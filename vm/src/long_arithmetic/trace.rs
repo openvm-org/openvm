@@ -5,10 +5,10 @@ use super::{
     columns::{LongArithmeticAuxCols, LongArithmeticCols, LongArithmeticIoCols},
     num_limbs, LongArithmeticChip, LongArithmeticOperation,
 };
-use crate::cpu::OpCode;
+use crate::arch::instructions::Opcode;
 
 pub fn create_row_from_values<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Field>(
-    opcode: OpCode,
+    opcode: Opcode,
     x: &[u32],
     y: &[u32],
     result_limbs: &[u32],
@@ -28,10 +28,10 @@ pub fn create_row_from_values<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: 
             cmp_result: T::from_canonical_u8(cmp_result as u8),
         },
         aux: LongArithmeticAuxCols {
-            opcode_add_flag: T::from_canonical_u8((opcode == OpCode::ADD256) as u8),
-            opcode_sub_flag: T::from_canonical_u8((opcode == OpCode::SUB256) as u8),
-            opcode_lt_flag: T::from_canonical_u8((opcode == OpCode::LT256) as u8),
-            opcode_eq_flag: T::from_canonical_u8((opcode == OpCode::EQ256) as u8),
+            opcode_add_flag: T::from_canonical_u8((opcode == Opcode::ADD256) as u8),
+            opcode_sub_flag: T::from_canonical_u8((opcode == Opcode::SUB256) as u8),
+            opcode_lt_flag: T::from_canonical_u8((opcode == Opcode::LT256) as u8),
+            opcode_eq_flag: T::from_canonical_u8((opcode == Opcode::EQ256) as u8),
             buffer: buffer_limbs
                 .iter()
                 .map(|x| T::from_canonical_u32(*x))
@@ -48,9 +48,9 @@ struct CalculationResult {
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE, LIMB_SIZE> {
-    fn calculate<F: PrimeField32>(opcode: OpCode, x: &[u32], y: &[u32]) -> CalculationResult {
+    fn calculate<F: PrimeField32>(opcode: Opcode, x: &[u32], y: &[u32]) -> CalculationResult {
         match opcode {
-            OpCode::ADD256 => {
+            Opcode::ADD256 => {
                 let (sum, carry) = Self::calc_sum(x, y);
                 CalculationResult {
                     result_limbs: sum,
@@ -58,7 +58,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE,
                     cmp_result: false,
                 }
             }
-            OpCode::SUB256 => {
+            Opcode::SUB256 => {
                 let (diff, carry) = Self::calc_diff(x, y);
                 CalculationResult {
                     result_limbs: diff,
@@ -66,7 +66,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE,
                     cmp_result: false,
                 }
             }
-            OpCode::LT256 => {
+            Opcode::LT256 => {
                 let (diff, carry) = Self::calc_diff(x, y);
                 let cmp_result = *carry.last().unwrap() == 1;
                 CalculationResult {
@@ -75,7 +75,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE,
                     cmp_result,
                 }
             }
-            OpCode::EQ256 => {
+            Opcode::EQ256 => {
                 let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
                 let mut inverse = vec![0u32; num_limbs];
                 for i in 0..num_limbs {
@@ -136,8 +136,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE,
                     buffer_limbs,
                     cmp_result,
                 } = Self::calculate::<F>(opcode, x, y);
-                assert!(ARG_SIZE % LIMB_SIZE == 0);
-                if opcode == OpCode::ADD256 || opcode == OpCode::SUB256 || opcode == OpCode::LT256 {
+
+                assert_eq!(ARG_SIZE % LIMB_SIZE, 0);
+
+                if opcode == Opcode::ADD256 || opcode == Opcode::SUB256 || opcode == Opcode::LT256 {
                     for z in &result_limbs {
                         self.range_checker_chip.add_count(*z);
                     }
@@ -159,7 +161,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE,
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 
         let blank_row = create_row_from_values::<ARG_SIZE, LIMB_SIZE, F>(
-            OpCode::ADD256,
+            Opcode::ADD256,
             &vec![0u32; num_limbs],
             &vec![0u32; num_limbs],
             &vec![0u32; num_limbs],

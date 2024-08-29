@@ -7,9 +7,10 @@ use p3_bn254_fr::Bn254Fr;
 use p3_field::{ExtensionField, PrimeField};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
-        gates::{circuit::builder::BaseCircuitBuilder, GateInstructions},
+        gates::{circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip},
         halo2_proofs::halo2curves::bn256::Fr,
         utils::{biguint_to_fe, ScalarField},
+        Context,
     },
     util::arithmetic::PrimeField as _,
 };
@@ -22,6 +23,7 @@ use crate::{
                 BabyBearExt4Chip,
             },
             poseidon2_perm::{Poseidon2Params, Poseidon2State},
+            stats::{print, Halo2CellTracker, Halo2Stats},
         },
         ConstraintCompiler,
     },
@@ -60,8 +62,9 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
     where
         C: Config<N = Bn254Fr, F = BabyBear, EF = BabyBearExt4>,
     {
+        let mut cell_tracker = Halo2CellTracker::new();
         let range = Arc::new(halo2_state.builder.range_chip());
-        let f_chip = Arc::new(BabyBearChip::new(range));
+        let f_chip = Arc::new(BabyBearChip::new(range.clone()));
         let ext_chip = BabyBearExt4Chip::new(Arc::clone(&f_chip));
         let gate = f_chip.gate();
         let ctx = halo2_state.builder.main(0);
@@ -163,6 +166,12 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     let x = ext_chip.sub(ctx, tmp, exts[&c.0]);
                     exts.insert(a.0, x);
                 }
+                DslIr::SubEFI(a, b, c) => {
+                    let tmp = f_chip.load_constant(ctx, c);
+                    let mut x = exts[&b.0];
+                    x.0[0] = f_chip.sub(ctx, x.0[0], tmp);
+                    exts.insert(a.0, x);
+                }
                 DslIr::MulV(a, b, c) => {
                     let x = gate.mul(ctx, vars[&b.0], vars[&c.0]);
                     vars.insert(a.0, x);
@@ -192,6 +201,11 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                 }
                 DslIr::MulEF(a, b, c) => {
                     let x = ext_chip.scalar_mul(ctx, exts[&b.0], felts[&c.0]);
+                    exts.insert(a.0, x);
+                }
+                DslIr::MulEFI(a, b, c) => {
+                    let tmp = f_chip.load_constant(ctx, c);
+                    let x = ext_chip.scalar_mul(ctx, exts[&b.0], tmp);
                     exts.insert(a.0, x);
                 }
                 DslIr::DivFIN(a, b, c) => {
@@ -361,14 +375,19 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     );
                     exts.insert(b.0, x);
                 }
-                // TODO: implement cell tracker.
-                DslIr::CycleTrackerStart(_) | DslIr::CycleTrackerEnd(_) => {}
+                DslIr::CycleTrackerStart(name) => {
+                    cell_tracker.start(name, stats_snapshot(ctx, range.clone()));
+                }
+                DslIr::CycleTrackerEnd(name) => {
+                    cell_tracker.end(name, stats_snapshot(ctx, range.clone()));
+                }
                 _ => panic!("unsupported {:?}", instruction),
             };
         }
         let vkey_hash = vkey_hash.unwrap_or_else(|| ctx.load_zero());
         let committed_values_digest = committed_values_digest.unwrap_or_else(|| ctx.load_zero());
         halo2_state.builder.assigned_instances = vec![vec![vkey_hash, committed_values_digest]];
+        print(&cell_tracker);
     }
 }
 
@@ -383,4 +402,22 @@ pub fn convert_efr<F: PrimeField, EF: ExtensionField<F>>(a: &EF) -> Vec<Fr> {
     slc.iter()
         .map(|x| biguint_to_fe(&x.as_canonical_biguint()))
         .collect()
+}
+
+// Unfortunately `builder.statistics()` cannot be called when `ctx` exists.
+fn stats_snapshot(ctx: &Context<Fr>, range_chip: Arc<RangeChip<Fr>>) -> Halo2Stats {
+    Halo2Stats {
+        total_gate_cell: ctx.advice.len(),
+        total_fixed: ctx
+            .copy_manager
+            .lock()
+            .unwrap()
+            .constant_equalities
+            .iter()
+            .map(|(c, _)| *c)
+            .sorted()
+            .dedup()
+            .count(),
+        total_lookup_cell: range_chip.lookup_manager()[0].total_rows(),
+    }
 }

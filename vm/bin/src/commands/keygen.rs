@@ -1,5 +1,6 @@
 use std::{
     fs::{self},
+    ops::Deref,
     path::Path,
     time::Instant,
 };
@@ -15,7 +16,7 @@ use stark_vm::{
     vm::{config::VmConfig, VirtualMachine},
 };
 
-use super::{write_bytes, NUM_WORDS, WORD_SIZE};
+use super::write_bytes;
 use crate::asm::parse_asm_file;
 
 /// `afs keygen` command
@@ -57,15 +58,22 @@ impl KeygenCommand {
             instructions,
             debug_infos: vec![None; program_len],
         };
-        let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(config, program, vec![]);
-        let result = vm.execute_and_generate_traces()?;
-        let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree);
+        // FIXME: keygen should not have to execute
+        let vm = VirtualMachine::new(config, program, vec![]);
+        let result = vm.execute_and_generate()?;
+
+        assert_eq!(
+            result.segment_results.len(),
+            1,
+            "continuations not currently supported"
+        );
+        let result = result.segment_results.into_iter().next().unwrap();
+
+        let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree());
         let mut keygen_builder = engine.keygen_builder();
 
-        let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&result.nonempty_chips);
-
-        for chip in chips {
-            keygen_builder.add_air(chip, 0);
+        for (air, pvs) in result.airs.iter().zip(result.public_values) {
+            keygen_builder.add_air(air.deref(), pvs.len());
         }
 
         let pk = keygen_builder.generate_pk();

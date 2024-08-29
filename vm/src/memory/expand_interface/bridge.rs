@@ -5,7 +5,7 @@ use p3_field::{AbstractField, Field};
 
 use super::columns::MemoryExpandInterfaceCols;
 use crate::{
-    cpu::{EXPAND_BUS, NEW_MEMORY_BUS},
+    cpu::{EXPAND_BUS, MEMORY_BUS},
     memory::expand_interface::air::MemoryExpandInterfaceAir,
 };
 
@@ -37,8 +37,9 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize>
         for word_idx in 0..NUM_WORDS {
             let word = local.values[word_idx];
 
+            // TODO[zach]: use `MEMORY_BUS` interface.
             builder.push_send(
-                NEW_MEMORY_BUS.0,
+                MEMORY_BUS.0,
                 iter::once(local.address_space.into())
                     .chain(iter::once(
                         AB::Expr::from_canonical_usize(NUM_WORDS * WORD_SIZE) * local.leaf_label

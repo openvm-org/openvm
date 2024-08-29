@@ -677,7 +677,6 @@ where
         vk: &MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
         pis: &[Vec<Val<SC>>],
-        ops_sender: &dyn AnyRap<SC>,
     ) -> Result<(), VerificationError>
     where
         Val<SC>: PrimeField,
@@ -685,7 +684,7 @@ where
         let verifier = engine.verifier();
 
         let mut challenger = engine.new_challenger();
-        verifier.verify(&mut challenger, vk, self.airs(ops_sender), proof, pis)
+        verifier.verify(&mut challenger, vk, proof, pis)
     }
 
     pub fn airs<'a>(&'a self, ops_sender: &'a dyn AnyRap<SC>) -> Vec<&'a dyn AnyRap<SC>> {

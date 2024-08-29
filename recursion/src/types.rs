@@ -4,7 +4,7 @@ use afs_compiler::{
     prelude::*,
 };
 use afs_stark_backend::{
-    air_builders::symbolic::SymbolicConstraints,
+    air_builders::symbolic::symbolic_expression::SymbolicExpression,
     commit::MatrixCommitmentPointers,
     config::Com,
     keygen::types::{CommitmentToAirGraph, MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
@@ -107,9 +107,7 @@ pub struct StarkVerificationAdvice<C: Config> {
     /// Number of values to expose to verifier in each trace challenge phase
     pub num_exposed_values_after_challenge: Vec<usize>,
     /// Symbolic representation of all AIR constraints, including logup constraints
-    pub symbolic_constraints: SymbolicConstraints<C::F>,
-    /// TODO: remove this once dyn Rap is no longer necessary
-    pub(crate) interaction_chunk_size: usize,
+    pub symbolic_constraints: Vec<SymbolicExpression<C::F>>,
 }
 
 /// Create StarkVerificationAdvice for an inner config.
@@ -126,7 +124,6 @@ where
         main_graph,
         quotient_degree,
         symbolic_constraints,
-        interaction_chunk_size,
         ..
     } = vk;
     StarkVerificationAdvice {
@@ -139,8 +136,7 @@ where
         num_public_values: params.num_public_values,
         num_challenges_to_sample: params.num_challenges_to_sample,
         num_exposed_values_after_challenge: params.num_exposed_values_after_challenge,
-        symbolic_constraints,
-        interaction_chunk_size,
+        symbolic_constraints: symbolic_constraints.constraints,
     }
 }
 
@@ -175,7 +171,6 @@ where
         num_main_trace_commitments,
         main_commit_to_air_graph,
         num_challenges_to_sample,
-        // TODO: add support for interaction_chunk_size
         ..
     } = vk;
     MultiStarkVerificationAdvice {

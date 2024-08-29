@@ -1,4 +1,4 @@
-use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program_and_generate_traces};
+use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 
@@ -22,7 +22,6 @@ fn test_compiler_loop() {
 
     builder.halt();
 
-    const WORD_SIZE: usize = 1;
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }

@@ -70,20 +70,32 @@ pub enum AsmInstruction<F, EF> {
     /// Multiply extension, dst = lhs * rhs.
     MulE(i32, i32, i32),
 
-    /// Extension inverse, dst = 1 / src.
-    InvE(i32, i32),
+    /// Divide extension, dst = lhs / rhs.
+    DivE(i32, i32, i32),
 
     /// Modular add, dst = lhs + rhs.
-    AddMSecp256k1(i32, i32, i32),
+    AddSecp256k1Coord(i32, i32, i32),
 
     /// Modular subtract, dst = lhs - rhs.
-    SubMSecp256k1(i32, i32, i32),
+    SubSecp256k1Coord(i32, i32, i32),
 
     /// Modular multiply, dst = lhs * rhs.
-    MulMSecp256k1(i32, i32, i32),
+    MulSecp256k1Coord(i32, i32, i32),
 
     /// Modular divide, dst = lhs / rhs.
-    DivMSecp256k1(i32, i32, i32),
+    DivSecp256k1Coord(i32, i32, i32),
+
+    /// Modular add, dst = lhs + rhs.
+    AddSecp256k1Scalar(i32, i32, i32),
+
+    /// Modular subtract, dst = lhs - rhs.
+    SubSecp256k1Scalar(i32, i32, i32),
+
+    /// Modular multiply, dst = lhs * rhs.
+    MulSecp256k1Scalar(i32, i32, i32),
+
+    /// Modular divide, dst = lhs / rhs.
+    DivSecp256k1Scalar(i32, i32, i32),
 
     /// Jump.
     Jump(i32, F),
@@ -144,7 +156,7 @@ pub enum AsmInstruction<F, EF> {
     /// HintBits(dst, src).
     ///
     /// Bit decompose the field element `src` and add in little endian to hint stream.
-    HintBits(i32),
+    HintBits(i32, u32),
 
     /// Stores the next hint stream word into value stored at addr + value.
     StoreHintWordI(i32, F),
@@ -243,8 +255,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::MulE(dst, lhs, rhs) => {
                 write!(f, "emul  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
-            AsmInstruction::InvE(dst, src) => {
-                write!(f, "einv ({})fp, ({})fp", dst, src)
+            AsmInstruction::DivE(dst, lhs, rhs) => {
+                write!(f, "ediv  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
             AsmInstruction::Jump(dst, label) => {
                 write!(
@@ -328,7 +340,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::Trap => write!(f, "trap"),
             AsmInstruction::Halt => write!(f, "halt"),
-            AsmInstruction::HintBits(dst) => write!(f, "hint_bits ({})fp", dst),
+            AsmInstruction::HintBits(dst, len) => write!(f, "hint_bits ({})fp, {}", dst, len),
             AsmInstruction::Poseidon2Permute(dst, lhs) => {
                 write!(f, "poseidon2_permute ({})fp, ({})fp", dst, lhs)
             }
@@ -361,17 +373,61 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::CycleTrackerEnd(name) => {
                 write!(f, "cycle_tracker_end {}", name)
             }
-            AsmInstruction::AddMSecp256k1(dst, src1, src2) => {
-                write!(f, "modular_add ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::AddSecp256k1Coord(dst, src1, src2) => {
+                write!(
+                    f,
+                    "add_secp256k1_coord ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
             }
-            AsmInstruction::SubMSecp256k1(dst, src1, src2) => {
-                write!(f, "modular_subtract ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::SubSecp256k1Coord(dst, src1, src2) => {
+                write!(
+                    f,
+                    "subtract_secp256k1_coord ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
             }
-            AsmInstruction::MulMSecp256k1(dst, src1, src2) => {
-                write!(f, "modular_multiply ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::MulSecp256k1Coord(dst, src1, src2) => {
+                write!(
+                    f,
+                    "multiply_secp256k1_coord ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
             }
-            AsmInstruction::DivMSecp256k1(dst, src1, src2) => {
-                write!(f, "modular_divide ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::DivSecp256k1Coord(dst, src1, src2) => {
+                write!(
+                    f,
+                    "divide_secp256k1_coord ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
+            }
+            AsmInstruction::AddSecp256k1Scalar(dst, src1, src2) => {
+                write!(
+                    f,
+                    "add_secp256k1_scalar ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
+            }
+            AsmInstruction::SubSecp256k1Scalar(dst, src1, src2) => {
+                write!(
+                    f,
+                    "subtract_secp256k1_scalar ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
+            }
+            AsmInstruction::MulSecp256k1Scalar(dst, src1, src2) => {
+                write!(
+                    f,
+                    "multiply_secp256k1_scalar ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
+            }
+            AsmInstruction::DivSecp256k1Scalar(dst, src1, src2) => {
+                write!(
+                    f,
+                    "divide_secp256k1_scalar ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
             }
         }
     }

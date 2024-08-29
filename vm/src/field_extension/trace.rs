@@ -1,91 +1,125 @@
-use std::{array, vec::IntoIter};
-
-use itertools::Itertools;
-use p3_field::{Field, PrimeField32};
+use afs_stark_backend::rap::AnyRap;
+use p3_air::BaseAir;
+use p3_commit::PolynomialSpace;
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use super::{
-    columns::{
-        FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols,
-        FieldExtensionArithmeticIoCols,
-    },
-    FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
+use super::columns::{
+    FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols,
 };
-use crate::{cpu::OpCode, memory::offline_checker::columns::MemoryOfflineCheckerAuxCols};
+use crate::{
+    arch::{chips::MachineChip, instructions::Opcode},
+    field_extension::chip::{
+        FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
+        EXT_DEG,
+    },
+    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+};
 
-/// Constructs a new set of columns (including auxiliary columns) given inputs.
-fn generate_cols<const WORD_SIZE: usize, T: Field>(
-    op: FieldExtensionArithmeticOperation<WORD_SIZE, T>,
-    oc_aux_iter: &mut IntoIter<MemoryOfflineCheckerAuxCols<WORD_SIZE, T>>,
-) -> FieldExtensionArithmeticCols<WORD_SIZE, T> {
-    let is_add = T::from_bool(op.opcode == OpCode::FE4ADD);
-    let is_sub = T::from_bool(op.opcode == OpCode::FE4SUB);
-    let is_mul = T::from_bool(op.opcode == OpCode::BBE4MUL);
-    let is_inv = T::from_bool(op.opcode == OpCode::BBE4INV);
+impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
+    /// Generates trace for field arithmetic chip.
+    fn generate_trace(mut self) -> RowMajorMatrix<F> {
+        let curr_height = self.records.len();
+        let correct_height = curr_height.next_power_of_two();
 
-    let x = op.operand1;
-    let y = op.operand2;
+        let width = FieldExtensionArithmeticCols::<F>::get_width(&self.air);
+        // TODO[jpw] better to create entire 1d trace matrix first and then mutate buffers
+        let blank_row = self.make_blank_row().flatten();
+        let dummy_rows_flattened =
+            (0..correct_height - curr_height).flat_map(|_| blank_row.clone());
 
-    let inv = if x[0] == T::zero() && x[1] == T::zero() && x[2] == T::zero() && x[3] == T::zero() {
-        [T::zero(), T::zero(), T::zero(), T::zero()]
-    } else {
-        FieldExtensionArithmetic::solve(OpCode::BBE4INV, x, y).unwrap()
-    };
+        let records = std::mem::take(&mut self.records);
 
-    FieldExtensionArithmeticCols {
-        io: FieldExtensionArithmeticIoCols {
-            opcode: T::from_canonical_usize(op.opcode as usize),
-            clk: T::from_canonical_usize(op.clk),
-            x,
-            y,
-            z: op.result,
-        },
-        aux: FieldExtensionArithmeticAuxCols {
-            is_valid: T::one(),
-            valid_y_read: T::one() - is_inv,
-            op_a: op.op_a,
-            op_b: op.op_b,
-            op_c: op.op_c,
-            d: op.d,
-            e: op.e,
-            is_add,
-            is_sub,
-            is_mul,
-            is_inv,
-            inv,
-            mem_oc_aux_cols: array::from_fn(|_| oc_aux_iter.next().unwrap()),
-        },
+        let flattened_trace: Vec<F> = records
+            .into_iter()
+            .flat_map(|record| self.cols_from_record(record).flatten())
+            .chain(dummy_rows_flattened)
+            .collect();
+
+        RowMajorMatrix::new(flattened_trace, width)
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        Box::new(self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.records.len()
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::<F>::width(&self.air)
     }
 }
 
-impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
-    FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F>
-{
-    /// Generates trace for field arithmetic chip.
-    pub fn generate_trace(&mut self) -> RowMajorMatrix<F> {
-        // todo[zach]: it's weird that `generate_trace` mutates the receiver
-        let accesses = self.memory.take_accesses_buffer();
-        let mut accesses_iter = accesses.into_iter();
+impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
+    /// Constructs a new set of columns (including auxiliary columns) given inputs.
+    fn cols_from_record(
+        &self,
+        record: FieldExtensionArithmeticRecord<F>,
+    ) -> FieldExtensionArithmeticCols<F> {
+        let is_add = F::from_bool(record.instruction.opcode == Opcode::FE4ADD);
+        let is_sub = F::from_bool(record.instruction.opcode == Opcode::FE4SUB);
+        let is_mul = F::from_bool(record.instruction.opcode == Opcode::BBE4MUL);
+        let is_div = F::from_bool(record.instruction.opcode == Opcode::BBE4DIV);
 
-        let mut trace: Vec<F> = self
-            .operations
-            .iter()
-            .cloned()
-            .flat_map(|op| generate_cols::<WORD_SIZE, F>(op, &mut accesses_iter).flatten())
-            .collect();
+        let FieldExtensionArithmeticRecord { x, y, z, .. } = record;
 
-        assert!(accesses_iter.next().is_none());
+        let divisor_inv = if record.instruction.opcode == Opcode::BBE4DIV {
+            FieldExtensionArithmetic::invert(record.y)
+        } else {
+            [F::zero(); EXT_DEG]
+        };
 
-        let curr_height = self.operations.len();
-        let correct_height = curr_height.next_power_of_two();
+        let memory = self.memory_chip.borrow();
 
-        let width = FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width(&self.air);
-        trace.extend(
-            (0..correct_height - curr_height)
-                .flat_map(|_| self.make_blank_row().flatten())
-                .collect_vec(),
-        );
+        FieldExtensionArithmeticCols {
+            io: FieldExtensionArithmeticIoCols {
+                pc: F::from_canonical_usize(record.pc),
+                timestamp: F::from_canonical_usize(record.timestamp),
+                op_a: record.instruction.op_a,
+                op_b: record.instruction.op_b,
+                op_c: record.instruction.op_c,
+                d: record.instruction.d,
+                e: record.instruction.e,
+                x,
+                y,
+                z,
+            },
+            aux: FieldExtensionArithmeticAuxCols {
+                is_valid: F::one(),
+                is_add,
+                is_sub,
+                is_mul,
+                is_div,
+                divisor_inv,
+                read_x_aux_cols: memory.make_read_aux_cols(record.x_read),
+                read_y_aux_cols: memory.make_read_aux_cols(record.y_read),
+                write_aux_cols: memory.make_write_aux_cols(record.z_write),
+            },
+        }
+    }
 
-        RowMajorMatrix::new(trace, width)
+    fn make_blank_row(&self) -> FieldExtensionArithmeticCols<F> {
+        let oc = self.memory_chip.borrow().make_offline_checker();
+
+        FieldExtensionArithmeticCols {
+            io: FieldExtensionArithmeticIoCols::default(),
+            aux: FieldExtensionArithmeticAuxCols {
+                is_valid: F::zero(),
+                is_add: F::zero(),
+                is_sub: F::zero(),
+                is_mul: F::zero(),
+                is_div: F::zero(),
+                divisor_inv: [F::zero(); EXT_DEG],
+                read_x_aux_cols: MemoryReadAuxCols::disabled(oc),
+                read_y_aux_cols: MemoryReadAuxCols::disabled(oc),
+                write_aux_cols: MemoryWriteAuxCols::disabled(oc),
+            },
+        }
     }
 }

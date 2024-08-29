@@ -30,7 +30,7 @@ impl IsLessThanTupleChip {
             );
 
             self.air
-                .generate_trace_row(x, y, self.range_checker.clone(), &mut cols);
+                .generate_trace_row(x, y, &self.range_checker, &mut cols);
         }
 
         RowMajorMatrix::new(rows_concat, width)
@@ -42,7 +42,7 @@ impl IsLessThanTupleAir {
         &self,
         x: &[u32],
         y: &[u32],
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: &RangeCheckerGateChip,
         lt_cols: &mut IsLessThanTupleColsMut<F>,
     ) {
         fill_slc_to_f(lt_cols.io.x, x);
@@ -56,7 +56,7 @@ impl IsLessThanTupleAir {
         &self,
         x: &[u32],
         y: &[u32],
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: &RangeCheckerGateChip,
         lt_aux_cols: &mut IsLessThanTupleAuxColsMut<F>,
     ) {
         for i in 0..self.limb_bits.len() {
@@ -64,7 +64,7 @@ impl IsLessThanTupleAir {
             self.is_less_than_airs[i].generate_trace_row_aux(
                 x[i],
                 y[i],
-                range_checker.clone(),
+                range_checker,
                 &mut lt_aux_cols.less_than_aux[i],
             );
         }
@@ -96,6 +96,7 @@ impl IsLessThanTupleAir {
     }
 }
 
+// TODO[jpw] stop using Arc<RangeCheckerGateChip> and use &RangeCheckerGateChip (requires not using this trait)
 impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
     type LocalInput = (Vec<u32>, Vec<u32>, Arc<RangeCheckerGateChip>);
 
@@ -108,7 +109,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
         self.generate_trace_row(
             input.0.as_slice(),
             input.1.as_slice(),
-            input.2,
+            &input.2,
             &mut lt_cols,
         );
 

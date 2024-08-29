@@ -10,46 +10,44 @@ use p3_matrix::Matrix;
 use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK};
-use crate::memory::{
-    offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
-    MemoryAddress,
+use crate::{
+    arch::bus::ExecutionBus,
+    memory::{
+        offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
+        MemoryAddress,
+    },
 };
 
 /// Poseidon2 Air, VM version.
 ///
 /// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
 /// `direct` determines whether direct interactions are enabled. By default they are on.
-#[derive(Clone, new)]
-pub struct Poseidon2VmAir<const WIDTH: usize, const WORD_SIZE: usize, F: Clone> {
+#[derive(Clone, new, Debug)]
+pub struct Poseidon2VmAir<const WIDTH: usize, F: Clone> {
     pub inner: Poseidon2Air<WIDTH, F>,
+    pub execution_bus: ExecutionBus,
     pub mem_oc: MemoryOfflineChecker,
     pub direct: bool, // Whether direct interactions are enabled.
 }
 
-impl<const WIDTH: usize, const WORD_SIZE: usize, F: Clone> AirConfig
-    for Poseidon2VmAir<WIDTH, WORD_SIZE, F>
-{
-    type Cols<T> = Poseidon2VmCols<WIDTH, WORD_SIZE, T>;
+impl<const WIDTH: usize, F: Clone> AirConfig for Poseidon2VmAir<WIDTH, F> {
+    type Cols<T> = Poseidon2VmCols<WIDTH, T>;
 }
 
-impl<const WIDTH: usize, const WORD_SIZE: usize, F: Field> BaseAir<F>
-    for Poseidon2VmAir<WIDTH, WORD_SIZE, F>
-{
+impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2VmAir<WIDTH, F> {
     fn width(&self) -> usize {
-        Poseidon2VmCols::<WIDTH, WORD_SIZE, F>::width(self)
+        Poseidon2VmCols::<WIDTH, F>::width(self)
     }
 }
 
-impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
-    for Poseidon2VmAir<WIDTH, WORD_SIZE, AB::F>
-{
+impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDTH, AB::F> {
     /// Checks and constrains multiplicity indicators, and does subair evaluation
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
         let local: &[<AB>::Var] = (*local).borrow();
 
-        let cols = Poseidon2VmCols::<WIDTH, WORD_SIZE, AB::Var>::from_slice(local, self);
+        let cols = Poseidon2VmCols::<WIDTH, AB::Var>::from_slice(local, self);
 
         self.eval_interactions(builder, cols.io, &cols.aux);
         self.inner
@@ -81,7 +79,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
             [cols.aux.dst, cols.aux.lhs, cols.aux.rhs],
             [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp,]
         ) {
-            let clk = cols.io.clk + AB::F::from_canonical_usize(clk_offset);
+            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
             clk_offset += 1;
 
             memory_bridge
@@ -96,7 +94,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
 
         // READ
         for i in 0..WIDTH {
-            let clk = cols.io.clk + AB::F::from_canonical_usize(clk_offset);
+            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
             clk_offset += 1;
 
             let pointer = if i < chunks {
@@ -117,7 +115,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
 
         // WRITE
         for i in 0..WIDTH {
-            let clk = cols.io.clk + AB::F::from_canonical_usize(clk_offset);
+            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
             clk_offset += 1;
 
             let pointer = cols.aux.dst + AB::F::from_canonical_usize(i);

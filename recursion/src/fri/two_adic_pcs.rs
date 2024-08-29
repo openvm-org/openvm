@@ -302,9 +302,6 @@ pub mod tests {
     };
 
     #[allow(dead_code)]
-    const WORD_SIZE: usize = 1;
-
-    #[allow(dead_code)]
     pub fn build_test_fri_with_cols_and_log2_rows(
         nb_cols: usize,
         nb_log2_rows: usize,
@@ -385,18 +382,15 @@ pub mod tests {
         pcs_var.verify(&mut builder, rounds, proofvar, &mut challenger);
         builder.halt();
 
-        let program = builder.compile_isa::<WORD_SIZE>();
+        let program = builder.compile_isa();
         let mut witness_stream = Vec::new();
         witness_stream.extend(proof.write());
         (program, witness_stream)
     }
 
     #[test]
-    #[ignore = "test takes too long"]
     fn test_two_adic_fri_pcs_single_batch() {
-        use afs_compiler::util::execute_program_and_generate_traces;
-
-        let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program_and_generate_traces::<WORD_SIZE>(program, witness);
+        let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 10);
+        afs_compiler::util::execute_program(program, witness);
     }
 }
