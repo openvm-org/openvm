@@ -9,6 +9,7 @@ use afs_primitives::{
     utils::{and, implies, not},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::izip;
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
@@ -191,11 +192,11 @@ impl MemoryOfflineChecker {
 }
 
 impl MemoryOfflineChecker {
-    pub fn subair_eval<AB: InteractionBuilder, const WORD_SIZE: usize>(
+    pub fn subair_eval<AB: InteractionBuilder, const N: usize>(
         &self,
         builder: &mut AB,
-        op: MemoryOperation<WORD_SIZE, AB::Expr>,
-        aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, AB::Var>,
+        op: MemoryOperation<N, AB::Expr>,
+        aux: MemoryOfflineCheckerAuxCols<N, AB::Var>,
         is_write: bool,
     ) {
         builder.assert_bool(op.enabled.clone());
@@ -222,27 +223,31 @@ impl MemoryOfflineChecker {
         //         .assert_zero(aux.is_immediate);
         // }
 
-        let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
-            aux.prev_timestamp.into(),
-            op.timestamp.clone(),
-            aux.clk_lt.into(),
-        );
+        for (prev_timestamp, clk_lt, clk_lt_aux) in
+            izip!(aux.prev_timestamps, aux.clk_lt, aux.clk_lt_aux)
+        {
+            let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
+                prev_timestamp.into(),
+                op.timestamp.clone(),
+                clk_lt.into(),
+            );
 
-        self.timestamp_lt_air.conditional_eval(
-            builder,
-            clk_lt_io_cols,
-            aux.clk_lt_aux,
-            op.enabled.clone(),
-        );
+            self.timestamp_lt_air.conditional_eval(
+                builder,
+                clk_lt_io_cols,
+                clk_lt_aux,
+                op.enabled.clone(),
+            );
 
-        builder.assert_one(implies(
-            and(op.enabled.clone(), not(aux.is_immediate.into())),
-            aux.clk_lt.into(),
-        ));
+            builder.assert_one(implies(
+                and(op.enabled.clone(), not(aux.is_immediate.into())),
+                clk_lt.into(),
+            ));
+        }
 
         // Ensuring that if op_type is Read, data_read is the same as data_write
         if !is_write {
-            for i in 0..WORD_SIZE {
+            for i in 0..N {
                 builder
                     .when(op.enabled.clone())
                     .assert_eq(op.data[i].clone(), aux.prev_data[i]);
@@ -256,12 +261,22 @@ impl MemoryOfflineChecker {
         // builder.assert_one(implies(aux.is_immediate.into(), op.enabled.clone()));
         // TODO[jpw]: make this degree 1 after removing is_immediate
         let count = op.enabled * not(aux.is_immediate.into());
-        let address = MemoryAddress::new(op.addr_space, op.pointer);
-        self.memory_bus
-            .read(address.clone(), aux.prev_data, aux.prev_timestamp)
-            .eval(builder, count.clone());
-        self.memory_bus
-            .write(address, op.data, op.timestamp)
-            .eval(builder, count);
+
+        for i in 0..N {
+            let address = MemoryAddress::new(
+                op.addr_space.clone(),
+                op.pointer.clone() + AB::Expr::from_canonical_usize(i),
+            );
+            self.memory_bus
+                .read(address.clone(), [aux.prev_data[i]], aux.prev_timestamps[i])
+                .eval(builder, count.clone());
+            self.memory_bus
+                .write(
+                    address,
+                    [op.data[i].clone()],
+                    op.timestamp.clone() + AB::Expr::from_canonical_usize(i),
+                )
+                .eval(builder, count.clone());
+        }
     }
 }

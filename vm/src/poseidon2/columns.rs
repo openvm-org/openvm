@@ -182,7 +182,10 @@ impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
         for _ in 0..3 + 2 * WIDTH {
             start = end;
             end += MemoryOfflineCheckerAuxCols::<1, T>::width(&air.mem_oc);
-            mem_oc_aux_cols.push(MemoryOfflineCheckerAuxCols::from_slice(&slc[start..end]));
+            mem_oc_aux_cols.push(MemoryOfflineCheckerAuxCols::from_slice(
+                &slc[start..end],
+                air.mem_oc,
+            ));
         }
 
         Self {

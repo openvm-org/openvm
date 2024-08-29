@@ -50,7 +50,7 @@ impl<F: PrimeField32> MemoryTester<F> {
         let read = RefCell::borrow_mut(&self.chip).read_cell(addr_space, pointer);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records
-            .push(self.bus.read(address, read.data, read.prev_timestamp));
+            .push(self.bus.read(address, read.data, read.prev_timestamps[0]));
         self.records
             .push(self.bus.write(address, read.data, read.timestamp));
         read.value()
@@ -62,7 +62,7 @@ impl<F: PrimeField32> MemoryTester<F> {
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(
             self.bus
-                .read(address, write.prev_data, write.prev_timestamp),
+                .read(address, write.prev_data, write.prev_timestamps[0]),
         );
         self.records
             .push(self.bus.write(address, write.data, write.timestamp));

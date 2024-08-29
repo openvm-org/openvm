@@ -17,7 +17,9 @@ use crate::{
     memory::{
         manager::{dimensions::MemoryDimensions, trace_builder::MemoryTraceBuilder, MemoryChip},
         offline_checker::{
-            bridge::MemoryOfflineChecker, bus::MemoryBus, columns::MemoryOfflineCheckerCols,
+            bridge::MemoryOfflineChecker,
+            bus::MemoryBus,
+            columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols},
             operation::MemoryOperation,
         },
     },
@@ -43,7 +45,10 @@ impl<AB: InteractionBuilder> Air<AB> for OfflineCheckerDummyAir {
         let main = &builder.main();
 
         let local = main.row_slice(0);
-        let local = MemoryOfflineCheckerCols::<TEST_WORD_SIZE, AB::Var>::from_slice(&local);
+        let local = MemoryOfflineCheckerCols::<TEST_WORD_SIZE, AB::Var>::from_slice(
+            &local,
+            self.offline_checker,
+        );
 
         self.offline_checker
             .subair_eval(builder, local.io.into_expr::<AB>(), local.aux, true);
@@ -140,6 +145,11 @@ fn volatile_memory_offline_checker_test() {
     let accesses_buffer = mem_trace_builder.take_accesses_buffer();
     let mut checker_trace = vec![];
     for (op, aux_cols) in zip_eq(mem_ops, accesses_buffer) {
+        println!(
+            "{} {}",
+            MemoryOfflineCheckerAuxCols::<1, Val>::width(&offline_checker),
+            aux_cols.clone().flatten().len()
+        );
         checker_trace.extend(op.flatten());
         checker_trace.extend(aux_cols.flatten());
     }

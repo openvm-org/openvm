@@ -1,5 +1,3 @@
-use std::array;
-
 use afs_stark_backend::rap::AnyRap;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
@@ -14,9 +12,9 @@ use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
     field_extension::chip::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
-        EXTENSION_DEGREE,
+        EXT_DEG,
     },
-    memory::OpType,
+    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
@@ -74,7 +72,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         let divisor_inv = if record.instruction.opcode == Opcode::BBE4DIV {
             FieldExtensionArithmetic::invert(record.y)
         } else {
-            [F::zero(); EXTENSION_DEGREE]
+            [F::zero(); EXT_DEG]
         };
 
         let memory = self.memory_chip.borrow();
@@ -99,22 +97,15 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: record.x_reads.map(|read| memory.make_read_aux_cols(read)),
-                read_y_aux_cols: record.y_reads.map(|read| memory.make_read_aux_cols(read)),
-                write_aux_cols: record
-                    .z_writes
-                    .map(|write| memory.make_write_aux_cols(write)),
+                read_x_aux_cols: memory.make_read_aux_cols(record.x_read),
+                read_y_aux_cols: memory.make_read_aux_cols(record.y_read),
+                write_aux_cols: memory.make_write_aux_cols(record.z_write),
             },
         }
     }
 
     fn make_blank_row(&self) -> FieldExtensionArithmeticCols<F> {
-        let memory_chip = self.memory_chip.borrow();
-
-        let make_aux_col = |op_type| match op_type {
-            OpType::Read => memory_chip.make_disabled_read_aux_cols(),
-            OpType::Write => memory_chip.make_disabled_write_aux_cols(),
-        };
+        let oc = self.memory_chip.borrow().make_offline_checker();
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols::default(),
@@ -124,10 +115,10 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
                 is_sub: F::zero(),
                 is_mul: F::zero(),
                 is_div: F::zero(),
-                divisor_inv: [F::zero(); EXTENSION_DEGREE],
-                read_x_aux_cols: array::from_fn(|_| make_aux_col(OpType::Read)),
-                read_y_aux_cols: array::from_fn(|_| make_aux_col(OpType::Read)),
-                write_aux_cols: array::from_fn(|_| make_aux_col(OpType::Write)),
+                divisor_inv: [F::zero(); EXT_DEG],
+                read_x_aux_cols: MemoryReadAuxCols::disabled(oc),
+                read_y_aux_cols: MemoryReadAuxCols::disabled(oc),
+                write_aux_cols: MemoryWriteAuxCols::disabled(oc),
             },
         }
     }

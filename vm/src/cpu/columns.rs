@@ -206,12 +206,12 @@ impl<T: Clone> CpuAuxCols<T> {
         let reads_aux_cols = array::from_fn(|_| {
             start = end;
             end += MemoryReadAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
-            MemoryReadAuxCols::from_slice(&slc[start..end])
+            MemoryReadAuxCols::from_slice(&slc[start..end], cpu_air.memory_offline_checker)
         });
         let writes_aux_cols = array::from_fn(|_| {
             start = end;
             end += MemoryWriteAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
-            MemoryWriteAuxCols::from_slice(&slc[start..end])
+            MemoryWriteAuxCols::from_slice(&slc[start..end], cpu_air.memory_offline_checker)
         });
 
         Self {

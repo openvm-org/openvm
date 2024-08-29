@@ -18,7 +18,7 @@ use crate::{
 };
 
 pub const BETA: usize = 11;
-pub const EXTENSION_DEGREE: usize = 4;
+pub const EXT_DEG: usize = 4;
 
 /// Records an arithmetic operation that happened at run-time.
 #[derive(Clone, Debug)]
@@ -28,15 +28,15 @@ pub(crate) struct FieldExtensionArithmeticRecord<F> {
     /// Timestamp at start of instruction
     pub(crate) timestamp: usize,
     pub(crate) instruction: Instruction<F>,
-    pub(crate) x: [F; EXTENSION_DEGREE],
-    pub(crate) y: [F; EXTENSION_DEGREE],
-    pub(crate) z: [F; EXTENSION_DEGREE],
+    pub(crate) x: [F; EXT_DEG],
+    pub(crate) y: [F; EXT_DEG],
+    pub(crate) z: [F; EXT_DEG],
     /// Memory accesses for reading `x`.
-    pub(crate) x_reads: [MemoryReadRecord<1, F>; EXTENSION_DEGREE],
+    pub(crate) x_read: MemoryReadRecord<EXT_DEG, F>,
     /// Memory accesses for reading `y`.
-    pub(crate) y_reads: [MemoryReadRecord<1, F>; EXTENSION_DEGREE],
+    pub(crate) y_read: MemoryReadRecord<EXT_DEG, F>,
     /// Memory accesses for writing `z`.
-    pub(crate) z_writes: [MemoryWriteRecord<1, F>; EXTENSION_DEGREE],
+    pub(crate) z_write: MemoryWriteRecord<EXT_DEG, F>,
 }
 
 /// A chip for performing arithmetic operations over the field extension
@@ -76,14 +76,14 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
 
     pub fn accesses_per_instruction(opcode: Opcode) -> usize {
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
-        3 * EXTENSION_DEGREE
+        3 * EXT_DEG
     }
 
     pub fn process(
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> [F; EXTENSION_DEGREE] {
+    ) -> [F; EXT_DEG] {
         let Instruction {
             opcode,
             op_a,
@@ -96,15 +96,19 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
 
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
 
-        let x_reads = self.read_extension_element(d, op_b);
-        let x: [F; EXTENSION_DEGREE] = array::from_fn(|i| x_reads[i].value());
+        assert_ne!(d, F::zero());
+        assert_ne!(e, F::zero());
 
-        let y_reads = self.read_extension_element(e, op_c);
-        let y: [F; EXTENSION_DEGREE] = array::from_fn(|i| y_reads[i].value());
+        let mut memory_chip = self.memory_chip.borrow_mut();
+
+        let x_read = memory_chip.read(d, op_b);
+        let x: [F; EXT_DEG] = x_read.data;
+
+        let y_read = memory_chip.read(e, op_c);
+        let y: [F; EXT_DEG] = y_read.data;
 
         let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
-
-        let z_writes = self.write_extension_element(d, op_a, z);
+        let z_write = memory_chip.write(d, op_a, z);
 
         self.records.push(FieldExtensionArithmeticRecord {
             timestamp: from_state.timestamp,
@@ -113,43 +117,12 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             x,
             y,
             z,
-            x_reads,
-            y_reads,
-            z_writes,
+            x_read,
+            y_read,
+            z_write,
         });
 
         z
-    }
-
-    fn read_extension_element(
-        &mut self,
-        address_space: F,
-        address: F,
-    ) -> [MemoryReadRecord<1, F>; EXTENSION_DEGREE] {
-        assert_ne!(address_space, F::zero());
-
-        array::from_fn(|i| {
-            self.memory_chip
-                .borrow_mut()
-                .read_cell(address_space, address + F::from_canonical_usize(i))
-        })
-    }
-
-    fn write_extension_element(
-        &mut self,
-        address_space: F,
-        address: F,
-        result: [F; EXTENSION_DEGREE],
-    ) -> [MemoryWriteRecord<1, F>; EXTENSION_DEGREE] {
-        assert_ne!(address_space, F::zero());
-
-        array::from_fn(|i| {
-            self.memory_chip.borrow_mut().write_cell(
-                address_space,
-                address + F::from_canonical_usize(i),
-                result[i],
-            )
-        })
     }
 
     pub fn current_height(&self) -> usize {
@@ -165,9 +138,9 @@ impl FieldExtensionArithmetic {
     /// Returns None for opcodes not in cpu::FIELD_EXTENSION_INSTRUCTIONS.
     pub(crate) fn solve<T: Field>(
         op: Opcode,
-        x: [T; EXTENSION_DEGREE],
-        y: [T; EXTENSION_DEGREE],
-    ) -> Option<[T; EXTENSION_DEGREE]> {
+        x: [T; EXT_DEG],
+        y: [T; EXT_DEG],
+    ) -> Option<[T; EXT_DEG]> {
         match op {
             Opcode::FE4ADD => Some(Self::add(x, y)),
             Opcode::FE4SUB => Some(Self::subtract(x, y)),
@@ -177,10 +150,7 @@ impl FieldExtensionArithmetic {
         }
     }
 
-    pub(crate) fn add<V, E>(
-        x: [V; EXTENSION_DEGREE],
-        y: [V; EXTENSION_DEGREE],
-    ) -> [E; EXTENSION_DEGREE]
+    pub(crate) fn add<V, E>(x: [V; EXT_DEG], y: [V; EXT_DEG]) -> [E; EXT_DEG]
     where
         V: Copy,
         V: Add<V, Output = E>,
@@ -188,10 +158,7 @@ impl FieldExtensionArithmetic {
         array::from_fn(|i| x[i] + y[i])
     }
 
-    pub(crate) fn subtract<V, E>(
-        x: [V; EXTENSION_DEGREE],
-        y: [V; EXTENSION_DEGREE],
-    ) -> [E; EXTENSION_DEGREE]
+    pub(crate) fn subtract<V, E>(x: [V; EXT_DEG], y: [V; EXT_DEG]) -> [E; EXT_DEG]
     where
         V: Copy,
         V: Sub<V, Output = E>,
@@ -199,10 +166,7 @@ impl FieldExtensionArithmetic {
         array::from_fn(|i| x[i] - y[i])
     }
 
-    pub(crate) fn multiply<V, E>(
-        x: [V; EXTENSION_DEGREE],
-        y: [V; EXTENSION_DEGREE],
-    ) -> [E; EXTENSION_DEGREE]
+    pub(crate) fn multiply<V, E>(x: [V; EXT_DEG], y: [V; EXT_DEG]) -> [E; EXT_DEG]
     where
         E: AbstractField,
         V: Copy,
@@ -221,14 +185,11 @@ impl FieldExtensionArithmetic {
         ]
     }
 
-    pub(crate) fn divide<F: Field>(
-        x: [F; EXTENSION_DEGREE],
-        y: [F; EXTENSION_DEGREE],
-    ) -> [F; EXTENSION_DEGREE] {
+    pub(crate) fn divide<F: Field>(x: [F; EXT_DEG], y: [F; EXT_DEG]) -> [F; EXT_DEG] {
         Self::multiply(x, Self::invert(y))
     }
 
-    pub(crate) fn invert<T: Field>(a: [T; EXTENSION_DEGREE]) -> [T; EXTENSION_DEGREE] {
+    pub(crate) fn invert<T: Field>(a: [T; EXT_DEG]) -> [T; EXT_DEG] {
         // Let a = (a0, a1, a2, a3) represent the element we want to invert.
         // Define a' = (a0, -a1, a2, -a3).  By construction, the product b = a * a' will have zero
         // degree-1 and degree-3 coefficients.
