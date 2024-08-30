@@ -32,7 +32,8 @@ pub mod utils;
     deserialize = "ProverTraceData<SC>: Deserialize<'de>"
 ))]
 pub struct CommittedPage<SC: StarkGenericConfig> {
-    /// The unique identifier for the page
+    /// The unique identifier for the page (currently used as the table name, but this will change in the future
+    /// with the various architecture changes. To support SQL table names, this is a lowercase alpha string.)
     pub page_id: String,
     /// The schema of the Page
     pub schema: Schema,
@@ -78,7 +79,15 @@ where
         }
     }
 
-    pub fn for_keygen(schema: Schema, schema_num_idx_fields: usize) -> Self {
+    pub fn new_from_paths(page_path: &str, schema_path: &str) -> Self {
+        let page = std::fs::read(page_path).unwrap();
+        let page: Page = bincode::deserialize(&page).unwrap();
+        let schema = std::fs::read(schema_path).unwrap();
+        let schema: Schema = bincode::deserialize(&schema).unwrap();
+        Self::new(schema, page)
+    }
+
+    pub fn new_for_keygen(schema: Schema, schema_num_idx_fields: usize) -> Self {
         let page_id = generate_random_alpha_string(32);
         let empty_page = Page::from_page_cols(vec![]);
         Self {
@@ -159,36 +168,4 @@ impl<SC: StarkGenericConfig> std::fmt::Debug for CommittedPage<SC> {
             self.page_id, self.schema, self.page
         )
     }
-}
-
-#[macro_export]
-macro_rules! committed_page {
-    ($name:expr, $page_path:expr, $schema_path:expr, $config:tt) => {{
-        let page_path = std::fs::read($page_path).unwrap();
-        let page: Page = bincode::deserialize(&page_path).unwrap();
-        let schema_path = std::fs::read($schema_path).unwrap();
-        let schema: Schema = bincode::deserialize(&schema_path).unwrap();
-        $crate::common::committed_page::CommittedPage::<$config>::new_with_page_id(
-            $name, schema, page,
-        )
-    }};
-    ($page_path:expr, $schema_path:expr, $config:tt) => {{
-        let page_path = std::fs::read($page_path).unwrap();
-        let page: Page = bincode::deserialize(&page_path).unwrap();
-        let schema_path = std::fs::read($schema_path).unwrap();
-        let schema: Schema = bincode::deserialize(&schema_path).unwrap();
-        $crate::common::committed_page::CommittedPage::<$config>::new(schema, page)
-    }};
-}
-
-#[macro_export]
-macro_rules! keygen_schema {
-    ($schema_path:expr, $num_idx_fields:expr, $config:tt) => {{
-        let schema_path = std::fs::read($schema_path).unwrap();
-        let schema: Schema = bincode::deserialize(&schema_path).unwrap();
-        $crate::common::committed_page::CommittedPage::<$config>::for_keygen(
-            schema,
-            $num_idx_fields,
-        )
-    }};
 }

@@ -47,7 +47,7 @@ where
         )
     }
 
-    pub async fn execute(filter: &AxdbExpr, page: CommittedPage<SC>) -> Result<CommittedPage<SC>> {
+    pub async fn execute(filter: &AxdbExpr, page: &CommittedPage<SC>) -> Result<CommittedPage<SC>> {
         let (_, comp, right_value) = filter.decompose_binary_expr();
         let right_value = match right_value {
             AxdbExpr::Literal(lit) => lit,

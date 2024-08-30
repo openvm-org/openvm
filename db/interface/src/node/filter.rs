@@ -82,7 +82,7 @@ where
     #[instrument(level = "info", skip_all)]
     async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
         let input = self.input_clone().await;
-        let output = FilterFn::<SC, E>::execute(&self.predicate, input).await?;
+        let output = FilterFn::<SC, E>::execute(&self.predicate, &input).await?;
         self.output = Some(output);
         Ok(())
     }

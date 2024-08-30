@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use afs_page::common::page::Page;
 use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
 use axdb_interface::{
-    committed_page, common::committed_page::CommittedPage, controller::AxdbController,
-    keygen_schema, NUM_IDX_COLS, PCS_LOG_DEGREE,
+    common::committed_page::CommittedPage, controller::AxdbController, NUM_IDX_COLS, PCS_LOG_DEGREE,
 };
 use datafusion::{
     arrow::{
@@ -19,11 +17,9 @@ use datafusion::{
 pub async fn run_keygen() {
     let ctx = SessionContext::new();
 
-    let cp = keygen_schema!(
-        "tests/data/example.schema.bin",
-        NUM_IDX_COLS,
-        BabyBearPoseidon2Config
-    );
+    let schema = std::fs::read("tests/data/example.schema.bin").unwrap();
+    let schema: Schema = bincode::deserialize(&schema).unwrap();
+    let cp = CommittedPage::<BabyBearPoseidon2Config>::new_for_keygen(schema, NUM_IDX_COLS);
 
     let page_id = cp.page_id.clone();
     ctx.register_table(page_id.clone(), Arc::new(cp.clone()))
@@ -53,11 +49,9 @@ pub async fn run_execute() {
     //     .await
     //     .unwrap();
 
-    let cp = committed_page!(
-        "example",
+    let cp = CommittedPage::<BabyBearPoseidon2Config>::new_from_paths(
         "tests/data/example.page.bin",
         "tests/data/example.schema.bin",
-        BabyBearPoseidon2Config
     );
 
     let page_id = cp.page_id.clone();
@@ -106,11 +100,9 @@ pub async fn test_execute() {
 pub async fn test_page_scan_with_filter() {
     let ctx = SessionContext::new();
 
-    let cp = committed_page!(
-        "example",
+    let cp = CommittedPage::<BabyBearPoseidon2Config>::new_from_paths(
         "tests/data/example.page.bin",
         "tests/data/example.schema.bin",
-        BabyBearPoseidon2Config
     );
     let page_id = cp.page_id.clone();
     ctx.register_table(page_id.clone(), Arc::new(cp.clone()))
@@ -136,11 +128,10 @@ pub async fn test_page_scan_with_filter() {
         axdb.axdb_execution_plan
     );
 
-    axdb.execute().await.unwrap();
-
     // After running keygen once, you will not need to run it again for the same LogicalPlan
     axdb.keygen().await.unwrap();
 
+    axdb.execute().await.unwrap();
     axdb.prove().await.unwrap();
     axdb.verify().await.unwrap();
 
@@ -150,11 +141,9 @@ pub async fn test_page_scan_with_filter() {
 
 #[tokio::test]
 pub async fn test_validate_ingestion() {
-    let cp_file = committed_page!(
-        "example",
+    let cp_file = CommittedPage::<BabyBearPoseidon2Config>::new_from_paths(
         "tests/data/example.page.bin",
         "tests/data/example.schema.bin",
-        BabyBearPoseidon2Config
     );
 
     let cp = CommittedPage::<BabyBearPoseidon2Config>::from_cols(

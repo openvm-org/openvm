@@ -112,7 +112,7 @@ where
 
         if !self.filters.is_empty() {
             for filter in &self.filters {
-                committed_page = FilterFn::<SC, E>::execute(filter, committed_page).await?;
+                committed_page = FilterFn::<SC, E>::execute(filter, &committed_page).await?;
                 self.filter_io.push(committed_page.clone());
             }
         }
