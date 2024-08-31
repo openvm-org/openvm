@@ -35,8 +35,9 @@ pub struct ModularArithmeticCols<T> {
 impl<T: Clone> ModularArithmeticCols<T> {
     pub fn from_slice(slc: &[T], num_limbs: usize, q_limbs: usize, carry_limbs: usize) -> Self {
         // The modulus p has num_limbs limbs.
-        // So all the numbers (x, y, q, r) we operate on have num_limbs limbs.
-        // The carries are for the expression xy - pq -r so it should be 2 * num_limbs - 1.
+        // So the numbers (x, y, r) we operate on have num_limbs limbs.
+        // The carries are for the expression will be 2 * num_limbs - 1 for mul and div, and num_limbs for add and sub.
+        // q limbs will be num_limbs for mul and div, and 1 for add and sub.
         let x = slc[0..num_limbs].to_vec();
         let y = slc[num_limbs..2 * num_limbs].to_vec();
         let r = slc[2 * num_limbs..3 * num_limbs].to_vec();
