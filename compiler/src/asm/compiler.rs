@@ -7,7 +7,7 @@ use stark_vm::program::DebugInfo;
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
     asm::AsmInstruction,
-    ir::{Array, DslIr, Ext, Felt, Ptr, RVar, Var},
+    ir::{Array, DslIr, Ext, Felt, Ptr, RVar, Usize, Var},
     prelude::{MemIndex, TracedVec},
 };
 
@@ -576,7 +576,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                                 AsmInstruction::Keccak256FixLen(
                                     output.fp(),
                                     input.fp(),
-                                    F::from_canonical_usize(fix_len),
+                                    *fix_len.borrow(),
                                 ),
                                 debug_info,
                             );

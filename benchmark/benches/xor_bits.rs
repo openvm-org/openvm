@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::xor_bits::XorBitsChip;
+use afs_primitives::xor::{bits::XorBitsChip, bus::XorBus};
 use afs_test_utils::utils::create_seeded_rng;
 use criterion::{criterion_group, criterion_main, Criterion};
 use p3_baby_bear::BabyBear;
@@ -15,7 +15,7 @@ pub fn xor_bits_benchmark(c: &mut Criterion) {
 
     let mut rng = create_seeded_rng();
 
-    let bus_index = 0;
+    let bus = XorBus(0);
 
     const BITS: usize = 30;
     const MAX: u32 = 1 << BITS;
@@ -23,7 +23,7 @@ pub fn xor_bits_benchmark(c: &mut Criterion) {
     const LOG_XOR_REQUESTS: usize = 20;
     const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
 
-    let xor_chip = Arc::new(XorBitsChip::<BITS>::new(bus_index, vec![]));
+    let xor_chip = Arc::new(XorBitsChip::<BITS>::new(bus, vec![]));
 
     for _ in 0..XOR_REQUESTS {
         xor_chip.request(rng.gen::<u32>() % MAX, rng.gen::<u32>() % MAX);

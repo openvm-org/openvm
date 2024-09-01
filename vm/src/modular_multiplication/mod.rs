@@ -103,24 +103,20 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
         let address1 = vm
             .memory_chip
             .borrow_mut()
-            .read(instruction.d, instruction.op_a)
-            .op
-            .cell
-            .data[0];
+            .read_cell(instruction.d, instruction.op_a)
+            .value();
+
         let address2 = vm
             .memory_chip
             .borrow_mut()
-            .read(instruction.d, op_input_2)
-            .op
-            .cell
-            .data[0];
+            .read_cell(instruction.d, op_input_2)
+            .value();
+
         let output_address = vm
             .memory_chip
             .borrow_mut()
-            .read(instruction.d, op_result)
-            .op
-            .cell
-            .data[0];
+            .read_cell(instruction.d, op_result)
+            .value();
 
         let chip: ModularArithmeticChip<F> = todo!();
         let air = &chip.air;
@@ -130,22 +126,19 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             .map(|i| {
                 vm.memory_chip
                     .borrow_mut()
-                    .read(instruction.e, address1 + F::from_canonical_usize(i))
-                    .op
-                    .cell
-                    .data[0]
+                    .read_cell(instruction.e, address1 + F::from_canonical_usize(i))
+                    .value()
             })
             .collect();
         let argument_2_elems = (0..num_elems)
             .map(|i| {
                 vm.memory_chip
                     .borrow_mut()
-                    .read(instruction.e, address2 + F::from_canonical_usize(i))
-                    .op
-                    .cell
-                    .data[0]
+                    .read_cell(instruction.e, address2 + F::from_canonical_usize(i))
+                    .value()
             })
             .collect();
+
         let argument_1 = elems_to_bigint(argument_1_elems, repr_bits);
         let argument_2 = elems_to_bigint(argument_2_elems, repr_bits);
         let result = match instruction.opcode {
@@ -166,7 +159,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
         } % modulus;
         let result_elems = bigint_to_elems(result, repr_bits, num_elems);
         for (i, &elem) in result_elems.iter().enumerate() {
-            vm.memory_chip.borrow_mut().write(
+            vm.memory_chip.borrow_mut().write_cell(
                 instruction.e,
                 output_address + F::from_canonical_usize(i),
                 elem,

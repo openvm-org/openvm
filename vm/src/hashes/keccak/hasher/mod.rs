@@ -19,7 +19,7 @@ use crate::{
         instructions::Opcode,
     },
     cpu::trace::Instruction,
-    memory::manager::{MemoryAccess, MemoryChipRef},
+    memory::manager::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
 };
 
 /// Memory reads to get dst, src, len
@@ -65,17 +65,17 @@ pub struct KeccakVmChip<F: PrimeField32> {
 #[derive(Clone, Debug)]
 pub struct KeccakRecord<F> {
     pub pc: F,
-    pub dst_read: MemoryAccess<1, F>,
-    pub src_read: MemoryAccess<1, F>,
-    pub len_read: MemoryAccess<1, F>,
+    pub dst_read: MemoryReadRecord<1, F>,
+    pub src_read: MemoryReadRecord<1, F>,
+    pub len_read: MemoryReadRecord<1, F>,
     pub input_blocks: Vec<KeccakInputBlock<F>>,
-    pub digest_writes: [MemoryAccess<1, F>; KECCAK_DIGEST_WRITES],
+    pub digest_writes: [MemoryWriteRecord<1, F>; KECCAK_DIGEST_WRITES],
 }
 
 #[derive(Clone, Debug)]
 pub struct KeccakInputBlock<F> {
     /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES].
-    pub bytes_read: Vec<MemoryAccess<1, F>>,
+    pub bytes_read: Vec<MemoryReadRecord<1, F>>,
     /// Bytes with padding. Can be derived from `bytes_read` but we store for convenience.
     pub padded_bytes: [u8; KECCAK_RATE_BYTES],
     pub remaining_len: usize,
@@ -126,9 +126,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let src_read = memory.read(d, b);
         let len_read = memory.read(f, c);
 
-        let dst = dst_read.op.cell.data[0];
-        let mut src = src_read.op.cell.data[0];
-        let len = len_read.op.cell.data[0];
+        let dst = dst_read.value();
+        let mut src = src_read.value();
+        let len = len_read.value();
         let byte_len = len.as_canonical_u32() as usize;
 
         let num_blocks = num_keccak_f(byte_len);
@@ -144,13 +144,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             let bytes: [_; KECCAK_RATE_BYTES] = from_fn(|i| {
                 if i < remaining_len {
                     let byte_read = memory.read(e, src + F::from_canonical_usize(i));
-                    let byte = byte_read.op.cell.data[0]
+                    let byte = byte_read
+                        .value()
                         .as_canonical_u32()
                         .try_into()
                         .expect("Memory cell not a byte");
                     bytes_read.push(byte_read);
                     byte
                 } else {
+                    memory.increment_timestamp();
                     0u8
                 }
             });
@@ -185,15 +187,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             memory.write(
                 e,
                 dst + F::from_canonical_usize(i),
-                F::from_canonical_u16(limb),
+                [F::from_canonical_u16(limb)],
             )
         });
         tracing::trace!("[runtime] keccak256 output: {:?}", output);
 
         let record = KeccakRecord {
             pc: F::from_canonical_usize(from_state.pc),
-            src_read,
             dst_read,
+            src_read,
             len_read,
             input_blocks,
             digest_writes,
@@ -207,7 +209,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         memory.jump_timestamp(F::from_canonical_usize(to_timestamp));
 
         ExecutionState {
-            pc: from_state.pc,
+            pc: from_state.pc + 1,
             timestamp: to_timestamp,
         }
     }
@@ -230,28 +232,28 @@ impl<F: PrimeField32> Default for KeccakInputBlock<F> {
 
 impl<F: Copy> KeccakRecord<F> {
     pub fn operands(&self) -> [F; 6] {
-        let a = self.dst_read.op.pointer;
-        let b = self.src_read.op.pointer;
-        let c = self.len_read.op.pointer;
-        let d = self.dst_read.op.addr_space;
-        let e = self.digest_writes[0].op.addr_space;
-        let f = self.len_read.op.addr_space;
+        let a = self.dst_read.pointer;
+        let b = self.src_read.pointer;
+        let c = self.len_read.pointer;
+        let d = self.dst_read.address_space;
+        let e = self.digest_writes[0].address_space;
+        let f = self.len_read.address_space;
         [a, b, c, d, e, f]
     }
 
     pub fn start_timestamp(&self) -> F {
-        self.src_read.op.cell.clk
+        self.dst_read.timestamp
     }
 
     pub fn src(&self) -> F {
-        self.src_read.op.cell.data[0]
+        self.src_read.value()
     }
 
     pub fn dst(&self) -> F {
-        self.dst_read.op.cell.data[0]
+        self.dst_read.value()
     }
 
     pub fn len(&self) -> F {
-        self.len_read.op.cell.data[0]
+        self.len_read.value()
     }
 }

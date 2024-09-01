@@ -36,6 +36,6 @@ jobs:
           cargo test --profile=fast --features parallel
 
       - name: Run compiler crate tests
-        working-directory: vm
+        working-directory: compiler
         run: |
           cargo test --profile=fast --features parallel

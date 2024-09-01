@@ -1,5 +1,4 @@
 use std::{
-    array,
     collections::{BTreeMap, VecDeque},
     error::Error,
     fmt::Display,
@@ -16,8 +15,8 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    timestamp_delta, CpuChip, CpuState, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
-    CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+    timestamp_delta, CpuChip, CpuState, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE,
+    INST_WIDTH,
 };
 use crate::{
     arch::{
@@ -28,8 +27,7 @@ use crate::{
             CORE_INSTRUCTIONS,
         },
     },
-    cpu::WORD_SIZE,
-    memory::manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
+    cpu::{columns::CpuMemoryAccessCols, WORD_SIZE},
     vm::ExecutionSegment,
 };
 
@@ -226,6 +224,11 @@ impl<F: PrimeField32> CpuChip<F> {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
+            let from_state = ExecutionState {
+                pc: pc_usize,
+                timestamp,
+            };
+
             let (instruction, debug_info) =
                 vm.program_chip.borrow_mut().get_instruction(pc_usize)?;
             tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
@@ -260,61 +263,25 @@ impl<F: PrimeField32> CpuChip<F> {
 
             let mut next_pc = pc + F::one();
 
-            let mut mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] =
-                array::from_fn(|_| MemoryOperation::<1, F>::default());
-            let mut mem_read_trace_builder = MemoryTraceBuilder::new(vm.memory_chip.clone());
-            let mut mem_write_trace_builder = MemoryTraceBuilder::new(vm.memory_chip.clone());
-            let mut num_reads = 0;
-            let mut num_writes = 0;
+            let mut write_records = vec![];
+            let mut read_records = vec![];
 
             let prev_trace_cells = vm.current_trace_cells();
 
             macro_rules! read {
                 ($addr_space: expr, $pointer: expr) => {{
-                    num_reads += 1;
-                    assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
-
-                    mem_ops[num_reads - 1] =
-                        mem_read_trace_builder.read_cell($addr_space, $pointer);
-                    mem_ops[num_reads - 1].cell.data[0]
-                }};
-            }
-
-            macro_rules! disabled_read {
-                () => {{
-                    num_reads += 1;
-                    assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
-
-                    mem_ops[num_reads - 1] = mem_read_trace_builder.disabled_read(F::one());
+                    assert!(read_records.len() < CPU_MAX_READS_PER_CYCLE);
+                    let mut memory_chip = vm.memory_chip.borrow_mut();
+                    read_records.push(memory_chip.read_cell($addr_space, $pointer));
+                    read_records[read_records.len() - 1].data[0]
                 }};
             }
 
             macro_rules! write {
                 ($addr_space: expr, $pointer: expr, $data: expr) => {{
-                    // First, finalize the read accesses
-                    while num_reads < CPU_MAX_READS_PER_CYCLE {
-                        disabled_read!();
-                    }
-
-                    num_writes += 1;
-                    assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
-
-                    mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                        mem_write_trace_builder.write_cell($addr_space, $pointer, $data);
-                }};
-            }
-
-            macro_rules! generate_disabled_ops {
-                () => {{
-                    while num_reads < CPU_MAX_READS_PER_CYCLE {
-                        disabled_read!();
-                    }
-
-                    while num_writes < CPU_MAX_WRITES_PER_CYCLE {
-                        num_writes += 1;
-                        mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                            mem_write_trace_builder.disabled_write(F::one());
-                    }
+                    assert!(write_records.len() < CPU_MAX_WRITES_PER_CYCLE);
+                    let mut memory_chip = vm.memory_chip.borrow_mut();
+                    write_records.push(memory_chip.write_cell($addr_space, $pointer, $data));
                 }};
             }
 
@@ -325,8 +292,6 @@ impl<F: PrimeField32> CpuChip<F> {
             let mut public_value_flags = vec![F::zero(); num_public_values];
 
             if vm.executors.contains_key(&opcode) {
-                generate_disabled_ops!();
-
                 let executor = vm.executors.get_mut(&opcode).unwrap();
                 let next_state = InstructionExecutor::execute(
                     executor,
@@ -454,11 +419,85 @@ impl<F: PrimeField32> CpuChip<F> {
                 timestamp += timestamp_delta(opcode);
             }
 
+            // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
+            // and move this logic into generate_trace().
+            {
+                let memory_chip = vm.memory_chip.borrow();
+
+                let mut read_cols = read_records
+                    .iter()
+                    .cloned()
+                    .map(CpuMemoryAccessCols::from_read_record)
+                    .collect_vec();
+                let mut reads_aux_cols = read_records
+                    .iter()
+                    .cloned()
+                    .map(|read| memory_chip.make_read_aux_cols(read))
+                    .collect_vec();
+
+                // icky timestamp calculation for disabled reads
+                let timestamp = read_records
+                    .last()
+                    .map(|read| read.timestamp + F::one())
+                    .unwrap_or(F::from_canonical_usize(from_state.timestamp));
+
+                while read_cols.len() < CPU_MAX_READS_PER_CYCLE {
+                    read_cols.push(CpuMemoryAccessCols::disabled(timestamp));
+                    reads_aux_cols.push(memory_chip.make_disabled_read_aux_cols());
+                }
+
+                let timestamp = write_records
+                    .last()
+                    .map(|write| write.timestamp + F::one())
+                    .unwrap_or(timestamp);
+
+                let mut write_cols = write_records
+                    .iter()
+                    .cloned()
+                    .map(CpuMemoryAccessCols::from_write_record)
+                    .collect_vec();
+                let mut writes_aux_cols = write_records
+                    .iter()
+                    .cloned()
+                    .map(|write| memory_chip.make_write_aux_cols(write))
+                    .collect_vec();
+                while write_cols.len() < CPU_MAX_WRITES_PER_CYCLE {
+                    write_cols.push(CpuMemoryAccessCols::disabled(timestamp));
+                    writes_aux_cols.push(memory_chip.make_disabled_write_aux_cols());
+                }
+
+                let mut operation_flags = BTreeMap::new();
+                for other_opcode in CORE_INSTRUCTIONS {
+                    operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
+                }
+
+                let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
+                    &IsEqualVecAir::new(WORD_SIZE),
+                    (vec![read_cols[0].value], vec![read_cols[1].value]),
+                );
+
+                let read0_equals_read1 = is_equal_vec_cols.io.is_equal;
+                let is_equal_vec_aux = is_equal_vec_cols.aux;
+
+                let aux = CpuAuxCols {
+                    operation_flags,
+                    public_value_flags,
+                    reads: read_cols.try_into().unwrap(),
+                    writes: write_cols.try_into().unwrap(),
+                    read0_equals_read1,
+                    is_equal_vec_aux,
+                    reads_aux_cols: reads_aux_cols.try_into().unwrap(),
+                    writes_aux_cols: writes_aux_cols.try_into().unwrap(),
+                };
+
+                let cols = CpuCols { io, aux };
+                vm.cpu_chip.borrow_mut().rows.push(cols.flatten());
+            }
+
             let now_trace_cells = vm.current_trace_cells();
             let added_trace_cells = now_trace_cells - prev_trace_cells;
 
             if collect_metrics {
-                //vm.update_chip_metrics();
                 vm.collected_metrics
                     .opcode_counts
                     .entry(opcode.to_string())
@@ -480,52 +519,11 @@ impl<F: PrimeField32> CpuChip<F> {
                     .or_insert(added_trace_cells);
             }
 
-            // Finalizing memory accesses
-            for mem_op in &mut mem_ops[num_reads..CPU_MAX_READS_PER_CYCLE] {
-                *mem_op = mem_read_trace_builder.disabled_read(F::one());
-            }
-            for mem_op in
-                &mut mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes..CPU_MAX_ACCESSES_PER_CYCLE]
-            {
-                *mem_op = mem_write_trace_builder.disabled_write(F::one());
-            }
-
-            let mem_oc_aux_cols: Vec<_> = mem_read_trace_builder
-                .take_accesses_buffer()
-                .into_iter()
-                .chain(mem_write_trace_builder.take_accesses_buffer())
-                .collect();
-            let mem_oc_aux_cols = mem_oc_aux_cols.try_into().unwrap();
-
-            let mut operation_flags = BTreeMap::new();
-            for other_opcode in CORE_INSTRUCTIONS {
-                operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
-            }
-
-            let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
-                &IsEqualVecAir::new(WORD_SIZE),
-                (mem_ops[0].cell.data.to_vec(), mem_ops[1].cell.data.to_vec()),
-            );
-
-            let read0_equals_read1 = is_equal_vec_cols.io.is_equal;
-            let is_equal_vec_aux = is_equal_vec_cols.aux;
-
-            let aux = CpuAuxCols {
-                operation_flags,
-                public_value_flags,
-                mem_ops,
-                read0_equals_read1,
-                is_equal_vec_aux,
-                mem_oc_aux_cols,
-            };
-
-            let cols = CpuCols { io, aux };
-            vm.cpu_chip.borrow_mut().rows.push(cols.flatten());
-
             pc = next_pc;
 
             clock_cycle += 1;
-            if opcode == TERMINATE {
+            if opcode == TERMINATE && collect_metrics {
+                vm.update_chip_metrics();
                 // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
                 collect_metrics = false;
             }
@@ -542,6 +540,9 @@ impl<F: PrimeField32> CpuChip<F> {
             if vm.should_segment() {
                 break;
             }
+        }
+        if collect_metrics {
+            vm.update_chip_metrics();
         }
 
         // Update CPU chip state with all changes from this segment.
@@ -575,7 +576,7 @@ impl<F: PrimeField32> CpuChip<F> {
 }
 
 impl<F: PrimeField32> MachineChip<F> for CpuChip<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(mut self) -> RowMajorMatrix<F> {
         if !self.state.is_done {
             self.pad_rows();
         }

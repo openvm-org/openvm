@@ -157,7 +157,7 @@ impl KeccakVmAir {
                 .read(MemoryAddress::new(addr_sp, ptr), [value], timestamp.clone())
                 .eval(builder, should_receive.clone());
 
-            timestamp = timestamp + AB::Expr::one();
+            timestamp += AB::Expr::one();
         }
         timestamp
     }
@@ -193,6 +193,7 @@ impl KeccakVmAir {
             // if used as `count` in interaction
             let count = is_input.clone() * not(is_padding);
 
+            // reminder: input is currently range checked to be 8-bits in `constrain_absorb` by the XOR lookup
             memory_bridge
                 .read(
                     MemoryAddress::new(local.opcode.e, ptr),
@@ -201,7 +202,7 @@ impl KeccakVmAir {
                 )
                 .eval(builder, count);
 
-            timestamp = timestamp + AB::Expr::one();
+            timestamp += AB::Expr::one();
         }
         timestamp
     }

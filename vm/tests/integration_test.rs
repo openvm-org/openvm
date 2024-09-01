@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use afs_test_utils::{
     config::{
-        baby_bear_poseidon2::{engine_from_perm, random_perm},
+        baby_bear_poseidon2::{default_perm, engine_from_perm, random_perm},
         fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
         setup_tracing_with_log_level,
     },
@@ -45,17 +45,17 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
     );
 
     // TODO: using log_blowup = 3 because keccak interaction chunking is not optimal right now
-    let perm = random_perm();
+    let perm = default_perm();
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
         fri_params_fast_testing()[1]
     } else {
         fri_params_with_80_bits_of_security()[1]
     };
-    let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
     let result = vm.execute_and_generate().unwrap();
 
     for segment_result in result.segment_results {
+        let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
         let airs = segment_result.airs.iter().map(Box::deref).collect();
         engine
             .run_simple_test(airs, segment_result.traces, segment_result.public_values)
@@ -241,6 +241,7 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(STOREW, 1, 6, 0, 0, 1),
         Instruction::from_isize(STOREW, 2, 7, 0, 0, 1),
         Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
         Instruction::from_isize(FE4SUB, 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4MUL, 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4DIV, 12, 0, 4, 1, 1),
@@ -354,7 +355,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     instructions.push(Instruction::from_isize(JAL, 0, 2, 0, 1, 1)); // skip fail
     instructions.push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
 
-    let [a, b, c] = [1, 0, (1 << 30) - 1];
+    let [a, b, c] = [1, 0, (1 << LIMB_BITS) - 1];
     // src = word[b]_1 <- 0
     let src = 0;
     instructions.push(Instruction::from_isize(STOREW, src, 0, b, 0, 1));
@@ -384,8 +385,11 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
             2,
         ));
     }
-    // dst = word[1]_1, src = word[0]_1, read and write to address space 2
-    instructions.push(Instruction::from_isize(KECCAK256, a, b, c, 1, 2));
+    // dst = word[a]_1, src = word[b]_1, len = word[c]_1,
+    // read and write io to address space 2
+    instructions.push(Instruction::large_from_isize(
+        KECCAK256, a, b, c, 1, 2, 1, 0,
+    ));
 
     // read expected result to check correctness
     for i in 0..KECCAK_DIGEST_U16S {

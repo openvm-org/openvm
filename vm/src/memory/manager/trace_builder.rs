@@ -1,7 +1,7 @@
 use p3_field::PrimeField32;
 
-use super::{operation::MemoryOperation, MemoryAccess, MemoryChipRef};
-use crate::memory::{offline_checker::columns::MemoryOfflineCheckerAuxCols, OpType};
+use super::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord};
+use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 const WORD_SIZE: usize = 1;
 
@@ -23,12 +23,14 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         }
     }
 
-    pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryOperation<WORD_SIZE, F> {
-        let mem_access = self.memory_chip.borrow_mut().read(addr_space, pointer);
-        self.accesses_buffer
-            .push(self.aux_col_from_access(&mem_access));
+    pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryReadRecord<WORD_SIZE, F> {
+        let mut memory_chip = self.memory_chip.borrow_mut();
+        let read = memory_chip.read_cell(addr_space, pointer);
+        let aux_cols = memory_chip.make_read_aux_cols(read.clone());
 
-        mem_access.op
+        self.accesses_buffer.push(aux_cols);
+
+        read
     }
 
     pub fn write_cell(
@@ -36,44 +38,23 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         addr_space: F,
         pointer: F,
         data: F,
-    ) -> MemoryOperation<WORD_SIZE, F> {
-        let mem_access = self
-            .memory_chip
-            .borrow_mut()
-            .write(addr_space, pointer, data);
-        self.accesses_buffer
-            .push(self.aux_col_from_access(&mem_access));
+    ) -> MemoryWriteRecord<WORD_SIZE, F> {
+        let mut memory_chip = self.memory_chip.borrow_mut();
+        let write = memory_chip.write_cell(addr_space, pointer, data);
+        let aux_cols = memory_chip.make_write_aux_cols(write.clone());
 
-        mem_access.op
+        self.accesses_buffer.push(aux_cols);
+
+        write
     }
 
     pub fn read_elem(&mut self, addr_space: F, pointer: F) -> F {
-        self.read_cell(addr_space, pointer).cell.data[0]
+        self.read_cell(addr_space, pointer).data[0]
     }
 
-    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
-    pub fn disabled_read(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
-        self.disabled_op(addr_space, OpType::Read)
-    }
-
-    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
-    pub fn disabled_write(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
-        self.disabled_op(addr_space, OpType::Write)
-    }
-
-    pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryOperation<WORD_SIZE, F> {
-        debug_assert_ne!(
-            addr_space,
-            F::zero(),
-            "Disabled memory operation cannot be immediate"
-        );
-        let clk = self.memory_chip.borrow().timestamp();
-        let mem_access = MemoryAccess::disabled_op(clk, addr_space, op_type);
-
+    pub fn disabled_op(&mut self) {
         self.accesses_buffer
-            .push(self.aux_col_from_access(&mem_access));
-
-        mem_access.op
+            .push(self.memory_chip.borrow().make_disabled_write_aux_cols());
     }
 
     // TODO[jpw]: rename increment_timestamp
@@ -83,12 +64,5 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
 
     pub fn take_accesses_buffer(&mut self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {
         std::mem::take(&mut self.accesses_buffer)
-    }
-
-    pub fn aux_col_from_access(
-        &self,
-        access: &MemoryAccess<WORD_SIZE, F>,
-    ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
-        self.memory_chip.borrow().make_access_cols(access.clone())
     }
 }

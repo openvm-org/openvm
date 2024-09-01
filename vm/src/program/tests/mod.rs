@@ -39,6 +39,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
         execution_frequencies[pc] += 1;
         chip.get_instruction(pc).unwrap();
     }
+    let air = chip.air.clone();
     let trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(9, true, READ_INSTRUCTION_BUS);
@@ -59,7 +60,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     }
 
     // Pad program cells with zeroes to make height a power of two.
-    let width = chip.air.width() + ProgramPreprocessedCols::<BabyBear>::get_width();
+    let width = air.width() + ProgramPreprocessedCols::<BabyBear>::get_width();
     let desired_height = instructions.len().next_power_of_two();
     let cells_to_add = desired_height * width - instructions.len() * width;
     program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
@@ -68,7 +69,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     println!("trace height = {}", trace.height());
     println!("counter trace height = {}", counter_trace.height());
 
-    run_simple_test_no_pis(vec![&chip.air, &counter_air], vec![trace, counter_trace])
+    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
         .expect("Verification failed");
 }
 
@@ -142,6 +143,7 @@ fn test_program_negative() {
     for pc in 0..instructions.len() {
         chip.get_instruction(pc).unwrap();
     }
+    let air = chip.air.clone();
     let trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
@@ -161,6 +163,6 @@ fn test_program_negative() {
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
-    run_simple_test_no_pis(vec![&chip.air, &counter_air], vec![trace, counter_trace])
+    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
         .expect("Incorrect failure mode");
 }

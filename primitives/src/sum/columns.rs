@@ -22,7 +22,8 @@ impl<T: Clone> SumCols<T> {
         let partial_sum = slc[cols.partial_sum].clone();
         let is_final = slc[cols.is_final].clone();
 
-        let is_lt_aux_cols = IsLessThanAuxCols::<T>::from_slice(&slc[cols.is_lt_aux_cols.lower..]);
+        let is_lt_aux_cols =
+            IsLessThanAuxCols::<T>::from_slice(&slc[cols.is_lt_aux_cols.lower_decomp[0]..]);
         SumCols {
             key,
             value,
@@ -32,6 +33,7 @@ impl<T: Clone> SumCols<T> {
         }
     }
 
+    // TODO[jpw] This is weird, remove it
     pub fn index_map(lt_air: &IsLessThanAir) -> SumCols<usize> {
         let num_aux_cols = IsLessThanAuxCols::<usize>::width(lt_air);
         SumCols {
@@ -40,8 +42,7 @@ impl<T: Clone> SumCols<T> {
             partial_sum: 2,
             is_final: 3,
             is_lt_aux_cols: IsLessThanAuxCols {
-                lower: 4,
-                lower_decomp: (5..5 + num_aux_cols - 1).collect(),
+                lower_decomp: (4..4 + num_aux_cols).collect(),
             },
         }
     }

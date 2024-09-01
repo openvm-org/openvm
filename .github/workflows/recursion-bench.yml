@@ -1,0 +1,37 @@
+name: STARK Recursion Benchmark
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "stark-backend/**"
+      - "primitives/**"
+      - "vm/**"
+      - "compiler/**"
+      - "recursion/**"
+  label:
+    types: [created]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  AXIOM_FAST_TEST: "1"
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/benchmark-call.yml
+    # run on non-draft pull request with label 'run-benchmark'
+    # and always run on push to main
+    if: |
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      contains(github.event.pull_request.labels.*.name, 'run-benchmark')) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    with:
+      benchmark_name: vm_verify_fibair
+    secrets: inherit

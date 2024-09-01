@@ -91,13 +91,13 @@ impl<F: PrimeField32> ExecutionTester<F> {
 }
 
 impl<F: Field> MachineChip<F> for ExecutionTester<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
         let mut values = vec![F::zero(); height * width];
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, record) in values.chunks_mut(width).into_iter().zip(&self.records) {
+        for (row, record) in values.chunks_mut(width).zip(&self.records) {
             *row.borrow_mut() = *record;
         }
         RowMajorMatrix::new(values, self.trace_width())

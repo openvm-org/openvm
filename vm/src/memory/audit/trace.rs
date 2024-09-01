@@ -5,10 +5,7 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::MemoryAuditChip;
-use crate::memory::{
-    audit::columns::AuditCols,
-    manager::{access_cell::AccessCell, TimestampedValue},
-};
+use crate::memory::{audit::columns::AuditCols, manager::TimestampedValue};
 
 impl<F: PrimeField32> MemoryAuditChip<F> {
     pub fn generate_trace(
@@ -28,7 +25,7 @@ impl<F: PrimeField32> MemoryAuditChip<F> {
         let gen_row = |prev_idx: Vec<u32>,
                        cur_idx: Vec<u32>,
                        final_data: F,
-                       final_clk: F,
+                       final_timestamp: F,
                        initial_data: F,
                        is_extra: F| {
             let lt_cols = LocalTraceInstructions::generate_trace_row(
@@ -40,7 +37,8 @@ impl<F: PrimeField32> MemoryAuditChip<F> {
                 F::from_canonical_u32(cur_idx[0]),
                 F::from_canonical_u32(cur_idx[1]),
                 initial_data,
-                AccessCell::<1, F>::new([final_data], final_clk),
+                final_data,
+                final_timestamp,
                 is_extra,
                 lt_cols.io.tuple_less_than,
                 lt_cols.aux,

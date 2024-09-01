@@ -116,9 +116,9 @@ pub struct MachineChipTester {
 
 impl MachineChipTester {
     pub fn load<C: MachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
-        self.traces.push(chip.generate_trace());
         self.public_values.push(chip.generate_public_values());
         self.airs.push(chip.air());
+        self.traces.push(chip.generate_trace());
 
         self
     }

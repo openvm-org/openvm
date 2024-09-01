@@ -19,8 +19,6 @@ use tracing::Level;
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
-const WORD_SIZE: usize = 1;
-
 fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
     let mut builder = AsmBuilder::<F, EF>::default();
 
@@ -49,13 +47,14 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
 
     builder.halt();
 
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+    let program = builder.compile_isa_with_options(CompilerOptions {
         compile_prints: false,
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: false,
+        ..Default::default()
     });
-    execute_and_prove_program::<WORD_SIZE>(
+    execute_and_prove_program(
         program,
         vec![],
         VmConfig {

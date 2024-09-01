@@ -50,7 +50,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         self.constrain_padding(builder, local, next);
         self.constrain_consistency_across_rounds(builder, local, next);
 
-        let mem = KeccakMemoryCols::from_slice(&local.mem_oc, &self.mem_oc);
+        let mem = KeccakMemoryCols::from_slice(local.mem_oc, &self.mem_oc);
         // Interactions:
         self.constrain_absorb(builder, local, next);
         let start_read_timestamp = self.eval_opcode_interactions(builder, local, mem.op_reads);
@@ -122,7 +122,7 @@ impl KeccakVmAir {
             next.opcode.src,
             local.opcode.src + AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
         );
-        // Advance timestamp by the number of memory accesses from [if new start] reading
+        // Advance timestamp by the number of memory accesses from reading
         // `dst, src, len` and block input bytes.
         block_transition.assert_eq(next.opcode.start_timestamp, start_write_timestamp);
         block_transition.assert_eq(

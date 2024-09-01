@@ -33,58 +33,41 @@ impl<T> IsLessThanIoCols<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq, new)]
 pub struct IsLessThanAuxCols<T> {
-    pub lower: T,
     // lower_decomp consists of lower decomposed into limbs of size decomp where we also shift
     // the final limb and store it as the last element of lower decomp so we can range check
     pub lower_decomp: Vec<T>,
 }
 
-impl<T: Default> Default for IsLessThanAuxCols<T> {
-    fn default() -> Self {
-        Self {
-            lower: T::default(),
-            lower_decomp: vec![],
-        }
-    }
-}
-
 impl<T: Clone> IsLessThanAuxCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
-            lower: slc[0].clone(),
-            lower_decomp: slc[1..].to_vec(),
+            lower_decomp: slc.to_vec(),
         }
     }
 }
 
 impl<T> IsLessThanAuxCols<T> {
     pub fn flatten(self) -> Vec<T> {
-        let mut flattened = vec![self.lower];
-        flattened.extend(self.lower_decomp);
-        flattened
+        self.lower_decomp
     }
 
     pub fn try_from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
         Self {
-            lower: iter.next().unwrap(),
-            lower_decomp: (1..Self::width(lt_air))
+            lower_decomp: (0..Self::width(lt_air))
                 .map(|_| iter.next().unwrap())
                 .collect(),
         }
     }
 
     pub fn width(lt_air: &IsLessThanAir) -> usize {
-        1 + lt_air.num_limbs + (lt_air.max_bits % lt_air.decomp != 0) as usize
+        lt_air.num_limbs + (lt_air.max_bits % lt_air.decomp != 0) as usize
     }
 
     pub fn into_expr<AB: AirBuilder>(self) -> IsLessThanAuxCols<AB::Expr>
     where
         T: Into<AB::Expr>,
     {
-        IsLessThanAuxCols::new(
-            self.lower.into(),
-            self.lower_decomp.into_iter().map(|x| x.into()).collect(),
-        )
+        IsLessThanAuxCols::new(self.lower_decomp.into_iter().map(|x| x.into()).collect())
     }
 }
 
@@ -142,18 +125,12 @@ impl<'a, T> IsLessThanIoColsMut<'a, T> {
 }
 
 pub struct IsLessThanAuxColsMut<'a, T> {
-    pub lower: &'a mut T,
     pub lower_decomp: &'a mut [T],
 }
 
 impl<'a, T> IsLessThanAuxColsMut<'a, T> {
     pub fn from_slice(slc: &'a mut [T]) -> Self {
-        let (lower, lower_decomp) = slc.split_first_mut().unwrap();
-
-        Self {
-            lower,
-            lower_decomp,
-        }
+        Self { lower_decomp: slc }
     }
 }
 

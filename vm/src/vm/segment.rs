@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{range_gate::RangeCheckerGateChip, xor::lookup::XorLookupChip};
 use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -13,17 +13,17 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use poseidon2_air::poseidon2::Poseidon2Config;
 
-use super::{VirtualMachineState, VmConfig, VmMetrics};
+use super::{VirtualMachineState, VmConfig, VmCycleTracker, VmMetrics};
 use crate::{
     arch::{
         bus::ExecutionBus,
         chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
         instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS},
     },
-    cpu::{trace::ExecutionError, CpuChip, RANGE_CHECKER_BUS},
+    cpu::{trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
-    hashes::poseidon2::Poseidon2Chip,
+    hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::{
         manager::{MemoryChip, MemoryChipRef},
         offline_checker::bus::MemoryBus,
@@ -44,7 +44,7 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
 
-    pub cycle_tracker: CycleTracker,
+    pub cycle_tracker: VmCycleTracker,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,
@@ -101,10 +101,12 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             };
         }
 
+        // NOTE: The order of entries in `chips` must be a linear extension of the dependency DAG.
+        // That is, if chip A holds a strong reference to chip B, then A must precede B in `chips`.
+
         let mut chips = vec![
             MachineChipVariant::Cpu(cpu_chip.clone()),
             MachineChipVariant::Program(program_chip.clone()),
-            MachineChipVariant::Memory(memory_chip.clone()),
         ];
 
         if config.field_arithmetic_enabled {
@@ -137,6 +139,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
             chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
         }
+        if config.keccak_enabled {
+            let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
+            let keccak_chip = Rc::new(RefCell::new(KeccakVmChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                byte_xor_chip.clone(),
+            )));
+            assign!([Opcode::KECCAK256], keccak_chip);
+            chips.push(MachineChipVariant::Keccak256(keccak_chip));
+            chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
+        }
         // let airs = vec![
         //     (
         //         ModularArithmeticChip::new(ModularArithmeticVmAir {
@@ -156,8 +169,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         //     modular_arithmetic_chips.insert(modulus.clone(), air);
         // }
 
-        // TODO: Range checker should be last since other chips' trace generation (including dummy rows)
-        // affect RangeChecker's trace.
+        // Most chips have a reference to the memory chip, and the memory chip has a reference to
+        // the range checker chip.
+        chips.push(MachineChipVariant::Memory(memory_chip.clone()));
         chips.push(MachineChipVariant::RangeChecker(range_checker.clone()));
 
         Self {
@@ -192,11 +206,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             metrics: self.collected_metrics,
         };
 
+        // Drop all strong references to chips other than self.chips, which will be consumed next.
+        drop(self.executors);
+        drop(self.cpu_chip);
+        drop(self.program_chip);
+        drop(self.memory_chip);
+
         for mut chip in self.chips {
             if chip.current_trace_height() != 0 {
                 result.airs.push(chip.air());
-                result.traces.push(chip.generate_trace());
                 result.public_values.push(chip.generate_public_values());
+                result.traces.push(chip.generate_trace());
             }
         }
 
@@ -220,5 +240,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             .iter()
             .map(|chip| chip.current_trace_cells())
             .sum()
+    }
+
+    pub(crate) fn update_chip_metrics(&mut self) {
+        self.collected_metrics.chip_metrics = self.chip_metrics();
+    }
+
+    fn chip_metrics(&self) -> BTreeMap<String, usize> {
+        let mut metrics = BTreeMap::new();
+        for chip in self.chips.iter() {
+            let chip_name: &'static str = chip.into();
+            metrics.insert(chip_name.into(), chip.current_trace_height());
+        }
+        metrics
     }
 }

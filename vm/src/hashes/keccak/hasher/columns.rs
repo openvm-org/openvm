@@ -13,7 +13,8 @@ use super::{
     KECCAK_RATE_U16S,
 };
 use crate::memory::offline_checker::{
-    bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols,
+    bridge::MemoryOfflineChecker,
+    columns::{MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -101,9 +102,11 @@ pub struct KeccakSpongeCols<T> {
 // Grouping all memory aux columns together because they can't use AlignedBorrow
 #[derive(Clone, Debug)]
 pub struct KeccakMemoryCols<T> {
-    pub op_reads: [MemoryOfflineCheckerAuxCols<1, T>; KECCAK_EXECUTION_READS],
-    pub absorb_reads: [MemoryOfflineCheckerAuxCols<1, T>; KECCAK_ABSORB_READS],
-    pub digest_writes: [MemoryOfflineCheckerAuxCols<1, T>; KECCAK_DIGEST_WRITES],
+    pub op_reads: [MemoryReadAuxCols<1, T>; KECCAK_EXECUTION_READS],
+    // TODO[jpw] switch to word_size=8
+    pub absorb_reads: [MemoryReadAuxCols<1, T>; KECCAK_ABSORB_READS],
+    // TODO[jpw] switch to word_size=? (4 or 8 or 16)
+    pub digest_writes: [MemoryWriteAuxCols<1, T>; KECCAK_DIGEST_WRITES],
 }
 
 impl<'a, T: Copy> KeccakVmColsRef<'a, T> {

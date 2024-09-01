@@ -1,24 +1,19 @@
-use std::{array, collections::VecDeque};
+use std::collections::VecDeque;
 
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
-    is_zero::{
-        columns::{IsZeroCols, IsZeroIoCols},
-        IsZeroAir,
-    },
-    utils::implies,
+    is_zero::IsZeroAir,
+    utils::{and, implies, not},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::izip;
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
 use super::{bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols};
 use crate::{
     cpu::RANGE_CHECKER_BUS,
-    memory::{
-        manager::{access_cell::AccessCell, operation::MemoryOperation},
-        MemoryAddress,
-    },
+    memory::{offline_checker::operation::MemoryOperation, MemoryAddress},
 };
 
 /// The [MemoryBridge] can be created within any AIR evaluation function to be used as the
@@ -134,11 +129,12 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryReadOperation<T, V, WORD
         let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
-            op_type: AB::Expr::from_bool(false),
-            cell: AccessCell::new(self.data, self.timestamp),
+            timestamp: self.timestamp,
+            data: self.data,
             enabled: count.into(),
         };
-        self.offline_checker.subair_eval(builder, op, self.aux);
+        self.offline_checker
+            .subair_eval(builder, op, self.aux, false);
     }
 }
 
@@ -166,11 +162,12 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryWriteOperation<T, V, WOR
         let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
-            op_type: AB::Expr::from_bool(true),
-            cell: AccessCell::new(self.data, self.timestamp),
+            timestamp: self.timestamp,
+            data: self.data,
             enabled: count.into(),
         };
-        self.offline_checker.subair_eval(builder, op, self.aux);
+        self.offline_checker
+            .subair_eval(builder, op, self.aux, true);
     }
 }
 
@@ -192,73 +189,93 @@ impl MemoryOfflineChecker {
 }
 
 impl MemoryOfflineChecker {
-    pub fn subair_eval<AB: InteractionBuilder, const WORD_SIZE: usize>(
+    pub fn subair_eval<AB: InteractionBuilder, const N: usize>(
         &self,
         builder: &mut AB,
-        op: MemoryOperation<WORD_SIZE, AB::Expr>,
-        aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, AB::Var>,
+        op: MemoryOperation<N, AB::Expr>,
+        aux: MemoryOfflineCheckerAuxCols<N, AB::Var>,
+        is_write: bool,
     ) {
-        builder.assert_bool(op.op_type.clone());
-        builder.assert_bool(op.enabled.clone());
+        // FIXME[jpw]: this should not be here because op.enabled could be an
+        // expression of degree > 1 and assert_bool is quadratic
+        // builder.assert_bool(op.enabled.clone());
+
+        // TODO[jpw] immediate checks should not be in memory bridge
+        // Currently: expected is that enabled = 0, is_immediate = 0, all aux = 0 works
 
         // Ensuring is_immediate is correct
-        let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
-            IsZeroIoCols::<AB::Expr>::new(op.addr_space.clone(), aux.is_immediate.into()),
-            aux.is_zero_aux.into(),
-        );
+        // let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
+        //     IsZeroIoCols::<AB::Expr>::new(op.addr_space.clone(), aux.is_immediate.into()),
+        //     aux.is_zero_aux.into(),
+        // );
 
-        self.is_zero_air.subair_eval(
-            builder,
-            addr_space_is_zero_cols.io,
-            addr_space_is_zero_cols.inv,
-        );
-
-        // immediate => enabled
-        builder.assert_one(implies(aux.is_immediate, op.enabled.clone()));
+        // self.is_zero_air.subair_eval(
+        //     &mut builder.when(op.enabled.clone()), // when not enabled, allow aux to be all 0s no matter what
+        //     addr_space_is_zero_cols.io,
+        //     addr_space_is_zero_cols.inv,
+        // );
 
         // is_immediate => read
-        builder.assert_one(implies(
-            aux.is_immediate,
-            AB::Expr::one() - op.op_type.clone(),
-        ));
+        // if is_write {
+        //     builder
+        //         .when(op.enabled.clone())
+        //         .assert_zero(aux.is_immediate);
+        // }
 
-        let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
-            aux.old_cell.clk.into(),
-            op.cell.clk.clone(),
-            aux.clk_lt.into(),
-        );
+        for (prev_timestamp, clk_lt, clk_lt_aux) in
+            izip!(aux.prev_timestamps, aux.clk_lt, aux.clk_lt_aux)
+        {
+            let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
+                prev_timestamp.into(),
+                op.timestamp.clone(),
+                clk_lt.into(),
+            );
 
-        self.timestamp_lt_air
-            .subair_eval(builder, clk_lt_io_cols, aux.clk_lt_aux);
+            self.timestamp_lt_air.conditional_eval(
+                builder,
+                clk_lt_io_cols,
+                clk_lt_aux,
+                op.enabled.clone(),
+            );
 
-        builder.assert_one(implies(op.enabled.clone(), aux.clk_lt));
-
-        // Ensuring that if op_type is Read, data_read is the same as data_write
-        for i in 0..WORD_SIZE {
-            builder
-                .when(op.enabled.clone())
-                .when(AB::Expr::one() - op.op_type.clone())
-                .assert_eq(op.cell.data[i].clone(), aux.old_cell.data[i]);
+            builder.assert_one(implies(
+                and::<AB::Expr>(op.enabled.clone(), not(aux.is_immediate)),
+                clk_lt,
+            ));
         }
 
+        // Ensuring that if op_type is Read, data_read is the same as data_write
+        if !is_write {
+            for i in 0..N {
+                builder
+                    .when(op.enabled.clone())
+                    .assert_eq(op.data[i].clone(), aux.prev_data[i]);
+            }
+        }
+        builder
+            .when(aux.is_immediate)
+            .assert_eq(op.data[0].clone(), op.pointer.clone());
+
         // TODO[osama]: resolve is_immediate stuff
-        let count = op.enabled - aux.is_immediate.into();
-        let address = MemoryAddress::new(op.addr_space, op.pointer);
-        self.memory_bus
-            .read(address.clone(), aux.old_cell.data, aux.old_cell.clk)
-            .eval(builder, count.clone());
-        self.memory_bus
-            .write(address, op.cell.data, op.cell.clk)
-            .eval(builder, count);
+        // builder.assert_one(implies(aux.is_immediate.into(), op.enabled.clone()));
+        // TODO[jpw]: make this degree 1 after removing is_immediate
+        let count = op.enabled * not(aux.is_immediate);
+
+        for i in 0..N {
+            let address = MemoryAddress::new(
+                op.addr_space.clone(),
+                op.pointer.clone() + AB::Expr::from_canonical_usize(i),
+            );
+            self.memory_bus
+                .read(address.clone(), [aux.prev_data[i]], aux.prev_timestamps[i])
+                .eval(builder, count.clone());
+            self.memory_bus
+                .write(
+                    address,
+                    [op.data[i].clone()],
+                    op.timestamp.clone() + AB::Expr::from_canonical_usize(i),
+                )
+                .eval(builder, count.clone());
+        }
     }
-}
-
-pub fn proj<F: AbstractField, const WORD_SIZE: usize>(x: [F; WORD_SIZE]) -> F {
-    x.into_iter().next().unwrap()
-}
-
-pub fn emb<F: AbstractField, const WORD_SIZE: usize>(x: F) -> [F; WORD_SIZE] {
-    let mut arr = array::from_fn(|_| F::zero());
-    arr[0] = x;
-    arr
 }

@@ -24,8 +24,8 @@ impl MemoryAuditAir {
         self.memory_bus
             .read(
                 MemoryAddress::new(local.addr_space, local.pointer),
-                local.final_cell.data,
-                local.final_cell.clk,
+                [local.final_data],
+                local.final_timestamp,
             )
             .eval(builder, mult);
     }

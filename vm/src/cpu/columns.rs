@@ -8,13 +8,16 @@ use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 
 use super::{
-    CpuAir, CpuChip, Opcode, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, WORD_SIZE,
+    CpuAir, CpuChip, Opcode, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
+    CPU_MAX_WRITES_PER_CYCLE, WORD_SIZE,
 };
 use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
     memory::{
-        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
-        offline_checker::columns::MemoryOfflineCheckerAuxCols,
+        manager::{MemoryReadRecord, MemoryWriteRecord},
+        offline_checker::columns::{
+            MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols,
+        },
     },
 };
 
@@ -87,13 +90,84 @@ impl<T: Field> CpuIoCols<T> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpuMemoryAccessCols<T> {
+    pub address_space: T,
+    pub pointer: T,
+    pub timestamp: T,
+    pub enabled: T,
+    pub value: T,
+}
+
+impl<F: Field> CpuMemoryAccessCols<F> {
+    pub fn disabled(timestamp: F) -> Self {
+        CpuMemoryAccessCols {
+            address_space: F::one(),
+            pointer: F::zero(),
+            timestamp,
+            enabled: F::zero(),
+            value: F::zero(),
+        }
+    }
+
+    pub fn from_read_record(read: MemoryReadRecord<1, F>) -> Self {
+        CpuMemoryAccessCols {
+            address_space: read.address_space,
+            pointer: read.pointer,
+            timestamp: read.timestamp,
+            enabled: F::one(),
+            value: read.value(),
+        }
+    }
+
+    pub fn from_write_record(write: MemoryWriteRecord<1, F>) -> Self {
+        CpuMemoryAccessCols {
+            address_space: write.address_space,
+            pointer: write.pointer,
+            timestamp: write.timestamp,
+            enabled: F::one(),
+            value: write.value(),
+        }
+    }
+}
+
+impl<T: Clone> CpuMemoryAccessCols<T> {
+    pub fn from_slice(slc: &[T]) -> Self {
+        Self {
+            address_space: slc[0].clone(),
+            pointer: slc[1].clone(),
+            timestamp: slc[2].clone(),
+            enabled: slc[3].clone(),
+            value: slc[4].clone(),
+        }
+    }
+}
+
+impl<T> CpuMemoryAccessCols<T> {
+    pub fn flatten(self) -> Vec<T> {
+        vec![
+            self.address_space,
+            self.pointer,
+            self.timestamp,
+            self.enabled,
+            self.value,
+        ]
+    }
+
+    pub fn width() -> usize {
+        5
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuAuxCols<T> {
     pub operation_flags: BTreeMap<Opcode, T>,
     pub public_value_flags: Vec<T>,
-    pub mem_ops: [MemoryOperation<1, T>; CPU_MAX_ACCESSES_PER_CYCLE],
+    pub reads: [CpuMemoryAccessCols<T>; CPU_MAX_READS_PER_CYCLE],
+    pub writes: [CpuMemoryAccessCols<T>; CPU_MAX_WRITES_PER_CYCLE],
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
-    pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; CPU_MAX_ACCESSES_PER_CYCLE],
+    pub reads_aux_cols: [MemoryReadAuxCols<1, T>; CPU_MAX_READS_PER_CYCLE],
+    pub writes_aux_cols: [MemoryWriteAuxCols<1, T>; CPU_MAX_WRITES_PER_CYCLE],
 }
 
 impl<T: Clone> CpuAuxCols<T> {
@@ -110,10 +184,15 @@ impl<T: Clone> CpuAuxCols<T> {
         end += cpu_air.options.num_public_values;
         let public_value_flags = slc[start..end].to_vec();
 
-        let mem_ops = array::from_fn(|_| {
+        let reads = array::from_fn(|_| {
             start = end;
-            end += MemoryOperation::<WORD_SIZE, T>::width();
-            MemoryOperation::<WORD_SIZE, T>::from_slice(&slc[start..end])
+            end += CpuMemoryAccessCols::<T>::width();
+            CpuMemoryAccessCols::<T>::from_slice(&slc[start..end])
+        });
+        let writes = array::from_fn(|_| {
+            start = end;
+            end += CpuMemoryAccessCols::<T>::width();
+            CpuMemoryAccessCols::<T>::from_slice(&slc[start..end])
         });
 
         start = end;
@@ -124,20 +203,26 @@ impl<T: Clone> CpuAuxCols<T> {
         end += IsEqualVecAuxCols::<T>::width(WORD_SIZE);
         let is_equal_vec_aux = IsEqualVecAuxCols::from_slice(&slc[start..end], WORD_SIZE);
 
-        let mem_oc_aux_cols = array::from_fn(|_| {
+        let reads_aux_cols = array::from_fn(|_| {
             start = end;
-            end +=
-                MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
-            MemoryOfflineCheckerAuxCols::from_slice(&slc[start..end])
+            end += MemoryReadAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
+            MemoryReadAuxCols::from_slice(&slc[start..end], cpu_air.memory_offline_checker)
+        });
+        let writes_aux_cols = array::from_fn(|_| {
+            start = end;
+            end += MemoryWriteAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
+            MemoryWriteAuxCols::from_slice(&slc[start..end], cpu_air.memory_offline_checker)
         });
 
         Self {
             operation_flags,
             public_value_flags,
-            mem_ops,
+            reads,
+            writes,
             read0_equals_read1: beq_check,
             is_equal_vec_aux,
-            mem_oc_aux_cols,
+            reads_aux_cols,
+            writes_aux_cols,
         }
     }
 
@@ -148,18 +233,30 @@ impl<T: Clone> CpuAuxCols<T> {
         }
         flattened.extend(self.public_value_flags.clone());
         flattened.extend(
-            self.mem_ops
+            self.reads
                 .iter()
                 .cloned()
-                .flat_map(MemoryOperation::<WORD_SIZE, T>::flatten),
+                .flat_map(CpuMemoryAccessCols::<T>::flatten),
+        );
+        flattened.extend(
+            self.writes
+                .iter()
+                .cloned()
+                .flat_map(CpuMemoryAccessCols::<T>::flatten),
         );
         flattened.push(self.read0_equals_read1.clone());
         flattened.extend(self.is_equal_vec_aux.flatten());
         flattened.extend(
-            self.mem_oc_aux_cols
+            self.reads_aux_cols
                 .iter()
                 .cloned()
-                .flat_map(MemoryOfflineCheckerAuxCols::flatten),
+                .flat_map(MemoryReadAuxCols::flatten),
+        );
+        flattened.extend(
+            self.writes_aux_cols
+                .iter()
+                .cloned()
+                .flat_map(MemoryWriteAuxCols::flatten),
         );
         flattened
     }
@@ -167,11 +264,12 @@ impl<T: Clone> CpuAuxCols<T> {
     pub fn get_width(cpu_air: &CpuAir) -> usize {
         CORE_INSTRUCTIONS.len()
             + cpu_air.options.num_public_values
+            + CPU_MAX_READS_PER_CYCLE * CpuMemoryAccessCols::<T>::width()
+            + CPU_MAX_WRITES_PER_CYCLE * CpuMemoryAccessCols::<T>::width()
             + CPU_MAX_ACCESSES_PER_CYCLE
-                * (MemoryOperation::<WORD_SIZE, T>::width()
-                    + MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(
-                        &cpu_air.memory_offline_checker,
-                    ))
+                * MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(
+                    &cpu_air.memory_offline_checker,
+                )
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
     }
@@ -184,26 +282,22 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             operation_flags.insert(opcode, F::from_bool(opcode == Opcode::NOP));
         }
 
-        let mut mem_trace_builder = MemoryTraceBuilder::new(chip.memory_chip.clone());
-        let mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] = array::from_fn(|i| {
-            if i < CPU_MAX_READS_PER_CYCLE {
-                mem_trace_builder.disabled_read(F::one())
-            } else {
-                mem_trace_builder.disabled_write(F::one())
-            }
-        });
+        let memory_chip = chip.memory_chip.borrow();
+        let timestamp = memory_chip.timestamp();
 
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
-            (mem_ops[0].cell.data.to_vec(), mem_ops[1].cell.data.to_vec()),
+            (vec![F::zero()], vec![F::zero()]),
         );
         Self {
             operation_flags,
             public_value_flags: vec![F::zero(); chip.air.options.num_public_values],
-            mem_ops,
+            reads: array::from_fn(|_| CpuMemoryAccessCols::disabled(timestamp)),
+            writes: array::from_fn(|_| CpuMemoryAccessCols::disabled(timestamp)),
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
-            mem_oc_aux_cols: mem_trace_builder.take_accesses_buffer().try_into().unwrap(),
+            reads_aux_cols: array::from_fn(|_| memory_chip.make_disabled_read_aux_cols()),
+            writes_aux_cols: array::from_fn(|_| memory_chip.make_disabled_read_aux_cols()),
         }
     }
 }

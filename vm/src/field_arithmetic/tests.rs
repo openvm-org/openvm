@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::{baby_bear_poseidon2::run_simple_test_no_pis, setup_tracing},
@@ -127,20 +125,21 @@ fn field_arithmetic_air_zero_div_zero() {
         Instruction::from_usize(FDIV, [0, 0, 1, 1, 1, 1]),
     );
 
+    let air = field_arithmetic_chip.air;
     let trace = field_arithmetic_chip.generate_trace();
     let row = trace.row_slice(0).to_vec();
-    let mut cols = FieldArithmeticCols::from_iter(&mut row.into_iter(), &field_arithmetic_chip.air);
+    let mut cols = FieldArithmeticCols::from_iter(&mut row.into_iter(), &air);
     cols.io.y.value = BabyBear::zero();
     let trace = RowMajorMatrix::new(
         cols.flatten(),
-        FieldArithmeticCols::<BabyBear>::get_width(&field_arithmetic_chip.air),
+        FieldArithmeticCols::<BabyBear>::get_width(&air),
     );
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![field_arithmetic_chip.air().deref()], vec![trace],),
+        run_simple_test_no_pis(vec![&air], vec![trace]),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );

@@ -14,9 +14,9 @@ impl FieldArithmeticAir {
         builder: &mut AB,
         io: FieldArithmeticIoCols<AB::Var>,
         aux: FieldArithmeticAuxCols<AB::Var>,
+        expected_opcode: AB::Expr,
     ) {
         let FieldArithmeticIoCols {
-            opcode,
             from_state,
             z: result,
             x: operand1,
@@ -30,7 +30,7 @@ impl FieldArithmeticAir {
             io.from_state.map(Into::into),
             AB::F::from_canonical_usize(Self::TIMESTAMP_DELTA),
             InstructionCols::new(
-                opcode,
+                expected_opcode,
                 [
                     result.address,
                     operand1.address,

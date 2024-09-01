@@ -3646,6 +3646,7 @@ dependencies = [
  "rand_xoshiro",
  "serde",
  "strum",
+ "strum_macros",
  "test-case",
  "tiny-keccak",
  "toml",

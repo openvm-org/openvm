@@ -19,6 +19,7 @@ use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
+use stark_vm::vm::config::VmConfig;
 
 use crate::{
     hints::Hintable,
@@ -32,7 +33,7 @@ pub(crate) struct StarkForTest<SC: StarkGenericConfig> {
     pub pvs: Vec<Vec<BabyBear>>,
 }
 
-pub(crate) fn fibonacci_stark_for_test<'a, SC: StarkGenericConfig>() -> StarkForTest<SC> {
+pub(crate) fn fibonacci_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC> {
     setup_tracing();
 
     let fib_air = Rc::new(FibonacciAir {});
@@ -50,7 +51,7 @@ pub(crate) fn fibonacci_stark_for_test<'a, SC: StarkGenericConfig>() -> StarkFor
     }
 }
 
-pub(crate) fn interaction_stark_for_test<'a, SC: StarkGenericConfig>() -> StarkForTest<SC> {
+pub(crate) fn interaction_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC> {
     const INPUT_BUS: usize = 0;
     const OUTPUT_BUS: usize = 1;
     const RANGE_BUS: usize = 2;
@@ -155,7 +156,7 @@ fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2Config>) {
     let main_trace_data = trace_builder.view(&vk, any_raps.clone());
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, pvs);
     let log_degree_per_air = proof
         .degrees
         .iter()
@@ -164,7 +165,7 @@ fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2Config>) {
     // Make sure proof verifies outside eDSL...
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(&mut engine.new_challenger(), &vk, &proof, &pvs)
+        .verify(&mut engine.new_challenger(), &vk, &proof, pvs)
         .expect("afs proof should verify");
 
     // Build verification program in eDSL.
@@ -181,5 +182,5 @@ fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2Config>) {
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    execute_and_prove_program(program, witness_stream);
+    execute_and_prove_program(program, witness_stream, VmConfig::default());
 }
