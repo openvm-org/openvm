@@ -2,7 +2,7 @@ use std::{marker::PhantomData, time::Instant};
 
 use afs_page::common::page::Page;
 use afs_stark_backend::{config::PcsProverData, prover::trace::TraceCommitmentBuilder};
-use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
+use ax_sdk::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::write_bytes;
 use clap::Parser;
 use color_eyre::eyre::Result;

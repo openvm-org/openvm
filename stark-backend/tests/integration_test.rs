@@ -2,7 +2,7 @@
 #![allow(incomplete_features)]
 
 /// Test utils
-use afs_test_utils::{
+use ax_sdk::{
     config::{self, baby_bear_poseidon2::run_simple_test},
     utils,
 };

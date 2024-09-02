@@ -2,7 +2,7 @@ use std::{collections::HashSet, fs::remove_file, time::Instant};
 
 use afs_page::page_btree::PageBTree;
 use afs_stark_backend::prover::{trace::TraceCommitter, MultiTraceStarkProver};
-use afs_test_utils::{
+use ax_sdk::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     page_config::MultitierPageConfig,
 };

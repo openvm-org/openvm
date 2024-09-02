@@ -9,7 +9,7 @@ description = "CLI for the STARK VM"
 p3-field = { workspace = true }
 p3-baby-bear = { workspace = true }
 afs-stark-backend = { path = "../../stark-backend", default-features = false }
-afs-test-utils = { path = "../../test-utils" }
+ax-sdk = { path = "../../sdk" }
 stark-vm = { path = "../" }
 parking_lot = "0.12.2"
 clap = { version = "4.5.4", features = ["derive"] }

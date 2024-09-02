@@ -5,7 +5,7 @@ use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
 use afs_stark_backend::{
     prover::trace::TraceCommitmentBuilder, rap::AnyRap, verifier::MultiTraceStarkVerifier,
 };
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         setup_tracing,

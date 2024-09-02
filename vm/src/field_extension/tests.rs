@@ -4,7 +4,7 @@ use std::{
 };
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::utils::create_seeded_rng;
+use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
 use rand::{seq::SliceRandom, Rng};

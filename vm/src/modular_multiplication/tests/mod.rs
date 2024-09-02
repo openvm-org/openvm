@@ -1,5 +1,5 @@
 use afs_primitives::modular_multiplication::bigint::air::ModularArithmeticBigIntAir;
-use afs_test_utils::utils::create_seeded_rng;
+use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

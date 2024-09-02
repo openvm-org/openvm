@@ -1,4 +1,4 @@
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Config, fri_params::default_fri_params, setup_tracing,
     },

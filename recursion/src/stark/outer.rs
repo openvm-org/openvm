@@ -1,5 +1,5 @@
 use afs_compiler::ir::{Builder, DslIr, TracedVec};
-use afs_test_utils::config::{
+use ax_sdk::config::{
     baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters,
 };
 

@@ -36,7 +36,7 @@ dependencies = [
  "afs-page",
  "afs-primitives",
  "afs-stark-backend",
- "afs-test-utils",
+ "ax-sdk",
  "bin-common",
  "bincode",
  "clap",
@@ -62,8 +62,8 @@ dependencies = [
  "afs-page",
  "afs-primitives",
  "afs-stark-backend",
- "afs-test-utils",
  "alloy-primitives 0.7.7",
+ "ax-sdk",
  "bincode",
  "clap",
  "color-eyre",
@@ -89,7 +89,7 @@ name = "afs-compiler"
 version = "0.1.0"
 dependencies = [
  "afs-derive",
- "afs-test-utils",
+ "ax-sdk",
  "backtrace",
  "hex",
  "itertools 0.13.0",
@@ -130,7 +130,7 @@ dependencies = [
  "afs-derive",
  "afs-primitives",
  "afs-stark-backend",
- "afs-test-utils",
+ "ax-sdk",
  "bincode",
  "derive-new 0.5.9",
  "derive_more",
@@ -157,7 +157,7 @@ version = "0.1.0"
 dependencies = [
  "afs-derive",
  "afs-stark-backend",
- "afs-test-utils",
+ "ax-sdk",
  "derive-new 0.6.0",
  "getset",
  "itertools 0.13.0",
@@ -193,7 +193,7 @@ dependencies = [
  "afs-derive",
  "afs-primitives",
  "afs-stark-backend",
- "afs-test-utils",
+ "ax-sdk",
  "ff 0.13.0",
  "itertools 0.13.0",
  "lazy_static",
@@ -226,7 +226,7 @@ name = "afs-stark-backend"
 version = "0.1.0"
 dependencies = [
  "afs-derive",
- "afs-test-utils",
+ "ax-sdk",
  "csv",
  "derivative",
  "eyre",
@@ -257,41 +257,6 @@ dependencies = [
  "tracing",
  "tracing-forest",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "afs-test-utils"
-version = "0.1.0"
-dependencies = [
- "afs-stark-backend",
- "derive_more",
- "ff 0.13.0",
- "itertools 0.13.0",
- "p3-air",
- "p3-baby-bear",
- "p3-blake3",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
- "p3-matrix",
- "p3-merkle-tree",
- "p3-poseidon",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand",
- "serde",
- "toml",
- "tracing",
- "tracing-forest",
- "tracing-subscriber",
- "zkhash",
 ]
 
 [[package]]
@@ -618,6 +583,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
 [[package]]
+name = "ax-sdk"
+version = "0.1.0"
+dependencies = [
+ "afs-stark-backend",
+ "derive_more",
+ "ff 0.13.0",
+ "itertools 0.13.0",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-blake3",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-goldilocks",
+ "p3-keccak",
+ "p3-matrix",
+ "p3-merkle-tree",
+ "p3-poseidon",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand",
+ "serde",
+ "toml",
+ "tracing",
+ "tracing-forest",
+ "tracing-subscriber",
+ "zkhash",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -656,7 +656,7 @@ dependencies = [
  "afs-primitives",
  "afs-recursion",
  "afs-stark-backend",
- "afs-test-utils",
+ "ax-sdk",
  "chrono",
  "clap",
  "color-eyre",
@@ -694,7 +694,7 @@ name = "bin-common"
 version = "0.1.0"
 dependencies = [
  "afs-page",
- "afs-test-utils",
+ "ax-sdk",
  "color-eyre",
  "itertools 0.13.0",
  "logical-interface",
@@ -1010,7 +1010,7 @@ name = "cli"
 version = "0.1.0"
 dependencies = [
  "afs-stark-backend",
- "afs-test-utils",
+ "ax-sdk",
  "bincode",
  "clap",
  "color-eyre",
@@ -2358,7 +2358,7 @@ version = "0.1.0"
 dependencies = [
  "afs-page",
  "afs-stark-backend",
- "afs-test-utils",
+ "ax-sdk",
  "bin-common",
  "bincode",
  "clap",
@@ -2856,8 +2856,8 @@ dependencies = [
  "afs-derive",
  "afs-primitives",
  "afs-stark-backend",
- "afs-test-utils",
  "ark-ff 0.4.2",
+ "ax-sdk",
  "itertools 0.13.0",
  "lazy_static",
  "p3-air",
@@ -3614,8 +3614,8 @@ dependencies = [
  "afs-derive",
  "afs-primitives",
  "afs-stark-backend",
- "afs-test-utils",
  "ark-ff 0.4.2",
+ "ax-sdk",
  "backtrace",
  "derive-new 0.5.9",
  "enum-utils",

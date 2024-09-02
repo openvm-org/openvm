@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use afs_test_utils::{
+use ax_sdk::{
     config::{self},
     engine::StarkEngine,
 };

@@ -1,7 +1,7 @@
 use std::{iter, sync::Arc};
 
 use afs_stark_backend::rap::AnyRap;
-use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 use list::ListChip;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;

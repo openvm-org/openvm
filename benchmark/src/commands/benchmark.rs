@@ -7,7 +7,7 @@ use std::{
 };
 
 use afs_stark_backend::prover::metrics::TraceMetrics;
-use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
+use ax_sdk::page_config::{MultitierPageConfig, PageConfig};
 use chrono::Local;
 use color_eyre::eyre::Result;
 

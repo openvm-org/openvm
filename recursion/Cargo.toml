@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 afs-stark-backend = { path = "../stark-backend" }
 afs-compiler = { path = "../compiler" }
-afs-test-utils = { path = "../test-utils" }
+ax-sdk = { path = "../sdk" }
 afs-derive = { path = "../derive" }
 stark-vm = { path = "../vm" }
 p3-air = { workspace = true }

@@ -15,7 +15,7 @@ use afs_stark_backend::{
     prover::opener::AdjacentOpenedValues,
     rap::AnyRap,
 };
-use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use itertools::{izip, Itertools};
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;

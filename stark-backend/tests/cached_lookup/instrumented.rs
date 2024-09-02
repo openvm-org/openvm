@@ -1,7 +1,7 @@
 use std::fs::{self, File};
 
 use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::{self, engine_from_perm},
         fri_params::{fri_params_with_100_bits_of_security, fri_params_with_80_bits_of_security},

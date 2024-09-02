@@ -1,4 +1,4 @@
-use afs_test_utils::config::setup_tracing;
+use ax_sdk::config::setup_tracing;
 use cli::cli::Cli;
 use stark_vm::vm::config::VmConfig;
 

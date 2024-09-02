@@ -2,7 +2,7 @@ use std::{cell::RefCell, ops::Deref, rc::Rc, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{rap::AnyRap, verifier::VerificationError};
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
 };

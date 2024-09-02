@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };

@@ -13,7 +13,7 @@ afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-recursion = { path = "../recursion", default-features = false }
 afs-compiler = { path = "../compiler", default-features = false }
 logical-interface = { path = "../logical-interface" }
-afs-test-utils = { path = "../test-utils" }
+ax-sdk = { path = "../sdk" }
 afs-page = { path = "../db/page", default-features = false }
 afs-primitives = { path = "../primitives", default-features = false }
 serde = { version = "1.0.203", features = ["derive"] }

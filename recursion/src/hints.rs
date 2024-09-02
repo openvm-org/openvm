@@ -6,7 +6,7 @@ use afs_stark_backend::{
         types::{Commitments, Proof},
     },
 };
-use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};

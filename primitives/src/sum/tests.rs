@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::to_field_vec,
 };

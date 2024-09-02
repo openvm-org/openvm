@@ -13,7 +13,7 @@ members = [
     "poseidon2-air",
     "recursion",
     "stark-backend",
-    "test-utils",
+    "sdk",
     "vm",
     "vm/bin",
 ]

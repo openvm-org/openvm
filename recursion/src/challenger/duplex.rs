@@ -266,7 +266,7 @@ mod tests {
         ir::Felt,
         util::execute_program,
     };
-    use afs_test_utils::{
+    use ax_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
     };

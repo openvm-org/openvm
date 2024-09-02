@@ -6,7 +6,7 @@ edition.workspace = true
 
 [dependencies]
 afs-page = { path = "../../db/page" }
-afs-test-utils = { path = "../../test-utils" }
+ax-sdk = { path = "../../sdk" }
 color-eyre = "0.6.3"
 logical-interface = { path = "../../logical-interface" }
 itertools = "0.13.0"

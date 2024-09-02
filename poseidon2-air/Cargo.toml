@@ -18,7 +18,7 @@ rand = "0.8"
 afs-primitives = { path = "../primitives" }
 afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }
-afs-test-utils = { path = "../test-utils" }
+ax-sdk = { path = "../sdk" }
 lazy_static = "1.5.0"
 itertools.workspace = true
 

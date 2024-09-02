@@ -1,5 +1,5 @@
 use afs_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
-use afs_test_utils::config::FriParameters;
+use ax_sdk::config::FriParameters;
 use p3_commit::TwoAdicMultiplicativeCoset;
 use p3_field::{AbstractField, TwoAdicField};
 

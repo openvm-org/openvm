@@ -166,7 +166,7 @@ where
 #[cfg(test)]
 pub(crate) mod tests {
     use afs_compiler::{asm::AsmBuilder, util::execute_program};
-    use afs_test_utils::config::{
+    use ax_sdk::config::{
         baby_bear_poseidon2::{default_config, default_perm, BabyBearPoseidon2Config},
         fri_params::default_fri_params,
     };

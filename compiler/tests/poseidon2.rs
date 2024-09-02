@@ -4,7 +4,7 @@ use afs_compiler::{
     prelude::RVar,
     util::execute_program,
 };
-use afs_test_utils::config::baby_bear_poseidon2::default_perm;
+use ax_sdk::config::baby_bear_poseidon2::default_perm;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_symmetric::Permutation;

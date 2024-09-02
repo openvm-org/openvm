@@ -13,7 +13,7 @@ use afs_page::{
 };
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{config::Com, prover::trace::ProverTraceData};
-use afs_test_utils::page_config::MultitierPageConfig;
+use ax_sdk::page_config::MultitierPageConfig;
 use color_eyre::eyre::Result;
 use logical_interface::{
     afs_input::{types::InputFileOp, AfsInputFile},

@@ -7,7 +7,7 @@ use std::{
 
 use afs_page::page_rw_checker::page_controller::PageController;
 use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
-use afs_test_utils::{
+use ax_sdk::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
 };
 use num_bigint_dig::BigUint;

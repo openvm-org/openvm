@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
 use afs_stark_backend::rap::AnyRap;
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Config, fri_params::default_fri_params, setup_tracing,
     },

@@ -3,7 +3,7 @@ use std::{
     io::{BufReader, BufWriter, Read, Write},
 };
 
-use afs_test_utils::page_config::PageConfig;
+use ax_sdk::page_config::PageConfig;
 use color_eyre::eyre::Result;
 
 pub fn read_from_path(path: String) -> Option<Vec<u8>> {

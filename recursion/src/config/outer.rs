@@ -1,6 +1,6 @@
 use afs_compiler::ir::Config;
 use afs_stark_backend::keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey};
-use afs_test_utils::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
+use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254};
 use p3_challenger::MultiField32Challenger;

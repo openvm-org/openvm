@@ -2,7 +2,7 @@ use core::cmp::min;
 use std::{collections::HashSet, fs::File, io::Write};
 
 use afs_page::common::page::Page;
-use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
+use ax_sdk::page_config::{MultitierPageConfig, PageConfig};
 use color_eyre::eyre::Result;
 use logical_interface::{
     afs_input::header::AfsHeader,

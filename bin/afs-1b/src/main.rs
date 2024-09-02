@@ -1,5 +1,5 @@
 use afs_1b::cli::run;
-use afs_test_utils::page_config::MultitierPageConfig;
+use ax_sdk::page_config::MultitierPageConfig;
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
