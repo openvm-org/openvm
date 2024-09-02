@@ -6,13 +6,19 @@ pub mod air_builders;
 pub mod commit;
 /// Helper types associated to generic STARK config.
 pub mod config;
+/// Trait for STARK backend engine proving keygen, proviing, verifying API functions.
+pub mod engine;
+/// Log-up permutation argument implementation as RAP.
 pub mod interaction;
 /// Proving and verifying key generation
 pub mod keygen;
 /// Prover implementation for partitioned multi-matrix AIRs.
 pub mod prover;
+/// Trait for RAP (Randomized AIR with Preprocessing)
 pub mod rap;
+/// Utility functions
 pub mod utils;
+/// Verifier implementation
 pub mod verifier;
 
 // Use jemalloc as global allocator for performance
