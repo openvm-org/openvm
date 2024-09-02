@@ -84,7 +84,7 @@ pub type MemoryChipRef<F> = Rc<RefCell<MemoryChip<F>>>;
 pub struct MemoryChip<F: PrimeField32> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<NUM_WORDS, F>,
-    mem_config: MemoryConfig,
+    pub(crate) mem_config: MemoryConfig,
     pub(crate) range_checker: Arc<RangeCheckerGateChip>,
     timestamp: F,
     /// Maps (addr_space, pointer) to (data, timestamp)

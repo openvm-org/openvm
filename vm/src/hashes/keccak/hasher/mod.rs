@@ -11,8 +11,8 @@ pub mod columns;
 pub mod trace;
 pub mod utils;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 pub use air::KeccakVmAir;
 

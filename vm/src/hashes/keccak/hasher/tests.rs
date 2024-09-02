@@ -1,0 +1,131 @@
+use std::sync::Arc;
+
+use afs_primitives::xor::lookup::XorLookupChip;
+use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{default_perm, engine_from_perm, BabyBearPoseidon2Engine},
+        fri_params::fri_params_with_80_bits_of_security,
+    },
+    utils::create_seeded_rng,
+};
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_keccak_air::NUM_ROUNDS;
+use p3_util::log2_strict_usize;
+use rand::Rng;
+use tiny_keccak::Hasher;
+
+use super::{columns::KeccakVmColsMut, utils::num_keccak_f, KeccakVmChip};
+use crate::{
+    arch::{
+        instructions::Opcode,
+        testing::{MachineChipTestBuilder, MachineChipTester},
+    },
+    cpu::{trace::Instruction, BYTE_XOR_BUS},
+};
+
+fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
+    let max_log_degree = log2_strict_usize(max_trace_height);
+    let perm = default_perm();
+    let fri_params = fri_params_with_80_bits_of_security()[1];
+    engine_from_perm(perm, max_log_degree, fri_params)
+}
+
+// io is vector of (input, prank_output) where prank_output is Some if the trace
+// will be replaced
+fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTester {
+    let mut tester = MachineChipTestBuilder::default();
+    let xor_chip = Arc::new(XorLookupChip::<8>::new(BYTE_XOR_BUS));
+    let mut chip = KeccakVmChip::new(
+        tester.execution_bus(),
+        tester.memory_chip(),
+        xor_chip.clone(),
+    );
+
+    let mut dst = 0;
+    let src = 0;
+
+    for (input, prank_output) in &io {
+        let [a, b, c] = [0, 1, 2];
+        let [d, e, f] = [1, 2, 1];
+
+        tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
+        tester.write_cell(d, b, BabyBear::from_canonical_usize(src));
+        tester.write_cell(f, c, BabyBear::from_canonical_usize(input.len()));
+        for (i, byte) in input.iter().enumerate() {
+            tester.write_cell(e, src + i, BabyBear::from_canonical_usize(*byte as usize));
+        }
+
+        tester.execute(
+            &mut chip,
+            Instruction::large_from_isize(
+                Opcode::KECCAK256,
+                a as isize,
+                b as isize,
+                c as isize,
+                d as isize,
+                e as isize,
+                f as isize,
+                0,
+            ),
+        );
+        if let Some(output) = prank_output {
+            for i in 0..16 {
+                chip.records.last_mut().unwrap().digest_writes[i].data[0] =
+                    BabyBear::from_canonical_u16(
+                        output[2 * i] as u16 + ((output[2 * i + 1] as u16) << 8),
+                    );
+            }
+        }
+        // shift dst to not deal with timestamps for pranking
+        dst += 16;
+    }
+    let mut tester = tester.build().load(chip).load(xor_chip).finalize();
+
+    let keccak_trace = &mut tester.traces[1];
+    let mut row = 0;
+    for (input, output) in io {
+        let num_blocks = num_keccak_f(input.len());
+        let num_rows = NUM_ROUNDS * num_blocks;
+        row += num_rows;
+        if output.is_none() {
+            continue;
+        }
+        let output = output.unwrap();
+        let digest_row = KeccakVmColsMut::from_mut_slice(keccak_trace.row_mut(row - 1));
+        for i in 0..16 {
+            let out_limb = BabyBear::from_canonical_u16(
+                output[2 * i] as u16 + ((output[2 * i + 1] as u16) << 8),
+            );
+            let x = i / 4;
+            let y = 0;
+            let limb = i % 4;
+            if x == 0 && y == 0 {
+                digest_row.inner.a_prime_prime_prime_0_0_limbs[limb] = out_limb;
+            } else {
+                digest_row.inner.a_prime_prime[y][x][limb] = out_limb;
+            }
+        }
+    }
+
+    tester
+}
+
+#[test]
+fn negative_test_keccak256() {
+    let mut rng = create_seeded_rng();
+    let mut hasher = tiny_keccak::Keccak::v256();
+    hasher.update(&[0u8; 137]);
+    let mut out = [0u8; 32];
+    hasher.finalize(&mut out);
+    out[0] = rng.gen();
+    let tester = build_keccak256_test(vec![(vec![], Some(out))]);
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        tester.test(get_engine),
+        Err(VerificationError::OodEvaluationMismatch)
+    );
+}
