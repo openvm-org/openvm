@@ -2,6 +2,8 @@ use std::{array::from_fn, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
 use p3_field::PrimeField32;
+use tiny_keccak::{Hasher, Keccak};
+use utils::num_keccak_f;
 
 pub mod air;
 pub mod bridge;
@@ -9,9 +11,10 @@ pub mod columns;
 pub mod trace;
 pub mod utils;
 
+// #[cfg(test)]
+// mod tests;
+
 pub use air::KeccakVmAir;
-use tiny_keccak::{Hasher, Keccak};
-use utils::num_keccak_f;
 
 use crate::{
     arch::{

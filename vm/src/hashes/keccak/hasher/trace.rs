@@ -124,6 +124,8 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
 
         let memory = self.memory_chip.borrow();
         let mem_oc = memory.make_offline_checker();
+        let range_checker = memory.range_checker.clone();
+        drop(memory);
         // Use unsafe alignment so we can parallely write to the matrix
         let trace_width = self.trace_width();
         let mut trace = RowMajorMatrix::new(vec![F::zero(); num_rows * trace_width], trace_width);
@@ -160,7 +162,9 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                 let mut slc_idx = 0;
                 if let Some(op_reads) = diff.op_reads {
                     for record in op_reads {
-                        let aux = memory.make_read_aux_cols(record).flatten();
+                        let aux = mem_oc
+                            .make_read_aux_cols(range_checker.clone(), record)
+                            .flatten();
                         first_row.mem_oc[slc_idx..][..aux.len()].copy_from_slice(&aux);
                         slc_idx += aux.len();
                     }
@@ -168,7 +172,9 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                 slc_idx = KECCAK_EXECUTION_READS * MemoryReadAuxCols::<1, F>::width(&mem_oc);
                 for record in block.bytes_read {
                     // TODO[jpw] make_read_aux_cols should directly write into slice
-                    let aux = memory.make_read_aux_cols(record).flatten();
+                    let aux = mem_oc
+                        .make_read_aux_cols(range_checker.clone(), record)
+                        .flatten();
                     first_row.mem_oc[slc_idx..][..aux.len()].copy_from_slice(&aux);
                     slc_idx += aux.len();
                 }
@@ -183,7 +189,9 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                         * MemoryReadAuxCols::<1, F>::width(&mem_oc);
                     for record in digest_writes {
                         // TODO: these aux columns are only used for the last row - can we share them with aux reads in first row?
-                        let aux = memory.make_write_aux_cols(record).flatten();
+                        let aux = mem_oc
+                            .make_write_aux_cols(range_checker.clone(), record)
+                            .flatten();
                         last_row.mem_oc[slc_idx..][..aux.len()].copy_from_slice(&aux);
                         slc_idx += aux.len();
                     }
