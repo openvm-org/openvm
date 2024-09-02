@@ -3,6 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use afs_primitives::{offline_checker::OfflineCheckerOperation, range_gate::RangeCheckerGateChip};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
+    engine::StarkEngine,
     keygen::{
         types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
@@ -14,7 +15,6 @@ use afs_stark_backend::{
     rap::AnyRap,
     verifier::VerificationError,
 };
-use afs_test_utils::engine::StarkEngine;
 use getset::Getters;
 use p3_field::{AbstractField, Field, PrimeField, PrimeField64};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};

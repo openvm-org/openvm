@@ -3,6 +3,7 @@ use std::{marker::PhantomData, sync::Arc};
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
+    engine::StarkEngine,
     keygen::{
         types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
@@ -13,7 +14,6 @@ use afs_stark_backend::{
     },
     verifier::VerificationError,
 };
-use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};

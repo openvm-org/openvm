@@ -3,8 +3,9 @@ use std::{
     sync::Arc,
 };
 
-use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
-use afs_test_utils::utils::to_field_vec;
+use afs_primitives::{
+    range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions, utils::to_field_vec,
+};
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -65,7 +66,7 @@ impl IntersectorAir {
 
             let inter_cols = IntersectorCols {
                 io: IntersectorIoCols {
-                    idx: to_field_vec::<F>(idx),
+                    idx: to_field_vec::<F>(&idx),
                     t1_mult: F::from_canonical_u32(t1_mult),
                     t2_mult: F::from_canonical_u32(t2_mult),
                     out_mult: F::from_canonical_u32(out_mult),
