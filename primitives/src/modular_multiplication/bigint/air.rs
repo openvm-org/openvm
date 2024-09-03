@@ -18,6 +18,7 @@ use crate::{
     sub_chip::AirConfig,
 };
 
+#[derive(Clone, Debug)]
 pub struct ModularArithmeticBigIntAir {
     pub modulus: BigUint,
     pub total_bits: usize,

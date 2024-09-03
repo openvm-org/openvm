@@ -6,15 +6,18 @@ use p3_field::AbstractField;
 use rand::RngCore;
 
 use crate::{
+    arch::{
+        chips::InstructionExecutor, columns::ExecutionState,
+        instructions::Opcode::SECP256K1_COORD_MUL,
+    },
+    cpu::trace::Instruction,
+    modular_multiplication::bigint_to_elems,
     program::Program,
     vm::{
-        config::{DEFAULT_MAX_SEGMENT_LEN, MemoryConfig, VmConfig},
+        config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
         VirtualMachine,
     },
 };
-use crate::arch::instructions::Opcode::SECP256K1_COORD_MUL;
-use crate::cpu::trace::Instruction;
-use crate::modular_multiplication::{bigint_to_elems, ModularArithmeticChip};
 
 fn make_vm(
     program: Program<BabyBear>,
@@ -27,6 +30,7 @@ fn make_vm(
             field_extension_enabled,
             compress_poseidon2_enabled: false,
             perm_poseidon2_enabled: false,
+            keccak_enabled: false,
             modular_multiplication_enabled: true,
             is_less_than_enabled: false,
             memory_config: MemoryConfig {
@@ -74,43 +78,42 @@ fn test_modular_multiplication_runtime() {
     let address1 = 0;
     let address2 = 100;
     let address3 = 4000;
-    let air = &segment.modular_arithmetic_chips.get(&modulus).unwrap().air;
-    let repr_bits = air.air.repr_bits;
-    let num_elems = air.air.limb_dimensions.io_limb_sizes.len();
+    let num_elems = 9;
+    let repr_bits = 30;
 
     for (i, &elem) in bigint_to_elems(a, repr_bits, num_elems).iter().enumerate() {
         let address = address1 + i;
-        segment.memory_chip.borrow_mut().write_word(
+        segment.memory_chip.borrow_mut().write_cell(
             BabyBear::one(),
             BabyBear::from_canonical_usize(address),
-            [elem],
+            elem,
         );
     }
     for (i, &elem) in bigint_to_elems(b, repr_bits, num_elems).iter().enumerate() {
         let address = address2 + i;
-        segment.memory_chip.borrow_mut().write_word(
+        segment.memory_chip.borrow_mut().write_cell(
             BabyBear::one(),
             BabyBear::from_canonical_usize(address),
-            [elem],
+            elem,
         );
     }
-    ModularArithmeticChip::calculate(
-        segment,
-        Instruction::from_isize(
-            SECP256K1_COORD_MUL,
-            address1 as isize,
-            address2 as isize,
-            address3 as isize,
-            0,
-            1,
-        ),
+    let instruction = Instruction::from_isize(
+        SECP256K1_COORD_MUL,
+        address1 as isize,
+        address2 as isize,
+        address3 as isize,
+        0,
+        1,
     );
+    let executor = segment.executors.get_mut(&instruction.opcode).unwrap();
+    let _next_state =
+        InstructionExecutor::execute(executor, &instruction, ExecutionState::new(0usize, 0usize));
     for (i, &elem) in bigint_to_elems(r, repr_bits, num_elems).iter().enumerate() {
         let address = address3 + i;
-        segment.memory_chip.borrow_mut().write_word(
+        segment.memory_chip.borrow_mut().write_cell(
             BabyBear::one(),
             BabyBear::from_canonical_usize(address),
-            [elem],
+            elem,
         );
     }
 }
