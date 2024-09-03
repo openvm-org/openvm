@@ -1,4 +1,5 @@
 use afs_compiler::util::execute_program;
+use afs_recursion::testing_utils::{inner::build_verification_program, VerificationParams};
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder, prover::trace::TraceCommitmentBuilder,
     verifier::VerificationError,
@@ -6,7 +7,6 @@ use afs_stark_backend::{
 use ax_sdk::{
     config::baby_bear_poseidon2::default_engine, engine::StarkEngine, utils::generate_random_matrix,
 };
-use common::VerificationParams;
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
@@ -14,8 +14,6 @@ use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
-
-mod common;
 
 /// Inner value is width of y-submatrix
 pub struct SumAir(pub usize);
@@ -87,7 +85,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
         proof,
         fri_params: engine.fri_params,
     };
-    let (program, input_stream) = common::build_verification_program(pvs, vparams);
+    let (program, input_stream) = build_verification_program(pvs, vparams);
     execute_program(program, input_stream);
 
     Ok(())

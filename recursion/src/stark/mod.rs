@@ -4,7 +4,7 @@ use std::{cmp::Reverse, marker::PhantomData};
 
 use afs_compiler::{
     conversion::CompilerOptions,
-    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var},
+    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
     prelude::RVar,
 };
 use afs_stark_backend::{
@@ -16,7 +16,7 @@ use afs_stark_backend::{
     rap::AnyRap,
 };
 use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
-use itertools::{izip, Itertools};
+use itertools::{izip, multiunzip, Itertools};
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
@@ -270,11 +270,11 @@ where
         let mut round_idx = 0;
 
         // 1. First the preprocessed trace openings: one round per AIR with preprocessing.
-        let prep_idx: Var<_> = builder.constant(C::N::zero());
+        let prep_idx: Usize<_> = builder.eval(C::N::zero());
         for i in 0..num_airs {
             if let Some(preprocessed_data) = vk.per_air[i].preprocessed_data.as_ref() {
-                let prep = builder.get(&proof.opening.values.preprocessed, prep_idx);
-                builder.assign(&prep_idx, prep_idx + C::N::one());
+                let prep = builder.get(&proof.opening.values.preprocessed, prep_idx.clone());
+                builder.assign(&prep_idx, prep_idx.clone() + C::N::one());
                 let batch_commit = builder.constant(preprocessed_data.commit.clone());
 
                 let domain = builder.get(&domains, i);
@@ -841,10 +841,5 @@ pub fn sort_chips(
 ) {
     let mut groups = izip!(chips, traces, pvs).collect_vec();
     groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
-
-    let chips = groups.iter().map(|(x, _, _)| *x).collect_vec();
-    let pvs = groups.iter().map(|(_, _, x)| x.clone()).collect_vec();
-    let traces = groups.into_iter().map(|(_, x, _)| x).collect_vec();
-
-    (chips, traces, pvs)
+    multiunzip(groups)
 }

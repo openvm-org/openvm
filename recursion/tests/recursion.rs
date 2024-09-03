@@ -1,19 +1,18 @@
-use std::ops::Deref;
+use std::cmp::Reverse;
 
 use afs_compiler::{asm::AsmBuilder, ir::Felt};
-use ax_sdk::config::{
-    fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
-    setup_tracing,
-};
-use itertools::Itertools;
+use afs_recursion::testing_utils::{inner::run_recursive_test, StarkForTest};
+use ax_sdk::config::{fri_params::default_fri_params, setup_tracing};
+use itertools::{izip, multiunzip, Itertools};
 use p3_baby_bear::BabyBear;
+use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
+use p3_matrix::Matrix;
+use p3_uni_stark::{Domain, StarkGenericConfig};
 use stark_vm::{
     program::Program,
     vm::{config::VmConfig, segment::SegmentResult, VirtualMachine},
 };
-
-mod common;
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
@@ -41,11 +40,15 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     builder.compile_isa()
 }
 
-#[test]
-fn test_fibonacci_program_verify() {
-    setup_tracing();
-
-    let fib_program = fibonacci_program(0, 1, 32);
+pub(crate) fn fibonacci_program_stark_for_test<SC: StarkGenericConfig>(
+    a: u32,
+    b: u32,
+    n: u32,
+) -> StarkForTest<SC>
+where
+    Domain<SC>: PolynomialSpace<Val = BabyBear>,
+{
+    let fib_program = fibonacci_program(a, b, n);
 
     let vm_config = VmConfig {
         num_public_values: 3,
@@ -68,13 +71,31 @@ fn test_fibonacci_program_verify() {
         ..
     } = result.segment_results.into_iter().next().unwrap();
 
-    let airs = airs.iter().map(Box::deref).collect_vec();
+    let mut groups = izip!(airs, traces, public_values).collect_vec();
+    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
+    let (airs, traces, pvs): (Vec<_>, _, _) = multiunzip(groups);
+    let airs = airs.into_iter().map(|x| x.into()).collect_vec();
+    StarkForTest {
+        any_raps: airs,
+        traces,
+        pvs,
+    }
+}
 
-    // blowup factor = 3
-    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-        fri_params_fast_testing()[1]
-    } else {
-        fri_params_with_80_bits_of_security()[1]
-    };
-    common::run_recursive_test(airs, traces, public_values, fri_params);
+#[test]
+fn test_fibonacci_program_verify() {
+    setup_tracing();
+
+    let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
+    run_recursive_test(fib_program_stark, default_fri_params());
+}
+
+#[cfg(feature = "static-verifier")]
+#[test]
+fn test_fibonacci_program_halo2_verify() {
+    use afs_recursion::halo2::testing_utils::run_static_verifier_test;
+    setup_tracing();
+
+    let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
+    run_static_verifier_test(&fib_program_stark, default_fri_params());
 }

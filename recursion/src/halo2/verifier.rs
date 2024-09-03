@@ -73,8 +73,8 @@ impl Halo2VerifierCircuit {
         let config_params = circuit.builder.config_params.clone();
         // Wrapper circuit should only have 1 column.
         assert_eq!(config_params.num_advice_per_phase, vec![1]);
-        let vk = keygen_vk(&params, &circuit).unwrap();
-        let pk = keygen_pk(&params, vk, &circuit).unwrap();
+        let vk = keygen_vk(params.as_ref(), &circuit).unwrap();
+        let pk = keygen_pk(params.as_ref(), vk, &circuit).unwrap();
         let num_pvs = circuit.instances().iter().map(|x| x.len()).collect_vec();
         Halo2ProvingPinning {
             pk,

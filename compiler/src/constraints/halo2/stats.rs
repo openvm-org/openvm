@@ -10,6 +10,14 @@ pub(crate) struct Halo2Stats {
     pub total_lookup_cell: usize,
 }
 
+impl Halo2Stats {
+    pub fn add_assign(&mut self, b: &Self) {
+        self.total_gate_cell += b.total_gate_cell;
+        self.total_fixed += b.total_fixed;
+        self.total_lookup_cell += b.total_lookup_cell;
+    }
+}
+
 impl CanDiff for Halo2Stats {
     fn diff(&mut self, another: &Self) {
         *self = Self {
@@ -20,7 +28,7 @@ impl CanDiff for Halo2Stats {
     }
 }
 
-pub(crate) fn print(cell_tracker: &Halo2CellTracker) {
+pub(crate) fn print(cell_tracker: &Halo2CellTracker, babybear_stats: &Halo2Stats) {
     if cell_tracker.instances.is_empty() {
         return;
     }
@@ -33,9 +41,7 @@ pub(crate) fn print(cell_tracker: &Halo2CellTracker) {
         }
 
         let agg_stats = spans.iter().fold(Halo2Stats::default(), |mut total, span| {
-            total.total_gate_cell += span.metrics.total_gate_cell;
-            total.total_fixed += span.metrics.total_fixed;
-            total.total_lookup_cell += span.metrics.total_lookup_cell;
+            total.add_assign(&span.metrics);
             total
         });
 
@@ -44,4 +50,11 @@ pub(crate) fn print(cell_tracker: &Halo2CellTracker) {
         info!("  - total_fixed: {}", agg_stats.total_fixed);
         info!("  - total_lookup_cell: {}", agg_stats.total_lookup_cell);
     }
+    info!("Babybear:");
+    info!("  - total_gate_cell: {}", babybear_stats.total_gate_cell);
+    info!("  - total_fixed: {}", babybear_stats.total_fixed);
+    info!(
+        "  - total_lookup_cell: {}",
+        babybear_stats.total_lookup_cell
+    );
 }

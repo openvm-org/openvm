@@ -9,11 +9,12 @@ pub mod halo2;
 pub mod hints;
 mod outer_poseidon2;
 pub mod stark;
+pub mod testing_utils;
 #[cfg(test)]
 mod tests;
 pub mod types;
 mod utils;
-mod witness;
+pub mod witness;
 
 /// Digest size in the outer config.
 const OUTER_DIGEST_SIZE: usize = 1;
