@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, One, Zero};
 use p3_air::BaseAir;
@@ -14,7 +14,9 @@ use super::{
     super::utils::secp256k1_prime, add::*, div::*, mul::*, sub::*, ModularArithmeticAir,
     ModularArithmeticCols,
 };
-use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
+use crate::{
+    range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions,
+};
 // 256 bit prime, 10 limb bits -> 26 limbs.
 const LIMB_BITS: usize = 10;
 const NUM_LIMB: usize = 26;
@@ -47,7 +49,10 @@ fn get_air_and_range_checker(
 
     let range_bus = 1;
     let range_decomp = 17;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        range_bus,
+        1 << range_decomp,
+    )));
     let q_limbs = if is_mul_div { num_limbs } else { 1 };
     let carry_limbs = if is_mul_div {
         2 * num_limbs - 1
