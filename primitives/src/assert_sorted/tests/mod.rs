@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use assert_sorted::AssertSortedChip;
+use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::DenseMatrix;
 
