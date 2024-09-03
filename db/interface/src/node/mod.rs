@@ -17,7 +17,7 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
 use self::{filter::Filter, page_scan::PageScan, projection::Projection};
-use crate::common::{committed_page::CommittedPage, expr::AxdbExpr};
+use crate::common::{cryptographic_object::CryptographicObject, expr::AxdbExpr};
 
 pub mod filter;
 pub mod functionality;
@@ -39,7 +39,7 @@ pub trait AxdbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC> + Send +
     /// Verify the STARK proof for the node
     async fn verify(&self, ctx: &SessionContext, engine: &E) -> Result<()>;
     /// Get the output of the node
-    fn output(&self) -> &Option<CommittedPage<SC>>;
+    fn output(&self) -> &Option<CryptographicObject<SC>>;
     /// Get the proof of the node
     fn proof(&self) -> &Option<Proof<SC>>;
     /// Get the string name of the node
@@ -119,21 +119,13 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AxdbNode::PageScan(page_scan) => {
-                write!(
-                    f,
-                    "PageScan {:?} {:?}",
-                    page_scan.table_name, page_scan.output
-                )
+                write!(f, "PageScan {:?}", page_scan.table_name)
             }
             AxdbNode::Projection(projection) => {
-                write!(
-                    f,
-                    "Projection {:?} {:?}",
-                    projection.schema, projection.output
-                )
+                write!(f, "Projection {:?}", projection.schema)
             }
             AxdbNode::Filter(filter) => {
-                write!(f, "Filter {:?} {:?}", filter.predicate, filter.output)
+                write!(f, "Filter {:?}", filter.predicate)
             }
         }
     }

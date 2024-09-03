@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
 use axdb_interface::{
-    common::committed_page::CommittedPage, controller::AxdbController, NUM_IDX_COLS, PCS_LOG_DEGREE,
+    common::committed_page::{CommittedPage, CryptographicSchema},
+    controller::AxdbController,
+    NUM_IDX_COLS, PCS_LOG_DEGREE,
 };
 use datafusion::{
     arrow::{
@@ -19,13 +21,14 @@ pub async fn run_keygen() {
 
     let schema = std::fs::read("tests/data/example.schema.bin").unwrap();
     let schema: Schema = bincode::deserialize(&schema).unwrap();
-    let cp = CommittedPage::<BabyBearPoseidon2Config>::new_for_keygen(schema, NUM_IDX_COLS);
+    // let cp = CommittedPage::<BabyBearPoseidon2Config>::new_for_keygen(schema, NUM_IDX_COLS);
+    let cs = CryptographicSchema::new(schema, NUM_IDX_COLS);
 
-    let page_id = cp.page_id.clone();
-    ctx.register_table(page_id.clone(), Arc::new(cp.clone()))
+    let table_id = cs.id.clone();
+    ctx.register_table(table_id.clone(), Arc::new(cs.clone()))
         .unwrap();
 
-    let sql = format!("SELECT a FROM {} WHERE a <= 10", page_id);
+    let sql = format!("SELECT a FROM {} WHERE a <= 10", table_id);
     let logical = ctx.state().create_logical_plan(sql.as_str()).await.unwrap();
 
     let engine = default_engine(PCS_LOG_DEGREE);

@@ -15,7 +15,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use tracing::instrument;
 
 use super::{AxdbNode, AxdbNodeExecutable};
-use crate::common::committed_page::CommittedPage;
+use crate::common::cryptographic_object::CryptographicObject;
 
 pub struct Projection<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync>
 where
@@ -28,7 +28,7 @@ where
     SC::Challenge: Send + Sync,
 {
     pub input: Arc<Mutex<AxdbNode<SC, E>>>,
-    pub output: Option<CommittedPage<SC>>,
+    pub output: Option<CryptographicObject<SC>>,
     pub schema: Schema,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
@@ -66,7 +66,7 @@ where
         unimplemented!()
     }
 
-    fn output(&self) -> &Option<CommittedPage<SC>> {
+    fn output(&self) -> &Option<CryptographicObject<SC>> {
         &self.output
     }
 

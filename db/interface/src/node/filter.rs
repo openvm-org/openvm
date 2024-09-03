@@ -16,12 +16,17 @@ use tracing::instrument;
 
 use super::{functionality::filter::FilterFn, AxdbNode, AxdbNodeExecutable};
 use crate::{
-    common::{committed_page::CommittedPage, expr::AxdbExpr},
+    common::{
+        cryptographic_object::{CryptographicObject, CryptographicObjectTrait},
+        expr::AxdbExpr,
+    },
     NUM_IDX_COLS,
 };
 
-pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync>
+pub struct Filter<SC, E>
 where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC> + Send + Sync,
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
     PcsProof<SC>: Send + Sync,
@@ -31,14 +36,16 @@ where
     SC::Challenge: Send + Sync,
 {
     pub input: Arc<Mutex<AxdbNode<SC, E>>>,
-    pub output: Option<CommittedPage<SC>>,
+    pub output: Option<CryptographicObject<SC>>,
     pub predicate: AxdbExpr,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> Filter<SC, E>
+impl<SC, E> Filter<SC, E>
 where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC> + Send + Sync,
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
     PcsProof<SC>: Send + Sync,
@@ -47,14 +54,13 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    async fn input_clone(&self) -> CommittedPage<SC> {
-        let input = self.input.lock().await;
-        let input = input.output().as_ref().unwrap().clone();
-        input
-    }
+    // async fn unlock_input(&self) -> Arc<CryptographicObject<SC>> {
+    //     let input = self.input.lock().await;
+    //     let input = input.output().as_ref().unwrap();
+    // }
 
-    fn page_stats(&self, cp: &CommittedPage<SC>) -> (usize, usize, usize) {
-        let schema = &cp.schema;
+    fn page_stats(&self, cp: &CryptographicObject<SC>) -> (usize, usize, usize) {
+        let schema = cp.schema();
         // TODO: handle different data types
         // for field in schema.fields() {
         //     let data_type = field.data_type();
@@ -68,9 +74,10 @@ where
 }
 
 #[async_trait]
-impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxdbNodeExecutable<SC, E>
-    for Filter<SC, E>
+impl<SC, E> AxdbNodeExecutable<SC, E> for Filter<SC, E>
 where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC> + Send + Sync,
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
     PcsProof<SC>: Send + Sync,
@@ -81,47 +88,107 @@ where
 {
     #[instrument(level = "info", skip_all)]
     async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
-        let input = self.input_clone().await;
-        let output = FilterFn::<SC, E>::execute(&self.predicate, &input).await?;
-        self.output = Some(output);
+        // let input = self.unlock_input().await;
+        let input = self.input.lock().await;
+        let input = input.output().as_ref().unwrap();
+        match input {
+            CryptographicObject::CommittedPage(cp) => {
+                let output = FilterFn::<SC, E>::execute(&self.predicate, &cp).await?;
+                self.output = Some(output.into());
+            }
+            _ => panic!("input is not a CommittedPage<SC>"),
+        }
+        // if let Some(input_page) = input.as_any().downcast_ref::<CommittedPage<_>>() {
+        //     let output = FilterFn::<SC, E>::execute(&self.predicate, &input_page).await?;
+        //     // self.output = Some(output.into());
+        // }
         Ok(())
     }
 
     #[instrument(level = "info", skip_all)]
     async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        let input = self.input_clone().await;
-        let (idx_len, data_len, _page_width) = self.page_stats(&input);
+        let input = self.input.lock().await;
+        let input = input.output().as_ref().unwrap();
+
+        let (idx_len, data_len, _page_width) = self.page_stats(input);
         let pk = FilterFn::<SC, E>::keygen(engine, &self.predicate, self.name(), idx_len, data_len)
             .await?;
         self.pk = Some(pk);
 
-        self.output = Some(input);
+        match input {
+            CryptographicObject::CryptographicSchema(schema) => {
+                let output = CryptographicObject::CryptographicSchema(schema.clone());
+                self.output = Some(output);
+            }
+            _ => panic!("input is not a CryptographicSchema"),
+        }
         Ok(())
     }
 
     #[instrument(level = "info", skip_all)]
     async fn prove(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        let input = self.input_clone().await;
-        let output = self.output.as_ref().unwrap();
-        let (idx_len, data_len, _page_width) = self.page_stats(&input);
-        let proof = FilterFn::<SC, E>::prove(
-            engine,
-            &input,
-            output,
-            &self.predicate,
-            self.name(),
-            idx_len,
-            data_len,
-        )
-        .await?;
-        self.proof = Some(proof);
+        let input = self.input.lock().await;
+        let input = input.output().as_ref().unwrap();
+        let (idx_len, data_len, _page_width) = self.page_stats(input);
+        match input {
+            CryptographicObject::CommittedPage(cp) => {
+                let output = self.output.as_ref().unwrap();
+                match output {
+                    CryptographicObject::CommittedPage(output_page) => {
+                        let proof = FilterFn::<SC, E>::prove(
+                            engine,
+                            &cp,
+                            &output_page,
+                            &self.predicate,
+                            self.name(),
+                            idx_len,
+                            data_len,
+                        )
+                        .await?;
+                        self.proof = Some(proof);
+                    }
+                    _ => panic!("output is not a CommittedPage<SC>"),
+                }
+            }
+            _ => panic!("input is not a CommittedPage<SC>"),
+        }
+        // let input_page = input.as_any().downcast_ref::<CommittedPage<SC>>().unwrap();
+        // if let None = self
+        //     .output
+        //     .as_ref()
+        //     .unwrap()
+        //     .as_any()
+        //     .downcast_ref::<CommittedPage<SC>>()
+        // {
+        //     panic!("output is not a committed page");
+        // }
+        // let output = self
+        //     .output
+        //     .as_ref()
+        //     .unwrap()
+        //     .as_any()
+        //     .downcast_ref::<CommittedPage<_>>()
+        //     .unwrap();
+        // let (idx_len, data_len, _page_width) = self.page_stats(&input);
+        // let proof = FilterFn::<SC, E>::prove(
+        //     engine,
+        //     &input_page,
+        //     output,
+        //     &self.predicate,
+        //     self.name(),
+        //     idx_len,
+        //     data_len,
+        // )
+        // .await?;
+        // self.proof = Some(proof);
         Ok(())
     }
 
     #[instrument(level = "info", skip_all)]
     async fn verify(&self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        let input = self.input_clone().await;
-        let (idx_len, data_len, _page_width) = self.page_stats(&input);
+        let input = self.input.lock().await;
+        let input = input.output().as_ref().unwrap();
+        let (idx_len, data_len, _page_width) = self.page_stats(input);
         let proof = self.proof.as_ref().unwrap();
         FilterFn::<SC, E>::verify(
             engine,
@@ -135,7 +202,7 @@ where
         Ok(())
     }
 
-    fn output(&self) -> &Option<CommittedPage<SC>> {
+    fn output(&self) -> &Option<CryptographicObject<SC>> {
         &self.output
     }
 

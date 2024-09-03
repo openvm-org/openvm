@@ -12,7 +12,10 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info;
 
-use crate::node::{AxdbNode, AxdbNodeExecutable};
+use crate::{
+    common::cryptographic_object::CryptographicObject,
+    node::{AxdbNode, AxdbNodeExecutable},
+};
 
 macro_rules! run_execution_plan {
     ($self:ident, $method:ident, $ctx:expr, $engine:expr) => {
@@ -69,7 +72,10 @@ where
         let last_node = self.axdb_execution_plan.last().unwrap().to_owned();
         let last_node = last_node.lock().await;
         let output = last_node.output().as_ref().unwrap();
-        Ok(output.to_record_batch())
+        match output {
+            CryptographicObject::CommittedPage(cp) => Ok(cp.to_record_batch()),
+            _ => panic!("output is not a CommittedPage"),
+        }
     }
 
     pub async fn execute(&mut self) -> Result<()> {

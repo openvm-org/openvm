@@ -15,14 +15,16 @@ use tracing::instrument;
 
 use super::{functionality::filter::FilterFn, AxdbNodeExecutable};
 use crate::{
-    common::{committed_page::CommittedPage, expr::AxdbExpr},
+    common::{
+        committed_page::CommittedPage, cryptographic_object::CryptographicObject, expr::AxdbExpr,
+    },
     utils::table::get_record_batches,
     NUM_IDX_COLS,
 };
 
 pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     pub input: Arc<dyn TableSource>,
-    pub output: Option<CommittedPage<SC>>,
+    pub output: Option<CryptographicObject<SC>>,
     pub table_name: String,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
@@ -117,7 +119,7 @@ where
             }
         }
 
-        self.output = Some(committed_page);
+        self.output = Some(CryptographicObject::CommittedPage(committed_page));
         Ok(())
     }
 
@@ -137,7 +139,7 @@ where
             )
             .await?;
         }
-        self.output = Some(committed_page);
+        self.output = Some(committed_page.into());
         Ok(())
     }
 
@@ -179,7 +181,7 @@ where
         Ok(())
     }
 
-    fn output(&self) -> &Option<CommittedPage<SC>> {
+    fn output(&self) -> &Option<CryptographicObject<SC>> {
         &self.output
     }
 

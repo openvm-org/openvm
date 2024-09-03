@@ -15,6 +15,7 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use self::utils::{convert_columns_to_page_rows, convert_to_record_batch, get_num_idx_fields};
+use super::cryptographic_object::CryptographicObjectTrait;
 use crate::{utils::generate_random_alpha_string, BITS_PER_FE, NUM_IDX_COLS};
 
 pub mod column;
@@ -159,6 +160,31 @@ where
         self.cached_trace = Some(trace);
     }
 }
+
+impl<SC: StarkGenericConfig> CryptographicObjectTrait for CommittedPage<SC> {
+    fn schema(&self) -> Schema {
+        self.schema.clone()
+    }
+}
+
+// impl<SC: StarkGenericConfig> CryptographicObject for CommittedPage<SC>
+// where
+//     Val<SC>: PrimeField64,
+//     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+//     PcsProof<SC>: Send + Sync,
+//     Domain<SC>: Send + Sync,
+//     Com<SC>: Send + Sync,
+//     SC::Pcs: Send + Sync,
+//     SC::Challenge: Send + Sync,
+// {
+//     fn schema(&self) -> Schema {
+//         self.schema.clone()
+//     }
+
+//     fn as_any(&self) -> &dyn Any {
+//         self
+//     }
+// }
 
 impl<SC: StarkGenericConfig> std::fmt::Debug for CommittedPage<SC> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
