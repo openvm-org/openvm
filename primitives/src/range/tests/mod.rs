@@ -8,7 +8,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
-use crate::range::RangeCheckerChip;
+use crate::range::{bus::RangeCheckBus, RangeCheckerChip};
 
 /// List chip for testing
 pub mod list;
@@ -17,16 +17,16 @@ pub mod list;
 fn test_list_range_checker() {
     let mut rng = create_seeded_rng();
 
-    let bus_index = 0;
-
     const LOG_TRACE_DEGREE_RANGE: usize = 3;
     const MAX: u32 = 1 << LOG_TRACE_DEGREE_RANGE;
+
+    let bus = RangeCheckBus::new(0, MAX);
 
     const LOG_TRACE_DEGREE_LIST: usize = 6;
     const LIST_LEN: usize = 1 << LOG_TRACE_DEGREE_LIST;
 
     // Creating a RangeCheckerChip
-    let range_checker = Arc::new(RangeCheckerChip::new(bus_index, MAX));
+    let range_checker = Arc::new(RangeCheckerChip::new(bus));
 
     // Generating random lists
     let num_lists = 10;
@@ -41,7 +41,7 @@ fn test_list_range_checker() {
     // define a bunch of ListChips
     let lists = lists_vals
         .iter()
-        .map(|vals| ListChip::new(bus_index, vals.to_vec(), Arc::clone(&range_checker)))
+        .map(|vals| ListChip::new(vals.to_vec(), Arc::clone(&range_checker)))
         .collect::<Vec<ListChip>>();
 
     let lists_traces = lists

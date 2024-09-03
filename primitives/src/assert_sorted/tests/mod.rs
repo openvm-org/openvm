@@ -7,7 +7,7 @@ use p3_baby_bear::BabyBear;
 use p3_matrix::dense::DenseMatrix;
 
 use super::super::assert_sorted;
-use crate::range_gate::RangeCheckerGateChip;
+use crate::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
 
 /*
  * Testing strategy for the assert sorted chip:
@@ -31,11 +31,10 @@ use crate::range_gate::RangeCheckerGateChip;
 // covers limb_bits < 20, key_vec_len < 4, limb_bits % decomp == 0, number of rows < 4, rows are sorted lexicographically
 #[test]
 fn test_assert_sorted_chip_small_positive() {
-    let bus_index: usize = 0;
     let limb_bits: Vec<usize> = vec![16, 16];
     let decomp: usize = 8;
-
     let range_max: u32 = 1 << decomp;
+    let bus = RangeCheckBus::new(0, range_max);
 
     let requests = vec![
         vec![7784, 35423],
@@ -44,9 +43,9 @@ fn test_assert_sorted_chip_small_positive() {
         vec![32886, 24834],
     ];
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
 
-    let assert_sorted_chip = AssertSortedChip::new(bus_index, limb_bits, decomp, range_checker);
+    let assert_sorted_chip = AssertSortedChip::new(limb_bits, decomp, range_checker);
     let range_checker_chip = assert_sorted_chip.range_checker.as_ref();
 
     let assert_sorted_chip_trace: DenseMatrix<BabyBear> =
@@ -63,11 +62,10 @@ fn test_assert_sorted_chip_small_positive() {
 // covers limb_bits >= 20, key_vec_len >= 4, limb_bits % decomp != 0, number of rows >= 4, rows are sorted lexicographically
 #[test]
 fn test_assert_sorted_chip_large_positive() {
-    let bus_index: usize = 0;
     let limb_bits: Vec<usize> = vec![30, 30, 30, 30];
     let decomp: usize = 8;
-
     let range_max: u32 = 1 << decomp;
+    let bus = RangeCheckBus::new(0, range_max);
 
     let requests = vec![
         vec![44832, 12786, 318434, 35867],
@@ -76,10 +74,9 @@ fn test_assert_sorted_chip_large_positive() {
         vec![887921, 196209, 767547, 875005],
     ];
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
 
-    let assert_sorted_chip =
-        AssertSortedChip::new(bus_index, limb_bits, decomp, range_checker.clone());
+    let assert_sorted_chip = AssertSortedChip::new(limb_bits, decomp, range_checker.clone());
     let range_checker_chip = assert_sorted_chip.range_checker.as_ref();
 
     let assert_sorted_chip_trace: DenseMatrix<BabyBear> =
@@ -96,11 +93,10 @@ fn test_assert_sorted_chip_large_positive() {
 // covers limb_bits >= 20, key_vec_len >= 4, limb_bits % decomp != 0, number of rows >= 4, rows are not sorted lexicographically
 #[test]
 fn test_assert_sorted_chip_unsorted_negative() {
-    let bus_index: usize = 0;
     let limb_bits: Vec<usize> = vec![30, 30, 30, 30];
     let decomp: usize = 8;
-
     let range_max: u32 = 1 << decomp;
+    let bus = RangeCheckBus::new(0, range_max);
 
     // the first and second rows are not in sorted order
     let requests = vec![
@@ -110,10 +106,9 @@ fn test_assert_sorted_chip_unsorted_negative() {
         vec![887921, 196209, 767547, 875005],
     ];
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
 
-    let assert_sorted_chip =
-        AssertSortedChip::new(bus_index, limb_bits, decomp, range_checker.clone());
+    let assert_sorted_chip = AssertSortedChip::new(limb_bits, decomp, range_checker.clone());
     let range_checker_chip = assert_sorted_chip.range_checker.as_ref();
 
     let assert_sorted_chip_trace: DenseMatrix<BabyBear> =

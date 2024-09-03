@@ -1,6 +1,6 @@
 use std::{collections::HashMap, iter, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::StarkEngine,
@@ -190,20 +190,17 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
             traces: None,
             table_commitments: None,
 
-            range_checker: Arc::new(RangeCheckerGateChip::new(
+            range_checker: Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
                 buses.range_bus_index,
                 1 << decomp,
-            )),
+            ))),
         }
     }
 
     /// This function creates a new range checker (using decomp).
     /// Helpful for clearing range_checker counts
-    pub fn reset_range_checker(&mut self, decomp: usize) {
-        self.range_checker = Arc::new(RangeCheckerGateChip::new(
-            self.range_checker.air.bus_index,
-            1 << decomp,
-        ));
+    pub fn reset_range_checker(&mut self, _decomp: usize) {
+        self.range_checker = Arc::new(RangeCheckerGateChip::new(self.range_checker.bus()));
     }
 
     /// This function generates the main traces for the input and output tables.

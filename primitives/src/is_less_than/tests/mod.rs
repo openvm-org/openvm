@@ -7,11 +7,13 @@ use p3_field::AbstractField;
 use p3_matrix::dense::DenseMatrix;
 
 use super::{super::is_less_than::IsLessThanChip, columns::IsLessThanCols};
-use crate::{is_less_than::IsLessThanAir, range_gate::RangeCheckerGateChip};
+use crate::{
+    is_less_than::IsLessThanAir, range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip,
+};
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
-    let lt_air = IsLessThanAir::new(0, 16, 8);
+    let lt_air = IsLessThanAir::new(RangeCheckBus::new(0, 1 << 8), 16, 8);
 
     let num_cols = IsLessThanCols::<usize>::width(&lt_air);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -28,14 +30,14 @@ fn test_flatten_fromslice_roundtrip() {
 
 #[test]
 fn test_is_less_than_chip_lt() {
-    let bus_index: usize = 0;
     let max_bits: usize = 16;
     let decomp: usize = 8;
     let range_max: u32 = 1 << decomp;
+    let bus = RangeCheckBus::new(0, range_max);
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
 
-    let chip = IsLessThanChip::new(bus_index, max_bits, decomp, range_checker);
+    let chip = IsLessThanChip::new(bus, max_bits, decomp, range_checker);
     let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
@@ -48,14 +50,14 @@ fn test_is_less_than_chip_lt() {
 
 #[test]
 fn test_lt_chip_decomp_does_not_divide() {
-    let bus_index: usize = 0;
     let max_bits: usize = 30;
     let decomp: usize = 8;
     let range_max: u32 = 1 << decomp;
+    let bus = RangeCheckBus::new(0, range_max);
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
 
-    let chip = IsLessThanChip::new(bus_index, max_bits, decomp, range_checker);
+    let chip = IsLessThanChip::new(bus, max_bits, decomp, range_checker);
     let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
@@ -68,14 +70,14 @@ fn test_lt_chip_decomp_does_not_divide() {
 
 #[test]
 fn test_is_less_than_negative() {
-    let bus_index: usize = 0;
     let max_bits: usize = 16;
     let decomp: usize = 8;
     let range_max: u32 = 1 << decomp;
+    let bus = RangeCheckBus::new(0, range_max);
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
 
-    let chip = IsLessThanChip::new(bus_index, max_bits, decomp, range_checker);
+    let chip = IsLessThanChip::new(bus, max_bits, decomp, range_checker);
     let mut trace = chip.generate_trace(vec![(446, 553)]);
     let range_trace = chip.range_checker.generate_trace();
 

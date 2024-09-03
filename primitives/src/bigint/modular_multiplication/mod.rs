@@ -231,6 +231,7 @@ mod test {
     use rand::RngCore;
 
     use super::{super::utils::secp256k1_prime, *};
+    use crate::range::bus::RangeCheckBus;
     // 256 bit prime, 10 limb bits -> 26 limbs.
     const LIMB_BITS: usize = 10;
     const NUM_LIMB: usize = 26;
@@ -257,7 +258,10 @@ mod test {
 
         let range_bus = 1;
         let range_decomp = 17;
-        let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
+        let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+            range_bus,
+            1 << range_decomp,
+        )));
         let air = ModularMultiplicationAir::new(
             prime,
             limb_bits,

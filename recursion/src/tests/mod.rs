@@ -1,7 +1,7 @@
 use std::{rc::Rc, sync::Arc};
 
 use afs_compiler::util::execute_and_prove_program;
-use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
+use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip, sum::SumChip};
 use afs_stark_backend::{
     prover::trace::TraceCommitmentBuilder, rap::AnyRap, verifier::MultiTraceStarkVerifier,
 };
@@ -57,7 +57,8 @@ pub(crate) fn interaction_stark_for_test<SC: StarkGenericConfig>() -> StarkForTe
     const RANGE_BUS: usize = 2;
     const RANGE_MAX: u32 = 16;
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_BUS, RANGE_MAX));
+    let range_bus = RangeCheckBus::new(RANGE_BUS, RANGE_MAX);
+    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
     let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, 4, range_checker);
 
     let mut sum_trace_u32 = Vec::<(u32, u32, u32, u32)>::new();

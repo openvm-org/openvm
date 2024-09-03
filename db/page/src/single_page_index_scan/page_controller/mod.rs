@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::StarkEngine,
@@ -60,7 +60,10 @@ where
         idx_decomp: usize,
         cmp: Comp,
     ) -> Self {
-        let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus_index, range_max));
+        let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+            range_bus_index,
+            range_max,
+        )));
         Self {
             input_chip: PageIndexScanInputChip::new(
                 page_bus_index,
@@ -114,10 +117,10 @@ where
     }
 
     pub fn update_range_checker(&mut self, idx_decomp: usize) {
-        self.range_checker = Arc::new(RangeCheckerGateChip::new(
+        self.range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
             self.range_checker.bus_index(),
             1 << idx_decomp,
-        ));
+        )));
     }
 
     pub fn gen_output(&self, page: Page, x: Vec<u32>, page_width: usize, cmp: Comp) -> Page {

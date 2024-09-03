@@ -27,12 +27,11 @@ pub struct IsLessThanTupleChip {
 
 impl IsLessThanTupleChip {
     pub fn new(
-        bus_index: usize,
         limb_bits: Vec<usize>,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
-        let air = IsLessThanTupleAir::new(bus_index, limb_bits, decomp);
+        let air = IsLessThanTupleAir::new(range_checker.bus(), limb_bits, decomp);
 
         Self { air, range_checker }
     }

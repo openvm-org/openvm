@@ -1,3 +1,4 @@
+use afs_primitives::range::bus::RangeCheckBus;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
 use p3_baby_bear::BabyBear;
@@ -44,8 +45,8 @@ fn generate_add_sub_program<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
 #[test]
 fn long_add_rand_air_test() {
     let len_ops: usize = 15;
-    let bus_index: usize = 0;
-    let mut chip = LongArithmeticChip::<256, 16>::new(bus_index);
+    let bus = RangeCheckBus::new(0, 1 << 16);
+    let mut chip = LongArithmeticChip::<256, 16>::new(bus);
 
     generate_add_sub_program(&mut chip, len_ops);
 
@@ -72,8 +73,8 @@ fn setup_bad_long_arithmetic_test(
     pos: usize,
     cmp_result: bool,
 ) -> (LongArithmeticChip<256, 16>, RowMajorMatrix<F>) {
-    let bus_index: usize = 0;
-    let mut chip = LongArithmeticChip::<256, 16>::new(bus_index);
+    let bus = RangeCheckBus::new(0, 1 << 16);
+    let mut chip = LongArithmeticChip::<256, 16>::new(bus);
 
     let mut x = vec![0u32; 16];
     let mut y = vec![0u32; 16];
@@ -151,8 +152,8 @@ fn long_add_wrong_addition_air_test() {
 #[test]
 fn long_add_invalid_carry_air_test() {
     let bad_carry = F::from_canonical_u32(1 << 16).inverse().as_canonical_u32();
-    let bus_index: usize = 0;
-    let chip = LongArithmeticChip::<256, 16>::new(bus_index);
+    let bus = RangeCheckBus::new(0, 1 << 16);
+    let chip = LongArithmeticChip::<256, 16>::new(bus);
 
     let mut x = [0u32; 16];
     let mut y = [0u32; 16];
@@ -200,8 +201,8 @@ fn long_sub_wrong_subtraction_air_test() {
 #[test]
 fn long_sub_invalid_carry_air_test() {
     let bad_carry = F::from_canonical_u32(1 << 16).inverse().as_canonical_u32();
-    let bus_index: usize = 0;
-    let chip = LongArithmeticChip::<256, 16>::new(bus_index);
+    let bus = RangeCheckBus::new(0, 1 << 16);
+    let chip = LongArithmeticChip::<256, 16>::new(bus);
 
     let mut x = [0u32; 16];
     let mut y = [0u32; 16];
@@ -228,8 +229,8 @@ fn long_sub_invalid_carry_air_test() {
 #[test]
 fn long_lt_rand_air_test() {
     let len_ops: usize = 15;
-    let bus_index: usize = 0;
-    let mut chip = LongArithmeticChip::<256, 16>::new(bus_index);
+    let bus = RangeCheckBus::new(0, 1 << 16);
+    let mut chip = LongArithmeticChip::<256, 16>::new(bus);
 
     let mut rng = create_seeded_rng();
     let operands = (0..len_ops)
@@ -269,8 +270,8 @@ fn long_lt_wrong_carry_test() {
 #[test]
 fn long_eq_rand_air_test() {
     let len_ops: usize = 15;
-    let bus_index: usize = 0;
-    let mut chip = LongArithmeticChip::<256, 16>::new(bus_index);
+    let bus = RangeCheckBus::new(0, 1 << 16);
+    let mut chip = LongArithmeticChip::<256, 16>::new(bus);
 
     let mut rng = create_seeded_rng();
     let operands = (0..len_ops)

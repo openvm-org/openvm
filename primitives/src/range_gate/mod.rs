@@ -1,7 +1,6 @@
-use std::sync::{atomic::AtomicU32, Arc};
+use std::sync::atomic::AtomicU32;
 
 pub mod air;
-pub mod bridge;
 pub mod columns;
 pub mod trace;
 
@@ -10,37 +9,38 @@ mod tests;
 
 pub use air::RangeCheckerGateAir;
 
+use crate::range::bus::RangeCheckBus;
+
 /// This chip gets requests to verify that a number is in the range
 /// [0, MAX). In the trace, there is a counter column and a multiplicity
 /// column. The counter column is generated using a gate, as opposed to
 /// the other RangeCheckerChip.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct RangeCheckerGateChip {
     pub air: RangeCheckerGateAir,
-    pub count: Vec<Arc<AtomicU32>>,
+    pub count: Vec<AtomicU32>,
 }
 
 impl RangeCheckerGateChip {
-    pub fn new(bus_index: usize, range_max: u32) -> Self {
-        let count = (0..range_max)
-            .map(|_| Arc::new(AtomicU32::new(0)))
-            .collect();
+    pub fn new(bus: RangeCheckBus) -> Self {
+        let count = (0..bus.range_max).map(|_| AtomicU32::new(0)).collect();
 
         Self {
-            air: RangeCheckerGateAir {
-                bus_index,
-                range_max,
-            },
+            air: RangeCheckerGateAir::new(bus),
             count,
         }
     }
 
+    pub fn bus(&self) -> RangeCheckBus {
+        self.air.bus
+    }
+
     pub fn bus_index(&self) -> usize {
-        self.air.bus_index
+        self.air.bus.index
     }
 
     pub fn range_max(&self) -> u32 {
-        self.air.range_max
+        self.air.bus.range_max
     }
 
     pub fn air_width(&self) -> usize {

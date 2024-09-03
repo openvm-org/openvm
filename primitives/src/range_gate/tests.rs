@@ -11,13 +11,11 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
-use crate::range_gate::RangeCheckerGateChip;
+use crate::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
 
 #[test]
 fn test_range_gate_chip() {
     let mut rng = create_seeded_rng();
-
-    let bus_index = 0;
 
     const N: usize = 3;
     const MAX: u32 = 1 << N;
@@ -25,7 +23,8 @@ fn test_range_gate_chip() {
     const LOG_LIST_LEN: usize = 6;
     const LIST_LEN: usize = 1 << LOG_LIST_LEN;
 
-    let range_checker = RangeCheckerGateChip::new(bus_index, MAX);
+    let bus = RangeCheckBus::new(0, MAX);
+    let range_checker = RangeCheckerGateChip::new(bus);
 
     // Generating random lists
     let num_lists = 10;
@@ -38,7 +37,7 @@ fn test_range_gate_chip() {
         .collect::<Vec<Vec<u32>>>();
 
     let lists = (0..num_lists)
-        .map(|_| DummyInteractionAir::new(1, true, bus_index))
+        .map(|_| DummyInteractionAir::new(1, true, bus.index))
         .collect::<Vec<DummyInteractionAir>>();
 
     let lists_traces = lists_vals
@@ -76,12 +75,11 @@ fn test_range_gate_chip() {
 
 #[test]
 fn negative_test_range_gate_chip() {
-    let bus_index = 0;
-
     const N: usize = 3;
     const MAX: u32 = 1 << N;
 
-    let range_checker = RangeCheckerGateChip::new(bus_index, MAX);
+    let bus = RangeCheckBus::new(0, MAX);
+    let range_checker = RangeCheckerGateChip::new(bus);
 
     // generating a trace with a counter starting from 1
     // instead of 0 to test the AIR constraints in range_checker

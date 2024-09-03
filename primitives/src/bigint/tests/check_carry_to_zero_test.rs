@@ -16,6 +16,7 @@ use super::super::{
     OverflowInt,
 };
 use crate::{
+    range::bus::RangeCheckBus,
     range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
 };
@@ -152,7 +153,10 @@ fn test_x_square_minus_y(x: BigUint, y: BigUint) {
     let max_overflow_bits = limb_bits * 2 + log2_ceil_usize(N);
     let range_bus = 1;
     let range_decomp = 16;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        range_bus,
+        1 << range_decomp,
+    )));
     let check_carry_sub_air =
         CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, max_overflow_bits);
     let test_air = TestCarryAir::<N> {

@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::StarkEngine,
@@ -77,7 +77,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         aggregated_col: usize,
         internal_bus: usize,
         output_bus: usize,
-        range_bus: usize,
+        range_bus_index: usize,
         limb_bits: usize,
         decomp: usize,
         sorted: bool,
@@ -92,10 +92,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             sorted,
             op,
         );
-        let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << decomp));
+        let range_bus = RangeCheckBus::new(range_bus_index, 1 << decomp);
+        let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
         let final_chip = ReceivingIndexedOutputPageAir::new(
             output_bus,
-            range_bus,
+            range_bus_index,
             group_by_cols.len(),
             1,
             limb_bits,
@@ -165,10 +166,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     }
 
     pub fn refresh_range_checker(&mut self) {
-        self.range_checker = Arc::new(RangeCheckerGateChip::new(
-            self.range_checker.air.bus_index,
-            self.range_checker.air.range_max,
-        ));
+        self.range_checker = Arc::new(RangeCheckerGateChip::new(self.range_checker.bus()));
     }
 
     /// Set up the keygen builder for the group-by test case by querying trace widths.

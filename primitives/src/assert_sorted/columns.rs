@@ -1,6 +1,9 @@
 use afs_derive::AlignedBorrow;
 
-use crate::is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir};
+use crate::{
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
+    range::bus::RangeCheckBus,
+};
 
 // Since AssertSortedChip contains a LessThanChip subchip, a subset of the columns are those of the
 // LessThanChip
@@ -28,7 +31,11 @@ impl<T: Clone> AssertSortedCols<T> {
         let less_than_next_key = slc[curr_start_idx].clone();
         curr_start_idx = curr_end_idx;
 
-        let lt_chip = IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp);
+        let lt_chip = IsLessThanTupleAir::new(
+            RangeCheckBus::new(0, 1 << decomp),
+            limb_bits.to_vec(),
+            decomp,
+        );
         let is_less_than_tuple_aux =
             IsLessThanTupleAuxCols::from_slice(&slc[curr_start_idx..], &lt_chip);
 
@@ -43,7 +50,7 @@ impl<T: Clone> AssertSortedCols<T> {
         limb_bits.len()
             + 1
             + IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
-                0,
+                RangeCheckBus::new(0, 1 << decomp),
                 limb_bits.to_vec(),
                 decomp,
             ))

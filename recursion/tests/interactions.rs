@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
+use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip, sum::SumChip};
 use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
     config::{
@@ -24,7 +24,8 @@ fn test_interactions() {
 
     setup_tracing();
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_BUS, RANGE_MAX));
+    let range_bus = RangeCheckBus::new(RANGE_BUS, RANGE_MAX);
+    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
     let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, 4, range_checker);
 
     let mut sum_trace_u32 = Vec::<(u32, u32, u32, u32)>::new();

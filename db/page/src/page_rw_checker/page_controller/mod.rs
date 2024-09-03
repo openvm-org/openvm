@@ -1,6 +1,9 @@
 use std::{collections::HashSet, sync::Arc};
 
-use afs_primitives::{offline_checker::OfflineCheckerOperation, range_gate::RangeCheckerGateChip};
+use afs_primitives::{
+    offline_checker::OfflineCheckerOperation, range::bus::RangeCheckBus,
+    range_gate::RangeCheckerGateChip,
+};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::StarkEngine,
@@ -208,7 +211,10 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             traces: None,
             page_commitments: None,
 
-            range_checker: Arc::new(RangeCheckerGateChip::new(range_bus_index, 1 << idx_decomp)),
+            range_checker: Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+                range_bus_index,
+                1 << idx_decomp,
+            ))),
         }
     }
 
@@ -219,11 +225,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         self.range_checker.generate_trace()
     }
 
-    pub fn reset_range_checker(&mut self, idx_decomp: usize) {
-        self.range_checker = Arc::new(RangeCheckerGateChip::new(
-            self.range_checker.air.bus_index,
-            1 << idx_decomp,
-        ));
+    pub fn reset_range_checker(&mut self, _idx_decomp: usize) {
+        self.range_checker = Arc::new(RangeCheckerGateChip::new(self.range_checker.air.bus));
     }
 
     /// Used to load the initial page and the operations

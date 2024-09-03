@@ -7,6 +7,7 @@ use p3_field::AbstractField;
 use super::super::is_less_than_tuple::IsLessThanTupleChip;
 use crate::{
     is_less_than_tuple::{columns::IsLessThanTupleCols, IsLessThanTupleAir},
+    range::bus::RangeCheckBus,
     range_gate::RangeCheckerGateChip,
 };
 
@@ -14,8 +15,9 @@ use crate::{
 fn test_flatten_fromslice_roundtrip() {
     let limb_bits = vec![16, 8, 20, 20];
     let decomp = 8;
+    let bus = RangeCheckBus::new(0, 1 << decomp);
 
-    let lt_air = IsLessThanTupleAir::new(0, limb_bits.clone(), decomp);
+    let lt_air = IsLessThanTupleAir::new(bus, limb_bits.clone(), decomp);
 
     let num_cols = IsLessThanTupleCols::<usize>::width(&lt_air);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -32,14 +34,13 @@ fn test_flatten_fromslice_roundtrip() {
 
 #[test]
 fn test_is_less_than_tuple_chip() {
-    let bus_index: usize = 0;
     let limb_bits: Vec<usize> = vec![16, 8];
     let decomp: usize = 6;
-    let range_max: u32 = 1 << decomp;
+    let bus = RangeCheckBus::new(0, 1 << decomp);
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
 
-    let chip = IsLessThanTupleChip::new(bus_index, limb_bits, decomp, range_checker);
+    let chip = IsLessThanTupleChip::new(limb_bits, decomp, range_checker);
     let range_checker = chip.range_checker.as_ref();
 
     let trace = chip.generate_trace(vec![
@@ -58,14 +59,13 @@ fn test_is_less_than_tuple_chip() {
 
 #[test]
 fn test_is_less_than_tuple_chip_negative() {
-    let bus_index: usize = 0;
     let limb_bits: Vec<usize> = vec![16, 8];
     let decomp: usize = 8;
-    let range_max: u32 = 1 << decomp;
+    let bus = RangeCheckBus::new(0, 1 << decomp);
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
 
-    let chip = IsLessThanTupleChip::new(bus_index, limb_bits, decomp, range_checker);
+    let chip = IsLessThanTupleChip::new(limb_bits, decomp, range_checker);
     let range_checker = chip.range_checker.as_ref();
     let mut trace = chip.generate_trace(vec![(vec![14321, 123], vec![26678, 233])]);
     let range_checker_trace = range_checker.generate_trace();

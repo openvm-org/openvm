@@ -16,6 +16,7 @@ use super::super::{
     OverflowInt,
 };
 use crate::{
+    range::bus::RangeCheckBus,
     range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
 };
@@ -183,7 +184,10 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
 
     let range_bus = 1;
     let range_decomp = 16;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        range_bus,
+        1 << range_decomp,
+    )));
     let check_carry_sub_air = CheckCarryModToZeroSubAir::new(
         prime.clone(),
         limb_bits,

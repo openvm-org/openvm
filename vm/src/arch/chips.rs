@@ -119,7 +119,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeCheckerGateChip> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.air.range_max as usize
+        self.air.bus.range_max as usize
     }
 
     fn trace_width(&self) -> usize {

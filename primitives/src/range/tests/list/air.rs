@@ -6,11 +6,12 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::{ListCols, NUM_LIST_COLS};
+use crate::range::bus::RangeCheckBus;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct ListAir {
     /// The index for the Range Checker bus.
-    pub bus_index: usize,
+    pub bus: RangeCheckBus,
 }
 
 impl<F: Field> BaseAir<F> for ListAir {
@@ -26,6 +27,6 @@ impl<AB: InteractionBuilder> Air<AB> for ListAir {
         let local: &ListCols<AB::Var> = (*local).borrow();
 
         // We do not implement SubAirBridge trait for brevity
-        builder.push_send(self.bus_index, vec![local.val], AB::F::one());
+        self.bus.send(local.val).eval(builder, AB::F::one());
     }
 }

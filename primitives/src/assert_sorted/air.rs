@@ -6,7 +6,10 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::columns::AssertSortedCols;
-use crate::is_less_than_tuple::{columns::IsLessThanTupleIoCols, IsLessThanTupleAir};
+use crate::{
+    is_less_than_tuple::{columns::IsLessThanTupleIoCols, IsLessThanTupleAir},
+    range::bus::RangeCheckBus,
+};
 
 #[derive(Clone, Debug)]
 pub struct AssertSortedAir {
@@ -14,11 +17,11 @@ pub struct AssertSortedAir {
 }
 
 impl AssertSortedAir {
-    pub fn new(bus_index: usize, limb_bits: Vec<usize>, decomp: usize) -> Self {
+    pub fn new(bus: RangeCheckBus, limb_bits: Vec<usize>, decomp: usize) -> Self {
         // We do not enable interactions for IsLessThanTupleAir because that AIR assumes
         // that `x, y` are on the same row. We will separately enable interactions for this Air.
         Self {
-            is_less_than_tuple_air: IsLessThanTupleAir::new(bus_index, limb_bits, decomp),
+            is_less_than_tuple_air: IsLessThanTupleAir::new(bus, limb_bits, decomp),
         }
     }
 }

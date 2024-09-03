@@ -7,6 +7,7 @@ use afs_primitives::{
         columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols},
         IsLessThanTupleAir,
     },
+    range::bus::RangeCheckBus,
     sub_chip::{AirConfig, SubAir},
 };
 use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
@@ -62,8 +63,11 @@ impl PageIndexScanInputAir {
         decomp: usize,
         cmp: Comp,
     ) -> Self {
-        let is_less_than_tuple_air =
-            IsLessThanTupleAir::new(range_bus_index, vec![idx_limb_bits; idx_len], decomp);
+        let is_less_than_tuple_air = IsLessThanTupleAir::new(
+            RangeCheckBus::new(range_bus_index, 1 << decomp),
+            vec![idx_limb_bits; idx_len],
+            decomp,
+        );
         let is_equal_vec_air = IsEqualVecAir::new(idx_len);
 
         let variant_air = match cmp {

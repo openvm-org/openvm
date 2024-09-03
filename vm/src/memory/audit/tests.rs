@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
 use ax_sdk::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
@@ -42,7 +42,8 @@ fn audit_air_test() {
         distinct_addresses.insert((addr_space, pointer));
     }
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << DECOMP));
+    let range_bus = RangeCheckBus::new(RANGE_CHECKER_BUS, 1 << DECOMP);
+    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
     let mut audit_chip =
         MemoryAuditChip::<Val>::new(memory_bus, 2, LIMB_BITS, DECOMP, range_checker.clone());
 

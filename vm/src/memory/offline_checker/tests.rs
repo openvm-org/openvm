@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
 use afs_stark_backend::interaction::InteractionBuilder;
 use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
 use itertools::zip_eq;
@@ -63,11 +63,9 @@ fn volatile_memory_offline_checker_test() {
 
     let memory_dimensions = MemoryDimensions::new(1, 20, 1);
     let mem_config = MemoryConfig::new(29, 29, 29, 16);
+    let range_bus = RangeCheckBus::new(RANGE_CHECKER_BUS, 1 << mem_config.decomp);
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(
-        RANGE_CHECKER_BUS,
-        (1 << mem_config.decomp) as u32,
-    ));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
     let memory_chip = Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
         memory_bus,
         mem_config,
