@@ -43,6 +43,8 @@ pub enum Opcode {
     HINT_INPUT = 51,
     /// Phantom instruction to prepare the little-endian bit decomposition of a variable for hinting.
     HINT_BITS = 52,
+    /// Phantom instruction to prepare the little-endian byte decomposition of a variable for hinting.
+    HINT_BYTES = 53,
 
     /// Phantom instruction to start tracing
     CT_START = 60,

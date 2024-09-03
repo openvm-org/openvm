@@ -160,10 +160,15 @@ pub enum AsmInstruction<F, EF> {
     /// Add next input vector to hint stream.
     HintInputVec(),
 
-    /// HintBits(dst, src).
+    /// HintBits(src, len).
     ///
-    /// Bit decompose the field element `src` and add in little endian to hint stream.
+    /// Bit decompose the field element at pointer `src` to the first `len` little endian bits and add to hint stream.
     HintBits(i32, u32),
+
+    /// HintBytes(src, len).
+    ///
+    /// Byte decompose the field element at pointer `src` to the first `len` little endian bytes and add to hint stream.
+    HintBytes(i32, u32),
 
     /// Stores the next hint stream word into value stored at addr + value.
     StoreHintWordI(i32, F),
@@ -347,7 +352,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::Trap => write!(f, "trap"),
             AsmInstruction::Halt => write!(f, "halt"),
-            AsmInstruction::HintBits(dst, len) => write!(f, "hint_bits ({})fp, {}", dst, len),
+            AsmInstruction::HintBits(src, len) => write!(f, "hint_bits ({})fp, {}", src, len),
+            AsmInstruction::HintBytes(src, len) => write!(f, "hint_bytes ({})fp, {}", src, len),
             AsmInstruction::Poseidon2Permute(dst, lhs) => {
                 write!(f, "poseidon2_permute ({})fp, ({})fp", dst, lhs)
             }

@@ -613,6 +613,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
+        AsmInstruction::HintBytes(src, len) => vec![inst(
+            HINT_BYTES,
+            i32_f(src),
+            F::zero(),
+            F::from_canonical_u32(len),
+            AS::Memory,
+            AS::Memory,
+        )],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             SHINTW,
             i32_f(val),
