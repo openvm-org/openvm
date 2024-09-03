@@ -5,7 +5,7 @@ use afs_primitives::{
 
 use crate::common::{
     comp::{
-        columns::{EqCompAuxCols, StrictCompAuxCols},
+        columns::{EqCompAuxCols, StrictCompAuxCols, StrictInvCompAuxCols},
         Comp,
     },
     page_cols::PageCols,
@@ -13,10 +13,10 @@ use crate::common::{
 
 pub enum FilterInputTableAuxCols<T> {
     Lt(StrictCompAuxCols<T>),
-    Lte(StrictCompAuxCols<T>),
-    Eq(EqCompAuxCols<T>),
-    Gte(StrictCompAuxCols<T>),
+    Lte(StrictInvCompAuxCols<T>),
     Gt(StrictCompAuxCols<T>),
+    Gte(StrictInvCompAuxCols<T>),
+    Eq(EqCompAuxCols<T>),
 }
 
 pub struct FilterInputTableLocalCols<T> {
@@ -41,17 +41,31 @@ impl<T: Clone> FilterInputTableLocalCols<T> {
         let send_row = slc[select_len + 1].clone();
 
         let aux_cols = match cmp {
-            Comp::Lt | Comp::Gte => FilterInputTableAuxCols::Lt(StrictCompAuxCols {
+            Comp::Lt => FilterInputTableAuxCols::Lt(StrictCompAuxCols {
                 is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                     &slc[select_len + 2..],
                     &IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp),
                 ),
             }),
-            Comp::Gt | Comp::Lte => FilterInputTableAuxCols::Gt(StrictCompAuxCols {
+            Comp::Lte => FilterInputTableAuxCols::Lte(StrictInvCompAuxCols {
+                is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
+                    &slc[select_len + 2..slc.len() - 1],
+                    &IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp),
+                ),
+                inv: slc[slc.len() - 1].clone(),
+            }),
+            Comp::Gt => FilterInputTableAuxCols::Gt(StrictCompAuxCols {
                 is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                     &slc[select_len + 2..],
                     &IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp),
                 ),
+            }),
+            Comp::Gte => FilterInputTableAuxCols::Lte(StrictInvCompAuxCols {
+                is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
+                    &slc[select_len + 2..slc.len() - 1],
+                    &IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp),
+                ),
+                inv: slc[slc.len() - 1].clone(),
             }),
             Comp::Eq => FilterInputTableAuxCols::Eq(EqCompAuxCols {
                 is_equal_vec_aux: IsEqualVecAuxCols::from_slice(&slc[select_len + 2..], select_len),

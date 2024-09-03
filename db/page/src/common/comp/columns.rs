@@ -6,6 +6,11 @@ pub struct StrictCompAuxCols<T> {
     pub is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,
 }
 
+pub struct StrictInvCompAuxCols<T> {
+    pub is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,
+    pub inv: T,
+}
+
 pub struct NonStrictCompAuxCols<T> {
     pub satisfies_strict_comp: T,
     pub satisfies_eq_comp: T,
