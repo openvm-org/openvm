@@ -1,3 +1,4 @@
+use afs_page::common::page::Page;
 use datafusion::arrow::datatypes::Schema;
 
 use super::cryptographic_object::CryptographicObjectTrait;
@@ -24,5 +25,9 @@ impl CryptographicSchema {
 impl CryptographicObjectTrait for CryptographicSchema {
     fn schema(&self) -> Schema {
         self.schema.clone()
+    }
+
+    fn page(&self) -> Page {
+        Page::from_page_cols(vec![])
     }
 }

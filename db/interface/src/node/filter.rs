@@ -137,8 +137,8 @@ where
                     CryptographicObject::CommittedPage(output_page) => {
                         let proof = FilterFn::<SC, E>::prove(
                             engine,
-                            &cp,
-                            &output_page,
+                            cp,
+                            output_page,
                             &self.predicate,
                             self.name(),
                             idx_len,

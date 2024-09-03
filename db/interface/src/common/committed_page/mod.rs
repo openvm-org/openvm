@@ -88,17 +88,17 @@ where
         Self::new(schema, page)
     }
 
-    pub fn new_for_keygen(schema: Schema, schema_num_idx_fields: usize) -> Self {
-        let page_id = generate_random_alpha_string(32);
-        let empty_page = Page::from_page_cols(vec![]);
-        Self {
-            page_id: page_id.to_string(),
-            schema,
-            schema_num_idx_fields,
-            page: empty_page,
-            cached_trace: None,
-        }
-    }
+    // pub fn new_for_keygen(schema: Schema, schema_num_idx_fields: usize) -> Self {
+    //     let page_id = generate_random_alpha_string(32);
+    //     let empty_page = Page::from_page_cols(vec![]);
+    //     Self {
+    //         page_id: page_id.to_string(),
+    //         schema,
+    //         schema_num_idx_fields,
+    //         page: empty_page,
+    //         cached_trace: None,
+    //     }
+    // }
 
     pub fn from_cols(cols: Vec<(Field, Arc<dyn Array>)>, idx_len: usize) -> Self {
         let page_id = generate_random_alpha_string(32);
@@ -164,6 +164,10 @@ where
 impl<SC: StarkGenericConfig> CryptographicObjectTrait for CommittedPage<SC> {
     fn schema(&self) -> Schema {
         self.schema.clone()
+    }
+
+    fn page(&self) -> Page {
+        self.page.clone()
     }
 }
 
