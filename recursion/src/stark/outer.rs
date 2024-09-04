@@ -1,7 +1,5 @@
 use afs_compiler::ir::{Builder, DslIr, TracedVec};
-use afs_test_utils::config::{
-    baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters,
-};
+use ax_sdk::config::{baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters};
 
 use crate::{
     challenger::multi_field32::MultiField32ChallengerVariable,

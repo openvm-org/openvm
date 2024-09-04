@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_primitives::xor::lookup::XorLookupChip;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::{default_perm, engine_from_perm, BabyBearPoseidon2Engine},
         fri_params::fri_params_with_80_bits_of_security,

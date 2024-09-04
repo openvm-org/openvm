@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
     is_zero::IsZeroAir,
+    range::bus::RangeCheckBus,
     utils::{and, implies, not},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
@@ -179,10 +180,12 @@ pub struct MemoryOfflineChecker {
 }
 
 impl MemoryOfflineChecker {
+    // TODO[jpw]: pass in range bus
     pub fn new(memory_bus: MemoryBus, clk_max_bits: usize, decomp: usize) -> Self {
+        let range_bus = RangeCheckBus::new(RANGE_CHECKER_BUS, 1 << decomp);
         Self {
             memory_bus,
-            timestamp_lt_air: IsLessThanAir::new(RANGE_CHECKER_BUS, clk_max_bits, decomp),
+            timestamp_lt_air: IsLessThanAir::new(range_bus, clk_max_bits, decomp),
             is_zero_air: IsZeroAir,
         }
     }

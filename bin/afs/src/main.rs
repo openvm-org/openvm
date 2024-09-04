@@ -1,5 +1,5 @@
 use afs::cli::run;
-use afs_test_utils::{config::setup_tracing, page_config::PageConfig};
+use ax_sdk::{config::setup_tracing, page_config::PageConfig};
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {

@@ -31,7 +31,7 @@ mimalloc = { version = "0.1.43", optional = true }
 
 [dev-dependencies]
 afs-derive = { path = "../derive" }
-afs-test-utils = { path = "../test-utils" }
+ax-sdk = { path = "../sdk" }
 
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }

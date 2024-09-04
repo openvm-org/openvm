@@ -1,4 +1,7 @@
-use afs_primitives::is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir};
+use afs_primitives::{
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
+    range::bus::RangeCheckBus,
+};
 use getset::Getters;
 
 use super::page_controller::MyLessThanTupleParams;
@@ -92,12 +95,12 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 is_init,
                 is_less_than_tuple_air: Some(LeafPageSubAirs {
                     idx_start: IsLessThanTupleAir::new(
-                        lt_bus_index,
+                        RangeCheckBus::new(lt_bus_index, 1 << is_less_than_tuple_param.decomp),
                         vec![is_less_than_tuple_param.limb_bits; idx_len],
                         is_less_than_tuple_param.decomp,
                     ),
                     end_idx: IsLessThanTupleAir::new(
-                        lt_bus_index,
+                        RangeCheckBus::new(lt_bus_index, 1 << is_less_than_tuple_param.decomp),
                         vec![is_less_than_tuple_param.limb_bits; idx_len],
                         is_less_than_tuple_param.decomp,
                     ),
@@ -132,7 +135,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 * (2 * self.idx_len
                     + 2
                     + 2 * IsLessThanTupleAuxCols::<usize>::width(&IsLessThanTupleAir::new(
-                        0,
+                        RangeCheckBus::new(0, 1 << self.is_less_than_tuple_param.decomp),
                         vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
                         self.is_less_than_tuple_param.decomp,
                     )))
@@ -144,7 +147,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 * (2 * self.idx_len
                     + 2
                     + 2 * IsLessThanTupleAuxCols::<usize>::width(&IsLessThanTupleAir::new(
-                        0,
+                        RangeCheckBus::new(0, 1 << self.is_less_than_tuple_param.decomp),
                         vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
                         self.is_less_than_tuple_param.decomp,
                     )))

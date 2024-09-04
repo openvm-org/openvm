@@ -10,7 +10,7 @@ use afs_stark_backend::{
     rap::AnyRap,
     verifier::MultiTraceStarkVerifier,
 };
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::{default_perm, engine_from_perm, BabyBearPoseidon2Config},
         fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},

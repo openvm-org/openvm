@@ -3,7 +3,7 @@ use afs_stark_backend::{
     air_builders::PartitionedAirBuilder, prover::trace::TraceCommitmentBuilder,
     verifier::VerificationError,
 };
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::default_engine, engine::StarkEngine, utils::generate_random_matrix,
 };
 use common::VerificationParams;

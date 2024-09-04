@@ -1,5 +1,5 @@
 [package]
-name = "afs-test-utils"
+name = "ax-sdk"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

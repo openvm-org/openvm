@@ -15,7 +15,7 @@ use afs_stark_backend::{
         MultiTraceStarkProver,
     },
 };
-use afs_test_utils::{
+use ax_sdk::{
     engine::StarkEngine,
     page_config::{MultitierPageConfig, PageMode},
 };

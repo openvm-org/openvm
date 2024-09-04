@@ -6,7 +6,7 @@ use afs_compiler::{
     ir::{Array, Var},
     util::execute_and_prove_program,
 };
-use afs_test_utils::config::setup_tracing_with_log_level;
+use ax_sdk::config::setup_tracing_with_log_level;
 use hex::FromHex;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};

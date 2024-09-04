@@ -28,11 +28,7 @@ impl SumChip {
             air: SumAir {
                 input_bus,
                 output_bus,
-                is_lt_air: IsLessThanAir::new(
-                    range_checker.air.bus_index,
-                    key_limb_bits,
-                    key_decomp,
-                ),
+                is_lt_air: IsLessThanAir::new(range_checker.air.bus, key_limb_bits, key_decomp),
             },
             range_checker,
         }

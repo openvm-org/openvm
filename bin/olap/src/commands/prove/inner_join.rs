@@ -6,7 +6,7 @@ use afs_stark_backend::{
     keygen::types::MultiStarkProvingKey,
     prover::trace::{ProverTraceData, TraceCommitmentBuilder},
 };
-use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
+use ax_sdk::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::{read_from_path, write_bytes};
 use clap::Parser;
 use color_eyre::eyre::Result;

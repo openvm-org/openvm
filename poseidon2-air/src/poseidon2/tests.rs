@@ -1,5 +1,6 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::{
+use ark_ff::PrimeField as _;
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::fri_params_with_80_bits_of_security,
@@ -8,7 +9,6 @@ use afs_test_utils::{
     interaction::dummy_interaction_air::DummyInteractionAir,
     utils::create_seeded_rng,
 };
-use ark_ff::PrimeField as _;
 use p3_baby_bear::{
     BabyBear, DiffusionMatrixBabyBear, POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
 };

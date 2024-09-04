@@ -1,14 +1,13 @@
-use afs_stark_backend::{
+use p3_matrix::dense::DenseMatrix;
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+
+use crate::{
     config::{Com, PcsProof, PcsProverData},
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
     rap::AnyRap,
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
-use p3_matrix::dense::DenseMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-
-use crate::config::instrument::StarkHashStatistics;
 
 /// Testing engine
 pub trait StarkEngine<SC: StarkGenericConfig> {
@@ -52,11 +51,6 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
     {
         run_simple_test_impl(self, chips, traces, public_values)
     }
-}
-
-pub trait StarkEngineWithHashInstrumentation<SC: StarkGenericConfig>: StarkEngine<SC> {
-    fn clear_instruments(&mut self);
-    fn stark_hash_statistics<T>(&self, custom: T) -> StarkHashStatistics<T>;
 }
 
 fn run_simple_test_impl<SC: StarkGenericConfig, E: StarkEngine<SC> + ?Sized>(

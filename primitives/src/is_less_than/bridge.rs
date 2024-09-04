@@ -10,10 +10,12 @@ impl IsLessThanAir {
         count: impl Into<AB::Expr>,
     ) {
         let count = count.into();
-        // we range check the limbs of the lower_bits so that we know each element
-        // of lower_bits has at most limb_bits bits
+        // we range check the limbs of the lower_decomp so that we know each element
+        // of lower_decomp has at most `decomp` bits
         for limb in lower_decomp {
-            builder.push_send(self.bus_index, vec![limb], count.clone());
+            self.bus
+                .range_check(limb, self.decomp)
+                .eval(builder, count.clone());
         }
     }
 }

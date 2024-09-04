@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::range_gate::RangeCheckerGateChip;
+use crate::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
 
 #[cfg(test)]
 pub mod tests;
@@ -24,13 +24,13 @@ pub struct IsLessThanChip {
 
 impl IsLessThanChip {
     pub fn new(
-        bus_index: usize,
+        bus: RangeCheckBus,
         limb_bits: usize,
-        decomp: usize,
+        decomp_bits: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
-            air: IsLessThanAir::new(bus_index, limb_bits, decomp),
+            air: IsLessThanAir::new(bus, limb_bits, decomp_bits),
             range_checker,
         }
     }

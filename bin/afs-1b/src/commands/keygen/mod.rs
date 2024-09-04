@@ -10,7 +10,7 @@ use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
-use afs_test_utils::{
+use ax_sdk::{
     engine::StarkEngine,
     page_config::{MultitierPageConfig, PageMode},
 };

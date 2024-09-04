@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_primitives::utils;
+use afs_primitives::{range::bus::RangeCheckBus, utils};
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -12,13 +12,13 @@ use crate::arch::instructions::Opcode;
 /// AIR for the long addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.
 #[derive(Copy, Clone, Debug)]
 pub struct LongArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
-    pub bus_index: usize, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
+    pub bus: RangeCheckBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
     pub base_op: Opcode,
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticAir<ARG_SIZE, LIMB_SIZE> {
-    pub fn new(bus_index: usize, base_op: Opcode) -> Self {
-        Self { bus_index, base_op }
+    pub fn new(bus: RangeCheckBus, base_op: Opcode) -> Self {
+        Self { bus, base_op }
     }
 }
 

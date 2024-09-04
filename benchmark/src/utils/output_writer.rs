@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::OpenOptions};
 
-use afs_test_utils::{
+use ax_sdk::{
     config::EngineType,
     page_config::{MultitierPageConfig, PageConfig, PageMode},
 };

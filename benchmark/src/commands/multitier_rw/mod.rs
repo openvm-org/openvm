@@ -9,7 +9,7 @@ use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
         EngineType,

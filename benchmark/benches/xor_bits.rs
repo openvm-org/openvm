@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_primitives::xor::{bits::XorBitsChip, bus::XorBus};
-use afs_test_utils::utils::create_seeded_rng;
+use ax_sdk::utils::create_seeded_rng;
 use criterion::{criterion_group, criterion_main, Criterion};
 use p3_baby_bear::BabyBear;
 use pprof::criterion::{Output, PProfProfiler};

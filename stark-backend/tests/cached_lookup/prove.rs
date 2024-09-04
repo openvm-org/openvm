@@ -9,7 +9,7 @@ use afs_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     prover::{trace::TraceCommitmentBuilder, types::Proof, USE_DEBUG_BUILDER},
 };
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::{fri_params_with_100_bits_of_security, fri_params_with_80_bits_of_security},

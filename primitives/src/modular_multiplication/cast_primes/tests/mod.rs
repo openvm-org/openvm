@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use afs_test_utils::{
-    config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
-};
+use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
 use num_traits::{One, Zero};
 use p3_baby_bear::BabyBear;
@@ -13,6 +11,7 @@ use crate::{
     modular_multiplication::cast_primes::{
         air::ModularMultiplicationPrimesAir, columns::ModularMultiplicationPrimesCols,
     },
+    range::bus::RangeCheckBus,
     range_gate::RangeCheckerGateChip,
 };
 
@@ -59,7 +58,10 @@ fn test_flatten_fromslice_roundtrip() {
 fn test_modular_multiplication_1() {
     let air = default_air();
     let num_digits = 8;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(air.range_bus, 1 << air.decomp));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        air.range_bus,
+        1 << air.decomp,
+    )));
 
     let mut rng = create_seeded_rng();
     let a_digits = (0..num_digits).map(|_| rng.next_u32()).collect();
@@ -80,7 +82,10 @@ fn test_modular_multiplication_1() {
 fn test_modular_multiplication_2() {
     let air = default_air();
     let num_digits = 8;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(air.range_bus, 1 << air.decomp));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        air.range_bus,
+        1 << air.decomp,
+    )));
 
     let trace_degree = 16;
     let mut rng = create_seeded_rng();
@@ -107,7 +112,10 @@ fn test_modular_multiplication_2() {
 #[test]
 fn test_modular_multiplication_zero() {
     let air = default_air();
-    let range_checker = Arc::new(RangeCheckerGateChip::new(air.range_bus, 1 << air.decomp));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        air.range_bus,
+        1 << air.decomp,
+    )));
 
     let trace = air.generate_trace(
         vec![(BigUint::zero(), BigUint::zero())],
@@ -124,7 +132,10 @@ fn test_modular_multiplication_negative() {
     std::env::set_var("RUST_BACKTRACE", "1");
     let air = default_air();
     let num_digits = 8;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(air.range_bus, 1 << air.decomp));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        air.range_bus,
+        1 << air.decomp,
+    )));
 
     let digits = (0..num_digits).map(|_| u32::MAX).collect();
     let a = BigUint::new(digits);
@@ -141,7 +152,10 @@ fn test_modular_multiplication_negative() {
 fn test_modular_multiplication_negative_2() {
     let air = default_air();
     let num_digits = 8;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(air.range_bus, 1 << air.decomp));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        air.range_bus,
+        1 << air.decomp,
+    )));
 
     let mut rng = create_seeded_rng();
     let a_digits = (0..num_digits).map(|_| rng.next_u32()).collect();

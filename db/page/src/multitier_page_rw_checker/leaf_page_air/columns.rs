@@ -1,4 +1,7 @@
-use afs_primitives::is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir};
+use afs_primitives::{
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
+    range::bus::RangeCheckBus,
+};
 
 use crate::{
     common::page_cols::PageCols,
@@ -86,7 +89,7 @@ impl<T> LeafPageMetadataCols<T> {
             new_start += 2 * idx_len + 2;
             let mut aux_allocs = vec![];
             let aux_size = IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
-                0,
+                RangeCheckBus::new(0, 1 << is_less_than_tuple_params.decomp),
                 vec![is_less_than_tuple_params.limb_bits; idx_len],
                 is_less_than_tuple_params.decomp,
             ));
@@ -94,7 +97,7 @@ impl<T> LeafPageMetadataCols<T> {
                 aux_allocs.push(IsLessThanTupleAuxCols::from_slice(
                     &cols[new_start + i * aux_size..new_start + (i + 1) * aux_size],
                     &IsLessThanTupleAir::new(
-                        0,
+                        RangeCheckBus::new(0, 1 << is_less_than_tuple_params.decomp),
                         vec![is_less_than_tuple_params.limb_bits; idx_len],
                         is_less_than_tuple_params.decomp,
                     ),

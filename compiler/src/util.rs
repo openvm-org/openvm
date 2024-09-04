@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},

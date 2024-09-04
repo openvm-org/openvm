@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_blake3::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };

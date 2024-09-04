@@ -22,7 +22,7 @@ p3-keccak = { workspace = true }
 p3-util = { workspace = true }
 afs-stark-backend = { path = "../../stark-backend" }
 afs-derive = { path = "../../derive" }
-afs-test-utils = { path = "../../test-utils" }
+ax-sdk = { path = "../../sdk" }
 afs-primitives = { path = "../../primitives" }
 afs-page = { path = "../../db/page" }
 p3-uni-stark = { workspace = true }

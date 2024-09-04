@@ -6,12 +6,15 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols};
-use crate::sub_chip::{AirConfig, SubAir};
+use crate::{
+    range::bus::RangeCheckBus,
+    sub_chip::{AirConfig, SubAir},
+};
 
 #[derive(Copy, Clone, Debug)]
 pub struct IsLessThanAir {
-    /// The bus index for sends to range chip
-    pub bus_index: usize,
+    /// The bus for sends to range chip
+    pub bus: RangeCheckBus,
     /// The maximum number of bits for the numbers to compare
     pub max_bits: usize,
     /// The number of bits to decompose each number into, for less than checking
@@ -21,9 +24,10 @@ pub struct IsLessThanAir {
 }
 
 impl IsLessThanAir {
-    pub fn new(bus_index: usize, max_bits: usize, decomp: usize) -> Self {
+    pub fn new(bus: RangeCheckBus, max_bits: usize, decomp: usize) -> Self {
+        debug_assert!(bus.range_max >= (1 << decomp));
         Self {
-            bus_index,
+            bus,
             max_bits,
             decomp,
             num_limbs: (max_bits + decomp - 1) / decomp,

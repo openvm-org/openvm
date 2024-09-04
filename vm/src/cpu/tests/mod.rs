@@ -1,7 +1,7 @@
 use std::iter;
 
 use afs_stark_backend::verifier::VerificationError;
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::run_simple_test,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
@@ -287,8 +287,7 @@ fn air_test_change<
     segment.cpu_chip.generate_pvs();
     let mut all_public_values = vec![segment.get_cpu_pis(), vec![], vec![], vec![], vec![]];
 
-    let MemoryInterface::Volatile(memory_audit_chip) =
-        &segment.memory_chip.borrow().interface_chip;
+    let MemoryInterface::Volatile(memory_audit_chip) = &segment.memory_chip.borrow().interface_chip;
 
     let test_result = if field_arithmetic_enabled {
         run_simple_test(

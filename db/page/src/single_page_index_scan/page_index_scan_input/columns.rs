@@ -1,6 +1,7 @@
 use afs_primitives::{
     is_equal_vec::columns::IsEqualVecAuxCols,
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
+    range::bus::RangeCheckBus,
 };
 
 use super::Comp;
@@ -52,19 +53,24 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
             Comp::Lt => PageIndexScanInputAuxCols::Lt(StrictCompAuxCols {
                 is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                     &slc[idx_len + 2..],
-                    &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
+                    &IsLessThanTupleAir::new(
+                        RangeCheckBus::new(0, 1 << decomp),
+                        idx_limb_bits.to_vec(),
+                        decomp,
+                    ),
                 ),
             }),
             Comp::Lte => {
+                let dummy_bus = RangeCheckBus::new(0, 1 << decomp);
                 let less_than_tuple_aux_width = IsLessThanTupleAuxCols::<T>::width(
-                    &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
+                    &IsLessThanTupleAir::new(dummy_bus, idx_limb_bits.to_vec(), decomp),
                 );
                 PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
                     satisfies_strict_comp: slc[idx_len + 2].clone(),
                     satisfies_eq_comp: slc[idx_len + 3].clone(),
                     is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                         &slc[idx_len + 4..idx_len + 4 + less_than_tuple_aux_width],
-                        &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
+                        &IsLessThanTupleAir::new(dummy_bus, idx_limb_bits.to_vec(), decomp),
                     ),
                     is_equal_vec_aux: IsEqualVecAuxCols::from_slice(
                         &slc[idx_len + 4 + less_than_tuple_aux_width..],
@@ -76,15 +82,16 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
                 is_equal_vec_aux: IsEqualVecAuxCols::from_slice(&slc[idx_len + 2..], idx_len),
             }),
             Comp::Gte => {
+                let dummy_bus = RangeCheckBus::new(0, 1 << decomp);
                 let less_than_tuple_aux_width = IsLessThanTupleAuxCols::<T>::width(
-                    &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
+                    &IsLessThanTupleAir::new(dummy_bus, idx_limb_bits.to_vec(), decomp),
                 );
                 PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
                     satisfies_strict_comp: slc[idx_len + 2].clone(),
                     satisfies_eq_comp: slc[idx_len + 3].clone(),
                     is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                         &slc[idx_len + 4..idx_len + 4 + less_than_tuple_aux_width],
-                        &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
+                        &IsLessThanTupleAir::new(dummy_bus, idx_limb_bits.to_vec(), decomp),
                     ),
                     is_equal_vec_aux: IsEqualVecAuxCols::from_slice(
                         &slc[idx_len + 4 + less_than_tuple_aux_width..],
@@ -95,7 +102,11 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
             Comp::Gt => PageIndexScanInputAuxCols::Gt(StrictCompAuxCols {
                 is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                     &slc[idx_len + 2..],
-                    &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
+                    &IsLessThanTupleAir::new(
+                        RangeCheckBus::new(0, 1 << decomp),
+                        idx_limb_bits.to_vec(),
+                        decomp,
+                    ),
                 ),
             }),
         };
@@ -168,7 +179,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
                     + 1
                     + 1
                     + IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
-                        0,
+                        RangeCheckBus::new(0, 1 << decomp),
                         idx_limb_bits.to_vec(),
                         decomp,
                     ))
@@ -182,7 +193,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
                     + 1
                     + 1
                     + IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
-                        0,
+                        RangeCheckBus::new(0, 1 << decomp),
                         idx_limb_bits.to_vec(),
                         decomp,
                     ))

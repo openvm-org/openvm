@@ -3,6 +3,7 @@ use afs_primitives::{
         columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
         IsLessThanTupleAir,
     },
+    range::bus::RangeCheckBus,
     utils::{implies, or},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
@@ -21,6 +22,7 @@ pub struct MemoryAuditAir {
 }
 
 impl MemoryAuditAir {
+    // TODO[jpw]: pass in range bus
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
@@ -31,7 +33,7 @@ impl MemoryAuditAir {
         Self {
             memory_bus,
             addr_lt_air: IsLessThanTupleAir::new(
-                RANGE_CHECKER_BUS,
+                RangeCheckBus::new(RANGE_CHECKER_BUS, 1 << decomp),
                 vec![addr_space_max_bits, pointer_max_bits],
                 decomp,
             ),

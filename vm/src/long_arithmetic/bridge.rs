@@ -9,9 +9,8 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticAir<ARG_SIZE, 
         local: LongArithmeticCols<ARG_SIZE, LIMB_SIZE, AB::Var>,
     ) {
         for z in local.io.z_limbs {
-            builder.push_send(
-                self.bus_index,
-                vec![z],
+            self.bus.range_check(z, LIMB_SIZE).eval(
+                builder,
                 local.io.rcv_count
                     * (local.aux.opcode_add_flag
                         + local.aux.opcode_sub_flag

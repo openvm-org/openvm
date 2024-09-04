@@ -1,6 +1,6 @@
 use std::fs;
 
-use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
+use ax_sdk::page_config::{MultitierPageConfig, PageConfig};
 use clap::Parser;
 use color_eyre::eyre::Result;
 

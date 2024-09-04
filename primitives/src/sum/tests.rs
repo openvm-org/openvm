@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::to_field_vec,
 };
@@ -11,8 +11,8 @@ use p3_field::AbstractField;
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 
 use crate::{
-    is_less_than::columns::IsLessThanCols, range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions, sum::SumChip,
+    is_less_than::columns::IsLessThanCols, range::bus::RangeCheckBus,
+    range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions, sum::SumChip,
 };
 
 const INPUT_BUS: usize = 0;
@@ -52,7 +52,9 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
         receiver_air.field_width() + 1,
     );
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_BUS, RANGE_MAX));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        RANGE_BUS, RANGE_MAX,
+    )));
     let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, 4, range_checker);
 
     let mut rows: Vec<Vec<BabyBear>> = Vec::new();

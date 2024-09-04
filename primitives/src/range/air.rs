@@ -5,12 +5,20 @@ use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use super::columns::{RangeCols, RangePreprocessedCols, NUM_RANGE_COLS};
+use super::{
+    bus::RangeCheckBus,
+    columns::{RangeCols, RangePreprocessedCols, NUM_RANGE_COLS},
+};
 
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct RangeCheckerAir {
-    pub bus_index: usize,
-    pub range_max: u32,
+    pub bus: RangeCheckBus,
+}
+
+impl RangeCheckerAir {
+    pub fn range_max(&self) -> u32 {
+        self.bus.range_max
+    }
 }
 
 impl<F: Field> BaseAir<F> for RangeCheckerAir {
@@ -19,7 +27,7 @@ impl<F: Field> BaseAir<F> for RangeCheckerAir {
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let column = (0..self.range_max).map(F::from_canonical_u32).collect();
+        let column = (0..self.range_max()).map(F::from_canonical_u32).collect();
         Some(RowMajorMatrix::new_col(column))
     }
 }
@@ -32,6 +40,9 @@ impl<AB: InteractionBuilder + PairBuilder> Air<AB> for RangeCheckerAir {
         let main = builder.main();
         let local = main.row_slice(0);
         let local: &RangeCols<AB::Var> = (*local).borrow();
-        self.eval_interactions(builder, prep_local.counter, local.mult);
+        // Omit creating separate bridge.rs file for brevity
+        self.bus
+            .receive(prep_local.counter)
+            .eval(builder, local.mult);
     }
 }

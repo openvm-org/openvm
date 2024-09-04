@@ -279,7 +279,7 @@ pub mod tests {
         asm::AsmBuilder,
         ir::{Array, RVar, DIGEST_SIZE},
     };
-    use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+    use ax_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, FieldChallenger};

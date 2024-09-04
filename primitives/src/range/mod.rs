@@ -1,9 +1,9 @@
 // Adapted from Valida
 
-use std::sync::{atomic::AtomicU32, Arc};
+use std::sync::atomic::AtomicU32;
 
 pub mod air;
-pub mod bridge;
+pub mod bus;
 pub mod columns;
 pub mod trace;
 
@@ -11,27 +11,33 @@ pub mod trace;
 pub mod tests;
 
 pub use air::RangeCheckerAir;
+use bus::RangeCheckBus;
 
-#[derive(Clone, Default, Debug)]
+#[derive(Debug)]
 pub struct RangeCheckerChip {
     pub air: RangeCheckerAir,
-    count: Vec<Arc<AtomicU32>>,
+    count: Vec<AtomicU32>,
 }
 
 impl RangeCheckerChip {
-    pub fn new(bus_index: usize, range_max: u32) -> Self {
+    pub fn new(bus: RangeCheckBus) -> Self {
         let mut count = vec![];
-        for _ in 0..range_max {
-            count.push(Arc::new(AtomicU32::new(0)));
+        for _ in 0..bus.range_max {
+            count.push(AtomicU32::new(0));
         }
 
         Self {
-            air: RangeCheckerAir {
-                bus_index,
-                range_max,
-            },
+            air: RangeCheckerAir::new(bus),
             count,
         }
+    }
+
+    pub fn bus(&self) -> RangeCheckBus {
+        self.air.bus
+    }
+
+    pub fn range_max(&self) -> u32 {
+        self.air.range_max()
     }
 
     pub fn add_count(&self, val: u32) {

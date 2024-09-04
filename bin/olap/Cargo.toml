@@ -10,7 +10,7 @@ clap = { version = "4.5.4", features = ["derive"] }
 color-eyre = "0.6.3"
 serde = { version = "1.0.203", features = ["derive"] }
 afs-page = { path = "../../db/page", default-features = false }
-afs-test-utils = { path = "../../test-utils" }
+ax-sdk = { path = "../../sdk" }
 afs-stark-backend = { path = "../../stark-backend", default-features = false }
 bin-common = { path = "../common" }
 logical-interface = { path = "../../logical-interface" }

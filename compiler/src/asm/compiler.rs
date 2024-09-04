@@ -548,6 +548,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::HintBitsU(_) => {
                     todo!()
                 }
+                DslIr::HintBytes(var, len) => {
+                    self.push(AsmInstruction::HintBytes(var.fp(), len), debug_info);
+                }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
                     (Array::Dyn(dst, _), Array::Dyn(src, _)) => self.push(
                         AsmInstruction::Poseidon2Permute(dst.fp(), src.fp()),

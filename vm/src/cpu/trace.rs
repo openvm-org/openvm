@@ -403,6 +403,17 @@ impl<F: PrimeField32> CpuChip<F> {
                             val >>= 1;
                         }
                     }
+                    HINT_BYTES => {
+                        let val = vm.memory_chip.borrow_mut().unsafe_read_cell(d, a);
+                        let mut val = val.as_canonical_u32();
+
+                        let len = c.as_canonical_u32();
+                        hint_stream = VecDeque::new();
+                        for _ in 0..len {
+                            hint_stream.push_back(F::from_canonical_u32(val & 0xff));
+                            val >>= 8;
+                        }
+                    }
                     // e[d[a] + b] <- hint_stream.next()
                     SHINTW => {
                         let hint = match hint_stream.pop_front() {

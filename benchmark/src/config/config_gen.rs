@@ -1,9 +1,9 @@
 #[cfg(test)]
 use std::fs::create_dir_all;
 
-use afs_test_utils::config::FriParameters;
+use ax_sdk::config::FriParameters;
 #[allow(unused_imports)]
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         fri_params::{fri_params_with_100_bits_of_security, fri_params_with_80_bits_of_security},
         EngineType,

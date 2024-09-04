@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use afs_compiler::{asm::AsmBuilder, ir::Felt};
-use afs_test_utils::config::{
+use ax_sdk::config::{
     fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
     setup_tracing,
 };

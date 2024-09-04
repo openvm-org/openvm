@@ -27,13 +27,12 @@ pub struct AssertSortedChip {
 
 impl AssertSortedChip {
     pub fn new(
-        bus_index: usize,
         limb_bits: Vec<usize>,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
-            air: AssertSortedAir::new(bus_index, limb_bits, decomp),
+            air: AssertSortedAir::new(range_checker.bus(), limb_bits, decomp),
             range_checker,
         }
     }

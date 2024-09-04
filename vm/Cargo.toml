@@ -17,13 +17,12 @@ p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
 itertools.workspace = true
 tracing.workspace = true
-strum_macros = {workspace = true}
+strum_macros = { workspace = true }
 
 poseidon2-air = { path = "../poseidon2-air", default-features = false }
 afs-primitives = { path = "../primitives", default-features = false }
 afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }
-afs-test-utils = { path = "../test-utils" }
 parking_lot = "0.12.2"
 getset = "0.1.2"
 derive-new = "0.5.1"
@@ -52,6 +51,7 @@ test-case = "3.3.1"
 zkhash = { workspace = true }
 rand_xoshiro = "0.6.0"
 ark-ff = { version = "^0.4.0", default-features = false }
+ax-sdk = { path = "../sdk" }
 
 [features]
 default = []

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
-use afs_test_utils::utils::create_seeded_rng;
+use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use num_traits::{abs, signum, FromPrimitive, One, Zero};
 use p3_baby_bear::BabyBear;

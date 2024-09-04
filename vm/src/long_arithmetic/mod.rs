@@ -1,4 +1,4 @@
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
 use air::LongArithmeticAir;
 use itertools::Itertools;
 
@@ -29,13 +29,13 @@ pub struct LongArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE, LIMB_SIZE> {
-    pub fn new(bus_index: usize) -> Self {
+    pub fn new(bus: RangeCheckBus) -> Self {
         Self {
             air: LongArithmeticAir {
-                bus_index,
+                bus,
                 base_op: Opcode::ADD256,
             },
-            range_checker_chip: RangeCheckerGateChip::new(bus_index, 1 << LIMB_SIZE),
+            range_checker_chip: RangeCheckerGateChip::new(bus),
             operations: vec![],
         }
     }
