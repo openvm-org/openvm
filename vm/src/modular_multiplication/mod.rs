@@ -96,11 +96,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
             | SECP256K1_SCALAR_DIV => (instruction.op_c, instruction.op_b),
             _ => panic!(),
         };
-        let modulus = match instruction.opcode {
+        let modulus = self.air.air.modulus.clone();
+        match instruction.opcode {
             SECP256K1_COORD_ADD | SECP256K1_COORD_SUB | SECP256K1_COORD_MUL
-            | SECP256K1_COORD_DIV => ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+            | SECP256K1_COORD_DIV => {
+                assert_eq!(modulus, ModularArithmeticBigIntAir::secp256k1_coord_prime())
+            }
             SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB | SECP256K1_SCALAR_MUL
-            | SECP256K1_SCALAR_DIV => ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+            | SECP256K1_SCALAR_DIV => assert_eq!(
+                modulus,
+                ModularArithmeticBigIntAir::secp256k1_scalar_prime()
+            ),
             _ => panic!(),
         };
         let mut memory_chip = self.memory_chip.borrow_mut();
@@ -173,9 +179,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
 
 impl<F: PrimeField32> ModularArithmeticChip<F> {
     #[allow(clippy::new_without_default)]
-    pub fn new(air: ModularArithmeticVmAir, memory_chip: MemoryChipRef<F>) -> Self {
+    pub fn new(memory_chip: MemoryChipRef<F>, modulus: BigUint) -> Self {
         Self {
-            air,
+            air: ModularArithmeticVmAir {
+                air: ModularArithmeticBigIntAir::new(modulus, 256, 16, 0, 30, 30, 10, 16, 1 << 15),
+            },
             ops: vec![],
             memory_chip,
         }

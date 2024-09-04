@@ -35,7 +35,7 @@ use crate::{
         manager::{MemoryChip, MemoryChipRef},
         offline_checker::bus::MemoryBus,
     },
-    modular_multiplication::{air::ModularArithmeticVmAir, ModularArithmeticChip},
+    modular_multiplication::ModularArithmeticChip,
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
 };
@@ -159,19 +159,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let airs = vec![
                 (
                     ModularArithmeticChip::new(
-                        ModularArithmeticVmAir {
-                            air: ModularArithmeticBigIntAir::default_for_secp256k1_coord(),
-                        },
                         memory_chip.clone(),
+                        ModularArithmeticBigIntAir::secp256k1_coord_prime(),
                     ),
                     ModularArithmeticBigIntAir::secp256k1_coord_prime(),
                 ),
                 (
                     ModularArithmeticChip::new(
-                        ModularArithmeticVmAir {
-                            air: ModularArithmeticBigIntAir::default_for_secp256k1_scalar(),
-                        },
                         memory_chip.clone(),
+                        ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
                     ),
                     ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
                 ),
