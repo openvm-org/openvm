@@ -20,9 +20,9 @@ fn test_compiler_public_values() {
     let b: Felt<_> = builder.constant(public_value_1);
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
-    let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
-    builder.set(&mut var_array, RVar::zero(), a);
-    builder.set(&mut var_array, RVar::one(), b);
+    let var_array = builder.dyn_array::<Felt<_>>(dyn_len);
+    builder.set(&var_array, RVar::zero(), a);
+    builder.set(&var_array, RVar::one(), b);
 
     builder.commit_public_values(&var_array);
 
@@ -47,9 +47,9 @@ fn test_compiler_public_values_no_initial() {
     let b: Felt<_> = builder.constant(public_value_1);
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
-    let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
-    builder.set(&mut var_array, RVar::zero(), a);
-    builder.set(&mut var_array, RVar::one(), b);
+    let var_array = builder.dyn_array::<Felt<_>>(dyn_len);
+    builder.set(&var_array, RVar::zero(), a);
+    builder.set(&var_array, RVar::one(), b);
 
     builder.commit_public_values(&var_array);
 
@@ -72,9 +72,9 @@ fn test_compiler_public_values_negative() {
     let b: Felt<_> = builder.constant(public_value_1);
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
-    let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
-    builder.set(&mut var_array, RVar::zero(), a);
-    builder.set(&mut var_array, RVar::one(), b);
+    let var_array = builder.dyn_array::<Felt<_>>(dyn_len);
+    builder.set(&var_array, RVar::zero(), a);
+    builder.set(&var_array, RVar::one(), b);
 
     builder.commit_public_values(&var_array);
 

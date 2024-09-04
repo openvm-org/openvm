@@ -133,16 +133,16 @@ impl<C: Config> Builder<C> {
         let bit_len = bit_len.into();
         let num_bits = NUM_BITS;
 
-        let mut result_bits = self.dyn_array::<Var<_>>(num_bits);
+        let result_bits = self.dyn_array::<Var<_>>(num_bits);
         self.range(0, bit_len).for_each(|i, builder| {
             let idx = builder.eval_expr(bit_len - i - RVar::one());
             let entry = builder.get(index_bits, idx);
-            builder.set_value(&mut result_bits, i, entry);
+            builder.set_value(&result_bits, i, entry);
         });
 
         let zero = self.eval(C::N::zero());
         self.range(bit_len, num_bits).for_each(|i, builder| {
-            builder.set_value(&mut result_bits, i, zero);
+            builder.set_value(&result_bits, i, zero);
         });
 
         result_bits

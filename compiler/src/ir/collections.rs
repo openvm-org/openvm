@@ -133,11 +133,11 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                 }
 
                 let slice_len = builder.eval_expr(end - start);
-                let mut slice = builder.dyn_array(slice_len);
+                let slice = builder.dyn_array(slice_len);
                 builder.range(0, slice_len).for_each(|i, builder| {
                     let idx = builder.eval_expr(start + i);
                     let value = builder.get(self, idx);
-                    builder.set(&mut slice, i, value);
+                    builder.set(&slice, i, value);
                 });
 
                 slice
@@ -280,7 +280,7 @@ impl<C: Config> Builder<C> {
 
     pub fn set<V: MemVariable<C>, I: Into<RVar<C::N>>, Expr: Into<V::Expression>>(
         &mut self,
-        slice: &mut Array<C, V>,
+        slice: &Array<C, V>,
         index: I,
         value: Expr,
     ) {
@@ -314,7 +314,7 @@ impl<C: Config> Builder<C> {
 
     pub fn set_value<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
-        slice: &mut Array<C, V>,
+        slice: &Array<C, V>,
         index: I,
         value: V,
     ) {
@@ -474,10 +474,10 @@ impl<C: Config, V: FromConstant<C> + MemVariable<C>> FromConstant<C> for Array<C
     type Constant = Vec<V::Constant>;
 
     fn constant(value: Self::Constant, builder: &mut Builder<C>) -> Self {
-        let mut array = builder.dyn_array(value.len());
+        let array = builder.dyn_array(value.len());
         for (i, val) in value.into_iter().enumerate() {
             let val = V::constant(val, builder);
-            builder.set(&mut array, i, val);
+            builder.set(&array, i, val);
         }
         array
     }

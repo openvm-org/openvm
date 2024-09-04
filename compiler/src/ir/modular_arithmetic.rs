@@ -25,11 +25,11 @@ where
     C::N: PrimeField64,
 {
     pub fn eval_bigint(&mut self, bigint: BigUint) -> BigIntVar<C> {
-        let mut array = self.dyn_array(NUM_ELEMS);
+        let array = self.dyn_array(NUM_ELEMS);
 
         let elems: Vec<C::N> = bigint_to_elems(bigint, REPR_BITS, NUM_ELEMS);
         for (i, &elem) in elems.iter().enumerate() {
-            self.set(&mut array, i, elem);
+            self.set(&array, i, elem);
         }
 
         array

@@ -218,39 +218,39 @@ where
 
         let zeta = challenger.sample_ext(builder);
 
-        let mut trace_domains = builder.array::<TwoAdicMultiplicativeCosetVariable<_>>(r_num_airs);
+        let trace_domains = builder.array::<TwoAdicMultiplicativeCosetVariable<_>>(r_num_airs);
 
         let mut num_prep_rounds = 0;
 
         // Build domains
-        let mut domains = builder.array(r_num_airs);
-        let mut quotient_domains = builder.array(r_num_airs);
-        let mut trace_points_per_domain = builder.array(r_num_airs);
-        let mut quotient_chunk_domains = builder.array(r_num_airs);
+        let domains = builder.array(r_num_airs);
+        let quotient_domains = builder.array(r_num_airs);
+        let trace_points_per_domain = builder.array(r_num_airs);
+        let quotient_chunk_domains = builder.array(r_num_airs);
         for i in 0..num_airs {
             let log_degree: RVar<_> = builder.get(log_degree_per_air, i).into();
 
             let domain = pcs.natural_domain_for_log_degree(builder, log_degree);
-            builder.set_value(&mut trace_domains, i, domain.clone());
+            builder.set_value(&trace_domains, i, domain.clone());
 
-            let mut trace_points = builder.array::<Ext<_, _>>(2);
+            let trace_points = builder.array::<Ext<_, _>>(2);
             let zeta_next = domain.next_point(builder, zeta);
-            builder.set_value(&mut trace_points, RVar::zero(), zeta);
-            builder.set_value(&mut trace_points, RVar::one(), zeta_next);
+            builder.set_value(&trace_points, RVar::zero(), zeta);
+            builder.set_value(&trace_points, RVar::one(), zeta_next);
 
             let log_quotient_degree = RVar::from(vk.per_air[i].log_quotient_degree());
             let quotient_degree = vk.per_air[i].quotient_degree;
             let log_quotient_size = builder.eval_expr(log_degree + log_quotient_degree);
             let quotient_domain =
                 domain.create_disjoint_domain(builder, log_quotient_size, Some(pcs.config.clone()));
-            builder.set_value(&mut quotient_domains, i, quotient_domain.clone());
+            builder.set_value(&quotient_domains, i, quotient_domain.clone());
 
             let qc_domains =
                 quotient_domain.split_domains(builder, log_quotient_degree, quotient_degree);
 
-            builder.set_value(&mut domains, i, domain);
-            builder.set_value(&mut trace_points_per_domain, i, trace_points);
-            builder.set_value(&mut quotient_chunk_domains, i, qc_domains);
+            builder.set_value(&domains, i, domain);
+            builder.set_value(&trace_points_per_domain, i, trace_points);
+            builder.set_value(&quotient_chunk_domains, i, qc_domains);
 
             if vk.per_air[i].preprocessed_data.is_some() {
                 num_prep_rounds += 1;
@@ -266,7 +266,7 @@ where
         let total_rounds =
             num_prep_rounds + num_main_rounds + num_challenge_rounds + num_quotient_rounds;
 
-        let mut rounds = builder.array::<TwoAdicPcsRoundVariable<_>>(total_rounds);
+        let rounds = builder.array::<TwoAdicPcsRoundVariable<_>>(total_rounds);
         let mut round_idx = 0;
 
         // 1. First the preprocessed trace openings: one round per AIR with preprocessing.
@@ -281,20 +281,20 @@ where
                 let trace_points = builder.get(&trace_points_per_domain, i);
 
                 // Assumption: each AIR with preprocessed trace has its own commitment and opening values
-                let mut values = builder.array::<Array<C, _>>(2);
-                builder.set_value(&mut values, 0, prep.local);
-                builder.set_value(&mut values, 1, prep.next);
+                let values = builder.array::<Array<C, _>>(2);
+                builder.set_value(&values, 0, prep.local);
+                builder.set_value(&values, 1, prep.next);
                 let prep_mat = TwoAdicPcsMatsVariable::<C> {
                     domain,
                     values,
                     points: trace_points.clone(),
                 };
 
-                let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(1);
-                builder.set_value(&mut mats, 0, prep_mat);
+                let mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(1);
+                builder.set_value(&mats, 0, prep_mat);
 
                 builder.set_value(
-                    &mut rounds,
+                    &rounds,
                     round_idx,
                     TwoAdicPcsRoundVariable { batch_commit, mats },
                 );
@@ -315,7 +315,7 @@ where
                     values_per_mat.len(),
                     RVar::from(matrix_to_air_index.len()),
                 );
-                let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> =
+                let mats: Array<_, TwoAdicPcsMatsVariable<_>> =
                     builder.array(matrix_to_air_index.len());
 
                 matrix_to_air_index
@@ -325,18 +325,18 @@ where
                         let main = builder.get(&values_per_mat, matrix_idx);
                         let domain = builder.get(&domains, air_idx);
                         let trace_points = builder.get(&trace_points_per_domain, air_idx);
-                        let mut values = builder.array::<Array<C, _>>(2);
-                        builder.set_value(&mut values, 0, main.local);
-                        builder.set_value(&mut values, 1, main.next);
+                        let values = builder.array::<Array<C, _>>(2);
+                        builder.set_value(&values, 0, main.local);
+                        builder.set_value(&values, 1, main.next);
                         let main_mat = TwoAdicPcsMatsVariable::<C> {
                             domain,
                             values,
                             points: trace_points,
                         };
-                        builder.set_value(&mut mats, air_idx, main_mat);
+                        builder.set_value(&mats, air_idx, main_mat);
                     });
                 builder.set_value(
-                    &mut rounds,
+                    &rounds,
                     round_idx,
                     TwoAdicPcsRoundVariable { batch_commit, mats },
                 );
@@ -350,26 +350,26 @@ where
 
             builder.assert_eq::<Usize<_>>(values_per_mat.len(), RVar::from(num_airs));
 
-            let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_airs);
+            let mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_airs);
             for i in 0..num_airs {
                 let domain = builder.get(&domains, i);
                 let trace_points = builder.get(&trace_points_per_domain, i);
 
                 let after_challenge = builder.get(&values_per_mat, i);
 
-                let mut values = builder.array::<Array<C, _>>(2);
-                builder.set_value(&mut values, 0, after_challenge.local);
-                builder.set_value(&mut values, 1, after_challenge.next);
+                let values = builder.array::<Array<C, _>>(2);
+                builder.set_value(&values, 0, after_challenge.local);
+                builder.set_value(&values, 1, after_challenge.next);
                 let after_challenge_mat = TwoAdicPcsMatsVariable::<C> {
                     domain,
                     values,
                     points: trace_points,
                 };
-                builder.set_value(&mut mats, i, after_challenge_mat);
+                builder.set_value(&mats, i, after_challenge_mat);
             }
 
             builder.set_value(
-                &mut rounds,
+                &rounds,
                 round_idx,
                 TwoAdicPcsRoundVariable { batch_commit, mats },
             );
@@ -383,12 +383,11 @@ where
             .map(|air| air.quotient_degree)
             .sum::<usize>();
 
-        let mut quotient_mats: Array<_, TwoAdicPcsMatsVariable<_>> =
-            builder.array(num_quotient_mats);
+        let quotient_mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_quotient_mats);
         let qc_index: Usize<_> = builder.eval(C::N::zero());
 
-        let mut qc_points = builder.array::<Ext<_, _>>(1);
-        builder.set_value(&mut qc_points, 0, zeta);
+        let qc_points = builder.array::<Ext<_, _>>(1);
+        builder.set_value(&qc_points, 0, zeta);
 
         for i in 0..num_airs {
             let opened_quotient = builder.get(&proof.opening.values.quotient, i);
@@ -397,14 +396,14 @@ where
             builder.range(0, qc_domains.len()).for_each(|j, builder| {
                 let qc_dom = builder.get(&qc_domains, j);
                 let qc_vals_array = builder.get(&opened_quotient, j);
-                let mut qc_values = builder.array::<Array<C, _>>(1);
-                builder.set_value(&mut qc_values, 0, qc_vals_array);
+                let qc_values = builder.array::<Array<C, _>>(1);
+                builder.set_value(&qc_values, 0, qc_vals_array);
                 let qc_mat = TwoAdicPcsMatsVariable::<C> {
                     domain: qc_dom,
                     values: qc_values,
                     points: qc_points.clone(),
                 };
-                builder.set_value(&mut quotient_mats, qc_index.clone(), qc_mat);
+                builder.set_value(&quotient_mats, qc_index.clone(), qc_mat);
                 builder.assign(&qc_index, qc_index.clone() + C::N::one());
             });
         }
@@ -412,7 +411,7 @@ where
             batch_commit: quotient_commit.clone(),
             mats: quotient_mats,
         };
-        builder.set_value(&mut rounds, round_idx, quotient_round);
+        builder.set_value(&rounds, round_idx, quotient_round);
         round_idx += 1;
         // Sanity check: the number of rounds matches.
         assert_eq!(round_idx, total_rounds);
