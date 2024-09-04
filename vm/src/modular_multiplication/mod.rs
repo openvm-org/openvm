@@ -178,7 +178,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
 }
 
 impl<F: PrimeField32> ModularArithmeticChip<F> {
-    #[allow(clippy::new_without_default)]
     pub fn new(memory_chip: MemoryChipRef<F>, modulus: BigUint) -> Self {
         Self {
             air: ModularArithmeticVmAir {
