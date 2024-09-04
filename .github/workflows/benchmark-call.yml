@@ -85,7 +85,8 @@ jobs:
           mkdir -p ../benchmark
           mkdir -p ../benchmark/tmp
           bash trusted_setup_s3.sh
-          RUSTFLAGS="-Ctarget-cpu=native" cargo test --profile=fast -p afs-recursion --test recursion --features parallel,static-verifier -- test_fibonacci_program_halo2_verify > ../benchmark/tmp/_result.md 
+          RUSTFLAGS="-Ctarget-cpu=native" cargo test --profile=fast -p afs-recursion --test recursion --features parallel,static-verifier -- test_fibonacci_program_halo2_verify > ../benchmark/tmp/_result.middle.md
+          sed -n "/prove halo2 verifier circuit/,\$p" ../benchmark/tmp/_result.middle.md > ../benchmark/tmp/_result.md
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'single_rw'
