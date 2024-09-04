@@ -1,6 +1,7 @@
 use std::{str::FromStr, sync::Arc};
 
 use ax_sdk::config::baby_bear_blake3::run_simple_test_no_pis;
+use lazy_static::lazy_static;
 use num_bigint_dig::BigUint;
 use num_traits::FromPrimitive;
 use p3_air::BaseAir;
@@ -14,6 +15,33 @@ use crate::{
     range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
 };
+
+lazy_static! {
+    // Sample points got from https://asecuritysite.com/ecc/ecc_points2.
+    static ref EcPoints: Vec<(BigUint, BigUint)> = {
+        let x1 = BigUint::from_u32(1).unwrap();
+        let y1 = BigUint::from_str(
+            "29896722852569046015560700294576055776214335159245303116488692907525646231534",
+        )
+        .unwrap();
+        let x2 = BigUint::from_u32(2).unwrap();
+        let y2 = BigUint::from_str(
+            "69211104694897500952317515077652022726490027694212560352756646854116994689233",
+        )
+        .unwrap();
+        let x3 = BigUint::from_u32(3).unwrap();
+        let y3 = BigUint::from_str(
+            "94471189679404635060807731153122836805497974241028285133722790318709222555876",
+        )
+        .unwrap();
+        let x4 = BigUint::from_u32(20).unwrap();
+        let y4 = BigUint::from_str(
+            "95115947350322555212584100192293494006877237570979160767752142956238074546829",
+        )
+        .unwrap();
+        vec![(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
+    };
+}
 
 fn get_air_and_range_checker() -> (EccAir, Arc<RangeCheckerGateChip>) {
     let prime = secp256k1_prime();
@@ -38,24 +66,9 @@ fn get_air_and_range_checker() -> (EccAir, Arc<RangeCheckerGateChip>) {
     (air, range_checker)
 }
 
-#[test]
-fn test_ec_add() {
+fn test_ec_add(p1: (BigUint, BigUint), p2: (BigUint, BigUint)) {
     let (air, range_checker) = get_air_and_range_checker();
-
-    // Sample points got from https://asecuritysite.com/ecc/ecc_points2.
-    let x1 = BigUint::from_u32(1).unwrap();
-    let y1 = BigUint::from_str(
-        "29896722852569046015560700294576055776214335159245303116488692907525646231534",
-    )
-    .unwrap();
-    let x2 = BigUint::from_u32(2).unwrap();
-    let y2 = BigUint::from_str(
-        "69211104694897500952317515077652022726490027694212560352756646854116994689233",
-    )
-    .unwrap();
-
-    // let input = ((x1, y1), (x2, y2), range_checker.clone());
-    let input = ((x2, y2), (x1, y1), range_checker.clone());
+    let input = (p1, p2, range_checker.clone());
     let cols = air.generate_trace_row(input);
 
     let row = cols.flatten();
@@ -66,4 +79,32 @@ fn test_ec_add() {
 
     run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
         .expect("Verification failed");
+}
+
+#[test]
+fn test_ec_add1() {
+    let p1 = EcPoints[0].clone();
+    let p2 = EcPoints[1].clone();
+    test_ec_add(p1, p2);
+}
+
+#[test]
+fn test_ec_add2() {
+    let p1 = EcPoints[1].clone();
+    let p2 = EcPoints[0].clone();
+    test_ec_add(p1, p2);
+}
+
+#[test]
+fn test_ec_add3() {
+    let p1 = EcPoints[2].clone();
+    let p2 = EcPoints[3].clone();
+    test_ec_add(p1, p2);
+}
+
+#[test]
+fn test_ec_add4() {
+    let p1 = EcPoints[3].clone();
+    let p2 = EcPoints[1].clone();
+    test_ec_add(p1, p2);
 }
