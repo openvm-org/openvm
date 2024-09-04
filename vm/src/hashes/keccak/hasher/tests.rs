@@ -116,11 +116,12 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
 fn negative_test_keccak256() {
     let mut rng = create_seeded_rng();
     let mut hasher = tiny_keccak::Keccak::v256();
-    hasher.update(&[0u8; 137]);
+    let input: Vec<_> = vec![0; 137];
+    hasher.update(&input);
     let mut out = [0u8; 32];
     hasher.finalize(&mut out);
     out[0] = rng.gen();
-    let tester = build_keccak256_test(vec![(vec![], Some(out))]);
+    let tester = build_keccak256_test(vec![(input, Some(out))]);
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
