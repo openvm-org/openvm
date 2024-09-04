@@ -10,7 +10,8 @@ use super::{
 };
 use crate::{
     bigint::{
-        check_carry_mod_to_zero::CheckCarryModToZeroCols, CanonicalUint, DefaultLimbConfig,
+        check_carry_mod_to_zero::CheckCarryModToZeroCols,
+        check_carry_to_zero::get_carry_max_abs_and_bits, CanonicalUint, DefaultLimbConfig,
         OverflowInt,
     },
     range_gate::RangeCheckerGateChip,
@@ -107,6 +108,11 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
                 + y1_overflow.clone()
                 - lambda_q_overflow * prime_overflow.clone();
         let lambda_carries = expr.calculate_carries(self.limb_bits);
+        let (carry_min_abs, carry_bits) =
+            get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
+        for &carry in lambda_carries.iter() {
+            range_check(carry_bits, (carry + carry_min_abs as isize) as usize);
+        }
 
         // ===== x3 =====
         // Compute x3: x3 = λ * λ - x1 - x2
@@ -136,6 +142,11 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
             - x3_overflow.clone()
             - x3_q_overflow * prime_overflow.clone();
         let x3_carries = expr.calculate_carries(self.limb_bits);
+        let (carry_min_abs, carry_bits) =
+            get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
+        for &carry in x3_carries.iter() {
+            range_check(carry_bits, (carry + carry_min_abs as isize) as usize);
+        }
 
         // ===== y3 =====
         // Compute y3 and its carries: y3 = -λ * x3 - y1 + λ * x1.
@@ -162,6 +173,11 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
                 - lambda_overflow.clone() * x1_overflow.clone()
                 - y3_q_overflow * prime_overflow.clone();
         let y3_carries = expr.calculate_carries(self.limb_bits);
+        let (carry_min_abs, carry_bits) =
+            get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
+        for &carry in y3_carries.iter() {
+            range_check(carry_bits, (carry + carry_min_abs as isize) as usize);
+        }
 
         let io = EcAddIoCols {
             p1: EcPoint {
