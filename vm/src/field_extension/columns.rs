@@ -7,7 +7,7 @@ use crate::{
     field_extension::{air::FieldExtensionArithmeticAir, chip::EXT_DEG},
     memory::offline_checker::{
         bridge::MemoryOfflineChecker,
-        columns::{MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+        columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
     },
 };
 
@@ -50,11 +50,11 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     /// `divisor_inv` is y.inverse() when opcode is BBE4DIV and zero otherwise.
     pub divisor_inv: [T; EXT_DEG],
     /// The aux columns for the x reads.
-    pub read_x_aux_cols: MemoryOfflineCheckerAuxCols<EXT_DEG, T>,
+    pub read_x_aux_cols: MemoryReadAuxCols<EXT_DEG, T>,
     /// The aux columns for the y reads.
-    pub read_y_aux_cols: MemoryOfflineCheckerAuxCols<EXT_DEG, T>,
+    pub read_y_aux_cols: MemoryReadAuxCols<EXT_DEG, T>,
     /// The aux columns for the z writes.
-    pub write_aux_cols: MemoryOfflineCheckerAuxCols<EXT_DEG, T>,
+    pub write_aux_cols: MemoryWriteAuxCols<EXT_DEG, T>,
 }
 
 impl<T> FieldExtensionArithmeticCols<T> {
@@ -130,7 +130,10 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<T> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
-        EXT_DEG + 5 + 3 * MemoryOfflineCheckerAuxCols::<EXT_DEG, T>::width(oc)
+        EXT_DEG
+            + 5
+            + 2 * MemoryReadAuxCols::<EXT_DEG, T>::width(oc)
+            + MemoryWriteAuxCols::<EXT_DEG, T>::width(oc)
     }
 }
 

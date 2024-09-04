@@ -18,7 +18,10 @@ use crate::{
         instructions::Opcode,
     },
     memory::{
-        offline_checker::{bridge::MemoryBridge, columns::MemoryOfflineCheckerAuxCols},
+        offline_checker::{
+            bridge::MemoryBridge,
+            columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+        },
         MemoryAddress,
     },
 };
@@ -121,7 +124,7 @@ impl KeccakVmAir {
         &self,
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
-        mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_EXECUTION_READS],
+        mem_aux: [MemoryReadAuxCols<1, AB::Var>; KECCAK_EXECUTION_READS],
     ) -> AB::Expr {
         let opcode = local.opcode;
         // Only receive opcode if:
@@ -174,7 +177,7 @@ impl KeccakVmAir {
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
         start_read_timestamp: AB::Expr,
-        mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_ABSORB_READS],
+        mem_aux: [MemoryReadAuxCols<1, AB::Var>; KECCAK_ABSORB_READS],
     ) -> AB::Expr {
         let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
         // Only read input from memory when it is an opcode-related row
@@ -212,7 +215,7 @@ impl KeccakVmAir {
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_DIGEST_WRITES],
+        mem_aux: [MemoryWriteAuxCols<1, AB::Var>; KECCAK_DIGEST_WRITES],
     ) {
         let opcode = local.opcode;
         let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);

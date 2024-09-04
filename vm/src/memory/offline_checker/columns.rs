@@ -25,6 +25,7 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerCols<WORD_SIZE, T> {
 pub type MemoryReadAuxCols<const WORD_SIZE: usize, T> = MemoryOfflineCheckerAuxCols<WORD_SIZE, T>;
 pub type MemoryWriteAuxCols<const WORD_SIZE: usize, T> = MemoryOfflineCheckerAuxCols<WORD_SIZE, T>;
 
+/// DEPRECATED: Use `MemoryReadAuxCols` or `MemoryWriteAuxCols`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
     // TODO[jpw]: Remove this; read does not need old_data

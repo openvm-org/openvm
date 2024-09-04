@@ -14,7 +14,7 @@ use super::{
 };
 use crate::memory::offline_checker::{
     bridge::MemoryOfflineChecker,
-    columns::{MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+    columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -183,8 +183,8 @@ pub const NUM_KECCAK_SPONGE_COLS: usize = size_of::<KeccakSpongeCols<u8>>();
 
 impl<T> KeccakMemoryCols<T> {
     pub fn width(mem_oc: &MemoryOfflineChecker) -> usize {
-        (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES)
-            * MemoryOfflineCheckerAuxCols::<1, T>::width(mem_oc)
+        (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS) * MemoryReadAuxCols::<1, T>::width(mem_oc)
+            + KECCAK_DIGEST_WRITES * MemoryWriteAuxCols::<1, T>::width(mem_oc)
     }
 
     pub fn from_slice(slc: &[T], mem_oc: &MemoryOfflineChecker) -> Self
@@ -192,8 +192,7 @@ impl<T> KeccakMemoryCols<T> {
         T: Clone,
     {
         let mut it = slc.iter().cloned();
-        let mut next =
-            || MemoryOfflineCheckerAuxCols::try_from_iter(&mut it, &mem_oc.timestamp_lt_air);
+        let mut next = || MemoryReadAuxCols::try_from_iter(&mut it, &mem_oc.timestamp_lt_air);
         let op_reads = from_fn(|_| next());
         let absorb_reads = from_fn(|_| next());
         let digest_writes = from_fn(|_| next());
