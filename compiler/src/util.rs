@@ -16,7 +16,7 @@ use stark_vm::{
     vm::{config::VmConfig, VirtualMachine},
 };
 
-pub fn execute_program_with_config<const WORD_SIZE: usize>(
+pub fn execute_program_with_config(
     config: VmConfig,
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,

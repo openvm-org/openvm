@@ -8,8 +8,6 @@ use stark_vm::vm::config::VmConfig;
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
-const WORD_SIZE: usize = 1;
-
 #[test]
 #[ignore = "currently disabled in vm"]
 fn test_compiler_less_than() {
@@ -39,5 +37,5 @@ fn test_compiler_less_than() {
         is_less_than_enabled: true,
         ..Default::default()
     };
-    execute_program_with_config::<WORD_SIZE>(config, program, vec![]);
+    execute_program_with_config(config, program, vec![]);
 }
