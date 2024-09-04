@@ -27,19 +27,11 @@ pub struct EccAir {
     pub limb_bits: usize,
     // Number of limbs of the prime and the coordinates.
     pub num_limbs: usize,
-    // pub limb_config: C,
-
-    // The max overflow bits, see OverflowInt for details.
-    // pub max_overflow_bits: usize,
 
     // The subair to constrain big integer operations.
     pub check_carry: CheckCarryModToZeroSubAir,
-    // For range checker interactions.
-    // pub range_checker_bus: usize,
     // Range checker decomp bits.
     pub decomp: usize,
-    // lambda_carries_bits: usize ?? I think each carry bit is different?
-    // If carry bits are different for each equation, we need different subair...
 }
 
 impl EccAir {

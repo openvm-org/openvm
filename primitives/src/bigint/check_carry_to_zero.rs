@@ -11,14 +11,7 @@ pub struct CheckCarryToZeroCols<T> {
 pub struct CheckCarryToZeroSubAir {
     // The number of bits for each limb (not overflowed). Example: 10.
     pub limb_bits: usize,
-    // The max number of bits for overflowed limbs.
-    // pub max_overflow_bits: usize,
 
-    // Carry can be negative, so this is the max abs of negative carry.
-    // We will add this to carries to make them positive so we can range check them.
-    // pub carry_min_value_abs: usize,
-    // The max number of bits for carry + carry_min_value_abs.
-    // pub carry_bits: usize,
     // This is the number of bits a field element, so max overflow bits must less than this.
     pub field_element_bits: usize,
 
@@ -41,14 +34,8 @@ impl CheckCarryToZeroSubAir {
         decomp: usize,
         field_element_bits: usize,
     ) -> Self {
-        // let carry_bits = max_overflow_bits - limb_bits;
-        // let carry_min_value_abs = 1 << carry_bits;
-        // let carry_abs_bits = carry_bits + 1;
         Self {
             limb_bits,
-            // max_overflow_bits,
-            // carry_min_value_abs,
-            // carry_bits: carry_abs_bits,
             field_element_bits,
             range_checker_bus,
             decomp,

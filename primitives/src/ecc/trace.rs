@@ -51,7 +51,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
             CanonicalUint::<F, DefaultLimbConfig>::from_vec(limbs)
         };
         let to_overflow_int = |x: &BigUint| OverflowInt::<isize>::from(to_canonical(x));
-        // Make the limbs for the absolute value of a bigint.
         let bigint_abs = |x: &BigInt| {
             if x.sign() == Sign::Minus {
                 x.neg().to_biguint().unwrap()
