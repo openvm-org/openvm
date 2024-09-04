@@ -78,7 +78,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
             [cols.io.a, cols.io.b, cols.io.c],
             [cols.aux.dst, cols.aux.lhs, cols.aux.rhs],
             [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp],
-            &cols.aux.mem_oc_aux_cols[..3],
+            cols.aux.ptr_aux_cols,
         ) {
             let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
             clk_offset += 1;
@@ -111,7 +111,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
                     // FIXME[jpw]: only works for WORD_SIZE = 1 right now
                     from_fn(|_| cols.aux.internal.io.input[i]),
                     clk,
-                    cols.aux.mem_oc_aux_cols[3 + i].clone(),
+                    cols.aux.input_aux_cols[i].clone(),
                 )
                 .eval(builder, cols.io.is_opcode);
         }
@@ -135,7 +135,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
                     // FIXME[jpw]: only works for WORD_SIZE = 1 right now
                     from_fn(|_| cols.aux.internal.io.output[i]),
                     clk,
-                    cols.aux.mem_oc_aux_cols[3 + WIDTH + i].clone(),
+                    cols.aux.output_aux_cols[i].clone(),
                 )
                 .eval(builder, count);
         }

@@ -31,7 +31,6 @@ use crate::{
 /// [MemoryBridge] must be initialized with the correct number of auxiliary columns to match the
 /// exact number of memory operations to be constrained.
 #[derive(Clone, Debug)]
-// TODO: WORD_SIZE should not be here, refactor
 pub struct MemoryBridge<V> {
     offline_checker: MemoryOfflineChecker,
     phantom_data: PhantomData<V>,
@@ -48,7 +47,7 @@ impl<V> MemoryBridge<V> {
 
     /// Prepare a logical memory read operation.
     #[must_use]
-    pub fn read<const N: usize, T>(
+    pub fn read<T, const N: usize>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; N],
@@ -66,7 +65,7 @@ impl<V> MemoryBridge<V> {
 
     /// Prepare a logical memory write operation.
     #[must_use]
-    pub fn write<const N: usize, T>(
+    pub fn write<T, const N: usize>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; N],

@@ -167,6 +167,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
             lhs + F::from_canonical_usize(CHUNK)
         };
 
+        let ptr_aux_cols = mem_trace_builder.take_accesses_buffer();
+
+        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
+
         let input_state: [F; WIDTH] = array::from_fn(|i| {
             if i < CHUNK {
                 mem_trace_builder.read_elem(e, lhs + F::from_canonical_usize(i))
@@ -174,6 +178,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
                 mem_trace_builder.read_elem(e, rhs + F::from_canonical_usize(i - CHUNK))
             }
         });
+        let input_aux_cols = mem_trace_builder.take_accesses_buffer();
+
+        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
 
         let internal = self.air.inner.generate_trace_row(input_state);
         let output = internal.io.output;
@@ -183,11 +190,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
             mem_trace_builder.write_cell(e, dst + F::from_canonical_usize(i), output_elem);
         }
 
-        // Generate disabled MemoryOfflineCheckerAuxCols in case len != WIDTH
+        // Generate disabled MemoryWriteAuxCols in case len != WIDTH
         for _ in len..WIDTH {
             mem_trace_builder.disabled_op();
             mem_trace_builder.increment_clk();
         }
+
+        let output_aux_cols = mem_trace_builder.take_accesses_buffer();
 
         let io = Poseidon2VmAir::<WIDTH, F>::make_io_cols(
             from_state.map(F::from_canonical_usize),
@@ -201,7 +210,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
                 lhs,
                 rhs,
                 internal,
-                mem_oc_aux_cols: mem_trace_builder.take_accesses_buffer(),
+                ptr_aux_cols: ptr_aux_cols.try_into().unwrap(),
+                input_aux_cols: input_aux_cols.try_into().unwrap(),
+                output_aux_cols: output_aux_cols.try_into().unwrap(),
             },
         };
 

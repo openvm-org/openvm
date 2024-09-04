@@ -62,7 +62,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         self.memory_chip.borrow_mut().increment_timestamp();
     }
 
-    pub fn take_accesses_buffer(&mut self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {
+    pub fn take_accesses_buffer(mut self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {
         std::mem::take(&mut self.accesses_buffer)
     }
 }
