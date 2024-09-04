@@ -35,6 +35,10 @@ where
         array
     }
 
+    pub fn uninit_bigint(&mut self) -> BigIntVar<C> {
+        self.dyn_array(NUM_ELEMS)
+    }
+
     fn mod_operation(
         &mut self,
         left: &BigIntVar<C>,
@@ -93,6 +97,12 @@ where
         }
 
         result
+    }
+
+    pub fn secp256k1_coord_set_to_zero(&mut self, bigint: &BigIntVar<C>) {
+        for i in 0..NUM_ELEMS {
+            self.set(bigint, i, C::N::zero());
+        }
     }
 
     pub fn secp256k1_coord_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> Var<C::N> {

@@ -161,6 +161,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     ModularArithmeticChip::new(
                         memory_chip.clone(),
                         ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                        config.bigint_limb_size,
                     ),
                     ModularArithmeticBigIntAir::secp256k1_coord_prime(),
                 ),
@@ -168,6 +169,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     ModularArithmeticChip::new(
                         memory_chip.clone(),
                         ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                        config.bigint_limb_size,
                     ),
                     ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
                 ),
@@ -186,24 +188,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 Rc::new(RefCell::new(airs[1].0.clone()))
             );
         }
-        // let airs = vec![
-        //     (
-        //         ModularArithmeticChip::new(ModularArithmeticVmAir {
-        //             air: ModularArithmeticBigIntAir::default_for_secp256k1_coord(),
-        //         }),
-        //         ModularArithmeticBigIntAir::secp256k1_coord_prime(),
-        //     ),
-        //     (
-        //         ModularArithmeticChip::new(ModularArithmeticVmAir {
-        //             air: ModularArithmeticBigIntAir::default_for_secp256k1_scalar(),
-        //         }),
-        //         ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
-        //     ),
-        // ];
-        // let mut modular_arithmetic_chips = BTreeMap::new();
-        // for (air, modulus) in airs {
-        //     modular_arithmetic_chips.insert(modulus.clone(), air);
-        // }
 
         // Most chips have a reference to the memory chip, and the memory chip has a reference to
         // the range checker chip.

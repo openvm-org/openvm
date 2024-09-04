@@ -116,7 +116,7 @@ impl ModularArithmeticBigIntAir {
         lol
     }
 
-    pub fn default_for_secp256k1_coord() -> Self {
+    pub fn default_for_secp256k1_coord(limb_bits: usize) -> Self {
         Self::new(
             Self::secp256k1_coord_prime(),
             256,
@@ -124,13 +124,13 @@ impl ModularArithmeticBigIntAir {
             0,
             30,
             30,
-            10,
+            limb_bits,
             16,
             1 << 15,
         )
     }
 
-    pub fn default_for_secp256k1_scalar() -> Self {
+    pub fn default_for_secp256k1_scalar(limb_bits: usize) -> Self {
         Self::new(
             Self::secp256k1_scalar_prime(),
             256,
@@ -138,7 +138,7 @@ impl ModularArithmeticBigIntAir {
             0,
             30,
             30,
-            10,
+            limb_bits,
             16,
             1 << 15,
         )

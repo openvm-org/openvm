@@ -1,6 +1,6 @@
 use p3_field::AbstractField;
 
-use super::{Array, Builder, Config, DslIr, Felt, MemIndex, RVar, Var};
+use super::{Array, BigIntVar, Builder, Config, DslIr, Felt, MemIndex, RVar, Var};
 
 pub const NUM_BITS: usize = 31;
 
@@ -30,6 +30,21 @@ impl<C: Config> Builder<C> {
         self.assert_var_eq(sum, num);
 
         output
+    }
+
+    pub fn num2bits_bigint(&mut self, bigint: &BigIntVar<C>) -> Array<C, Var<C::N>> {
+        let repr_size = self.bigint_repr_size;
+        let num_limbs = (256 + repr_size - 1) / repr_size;
+        let bits = self.dyn_array((num_limbs * repr_size) as usize);
+        for i in 0..num_limbs as usize {
+            let limb = self.get(bigint, i);
+            let limb_bits = self.num2bits_v(limb, repr_size);
+            for j in 0..repr_size as usize {
+                let val = self.get(&limb_bits, j);
+                self.set_value(&bits, j + i * repr_size as usize, val);
+            }
+        }
+        bits
     }
 
     /// Converts a variable to bits inside a circuit.

@@ -26,10 +26,12 @@ fn test_modular_multiplication_runtime() {
     let mut coord_chip = ModularArithmeticChip::new(
         tester.memory_chip(),
         ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+        10,
     );
     let mut scalar_chip = ModularArithmeticChip::new(
         tester.memory_chip(),
         ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+        10,
     );
     let mut rng = create_seeded_rng();
     for _ in 0..100 {

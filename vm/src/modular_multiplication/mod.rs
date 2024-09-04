@@ -178,10 +178,20 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
 }
 
 impl<F: PrimeField32> ModularArithmeticChip<F> {
-    pub fn new(memory_chip: MemoryChipRef<F>, modulus: BigUint) -> Self {
+    pub fn new(memory_chip: MemoryChipRef<F>, modulus: BigUint, bigint_limb_size: usize) -> Self {
         Self {
             air: ModularArithmeticVmAir {
-                air: ModularArithmeticBigIntAir::new(modulus, 256, 16, 0, 30, 30, 10, 16, 1 << 15),
+                air: ModularArithmeticBigIntAir::new(
+                    modulus,
+                    256,
+                    16,
+                    0,
+                    30,
+                    30,
+                    bigint_limb_size,
+                    16,
+                    1 << 15,
+                ),
             },
             ops: vec![],
             memory_chip,
