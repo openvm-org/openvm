@@ -89,7 +89,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
                 + y1_signed.clone())
                 / prime_signed.clone();
         let lambda_q_sign = lambda_q_signed.sign();
-        println!("lambda_q_sign: {:?}", lambda_q_sign);
         let lambda_q_abs = bigint_abs(&lambda_q_signed);
         let lambda_q = to_canonical(&lambda_q_abs);
         for &q in lambda_q.limbs.iter() {
@@ -134,7 +133,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
             - x3_signed.clone())
             / prime_signed.clone();
         let x3_q_sign = x3_q_signed.sign();
-        println!("x3_q_sign: {:?}", x3_q_sign);
         let x3_q_abs = bigint_abs(&x3_q_signed);
         let x3_q = to_canonical(&x3_q_abs);
         for &q in x3_q.limbs.iter() {
@@ -167,7 +165,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
             - lambda_signed * x1_signed)
             / prime_signed;
         let y3_q_sign = y3_q_signed.sign();
-        println!("y3_q_sign: {:?}", y3_q_sign);
         let y3_q_abs = bigint_abs(&y3_q_signed);
         let y3_q = to_canonical(&y3_q_abs);
         for &q in y3_q.limbs.iter() {

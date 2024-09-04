@@ -6,6 +6,7 @@ use num_bigint_dig::BigUint;
 use num_traits::FromPrimitive;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::EccAir;
@@ -72,8 +73,6 @@ fn test_ec_add(p1: (BigUint, BigUint), p2: (BigUint, BigUint)) {
     let cols = air.generate_trace_row(input);
 
     let row = cols.flatten();
-    println!("row: {:?}", row.len());
-    println!("width: {:?}", BaseAir::<BabyBear>::width(&air));
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
@@ -107,4 +106,22 @@ fn test_ec_add4() {
     let p1 = EcPoints[3].clone();
     let p2 = EcPoints[1].clone();
     test_ec_add(p1, p2);
+}
+
+#[test]
+#[should_panic]
+fn test_ec_add_fail() {
+    let p1 = EcPoints[0].clone();
+    let p2 = EcPoints[1].clone();
+    let (air, range_checker) = get_air_and_range_checker();
+    let input = (p1, p2, range_checker.clone());
+    let cols = air.generate_trace_row(input);
+
+    let row = cols.flatten();
+    let mut trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
+    let range_trace = range_checker.generate_trace();
+    trace.row_mut(0)[0] += BabyBear::one();
+
+    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
+        .expect("Verification failed");
 }

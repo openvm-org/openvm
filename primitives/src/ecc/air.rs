@@ -31,7 +31,6 @@ impl<AB: InteractionBuilder> Air<AB> for EccAir {
         let EcAddCols { io, aux } = local;
 
         // λ = (y2 - y1) / (x2 - x1)
-        println!("constraining lambda");
         let lambda =
             OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(aux.lambda, self.limb_bits);
         let x1: OverflowInt<AB::Expr> = io.p1.x.into();
@@ -50,7 +49,6 @@ impl<AB: InteractionBuilder> Air<AB> for EccAir {
             .constrain_carry_mod_to_zero(builder, expr, aux.lambda_check);
 
         // x3 = λ * λ - x1 - x2
-        println!("constraining x3");
         let x3: OverflowInt<AB::Expr> = io.p3.x.into();
         let sign: AB::Expr =
             AB::Expr::from_canonical_u8(1) - AB::Expr::from_canonical_u8(2) * aux.x3_expr_sign;
@@ -62,7 +60,6 @@ impl<AB: InteractionBuilder> Air<AB> for EccAir {
 
         // t = y1 - λ * x1
         // y3 = -(λ * x3 + t) = -λ * x3 - y1 + λ * x1
-        println!("constraining y3");
         let y3: OverflowInt<AB::Expr> = io.p3.y.into();
         let sign: AB::Expr =
             AB::Expr::from_canonical_u8(1) - AB::Expr::from_canonical_u8(2) * aux.y3_expr_sign;
