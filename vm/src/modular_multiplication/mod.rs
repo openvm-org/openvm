@@ -86,7 +86,7 @@ pub struct ModularArithmeticChip<F: PrimeField64 + PrimeField32> {
 impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
+        instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         let (op_input_2, op_result) = match instruction.opcode {
