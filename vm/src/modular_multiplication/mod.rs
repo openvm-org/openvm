@@ -86,7 +86,7 @@ pub struct ModularArithmeticChip<F: PrimeField64 + PrimeField32> {
 impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
+        instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         let (op_input_2, op_result) = match instruction.opcode {
@@ -110,14 +110,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
             _ => panic!(),
         };
         let mut memory_chip = self.memory_chip.borrow_mut();
+        let mut timestamp = from_state.timestamp;
         // TODO[zach]: update for word size
         let address1 = memory_chip
-            .read_cell(instruction.d, instruction.op_a)
+            .read_cell(instruction.d, instruction.op_a, &mut timestamp)
             .value();
 
-        let address2 = memory_chip.read_cell(instruction.d, op_input_2).value();
+        let address2 = memory_chip.read_cell(instruction.d, op_input_2, &mut timestamp).value();
 
-        let output_address = memory_chip.read_cell(instruction.d, op_result).value();
+        let output_address = memory_chip.read_cell(instruction.d, op_result, &mut timestamp).value();
 
         let air = &self.air;
         let num_elems = air.air.limb_dimensions.io_limb_sizes.len();
@@ -125,14 +126,14 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
         let argument_1_elems = (0..num_elems)
             .map(|i| {
                 memory_chip
-                    .read_cell(instruction.e, address1 + F::from_canonical_usize(i))
+                    .read_cell(instruction.e, address1 + F::from_canonical_usize(i), &mut timestamp)
                     .value()
             })
             .collect();
         let argument_2_elems = (0..num_elems)
             .map(|i| {
                 memory_chip
-                    .read_cell(instruction.e, address2 + F::from_canonical_usize(i))
+                    .read_cell(instruction.e, address2 + F::from_canonical_usize(i), &mut timestamp)
                     .value()
             })
             .collect();
@@ -161,6 +162,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
                 instruction.e,
                 output_address + F::from_canonical_usize(i),
                 elem,
+                &mut timestamp,
             );
         }
         self.ops.push(VmModularArithmetic {
@@ -192,7 +194,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
     #[allow(unreachable_code)]
     #[allow(unused_variables)]
     #[allow(clippy::diverging_sub_expression)]
-    pub fn calculate(vm: &mut ExecutionSegment<F>, instruction: Instruction<F>) {
+    pub fn calculate(vm: &mut ExecutionSegment<F>, instruction: Instruction<F>, timestamp: &mut usize) {
         let (op_input_2, op_result) = match instruction.opcode {
             SECP256K1_COORD_ADD | SECP256K1_COORD_MUL | SECP256K1_SCALAR_ADD
             | SECP256K1_SCALAR_MUL => (instruction.op_b, instruction.op_c),
@@ -211,19 +213,19 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
         let address1 = vm
             .memory_chip
             .borrow_mut()
-            .read_cell(instruction.d, instruction.op_a)
+            .read_cell(instruction.d, instruction.op_a, timestamp)
             .value();
 
         let address2 = vm
             .memory_chip
             .borrow_mut()
-            .read_cell(instruction.d, op_input_2)
+            .read_cell(instruction.d, op_input_2, timestamp)
             .value();
 
         let output_address = vm
             .memory_chip
             .borrow_mut()
-            .read_cell(instruction.d, op_result)
+            .read_cell(instruction.d, op_result, timestamp)
             .value();
 
         let chip: ModularArithmeticChip<F> = todo!();
@@ -234,7 +236,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             .map(|i| {
                 vm.memory_chip
                     .borrow_mut()
-                    .read_cell(instruction.e, address1 + F::from_canonical_usize(i))
+                    .read_cell(instruction.e, address1 + F::from_canonical_usize(i), timestamp)
                     .value()
             })
             .collect();
@@ -242,7 +244,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             .map(|i| {
                 vm.memory_chip
                     .borrow_mut()
-                    .read_cell(instruction.e, address2 + F::from_canonical_usize(i))
+                    .read_cell(instruction.e, address2 + F::from_canonical_usize(i), timestamp)
                     .value()
             })
             .collect();
@@ -271,6 +273,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
                 instruction.e,
                 output_address + F::from_canonical_usize(i),
                 elem,
+                &mut timestamp,
             );
         }
         chip.ops.push(VmModularArithmetic {

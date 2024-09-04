@@ -23,9 +23,9 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         }
     }
 
-    pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryReadRecord<WORD_SIZE, F> {
+    pub fn read_cell(&mut self, addr_space: F, pointer: F, timestamp: &mut usize) -> MemoryReadRecord<WORD_SIZE, F> {
         let mut memory_chip = self.memory_chip.borrow_mut();
-        let read = memory_chip.read_cell(addr_space, pointer);
+        let read = memory_chip.read_cell(addr_space, pointer, timestamp);
         let aux_cols = memory_chip.make_read_aux_cols(read.clone());
 
         self.accesses_buffer.push(aux_cols);
@@ -38,9 +38,10 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         addr_space: F,
         pointer: F,
         data: F,
+        timestamp: &mut usize,
     ) -> MemoryWriteRecord<WORD_SIZE, F> {
         let mut memory_chip = self.memory_chip.borrow_mut();
-        let write = memory_chip.write_cell(addr_space, pointer, data);
+        let write = memory_chip.write_cell(addr_space, pointer, data, timestamp);
         let aux_cols = memory_chip.make_write_aux_cols(write.clone());
 
         self.accesses_buffer.push(aux_cols);
@@ -48,18 +49,13 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         write
     }
 
-    pub fn read_elem(&mut self, addr_space: F, pointer: F) -> F {
-        self.read_cell(addr_space, pointer).data[0]
+    pub fn read_elem(&mut self, addr_space: F, pointer: F, timestamp: &mut usize) -> F {
+        self.read_cell(addr_space, pointer, timestamp).data[0]
     }
 
     pub fn disabled_op(&mut self) {
         self.accesses_buffer
             .push(self.memory_chip.borrow().make_disabled_write_aux_cols());
-    }
-
-    // TODO[jpw]: rename increment_timestamp
-    pub fn increment_clk(&mut self) {
-        self.memory_chip.borrow_mut().increment_timestamp();
     }
 
     pub fn take_accesses_buffer(mut self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {

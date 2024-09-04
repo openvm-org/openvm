@@ -71,6 +71,7 @@ fn volatile_memory_offline_checker_test() {
         mem_config,
         range_checker.clone(),
     )));
+    let mut timestamp = 1;
     let offline_checker =
         MemoryOfflineChecker::new(memory_bus, mem_config.clk_max_bits, mem_config.decomp);
 
@@ -92,7 +93,7 @@ fn volatile_memory_offline_checker_test() {
     for (addr_space, pointer) in all_addresses.iter() {
         let value = Val::from_canonical_u32(rng.next_u32() % MAX_VAL);
         mem_ops.push({
-            let write = mem_trace_builder.write_cell(*addr_space, *pointer, value);
+            let write = mem_trace_builder.write_cell(*addr_space, *pointer, value, &mut timestamp);
             MemoryOperation {
                 addr_space: write.address_space,
                 pointer: write.pointer,
@@ -110,7 +111,7 @@ fn volatile_memory_offline_checker_test() {
         let value = Val::from_canonical_u32(rng.next_u32() % MAX_VAL);
 
         let mem_op = if rng.gen_bool(0.5) {
-            let write = mem_trace_builder.write_cell(addr_space, pointer, value);
+            let write = mem_trace_builder.write_cell(addr_space, pointer, value, &mut timestamp);
             MemoryOperation {
                 addr_space: write.address_space,
                 pointer: write.pointer,
@@ -119,7 +120,7 @@ fn volatile_memory_offline_checker_test() {
                 enabled: Val::one(),
             }
         } else {
-            let read = mem_trace_builder.read_cell(addr_space, pointer);
+            let read = mem_trace_builder.read_cell(addr_space, pointer, &mut timestamp);
             MemoryOperation {
                 addr_space: read.address_space,
                 pointer: read.pointer,

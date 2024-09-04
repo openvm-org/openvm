@@ -120,14 +120,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         debug_assert_eq!(opcode, Opcode::KECCAK256);
 
         let mut memory = self.memory_chip.borrow_mut();
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory.timestamp().as_canonical_u32() as usize
-        );
+        let mut timestamp = from_state.timestamp;
 
-        let dst_read = memory.read(d, a);
-        let src_read = memory.read(d, b);
-        let len_read = memory.read(f, c);
+        let dst_read = memory.read(d, a, &mut timestamp);
+        let src_read = memory.read(d, b, &mut timestamp);
+        let len_read = memory.read(f, c, &mut timestamp);
 
         let dst = dst_read.value();
         let mut src = src_read.value();
@@ -141,12 +138,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
 
         for block_idx in 0..num_blocks {
             if block_idx != 0 {
-                memory.increment_timestamp_by(F::from_canonical_usize(KECCAK_EXECUTION_READS));
+                timestamp += KECCAK_EXECUTION_READS;
             }
             let mut bytes_read = Vec::with_capacity(KECCAK_RATE_BYTES);
             let bytes: [_; KECCAK_RATE_BYTES] = from_fn(|i| {
                 if i < remaining_len {
-                    let byte_read = memory.read(e, src + F::from_canonical_usize(i));
+                    let byte_read = memory.read(e, src + F::from_canonical_usize(i), &mut timestamp);
                     let byte = byte_read
                         .value()
                         .as_canonical_u32()
@@ -155,7 +152,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                     bytes_read.push(byte_read);
                     byte
                 } else {
-                    memory.increment_timestamp();
+                    timestamp += 1;
                     0u8
                 }
             });
@@ -191,6 +188,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                 e,
                 dst + F::from_canonical_usize(i),
                 [F::from_canonical_u16(limb)],
+                &mut timestamp,
             )
         });
         tracing::trace!("[runtime] keccak256 output: {:?}", output);
@@ -209,7 +207,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
 
         let timestamp_change = KeccakVmAir::timestamp_change::<F>(len).as_canonical_u32() as usize;
         let to_timestamp = from_state.timestamp + timestamp_change;
-        memory.jump_timestamp(F::from_canonical_usize(to_timestamp));
 
         ExecutionState {
             pc: from_state.pc + 1,

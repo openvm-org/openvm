@@ -14,11 +14,7 @@ use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    timestamp_delta, CpuChip, CpuState, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE,
-    INST_WIDTH,
-};
+use super::{columns::{CpuAuxCols, CpuCols, CpuIoCols}, CpuChip, CpuState, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH, timestamp_delta};
 use crate::{
     arch::{
         chips::{InstructionExecutor, MachineChip},
@@ -209,11 +205,6 @@ impl<F: PrimeField32> CpuChip<F> {
         let mut timestamp: usize = vm.cpu_chip.borrow().state.timestamp;
         let mut pc = F::from_canonical_usize(vm.cpu_chip.borrow().state.pc);
 
-        debug_assert_eq!(
-            timestamp,
-            vm.memory_chip.borrow().timestamp().as_canonical_u32() as usize
-        );
-
         let mut hint_stream = vm.hint_stream.clone();
         let mut cycle_tracker = std::mem::take(&mut vm.cycle_tracker);
         let mut is_done = false;
@@ -224,6 +215,7 @@ impl<F: PrimeField32> CpuChip<F> {
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
+            let from_timestamp = timestamp;
 
             let (instruction, debug_info) =
                 vm.program_chip.borrow_mut().get_instruction(pc_usize)?;
@@ -268,7 +260,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 ($addr_space: expr, $pointer: expr) => {{
                     assert!(read_records.len() < CPU_MAX_READS_PER_CYCLE);
                     let mut memory_chip = vm.memory_chip.borrow_mut();
-                    read_records.push(memory_chip.read_cell($addr_space, $pointer));
+                    read_records.push(memory_chip.read_cell($addr_space, $pointer, &mut timestamp));
                     read_records[read_records.len() - 1].data[0]
                 }};
             }
@@ -277,7 +269,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 ($addr_space: expr, $pointer: expr, $data: expr) => {{
                     assert!(write_records.len() < CPU_MAX_WRITES_PER_CYCLE);
                     let mut memory_chip = vm.memory_chip.borrow_mut();
-                    write_records.push(memory_chip.write_cell($addr_space, $pointer, $data));
+                    write_records.push(memory_chip.write_cell($addr_space, $pointer, $data, &mut timestamp));
                 }};
             }
 
@@ -423,7 +415,7 @@ impl<F: PrimeField32> CpuChip<F> {
                     CT_END => cycle_tracker.end(debug, vm.collected_metrics.clone()),
                     _ => return Err(ExecutionError::DisabledOperation(pc_usize, opcode)),
                 };
-                timestamp += timestamp_delta(opcode);
+                assert_eq!(timestamp, from_timestamp + timestamp_delta(opcode));
             }
 
             // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }

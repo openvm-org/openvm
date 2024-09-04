@@ -111,6 +111,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
+        let mut timestamp = from_state.timestamp;
 
         let Instruction {
             opcode,
@@ -125,13 +126,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         debug_assert_eq!(WIDTH, CHUNK * 2);
 
-        let dst = mem_trace_builder.read_elem(d, op_a);
-        let lhs = mem_trace_builder.read_elem(d, op_b);
+        let dst = mem_trace_builder.read_elem(d, op_a, &mut timestamp);
+        let lhs = mem_trace_builder.read_elem(d, op_b, &mut timestamp);
         let rhs = if opcode == COMP_POS2 {
-            mem_trace_builder.read_elem(d, op_c)
+            mem_trace_builder.read_elem(d, op_c, &mut timestamp)
         } else {
             mem_trace_builder.disabled_op();
-            mem_trace_builder.increment_clk();
+            timestamp += 1;
             lhs + F::from_canonical_usize(CHUNK)
         };
 
@@ -141,9 +142,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
 
         let input_state: [F; WIDTH] = array::from_fn(|i| {
             if i < CHUNK {
-                mem_trace_builder.read_elem(e, lhs + F::from_canonical_usize(i))
+                mem_trace_builder.read_elem(e, lhs + F::from_canonical_usize(i), &mut timestamp)
             } else {
-                mem_trace_builder.read_elem(e, rhs + F::from_canonical_usize(i - CHUNK))
+                mem_trace_builder.read_elem(e, rhs + F::from_canonical_usize(i - CHUNK), &mut timestamp)
             }
         });
         let input_aux_cols = mem_trace_builder.take_accesses_buffer();
@@ -155,13 +156,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         let len = if opcode == PERM_POS2 { WIDTH } else { CHUNK };
 
         for (i, &output_elem) in output.iter().enumerate().take(len) {
-            mem_trace_builder.write_cell(e, dst + F::from_canonical_usize(i), output_elem);
+            mem_trace_builder.write_cell(e, dst + F::from_canonical_usize(i), output_elem, &mut timestamp);
         }
 
         // Generate disabled MemoryWriteAuxCols in case len != WIDTH
         for _ in len..WIDTH {
             mem_trace_builder.disabled_op();
-            mem_trace_builder.increment_clk();
+            timestamp += 1;
         }
 
         let output_aux_cols = mem_trace_builder.take_accesses_buffer();

@@ -29,6 +29,7 @@ use crate::memory::manager::MemoryChipRef;
 
 #[derive(Clone, Debug)]
 pub struct MachineChipTestBuilder<F: PrimeField32> {
+    pub timestamp: usize,
     pub memory: MemoryTester<F>,
     pub execution: ExecutionTester<F>,
 }
@@ -36,6 +37,7 @@ pub struct MachineChipTestBuilder<F: PrimeField32> {
 impl<F: PrimeField32> MachineChipTestBuilder<F> {
     pub fn new(memory_chip: MemoryChipRef<F>, execution_bus: ExecutionBus, rng: StdRng) -> Self {
         Self {
+            timestamp: 1,
             memory: MemoryTester::new(memory_chip),
             execution: ExecutionTester::new(execution_bus, rng),
         }
@@ -48,23 +50,23 @@ impl<F: PrimeField32> MachineChipTestBuilder<F> {
         instruction: Instruction<F>,
     ) {
         self.execution
-            .execute(&mut self.memory, executor, instruction);
+            .execute(self.timestamp, executor, instruction);
     }
 
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.memory.read_cell(address_space, pointer)
+        self.memory.read_cell(address_space, pointer, &mut self.timestamp)
     }
 
     pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.memory.write_cell(address_space, pointer, value);
+        self.memory.write_cell(address_space, pointer, value, &mut self.timestamp);
     }
 
     pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        self.memory.read(address_space, pointer)
+        self.memory.read(address_space, pointer, &mut self.timestamp)
     }
 
     pub fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
-        self.memory.write(address_space, pointer, value);
+        self.memory.write(address_space, pointer, value, &mut self.timestamp);
     }
 
     pub fn execution_bus(&self) -> ExecutionBus {
@@ -99,6 +101,7 @@ impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
         )));
         let memory_chip = MemoryChip::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
         Self {
+            timestamp: 1,
             memory: MemoryTester::new(Rc::new(RefCell::new(memory_chip))),
             execution: ExecutionTester::new(ExecutionBus(0), StdRng::seed_from_u64(0)),
         }

@@ -71,14 +71,16 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
 
         let mut memory_chip = self.memory_chip.borrow_mut();
 
-        let x_read = memory_chip.read(d, op_b);
+        let mut timestamp = from_state.timestamp;
+
+        let x_read = memory_chip.read(d, op_b, &mut timestamp);
         let x: [F; EXT_DEG] = x_read.data;
 
-        let y_read = memory_chip.read(e, op_c);
+        let y_read = memory_chip.read(e, op_c, &mut timestamp);
         let y: [F; EXT_DEG] = y_read.data;
 
         let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
-        let z_write = memory_chip.write(d, op_a, z);
+        let z_write = memory_chip.write(d, op_a, z, &mut timestamp);
 
         self.records.push(FieldExtensionArithmeticRecord {
             timestamp: from_state.timestamp,
@@ -94,7 +96,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
 
         ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: from_state.timestamp + Self::accesses_per_instruction(opcode),
+            timestamp,
         }
     }
 }
@@ -108,11 +110,6 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             records: vec![],
             memory_chip: memory,
         }
-    }
-
-    pub fn accesses_per_instruction(opcode: Opcode) -> usize {
-        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
-        3 * EXT_DEG
     }
 
     pub fn current_height(&self) -> usize {

@@ -44,10 +44,10 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 
     /// Returns the cell value at the current timestamp according to [MemoryChip].
-    pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
+    pub fn read_cell(&mut self, address_space: usize, pointer: usize, timestamp: &mut usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let read = RefCell::borrow_mut(&self.chip).read_cell(addr_space, pointer);
+        let read = RefCell::borrow_mut(&self.chip).read_cell(addr_space, pointer, timestamp);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records
             .push(self.bus.read(address, read.data, read.prev_timestamps[0]));
@@ -56,9 +56,9 @@ impl<F: PrimeField32> MemoryTester<F> {
         read.value()
     }
 
-    pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
+    pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F, timestamp: &mut usize) {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let write = RefCell::borrow_mut(&self.chip).write_cell(addr_space, pointer, value);
+        let write = RefCell::borrow_mut(&self.chip).write_cell(addr_space, pointer, value, timestamp);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(
             self.bus
@@ -68,8 +68,8 @@ impl<F: PrimeField32> MemoryTester<F> {
             .push(self.bus.write(address, write.data, write.timestamp));
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        from_fn(|i| self.read_cell(address_space, pointer + i))
+    pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize, timestamp: &mut usize) -> [F; N] {
+        from_fn(|i| self.read_cell(address_space, pointer + i, timestamp))
     }
 
     pub fn write<const N: usize>(
@@ -77,9 +77,10 @@ impl<F: PrimeField32> MemoryTester<F> {
         address_space: usize,
         mut pointer: usize,
         cells: [F; N],
+        timestamp: &mut usize,
     ) {
         for cell in cells {
-            self.write_cell(address_space, pointer, cell);
+            self.write_cell(address_space, pointer, cell, timestamp);
             pointer += 1;
         }
     }

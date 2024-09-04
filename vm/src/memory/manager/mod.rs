@@ -86,7 +86,6 @@ pub struct MemoryChip<F: PrimeField32> {
     pub interface_chip: MemoryInterface<NUM_WORDS, F>,
     pub(crate) mem_config: MemoryConfig,
     pub(crate) range_checker: Arc<RangeCheckerGateChip>,
-    timestamp: F,
     /// Maps (addr_space, pointer) to (data, timestamp)
     memory: HashMap<(F, F), TimestampedValue<F>>,
 }
@@ -120,7 +119,6 @@ impl<F: PrimeField32> MemoryChip<F> {
                 mem_config.decomp,
                 range_checker.clone(),
             )),
-            timestamp: F::one(),
             memory: HashMap::new(),
             range_checker,
         }
@@ -134,13 +132,13 @@ impl<F: PrimeField32> MemoryChip<F> {
         )
     }
 
-    pub fn read_cell(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<1, F> {
-        self.read(address_space, pointer)
+    pub fn read_cell(&mut self, address_space: F, pointer: F, timestamp: &mut usize) -> MemoryReadRecord<1, F> {
+        self.read(address_space, pointer, timestamp)
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<N, F> {
-        let timestamp = self.timestamp;
-        self.timestamp += F::from_canonical_usize(N);
+    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F, timestamp: &mut usize) -> MemoryReadRecord<N, F> {
+        let from_timestamp = F::from_canonical_usize(*timestamp);
+        *timestamp += N;
 
         if address_space == F::zero() {
             assert_eq!(N, 1, "cannot batch read from address space 0");
@@ -148,7 +146,7 @@ impl<F: PrimeField32> MemoryChip<F> {
             return MemoryReadRecord {
                 address_space,
                 pointer,
-                timestamp,
+                timestamp: from_timestamp,
                 prev_timestamps: [F::zero(); N],
                 data: array::from_fn(|_| pointer),
             };
@@ -156,10 +154,10 @@ impl<F: PrimeField32> MemoryChip<F> {
 
         let prev_entries = array::from_fn(|i| {
             let cur_ptr = pointer + F::from_canonical_usize(i);
-            let cur_timestamp = timestamp + F::from_canonical_usize(i);
+            let cur_timestamp = from_timestamp + F::from_canonical_usize(i);
 
             let entry = self.memory.get_mut(&(address_space, cur_ptr)).unwrap();
-            debug_assert!(entry.timestamp < cur_timestamp);
+            debug_assert!(entry.timestamp < cur_timestamp, "old timestamp ({}) not less than new timestamp ({cur_timestamp})", entry.timestamp);
 
             let prev_entry = *entry;
             entry.timestamp = cur_timestamp;
@@ -173,7 +171,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         MemoryReadRecord {
             address_space,
             pointer,
-            timestamp,
+            timestamp: from_timestamp,
             prev_timestamps: prev_entries.map(|entry| entry.timestamp),
             data: prev_entries.map(|entry| entry.value),
         }
@@ -186,8 +184,8 @@ impl<F: PrimeField32> MemoryChip<F> {
         self.memory.get(&(addr_space, pointer)).unwrap().value
     }
 
-    pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<1, F> {
-        self.write(address_space, pointer, [data])
+    pub fn write_cell(&mut self, address_space: F, pointer: F, data: F, timestamp: &mut usize) -> MemoryWriteRecord<1, F> {
+        self.write(address_space, pointer, [data], timestamp)
     }
 
     pub fn write<const N: usize>(
@@ -195,15 +193,16 @@ impl<F: PrimeField32> MemoryChip<F> {
         address_space: F,
         pointer: F,
         data: [F; N],
+        timestamp: &mut usize,
     ) -> MemoryWriteRecord<N, F> {
         assert_ne!(address_space, F::zero());
 
-        let timestamp = self.timestamp;
-        self.timestamp += F::from_canonical_usize(N);
+        let from_timestamp = F::from_canonical_usize(*timestamp);
+        *timestamp += N;
 
         let prev_entries = array::from_fn(|i| {
             let cur_ptr = pointer + F::from_canonical_usize(i);
-            let cur_timestamp = timestamp + F::from_canonical_usize(i);
+            let cur_timestamp = from_timestamp + F::from_canonical_usize(i);
 
             let entry = self
                 .memory
@@ -228,7 +227,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         MemoryWriteRecord {
             address_space,
             pointer,
-            timestamp,
+            timestamp: from_timestamp,
             prev_timestamps: prev_entries.map(|entry| entry.timestamp),
             data,
             prev_data: prev_entries.map(|entry| entry.value),
@@ -310,29 +309,6 @@ impl<F: PrimeField32> MemoryChip<F> {
 
         self.interface_chip
             .generate_trace_with_height(final_memory, trace_height)
-    }
-
-    pub fn increment_timestamp(&mut self) {
-        self.timestamp += F::one();
-    }
-
-    pub fn increment_timestamp_by(&mut self, change: F) {
-        self.timestamp += change;
-    }
-
-    pub fn timestamp(&self) -> F {
-        self.timestamp
-    }
-
-    /// Advance the timestamp forward to `to_timestamp`. This should be used when the memory
-    /// timestamp needs to sync up with the execution state because instruction execution
-    /// uses an upper bound on timestamp change.
-    pub fn jump_timestamp(&mut self, to_timestamp: F) {
-        debug_assert!(
-            self.timestamp <= to_timestamp,
-            "Should never jump back in time"
-        );
-        self.timestamp = to_timestamp;
     }
 
     pub fn get_audit_air(&self) -> MemoryAuditAir {
