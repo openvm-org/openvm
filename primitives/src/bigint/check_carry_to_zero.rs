@@ -79,8 +79,6 @@ impl CheckCarryToZeroSubAir {
         // 2. Constrain the carries and expr.
         let mut previous_carry = AB::Expr::zero();
         for (i, limb) in expr.limbs.iter().enumerate() {
-            println!("limb: {:?}", limb);
-            println!("i: {}", i);
             builder.assert_eq(
                 limb.clone() + previous_carry.clone(),
                 cols.carries[i] * AB::F::from_canonical_usize(1 << self.limb_bits),

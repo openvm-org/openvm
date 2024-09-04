@@ -54,10 +54,13 @@ fn test_ec_add() {
     )
     .unwrap();
 
-    let input = ((x1, y1), (x2, y2), range_checker.clone());
+    // let input = ((x1, y1), (x2, y2), range_checker.clone());
+    let input = ((x2, y2), (x1, y1), range_checker.clone());
     let cols = air.generate_trace_row(input);
 
     let row = cols.flatten();
+    println!("row: {:?}", row.len());
+    println!("width: {:?}", BaseAir::<BabyBear>::width(&air));
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
