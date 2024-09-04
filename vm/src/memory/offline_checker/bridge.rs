@@ -33,7 +33,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct MemoryBridge<V> {
     offline_checker: MemoryOfflineChecker,
-    phantom_data: PhantomData<V>,
+    _marker: PhantomData<V>,
 }
 
 impl<V> MemoryBridge<V> {
@@ -41,7 +41,7 @@ impl<V> MemoryBridge<V> {
     pub fn new(offline_checker: MemoryOfflineChecker) -> Self {
         Self {
             offline_checker,
-            phantom_data: PhantomData,
+            _marker: PhantomData,
         }
     }
 
