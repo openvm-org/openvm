@@ -6,7 +6,7 @@ use std::{
 };
 
 use afs_primitives::{
-    modular_multiplication::bigint::air::ModularArithmeticBigIntAir,
+    modular_multiplication::bigint::air::ModularArithmeticBigIntAir, range::bus::RangeCheckBus,
     range_gate::RangeCheckerGateChip, xor::lookup::XorLookupChip,
 };
 use afs_stark_backend::rap::AnyRap;
