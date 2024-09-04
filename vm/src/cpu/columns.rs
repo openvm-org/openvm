@@ -8,16 +8,13 @@ use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 
 use super::{
-    CpuAir, CpuChip, Opcode, CPU_MAX_READS_PER_CYCLE,
-    CPU_MAX_WRITES_PER_CYCLE, WORD_SIZE,
+    CpuAir, CpuChip, Opcode, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, WORD_SIZE,
 };
 use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
     memory::{
         manager::{MemoryReadRecord, MemoryWriteRecord},
-        offline_checker::columns::{
-            MemoryReadAuxCols, MemoryWriteAuxCols,
-        },
+        offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
     },
 };
 
@@ -265,8 +262,11 @@ impl<T: Clone> CpuAuxCols<T> {
         let oc = &cpu_air.memory_offline_checker;
         CORE_INSTRUCTIONS.len()
             + cpu_air.options.num_public_values
-            + CPU_MAX_READS_PER_CYCLE * (CpuMemoryAccessCols::<T>::width() + MemoryReadAuxCols::<WORD_SIZE, T>::width(oc))
-            + CPU_MAX_WRITES_PER_CYCLE * (CpuMemoryAccessCols::<T>::width() + MemoryWriteAuxCols::<WORD_SIZE, T>::width(oc))
+            + CPU_MAX_READS_PER_CYCLE
+                * (CpuMemoryAccessCols::<T>::width() + MemoryReadAuxCols::<WORD_SIZE, T>::width(oc))
+            + CPU_MAX_WRITES_PER_CYCLE
+                * (CpuMemoryAccessCols::<T>::width()
+                    + MemoryWriteAuxCols::<WORD_SIZE, T>::width(oc))
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
     }

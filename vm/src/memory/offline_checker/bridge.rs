@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::marker::PhantomData;
 
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
@@ -14,7 +14,13 @@ use p3_field::AbstractField;
 use super::{bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols};
 use crate::{
     cpu::RANGE_CHECKER_BUS,
-    memory::{offline_checker::operation::MemoryOperation, MemoryAddress},
+    memory::{
+        offline_checker::{
+            columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+            operation::MemoryOperation,
+        },
+        MemoryAddress,
+    },
 };
 
 /// The [MemoryBridge] can be created within any AIR evaluation function to be used as the
@@ -26,39 +32,29 @@ use crate::{
 /// exact number of memory operations to be constrained.
 #[derive(Clone, Debug)]
 // TODO: WORD_SIZE should not be here, refactor
-pub struct MemoryBridge<V, const WORD_SIZE: usize> {
+pub struct MemoryBridge<V> {
     offline_checker: MemoryOfflineChecker,
-    // TODO[jpw]:
-    // Need separate VecDeque for writes to keep track of data_prev (since reads don't need)
-    // TODO[jpw]: MemoryOfflineCheckerAuxCols needs to be refactored to deal with variable word size
-    pub aux: VecDeque<MemoryOfflineCheckerAuxCols<WORD_SIZE, V>>,
-    // @dev: do not let MemoryBridge own &mut builder. The mutable borrow will not allow builder to be
-    // used again elsewhere while MemoryBridge is in scope.
+    phantom_data: PhantomData<V>,
 }
 
-impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
+impl<V> MemoryBridge<V> {
     /// Create a new [MemoryBridge] with the given number of auxiliary columns.
-    pub fn new(
-        offline_checker: MemoryOfflineChecker,
-        aux: impl IntoIterator<Item = MemoryOfflineCheckerAuxCols<WORD_SIZE, V>>,
-    ) -> Self {
+    pub fn new(offline_checker: MemoryOfflineChecker) -> Self {
         Self {
             offline_checker,
-            aux: VecDeque::from_iter(aux),
+            phantom_data: PhantomData,
         }
     }
 
     /// Prepare a logical memory read operation.
     #[must_use]
-    pub fn read<T>(
-        // , const WORD_SIZE: usize>(
-        &mut self,
+    pub fn read<const N: usize, T>(
+        &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; WORD_SIZE],
+        data: [impl Into<T>; N],
         timestamp: impl Into<T>,
-    ) -> MemoryReadOperation<T, V, WORD_SIZE> {
-        let aux = self.aux.pop_front().expect("Overflowed memory accesses");
-
+        aux: MemoryReadAuxCols<N, V>,
+    ) -> MemoryReadOperation<T, V, N> {
         MemoryReadOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
@@ -70,32 +66,19 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
 
     /// Prepare a logical memory write operation.
     #[must_use]
-    pub fn write<T>(
-        &mut self,
+    pub fn write<const N: usize, T>(
+        &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; WORD_SIZE],
+        data: [impl Into<T>; N],
         timestamp: impl Into<T>,
-    ) -> MemoryWriteOperation<T, V, WORD_SIZE> {
-        let aux = self.aux.pop_front().expect("Overflowed memory accesses");
-
+        aux: MemoryWriteAuxCols<N, V>,
+    ) -> MemoryWriteOperation<T, V, N> {
         MemoryWriteOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
             data: data.map(Into::into),
             timestamp: timestamp.into(),
             aux,
-        }
-    }
-}
-
-impl<V, const WORD_SIZE: usize> Drop for MemoryBridge<V, WORD_SIZE> {
-    fn drop(&mut self) {
-        // panic messes up rust backtrace
-        if !self.aux.is_empty() {
-            println!(
-                "[WARN] Underflowed memory accesses: {} remaining",
-                self.aux.len()
-            );
         }
     }
 }
@@ -110,18 +93,18 @@ impl<V, const WORD_SIZE: usize> Drop for MemoryBridge<V, WORD_SIZE> {
 /// The generic `T` type is intended to be `AB::Expr` where `AB` is the [AirBuilder].
 /// The auxiliary columns are not expected to be expressions, so the generic `V` type is intended
 /// to be `AB::Var`.
-pub struct MemoryReadOperation<T, V, const WORD_SIZE: usize> {
+pub struct MemoryReadOperation<T, V, const N: usize> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
-    data: [T; WORD_SIZE],
+    data: [T; N],
     /// The timestamp of the last write to this address
     // timestamp_prev: T,
     /// The timestamp of the current read
     timestamp: T,
-    aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, V>,
+    aux: MemoryReadAuxCols<N, V>,
 }
 
-impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryReadOperation<T, V, WORD_SIZE> {
+impl<T: AbstractField, V, const N: usize> MemoryReadOperation<T, V, N> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
@@ -145,16 +128,16 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryReadOperation<T, V, WORD
 /// Includes constraints for `timestamp_prev < timestamp`.
 ///
 /// **Note:** This can be used as a logical read operation by setting `data_prev = data`.
-pub struct MemoryWriteOperation<T, V, const WORD_SIZE: usize> {
+pub struct MemoryWriteOperation<T, V, const N: usize> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
-    data: [T; WORD_SIZE],
+    data: [T; N],
     /// The timestamp of the current read
     timestamp: T,
-    aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, V>,
+    aux: MemoryWriteAuxCols<N, V>,
 }
 
-impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryWriteOperation<T, V, WORD_SIZE> {
+impl<T: AbstractField, V, const N: usize> MemoryWriteOperation<T, V, N> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where

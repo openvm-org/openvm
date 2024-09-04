@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, iter::zip};
 
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
@@ -328,25 +328,26 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         // FIXME[zach]: Properly constrain op.enabled based on opcode.
 
         let mut op_timestamp: AB::Expr = io.timestamp.into();
-        let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, reads_aux_cols);
-        for read in &reads {
+        let memory_bridge = MemoryBridge::new(self.memory_offline_checker);
+        for (read, read_aux_cols) in zip(&reads, reads_aux_cols) {
             memory_bridge
-                .read::<AB::Expr>(
+                .read(
                     MemoryAddress::new(read.address_space, read.pointer),
                     [read.value],
                     op_timestamp.clone(),
+                    read_aux_cols,
                 )
                 .eval(builder, read.enabled);
             op_timestamp += read.enabled.into();
         }
 
-        let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, writes_aux_cols);
-        for write in &writes {
+        for (write, write_aux_cols) in zip(&writes, writes_aux_cols) {
             memory_bridge
                 .write(
                     MemoryAddress::new(write.address_space, write.pointer),
                     [write.value],
                     op_timestamp.clone(),
+                    write_aux_cols,
                 )
                 .eval(builder, write.enabled);
             op_timestamp += write.enabled.into();

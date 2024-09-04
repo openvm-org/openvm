@@ -69,15 +69,16 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
         // Memory access constraints
         let chunks: usize = WIDTH / 2;
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, cols.aux.mem_oc_aux_cols);
+        let memory_bridge = MemoryBridge::new(self.mem_oc);
         let mut clk_offset = 0;
         // read addresses when is_opcode:
         // dst <- [a]_d, lhs <- [b]_d
         // Only when opcode is COMPRESS is rhs <- [c]_d read
-        for (io_addr, aux_addr, count) in izip!(
+        for (io_addr, aux_addr, count, mem_aux) in izip!(
             [cols.io.a, cols.io.b, cols.io.c],
             [cols.aux.dst, cols.aux.lhs, cols.aux.rhs],
-            [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp,]
+            [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp],
+            &cols.aux.mem_oc_aux_cols[..3],
         ) {
             let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
             clk_offset += 1;
@@ -88,6 +89,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
                     // FIXME[jpw]: only works for WORD_SIZE = 1 right now
                     from_fn(|_| aux_addr),
                     clk,
+                    mem_aux.clone(),
                 )
                 .eval(builder, count);
         }
@@ -109,6 +111,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
                     // FIXME[jpw]: only works for WORD_SIZE = 1 right now
                     from_fn(|_| cols.aux.internal.io.input[i]),
                     clk,
+                    cols.aux.mem_oc_aux_cols[3 + i].clone(),
                 )
                 .eval(builder, cols.io.is_opcode);
         }
@@ -132,6 +135,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
                     // FIXME[jpw]: only works for WORD_SIZE = 1 right now
                     from_fn(|_| cols.aux.internal.io.output[i]),
                     clk,
+                    cols.aux.mem_oc_aux_cols[3 + WIDTH + i].clone(),
                 )
                 .eval(builder, count);
         }

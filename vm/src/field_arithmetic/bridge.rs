@@ -42,30 +42,35 @@ impl FieldArithmeticAir {
             ),
         );
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, [aux.read_x_aux_cols]);
+        let memory_bridge = MemoryBridge::new(self.mem_oc);
         let mut timestamp: AB::Expr = from_state.timestamp.into();
         memory_bridge
             .read(
                 operand1.memory_address(),
                 [operand1.value],
                 timestamp.clone(),
+                aux.read_x_aux_cols,
             )
             .eval(builder, is_valid);
         timestamp += is_valid.into();
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, [aux.read_y_aux_cols]);
         memory_bridge
             .read(
                 operand2.memory_address(),
                 [operand2.value],
                 timestamp.clone(),
+                aux.read_y_aux_cols,
             )
             .eval(builder, is_valid);
         timestamp += is_valid.into();
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, [aux.write_z_aux_cols]);
         memory_bridge
-            .write(result.memory_address(), [result.value], timestamp)
+            .write(
+                result.memory_address(),
+                [result.value],
+                timestamp,
+                aux.write_z_aux_cols,
+            )
             .eval(builder, is_valid);
     }
 }
