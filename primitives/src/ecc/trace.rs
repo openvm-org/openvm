@@ -88,7 +88,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
             (lambda_signed.clone() * (x2_signed.clone() - x1_signed.clone()) - y2_signed
                 + y1_signed.clone())
                 / prime_signed.clone();
-        let lambda_q_sign = lambda_q_signed.sign(); // TODO: should be in columns.
+        let lambda_q_sign = lambda_q_signed.sign();
         println!("lambda_q_sign: {:?}", lambda_q_sign);
         let lambda_q_abs = bigint_abs(&lambda_q_signed);
         let lambda_q = to_canonical(&lambda_q_abs);
@@ -103,11 +103,16 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
         let y2_overflow = to_overflow_int(&y2);
         let lambda_q_overflow = to_overflow_int(&lambda_q_abs);
         let prime_overflow = to_overflow_int(&self.prime);
-        // TODO: expr should depends on sign
-        let expr: OverflowInt<isize> =
+        // Taking abs of λ * (x2 - x1) - y2 + y1
+        let expr = if lambda_q_sign == Sign::Minus {
+            y2_overflow
+                - y1_overflow.clone()
+                - lambda_overflow.clone() * (x2_overflow.clone() - x1_overflow.clone())
+        } else {
             lambda_overflow.clone() * (x2_overflow.clone() - x1_overflow.clone()) - y2_overflow
                 + y1_overflow.clone()
-                - lambda_q_overflow * prime_overflow.clone();
+        };
+        let expr = expr - lambda_q_overflow * prime_overflow.clone();
         let lambda_carries = expr.calculate_carries(self.limb_bits);
         let (carry_min_abs, carry_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
@@ -203,13 +208,28 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
                 carries: vec_isize_to_f(lambda_carries),
                 quotient: vec_isize_to_f(lambda_q.limbs),
             },
+            lambda_expr_sign: if lambda_q_sign == Sign::Minus {
+                F::one()
+            } else {
+                F::zero()
+            },
             x3_check: CheckCarryModToZeroCols {
                 carries: vec_isize_to_f(x3_carries),
                 quotient: vec_isize_to_f(x3_q.limbs),
             },
+            x3_expr_sign: if x3_q_sign == Sign::Minus {
+                F::one()
+            } else {
+                F::zero()
+            },
             y3_check: CheckCarryModToZeroCols {
                 carries: vec_isize_to_f(y3_carries),
                 quotient: vec_isize_to_f(y3_q.limbs),
+            },
+            y3_expr_sign: if y3_q_sign == Sign::Minus {
+                F::one()
+            } else {
+                F::zero()
             },
         };
 

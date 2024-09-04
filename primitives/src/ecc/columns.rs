@@ -16,10 +16,14 @@ pub struct EcAddIoCols<T, C: LimbConfig> {
 pub struct EcAddAuxCols<T> {
     pub lambda: Vec<T>,
     pub lambda_check: CheckCarryModToZeroCols<T>,
+    // The sign of the expression that calculates lambda. 1 for negative, 0 for positive.
+    pub lambda_expr_sign: T,
 
     pub x3_check: CheckCarryModToZeroCols<T>,
+    pub x3_expr_sign: T,
 
     pub y3_check: CheckCarryModToZeroCols<T>,
+    pub y3_expr_sign: T,
 }
 
 impl<T: Clone, C: LimbConfig> EcAddCols<T, C> {
@@ -86,10 +90,13 @@ impl<T: Clone> EcAddAuxCols<T> {
         flattened.extend_from_slice(&self.lambda);
         flattened.extend_from_slice(&self.lambda_check.quotient);
         flattened.extend_from_slice(&self.lambda_check.carries);
+        flattened.push(self.lambda_expr_sign.clone());
         flattened.extend_from_slice(&self.x3_check.quotient);
         flattened.extend_from_slice(&self.x3_check.carries);
+        flattened.push(self.x3_expr_sign.clone());
         flattened.extend_from_slice(&self.y3_check.quotient);
         flattened.extend_from_slice(&self.y3_check.carries);
+        flattened.push(self.y3_expr_sign.clone());
 
         flattened
     }
@@ -98,10 +105,13 @@ impl<T: Clone> EcAddAuxCols<T> {
         let lambda = slc[0..num_limbs].to_vec();
         let lambda_check_q = slc[num_limbs..2 * num_limbs].to_vec();
         let lambda_check_c = slc[2 * num_limbs..4 * num_limbs - 1].to_vec();
-        let x3_check_q = slc[4 * num_limbs - 1..5 * num_limbs - 1].to_vec();
-        let x3_check_c = slc[5 * num_limbs - 1..7 * num_limbs - 2].to_vec();
-        let y3_check_q = slc[7 * num_limbs - 2..8 * num_limbs - 2].to_vec();
-        let y3_check_c = slc[8 * num_limbs - 2..10 * num_limbs - 3].to_vec();
+        let lambda_expr_sign = slc[4 * num_limbs - 1].clone();
+        let x3_check_q = slc[4 * num_limbs..5 * num_limbs].to_vec();
+        let x3_check_c = slc[5 * num_limbs..7 * num_limbs - 1].to_vec();
+        let x3_expr_sign = slc[7 * num_limbs - 1].clone();
+        let y3_check_q = slc[7 * num_limbs..8 * num_limbs].to_vec();
+        let y3_check_c = slc[8 * num_limbs..10 * num_limbs - 1].to_vec();
+        let y3_expr_sign = slc[10 * num_limbs - 1].clone();
 
         Self {
             lambda,
@@ -109,14 +119,17 @@ impl<T: Clone> EcAddAuxCols<T> {
                 quotient: lambda_check_q,
                 carries: lambda_check_c,
             },
+            lambda_expr_sign,
             x3_check: CheckCarryModToZeroCols {
                 quotient: x3_check_q,
                 carries: x3_check_c,
             },
+            x3_expr_sign,
             y3_check: CheckCarryModToZeroCols {
                 quotient: y3_check_q,
                 carries: y3_check_c,
             },
+            y3_expr_sign,
         }
     }
 }
