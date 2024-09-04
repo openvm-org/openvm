@@ -101,7 +101,7 @@ jobs:
         id: get-previous-benchmark
         run: |
           result_path="${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md"
-          count=`s5cmd ls $result_path | wc -l`
+          count=` s5cmd ls $result_path | wc -l`
           
           if [[ $count -gt 0 ]]; then
             s5cmd cp $result_path results.md

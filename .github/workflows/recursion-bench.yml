@@ -11,6 +11,7 @@ on:
       - "vm/**"
       - "compiler/**"
       - "recursion/**"
+      - ".github/workflows/benchmark-call.yml"
   label:
     types: [created]
 
