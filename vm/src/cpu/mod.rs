@@ -44,7 +44,7 @@ fn timestamp_delta(opcode: Opcode) -> usize {
         FAIL => 0,
         PRINTF => 1,
         SHINTW => 2,
-        HINT_INPUT | HINT_BITS => 0,
+        HINT_INPUT | HINT_BITS | HINT_BYTES => 0,
         CT_START | CT_END => 0,
         NOP => 0,
         _ => panic!("Non-CPU opcode: {:?}", opcode),
