@@ -96,11 +96,11 @@ pub struct CpuMemoryAccessCols<T> {
 }
 
 impl<F: Field> CpuMemoryAccessCols<F> {
-    pub fn disabled(timestamp: F) -> Self {
+    pub fn disabled() -> Self {
         CpuMemoryAccessCols {
             address_space: F::one(),
             pointer: F::zero(),
-            timestamp,
+            timestamp: F::zero(),
             enabled: F::zero(),
             value: F::zero(),
         }
@@ -280,7 +280,6 @@ impl<F: PrimeField32> CpuAuxCols<F> {
         }
 
         let memory_chip = chip.memory_chip.borrow();
-        let timestamp = memory_chip.timestamp();
 
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
@@ -289,8 +288,8 @@ impl<F: PrimeField32> CpuAuxCols<F> {
         Self {
             operation_flags,
             public_value_flags: vec![F::zero(); chip.air.options.num_public_values],
-            reads: array::from_fn(|_| CpuMemoryAccessCols::disabled(timestamp)),
-            writes: array::from_fn(|_| CpuMemoryAccessCols::disabled(timestamp)),
+            reads: array::from_fn(|_| CpuMemoryAccessCols::disabled()),
+            writes: array::from_fn(|_| CpuMemoryAccessCols::disabled()),
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
             reads_aux_cols: array::from_fn(|_| memory_chip.make_disabled_read_aux_cols()),

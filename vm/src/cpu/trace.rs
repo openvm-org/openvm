@@ -1,4 +1,5 @@
 use std::{
+    array,
     collections::{BTreeMap, VecDeque},
     error::Error,
     fmt::Display,
@@ -224,11 +225,6 @@ impl<F: PrimeField32> CpuChip<F> {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let from_state = ExecutionState {
-                pc: pc_usize,
-                timestamp,
-            };
-
             let (instruction, debug_info) =
                 vm.program_chip.borrow_mut().get_instruction(pc_usize)?;
             tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
@@ -435,47 +431,31 @@ impl<F: PrimeField32> CpuChip<F> {
             {
                 let memory_chip = vm.memory_chip.borrow();
 
-                let mut read_cols = read_records
-                    .iter()
-                    .cloned()
-                    .map(CpuMemoryAccessCols::from_read_record)
-                    .collect_vec();
-                let mut reads_aux_cols = read_records
-                    .iter()
-                    .cloned()
-                    .map(|read| memory_chip.make_read_aux_cols(read))
-                    .collect_vec();
+                let read_cols = array::from_fn(|i| {
+                    read_records
+                        .get(i)
+                        .map(|read| CpuMemoryAccessCols::from_read_record(read.clone()))
+                        .unwrap_or_else(CpuMemoryAccessCols::disabled)
+                });
+                let reads_aux_cols = array::from_fn(|i| {
+                    read_records
+                        .get(i)
+                        .map(|read| memory_chip.make_read_aux_cols(read.clone()))
+                        .unwrap_or_else(|| memory_chip.make_disabled_read_aux_cols())
+                });
 
-                // icky timestamp calculation for disabled reads
-                let timestamp = read_records
-                    .last()
-                    .map(|read| read.timestamp + F::one())
-                    .unwrap_or(F::from_canonical_usize(from_state.timestamp));
-
-                while read_cols.len() < CPU_MAX_READS_PER_CYCLE {
-                    read_cols.push(CpuMemoryAccessCols::disabled(timestamp));
-                    reads_aux_cols.push(memory_chip.make_disabled_read_aux_cols());
-                }
-
-                let timestamp = write_records
-                    .last()
-                    .map(|write| write.timestamp + F::one())
-                    .unwrap_or(timestamp);
-
-                let mut write_cols = write_records
-                    .iter()
-                    .cloned()
-                    .map(CpuMemoryAccessCols::from_write_record)
-                    .collect_vec();
-                let mut writes_aux_cols = write_records
-                    .iter()
-                    .cloned()
-                    .map(|write| memory_chip.make_write_aux_cols(write))
-                    .collect_vec();
-                while write_cols.len() < CPU_MAX_WRITES_PER_CYCLE {
-                    write_cols.push(CpuMemoryAccessCols::disabled(timestamp));
-                    writes_aux_cols.push(memory_chip.make_disabled_write_aux_cols());
-                }
+                let write_cols = array::from_fn(|i| {
+                    write_records
+                        .get(i)
+                        .map(|write| CpuMemoryAccessCols::from_write_record(write.clone()))
+                        .unwrap_or_else(CpuMemoryAccessCols::disabled)
+                });
+                let writes_aux_cols = array::from_fn(|i| {
+                    write_records
+                        .get(i)
+                        .map(|write| memory_chip.make_write_aux_cols(write.clone()))
+                        .unwrap_or_else(|| memory_chip.make_disabled_write_aux_cols())
+                });
 
                 let mut operation_flags = BTreeMap::new();
                 for other_opcode in CORE_INSTRUCTIONS {
@@ -493,12 +473,12 @@ impl<F: PrimeField32> CpuChip<F> {
                 let aux = CpuAuxCols {
                     operation_flags,
                     public_value_flags,
-                    reads: read_cols.try_into().unwrap(),
-                    writes: write_cols.try_into().unwrap(),
+                    reads: read_cols,
+                    writes: write_cols,
                     read0_equals_read1,
                     is_equal_vec_aux,
-                    reads_aux_cols: reads_aux_cols.try_into().unwrap(),
-                    writes_aux_cols: writes_aux_cols.try_into().unwrap(),
+                    reads_aux_cols,
+                    writes_aux_cols,
                 };
 
                 let cols = CpuCols { io, aux };
