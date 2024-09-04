@@ -40,7 +40,6 @@ pub struct OverflowInt<T> {
     pub limb_max_abs: usize,
 
     // All limbs should be within [-2^max_overflow_bits, 2^max_overflow_bits)
-    // This should be ceiling of log2(limb_max_abs)
     pub max_overflow_bits: usize,
 }
 
@@ -52,7 +51,7 @@ pub struct CanonicalUint<T, C: LimbConfig> {
 }
 
 impl<T, C: LimbConfig> CanonicalUint<T, C> {
-    pub fn from_big_uint(x: BigUint, min_limbs: Option<usize>) -> CanonicalUint<isize, C> {
+    pub fn from_big_uint(x: &BigUint, min_limbs: Option<usize>) -> CanonicalUint<isize, C> {
         let mut x_bits = utils::big_uint_to_bits(x);
         let mut x_limbs: Vec<isize> = vec![];
         let mut limbs_len = 0;
@@ -71,12 +70,22 @@ impl<T, C: LimbConfig> CanonicalUint<T, C> {
             _marker: PhantomData::<C>,
         }
     }
+
+    pub fn from_vec(x: Vec<T>) -> CanonicalUint<T, C> {
+        CanonicalUint {
+            limbs: x,
+            _marker: PhantomData::<C>,
+        }
+    }
 }
 
-impl<T, C: LimbConfig> From<CanonicalUint<T, C>> for OverflowInt<T> {
-    fn from(x: CanonicalUint<T, C>) -> OverflowInt<T> {
+impl<T, C: LimbConfig, S> From<CanonicalUint<T, C>> for OverflowInt<S>
+where
+    T: Into<S>,
+{
+    fn from(x: CanonicalUint<T, C>) -> OverflowInt<S> {
         OverflowInt {
-            limbs: x.limbs,
+            limbs: x.limbs.into_iter().map(|x| x.into()).collect(),
             max_overflow_bits: C::limb_bits(),
             limb_max_abs: (1 << C::limb_bits()) - 1,
         }

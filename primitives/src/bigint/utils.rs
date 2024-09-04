@@ -4,7 +4,6 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::{One, Zero};
 use p3_field::AbstractField;
-use p3_util::log2_ceil_usize;
 
 use super::modular_arithmetic::ModularArithmeticAir;
 use crate::var_range::bus::VariableRangeCheckerBus;
@@ -49,19 +48,12 @@ pub fn secp256k1_scalar_prime() -> BigUint {
 pub fn get_arithmetic_air(
     prime: BigUint,
     limb_bits: usize,
+    field_element_bits: usize,
     num_limbs: usize,
     is_mul_div: bool,
     range_bus: usize,
     range_decomp: usize,
 ) -> ModularArithmeticAir {
-    let limb_max_abs = if is_mul_div {
-        (1 << (2 * limb_bits)) * num_limbs * 2 + (1 << limb_bits)
-    } else {
-        // x +- y -r -pq
-        (1 << (2 * limb_bits)) + (1 << limb_bits) * 3
-    };
-    let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-
     let q_limbs = if is_mul_div { num_limbs } else { 1 };
     let carry_limbs = if is_mul_div {
         2 * num_limbs - 1
@@ -71,7 +63,7 @@ pub fn get_arithmetic_air(
     ModularArithmeticAir::new(
         prime,
         limb_bits,
-        max_overflow_bits,
+        field_element_bits,
         num_limbs,
         q_limbs,
         carry_limbs,
@@ -98,7 +90,7 @@ pub fn big_uint_sub(x: BigUint, y: BigUint) -> BigInt {
 
 // Convert a big uint bits by first conerting to bytes (little endian).
 // So the number of bits is multiple of 8.
-pub fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
+pub fn big_uint_to_bits(x: &BigUint) -> VecDeque<usize> {
     let mut result = VecDeque::new();
     for byte in x.to_bytes_le() {
         for i in 0..8 {
@@ -108,7 +100,7 @@ pub fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
     result
 }
 
-pub fn big_uint_to_limbs(x: BigUint, limb_bits: usize) -> Vec<usize> {
+pub fn big_uint_to_limbs(x: &BigUint, limb_bits: usize) -> Vec<usize> {
     let total_limbs = (x.bits() + limb_bits - 1) / limb_bits;
     let mut modulus_bits = big_uint_to_bits(x);
 
@@ -118,7 +110,7 @@ pub fn big_uint_to_limbs(x: BigUint, limb_bits: usize) -> Vec<usize> {
 }
 
 pub fn big_uint_to_num_limbs(x: BigUint, limb_bits: usize, num_limbs: usize) -> Vec<usize> {
-    let limbs = big_uint_to_limbs(x, limb_bits);
+    let limbs = big_uint_to_limbs(&x, limb_bits);
     limbs
         .iter()
         .chain(repeat(&0))
@@ -129,7 +121,7 @@ pub fn big_uint_to_num_limbs(x: BigUint, limb_bits: usize, num_limbs: usize) -> 
 
 pub fn big_int_to_limbs(x: BigInt, limb_bits: usize) -> Vec<isize> {
     let x_sign = x.sign();
-    let limbs = big_uint_to_limbs(big_int_abs(x), limb_bits);
+    let limbs = big_uint_to_limbs(&big_int_abs(x), limb_bits);
     if x_sign == Sign::Minus {
         limbs.iter().map(|&x| -(x as isize)).collect()
     } else {

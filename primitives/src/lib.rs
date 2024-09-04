@@ -11,6 +11,7 @@ pub mod is_less_than_tuple_bits;
 pub mod is_zero;
 // pub mod merkle_proof;
 pub mod bigint;
+pub mod ecc;
 pub mod modular_multiplication;
 pub mod offline_checker;
 pub mod range;

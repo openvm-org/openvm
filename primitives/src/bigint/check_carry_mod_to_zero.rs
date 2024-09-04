@@ -31,11 +31,11 @@ impl CheckCarryModToZeroSubAir {
         limb_bits: usize,
         range_checker_bus: usize,
         decomp: usize,
-        max_overflow_bits: usize,
+        field_element_bits: usize,
     ) -> Self {
         let check_carry_to_zero =
-            CheckCarryToZeroSubAir::new(limb_bits, range_checker_bus, decomp, max_overflow_bits);
-        let modulus_limbs = big_uint_to_limbs(modulus, limb_bits);
+            CheckCarryToZeroSubAir::new(limb_bits, range_checker_bus, decomp, field_element_bits);
+        let modulus_limbs = big_uint_to_limbs(&modulus, limb_bits);
         Self {
             modulus_limbs,
             check_carry_to_zero,

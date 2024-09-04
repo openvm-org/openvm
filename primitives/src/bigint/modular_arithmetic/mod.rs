@@ -7,6 +7,7 @@ use p3_field::PrimeField64;
 use crate::{
     bigint::{
         check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
+        check_carry_to_zero::get_carry_max_abs_and_bits,
         utils::big_int_to_limbs,
         CanonicalUint, DefaultLimbConfig, OverflowInt,
     },
@@ -87,7 +88,7 @@ impl ModularArithmeticAir {
     pub fn new(
         modulus: BigUint,
         limb_bits: usize,
-        max_overflow_bits: usize,
+        field_element_bits: usize,
         num_limbs: usize,
         q_limbs: usize,
         carry_limbs: usize,
@@ -99,7 +100,7 @@ impl ModularArithmeticAir {
             limb_bits,
             range_bus,
             range_decomp,
-            max_overflow_bits,
+            field_element_bits,
         );
 
         Self {
@@ -117,15 +118,15 @@ impl ModularArithmeticAir {
         3 * self.num_limbs + self.q_limbs + self.carry_limbs
     }
 
-    fn get_carry_min_value_abs(&self) -> usize {
-        self.check_carry_sub_air
-            .check_carry_to_zero
-            .carry_min_value_abs
-    }
+    // fn get_carry_min_value_abs(&self) -> usize {
+    //     self.check_carry_sub_air
+    //         .check_carry_to_zero
+    //         .carry_min_value_abs
+    // }
 
-    fn get_carry_bits(&self) -> usize {
-        self.check_carry_sub_air.check_carry_to_zero.carry_bits
-    }
+    // fn get_carry_bits(&self) -> usize {
+    //     self.check_carry_sub_air.check_carry_to_zero.carry_bits
+    // }
 
     // Converting limb from an isize to a field element.
     fn to_f<F: PrimeField64>(x: isize) -> F {
@@ -182,7 +183,7 @@ impl ModularArithmeticAir {
         }
         let q_f: Vec<F> = q_limbs.iter().map(|&x| Self::to_f(x)).collect();
         let r_canonical =
-            CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(r, Some(self.num_limbs));
+            CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(&r, Some(self.num_limbs));
         let r_f: Vec<F> = r_canonical
             .limbs
             .iter()
@@ -190,11 +191,11 @@ impl ModularArithmeticAir {
             .collect();
 
         let x_canonical =
-            CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(x, Some(self.num_limbs));
+            CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(&x, Some(self.num_limbs));
         let y_canonical =
-            CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(y, Some(self.num_limbs));
+            CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(&y, Some(self.num_limbs));
         let p_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(
-            self.modulus.clone(),
+            &self.modulus,
             Some(self.num_limbs),
         );
         let q_overflow = OverflowInt {
@@ -211,9 +212,10 @@ impl ModularArithmeticAir {
         );
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
-        let carry_min_abs = self.get_carry_min_value_abs() as isize;
+        let (carry_min_abs, carry_bits) =
+            get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         for (i, &carry) in carries.iter().enumerate() {
-            range_checker.add_count((carry + carry_min_abs) as u32, self.get_carry_bits());
+            range_checker.add_count((carry + carry_min_abs as isize) as u32, carry_bits);
             carries_f[i] = Self::to_f(carry);
         }
 

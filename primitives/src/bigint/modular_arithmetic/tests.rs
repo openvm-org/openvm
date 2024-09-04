@@ -40,6 +40,8 @@ fn get_air_and_range_checker(
     num_limbs: usize,
     is_mul_div: bool,
 ) -> (ModularArithmeticAir, Arc<VariableRangeCheckerChip>) {
+    let field_element_bits = 30;
+
     let range_bus = 1;
     let range_decomp = 17;
     let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
@@ -49,6 +51,7 @@ fn get_air_and_range_checker(
     let air = get_arithmetic_air(
         prime,
         limb_bits,
+        field_element_bits,
         num_limbs,
         is_mul_div,
         range_bus,

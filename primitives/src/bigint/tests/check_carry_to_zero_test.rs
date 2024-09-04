@@ -8,11 +8,12 @@ use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_util::log2_ceil_usize;
 use rand::RngCore;
 
 use super::super::{
-    check_carry_to_zero::{CheckCarryToZeroCols, CheckCarryToZeroSubAir},
+    check_carry_to_zero::{
+        get_carry_max_abs_and_bits, CheckCarryToZeroCols, CheckCarryToZeroSubAir,
+    },
     CanonicalUint, DefaultLimbConfig, OverflowInt,
 };
 use crate::{
@@ -58,7 +59,7 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
 
 pub struct TestCarryAir<const N: usize> {
     pub test_carry_sub_air: CheckCarryToZeroSubAir,
-    pub max_overflow_bits: usize,
+    pub field_element_bits: usize,
     pub decomp: usize,
     pub num_limbs: usize,
     pub limb_bits: usize,
@@ -99,20 +100,19 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let x_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(x, Some(N));
+        let x_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(&x, Some(N));
         let x_overflow: OverflowInt<isize> = x_canonical.into();
-        let y_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(y, Some(2 * N));
+        let y_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(&y, Some(2 * N));
         let y_overflow: OverflowInt<isize> = y_canonical.into();
         assert_eq!(x_overflow.limbs.len(), N);
         assert_eq!(y_overflow.limbs.len(), 2 * N);
         let expr = x_overflow.clone() * x_overflow.clone() - y_overflow.clone();
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
+        let (carry_min_abs, carry_bits) =
+            get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         for (i, &carry) in carries.iter().enumerate() {
-            range_checker.add_count(
-                (carry + (self.test_carry_sub_air.carry_min_value_abs as isize)) as u32,
-                self.test_carry_sub_air.carry_bits,
-            );
+            range_checker.add_count((carry + (carry_min_abs as isize)) as u32, carry_bits);
             carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
         }
@@ -142,18 +142,18 @@ fn test_x_square_minus_y(x: BigUint, y: BigUint) {
     // The equation: x^2 - y
     // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N + 2^10
     // overflow bits: limb_bits * 2 + log2(N) => 24
-    let max_overflow_bits = limb_bits * 2 + log2_ceil_usize(N);
     let range_bus = 1;
     let range_decomp = 16;
     let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
         range_bus,
         range_decomp,
     )));
+    let field_element_bits = 30;
     let check_carry_sub_air =
-        CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, max_overflow_bits);
+        CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, field_element_bits);
     let test_air = TestCarryAir::<N> {
         test_carry_sub_air: check_carry_sub_air,
-        max_overflow_bits,
+        field_element_bits,
         decomp: range_decomp,
         num_limbs,
         limb_bits,
