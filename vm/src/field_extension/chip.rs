@@ -51,39 +51,9 @@ pub struct FieldExtensionArithmeticChip<F: PrimeField32> {
 impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F> {
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
-        self.process(instruction.clone(), from_state);
-
-        ExecutionState {
-            pc: from_state.pc + 1,
-            timestamp: from_state.timestamp + Self::accesses_per_instruction(instruction.opcode),
-        }
-    }
-}
-
-impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
-    pub fn new(execution_bus: ExecutionBus, memory: MemoryChipRef<F>) -> Self {
-        let air =
-            FieldExtensionArithmeticAir::new(execution_bus, memory.borrow().make_offline_checker());
-        Self {
-            air,
-            records: vec![],
-            memory_chip: memory,
-        }
-    }
-
-    pub fn accesses_per_instruction(opcode: Opcode) -> usize {
-        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
-        3 * EXT_DEG
-    }
-
-    pub fn process(
-        &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> [F; EXT_DEG] {
+    ) -> ExecutionState<usize> {
         let Instruction {
             opcode,
             op_a,
@@ -122,7 +92,27 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             z_write,
         });
 
-        z
+        ExecutionState {
+            pc: from_state.pc + 1,
+            timestamp: from_state.timestamp + Self::accesses_per_instruction(opcode),
+        }
+    }
+}
+
+impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
+    pub fn new(execution_bus: ExecutionBus, memory: MemoryChipRef<F>) -> Self {
+        let air =
+            FieldExtensionArithmeticAir::new(execution_bus, memory.borrow().make_offline_checker());
+        Self {
+            air,
+            records: vec![],
+            memory_chip: memory,
+        }
+    }
+
+    pub fn accesses_per_instruction(opcode: Opcode) -> usize {
+        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
+        3 * EXT_DEG
     }
 
     pub fn current_height(&self) -> usize {

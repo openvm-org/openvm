@@ -295,7 +295,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 let executor = vm.executors.get_mut(&opcode).unwrap();
                 let next_state = InstructionExecutor::execute(
                     executor,
-                    &instruction,
+                    instruction,
                     ExecutionState::new(pc_usize, timestamp),
                 );
                 next_pc = F::from_canonical_usize(next_state.pc);

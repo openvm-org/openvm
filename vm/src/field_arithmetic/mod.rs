@@ -58,7 +58,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
 impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
+        instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         let Instruction {
@@ -70,7 +70,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             e: x_as,
             op_f: y_as,
             ..
-        } = instruction.clone();
+        } = instruction;
         assert!(FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
 
         let mut memory_chip = self.memory_chip.borrow_mut();

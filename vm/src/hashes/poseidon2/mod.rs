@@ -76,36 +76,6 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     pub fn direct_interaction_width() -> usize {
         WIDTH + WIDTH / 2
     }
-
-    /// Map VM instructions to Poseidon2IO columns, for opcodes.
-    fn make_io_cols(
-        ExecutionState { pc, timestamp }: ExecutionState<F>,
-        instruction: Instruction<F>,
-    ) -> Poseidon2VmIoCols<F> {
-        let Instruction {
-            opcode,
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
-            op_f: _f,
-            op_g: _g,
-            debug: _debug,
-        } = instruction;
-        Poseidon2VmIoCols {
-            is_opcode: F::one(),
-            is_direct: F::zero(),
-            pc,
-            timestamp,
-            a: op_a,
-            b: op_b,
-            c: op_c,
-            d,
-            e,
-            cmp: F::from_bool(opcode == COMP_POS2),
-        }
-    }
 }
 
 const WIDTH: usize = 16;
@@ -137,7 +107,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
     /// Used for both compression and permutation.
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
+        instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
@@ -149,10 +119,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
             op_c,
             d,
             e,
-            op_f: _f,
-            op_g: _g,
-            debug: _debug,
-        } = instruction.clone();
+            ..
+        } = instruction;
 
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         debug_assert_eq!(WIDTH, CHUNK * 2);
@@ -198,13 +166,19 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
 
         let output_aux_cols = mem_trace_builder.take_accesses_buffer();
 
-        let io = Poseidon2VmAir::<WIDTH, F>::make_io_cols(
-            from_state.map(F::from_canonical_usize),
-            instruction.clone(),
-        );
-
         let row = Poseidon2VmCols {
-            io,
+            io: Poseidon2VmIoCols {
+                is_opcode: F::one(),
+                is_direct: F::zero(),
+                pc: F::from_canonical_usize(from_state.pc),
+                timestamp: F::from_canonical_usize(from_state.timestamp),
+                a: op_a,
+                b: op_b,
+                c: op_c,
+                d,
+                e,
+                cmp: F::from_bool(opcode == COMP_POS2),
+            },
             aux: Poseidon2VmAuxCols::<WIDTH, F> {
                 dst,
                 lhs,

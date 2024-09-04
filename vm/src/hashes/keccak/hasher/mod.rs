@@ -104,7 +104,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
 impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
+        instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         let Instruction {
@@ -116,7 +116,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             e,
             op_f: f,
             ..
-        } = instruction.clone();
+        } = instruction;
         debug_assert_eq!(opcode, Opcode::KECCAK256);
 
         let mut memory = self.memory_chip.borrow_mut();
