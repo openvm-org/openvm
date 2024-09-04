@@ -4,7 +4,7 @@ use snark_verifier_sdk::Snark;
 use crate::{
     config::outer::new_from_outer_multi_vk,
     halo2::verifier::{generate_halo2_verifier_circuit, Halo2VerifierCircuit},
-    testing_utils::{outer::make_verification_params, StarkForTest},
+    testing_utils::{outer::make_verification_data, StarkForTest},
     types::VerifierInput,
 };
 
@@ -18,7 +18,7 @@ pub fn run_static_verifier_test(
         pvs,
     } = stark_for_test;
     let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-    let vparams = make_verification_params(&any_raps, traces.clone(), pvs, fri_params);
+    let vparams = make_verification_data(&any_raps, traces.clone(), pvs, fri_params);
 
     // Build verification program in eDSL.
     let advice = new_from_outer_multi_vk(&vparams.vk);

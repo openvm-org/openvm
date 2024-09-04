@@ -8,7 +8,7 @@ use crate::{
     config::outer::new_from_outer_multi_vk,
     halo2::Halo2Prover,
     stark::outer::build_circuit_verify_operations,
-    testing_utils::{outer::make_verification_params, StarkForTest},
+    testing_utils::{outer::make_verification_data, StarkForTest},
     tests::{fibonacci_stark_for_test, interaction_stark_for_test},
     types::VerifierInput,
     witness::Witnessable,
@@ -38,7 +38,7 @@ fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig
     let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
 
     let fri_params = default_fri_params();
-    let vparams = make_verification_params(&any_raps, traces.clone(), pvs, fri_params);
+    let vparams = make_verification_data(&any_raps, traces.clone(), pvs, fri_params);
 
     let advice = new_from_outer_multi_vk(&vparams.vk);
     let log_degree_per_air = vparams.proof.log_degrees();

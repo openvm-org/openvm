@@ -20,8 +20,8 @@ use crate::{
     types::{new_from_inner_multi_vk, VerifierInput},
 };
 
-/// All necessary parameters to verify a Stark proof.
-pub struct VerificationParams<SC: StarkGenericConfig> {
+/// All necessary data to verify a Stark proof.
+pub struct VerificationData<SC: StarkGenericConfig> {
     pub vk: MultiStarkVerifyingKey<SC>,
     pub proof: Proof<SC>,
     pub fri_params: FriParameters,
@@ -41,12 +41,12 @@ pub mod outer {
 
     use super::*;
 
-    pub fn make_verification_params(
+    pub fn make_verification_data(
         raps: &[&dyn AnyRap<BabyBearPoseidon2OuterConfig>],
         traces: Vec<RowMajorMatrix<BabyBear>>,
         pvs: &[Vec<BabyBear>],
         fri_params: FriParameters,
-    ) -> VerificationParams<BabyBearPoseidon2OuterConfig> {
+    ) -> VerificationData<BabyBearPoseidon2OuterConfig> {
         let num_pvs: Vec<usize> = pvs.iter().map(|pv| pv.len()).collect();
 
         let trace_heights: Vec<usize> = traces.iter().map(|t| t.height()).collect();
@@ -79,7 +79,7 @@ pub mod outer {
             .verify(&mut engine.new_challenger(), &vk, &proof, pvs)
             .expect("proof should verify");
 
-        VerificationParams {
+        VerificationData {
             vk,
             proof,
             fri_params: engine.fri_params,
@@ -97,12 +97,12 @@ pub mod inner {
     use super::*;
     use crate::hints::Hintable;
 
-    pub fn make_verification_params(
+    pub fn make_verification_data(
         raps: &[&dyn AnyRap<BabyBearPoseidon2Config>],
         traces: Vec<RowMajorMatrix<BabyBear>>,
         pvs: &[Vec<BabyBear>],
         fri_params: FriParameters,
-    ) -> VerificationParams<BabyBearPoseidon2Config> {
+    ) -> VerificationData<BabyBearPoseidon2Config> {
         let num_pvs: Vec<usize> = pvs.iter().map(|pv| pv.len()).collect();
 
         let trace_heights: Vec<usize> = traces.iter().map(|t| t.height()).collect();
@@ -135,7 +135,7 @@ pub mod inner {
             .verify(&mut engine.new_challenger(), &vk, &proof, pvs)
             .expect("proof should verify");
 
-        VerificationParams {
+        VerificationData {
             vk,
             proof,
             fri_params: engine.fri_params,
@@ -143,9 +143,9 @@ pub mod inner {
     }
     pub fn build_verification_program(
         pvs: Vec<Vec<InnerVal>>,
-        vparams: VerificationParams<BabyBearPoseidon2Config>,
+        vparams: VerificationData<BabyBearPoseidon2Config>,
     ) -> (Program<BabyBear>, Vec<Vec<InnerVal>>) {
-        let VerificationParams {
+        let VerificationData {
             vk,
             proof,
             fri_params,
@@ -168,6 +168,10 @@ pub mod inner {
         (program, input_stream)
     }
 
+    /// Steps of recursive tests:
+    /// 1. Generate a stark proof, P.
+    /// 2. build a verifier program which can verify P.
+    /// 3. Execute the verifier program and generate a proof.
     pub fn run_recursive_test(
         stark_for_test: StarkForTest<BabyBearPoseidon2Config>,
         fri_params: FriParameters,
@@ -180,7 +184,7 @@ pub mod inner {
         let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
         let (any_raps, traces, pvs) = sort_chips(any_raps, traces, pvs);
 
-        let vparams = make_verification_params(&any_raps, traces, &pvs, fri_params);
+        let vparams = make_verification_data(&any_raps, traces, &pvs, fri_params);
 
         let (program, witness_stream) = build_verification_program(pvs, vparams);
         execute_and_prove_program(

@@ -1,5 +1,5 @@
 use afs_compiler::util::execute_program;
-use afs_recursion::testing_utils::{inner::build_verification_program, VerificationParams};
+use afs_recursion::testing_utils::{inner::build_verification_program, VerificationData};
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder, prover::trace::TraceCommitmentBuilder,
     verifier::VerificationError,
@@ -80,7 +80,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let mut challenger = engine.new_challenger();
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
 
-    let vparams = VerificationParams {
+    let vparams = VerificationData {
         vk,
         proof,
         fri_params: engine.fri_params,
