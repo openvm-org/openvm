@@ -42,7 +42,7 @@ pub struct Poseidon2VmIoCols<T> {
 /// * `internal`: auxiliary columns used by Poseidon2Air for interpreting opcode, evaluating indicators, inverse, and explicit computations.
 #[derive(Clone, Debug)]
 pub struct Poseidon2VmAuxCols<T> {
-    pub dst: T,
+    pub dst_ptr: T,
     pub lhs_ptr: T,
     pub rhs_ptr: T,
     pub internal: Poseidon2Cols<WIDTH, T>,
@@ -162,7 +162,11 @@ impl<T: Clone> Poseidon2VmAuxCols<T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut result = vec![self.dst.clone(), self.lhs_ptr.clone(), self.rhs_ptr.clone()];
+        let mut result = vec![
+            self.dst_ptr.clone(),
+            self.lhs_ptr.clone(),
+            self.rhs_ptr.clone(),
+        ];
         result.extend(self.internal.flatten());
         result.extend(
             self.ptr_aux_cols
@@ -210,7 +214,7 @@ impl<T: Clone> Poseidon2VmAuxCols<T> {
         });
 
         Self {
-            dst,
+            dst_ptr: dst,
             lhs_ptr: lhs,
             rhs_ptr: rhs,
             internal,
@@ -224,7 +228,7 @@ impl<T: Clone> Poseidon2VmAuxCols<T> {
 impl<T: Field> Poseidon2VmAuxCols<T> {
     pub fn blank_row(air: &Poseidon2VmAir<T>) -> Self {
         Self {
-            dst: T::default(),
+            dst_ptr: T::default(),
             lhs_ptr: T::default(),
             rhs_ptr: T::default(),
             internal: Poseidon2Cols::blank_row(&air.inner),

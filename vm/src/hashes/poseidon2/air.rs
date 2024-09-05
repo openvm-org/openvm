@@ -76,7 +76,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
         // Only when opcode is COMPRESS is rhs <- [c]_d read
         for (io_addr, aux_addr, count, mem_aux) in izip!(
             [cols.io.a, cols.io.b, cols.io.c],
-            [cols.aux.dst, cols.aux.lhs_ptr, cols.aux.rhs_ptr],
+            [cols.aux.dst_ptr, cols.aux.lhs_ptr, cols.aux.rhs_ptr],
             [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp],
             cols.aux.ptr_aux_cols,
         ) {
@@ -128,7 +128,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
 
             memory_bridge
                 .write(
-                    MemoryAddress::new(cols.io.e, cols.aux.dst),
+                    MemoryAddress::new(cols.io.e, cols.aux.dst_ptr),
                     cols.aux.internal.io.output[..CHUNK].try_into().unwrap(),
                     clk,
                     cols.aux.output_aux_cols[0].clone(),
@@ -139,7 +139,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
         {
             let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
 
-            let pointer = cols.aux.dst + AB::F::from_canonical_usize(CHUNK);
+            let pointer = cols.aux.dst_ptr + AB::F::from_canonical_usize(CHUNK);
             memory_bridge
                 .write(
                     MemoryAddress::new(cols.io.e, pointer),
