@@ -17,5 +17,6 @@ pub mod range_gate;
 pub mod sub_chip;
 pub mod sum;
 pub mod utils;
+pub mod var_range;
 /// Different xor chip implementations
 pub mod xor;
