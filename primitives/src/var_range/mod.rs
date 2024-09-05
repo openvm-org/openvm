@@ -20,8 +20,8 @@ pub struct VariableRangeCheckerChip {
 
 impl VariableRangeCheckerChip {
     pub fn new(bus: VariableRangeCheckBus) -> Self {
-        let num_rows = u32::pow(2, bus.range_max_bits + 1) as usize;
-        let mut count = vec![];
+        let num_rows = (1 << (bus.range_max_bits + 1)) as usize;
+        let mut count = Vec::with_capacity(num_rows);
         for _ in 0..num_rows {
             count.push(AtomicU32::new(0));
         }
@@ -42,9 +42,9 @@ impl VariableRangeCheckerChip {
     }
 
     pub fn add_count(&self, value: u32, max_bits: u32) {
-        // index is 2^value + max_bits - 1 + 1 for the extra [0, 0] row
+        // index is 2^max_bits + value - 1 + 1 for the extra [0, 0] row
         // if each [value, max_bits] is valid, the sends multiset will be exactly the receives multiset
-        let idx = (u32::pow(2, value) + max_bits) as usize;
+        let idx = ((1 << max_bits) + value) as usize;
         assert!(
             idx < self.num_rows,
             "range exceeded: {} >= {}",
