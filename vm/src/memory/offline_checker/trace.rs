@@ -1,11 +1,13 @@
 use std::{array::from_fn, sync::Arc};
 
-use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
+use afs_primitives::{
+    is_zero::IsZeroAir, range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions,
+};
 use p3_field::PrimeField32;
-use afs_primitives::is_zero::IsZeroAir;
+
 use super::{
     bridge::MemoryOfflineChecker,
-    columns::{MemoryWriteAuxCols, MemoryReadAuxCols},
+    columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 use crate::memory::manager::{MemoryReadRecord, MemoryWriteRecord};
 
@@ -36,7 +38,6 @@ impl MemoryOfflineChecker {
         let addr_space_is_zero_cols = IsZeroAir.generate_trace_row(read.address_space);
 
         MemoryReadAuxCols::new(
-            read.data,
             read.prev_timestamps,
             addr_space_is_zero_cols.io.is_zero,
             addr_space_is_zero_cols.inv,
@@ -68,13 +69,9 @@ impl MemoryOfflineChecker {
             )
         });
 
-        let addr_space_is_zero_cols = IsZeroAir.generate_trace_row(write.address_space);
-
         MemoryWriteAuxCols::new(
             write.prev_data,
             write.prev_timestamps,
-            addr_space_is_zero_cols.io.is_zero,
-            addr_space_is_zero_cols.inv,
             clk_lt_cols.clone().map(|x| x.io.less_than),
             clk_lt_cols.map(|x| x.aux),
         )

@@ -14,9 +14,7 @@ use super::bus::MemoryBus;
 use crate::{
     cpu::RANGE_CHECKER_BUS,
     memory::{
-        offline_checker::{
-            columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
-        },
+        offline_checker::columns::{BaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -105,7 +103,7 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
-        AB: InteractionBuilder<Var=V, Expr=F>,
+        AB: InteractionBuilder<Var = V, Expr = F>,
     {
         let enabled = enabled.into();
 
@@ -128,37 +126,18 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
         //     addr_space_is_zero_cols.inv,
         // );
 
-        // is_immediate => read
-        // if is_write {
-        //     builder
-        //         .when(op.enabled.clone())
-        //         .assert_zero(aux.is_immediate);
-        // }
+        self.offline_checker.assert_increasing_timestamps(
+            builder,
+            self.timestamp.clone(),
+            &self.aux.base,
+            enabled.clone(),
+        );
 
-        for (prev_timestamp, clk_lt, clk_lt_aux) in izip!(self.aux.base.prev_timestamps, self.aux.base.clk_lt, self.aux.base.clk_lt_aux) {
-            let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
-                prev_timestamp,
-                self.timestamp.clone(),
-                clk_lt,
-            );
-            self.offline_checker.timestamp_lt_air.conditional_eval(
-                builder,
-                clk_lt_io_cols,
-                clk_lt_aux,
-                enabled.clone(),
-            );
-
+        for clk_lt in self.aux.base.clk_lt {
             builder.assert_one(implies(
                 and::<AB::Expr>(enabled.clone(), not(self.aux.is_immediate)),
                 clk_lt,
             ));
-        }
-
-        // TODO[zach]: Remove this assertion. Just consume self.data[i] and produce self.data[i].
-        for i in 0..N {
-            builder
-                .when(enabled.clone())
-                .assert_eq(self.data[i].clone(), self.aux.prev_data[i]);
         }
 
         builder
@@ -175,10 +154,16 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
                 self.address.address_space.clone(),
                 self.address.pointer.clone() + AB::Expr::from_canonical_usize(i),
             );
-            self.offline_checker.memory_bus
-                .read(address.clone(), [self.aux.prev_data[i]], self.aux.base.prev_timestamps[i])
+            self.offline_checker
+                .memory_bus
+                .read(
+                    address.clone(),
+                    [self.data[i].clone()],
+                    self.aux.base.prev_timestamps[i],
+                )
                 .eval(builder, count.clone());
-            self.offline_checker.memory_bus
+            self.offline_checker
+                .memory_bus
                 .write(
                     address,
                     [self.data[i].clone()],
@@ -205,76 +190,41 @@ pub struct MemoryWriteOperation<T, V, const N: usize> {
 }
 
 impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T, V, N> {
-    /// Evaluate constraints and send/receive interactions.
+    /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
         AB: InteractionBuilder<Var = V, Expr = T>,
     {
         let enabled = enabled.into();
+        self.offline_checker.assert_increasing_timestamps(
+            builder,
+            self.timestamp.clone(),
+            &self.aux.base,
+            enabled.clone(),
+        );
 
-        // FIXME[jpw]: this should not be here because op.enabled could be an
-        // expression of degree > 1 and assert_bool is quadratic
-        // builder.assert_bool(op.enabled.clone());
-
-        // TODO[jpw] immediate checks should not be in memory bridge
-        // Currently: expected is that enabled = 0, is_immediate = 0, all aux = 0 works
-
-        // Ensuring is_immediate is correct
-        // let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
-        //     IsZeroIoCols::<AB::Expr>::new(op.addr_space.clone(), aux.is_immediate.into()),
-        //     aux.is_zero_aux.into(),
-        // );
-
-        // self.is_zero_air.subair_eval(
-        //     &mut builder.when(op.enabled.clone()), // when not enabled, allow aux to be all 0s no matter what
-        //     addr_space_is_zero_cols.io,
-        //     addr_space_is_zero_cols.inv,
-        // );
-
-        // is_immediate => read
-        // if is_write {
-        //     builder
-        //         .when(op.enabled.clone())
-        //         .assert_zero(aux.is_immediate);
-        // }
-
-        for (prev_timestamp, clk_lt, clk_lt_aux) in izip!(self.aux.base.prev_timestamps, self.aux.base.clk_lt, self.aux.base.clk_lt_aux) {
-            let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
-                prev_timestamp,
-                self.timestamp.clone(),
-                clk_lt,
-            );
-            self.offline_checker.timestamp_lt_air.conditional_eval(
-                builder,
-                clk_lt_io_cols,
-                clk_lt_aux,
-                enabled.clone(),
-            );
-
-            builder.assert_one(implies(
-                and::<AB::Expr>(enabled.clone(), not(self.aux.is_immediate)),
-                clk_lt,
-            ));
+        for clk_lt in self.aux.base.clk_lt {
+            builder.assert_one(implies(enabled.clone(), clk_lt));
         }
 
-        builder
-            .when(self.aux.is_immediate)
-            .assert_eq(self.data[0].clone(), self.address.pointer.clone());
-
-        // TODO[osama]: resolve is_immediate stuff
-        // builder.assert_one(implies(aux.is_immediate.into(), op.enabled.clone()));
-        // TODO[jpw]: make this degree 1 after removing is_immediate
-        let count = enabled * not(self.aux.is_immediate);
+        let count = enabled.clone();
 
         for i in 0..N {
             let address = MemoryAddress::new(
                 self.address.address_space.clone(),
                 self.address.pointer.clone() + AB::Expr::from_canonical_usize(i),
             );
-            self.offline_checker.memory_bus
-                .read(address.clone(), [self.aux.prev_data[i]], self.aux.base.prev_timestamps[i])
+            self.offline_checker
+                .memory_bus
+                .read(
+                    address.clone(),
+                    [self.aux.prev_data[i]],
+                    self.aux.base.prev_timestamps[i],
+                )
                 .eval(builder, count.clone());
-            self.offline_checker.memory_bus
+
+            self.offline_checker
+                .memory_bus
                 .write(
                     address,
                     [self.data[i].clone()],
@@ -298,6 +248,27 @@ impl MemoryOfflineChecker {
         Self {
             memory_bus,
             timestamp_lt_air: IsLessThanAir::new(range_bus, clk_max_bits, decomp),
+        }
+    }
+
+    fn assert_increasing_timestamps<AB: InteractionBuilder, const N: usize>(
+        &self,
+        builder: &mut AB,
+        timestamp: AB::Expr,
+        base: &BaseAuxCols<AB::Var, N>,
+        enabled: AB::Expr,
+    ) {
+        for (prev_timestamp, clk_lt, clk_lt_aux) in
+            izip!(base.prev_timestamps, base.clk_lt, base.clk_lt_aux.clone())
+        {
+            let clk_lt_io_cols =
+                IsLessThanIoCols::<AB::Expr>::new(prev_timestamp, timestamp.clone(), clk_lt);
+            self.timestamp_lt_air.conditional_eval(
+                builder,
+                clk_lt_io_cols,
+                clk_lt_aux,
+                enabled.clone(),
+            );
         }
     }
 }

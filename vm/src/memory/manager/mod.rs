@@ -250,10 +250,8 @@ impl<F: PrimeField32> MemoryChip<F> {
         &self,
         read: MemoryReadRecord<N, F>,
     ) -> MemoryReadAuxCols<N, F> {
-        self.make_offline_checker().make_read_aux_cols(
-            self.range_checker.clone(),
-            read,
-        )
+        self.make_offline_checker()
+            .make_read_aux_cols(self.range_checker.clone(), read)
     }
 
     pub fn make_disabled_read_aux_cols<const N: usize>(&self) -> MemoryReadAuxCols<N, F> {
@@ -264,10 +262,8 @@ impl<F: PrimeField32> MemoryChip<F> {
         &self,
         write: MemoryWriteRecord<N, F>,
     ) -> MemoryWriteAuxCols<N, F> {
-        self.make_offline_checker().make_write_aux_cols(
-            self.range_checker.clone(),
-            write,
-        )
+        self.make_offline_checker()
+            .make_write_aux_cols(self.range_checker.clone(), write)
     }
 
     pub fn make_disabled_write_aux_cols<const N: usize>(&self) -> MemoryWriteAuxCols<N, F> {

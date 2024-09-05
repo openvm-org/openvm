@@ -1,7 +1,10 @@
 use p3_baby_bear::BabyBear;
-use crate::memory::offline_checker::bridge::MemoryOfflineChecker;
-use crate::memory::offline_checker::bus::MemoryBus;
-use crate::memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols};
+
+use crate::memory::offline_checker::{
+    bridge::MemoryOfflineChecker,
+    bus::MemoryBus,
+    columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+};
 
 #[test]
 fn test_write_aux_cols_width() {
@@ -10,10 +13,16 @@ fn test_write_aux_cols_width() {
     let mem_oc = MemoryOfflineChecker::new(MemoryBus(1), 29, 16);
 
     let disabled = MemoryWriteAuxCols::<1, F>::disabled(mem_oc);
-    assert_eq!(disabled.flatten().len(), MemoryWriteAuxCols::<1, F>::width(&mem_oc));
+    assert_eq!(
+        disabled.flatten().len(),
+        MemoryWriteAuxCols::<1, F>::width(&mem_oc)
+    );
 
     let disabled = MemoryWriteAuxCols::<4, F>::disabled(mem_oc);
-    assert_eq!(disabled.flatten().len(), MemoryWriteAuxCols::<4, F>::width(&mem_oc));
+    assert_eq!(
+        disabled.flatten().len(),
+        MemoryWriteAuxCols::<4, F>::width(&mem_oc)
+    );
 }
 
 #[test]
@@ -23,8 +32,14 @@ fn test_read_aux_cols_width() {
     let mem_oc = MemoryOfflineChecker::new(MemoryBus(1), 29, 16);
 
     let disabled = MemoryReadAuxCols::<1, F>::disabled(mem_oc);
-    assert_eq!(disabled.flatten().len(), MemoryReadAuxCols::<1, F>::width(&mem_oc));
+    assert_eq!(
+        disabled.flatten().len(),
+        MemoryReadAuxCols::<1, F>::width(&mem_oc)
+    );
 
     let disabled = MemoryReadAuxCols::<4, F>::disabled(mem_oc);
-    assert_eq!(disabled.flatten().len(), MemoryReadAuxCols::<4, F>::width(&mem_oc));
+    assert_eq!(
+        disabled.flatten().len(),
+        MemoryReadAuxCols::<4, F>::width(&mem_oc)
+    );
 }
