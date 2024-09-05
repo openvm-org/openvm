@@ -14,9 +14,10 @@ use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
     memory::{
         manager::{MemoryReadRecord, MemoryWriteRecord},
-        offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::columns::MemoryWriteAuxCols,
     },
 };
+use crate::memory::offline_checker::columns::MemoryReadOrImmediateAuxCols;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -163,7 +164,7 @@ pub struct CpuAuxCols<T> {
     pub writes: [CpuMemoryAccessCols<T>; CPU_MAX_WRITES_PER_CYCLE],
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
-    pub reads_aux_cols: [MemoryReadAuxCols<1, T>; CPU_MAX_READS_PER_CYCLE],
+    pub reads_aux_cols: [MemoryReadOrImmediateAuxCols<T>; CPU_MAX_READS_PER_CYCLE],
     pub writes_aux_cols: [MemoryWriteAuxCols<1, T>; CPU_MAX_WRITES_PER_CYCLE],
 }
 
@@ -202,8 +203,8 @@ impl<T: Clone> CpuAuxCols<T> {
 
         let reads_aux_cols = array::from_fn(|_| {
             start = end;
-            end += MemoryReadAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
-            MemoryReadAuxCols::from_slice(&slc[start..end], &cpu_air.memory_offline_checker)
+            end += MemoryReadOrImmediateAuxCols::<T>::width(&cpu_air.memory_offline_checker);
+            MemoryReadOrImmediateAuxCols::from_slice(&slc[start..end], &cpu_air.memory_offline_checker)
         });
         let writes_aux_cols = array::from_fn(|_| {
             start = end;
@@ -247,7 +248,7 @@ impl<T: Clone> CpuAuxCols<T> {
             self.reads_aux_cols
                 .iter()
                 .cloned()
-                .flat_map(MemoryReadAuxCols::flatten),
+                .flat_map(MemoryReadOrImmediateAuxCols::flatten),
         );
         flattened.extend(
             self.writes_aux_cols
@@ -263,7 +264,7 @@ impl<T: Clone> CpuAuxCols<T> {
         CORE_INSTRUCTIONS.len()
             + cpu_air.options.num_public_values
             + CPU_MAX_READS_PER_CYCLE
-                * (CpuMemoryAccessCols::<T>::width() + MemoryReadAuxCols::<WORD_SIZE, T>::width(oc))
+            * (CpuMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width(oc))
             + CPU_MAX_WRITES_PER_CYCLE
                 * (CpuMemoryAccessCols::<T>::width()
                     + MemoryWriteAuxCols::<WORD_SIZE, T>::width(oc))
@@ -279,7 +280,7 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             operation_flags.insert(opcode, F::from_bool(opcode == Opcode::NOP));
         }
 
-        let memory_chip = chip.memory_chip.borrow();
+        let offline_checker = chip.memory_chip.borrow().make_offline_checker();
 
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
@@ -292,8 +293,8 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             writes: array::from_fn(|_| CpuMemoryAccessCols::disabled()),
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
-            reads_aux_cols: array::from_fn(|_| memory_chip.make_disabled_read_aux_cols()),
-            writes_aux_cols: array::from_fn(|_| memory_chip.make_disabled_write_aux_cols()),
+            reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled(offline_checker)),
+            writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled(offline_checker)),
         }
     }
 }

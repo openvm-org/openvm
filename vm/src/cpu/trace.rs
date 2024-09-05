@@ -31,6 +31,7 @@ use crate::{
     cpu::{columns::CpuMemoryAccessCols, WORD_SIZE},
     vm::ExecutionSegment,
 };
+use crate::memory::offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols};
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -430,6 +431,8 @@ impl<F: PrimeField32> CpuChip<F> {
             // and move this logic into generate_trace().
             {
                 let memory_chip = vm.memory_chip.borrow();
+                let offline_checker = memory_chip.make_offline_checker();
+                let range_checker = &memory_chip.range_checker;
 
                 let read_cols = array::from_fn(|i| {
                     read_records
@@ -440,8 +443,8 @@ impl<F: PrimeField32> CpuChip<F> {
                 let reads_aux_cols = array::from_fn(|i| {
                     read_records
                         .get(i)
-                        .map(|read| memory_chip.make_read_aux_cols(read.clone()))
-                        .unwrap_or_else(|| memory_chip.make_disabled_read_aux_cols())
+                        .map(|read| offline_checker.make_read_or_immediate_aux_cols(range_checker.clone(), read.clone()))
+                        .unwrap_or_else(|| MemoryReadOrImmediateAuxCols::disabled(offline_checker))
                 });
 
                 let write_cols = array::from_fn(|i| {
@@ -453,8 +456,8 @@ impl<F: PrimeField32> CpuChip<F> {
                 let writes_aux_cols = array::from_fn(|i| {
                     write_records
                         .get(i)
-                        .map(|write| memory_chip.make_write_aux_cols(write.clone()))
-                        .unwrap_or_else(|| memory_chip.make_disabled_write_aux_cols())
+                        .map(|read| offline_checker.make_write_aux_cols(range_checker.clone(), read.clone()))
+                        .unwrap_or_else(|| MemoryWriteAuxCols::disabled(offline_checker))
                 });
 
                 let mut operation_flags = BTreeMap::new();

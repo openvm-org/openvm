@@ -5,6 +5,7 @@ use crate::memory::offline_checker::{
     bus::MemoryBus,
     columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
+use crate::memory::offline_checker::columns::MemoryReadOrImmediateAuxCols;
 
 #[test]
 fn test_write_aux_cols_width() {
@@ -41,5 +42,18 @@ fn test_read_aux_cols_width() {
     assert_eq!(
         disabled.flatten().len(),
         MemoryReadAuxCols::<4, F>::width(&mem_oc)
+    );
+}
+
+#[test]
+fn test_read_or_immediate_aux_cols_width() {
+    type F = BabyBear;
+
+    let mem_oc = MemoryOfflineChecker::new(MemoryBus(1), 29, 16);
+
+    let disabled = MemoryReadOrImmediateAuxCols::<F>::disabled(mem_oc);
+    assert_eq!(
+        disabled.flatten().len(),
+        MemoryReadOrImmediateAuxCols::<F>::width(&mem_oc)
     );
 }

@@ -64,6 +64,24 @@ impl<V> MemoryBridge<V> {
         }
     }
 
+    /// Prepare a logical memory read operation.
+    #[must_use]
+    pub fn read_or_immediate<T>(
+        &self,
+        address: MemoryAddress<impl Into<T>, impl Into<T>>,
+        data: impl Into<T>,
+        timestamp: impl Into<T>,
+        aux: MemoryReadOrImmediateAuxCols<V>,
+    ) -> MemoryReadOrImmediateOperation<T, V> {
+        MemoryReadOrImmediateOperation {
+            offline_checker: self.offline_checker,
+            address: MemoryAddress::from(address),
+            data: data.into(),
+            timestamp: timestamp.into(),
+            aux,
+        }
+    }
+
     /// Prepare a logical memory write operation.
     #[must_use]
     pub fn write<T, const N: usize>(

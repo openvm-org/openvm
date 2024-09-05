@@ -331,9 +331,9 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         let memory_bridge = MemoryBridge::new(self.memory_offline_checker);
         for (read, read_aux_cols) in zip(&reads, reads_aux_cols) {
             memory_bridge
-                .read(
+                .read_or_immediate(
                     MemoryAddress::new(read.address_space, read.pointer),
-                    [read.value],
+                    read.value,
                     op_timestamp.clone(),
                     read_aux_cols,
                 )
