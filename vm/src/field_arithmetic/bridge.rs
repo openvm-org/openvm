@@ -45,9 +45,9 @@ impl FieldArithmeticAir {
         let memory_bridge = MemoryBridge::new(self.mem_oc);
         let mut timestamp: AB::Expr = from_state.timestamp.into();
         memory_bridge
-            .read(
+            .read_or_immediate(
                 operand1.memory_address(),
-                [operand1.value],
+                operand1.value,
                 timestamp.clone(),
                 aux.read_x_aux_cols,
             )
@@ -55,9 +55,9 @@ impl FieldArithmeticAir {
         timestamp += is_valid.into();
 
         memory_bridge
-            .read(
+            .read_or_immediate(
                 operand2.memory_address(),
-                [operand2.value],
+                operand2.value,
                 timestamp.clone(),
                 aux.read_y_aux_cols,
             )

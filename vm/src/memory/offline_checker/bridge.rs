@@ -190,7 +190,7 @@ impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
-        AB: InteractionBuilder<Var=V, Expr=F>,
+        AB: InteractionBuilder<Var = V, Expr = F>,
     {
         // TODO[zach]: ensure that enabled is constrained to be boolean at call-sites
         let enabled = enabled.into();

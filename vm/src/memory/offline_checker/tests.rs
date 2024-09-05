@@ -3,9 +3,8 @@ use p3_baby_bear::BabyBear;
 use crate::memory::offline_checker::{
     bridge::MemoryOfflineChecker,
     bus::MemoryBus,
-    columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    columns::{MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
 };
-use crate::memory::offline_checker::columns::MemoryReadOrImmediateAuxCols;
 
 #[test]
 fn test_write_aux_cols_width() {

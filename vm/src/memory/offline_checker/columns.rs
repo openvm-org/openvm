@@ -121,10 +121,7 @@ pub struct MemoryReadAuxCols<const N: usize, T> {
 }
 
 impl<const N: usize, T> MemoryReadAuxCols<N, T> {
-    pub fn new(
-        prev_timestamps: [T; N],
-        clk_lt_aux: [IsLessThanAuxCols<T>; N],
-    ) -> Self {
+    pub fn new(prev_timestamps: [T; N], clk_lt_aux: [IsLessThanAuxCols<T>; N]) -> Self {
         Self {
             base: MemoryBaseAuxCols {
                 prev_timestamps,
@@ -210,7 +207,7 @@ impl<T> MemoryReadOrImmediateAuxCols<T> {
             .collect()
     }
 
-    pub fn from_iterator<I: Iterator<Item=T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
         Self {
             base: MemoryBaseAuxCols::from_iterator(iter, lt_air),
             is_immediate: iter.next().unwrap(),

@@ -14,10 +14,9 @@ use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
     memory::{
         manager::{MemoryReadRecord, MemoryWriteRecord},
-        offline_checker::columns::MemoryWriteAuxCols,
+        offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
     },
 };
-use crate::memory::offline_checker::columns::MemoryReadOrImmediateAuxCols;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -204,7 +203,10 @@ impl<T: Clone> CpuAuxCols<T> {
         let reads_aux_cols = array::from_fn(|_| {
             start = end;
             end += MemoryReadOrImmediateAuxCols::<T>::width(&cpu_air.memory_offline_checker);
-            MemoryReadOrImmediateAuxCols::from_slice(&slc[start..end], &cpu_air.memory_offline_checker)
+            MemoryReadOrImmediateAuxCols::from_slice(
+                &slc[start..end],
+                &cpu_air.memory_offline_checker,
+            )
         });
         let writes_aux_cols = array::from_fn(|_| {
             start = end;
@@ -264,7 +266,7 @@ impl<T: Clone> CpuAuxCols<T> {
         CORE_INSTRUCTIONS.len()
             + cpu_air.options.num_public_values
             + CPU_MAX_READS_PER_CYCLE
-            * (CpuMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width(oc))
+                * (CpuMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width(oc))
             + CPU_MAX_WRITES_PER_CYCLE
                 * (CpuMemoryAccessCols::<T>::width()
                     + MemoryWriteAuxCols::<WORD_SIZE, T>::width(oc))
@@ -293,7 +295,9 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             writes: array::from_fn(|_| CpuMemoryAccessCols::disabled()),
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
-            reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled(offline_checker)),
+            reads_aux_cols: array::from_fn(|_| {
+                MemoryReadOrImmediateAuxCols::disabled(offline_checker)
+            }),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled(offline_checker)),
         }
     }

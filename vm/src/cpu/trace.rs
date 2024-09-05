@@ -29,9 +29,9 @@ use crate::{
         },
     },
     cpu::{columns::CpuMemoryAccessCols, WORD_SIZE},
+    memory::offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
     vm::ExecutionSegment,
 };
-use crate::memory::offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols};
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -443,7 +443,12 @@ impl<F: PrimeField32> CpuChip<F> {
                 let reads_aux_cols = array::from_fn(|i| {
                     read_records
                         .get(i)
-                        .map(|read| offline_checker.make_read_or_immediate_aux_cols(range_checker.clone(), read.clone()))
+                        .map(|read| {
+                            offline_checker.make_read_or_immediate_aux_cols(
+                                range_checker.clone(),
+                                read.clone(),
+                            )
+                        })
                         .unwrap_or_else(|| MemoryReadOrImmediateAuxCols::disabled(offline_checker))
                 });
 
@@ -456,7 +461,9 @@ impl<F: PrimeField32> CpuChip<F> {
                 let writes_aux_cols = array::from_fn(|i| {
                     write_records
                         .get(i)
-                        .map(|read| offline_checker.make_write_aux_cols(range_checker.clone(), read.clone()))
+                        .map(|read| {
+                            offline_checker.make_write_aux_cols(range_checker.clone(), read.clone())
+                        })
                         .unwrap_or_else(|| MemoryWriteAuxCols::disabled(offline_checker))
                 });
 

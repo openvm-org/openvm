@@ -9,8 +9,10 @@ use super::{
     bridge::MemoryOfflineChecker,
     columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
-use crate::memory::manager::{MemoryReadRecord, MemoryWriteRecord};
-use crate::memory::offline_checker::columns::MemoryReadOrImmediateAuxCols;
+use crate::memory::{
+    manager::{MemoryReadRecord, MemoryWriteRecord},
+    offline_checker::columns::MemoryReadOrImmediateAuxCols,
+};
 
 impl MemoryOfflineChecker {
     // NOTE[jpw]: this function should be thread-safe so it can be used in parallelized
@@ -20,7 +22,10 @@ impl MemoryOfflineChecker {
         range_checker: Arc<RangeCheckerGateChip>,
         read: MemoryReadRecord<N, F>,
     ) -> MemoryReadAuxCols<N, F> {
-        assert!(!read.address_space.is_zero(), "cannot make `MemoryReadAuxCols` for address space 0");
+        assert!(
+            !read.address_space.is_zero(),
+            "cannot make `MemoryReadAuxCols` for address space 0"
+        );
 
         let timestamp = read.timestamp.as_canonical_u32();
         for prev_timestamp in &read.prev_timestamps {
@@ -38,10 +43,7 @@ impl MemoryOfflineChecker {
             )
         });
 
-        MemoryReadAuxCols::new(
-            read.prev_timestamps,
-            clk_lt_cols.map(|x| x.aux),
-        )
+        MemoryReadAuxCols::new(read.prev_timestamps, clk_lt_cols.map(|x| x.aux))
     }
 
     // NOTE[jpw]: this function should be thread-safe so it can be used in parallelized
@@ -55,15 +57,14 @@ impl MemoryOfflineChecker {
         let [prev_timestamp] = read.prev_timestamps;
         debug_assert!(prev_timestamp.as_canonical_u32() < timestamp);
 
-        let clk_lt_cols =
-            LocalTraceInstructions::generate_trace_row(
-                &self.timestamp_lt_air,
-                (
-                    prev_timestamp.as_canonical_u32(),
-                    timestamp,
-                    range_checker.clone(),
-                ),
-            );
+        let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
+            &self.timestamp_lt_air,
+            (
+                prev_timestamp.as_canonical_u32(),
+                timestamp,
+                range_checker.clone(),
+            ),
+        );
 
         let addr_space_is_zero_cols = IsZeroAir.generate_trace_row(read.address_space);
 
