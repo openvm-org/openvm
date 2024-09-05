@@ -135,7 +135,7 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
         //         .assert_zero(aux.is_immediate);
         // }
 
-        for (prev_timestamp, clk_lt, clk_lt_aux) in izip!(self.aux.prev_timestamps, self.aux.clk_lt, self.aux.clk_lt_aux) {
+        for (prev_timestamp, clk_lt, clk_lt_aux) in izip!(self.aux.base.prev_timestamps, self.aux.base.clk_lt, self.aux.base.clk_lt_aux) {
             let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
                 prev_timestamp,
                 self.timestamp.clone(),
@@ -176,7 +176,7 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
                 self.address.pointer.clone() + AB::Expr::from_canonical_usize(i),
             );
             self.offline_checker.memory_bus
-                .read(address.clone(), [self.aux.prev_data[i]], self.aux.prev_timestamps[i])
+                .read(address.clone(), [self.aux.prev_data[i]], self.aux.base.prev_timestamps[i])
                 .eval(builder, count.clone());
             self.offline_checker.memory_bus
                 .write(
@@ -238,7 +238,7 @@ impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T
         //         .assert_zero(aux.is_immediate);
         // }
 
-        for (prev_timestamp, clk_lt, clk_lt_aux) in izip!(self.aux.prev_timestamps, self.aux.clk_lt, self.aux.clk_lt_aux) {
+        for (prev_timestamp, clk_lt, clk_lt_aux) in izip!(self.aux.base.prev_timestamps, self.aux.base.clk_lt, self.aux.base.clk_lt_aux) {
             let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
                 prev_timestamp,
                 self.timestamp.clone(),
@@ -272,7 +272,7 @@ impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T
                 self.address.pointer.clone() + AB::Expr::from_canonical_usize(i),
             );
             self.offline_checker.memory_bus
-                .read(address.clone(), [self.aux.prev_data[i]], self.aux.prev_timestamps[i])
+                .read(address.clone(), [self.aux.prev_data[i]], self.aux.base.prev_timestamps[i])
                 .eval(builder, count.clone());
             self.offline_checker.memory_bus
                 .write(

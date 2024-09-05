@@ -86,9 +86,9 @@ impl<T> FieldExtensionArithmeticCols<T> {
                 is_mul: next(),
                 is_div: next(),
                 divisor_inv: array::from_fn(|_| next()),
-                read_x_aux_cols: MemoryReadAuxCols::try_from_iter(iter, lt_air),
-                read_y_aux_cols: MemoryReadAuxCols::try_from_iter(iter, lt_air),
-                write_aux_cols: MemoryWriteAuxCols::try_from_iter(iter, lt_air),
+                read_x_aux_cols: MemoryReadAuxCols::from_iterator(iter, lt_air),
+                read_y_aux_cols: MemoryReadAuxCols::from_iterator(iter, lt_air),
+                write_aux_cols: MemoryWriteAuxCols::from_iterator(iter, lt_air),
             },
         }
     }

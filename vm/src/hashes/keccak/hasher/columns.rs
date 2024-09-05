@@ -192,7 +192,7 @@ impl<T> KeccakMemoryCols<T> {
         T: Clone,
     {
         let mut it = slc.iter().cloned();
-        let mut next = || MemoryReadAuxCols::try_from_iter(&mut it, &mem_oc.timestamp_lt_air);
+        let mut next = || MemoryReadAuxCols::from_iterator(&mut it, &mem_oc.timestamp_lt_air);
         let op_reads = from_fn(|_| next());
         let absorb_reads = from_fn(|_| next());
         let digest_writes = from_fn(|_| next());

@@ -108,9 +108,9 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
             is_mul: next(),
             is_div: next(),
             divisor_inv: next(),
-            read_x_aux_cols: MemoryReadAuxCols::try_from_iter(iter, &air.mem_oc.timestamp_lt_air),
-            read_y_aux_cols: MemoryReadAuxCols::try_from_iter(iter, &air.mem_oc.timestamp_lt_air),
-            write_z_aux_cols: MemoryWriteAuxCols::try_from_iter(iter, &air.mem_oc.timestamp_lt_air),
+            read_x_aux_cols: MemoryReadAuxCols::from_iterator(iter, &air.mem_oc.timestamp_lt_air),
+            read_y_aux_cols: MemoryReadAuxCols::from_iterator(iter, &air.mem_oc.timestamp_lt_air),
+            write_z_aux_cols: MemoryWriteAuxCols::from_iterator(iter, &air.mem_oc.timestamp_lt_air),
         }
     }
 
