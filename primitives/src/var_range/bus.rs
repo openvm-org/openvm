@@ -1,7 +1,8 @@
 use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
 use p3_field::AbstractField;
 
-/// Represents a bus for `x` where `x` must lie in the range `[0, 2^range_max_bits)`.
+// Represents a bus for (x, bits) where either (x, bits) = (0, 0) or
+// x is in [0, 2^bits) and bits is in [1, range_max_bits]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VariableRangeCheckerBus {
     pub index: usize,
