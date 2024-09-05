@@ -22,6 +22,13 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         MultiStarkKeygenBuilder::new(self.config())
     }
 
+    fn trace_commitment_builder<'a>(&'a self) -> TraceCommitmentBuilder<'a, SC>
+    where
+        SC: 'a,
+    {
+        TraceCommitmentBuilder::new(self.config().pcs())
+    }
+
     fn prover(&self) -> MultiTraceStarkProver<SC> {
         MultiTraceStarkProver::new(self.config())
     }
