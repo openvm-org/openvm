@@ -1,5 +1,4 @@
-use std::iter::zip;
-use std::marker::PhantomData;
+use std::{iter::zip, marker::PhantomData};
 
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
@@ -247,9 +246,7 @@ impl MemoryOfflineChecker {
         base: &MemoryBaseAuxCols<AB::Var, N>,
         enabled: AB::Expr,
     ) {
-        for (prev_timestamp, clk_lt_aux) in
-            zip(base.prev_timestamps, base.clk_lt_aux.clone())
-        {
+        for (prev_timestamp, clk_lt_aux) in zip(base.prev_timestamps, base.clk_lt_aux.clone()) {
             let clk_lt_io_cols =
                 IsLessThanIoCols::<AB::Expr>::new(prev_timestamp, timestamp.clone(), AB::F::one());
             self.timestamp_lt_air.conditional_eval(
