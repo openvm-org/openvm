@@ -2,9 +2,12 @@ use std::array;
 
 use p3_field::Field;
 use poseidon2_air::poseidon2::columns::Poseidon2Cols;
-use crate::hashes::poseidon2::{CHUNK, WIDTH};
+
 use super::air::Poseidon2VmAir;
-use crate::memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols};
+use crate::{
+    hashes::poseidon2::{CHUNK, WIDTH},
+    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+};
 
 /// Columns for Poseidon2Vm AIR.
 #[derive(Clone, Debug)]
@@ -59,10 +62,7 @@ impl<T: Clone> Poseidon2VmCols<T> {
         result
     }
 
-    pub fn from_slice<F: Clone>(
-        slice: &[T],
-        air: &Poseidon2VmAir<F>,
-    ) -> Poseidon2VmCols<T> {
+    pub fn from_slice<F: Clone>(slice: &[T], air: &Poseidon2VmAir<F>) -> Poseidon2VmCols<T> {
         let io_width = Poseidon2VmIoCols::<T>::get_width();
         Self {
             io: Poseidon2VmIoCols::<T>::from_slice(&slice[..io_width]),

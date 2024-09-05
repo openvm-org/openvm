@@ -12,11 +12,7 @@ use crate::{
         instructions::Opcode::*,
     },
     cpu::trace::Instruction,
-    memory::{
-        manager::MemoryChipRef,
-        offline_checker::bridge::MemoryOfflineChecker,
-        tree::Hasher,
-    },
+    memory::{manager::MemoryChipRef, offline_checker::bridge::MemoryOfflineChecker, tree::Hasher},
 };
 
 #[cfg(test)]
@@ -138,7 +134,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         let dst = dst_read.value();
         let lhs_ptr = lhs_ptr_read.value();
-        let rhs_ptr = rhs_ptr_read.clone().map(|rhs_ptr_read| rhs_ptr_read.value()).unwrap_or(lhs_ptr + F::from_canonical_usize(CHUNK));
+        let rhs_ptr = rhs_ptr_read
+            .clone()
+            .map(|rhs_ptr_read| rhs_ptr_read.value())
+            .unwrap_or(lhs_ptr + F::from_canonical_usize(CHUNK));
 
         let input_1 = memory_chip.read(e, lhs_ptr);
         let input_2 = memory_chip.read(e, rhs_ptr);
@@ -161,15 +160,16 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             None
         };
 
-        let ptr_aux_cols = [Some(dst_read), Some(lhs_ptr_read), rhs_ptr_read]
-            .map(|maybe_read| {
-                maybe_read
-                    .map(|read| memory_chip.make_read_aux_cols(read))
-                    .unwrap_or_else(|| memory_chip.make_disabled_read_aux_cols())
-            });
+        let ptr_aux_cols = [Some(dst_read), Some(lhs_ptr_read), rhs_ptr_read].map(|maybe_read| {
+            maybe_read
+                .map(|read| memory_chip.make_read_aux_cols(read))
+                .unwrap_or_else(|| memory_chip.make_disabled_read_aux_cols())
+        });
         let input_aux_cols = [input_1, input_2].map(|x| memory_chip.make_read_aux_cols(x));
         let output_aux_cols = [Some(output_1), output_2].map(|maybe_write| {
-            maybe_write.map(|write| memory_chip.make_write_aux_cols(write)).unwrap_or(memory_chip.make_disabled_write_aux_cols())
+            maybe_write
+                .map(|write| memory_chip.make_write_aux_cols(write))
+                .unwrap_or(memory_chip.make_disabled_write_aux_cols())
         });
 
         let row = Poseidon2VmCols {

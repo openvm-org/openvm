@@ -1,7 +1,11 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
 
-use super::{air::Poseidon2VmAir, columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols}, WIDTH};
+use super::{
+    air::Poseidon2VmAir,
+    columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
+    WIDTH,
+};
 use crate::{
     arch::{
         columns::{ExecutionState, InstructionCols},
