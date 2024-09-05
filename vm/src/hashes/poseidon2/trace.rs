@@ -8,7 +8,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 use super::{columns::*, Poseidon2Chip};
 use crate::arch::chips::MachineChip;
 
-impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH, F> {
+impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
     /// Generates final Poseidon2VmAir trace from cached rows.
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
@@ -42,8 +42,8 @@ impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH
     }
 }
 
-impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
-    fn blank_row(&self) -> Poseidon2VmCols<WIDTH, F> {
-        Poseidon2VmCols::<WIDTH, F>::blank_row(&self.air)
+impl<F: PrimeField32> Poseidon2Chip<F> {
+    fn blank_row(&self) -> Poseidon2VmCols<F> {
+        Poseidon2VmCols::<F>::blank_row(&self.air)
     }
 }

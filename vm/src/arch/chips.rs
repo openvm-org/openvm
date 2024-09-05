@@ -89,7 +89,7 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
 pub enum InstructionExecutorVariant<F: PrimeField32> {
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
+    Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ModularArithmetic(Rc<RefCell<ModularArithmeticChip<F>>>),
 }
@@ -102,7 +102,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     Memory(MemoryChipRef<F>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
+    Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<RangeCheckerGateChip>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),

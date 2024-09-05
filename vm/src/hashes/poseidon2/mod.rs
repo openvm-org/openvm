@@ -27,17 +27,20 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+pub const WIDTH: usize = 16;
+pub const CHUNK: usize = 8;
+
 /// Poseidon2 Chip.
 ///
 /// Carries the Poseidon2VmAir for constraints, and cached state for trace generation.
 #[derive(Debug)]
-pub struct Poseidon2Chip<const WIDTH: usize, F: PrimeField32> {
-    pub air: Poseidon2VmAir<WIDTH, F>,
-    pub rows: Vec<Poseidon2VmCols<WIDTH, F>>,
+pub struct Poseidon2Chip<F: PrimeField32> {
+    pub air: Poseidon2VmAir<F>,
+    pub rows: Vec<Poseidon2VmCols<F>>,
     pub memory_chip: MemoryChipRef<F>,
 }
 
-impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
+impl<F: PrimeField32> Poseidon2VmAir<F> {
     /// Construct from Poseidon2 config and bus index.
     pub fn from_poseidon2_config(
         config: Poseidon2Config<WIDTH, F>,
@@ -78,15 +81,14 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     }
 }
 
-const WIDTH: usize = 16;
-impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+impl<F: PrimeField32> Poseidon2Chip<F> {
     /// Construct from Poseidon2 config and bus index.
     pub fn from_poseidon2_config(
         p2_config: Poseidon2Config<WIDTH, F>,
         execution_bus: ExecutionBus,
         memory_chip: MemoryChipRef<F>,
     ) -> Self {
-        let air = Poseidon2VmAir::<WIDTH, F>::from_poseidon2_config(
+        let air = Poseidon2VmAir::<F>::from_poseidon2_config(
             p2_config,
             execution_bus,
             memory_chip.borrow().make_offline_checker(),
@@ -99,7 +101,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
+impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
     /// Reads two chunks from memory and generates a trace row for
     /// the given instruction using the subair, storing it in `rows`. Then, writes output to memory,
     /// truncating if the instruction is a compression.
@@ -179,7 +181,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
                 e,
                 cmp: F::from_bool(opcode == COMP_POS2),
             },
-            aux: Poseidon2VmAuxCols::<WIDTH, F> {
+            aux: Poseidon2VmAuxCols {
                 dst,
                 lhs,
                 rhs,
@@ -199,8 +201,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
     }
 }
 
-const CHUNK: usize = 8;
-impl<F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WIDTH, F> {
+impl<F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<F> {
     /// Key method for Hasher trait.
     ///
     /// Takes two chunks, hashes them, and returns the result. Total width 3 * CHUNK, exposed in `direct_interaction_width()`.
