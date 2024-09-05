@@ -99,7 +99,7 @@ impl std::error::Error for BreakLoop {}
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct BuilderFlags {
-    pub(crate) debug: bool,
+    pub debug: bool,
     /// If true, `builder.break_loop` will take control flow instead of pushing an instruction.
     pub(crate) static_loop: bool,
     /// If true, panic when `builder.break_loop` is called.

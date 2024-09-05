@@ -1,5 +1,8 @@
 use afs_compiler::{
-    ir::{Array, BigIntVar, Builder, Config, MemIndex, MemVariable, Ptr, RVar, Var, Variable},
+    ir::{
+        Array, BigIntVar, Builder, Config, MemIndex, MemVariable, Ptr, RVar, Var, Variable,
+        NUM_ELEMS,
+    },
     prelude::DslVariable,
 };
 use p3_field::{AbstractField, PrimeField64};
@@ -23,14 +26,15 @@ where
     C: Config,
     C::N: PrimeField64,
 {
-    assert!(BIGINT_MAX_BITS % window_bits == 0);
+    assert_eq!(BIGINT_MAX_BITS % window_bits, 0);
     let EcPoint { x, y } = point;
+    let num_windows = BIGINT_MAX_BITS / window_bits;
+    let window_len = (1usize << window_bits) - 1;
 
     let x_zero = builder.secp256k1_coord_is_zero(x);
     let y_zero = builder.secp256k1_coord_is_zero(y);
     let result_x: BigIntVar<C> = builder.uninit_bigint();
     let result_y: BigIntVar<C> = builder.uninit_bigint();
-    let num_windows = (BIGINT_MAX_BITS + window_bits - 1) / window_bits;
 
     builder.secp256k1_coord_set_to_zero(&result_x);
     builder.secp256k1_coord_set_to_zero(&result_y);
@@ -43,9 +47,8 @@ where
                 .map(|_| {
                     let mut curr = increment.clone();
                     // start with increment at index 0 instead of identity just as a dummy value to avoid divide by 0 issues
-                    let cache_vec: Array<C, EcPoint<C>> =
-                        builder.dyn_array((1usize << window_bits) - 1);
-                    for j in 0..(1usize << window_bits) - 1 {
+                    let cache_vec: Array<C, EcPoint<C>> = builder.dyn_array(window_len);
+                    for j in 0..window_len {
                         let prev = curr.clone();
                         let (curr_x, curr_y) = builder.ec_add(
                             &(curr.x, curr.y),
@@ -80,15 +83,15 @@ where
             }
         },
     );
-    println!("X:");
-    for i in 0..9 {
-        let p = builder.get(&result_x, i);
-        builder.print_v(p);
-    }
-    println!("Y:");
-    for i in 0..9 {
-        let p = builder.get(&result_y, i);
-        builder.print_v(p);
+    if builder.flags.debug {
+        for i in 0..NUM_ELEMS {
+            let p = builder.get(&result_x, i);
+            builder.print_v(p);
+        }
+        for i in 0..NUM_ELEMS {
+            let p = builder.get(&result_y, i);
+            builder.print_v(p);
+        }
     }
     EcPoint {
         x: result_x,
