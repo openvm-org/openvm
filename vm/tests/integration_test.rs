@@ -13,7 +13,7 @@ use p3_field::AbstractField;
 use stark_vm::{
     arch::instructions::Opcode::*,
     cpu::trace::Instruction,
-    hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_U16S},
+    hashes::keccak::hasher::utils::keccak256,
     program::Program,
     vm::{
         config::{MemoryConfig, VmConfig},
@@ -392,14 +392,11 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     ));
 
     // read expected result to check correctness
-    for i in 0..KECCAK_DIGEST_U16S {
-        let mut limb = 0u16;
-        limb |= expected[2 * i] as u16;
-        limb |= (expected[2 * i + 1] as u16) << 8;
+    for (i, expected_byte) in expected.into_iter().enumerate() {
         instructions.push(Instruction::from_isize(
             BNE,
             dst + i as isize,
-            limb as isize,
+            expected_byte as isize,
             -(instructions.len() as isize) + 1, // jump to fail
             2,
             0,

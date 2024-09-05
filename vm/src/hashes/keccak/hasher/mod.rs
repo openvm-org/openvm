@@ -32,15 +32,13 @@ const KECCAK_EXECUTION_READS: usize = 3;
 const KECCAK_ABSORB_READS: usize = KECCAK_RATE_BYTES;
 // TODO[jpw]: adjust for batch write
 /// Memory writes for digest per row
-const KECCAK_DIGEST_WRITES: usize = KECCAK_DIGEST_U16S;
+const KECCAK_DIGEST_WRITES: usize = KECCAK_DIGEST_BYTES;
 
 /// Total number of sponge bytes: number of rate bytes + number of capacity
 /// bytes.
 pub const KECCAK_WIDTH_BYTES: usize = 200;
 /// Total number of 16-bit limbs in the sponge.
 pub const KECCAK_WIDTH_U16S: usize = KECCAK_WIDTH_BYTES / 2;
-/// Number of non-digest bytes.
-pub const KECCAK_WIDTH_MINUS_DIGEST_U16S: usize = (KECCAK_WIDTH_BYTES - KECCAK_DIGEST_BYTES) / 2;
 /// Number of rate bytes.
 pub const KECCAK_RATE_BYTES: usize = 136;
 /// Number of 16-bit rate limbs.
@@ -53,8 +51,8 @@ pub const KECCAK_CAPACITY_BYTES: usize = 64;
 pub const KECCAK_CAPACITY_U16S: usize = KECCAK_CAPACITY_BYTES / 2;
 /// Number of output digest bytes used during the squeezing phase.
 pub const KECCAK_DIGEST_BYTES: usize = 32;
-/// Number of 16-bit digest limbs.
-pub const KECCAK_DIGEST_U16S: usize = KECCAK_DIGEST_BYTES / 2;
+/// Number of 64-bit digest limbs.
+pub const KECCAK_DIGEST_U64S: usize = KECCAK_DIGEST_BYTES / 8;
 
 #[derive(Clone, Debug)]
 pub struct KeccakVmChip<F: PrimeField32> {
@@ -185,12 +183,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         }
         let mut output = [0u8; 32];
         hasher.finalize(&mut output);
-        let digest_writes: [_; KECCAK_DIGEST_U16S] = from_fn(|i| {
-            let limb = output[2 * i] as u16 | (output[2 * i + 1] as u16) << 8;
+        let digest_writes: [_; KECCAK_DIGEST_WRITES] = from_fn(|i| {
             memory.write(
                 e,
                 dst + F::from_canonical_usize(i),
-                [F::from_canonical_u16(limb)],
+                [F::from_canonical_u8(output[i])],
             )
         });
         tracing::trace!("[runtime] keccak256 output: {:?}", output);

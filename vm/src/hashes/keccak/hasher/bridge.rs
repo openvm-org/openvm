@@ -6,9 +6,8 @@ use p3_field::AbstractField;
 use p3_keccak_air::U64_LIMBS;
 
 use super::{
-    columns::KeccakVmColsRef, KeccakVmAir, KECCAK_ABSORB_READS, KECCAK_DIGEST_BYTES,
-    KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S,
-    NUM_ABSORB_ROUNDS,
+    columns::KeccakVmColsRef, KeccakVmAir, KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES,
+    KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
 };
 use crate::{
     arch::{
@@ -235,24 +234,29 @@ impl KeccakVmAir {
             local.inner.export,
             opcode.is_enabled * is_final_block * local.is_last_round(),
         );
-        for x in 0..KECCAK_DIGEST_BYTES / 8 {
-            for limb in 0..U64_LIMBS {
-                let index = x * U64_LIMBS + limb;
-                let timestamp =
-                    start_write_timestamp.clone() + AB::Expr::from_canonical_usize(index);
-                let value = local.postimage(0, x, limb);
-                memory_bridge
-                    .write(
-                        MemoryAddress::new(
-                            opcode.e,
-                            opcode.dst + AB::F::from_canonical_usize(index),
-                        ),
-                        [value],
-                        timestamp,
-                        mem_aux[index].clone(),
-                    )
-                    .eval(builder, local.inner.export)
-            }
+        // See `constrain_absorb` on how we derive the postimage bytes from u16 limbs
+        // **SAFETY:** because we never XOR the final state, these bytes are NOT range checked.
+        let updated_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
+            let y = i / 5;
+            let x = i % 5;
+            (0..U64_LIMBS).flat_map(move |limb| {
+                let state_limb = local.postimage(y, x, limb);
+                let hi = local.sponge.state_hi[i * U64_LIMBS + limb];
+                let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
+                // Conversion from bytes to u64 is little-endian
+                [lo, hi.into()]
+            })
+        });
+        for (i, digest_byte) in updated_state_bytes.take(KECCAK_DIGEST_WRITES).enumerate() {
+            let timestamp = start_write_timestamp.clone() + AB::Expr::from_canonical_usize(i);
+            memory_bridge
+                .write(
+                    MemoryAddress::new(opcode.e, opcode.dst + AB::F::from_canonical_usize(i)),
+                    [digest_byte],
+                    timestamp,
+                    mem_aux[i].clone(),
+                )
+                .eval(builder, local.inner.export)
         }
     }
 
