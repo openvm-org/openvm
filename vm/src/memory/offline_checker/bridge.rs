@@ -1,12 +1,12 @@
+use std::iter::zip;
 use std::marker::PhantomData;
 
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
     range::bus::RangeCheckBus,
-    utils::{and, implies, not},
+    utils::not,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
-use itertools::izip;
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
@@ -14,7 +14,7 @@ use super::bus::MemoryBus;
 use crate::{
     cpu::RANGE_CHECKER_BUS,
     memory::{
-        offline_checker::columns::{BaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::columns::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -133,13 +133,6 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
             enabled.clone(),
         );
 
-        for clk_lt in self.aux.base.clk_lt {
-            builder.assert_one(implies(
-                and::<AB::Expr>(enabled.clone(), not(self.aux.is_immediate)),
-                clk_lt,
-            ));
-        }
-
         builder
             .when(self.aux.is_immediate)
             .assert_eq(self.data[0].clone(), self.address.pointer.clone());
@@ -203,10 +196,6 @@ impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T
             enabled.clone(),
         );
 
-        for clk_lt in self.aux.base.clk_lt {
-            builder.assert_one(implies(enabled.clone(), clk_lt));
-        }
-
         let count = enabled.clone();
 
         for i in 0..N {
@@ -255,14 +244,14 @@ impl MemoryOfflineChecker {
         &self,
         builder: &mut AB,
         timestamp: AB::Expr,
-        base: &BaseAuxCols<AB::Var, N>,
+        base: &MemoryBaseAuxCols<AB::Var, N>,
         enabled: AB::Expr,
     ) {
-        for (prev_timestamp, clk_lt, clk_lt_aux) in
-            izip!(base.prev_timestamps, base.clk_lt, base.clk_lt_aux.clone())
+        for (prev_timestamp, clk_lt_aux) in
+            zip(base.prev_timestamps, base.clk_lt_aux.clone())
         {
             let clk_lt_io_cols =
-                IsLessThanIoCols::<AB::Expr>::new(prev_timestamp, timestamp.clone(), clk_lt);
+                IsLessThanIoCols::<AB::Expr>::new(prev_timestamp, timestamp.clone(), AB::F::one());
             self.timestamp_lt_air.conditional_eval(
                 builder,
                 clk_lt_io_cols,

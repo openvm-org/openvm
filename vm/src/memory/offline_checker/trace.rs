@@ -41,7 +41,6 @@ impl MemoryOfflineChecker {
             read.prev_timestamps,
             addr_space_is_zero_cols.io.is_zero,
             addr_space_is_zero_cols.inv,
-            clk_lt_cols.clone().map(|x| x.io.less_than),
             clk_lt_cols.map(|x| x.aux),
         )
     }
@@ -72,7 +71,6 @@ impl MemoryOfflineChecker {
         MemoryWriteAuxCols::new(
             write.prev_data,
             write.prev_timestamps,
-            clk_lt_cols.clone().map(|x| x.io.less_than),
             clk_lt_cols.map(|x| x.aux),
         )
     }
