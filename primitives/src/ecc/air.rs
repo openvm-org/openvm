@@ -39,10 +39,10 @@ impl<AB: InteractionBuilder> Air<AB> for EccAir {
         let y2: OverflowInt<AB::Expr> = io.p2.y.into();
         // lambda_expr_sign is 1 for negative, 0 for non-negative
         // 1 - 2x will be     -1               1
+        builder.assert_bool(aux.lambda_expr_sign);
         let sign: AB::Expr =
             AB::Expr::from_canonical_u8(1) - AB::Expr::from_canonical_u8(2) * aux.lambda_expr_sign;
         let sign = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(vec![sign], 1);
-        assert_eq!(sign.limbs.len(), 1);
         let expr: OverflowInt<AB::Expr> =
             (lambda.clone() * (x2.clone() - x1.clone()) - y2 + y1.clone()) * sign;
         self.check_carry
@@ -50,10 +50,10 @@ impl<AB: InteractionBuilder> Air<AB> for EccAir {
 
         // x3 = λ * λ - x1 - x2
         let x3: OverflowInt<AB::Expr> = io.p3.x.into();
+        builder.assert_bool(aux.x3_expr_sign);
         let sign: AB::Expr =
             AB::Expr::from_canonical_u8(1) - AB::Expr::from_canonical_u8(2) * aux.x3_expr_sign;
         let sign = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(vec![sign], 1);
-        assert_eq!(sign.limbs.len(), 1);
         let expr = (lambda.clone() * lambda.clone() - x1.clone() - x2.clone() - x3.clone()) * sign;
         self.check_carry
             .constrain_carry_mod_to_zero(builder, expr, aux.x3_check);
@@ -61,10 +61,10 @@ impl<AB: InteractionBuilder> Air<AB> for EccAir {
         // t = y1 - λ * x1
         // y3 = -(λ * x3 + t) = -λ * x3 - y1 + λ * x1
         let y3: OverflowInt<AB::Expr> = io.p3.y.into();
+        builder.assert_bool(aux.y3_expr_sign);
         let sign: AB::Expr =
             AB::Expr::from_canonical_u8(1) - AB::Expr::from_canonical_u8(2) * aux.y3_expr_sign;
         let sign = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(vec![sign], 1);
-        assert_eq!(sign.limbs.len(), 1);
         let expr = (y3 + lambda.clone() * x3 + y1 - lambda * x1) * sign;
         self.check_carry
             .constrain_carry_mod_to_zero(builder, expr, aux.y3_check);
