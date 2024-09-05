@@ -203,21 +203,22 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         let chunk_f = F::from_canonical_usize(CHUNK);
 
         let dst_ptr_read = memory_chip.read_cell(d, op_a);
+        let dst_ptr = dst_ptr_read.value();
+
         let lhs_ptr_read = memory_chip.read_cell(d, op_b);
-        let rhs_ptr_read = match opcode {
-            COMP_POS2 => Some(memory_chip.read_cell(d, op_c)),
+        let lhs_ptr = lhs_ptr_read.value();
+
+        let (rhs_ptr, rhs_ptr_read) = match opcode {
+            COMP_POS2 => {
+                let rhs_ptr_read = memory_chip.read_cell(d, op_c);
+                (rhs_ptr_read.value(), Some(rhs_ptr_read))
+            },
             PERM_POS2 => {
                 memory_chip.increment_timestamp();
-                None
+                (lhs_ptr + chunk_f, None)
             }
             _ => panic!("unrecognized Poseidon2Chip opcode"),
         };
-
-        let dst_ptr = dst_ptr_read.value();
-        let lhs_ptr = lhs_ptr_read.value();
-        let rhs_ptr = rhs_ptr_read
-            .as_ref()
-            .map_or(lhs_ptr + chunk_f, |rhs_ptr_read| rhs_ptr_read.value());
 
         let lhs_read = memory_chip.read(e, lhs_ptr);
         let rhs_read = memory_chip.read(e, rhs_ptr);
