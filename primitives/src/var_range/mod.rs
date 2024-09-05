@@ -5,8 +5,8 @@ pub mod bus;
 pub mod columns;
 pub mod trace;
 
-// #[cfg(test)]
-// pub mod tests;
+#[cfg(test)]
+pub mod tests;
 
 pub use air::VariableRangeCheckerAir;
 use bus::VariableRangeCheckBus;
