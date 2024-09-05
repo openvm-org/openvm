@@ -46,8 +46,6 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
 
         let FieldExtensionArithmeticCols { io, aux } = local_cols;
 
-        // TODO[zach]: Support DIV directly instead of INV.
-
         let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_div];
         let opcodes = [FE4ADD, FE4SUB, BBE4MUL, BBE4DIV];
         let results = [

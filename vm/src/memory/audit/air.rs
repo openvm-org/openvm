@@ -61,8 +61,11 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryAuditAir {
             AuditCols::<AB::Var>::from_slice(&row, self)
         });
 
+
         // TODO[jpw]: ideally make this work for testing too
         if !self.for_testing {
+            builder.assert_bool(local.is_extra);
+
             // Ensuring all is_extra rows are at the bottom
             builder
                 .when_transition()

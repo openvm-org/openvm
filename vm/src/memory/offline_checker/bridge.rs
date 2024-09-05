@@ -126,7 +126,6 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
     where
         AB: InteractionBuilder<Var = V, Expr = F>,
     {
-        // TODO[zach]: Ensure enabled is constrained to be boolean externally
         let enabled = enabled.into();
 
         // NOTE: We do not need to constrain `address_space != 0` since this is done implicitly by
@@ -192,11 +191,9 @@ impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
     where
         AB: InteractionBuilder<Var = V, Expr = F>,
     {
-        // TODO[zach]: ensure that enabled is constrained to be boolean at call-sites
         let enabled = enabled.into();
 
-        // TODO[zach]: We want to allow all zeroes to work.
-        // `is_immediate` should be an indicator for `address_space == 0`.
+        // `is_immediate` should be an indicator for `address_space == 0` (when `enabled`).
         {
             let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
                 IsZeroIoCols::<AB::Expr>::new(
@@ -216,7 +213,7 @@ impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
             .when(self.aux.is_immediate)
             .assert_eq(self.data.clone(), self.address.pointer.clone());
 
-        // Timestamps should be increasing when enabled.
+        // Timestamps should be increasing (when enabled).
         self.offline_checker.assert_increasing_timestamps(
             builder,
             self.timestamp.clone(),
@@ -225,13 +222,14 @@ impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
         );
 
         let count = enabled * not(self.aux.is_immediate);
+        let [prev_timestamp] = self.aux.base.prev_timestamps;
 
         self.offline_checker
             .memory_bus
             .read(
                 self.address.clone(),
                 [self.data.clone()],
-                self.aux.base.prev_timestamps[0],
+                prev_timestamp,
             )
             .eval(builder, count.clone());
         self.offline_checker
