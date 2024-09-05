@@ -195,7 +195,7 @@ impl<T> KeccakMemoryCols<T> {
         let mut next = || MemoryReadAuxCols::from_iterator(&mut it, &mem_oc.timestamp_lt_air);
         let op_reads = from_fn(|_| next());
         let absorb_reads = from_fn(|_| next());
-        let digest_writes = from_fn(|_| next());
+        let digest_writes = from_fn(|_| MemoryWriteAuxCols::from_iterator(&mut it, &mem_oc.timestamp_lt_air));
 
         Self {
             op_reads,

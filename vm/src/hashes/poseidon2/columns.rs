@@ -234,7 +234,7 @@ impl<T: Field> Poseidon2VmAuxCols<T> {
             internal: Poseidon2Cols::blank_row(&air.inner),
             ptr_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled(air.mem_oc)),
             input_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled(air.mem_oc)),
-            output_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled(air.mem_oc)),
+            output_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled(air.mem_oc)),
         }
     }
 }

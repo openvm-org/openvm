@@ -21,7 +21,6 @@ use crate::{
 
 pub mod dimensions;
 pub mod interface;
-pub mod trace_builder;
 
 const NUM_WORDS: usize = 16;
 
@@ -251,12 +250,9 @@ impl<F: PrimeField32> MemoryChip<F> {
         &self,
         read: MemoryReadRecord<N, F>,
     ) -> MemoryReadAuxCols<N, F> {
-        self.make_offline_checker().make_aux_cols(
+        self.make_offline_checker().make_read_aux_cols(
             self.range_checker.clone(),
-            read.timestamp,
-            read.address_space,
-            read.data,
-            read.prev_timestamps,
+            read,
         )
     }
 
@@ -268,12 +264,9 @@ impl<F: PrimeField32> MemoryChip<F> {
         &self,
         write: MemoryWriteRecord<N, F>,
     ) -> MemoryWriteAuxCols<N, F> {
-        self.make_offline_checker().make_aux_cols(
+        self.make_offline_checker().make_write_aux_cols(
             self.range_checker.clone(),
-            write.timestamp,
-            write.address_space,
-            write.prev_data,
-            write.prev_timestamps,
+            write,
         )
     }
 
