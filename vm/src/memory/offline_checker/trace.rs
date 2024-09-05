@@ -1,10 +1,10 @@
-use std::{array::from_fn, sync::Arc};
+use std::sync::Arc;
 
 use afs_primitives::{
     is_zero::IsZeroAir, range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions,
 };
 use p3_field::PrimeField32;
-
+use afs_primitives::is_less_than::columns::IsLessThanAuxCols;
 use super::{
     bridge::MemoryOfflineChecker,
     columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -14,9 +14,8 @@ use crate::memory::{
     offline_checker::columns::MemoryReadOrImmediateAuxCols,
 };
 
+// NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in parallelized trace generation.
 impl MemoryOfflineChecker {
-    // NOTE[jpw]: this function should be thread-safe so it can be used in parallelized
-    // trace generation
     pub fn make_read_aux_cols<const N: usize, F: PrimeField32>(
         &self,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -26,83 +25,56 @@ impl MemoryOfflineChecker {
             !read.address_space.is_zero(),
             "cannot make `MemoryReadAuxCols` for address space 0"
         );
-
-        let timestamp = read.timestamp.as_canonical_u32();
-        for prev_timestamp in &read.prev_timestamps {
-            debug_assert!(prev_timestamp.as_canonical_u32() < timestamp);
-        }
-
-        let clk_lt_cols = from_fn(|i| {
-            LocalTraceInstructions::generate_trace_row(
-                &self.timestamp_lt_air,
-                (
-                    read.prev_timestamps[i].as_canonical_u32(),
-                    timestamp,
-                    range_checker.clone(),
-                ),
-            )
-        });
-
-        MemoryReadAuxCols::new(read.prev_timestamps, clk_lt_cols.map(|x| x.aux))
+        MemoryReadAuxCols::new(read.prev_timestamps, self.generate_timestamp_lt_cols(range_checker, &read.prev_timestamps, read.timestamp))
     }
 
-    // NOTE[jpw]: this function should be thread-safe so it can be used in parallelized
-    // trace generation
     pub fn make_read_or_immediate_aux_cols<F: PrimeField32>(
         &self,
         range_checker: Arc<RangeCheckerGateChip>,
         read: MemoryReadRecord<1, F>,
     ) -> MemoryReadOrImmediateAuxCols<F> {
-        let timestamp = read.timestamp.as_canonical_u32();
         let [prev_timestamp] = read.prev_timestamps;
-        debug_assert!(prev_timestamp.as_canonical_u32() < timestamp);
-
-        let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
-            &self.timestamp_lt_air,
-            (
-                prev_timestamp.as_canonical_u32(),
-                timestamp,
-                range_checker.clone(),
-            ),
-        );
 
         let addr_space_is_zero_cols = IsZeroAir.generate_trace_row(read.address_space);
+        let [timestamp_lt_cols] = self.generate_timestamp_lt_cols(range_checker, &[prev_timestamp], read.timestamp);
 
         MemoryReadOrImmediateAuxCols::new(
             prev_timestamp,
             addr_space_is_zero_cols.io.is_zero,
             addr_space_is_zero_cols.inv,
-            clk_lt_cols.aux,
+            timestamp_lt_cols,
         )
     }
 
-    // NOTE[jpw]: this function should be thread-safe so it can be used in parallelized
-    // trace generation
     pub fn make_write_aux_cols<const N: usize, F: PrimeField32>(
         &self,
         range_checker: Arc<RangeCheckerGateChip>,
         write: MemoryWriteRecord<N, F>,
     ) -> MemoryWriteAuxCols<N, F> {
-        let timestamp = write.timestamp.as_canonical_u32();
-        for prev_timestamp in &write.prev_timestamps {
-            debug_assert!(prev_timestamp.as_canonical_u32() < timestamp);
-        }
-
-        let clk_lt_cols = from_fn(|i| {
-            LocalTraceInstructions::generate_trace_row(
-                &self.timestamp_lt_air,
-                (
-                    write.prev_timestamps[i].as_canonical_u32(),
-                    timestamp,
-                    range_checker.clone(),
-                ),
-            )
-        });
-
         MemoryWriteAuxCols::new(
             write.prev_data,
             write.prev_timestamps,
-            clk_lt_cols.map(|x| x.aux),
+            self.generate_timestamp_lt_cols(range_checker, &write.prev_timestamps, write.timestamp),
         )
+    }
+
+    fn generate_timestamp_lt_cols<const N: usize, F: PrimeField32>(
+        &self,
+        range_checker: Arc<RangeCheckerGateChip>,
+        prev_timestamps: &[F; N],
+        timestamp: F,
+    ) -> [IsLessThanAuxCols<F>; N] {
+        prev_timestamps.map(|prev_timestamp| {
+            debug_assert!(prev_timestamp.as_canonical_u32() < timestamp.as_canonical_u32());
+
+            LocalTraceInstructions::generate_trace_row(
+                &self.timestamp_lt_air,
+                (
+                    prev_timestamp.as_canonical_u32(),
+                    timestamp.as_canonical_u32(),
+                    range_checker.clone(),
+                ),
+            ).aux
+        })
     }
 }
