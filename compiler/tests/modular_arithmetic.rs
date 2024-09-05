@@ -28,10 +28,10 @@ fn test_compiler_modular_arithmetic_1() {
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let a_var = builder.eval_bigint(a);
-    let b_var = builder.eval_bigint(b);
+    let a_var = builder.eval_biguint(a);
+    let b_var = builder.eval_biguint(b);
     let r_var = builder.secp256k1_coord_mul(&a_var, &b_var);
-    let r_check_var = builder.eval_bigint(r);
+    let r_check_var = builder.eval_biguint(r);
     builder.assert_secp256k1_coord_eq(&r_var, &r_check_var);
     builder.halt();
 
@@ -59,10 +59,10 @@ fn test_compiler_modular_arithmetic_2() {
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let a_var = builder.eval_bigint(a);
-    let b_var = builder.eval_bigint(b);
+    let a_var = builder.eval_biguint(a);
+    let b_var = builder.eval_biguint(b);
     let r_var = builder.secp256k1_coord_mul(&a_var, &b_var);
-    let r_check_var = builder.eval_bigint(r);
+    let r_check_var = builder.eval_biguint(r);
     builder.assert_secp256k1_coord_eq(&r_var, &r_check_var);
     builder.halt();
 
@@ -83,11 +83,11 @@ fn test_compiler_modular_arithmetic_conditional() {
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let a_var = builder.eval_bigint(a);
-    let b_var = builder.eval_bigint(b);
+    let a_var = builder.eval_biguint(a);
+    let b_var = builder.eval_biguint(b);
     let product_var = builder.secp256k1_coord_mul(&a_var, &b_var);
-    let r_var = builder.eval_bigint(r);
-    let s_var = builder.eval_bigint(s);
+    let r_var = builder.eval_biguint(r);
+    let s_var = builder.eval_biguint(s);
 
     let should_be_1: Var<F> = builder.uninit();
     let should_be_2: Var<F> = builder.uninit();
@@ -122,9 +122,9 @@ fn test_compiler_modular_arithmetic_negative() {
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let one = builder.eval_bigint(BigUint::one());
+    let one = builder.eval_biguint(BigUint::one());
     let one_times_one = builder.secp256k1_coord_mul(&one, &one);
-    let zero = builder.eval_bigint(BigUint::zero());
+    let zero = builder.eval_biguint(BigUint::zero());
     builder.assert_secp256k1_coord_eq(&one_times_one, &zero);
     builder.halt();
 
@@ -145,11 +145,11 @@ fn test_compiler_modular_scalar_arithmetic_conditional() {
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let a_var = builder.eval_bigint(a);
-    let b_var = builder.eval_bigint(b);
+    let a_var = builder.eval_biguint(a);
+    let b_var = builder.eval_biguint(b);
     let product_var = builder.secp256k1_scalar_mul(&a_var, &b_var);
-    let r_var = builder.eval_bigint(r);
-    let s_var = builder.eval_bigint(s);
+    let r_var = builder.eval_biguint(r);
+    let s_var = builder.eval_biguint(s);
 
     let should_be_1: Var<F> = builder.uninit();
     let should_be_2: Var<F> = builder.uninit();
@@ -184,9 +184,9 @@ fn test_compiler_modular_scalar_arithmetic_negative() {
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let one = builder.eval_bigint(BigUint::one());
+    let one = builder.eval_biguint(BigUint::one());
     let one_times_one = builder.secp256k1_scalar_mul(&one, &one);
-    let zero = builder.eval_bigint(BigUint::zero());
+    let zero = builder.eval_biguint(BigUint::zero());
     builder.assert_secp256k1_scalar_eq(&one_times_one, &zero);
     builder.halt();
 
@@ -204,7 +204,7 @@ impl Fraction {
         Self { num, denom }
     }
 
-    fn to_bigint(&self) -> BigUint {
+    fn to_biguint(&self) -> BigUint {
         let sign = signum(self.num) * signum(self.denom);
         let num = BigUint::from_isize(abs(self.num)).unwrap();
         let denom = BigUint::from_isize(abs(self.denom)).unwrap();
@@ -248,12 +248,12 @@ fn test_ec_add(point_1: Point, point_2: Point, point_3: Point) {
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let x1_var = builder.eval_bigint(point_1.x.to_bigint());
-    let y1_var = builder.eval_bigint(point_1.y.to_bigint());
-    let x2_var = builder.eval_bigint(point_2.x.to_bigint());
-    let y2_var = builder.eval_bigint(point_2.y.to_bigint());
-    let x3_check = builder.eval_bigint(point_3.x.to_bigint());
-    let y3_check = builder.eval_bigint(point_3.y.to_bigint());
+    let x1_var = builder.eval_biguint(point_1.x.to_biguint());
+    let y1_var = builder.eval_biguint(point_1.y.to_biguint());
+    let x2_var = builder.eval_biguint(point_2.x.to_biguint());
+    let y2_var = builder.eval_biguint(point_2.y.to_biguint());
+    let x3_check = builder.eval_biguint(point_3.x.to_biguint());
+    let y3_check = builder.eval_biguint(point_3.y.to_biguint());
 
     let (x3_var, y3_var) = builder.ec_add(&(x1_var, y1_var), &(x2_var, y2_var));
 

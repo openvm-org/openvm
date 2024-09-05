@@ -108,12 +108,10 @@ impl ModularArithmeticBigIntAir {
     }
 
     pub fn secp256k1_scalar_prime() -> BigUint {
-        let lol = BigUint::from_str(
+        BigUint::from_str(
             "115792089237316195423570985008687907852837564279074904382605163141518161494337",
         )
-        .unwrap();
-        print!("{:?}", lol);
-        lol
+        .unwrap()
     }
 
     pub fn default_for_secp256k1_coord(limb_bits: usize) -> Self {

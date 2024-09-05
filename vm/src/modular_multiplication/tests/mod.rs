@@ -15,7 +15,7 @@ use crate::{
         testing::MachineChipTestBuilder,
     },
     cpu::trace::Instruction,
-    modular_multiplication::{bigint_to_elems, ModularArithmeticChip},
+    modular_multiplication::{biguint_to_elems, ModularArithmeticChip},
 };
 
 #[test]
@@ -80,11 +80,11 @@ fn test_modular_multiplication_runtime() {
         let num_elems = 9;
         let repr_bits = 30;
 
-        for (i, &elem) in bigint_to_elems(a, repr_bits, num_elems).iter().enumerate() {
+        for (i, &elem) in biguint_to_elems(a, repr_bits, num_elems).iter().enumerate() {
             let address = address1 + i;
             tester.write_cell(1, address, elem);
         }
-        for (i, &elem) in bigint_to_elems(b, repr_bits, num_elems).iter().enumerate() {
+        for (i, &elem) in biguint_to_elems(b, repr_bits, num_elems).iter().enumerate() {
             let address = address2 + i;
             tester.write_cell(1, address, elem);
         }
@@ -108,7 +108,7 @@ fn test_modular_multiplication_runtime() {
         } else {
             tester.execute(&mut coord_chip, instruction);
         }
-        for (i, &elem) in bigint_to_elems::<BabyBear>(r, repr_bits, num_elems)
+        for (i, &elem) in biguint_to_elems::<BabyBear>(r, repr_bits, num_elems)
             .iter()
             .enumerate()
         {

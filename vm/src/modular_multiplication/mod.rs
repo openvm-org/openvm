@@ -17,7 +17,7 @@ pub mod air;
 #[cfg(test)]
 mod tests;
 
-pub fn elems_to_bigint<F: PrimeField64>(elems: Vec<F>, repr_bits: usize) -> BigUint {
+pub fn elems_to_biguint<F: PrimeField64>(elems: Vec<F>, repr_bits: usize) -> BigUint {
     let mut bits = vec![];
     for elem in elems {
         let mut elem = elem.as_canonical_u64() as usize;
@@ -58,12 +58,12 @@ fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
     }
 }
 
-pub fn bigint_to_elems<F: PrimeField64>(
-    bigint: BigUint,
+pub fn biguint_to_elems<F: PrimeField64>(
+    biguint: BigUint,
     repr_bits: usize,
     num_elems: usize,
 ) -> Vec<F> {
-    let mut bits = big_uint_to_bits(bigint);
+    let mut bits = big_uint_to_bits(biguint);
     (0..num_elems)
         .map(|_| F::from_canonical_usize(take_limb(&mut bits, repr_bits)))
         .collect()
@@ -137,8 +137,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
             })
             .collect();
 
-        let argument_1 = elems_to_bigint(argument_1_elems, repr_bits);
-        let argument_2 = elems_to_bigint(argument_2_elems, repr_bits);
+        let argument_1 = elems_to_biguint(argument_1_elems, repr_bits);
+        let argument_2 = elems_to_biguint(argument_2_elems, repr_bits);
         let result = match instruction.opcode {
             SECP256K1_COORD_ADD | SECP256K1_SCALAR_ADD => argument_1.clone() + argument_2.clone(),
             SECP256K1_COORD_SUB | SECP256K1_SCALAR_SUB => {
@@ -155,7 +155,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
 
             _ => panic!(),
         } % modulus;
-        let result_elems = bigint_to_elems(result, repr_bits, num_elems);
+        let result_elems = biguint_to_elems(result, repr_bits, num_elems);
         for (i, &elem) in result_elems.iter().enumerate() {
             memory_chip.write_cell(
                 instruction.e,
@@ -178,7 +178,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
 }
 
 impl<F: PrimeField32> ModularArithmeticChip<F> {
-    pub fn new(memory_chip: MemoryChipRef<F>, modulus: BigUint, bigint_limb_size: usize) -> Self {
+    pub fn new(memory_chip: MemoryChipRef<F>, modulus: BigUint, biguint_limb_size: usize) -> Self {
         Self {
             air: ModularArithmeticVmAir {
                 air: ModularArithmeticBigIntAir::new(
@@ -188,7 +188,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
                     0,
                     30,
                     30,
-                    bigint_limb_size,
+                    biguint_limb_size,
                     16,
                     1 << 15,
                 ),
@@ -257,8 +257,8 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             })
             .collect();
 
-        let argument_1 = elems_to_bigint(argument_1_elems, repr_bits);
-        let argument_2 = elems_to_bigint(argument_2_elems, repr_bits);
+        let argument_1 = elems_to_biguint(argument_1_elems, repr_bits);
+        let argument_2 = elems_to_biguint(argument_2_elems, repr_bits);
         let result = match instruction.opcode {
             SECP256K1_COORD_ADD | SECP256K1_SCALAR_ADD => argument_1.clone() + argument_2.clone(),
             SECP256K1_COORD_SUB | SECP256K1_SCALAR_SUB => {
@@ -275,7 +275,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
 
             _ => panic!(),
         } % modulus;
-        let result_elems = bigint_to_elems(result, repr_bits, num_elems);
+        let result_elems = biguint_to_elems(result, repr_bits, num_elems);
         for (i, &elem) in result_elems.iter().enumerate() {
             vm.memory_chip.borrow_mut().write_cell(
                 instruction.e,

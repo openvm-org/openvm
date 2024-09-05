@@ -1,6 +1,6 @@
 use p3_field::AbstractField;
 
-use super::{Array, BigIntVar, Builder, Config, DslIr, Felt, MemIndex, RVar, Var};
+use super::{Array, BigUintVar, Builder, Config, DslIr, Felt, MemIndex, RVar, Var};
 
 pub const NUM_BITS: usize = 31;
 
@@ -32,12 +32,12 @@ impl<C: Config> Builder<C> {
         output
     }
 
-    pub fn num2bits_bigint(&mut self, bigint: &BigIntVar<C>) -> Array<C, Var<C::N>> {
+    pub fn num2bits_biguint(&mut self, biguint: &BigUintVar<C>) -> Array<C, Var<C::N>> {
         let repr_size = self.bigint_repr_size;
         let num_limbs = (256 + repr_size - 1) / repr_size;
         let bits = self.dyn_array((num_limbs * repr_size) as usize);
         for i in 0..num_limbs as usize {
-            let limb = self.get(bigint, i);
+            let limb = self.get(biguint, i);
             let limb_bits = self.num2bits_v(limb, repr_size);
             for j in 0..repr_size as usize {
                 let val = self.get(&limb_bits, j);

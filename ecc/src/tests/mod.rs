@@ -19,11 +19,11 @@ fn test_ec_mul(
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::bigint_builder();
 
-    let x1_var = builder.eval_bigint(point_1.0);
-    let y1_var = builder.eval_bigint(point_1.1);
-    let x2_var = builder.eval_bigint(point_2.0);
-    let y2_var = builder.eval_bigint(point_2.1);
-    let s = builder.eval_bigint(scalar);
+    let x1_var = builder.eval_biguint(point_1.0);
+    let y1_var = builder.eval_biguint(point_1.1);
+    let x2_var = builder.eval_biguint(point_2.0);
+    let y2_var = builder.eval_biguint(point_2.1);
+    let s = builder.eval_biguint(scalar);
 
     let EcPoint {
         x: x3_var,

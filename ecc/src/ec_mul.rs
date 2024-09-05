@@ -1,6 +1,6 @@
 use afs_compiler::{
     ir::{
-        Array, BigIntVar, Builder, Config, MemIndex, MemVariable, Ptr, RVar, Var, Variable,
+        Array, BigUintVar, Builder, Config, MemIndex, MemVariable, Ptr, RVar, Var, Variable,
         NUM_ELEMS,
     },
     prelude::DslVariable,
@@ -10,8 +10,8 @@ use p3_field::{AbstractField, PrimeField64};
 // pub type EcPoint<C> = (BigIntVar<C>, BigIntVar<C>);
 #[derive(DslVariable, Clone, Debug)]
 pub struct EcPoint<C: Config> {
-    pub x: BigIntVar<C>,
-    pub y: BigIntVar<C>,
+    pub x: BigUintVar<C>,
+    pub y: BigUintVar<C>,
 }
 
 pub const BIGINT_MAX_BITS: usize = 256;
@@ -19,7 +19,7 @@ pub const BIGINT_MAX_BITS: usize = 256;
 pub fn scalar_multiply<C>(
     builder: &mut Builder<C>,
     point: &EcPoint<C>,
-    scalar: BigIntVar<C>,
+    scalar: BigUintVar<C>,
     window_bits: usize,
 ) -> EcPoint<C>
 where
@@ -33,8 +33,8 @@ where
 
     let x_zero = builder.secp256k1_coord_is_zero(x);
     let y_zero = builder.secp256k1_coord_is_zero(y);
-    let result_x: BigIntVar<C> = builder.uninit_bigint();
-    let result_y: BigIntVar<C> = builder.uninit_bigint();
+    let result_x: BigUintVar<C> = builder.uninit_biguint();
+    let result_y: BigUintVar<C> = builder.uninit_biguint();
 
     builder.secp256k1_coord_set_to_zero(&result_x);
     builder.secp256k1_coord_set_to_zero(&result_y);
@@ -64,7 +64,7 @@ where
                     cache_vec
                 })
                 .collect::<Vec<_>>();
-            let bits = builder.num2bits_bigint(&scalar);
+            let bits = builder.num2bits_biguint(&scalar);
             for (i, cache_vec) in cached_points_jacobian.iter().enumerate() {
                 let window_sum: Var<C::N> = builder.uninit();
                 builder.assign(&window_sum, RVar::zero());

@@ -2,7 +2,7 @@ use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use p3_field::{AbstractField, PrimeField64};
 
-use crate::ir::{modular_arithmetic::BigIntVar, Builder, Config};
+use crate::ir::{modular_arithmetic::BigUintVar, Builder, Config};
 
 impl<C: Config> Builder<C>
 where
@@ -10,9 +10,9 @@ where
 {
     pub fn ec_add(
         &mut self,
-        point_1: &(BigIntVar<C>, BigIntVar<C>),
-        point_2: &(BigIntVar<C>, BigIntVar<C>),
-    ) -> (BigIntVar<C>, BigIntVar<C>) {
+        point_1: &(BigUintVar<C>, BigUintVar<C>),
+        point_2: &(BigUintVar<C>, BigUintVar<C>),
+    ) -> (BigUintVar<C>, BigUintVar<C>) {
         let (x1, y1) = point_1;
         let (x2, y2) = point_2;
 
@@ -46,7 +46,7 @@ where
                             .if_eq(xs_equal * ys_opposite, C::N::one())
                             .then_or_else(
                                 |builder| {
-                                    let zero = builder.eval_bigint(BigUint::zero());
+                                    let zero = builder.eval_biguint(BigUint::zero());
                                     builder.assign(&result_x, zero.clone());
                                     builder.assign(&result_y, zero);
                                 },
@@ -58,9 +58,9 @@ where
                                         .then_or_else(
                                             |builder| {
                                                 let two = builder
-                                                    .eval_bigint(BigUint::from_u8(2).unwrap());
+                                                    .eval_biguint(BigUint::from_u8(2).unwrap());
                                                 let three = builder
-                                                    .eval_bigint(BigUint::from_u8(3).unwrap());
+                                                    .eval_biguint(BigUint::from_u8(3).unwrap());
                                                 let two_y = builder.secp256k1_coord_mul(&two, y1);
                                                 let x_squared = builder.secp256k1_coord_mul(x1, x1);
                                                 let three_x_squared =
