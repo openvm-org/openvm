@@ -2,6 +2,10 @@ use std::{iter::zip, marker::PhantomData};
 
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
+    is_zero::{
+        columns::{IsZeroCols, IsZeroIoCols},
+        IsZeroAir,
+    },
     range::bus::RangeCheckBus,
     utils::not,
 };
@@ -13,7 +17,9 @@ use super::bus::MemoryBus;
 use crate::{
     cpu::RANGE_CHECKER_BUS,
     memory::{
-        offline_checker::columns::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::columns::{
+            MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
+        },
         MemoryAddress,
     },
 };
@@ -77,8 +83,6 @@ impl<V> MemoryBridge<V> {
     }
 }
 
-// **TODO[jpw]**: Read does not need duplicate trace cells for old_data and data since they are the same.
-// **Move old_cell out of AuxCols**
 /// Constraints and interactions for a logical memory read of `(address, data)` at time `timestamp`.
 /// This reads `(address, data, timestamp_prev)` from the memory bus and writes
 /// `(address, data, timestamp)` to the memory bus.
@@ -104,26 +108,11 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
     where
         AB: InteractionBuilder<Var = V, Expr = F>,
     {
+        // TODO[zach]: Ensure enabled is constrained to be boolean externally
         let enabled = enabled.into();
 
-        // FIXME[jpw]: this should not be here because op.enabled could be an
-        // expression of degree > 1 and assert_bool is quadratic
-        // builder.assert_bool(op.enabled.clone());
-
-        // TODO[jpw] immediate checks should not be in memory bridge
-        // Currently: expected is that enabled = 0, is_immediate = 0, all aux = 0 works
-
-        // Ensuring is_immediate is correct
-        // let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
-        //     IsZeroIoCols::<AB::Expr>::new(op.addr_space.clone(), aux.is_immediate.into()),
-        //     aux.is_zero_aux.into(),
-        // );
-
-        // self.is_zero_air.subair_eval(
-        //     &mut builder.when(op.enabled.clone()), // when not enabled, allow aux to be all 0s no matter what
-        //     addr_space_is_zero_cols.io,
-        //     addr_space_is_zero_cols.inv,
-        // );
+        // NOTE: We do not need to constrain `address_space != 0` since this is done implicitly by
+        // the memory interactions argument together with initial/final memory chips.
 
         self.offline_checker.assert_increasing_timestamps(
             builder,
@@ -132,14 +121,7 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
             enabled.clone(),
         );
 
-        builder
-            .when(self.aux.is_immediate)
-            .assert_eq(self.data[0].clone(), self.address.pointer.clone());
-
-        // TODO[osama]: resolve is_immediate stuff
-        // builder.assert_one(implies(aux.is_immediate.into(), op.enabled.clone()));
-        // TODO[jpw]: make this degree 1 after removing is_immediate
-        let count = enabled * not(self.aux.is_immediate);
+        let count = enabled;
 
         for i in 0..N {
             let address = MemoryAddress::new(
@@ -163,6 +145,85 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
                 )
                 .eval(builder, count.clone());
         }
+    }
+}
+
+/// Constraints and interactions for a logical memory read of `(address, data)` at time `timestamp`,
+/// supporting `address.address_space = 0` for immediates.
+///
+/// If `address.address_space` is non-zero, it behaves like `MemoryReadOperation`. Otherwise,
+/// it constrains the immediate value appropriately.
+///
+/// The generic `T` type is intended to be `AB::Expr` where `AB` is the [AirBuilder].
+/// The auxiliary columns are not expected to be expressions, so the generic `V` type is intended
+/// to be `AB::Var`.
+pub struct MemoryReadOrImmediateOperation<T, V> {
+    offline_checker: MemoryOfflineChecker,
+    address: MemoryAddress<T, T>,
+    data: T,
+    /// The timestamp of the last write to this address
+    // timestamp_prev: T,
+    /// The timestamp of the current read
+    timestamp: T,
+    aux: MemoryReadOrImmediateAuxCols<V>,
+}
+
+impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
+    /// Evaluate constraints and send/receive interactions.
+    pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
+    where
+        AB: InteractionBuilder<Var=V, Expr=F>,
+    {
+        // TODO[zach]: ensure that enabled is constrained to be boolean at call-sites
+        let enabled = enabled.into();
+
+        // TODO[zach]: We want to allow all zeroes to work.
+        // `is_immediate` should be an indicator for `address_space == 0`.
+        {
+            let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
+                IsZeroIoCols::<AB::Expr>::new(
+                    self.address.address_space.clone(),
+                    self.aux.is_immediate.into(),
+                ),
+                self.aux.is_zero_aux.into(),
+            );
+            IsZeroAir.subair_eval(
+                &mut builder.when(enabled.clone()), // when not enabled, allow aux to be all 0s no matter what
+                addr_space_is_zero_cols.io,
+                addr_space_is_zero_cols.inv,
+            );
+        }
+        // When `is_immediate`, the data should be the pointer value.
+        builder
+            .when(self.aux.is_immediate)
+            .assert_eq(self.data.clone(), self.address.pointer.clone());
+
+        // Timestamps should be increasing when enabled.
+        self.offline_checker.assert_increasing_timestamps(
+            builder,
+            self.timestamp.clone(),
+            &self.aux.base,
+            enabled.clone(),
+        );
+
+        let count = enabled * not(self.aux.is_immediate);
+
+        self.offline_checker
+            .memory_bus
+            .read(
+                self.address.clone(),
+                [self.data.clone()],
+                self.aux.base.prev_timestamps[0],
+            )
+            .eval(builder, count.clone());
+        self.offline_checker
+            .memory_bus
+            .write(
+                self.address.clone(),
+                [self.data.clone()],
+                self.timestamp.clone(),
+            )
+            .eval(builder, count.clone());
     }
 }
 

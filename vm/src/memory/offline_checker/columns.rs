@@ -118,15 +118,11 @@ impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<N, F> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryReadAuxCols<const N: usize, T> {
     pub(super) base: MemoryBaseAuxCols<T, N>,
-    pub(super) is_immediate: T,
-    pub(super) is_zero_aux: T,
 }
 
 impl<const N: usize, T> MemoryReadAuxCols<N, T> {
     pub fn new(
         prev_timestamps: [T; N],
-        is_immediate: T,
-        is_zero_aux: T,
         clk_lt_aux: [IsLessThanAuxCols<T>; N],
     ) -> Self {
         Self {
@@ -134,15 +130,69 @@ impl<const N: usize, T> MemoryReadAuxCols<N, T> {
                 prev_timestamps,
                 clk_lt_aux,
             },
-            is_immediate,
-            is_zero_aux,
         }
     }
 }
 
 impl<const N: usize, T: Clone> MemoryReadAuxCols<N, T> {
     pub fn from_slice(slc: &[T], oc: &MemoryOfflineChecker) -> Self {
-        let width = MemoryBaseAuxCols::<T, N>::width(oc);
+        Self {
+            base: MemoryBaseAuxCols::from_slice(slc, oc),
+        }
+    }
+}
+
+impl<const N: usize, T> MemoryReadAuxCols<N, T> {
+    pub fn flatten(self) -> Vec<T> {
+        self.base.flatten()
+    }
+
+    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+        Self {
+            base: MemoryBaseAuxCols::from_iterator(iter, lt_air),
+        }
+    }
+
+    pub fn width(oc: &MemoryOfflineChecker) -> usize {
+        MemoryBaseAuxCols::<T, N>::width(oc)
+    }
+}
+
+impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<N, F> {
+    pub fn disabled(mem_oc: MemoryOfflineChecker) -> Self {
+        let width = MemoryReadAuxCols::<N, F>::width(&mem_oc);
+        MemoryReadAuxCols::from_slice(&vec![F::zero(); width], &mem_oc)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryReadOrImmediateAuxCols<T> {
+    pub(super) base: MemoryBaseAuxCols<T, 1>,
+    pub(super) is_immediate: T,
+    pub(super) is_zero_aux: T,
+}
+
+impl<T> MemoryReadOrImmediateAuxCols<T> {
+    pub fn new(
+        prev_timestamp: T,
+        is_immediate: T,
+        is_zero_aux: T,
+        clk_lt_aux: IsLessThanAuxCols<T>,
+    ) -> Self {
+        Self {
+            base: MemoryBaseAuxCols {
+                prev_timestamps: [prev_timestamp],
+                clk_lt_aux: [clk_lt_aux],
+            },
+            is_immediate,
+            is_zero_aux,
+        }
+    }
+}
+
+impl<T: Clone> MemoryReadOrImmediateAuxCols<T> {
+    pub fn from_slice(slc: &[T], oc: &MemoryOfflineChecker) -> Self {
+        let width = MemoryBaseAuxCols::<T, 1>::width(oc);
         Self {
             base: MemoryBaseAuxCols::from_slice(&slc[..width], oc),
             is_immediate: slc[width].clone(),
@@ -151,7 +201,7 @@ impl<const N: usize, T: Clone> MemoryReadAuxCols<N, T> {
     }
 }
 
-impl<const N: usize, T> MemoryReadAuxCols<N, T> {
+impl<T> MemoryReadOrImmediateAuxCols<T> {
     pub fn flatten(self) -> Vec<T> {
         iter::empty()
             .chain(self.base.flatten())
@@ -160,7 +210,7 @@ impl<const N: usize, T> MemoryReadAuxCols<N, T> {
             .collect()
     }
 
-    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+    pub fn from_iterator<I: Iterator<Item=T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
         Self {
             base: MemoryBaseAuxCols::from_iterator(iter, lt_air),
             is_immediate: iter.next().unwrap(),
@@ -169,13 +219,13 @@ impl<const N: usize, T> MemoryReadAuxCols<N, T> {
     }
 
     pub fn width(oc: &MemoryOfflineChecker) -> usize {
-        MemoryBaseAuxCols::<T, N>::width(oc) + 2
+        MemoryBaseAuxCols::<T, 1>::width(oc) + 2
     }
 }
 
-impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<N, F> {
+impl<F: AbstractField + Copy> MemoryReadOrImmediateAuxCols<F> {
     pub fn disabled(mem_oc: MemoryOfflineChecker) -> Self {
-        let width = MemoryReadAuxCols::<N, F>::width(&mem_oc);
-        MemoryReadAuxCols::from_slice(&vec![F::zero(); width], &mem_oc)
+        let width = MemoryReadOrImmediateAuxCols::<F>::width(&mem_oc);
+        MemoryReadOrImmediateAuxCols::from_slice(&vec![F::zero(); width], &mem_oc)
     }
 }

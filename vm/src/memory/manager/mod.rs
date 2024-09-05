@@ -31,7 +31,9 @@ pub struct TimestampedValue<T> {
 }
 
 /// Represents a single or batch memory read operation.
-/// Can be used to generate [MemoryReadAuxCols].
+///
+/// Also used for "reads" from address space 0 (immediates).
+/// Can be used to generate [MemoryReadAuxCols] or [MemoryReadOrImmediateAuxCols].
 #[derive(Clone, Debug)]
 pub struct MemoryReadRecord<const N: usize, T> {
     /// The address space in which the read operation occurs.
