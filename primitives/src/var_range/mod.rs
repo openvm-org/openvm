@@ -9,7 +9,7 @@ pub mod trace;
 pub mod tests;
 
 pub use air::VariableRangeCheckerAir;
-use bus::VariableRangeCheckBus;
+use bus::VariableRangeCheckerBus;
 
 #[derive(Debug)]
 pub struct VariableRangeCheckerChip {
@@ -19,7 +19,7 @@ pub struct VariableRangeCheckerChip {
 }
 
 impl VariableRangeCheckerChip {
-    pub fn new(bus: VariableRangeCheckBus) -> Self {
+    pub fn new(bus: VariableRangeCheckerBus) -> Self {
         let num_rows = (1 << (bus.range_max_bits + 1)) as usize;
         let mut count = Vec::with_capacity(num_rows);
         for _ in 0..num_rows {
@@ -33,7 +33,7 @@ impl VariableRangeCheckerChip {
         }
     }
 
-    pub fn bus(&self) -> VariableRangeCheckBus {
+    pub fn bus(&self) -> VariableRangeCheckerBus {
         self.air.bus
     }
 

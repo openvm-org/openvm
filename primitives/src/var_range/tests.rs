@@ -11,7 +11,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
-use crate::var_range::{bus::VariableRangeCheckBus, VariableRangeCheckerChip};
+use crate::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 
 #[test]
 fn test_variable_range_checker_chip() {
@@ -21,7 +21,7 @@ fn test_variable_range_checker_chip() {
     const LOG_LIST_LEN: usize = 8;
     const LIST_LEN: usize = 1 << LOG_LIST_LEN;
 
-    let bus = VariableRangeCheckBus::new(0, MAX_BITS);
+    let bus = VariableRangeCheckerBus::new(0, MAX_BITS);
     let var_range_checker = VariableRangeCheckerChip::new(bus);
 
     // generate randomized valid values-bits pairs
@@ -86,7 +86,7 @@ fn negative_test_variable_range_checker_chip() {
     const LOG_LIST_LEN: usize = 8;
     const LIST_LEN: usize = 1 << LOG_LIST_LEN;
 
-    let bus = VariableRangeCheckBus::new(0, MAX_BITS);
+    let bus = VariableRangeCheckerBus::new(0, MAX_BITS);
     let var_range_checker = VariableRangeCheckerChip::new(bus);
 
     // generate randomized valid values-bits pairs

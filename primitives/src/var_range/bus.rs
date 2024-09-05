@@ -3,12 +3,12 @@ use p3_field::AbstractField;
 
 /// Represents a bus for `x` where `x` must lie in the range `[0, 2^range_max_bits)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct VariableRangeCheckBus {
+pub struct VariableRangeCheckerBus {
     pub index: usize,
     pub range_max_bits: u32,
 }
 
-impl VariableRangeCheckBus {
+impl VariableRangeCheckerBus {
     pub const fn new(index: usize, range_max_bits: u32) -> Self {
         Self {
             index,
@@ -20,7 +20,7 @@ impl VariableRangeCheckBus {
         &self,
         value: impl Into<T>,
         max_bits: impl Into<T>,
-    ) -> VariableRangeCheckBusInteraction<T> {
+    ) -> VariableRangeCheckerBusInteraction<T> {
         self.push(value, max_bits, InteractionType::Send)
     }
 
@@ -28,7 +28,7 @@ impl VariableRangeCheckBus {
         &self,
         value: impl Into<T>,
         max_bits: impl Into<T>,
-    ) -> VariableRangeCheckBusInteraction<T> {
+    ) -> VariableRangeCheckerBusInteraction<T> {
         self.push(value, max_bits, InteractionType::Receive)
     }
 
@@ -37,8 +37,8 @@ impl VariableRangeCheckBus {
         value: impl Into<T>,
         max_bits: impl Into<T>,
         interaction_type: InteractionType,
-    ) -> VariableRangeCheckBusInteraction<T> {
-        VariableRangeCheckBusInteraction {
+    ) -> VariableRangeCheckerBusInteraction<T> {
+        VariableRangeCheckerBusInteraction {
             value: value.into(),
             max_bits: max_bits.into(),
             bus_index: self.index,
@@ -48,14 +48,14 @@ impl VariableRangeCheckBus {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct VariableRangeCheckBusInteraction<T> {
+pub struct VariableRangeCheckerBusInteraction<T> {
     pub value: T,
     pub max_bits: T,
     pub bus_index: usize,
     pub interaction_type: InteractionType,
 }
 
-impl<T: AbstractField> VariableRangeCheckBusInteraction<T> {
+impl<T: AbstractField> VariableRangeCheckerBusInteraction<T> {
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
         AB: InteractionBuilder<Expr = T>,
