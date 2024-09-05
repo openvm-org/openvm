@@ -437,34 +437,36 @@ impl<F: PrimeField32> CpuChip<F> {
                 let read_cols = array::from_fn(|i| {
                     read_records
                         .get(i)
-                        .map(|read| CpuMemoryAccessCols::from_read_record(read.clone()))
-                        .unwrap_or_else(CpuMemoryAccessCols::disabled)
+                        .map_or_else(CpuMemoryAccessCols::disabled, |read| {
+                            CpuMemoryAccessCols::from_read_record(read.clone())
+                        })
                 });
                 let reads_aux_cols = array::from_fn(|i| {
-                    read_records
-                        .get(i)
-                        .map(|read| {
+                    read_records.get(i).map_or_else(
+                        || MemoryReadOrImmediateAuxCols::disabled(offline_checker),
+                        |read| {
                             offline_checker.make_read_or_immediate_aux_cols(
                                 range_checker.clone(),
                                 read.clone(),
                             )
-                        })
-                        .unwrap_or_else(|| MemoryReadOrImmediateAuxCols::disabled(offline_checker))
+                        },
+                    )
                 });
 
                 let write_cols = array::from_fn(|i| {
                     write_records
                         .get(i)
-                        .map(|write| CpuMemoryAccessCols::from_write_record(write.clone()))
-                        .unwrap_or_else(CpuMemoryAccessCols::disabled)
+                        .map_or_else(CpuMemoryAccessCols::disabled, |write| {
+                            CpuMemoryAccessCols::from_write_record(write.clone())
+                        })
                 });
                 let writes_aux_cols = array::from_fn(|i| {
-                    write_records
-                        .get(i)
-                        .map(|read| {
+                    write_records.get(i).map_or_else(
+                        || MemoryWriteAuxCols::disabled(offline_checker),
+                        |read| {
                             offline_checker.make_write_aux_cols(range_checker.clone(), read.clone())
-                        })
-                        .unwrap_or_else(|| MemoryWriteAuxCols::disabled(offline_checker))
+                        },
+                    )
                 });
 
                 let mut operation_flags = BTreeMap::new();

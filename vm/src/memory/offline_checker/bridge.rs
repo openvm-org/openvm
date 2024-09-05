@@ -140,6 +140,7 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
 
         let count = enabled;
 
+        // TODO[zach]: Deduplicate with the other `eval` functions in this file after word converter chip.
         for i in 0..N {
             let address = MemoryAddress::new(
                 self.address.address_space.clone(),
@@ -226,11 +227,7 @@ impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
 
         self.offline_checker
             .memory_bus
-            .read(
-                self.address.clone(),
-                [self.data.clone()],
-                prev_timestamp,
-            )
+            .read(self.address.clone(), [self.data.clone()], prev_timestamp)
             .eval(builder, count.clone());
         self.offline_checker
             .memory_bus
@@ -274,6 +271,7 @@ impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T
 
         let count = enabled.clone();
 
+        // TODO[zach]: Deduplicate with the other `eval` functions in this file after word converter chip.
         for i in 0..N {
             let address = MemoryAddress::new(
                 self.address.address_space.clone(),

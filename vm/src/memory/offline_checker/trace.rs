@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use afs_primitives::{
-    is_zero::IsZeroAir, range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions,
+    is_less_than::columns::IsLessThanAuxCols, is_zero::IsZeroAir, range_gate::RangeCheckerGateChip,
+    sub_chip::LocalTraceInstructions,
 };
 use p3_field::PrimeField32;
-use afs_primitives::is_less_than::columns::IsLessThanAuxCols;
+
 use super::{
     bridge::MemoryOfflineChecker,
     columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -25,7 +26,10 @@ impl MemoryOfflineChecker {
             !read.address_space.is_zero(),
             "cannot make `MemoryReadAuxCols` for address space 0"
         );
-        MemoryReadAuxCols::new(read.prev_timestamps, self.generate_timestamp_lt_cols(range_checker, &read.prev_timestamps, read.timestamp))
+        MemoryReadAuxCols::new(
+            read.prev_timestamps,
+            self.generate_timestamp_lt_cols(range_checker, &read.prev_timestamps, read.timestamp),
+        )
     }
 
     pub fn make_read_or_immediate_aux_cols<F: PrimeField32>(
@@ -36,7 +40,8 @@ impl MemoryOfflineChecker {
         let [prev_timestamp] = read.prev_timestamps;
 
         let addr_space_is_zero_cols = IsZeroAir.generate_trace_row(read.address_space);
-        let [timestamp_lt_cols] = self.generate_timestamp_lt_cols(range_checker, &[prev_timestamp], read.timestamp);
+        let [timestamp_lt_cols] =
+            self.generate_timestamp_lt_cols(range_checker, &[prev_timestamp], read.timestamp);
 
         MemoryReadOrImmediateAuxCols::new(
             prev_timestamp,
@@ -74,7 +79,8 @@ impl MemoryOfflineChecker {
                     timestamp.as_canonical_u32(),
                     range_checker.clone(),
                 ),
-            ).aux
+            )
+            .aux
         })
     }
 }

@@ -100,6 +100,7 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
     }
 
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, air: &FieldArithmeticAir) -> Self {
+        let lt_air = air.mem_oc.timestamp_lt_air;
         let mut next = || iter.next().unwrap();
         Self {
             is_valid: next(),
@@ -108,15 +109,9 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
             is_mul: next(),
             is_div: next(),
             divisor_inv: next(),
-            read_x_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(
-                iter,
-                &air.mem_oc.timestamp_lt_air,
-            ),
-            read_y_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(
-                iter,
-                &air.mem_oc.timestamp_lt_air,
-            ),
-            write_z_aux_cols: MemoryWriteAuxCols::from_iterator(iter, &air.mem_oc.timestamp_lt_air),
+            read_x_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter, &lt_air),
+            read_y_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter, &lt_air),
+            write_z_aux_cols: MemoryWriteAuxCols::from_iterator(iter, &lt_air),
         }
     }
 
