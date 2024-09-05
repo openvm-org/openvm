@@ -13,7 +13,7 @@ use crate::{
     },
     cpu::trace::Instruction,
     memory::{
-        manager::{trace_builder::MemoryTraceBuilder, MemoryChipRef},
+        manager::MemoryChipRef,
         offline_checker::bridge::MemoryOfflineChecker,
         tree::Hasher,
     },
@@ -112,7 +112,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
-        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
+        let mut memory_chip = self.memory_chip.borrow_mut();
 
         let Instruction {
             opcode,
@@ -127,46 +127,50 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         debug_assert_eq!(WIDTH, CHUNK * 2);
 
-        let dst = mem_trace_builder.read_elem(d, op_a);
-        let lhs = mem_trace_builder.read_elem(d, op_b);
-        let rhs = if opcode == COMP_POS2 {
-            mem_trace_builder.read_elem(d, op_c)
+        let dst_read = memory_chip.read_cell(d, op_a);
+        let lhs_ptr_read = memory_chip.read_cell(d, op_b);
+        let rhs_ptr_read = if opcode == COMP_POS2 {
+            Some(memory_chip.read_cell(d, op_c))
         } else {
-            mem_trace_builder.disabled_op();
-            mem_trace_builder.increment_clk();
-            lhs + F::from_canonical_usize(CHUNK)
+            memory_chip.increment_timestamp();
+            None
         };
 
-        let ptr_aux_cols = mem_trace_builder.take_accesses_buffer();
+        let dst = dst_read.value();
+        let lhs_ptr = lhs_ptr_read.value();
+        let rhs_ptr = rhs_ptr_read.clone().map(|rhs_ptr_read| rhs_ptr_read.value()).unwrap_or(lhs_ptr + F::from_canonical_usize(CHUNK));
 
-        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
-
+        let input_1 = memory_chip.read(e, lhs_ptr);
+        let input_2 = memory_chip.read(e, rhs_ptr);
         let input_state: [F; WIDTH] = array::from_fn(|i| {
             if i < CHUNK {
-                mem_trace_builder.read_elem(e, lhs + F::from_canonical_usize(i))
+                input_1.data[i]
             } else {
-                mem_trace_builder.read_elem(e, rhs + F::from_canonical_usize(i - CHUNK))
+                input_2.data[i - CHUNK]
             }
         });
-        let input_aux_cols = mem_trace_builder.take_accesses_buffer();
-
-        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
 
         let internal = self.air.inner.generate_trace_row(input_state);
         let output = internal.io.output;
-        let len = if opcode == PERM_POS2 { WIDTH } else { CHUNK };
 
-        for (i, &output_elem) in output.iter().enumerate().take(len) {
-            mem_trace_builder.write_cell(e, dst + F::from_canonical_usize(i), output_elem);
-        }
+        let output_1 = memory_chip.write(e, dst, output[..CHUNK].try_into().unwrap());
+        let output_2 = if opcode == PERM_POS2 {
+            Some(memory_chip.write(e, dst, output[CHUNK..].try_into().unwrap()))
+        } else {
+            memory_chip.increment_timestamp_by(F::from_canonical_usize(CHUNK));
+            None
+        };
 
-        // Generate disabled MemoryWriteAuxCols in case len != WIDTH
-        for _ in len..WIDTH {
-            mem_trace_builder.disabled_op();
-            mem_trace_builder.increment_clk();
-        }
-
-        let output_aux_cols = mem_trace_builder.take_accesses_buffer();
+        let ptr_aux_cols = [Some(dst_read), Some(lhs_ptr_read), rhs_ptr_read]
+            .map(|maybe_read| {
+                maybe_read
+                    .map(|read| memory_chip.make_read_aux_cols(read))
+                    .unwrap_or_else(|| memory_chip.make_disabled_read_aux_cols())
+            });
+        let input_aux_cols = [input_1, input_2].map(|x| memory_chip.make_read_aux_cols(x));
+        let output_aux_cols = [Some(output_1), output_2].map(|maybe_write| {
+            maybe_write.map(|write| memory_chip.make_write_aux_cols(write)).unwrap_or(memory_chip.make_disabled_write_aux_cols())
+        });
 
         let row = Poseidon2VmCols {
             io: Poseidon2VmIoCols {
@@ -183,12 +187,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             },
             aux: Poseidon2VmAuxCols {
                 dst,
-                lhs,
-                rhs,
+                lhs_ptr,
+                rhs_ptr,
                 internal,
-                ptr_aux_cols: ptr_aux_cols.try_into().unwrap(),
-                input_aux_cols: input_aux_cols.try_into().unwrap(),
-                output_aux_cols: output_aux_cols.try_into().unwrap(),
+                ptr_aux_cols,
+                input_aux_cols,
+                output_aux_cols,
             },
         };
 

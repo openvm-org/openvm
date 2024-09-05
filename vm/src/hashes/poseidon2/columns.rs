@@ -2,7 +2,7 @@ use std::array;
 
 use p3_field::Field;
 use poseidon2_air::poseidon2::columns::Poseidon2Cols;
-use crate::hashes::poseidon2::WIDTH;
+use crate::hashes::poseidon2::{CHUNK, WIDTH};
 use super::air::Poseidon2VmAir;
 use crate::memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols};
 
@@ -40,13 +40,12 @@ pub struct Poseidon2VmIoCols<T> {
 #[derive(Clone, Debug)]
 pub struct Poseidon2VmAuxCols<T> {
     pub dst: T,
-    pub lhs: T,
-    pub rhs: T,
+    pub lhs_ptr: T,
+    pub rhs_ptr: T,
     pub internal: Poseidon2Cols<WIDTH, T>,
     pub ptr_aux_cols: [MemoryReadAuxCols<1, T>; 3],
-    // TODO[INT-2074]: Change to batch read/write.
-    pub input_aux_cols: [MemoryReadAuxCols<1, T>; WIDTH],
-    pub output_aux_cols: [MemoryWriteAuxCols<1, T>; WIDTH],
+    pub input_aux_cols: [MemoryReadAuxCols<CHUNK, T>; 2],
+    pub output_aux_cols: [MemoryWriteAuxCols<CHUNK, T>; 2],
 }
 
 impl<T: Clone> Poseidon2VmCols<T> {
@@ -157,12 +156,13 @@ impl<T: Field> Poseidon2VmIoCols<T> {
 impl<T: Clone> Poseidon2VmAuxCols<T> {
     pub fn width(air: &Poseidon2VmAir<T>) -> usize {
         3 + Poseidon2Cols::<WIDTH, T>::get_width(&air.inner)
-            + (3 + WIDTH) * MemoryReadAuxCols::<1, T>::width(&air.mem_oc)
-            + WIDTH * MemoryWriteAuxCols::<1, T>::width(&air.mem_oc)
+            + 3 * MemoryReadAuxCols::<1, T>::width(&air.mem_oc)
+            + 2 * MemoryReadAuxCols::<CHUNK, T>::width(&air.mem_oc)
+            + 2 * MemoryWriteAuxCols::<CHUNK, T>::width(&air.mem_oc)
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut result = vec![self.dst.clone(), self.lhs.clone(), self.rhs.clone()];
+        let mut result = vec![self.dst.clone(), self.lhs_ptr.clone(), self.rhs_ptr.clone()];
         result.extend(self.internal.flatten());
         result.extend(
             self.ptr_aux_cols
@@ -200,19 +200,19 @@ impl<T: Clone> Poseidon2VmAuxCols<T> {
         });
         let input_aux_cols = array::from_fn(|_| {
             start = end;
-            end += MemoryReadAuxCols::<1, T>::width(&air.mem_oc);
+            end += MemoryReadAuxCols::<CHUNK, T>::width(&air.mem_oc);
             MemoryReadAuxCols::from_slice(&slc[start..end], air.mem_oc)
         });
         let output_aux_cols = array::from_fn(|_| {
             start = end;
-            end += MemoryWriteAuxCols::<1, T>::width(&air.mem_oc);
+            end += MemoryWriteAuxCols::<CHUNK, T>::width(&air.mem_oc);
             MemoryWriteAuxCols::from_slice(&slc[start..end], air.mem_oc)
         });
 
         Self {
             dst,
-            lhs,
-            rhs,
+            lhs_ptr: lhs,
+            rhs_ptr: rhs,
             internal,
             ptr_aux_cols,
             input_aux_cols,
@@ -225,8 +225,8 @@ impl<T: Field> Poseidon2VmAuxCols<T> {
     pub fn blank_row(air: &Poseidon2VmAir<T>) -> Self {
         Self {
             dst: T::default(),
-            lhs: T::default(),
-            rhs: T::default(),
+            lhs_ptr: T::default(),
+            rhs_ptr: T::default(),
             internal: Poseidon2Cols::blank_row(&air.inner),
             ptr_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled(air.mem_oc)),
             input_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled(air.mem_oc)),
