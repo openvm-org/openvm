@@ -302,7 +302,9 @@ For Poseidon2, the `PID` is just some identifier to provide domain separation be
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0     | [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48) but the Mat4 used is Plonky3's with a Monty reduction |
 
-and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above.
+and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above. For this setting, the input (of size `WIDTH`)
+is read in two batches of size `CHUNK`, and, similarly, the output is written in either one or two batches of
+size `CHUNK`, depending on the output size of the corresponding opcode.
 
 ### Excluded
 
