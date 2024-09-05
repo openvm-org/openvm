@@ -1,7 +1,7 @@
 use p3_field::PrimeField32;
 
 use super::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord};
-use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
+use crate::memory::offline_checker::columns::MemoryWriteAuxCols;
 
 const WORD_SIZE: usize = 1;
 
@@ -12,7 +12,7 @@ const WORD_SIZE: usize = 1;
 #[derive(Clone, Debug)]
 pub struct MemoryTraceBuilder<F: PrimeField32> {
     memory_chip: MemoryChipRef<F>,
-    accesses_buffer: Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>>,
+    accesses_buffer: Vec<MemoryWriteAuxCols<WORD_SIZE, F>>,
 }
 
 impl<F: PrimeField32> MemoryTraceBuilder<F> {
@@ -62,7 +62,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         self.memory_chip.borrow_mut().increment_timestamp();
     }
 
-    pub fn take_accesses_buffer(mut self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {
+    pub fn take_accesses_buffer(mut self) -> Vec<MemoryWriteAuxCols<WORD_SIZE, F>> {
         std::mem::take(&mut self.accesses_buffer)
     }
 }

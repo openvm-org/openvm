@@ -2,10 +2,10 @@ use std::{array::from_fn, sync::Arc};
 
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
-
+use afs_primitives::is_zero::IsZeroAir;
 use super::{
     bridge::MemoryOfflineChecker,
-    columns::{MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+    columns::{MemoryWriteAuxCols, MemoryReadAuxCols},
 };
 use crate::memory::manager::{MemoryReadRecord, MemoryWriteRecord};
 
@@ -47,7 +47,7 @@ impl MemoryOfflineChecker {
         address_space: F,
         prev_data: [F; N],
         prev_timestamps: [F; N],
-    ) -> MemoryOfflineCheckerAuxCols<N, F> {
+    ) -> MemoryWriteAuxCols<N, F> {
         let timestamp = timestamp.as_canonical_u32();
         for prev_timestamp in &prev_timestamps {
             debug_assert!(prev_timestamp.as_canonical_u32() < timestamp);
@@ -64,9 +64,9 @@ impl MemoryOfflineChecker {
             )
         });
 
-        let addr_space_is_zero_cols = self.is_zero_air.generate_trace_row(address_space);
+        let addr_space_is_zero_cols = IsZeroAir.generate_trace_row(address_space);
 
-        MemoryOfflineCheckerAuxCols::new(
+        MemoryWriteAuxCols::new(
             prev_data,
             prev_timestamps,
             addr_space_is_zero_cols.io.is_zero,

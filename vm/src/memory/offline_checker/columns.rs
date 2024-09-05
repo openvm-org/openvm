@@ -4,30 +4,13 @@ use afs_primitives::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
 use p3_field::Field;
 
 use super::bridge::MemoryOfflineChecker;
-use crate::memory::offline_checker::operation::MemoryOperation;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemoryOfflineCheckerCols<const WORD_SIZE: usize, T> {
-    pub io: MemoryOperation<WORD_SIZE, T>,
-    pub aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, T>,
-}
-
-impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerCols<WORD_SIZE, T> {
-    pub fn new(
-        io: MemoryOperation<WORD_SIZE, T>,
-        aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, T>,
-    ) -> Self {
-        Self { io, aux }
-    }
-}
 
 // TODO: Remove extraneous old_cell from read cols.
-pub type MemoryReadAuxCols<const WORD_SIZE: usize, T> = MemoryOfflineCheckerAuxCols<WORD_SIZE, T>;
-pub type MemoryWriteAuxCols<const WORD_SIZE: usize, T> = MemoryOfflineCheckerAuxCols<WORD_SIZE, T>;
+pub type MemoryReadAuxCols<const WORD_SIZE: usize, T> = MemoryWriteAuxCols<WORD_SIZE, T>;
 
 /// DEPRECATED: Use `MemoryReadAuxCols` or `MemoryWriteAuxCols`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
+pub struct MemoryWriteAuxCols<const WORD_SIZE: usize, T> {
     // TODO[jpw]: Remove this; read does not need old_data
     pub(super) prev_data: [T; WORD_SIZE],
     // TODO[zach]: Should be just prev_timestamp: T.
@@ -41,7 +24,7 @@ pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
     pub(super) clk_lt_aux: [IsLessThanAuxCols<T>; WORD_SIZE],
 }
 
-impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
+impl<const WORD_SIZE: usize, T> MemoryWriteAuxCols<WORD_SIZE, T> {
     pub fn new(
         prev_data: [T; WORD_SIZE],
         prev_timestamps: [T; WORD_SIZE],
@@ -61,34 +44,7 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
     }
 }
 
-// Straightforward implementations for from_slice, flatten, width functions for the above structs below
-
-impl<const WORD_SIZE: usize, T: Clone> MemoryOfflineCheckerCols<WORD_SIZE, T> {
-    pub fn from_slice(slc: &[T], oc: MemoryOfflineChecker) -> Self {
-        let op_width = MemoryOperation::<WORD_SIZE, T>::width();
-        Self {
-            io: MemoryOperation::<WORD_SIZE, T>::from_slice(&slc[..op_width]),
-            aux: MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::from_slice(&slc[op_width..], oc),
-        }
-    }
-}
-
-impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerCols<WORD_SIZE, T> {
-    pub fn flatten(self) -> Vec<T> {
-        self.io
-            .flatten()
-            .into_iter()
-            .chain(self.aux.flatten())
-            .collect()
-    }
-
-    pub fn width(oc: &MemoryOfflineChecker) -> usize {
-        MemoryOperation::<WORD_SIZE, T>::width()
-            + MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(oc)
-    }
-}
-
-impl<const WORD_SIZE: usize, T: Clone> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
+impl<const WORD_SIZE: usize, T: Clone> MemoryWriteAuxCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T], oc: MemoryOfflineChecker) -> Self {
         let mut pos = 3 * WORD_SIZE + 2;
         Self {
@@ -106,7 +62,7 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryOfflineCheckerAuxCols<WORD_SIZE, T>
     }
 }
 
-impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
+impl<const WORD_SIZE: usize, T> MemoryWriteAuxCols<WORD_SIZE, T> {
     pub fn flatten(self) -> Vec<T> {
         self.prev_data
             .into_iter()
@@ -134,9 +90,9 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
     }
 }
 
-impl<const WORD_SIZE: usize, F: Field> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
+impl<const WORD_SIZE: usize, F: Field> MemoryWriteAuxCols<WORD_SIZE, F> {
     pub fn disabled(mem_oc: MemoryOfflineChecker) -> Self {
         let width = MemoryReadAuxCols::<WORD_SIZE, F>::width(&mem_oc);
-        MemoryOfflineCheckerAuxCols::from_slice(&vec![F::zero(); width], mem_oc)
+        MemoryWriteAuxCols::from_slice(&vec![F::zero(); width], mem_oc)
     }
 }
