@@ -15,21 +15,15 @@ use bus::VariableRangeCheckerBus;
 pub struct VariableRangeCheckerChip {
     pub air: VariableRangeCheckerAir,
     count: Vec<AtomicU32>,
-    num_rows: usize,
 }
 
 impl VariableRangeCheckerChip {
     pub fn new(bus: VariableRangeCheckerBus) -> Self {
         let num_rows = (1 << (bus.range_max_bits + 1)) as usize;
-        let mut count = Vec::with_capacity(num_rows);
-        for _ in 0..num_rows {
-            count.push(AtomicU32::new(0));
-        }
-
+        let count = (0..num_rows).map(|_| AtomicU32::new(0)).collect();
         Self {
             air: VariableRangeCheckerAir::new(bus),
             count,
-            num_rows,
         }
     }
 
@@ -46,10 +40,10 @@ impl VariableRangeCheckerChip {
         // if each [value, max_bits] is valid, the sends multiset will be exactly the receives multiset
         let idx = ((1 << max_bits) + value) as usize;
         assert!(
-            idx < self.num_rows,
+            idx < self.count.len(),
             "range exceeded: {} >= {}",
             idx,
-            self.num_rows
+            self.count.len()
         );
         let val_atomic = &self.count[idx];
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
