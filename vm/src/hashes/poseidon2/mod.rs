@@ -212,7 +212,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             COMP_POS2 => {
                 let rhs_ptr_read = memory_chip.read_cell(d, op_c);
                 (rhs_ptr_read.value(), Some(rhs_ptr_read))
-            },
+            }
             PERM_POS2 => {
                 memory_chip.increment_timestamp();
                 (lhs_ptr + chunk_f, None)
