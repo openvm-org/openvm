@@ -1,8 +1,8 @@
 use std::borrow::Borrow;
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, BaseAir, PairBuilder};
-use p3_field::Field;
+use p3_air::{Air, AirBuilder, BaseAir, PairBuilder};
+use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::{
@@ -53,6 +53,13 @@ impl<AB: InteractionBuilder + PairBuilder> Air<AB> for VariableRangeCheckerAir {
         let main = builder.main();
         let local = main.row_slice(0);
         let local: &VariableRangeCols<AB::Var> = (*local).borrow();
+
+        // check that the max bits is correct
+        builder.when_last_row().assert_eq(
+            prep_local.max_bits,
+            AB::F::from_canonical_u32(self.bus.range_max_bits),
+        );
+
         // Omit creating separate bridge.rs file for brevity
         self.bus
             .receive(prep_local.value, prep_local.max_bits)
