@@ -1,9 +1,9 @@
 use std::array;
-
+use std::cell::Ref;
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use columns::*;
 use p3_field::PrimeField32;
-use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
+use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
 
 use self::air::Poseidon2VmAir;
 use crate::{
@@ -14,6 +14,7 @@ use crate::{
     cpu::trace::Instruction,
     memory::{manager::MemoryChipRef, offline_checker::bridge::MemoryOfflineChecker, tree::Hasher},
 };
+use crate::memory::manager::{MemoryChip, MemoryReadRecord, MemoryWriteRecord};
 
 #[cfg(test)]
 pub mod tests;
@@ -32,8 +33,9 @@ pub const CHUNK: usize = 8;
 #[derive(Debug)]
 pub struct Poseidon2Chip<F: PrimeField32> {
     pub air: Poseidon2VmAir<F>,
-    pub rows: Vec<Poseidon2VmCols<F>>,
     pub memory_chip: MemoryChipRef<F>,
+
+    records: Vec<Poseidon2Record<F>>,
 }
 
 impl<F: PrimeField32> Poseidon2VmAir<F> {
@@ -91,10 +93,72 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
         );
         Self {
             air,
-            rows: vec![],
+            records: vec![],
             memory_chip,
         }
     }
+
+    fn record_to_cols(memory_chip: &Ref<MemoryChip<F>>, record: Poseidon2Record<F>) -> Poseidon2VmCols<F> {
+        let dst = record.dst_ptr_read.value();
+        let lhs_ptr = record.lhs_ptr_read.value();
+
+        let ptr_aux_cols = [Some(record.dst_ptr_read), Some(record.lhs_ptr_read), record.rhs_ptr_read].map(|maybe_read| {
+            maybe_read
+                .map_or_else(
+                    || memory_chip.make_disabled_read_aux_cols(),
+                    |read| memory_chip.make_read_aux_cols(read),
+                )
+        });
+        let input_aux_cols = [record.lhs_read, record.rhs_read].map(|read| memory_chip.make_read_aux_cols(read));
+        let output_aux_cols = [Some(record.output1_write), record.output2_write].map(|maybe_write| {
+            maybe_write
+                .map_or_else(
+                    || memory_chip.make_disabled_write_aux_cols(),
+                    |write| memory_chip.make_write_aux_cols(write),
+                )
+        });
+
+        Poseidon2VmCols {
+            io: Poseidon2VmIoCols {
+                is_opcode: F::one(),
+                is_direct: F::zero(),
+                pc: F::from_canonical_usize(record.from_state.pc),
+                timestamp: F::from_canonical_usize(record.from_state.timestamp),
+                a: record.instruction.op_a,
+                b: record.instruction.op_b,
+                c: record.instruction.op_c,
+                d: record.instruction.d,
+                e: record.instruction.e,
+                cmp: F::from_bool(record.instruction.opcode == COMP_POS2),
+            },
+            aux: Poseidon2VmAuxCols {
+                dst,
+                lhs_ptr,
+                rhs_ptr: record.rhs_ptr,
+                internal: record.internal_cols,
+                ptr_aux_cols,
+                input_aux_cols,
+                output_aux_cols,
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Poseidon2Record<F> {
+    instruction: Instruction<F>,
+    from_state: ExecutionState<usize>,
+    internal_cols: Poseidon2Cols<WIDTH, F>,
+    dst_ptr_read: MemoryReadRecord<1, F>,
+    lhs_ptr_read: MemoryReadRecord<1, F>,
+    // None for permute (since rhs_ptr is computed from lhs_ptr).
+    rhs_ptr_read: Option<MemoryReadRecord<1, F>>,
+    rhs_ptr: F,
+    lhs_read: MemoryReadRecord<CHUNK, F>,
+    rhs_read: MemoryReadRecord<CHUNK, F>,
+    output1_write: MemoryWriteRecord<CHUNK, F>,
+    // None for compress (since output is of size CHUNK).
+    output2_write: Option<MemoryWriteRecord<CHUNK, F>>,
 }
 
 impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
@@ -123,7 +187,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         debug_assert_eq!(WIDTH, CHUNK * 2);
 
-        let dst_read = memory_chip.read_cell(d, op_a);
+        let dst_ptr_read = memory_chip.read_cell(d, op_a);
         let lhs_ptr_read = memory_chip.read_cell(d, op_b);
         let rhs_ptr_read = if opcode == COMP_POS2 {
             Some(memory_chip.read_cell(d, op_c))
@@ -132,71 +196,49 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             None
         };
 
-        let dst = dst_read.value();
+        let dst_ptr = dst_ptr_read.value();
         let lhs_ptr = lhs_ptr_read.value();
         let rhs_ptr = rhs_ptr_read
             .clone()
-            .map(|rhs_ptr_read| rhs_ptr_read.value())
-            .unwrap_or(lhs_ptr + F::from_canonical_usize(CHUNK));
+            .map_or(
+                lhs_ptr + F::from_canonical_usize(CHUNK),
+                |rhs_ptr_read| rhs_ptr_read.value(),
+            );
 
-        let input_1 = memory_chip.read(e, lhs_ptr);
-        let input_2 = memory_chip.read(e, rhs_ptr);
+        let lhs_read = memory_chip.read(e, lhs_ptr);
+        let rhs_read = memory_chip.read(e, rhs_ptr);
         let input_state: [F; WIDTH] = array::from_fn(|i| {
             if i < CHUNK {
-                input_1.data[i]
+                lhs_read.data[i]
             } else {
-                input_2.data[i - CHUNK]
+                rhs_read.data[i - CHUNK]
             }
         });
 
-        let internal = self.air.inner.generate_trace_row(input_state);
-        let output = internal.io.output;
+        let internal_cols = self.air.inner.generate_trace_row(input_state);
+        let output = internal_cols.io.output;
 
-        let output_1 = memory_chip.write(e, dst, output[..CHUNK].try_into().unwrap());
-        let output_2 = if opcode == PERM_POS2 {
-            Some(memory_chip.write(e, dst, output[CHUNK..].try_into().unwrap()))
+        let output1_write = memory_chip.write(e, dst_ptr, output[..CHUNK].try_into().unwrap());
+        let output2_write = if opcode == PERM_POS2 {
+            Some(memory_chip.write(e, dst_ptr, output[CHUNK..].try_into().unwrap()))
         } else {
             memory_chip.increment_timestamp_by(F::from_canonical_usize(CHUNK));
             None
         };
 
-        let ptr_aux_cols = [Some(dst_read), Some(lhs_ptr_read), rhs_ptr_read].map(|maybe_read| {
-            maybe_read
-                .map(|read| memory_chip.make_read_aux_cols(read))
-                .unwrap_or_else(|| memory_chip.make_disabled_read_aux_cols())
+        self.records.push(Poseidon2Record {
+            instruction,
+            from_state,
+            internal_cols,
+            dst_ptr_read,
+            lhs_ptr_read,
+            rhs_ptr_read,
+            rhs_ptr,
+            lhs_read,
+            rhs_read,
+            output1_write,
+            output2_write,
         });
-        let input_aux_cols = [input_1, input_2].map(|x| memory_chip.make_read_aux_cols(x));
-        let output_aux_cols = [Some(output_1), output_2].map(|maybe_write| {
-            maybe_write
-                .map(|write| memory_chip.make_write_aux_cols(write))
-                .unwrap_or(memory_chip.make_disabled_write_aux_cols())
-        });
-
-        let row = Poseidon2VmCols {
-            io: Poseidon2VmIoCols {
-                is_opcode: F::one(),
-                is_direct: F::zero(),
-                pc: F::from_canonical_usize(from_state.pc),
-                timestamp: F::from_canonical_usize(from_state.timestamp),
-                a: op_a,
-                b: op_b,
-                c: op_c,
-                d,
-                e,
-                cmp: F::from_bool(opcode == COMP_POS2),
-            },
-            aux: Poseidon2VmAuxCols {
-                dst,
-                lhs_ptr,
-                rhs_ptr,
-                internal,
-                ptr_aux_cols,
-                input_aux_cols,
-                output_aux_cols,
-            },
-        };
-
-        self.rows.push(row);
 
         ExecutionState {
             pc: from_state.pc + 1,
