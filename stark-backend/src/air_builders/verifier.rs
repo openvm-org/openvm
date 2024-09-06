@@ -5,6 +5,7 @@ use std::{
 
 use p3_field::{AbstractField, ExtensionField, Field};
 use p3_matrix::Matrix;
+use p3_maybe_rayon::prelude::join;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::{
@@ -46,9 +47,9 @@ impl<'a, F, EF, PubVar, Var, Expr> GenericVerifierConstraintFolder<'a, F, EF, Pu
 where
     F: Field,
     EF: ExtensionField<F>,
-    Expr: AbstractField + From<F> + MulAssign<Var> + AddAssign<Var>,
+    Expr: AbstractField + From<F> + MulAssign<Var> + AddAssign<Var> + Send + Sync,
     Var: Into<Expr> + Copy + Send + Sync,
-    PubVar: Into<Expr> + Copy,
+    PubVar: Into<Expr> + Copy + Send + Sync,
 {
     pub fn eval_constraints(&mut self, constraints: &[SymbolicExpression<F>]) {
         for constraint in constraints {
@@ -69,9 +70,9 @@ impl<'a, F, EF, PubVar, Var, Expr> SymbolicEvaluator<F, Expr>
 where
     F: Field,
     EF: ExtensionField<F>,
-    Expr: AbstractField + From<F>,
+    Expr: AbstractField + From<F> + Send + Sync,
     Var: Into<Expr> + Copy + Send + Sync,
-    PubVar: Into<Expr> + Copy,
+    PubVar: Into<Expr> + Copy + Send + Sync,
 {
     fn eval_var(&self, symbolic_var: SymbolicVariable<F>) -> Expr {
         let index = symbolic_var.index;
@@ -105,10 +106,19 @@ where
         match symbolic_expr {
             SymbolicExpression::Variable(var) => self.eval_var(*var),
             SymbolicExpression::Constant(c) => (*c).into(),
-            SymbolicExpression::Add { x, y, .. } => self.eval_expr(x) + self.eval_expr(y),
-            SymbolicExpression::Sub { x, y, .. } => self.eval_expr(x) - self.eval_expr(y),
+            SymbolicExpression::Add { x, y, .. } => {
+                let (x, y) = join(|| self.eval_expr(x), || self.eval_expr(y));
+                x + y
+            }
+            SymbolicExpression::Sub { x, y, .. } => {
+                let (x, y) = join(|| self.eval_expr(x), || self.eval_expr(y));
+                x - y
+            }
             SymbolicExpression::Neg { x, .. } => -self.eval_expr(x),
-            SymbolicExpression::Mul { x, y, .. } => self.eval_expr(x) * self.eval_expr(y),
+            SymbolicExpression::Mul { x, y, .. } => {
+                let (x, y) = join(|| self.eval_expr(x), || self.eval_expr(y));
+                x * y
+            }
             SymbolicExpression::IsFirstRow => self.is_first_row.into(),
             SymbolicExpression::IsLastRow => self.is_last_row.into(),
             SymbolicExpression::IsTransition => self.is_transition.into(),
