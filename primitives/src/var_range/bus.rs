@@ -35,7 +35,7 @@ impl VariableRangeCheckerBus {
         self.push(value, max_bits, InteractionType::Receive)
     }
 
-    // Equivalent to `self.send(value, max_bits)` where max_bits is a u32 constant
+    // Equivalent to `self.send(value, max_bits)` where max_bits is a usize constant
     #[must_use]
     pub fn range_check<T>(
         &self,
