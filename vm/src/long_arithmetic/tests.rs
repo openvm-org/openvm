@@ -108,6 +108,7 @@ fn long_arithmetic_rand_air_test() {
 /// Given a fake trace of a single operation, setup a chip and run the test.
 /// We replace the "output" part of the trace, and we _may_ replace the interactions
 /// based on the desired output. We check that it produces the error we expect.
+#[allow(clippy::too_many_arguments)]
 fn run_bad_long_arithmetic_test(
     op: Opcode,
     x: Vec<u32>,

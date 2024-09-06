@@ -87,7 +87,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
 {
     fn execute(
         &mut self,
-        instruction: &Instruction<T>,
+        instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         let Instruction {

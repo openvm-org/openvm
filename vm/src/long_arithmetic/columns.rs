@@ -178,11 +178,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
             iter.by_ref().take(width).collect::<Vec<_>>()
         };
 
-        let read_x_aux_cols = MemoryReadAuxCols::<16, T>::from_slice(&read_x_slice[..], *mem_oc);
-        let read_y_aux_cols = MemoryReadAuxCols::<16, T>::from_slice(&read_y_slice[..], *mem_oc);
-        let write_z_aux_cols = MemoryWriteAuxCols::<16, T>::from_slice(&write_z_slice[..], *mem_oc);
+        let read_x_aux_cols = MemoryReadAuxCols::<16, T>::from_slice(&read_x_slice[..], mem_oc);
+        let read_y_aux_cols = MemoryReadAuxCols::<16, T>::from_slice(&read_y_slice[..], mem_oc);
+        let write_z_aux_cols = MemoryWriteAuxCols::<16, T>::from_slice(&write_z_slice[..], mem_oc);
         let write_cmp_aux_cols =
-            MemoryWriteAuxCols::<1, T>::from_slice(&write_cmp_slice[..], *mem_oc);
+            MemoryWriteAuxCols::<1, T>::from_slice(&write_cmp_slice[..], mem_oc);
 
         Self {
             is_valid,

@@ -41,28 +41,28 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticAir<ARG_SIZE, 
             ),
         );
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, [aux.read_x_aux_cols]);
+        let memory_bridge = MemoryBridge::new(self.mem_oc);
         let mut timestamp: AB::Expr = io.from_state.timestamp.into();
         memory_bridge
             .read(
                 MemoryAddress::new(io.x.address_space, io.x.address),
                 io.x.data.try_into().unwrap_or_else(|_| unreachable!()),
                 timestamp.clone(),
+                aux.read_x_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp += num_limbs_expr.clone();
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, [aux.read_y_aux_cols]);
         memory_bridge
             .read(
                 MemoryAddress::new(io.y.address_space, io.y.address),
                 io.y.data.try_into().unwrap_or_else(|_| unreachable!()),
                 timestamp.clone(),
+                aux.read_y_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp += num_limbs_expr.clone();
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, [aux.write_z_aux_cols]);
         memory_bridge
             .write(
                 MemoryAddress::new(io.z.address_space, io.z.address),
@@ -71,15 +71,16 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticAir<ARG_SIZE, 
                     .try_into()
                     .unwrap_or_else(|_| unreachable!()),
                 timestamp.clone(),
+                aux.write_z_aux_cols,
             )
             .eval(builder, aux.opcode_add_flag + aux.opcode_sub_flag);
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, [aux.write_cmp_aux_cols]);
         memory_bridge
             .write(
                 MemoryAddress::new(io.z.address_space, io.z.address),
                 [io.cmp_result],
                 timestamp.clone(),
+                aux.write_cmp_aux_cols,
             )
             .eval(builder, aux.opcode_lt_flag + aux.opcode_eq_flag);
 
