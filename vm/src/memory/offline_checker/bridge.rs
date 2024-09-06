@@ -310,11 +310,7 @@ impl MemoryOfflineChecker {
                 .eval(builder, enabled.clone());
 
             self.memory_bus
-                .write(
-                    address,
-                    [datum.clone()],
-                    timestamp.clone() + AB::Expr::from_canonical_usize(i),
-                )
+                .write(address, [datum.clone()], timestamp.clone())
                 .eval(builder, enabled.clone());
         }
     }

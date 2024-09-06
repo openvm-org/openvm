@@ -10,7 +10,7 @@ use super::{columns::UintArithmeticCols, num_limbs};
 use crate::{
     arch::{
         bus::ExecutionBus,
-        instructions::{Opcode, LONG_ARITHMETIC_INSTRUCTIONS},
+        instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
     memory::offline_checker::bridge::MemoryOfflineChecker,
 };
@@ -133,7 +133,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
 
         let expected_opcode = flags
             .iter()
-            .zip(LONG_ARITHMETIC_INSTRUCTIONS)
+            .zip(UINT256_ARITHMETIC_INSTRUCTIONS)
             .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
             });

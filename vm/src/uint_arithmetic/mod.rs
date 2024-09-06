@@ -10,7 +10,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, LONG_ARITHMETIC_INSTRUCTIONS},
+        instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
     cpu::trace::Instruction,
     memory::manager::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
@@ -96,7 +96,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             op_f: y_as,
             ..
         } = instruction.clone();
-        assert!(LONG_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
+        assert!(UINT256_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
 

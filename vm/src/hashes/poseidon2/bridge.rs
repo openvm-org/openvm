@@ -1,11 +1,8 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
+use poseidon2_air::poseidon2::columns::Poseidon2IoCols;
 
-use super::{
-    air::Poseidon2VmAir,
-    columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
-    WIDTH,
-};
+use super::{air::Poseidon2VmAir, columns::Poseidon2VmIoCols, WIDTH};
 use crate::{
     arch::{
         columns::{ExecutionState, InstructionCols},
@@ -24,22 +21,21 @@ impl<F: Field> Poseidon2VmAir<F> {
         &self,
         builder: &mut AB,
         io: Poseidon2VmIoCols<AB::Var>,
-        aux: &Poseidon2VmAuxCols<AB::Var>,
+        internal_io: Poseidon2IoCols<WIDTH, AB::Var>,
+        timestamp_delta: AB::Expr,
     ) {
         let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
         self.execution_bus.execute_increment_pc(
             builder,
             io.is_opcode,
             ExecutionState::new(io.pc, io.timestamp),
-            AB::Expr::from_canonical_usize(3 + (2 * WIDTH)),
+            timestamp_delta,
             InstructionCols::new(opcode, [io.a, io.b, io.c, io.d, io.e]),
         );
 
         // DIRECT
         if self.direct {
-            let expand_fields = aux
-                .internal
-                .io
+            let expand_fields = internal_io
                 .flatten()
                 .into_iter()
                 .take(WIDTH + WIDTH / 2)

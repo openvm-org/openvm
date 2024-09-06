@@ -4,7 +4,6 @@ use p3_field::AbstractField;
 use super::{
     air::UintArithmeticAir,
     columns::{UintArithmeticAuxCols, UintArithmeticIoCols},
-    num_limbs,
 };
 use crate::{
     arch::columns::InstructionCols,
@@ -19,7 +18,6 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
         aux: UintArithmeticAuxCols<ARG_SIZE, LIMB_SIZE, AB::Var>,
         expected_opcode: AB::Expr,
     ) {
-        let num_limbs_expr = AB::Expr::from_canonical_usize(num_limbs::<ARG_SIZE, LIMB_SIZE>());
         let mut timestamp_delta = AB::Expr::zero();
 
         let memory_bridge = MemoryBridge::new(self.mem_oc);
@@ -32,7 +30,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
                 aux.read_x_aux_cols,
             )
             .eval(builder, aux.is_valid);
-        timestamp_delta += num_limbs_expr.clone();
+        timestamp_delta += AB::Expr::one();
 
         memory_bridge
             .read(
@@ -42,7 +40,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
                 aux.read_y_aux_cols,
             )
             .eval(builder, aux.is_valid);
-        timestamp_delta += num_limbs_expr.clone();
+        timestamp_delta += AB::Expr::one();
 
         let enabled = aux.opcode_add_flag + aux.opcode_sub_flag;
         memory_bridge
@@ -56,7 +54,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
                 aux.write_z_aux_cols,
             )
             .eval(builder, enabled.clone());
-        timestamp_delta += num_limbs_expr.clone() * enabled;
+        timestamp_delta += enabled;
 
         let enabled = aux.opcode_lt_flag + aux.opcode_eq_flag;
         memory_bridge

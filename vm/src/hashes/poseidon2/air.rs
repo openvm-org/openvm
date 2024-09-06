@@ -48,8 +48,8 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
         let local: &[<AB>::Var] = (*local).borrow();
 
         let cols = Poseidon2VmCols::<AB::Var>::from_slice(local, self);
+        let internal_io = cols.aux.internal.io;
 
-        self.eval_interactions(builder, cols.io, &cols.aux);
         self.inner
             .eval_without_interactions(builder, cols.aux.internal.io, cols.aux.internal.aux);
 
@@ -68,8 +68,13 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
 
         // Memory access constraints
         let memory_bridge = MemoryBridge::new(self.mem_oc);
-        let mut clk_offset = 0;
-        let timestamp_base = cols.io.timestamp;
+
+        let timestamp = cols.io.timestamp;
+        let mut timestamp_delta = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+        };
 
         // read addresses when is_opcode:
         // dst <- [a]_d, lhs <- [b]_d
@@ -80,74 +85,65 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
             [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp],
             cols.aux.ptr_aux_cols,
         ) {
-            let clk = timestamp_base + AB::F::from_canonical_usize(clk_offset);
-            clk_offset += 1;
-
             memory_bridge
                 .read(
                     MemoryAddress::new(cols.io.d, io_addr),
                     [aux_addr],
-                    clk,
-                    mem_aux.clone(),
+                    timestamp_pp(),
+                    mem_aux,
                 )
                 .eval(builder, count);
         }
 
+        let [input1_aux_cols, input2_aux_cols] = cols.aux.input_aux_cols;
+        let [output1_aux_cols, output2_aux_cols] = cols.aux.output_aux_cols;
+
         // First input chunk.
-        {
-            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
-            clk_offset += CHUNK;
+        memory_bridge
+            .read(
+                MemoryAddress::new(cols.io.e, cols.aux.lhs_ptr),
+                cols.aux.internal.io.input[..CHUNK].try_into().unwrap(),
+                timestamp_pp(),
+                input1_aux_cols,
+            )
+            .eval(builder, cols.io.is_opcode);
 
-            memory_bridge
-                .read(
-                    MemoryAddress::new(cols.io.e, cols.aux.lhs_ptr),
-                    cols.aux.internal.io.input[..CHUNK].try_into().unwrap(),
-                    clk,
-                    cols.aux.input_aux_cols[0].clone(),
-                )
-                .eval(builder, cols.io.is_opcode);
-        }
         // Second input chunk.
-        {
-            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
-            clk_offset += CHUNK;
+        memory_bridge
+            .read(
+                MemoryAddress::new(cols.io.e, cols.aux.rhs_ptr),
+                cols.aux.internal.io.input[CHUNK..].try_into().unwrap(),
+                timestamp_pp(),
+                input2_aux_cols,
+            )
+            .eval(builder, cols.io.is_opcode);
 
-            memory_bridge
-                .read(
-                    MemoryAddress::new(cols.io.e, cols.aux.rhs_ptr),
-                    cols.aux.internal.io.input[CHUNK..].try_into().unwrap(),
-                    clk,
-                    cols.aux.input_aux_cols[1].clone(),
-                )
-                .eval(builder, cols.io.is_opcode);
-        }
         // First output chunk.
-        {
-            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
-            clk_offset += CHUNK;
+        memory_bridge
+            .write(
+                MemoryAddress::new(cols.io.e, cols.aux.dst_ptr),
+                cols.aux.internal.io.output[..CHUNK].try_into().unwrap(),
+                timestamp_pp(),
+                output1_aux_cols,
+            )
+            .eval(builder, cols.io.is_opcode);
 
-            memory_bridge
-                .write(
-                    MemoryAddress::new(cols.io.e, cols.aux.dst_ptr),
-                    cols.aux.internal.io.output[..CHUNK].try_into().unwrap(),
-                    clk,
-                    cols.aux.output_aux_cols[0].clone(),
-                )
-                .eval(builder, cols.io.is_opcode);
-        }
         // Second output chunk.
-        {
-            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
+        let pointer = cols.aux.dst_ptr + AB::F::from_canonical_usize(CHUNK);
+        memory_bridge
+            .write(
+                MemoryAddress::new(cols.io.e, pointer),
+                cols.aux.internal.io.output[CHUNK..].try_into().unwrap(),
+                timestamp_pp(),
+                output2_aux_cols,
+            )
+            .eval(builder, cols.io.is_opcode - cols.io.cmp);
 
-            let pointer = cols.aux.dst_ptr + AB::F::from_canonical_usize(CHUNK);
-            memory_bridge
-                .write(
-                    MemoryAddress::new(cols.io.e, pointer),
-                    cols.aux.internal.io.output[CHUNK..].try_into().unwrap(),
-                    clk,
-                    cols.aux.output_aux_cols[1].clone(),
-                )
-                .eval(builder, cols.io.is_opcode - cols.io.cmp);
-        }
+        self.eval_interactions(
+            builder,
+            cols.io,
+            internal_io,
+            AB::Expr::from_canonical_usize(timestamp_delta),
+        );
     }
 }

@@ -57,10 +57,6 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
         }
     }
 
-    pub fn timestamp_delta(&self) -> usize {
-        3 + (2 * WIDTH)
-    }
-
     /// By default direct bus is on. If `continuations = OFF`, this should be called.
     pub fn set_direct(&mut self, direct: bool) {
         self.direct = direct;
@@ -239,7 +235,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         let output1_write = memory_chip.write(e, dst_ptr, output1);
         let output2_write = match opcode {
             COMP_POS2 => {
-                memory_chip.increment_timestamp_by(chunk_f);
+                memory_chip.increment_timestamp();
                 None
             }
             PERM_POS2 => Some(memory_chip.write(e, dst_ptr + chunk_f, output2)),
@@ -262,7 +258,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: from_state.timestamp + self.air.timestamp_delta(),
+            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         }
     }
 }

@@ -141,7 +141,7 @@ impl<F: PrimeField32> MemoryChip<F> {
 
     pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<N, F> {
         let timestamp = self.timestamp;
-        self.timestamp += F::from_canonical_usize(N);
+        self.timestamp += F::one();
 
         if address_space == F::zero() {
             assert_eq!(N, 1, "cannot batch read from address space 0");
@@ -157,13 +157,12 @@ impl<F: PrimeField32> MemoryChip<F> {
 
         let prev_entries = array::from_fn(|i| {
             let cur_ptr = pointer + F::from_canonical_usize(i);
-            let cur_timestamp = timestamp + F::from_canonical_usize(i);
 
             let entry = self.memory.get_mut(&(address_space, cur_ptr)).unwrap();
-            debug_assert!(entry.timestamp < cur_timestamp);
+            debug_assert!(entry.timestamp < timestamp);
 
             let prev_entry = *entry;
-            entry.timestamp = cur_timestamp;
+            entry.timestamp = timestamp;
 
             self.interface_chip
                 .touch_address(address_space, cur_ptr, entry.value);
@@ -200,11 +199,10 @@ impl<F: PrimeField32> MemoryChip<F> {
         assert_ne!(address_space, F::zero());
 
         let timestamp = self.timestamp;
-        self.timestamp += F::from_canonical_usize(N);
+        self.timestamp += F::one();
 
         let prev_entries = array::from_fn(|i| {
             let cur_ptr = pointer + F::from_canonical_usize(i);
-            let cur_timestamp = timestamp + F::from_canonical_usize(i);
 
             let entry = self
                 .memory
@@ -213,11 +211,11 @@ impl<F: PrimeField32> MemoryChip<F> {
                     value: F::zero(),
                     timestamp: F::zero(),
                 });
-            debug_assert!(entry.timestamp < cur_timestamp);
+            debug_assert!(entry.timestamp < timestamp);
 
             let prev_entry = *entry;
 
-            entry.timestamp = cur_timestamp;
+            entry.timestamp = timestamp;
             entry.value = data[i];
 
             self.interface_chip
