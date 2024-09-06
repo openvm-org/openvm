@@ -55,6 +55,19 @@ impl VerifierProgram<InnerConfig> {
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
     ) -> Program<BabyBear> {
+        let options = CompilerOptions {
+            enable_cycle_tracker: true,
+            ..Default::default()
+        };
+        Self::build_with_options(constants, fri_params, options)
+    }
+
+    /// Create a new instance of the program for the [BabyBearPoseidon2] config.
+    pub fn build_with_options(
+        constants: MultiStarkVerificationAdvice<InnerConfig>,
+        fri_params: &FriParameters,
+        options: CompilerOptions,
+    ) -> Program<BabyBear> {
         let mut builder = Builder::<InnerConfig>::default();
 
         builder.cycle_tracker_start("VerifierProgram");
@@ -69,10 +82,7 @@ impl VerifierProgram<InnerConfig> {
         builder.cycle_tracker_end("VerifierProgram");
         builder.halt();
 
-        builder.compile_isa_with_options(CompilerOptions {
-            enable_cycle_tracker: true,
-            ..Default::default()
-        })
+        builder.compile_isa_with_options(options)
     }
 }
 
