@@ -46,6 +46,20 @@ impl VariableRangeCheckerBus {
             interaction_type,
         }
     }
+
+    // Equivalent to `self.send(value, max_bits)` where max_bits is a u32 constant
+    pub fn range_check<T>(
+        &self,
+        value: impl Into<T>,
+        max_bits: u32,
+    ) -> VariableBitsCheckerBusInteraction<T> {
+        debug_assert!(max_bits <= self.range_max_bits);
+        VariableBitsCheckerBusInteraction {
+            value: value.into(),
+            max_bits,
+            bus_index: self.index,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -66,6 +80,27 @@ impl<T: AbstractField> VariableRangeCheckerBusInteraction<T> {
             [self.value, self.max_bits],
             count,
             self.interaction_type,
+        );
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct VariableBitsCheckerBusInteraction<T> {
+    pub value: T,
+    pub max_bits: u32,
+    pub bus_index: usize,
+}
+
+impl<T: AbstractField> VariableBitsCheckerBusInteraction<T> {
+    pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
+    where
+        AB: InteractionBuilder<Expr = T>,
+    {
+        builder.push_interaction(
+            self.bus_index,
+            [self.value, AB::Expr::from_canonical_u32(self.max_bits)],
+            count,
+            InteractionType::Send,
         );
     }
 }

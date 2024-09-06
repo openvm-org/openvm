@@ -30,16 +30,16 @@ impl<F: Field> BaseAir<F> for VariableRangeCheckerAir {
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let rows: Vec<[F; NUM_VARIABLE_RANGE_PREPROCESSED_COLS]> =
-            std::iter::once([F::from_canonical_u32(0), F::from_canonical_u32(0)])
-                .chain((0..=self.range_max_bits()).flat_map(|bits| {
-                    (0..(1 << bits)).map(move |value| {
-                        [F::from_canonical_u32(value), F::from_canonical_u32(bits)]
-                    })
-                }))
-                .collect();
+        let rows: Vec<F> = [F::zero(); NUM_VARIABLE_RANGE_PREPROCESSED_COLS]
+            .into_iter()
+            .chain((0..=self.range_max_bits()).flat_map(|bits| {
+                (0..(1 << bits)).flat_map(move |value| {
+                    [F::from_canonical_u32(value), F::from_canonical_u32(bits)].into_iter()
+                })
+            }))
+            .collect();
         Some(RowMajorMatrix::new(
-            rows.concat(),
+            rows,
             NUM_VARIABLE_RANGE_PREPROCESSED_COLS,
         ))
     }
