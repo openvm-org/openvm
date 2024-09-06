@@ -1,5 +1,5 @@
 use std::{iter::zip, marker::PhantomData};
-use itertools::izip;
+
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
     is_zero::{
@@ -10,6 +10,7 @@ use afs_primitives::{
     utils::not,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::izip;
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
@@ -283,6 +284,7 @@ impl MemoryOfflineChecker {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn eval_bulk_access<AB, const N: usize>(
         &self,
         builder: &mut AB,
@@ -292,11 +294,12 @@ impl MemoryOfflineChecker {
         timestamp: &AB::Expr,
         prev_timestamps: &[AB::Var; N],
         enabled: AB::Expr,
-    )
-    where
+    ) where
         AB: InteractionBuilder,
     {
-        for (i, (&prev_timestamp, prev_datum, datum)) in izip!(prev_timestamps, prev_data, data).enumerate() {
+        for (i, (&prev_timestamp, prev_datum, datum)) in
+            izip!(prev_timestamps, prev_data, data).enumerate()
+        {
             let address = MemoryAddress::new(
                 address.address_space.clone(),
                 address.pointer.clone() + AB::Expr::from_canonical_usize(i),
