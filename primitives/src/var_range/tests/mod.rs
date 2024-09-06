@@ -24,7 +24,7 @@ fn test_variable_range_checker_chip_send() {
     const LOG_LIST_LEN: usize = 8;
     const LIST_LEN: usize = 1 << LOG_LIST_LEN;
 
-    let bus = VariableRangeCheckerBus::new(0, MAX_BITS);
+    let bus = VariableRangeCheckerBus::new(0, MAX_BITS as usize);
     let var_range_checker = VariableRangeCheckerChip::new(bus);
 
     // generate lists of randomized valid values-bits pairs
@@ -33,8 +33,8 @@ fn test_variable_range_checker_chip_send() {
         .map(|_| {
             (0..LIST_LEN)
                 .map(|_| {
-                    let bits = rng.gen::<u32>() % (MAX_BITS + 1);
-                    let val = rng.gen::<u32>() % (1 << bits);
+                    let bits = rng.gen_range(0..=MAX_BITS);
+                    let val = rng.gen_range(0..(1 << bits));
                     [val, bits]
                 })
                 .collect::<Vec<[u32; 2]>>()
@@ -57,13 +57,12 @@ fn test_variable_range_checker_chip_send() {
         .par_iter()
         .map(|list| {
             RowMajorMatrix::new(
-                list.clone()
-                    .into_iter()
-                    .flat_map(|[val, bits]| {
-                        var_range_checker.add_count(val, bits);
+                list.iter()
+                    .flat_map(|&[val, bits]| {
+                        var_range_checker.add_count(val, bits as usize);
                         iter::once(val).chain(iter::once(bits))
                     })
-                    .map(AbstractField::from_wrapped_u32)
+                    .map(AbstractField::from_canonical_u32)
                     .collect(),
                 2,
             )
@@ -89,14 +88,14 @@ fn negative_test_variable_range_checker_chip_send() {
     const LOG_LIST_LEN: usize = 8;
     const LIST_LEN: usize = 1 << LOG_LIST_LEN;
 
-    let bus = VariableRangeCheckerBus::new(0, MAX_BITS);
+    let bus = VariableRangeCheckerBus::new(0, MAX_BITS as usize);
     let var_range_checker = VariableRangeCheckerChip::new(bus);
 
     // generate randomized valid values-bits pairs with one invalid pair (i.e. [4, 2])
     let list_vals = (0..(LIST_LEN - 1))
         .map(|_| {
-            let bits = rng.gen::<u32>() % (MAX_BITS + 1);
-            let val = rng.gen::<u32>() % (1 << bits);
+            let bits = rng.gen_range(0..=MAX_BITS);
+            let val = rng.gen_range(0..(1 << bits));
             [val, bits]
         })
         .chain(iter::once([4, 2]))
@@ -109,13 +108,12 @@ fn negative_test_variable_range_checker_chip_send() {
     // generate trace with a [val, bits] pair such that val >= 2^bits (i.e. [4, 2])
     let list_trace = RowMajorMatrix::new(
         list_vals
-            .clone()
-            .into_iter()
-            .flat_map(|[val, bits]| {
-                var_range_checker.add_count(val, bits);
+            .iter()
+            .flat_map(|&[val, bits]| {
+                var_range_checker.add_count(val, bits as usize);
                 iter::once(val).chain(iter::once(bits))
             })
-            .map(AbstractField::from_wrapped_u32)
+            .map(AbstractField::from_canonical_u32)
             .collect(),
         2,
     );
@@ -136,7 +134,7 @@ fn negative_test_variable_range_checker_chip_send() {
 fn test_variable_range_checker_chip_range_check() {
     let mut rng = create_seeded_rng();
 
-    const MAX_BITS: u32 = 3;
+    const MAX_BITS: usize = 3;
     const MAX_VAL: u32 = 1 << MAX_BITS;
     const LOG_LIST_LEN: usize = 6;
     const LIST_LEN: usize = 1 << LOG_LIST_LEN;
@@ -150,7 +148,7 @@ fn test_variable_range_checker_chip_range_check() {
     let lists_vals = (0..num_lists)
         .map(|_| {
             (0..LIST_LEN)
-                .map(|_| rng.gen::<u32>() % MAX_VAL)
+                .map(|_| rng.gen_range(0..MAX_VAL))
                 .collect::<Vec<u32>>()
         })
         .collect::<Vec<Vec<u32>>>();
@@ -171,13 +169,12 @@ fn test_variable_range_checker_chip_range_check() {
         .par_iter()
         .map(|list| {
             RowMajorMatrix::new(
-                list.clone()
-                    .into_iter()
-                    .flat_map(|val| {
+                list.iter()
+                    .flat_map(|&val| {
                         var_range_checker.add_count(val, MAX_BITS);
                         iter::once(val)
                     })
-                    .map(AbstractField::from_wrapped_u32)
+                    .map(AbstractField::from_canonical_u32)
                     .collect(),
                 1,
             )
@@ -199,7 +196,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
     // test that the constraint fails when some val >= 2^max_bits
     let mut rng = create_seeded_rng();
 
-    const MAX_BITS: u32 = 3;
+    const MAX_BITS: usize = 3;
     const MAX_VAL: u32 = 1 << MAX_BITS;
     const LOG_LIST_LEN: usize = 6;
     const LIST_LEN: usize = 1 << LOG_LIST_LEN;
@@ -210,7 +207,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
 
     // generate randomized valid values with one invalid value (i.e. MAX_VAL)
     let list_vals = (0..(LIST_LEN - 1))
-        .map(|_| rng.gen::<u32>() % MAX_VAL)
+        .map(|_| rng.gen_range(0..MAX_VAL))
         .chain(iter::once(MAX_VAL))
         .collect::<Vec<u32>>();
 
@@ -221,13 +218,12 @@ fn negative_test_variable_range_checker_chip_range_check() {
     // generate trace with one value >= 2^max_bits (i.e. MAX_VAL)
     let list_trace = RowMajorMatrix::new(
         list_vals
-            .clone()
-            .into_iter()
-            .flat_map(|val| {
+            .iter()
+            .flat_map(|&val| {
                 var_range_checker.add_count(val, MAX_BITS);
                 iter::once(val)
             })
-            .map(AbstractField::from_wrapped_u32)
+            .map(AbstractField::from_canonical_u32)
             .collect(),
         1,
     );

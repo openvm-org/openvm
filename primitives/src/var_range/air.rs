@@ -19,7 +19,7 @@ pub struct VariableRangeCheckerAir {
 }
 
 impl VariableRangeCheckerAir {
-    pub fn range_max_bits(&self) -> u32 {
+    pub fn range_max_bits(&self) -> usize {
         self.bus.range_max_bits
     }
 }
@@ -34,7 +34,7 @@ impl<F: Field> BaseAir<F> for VariableRangeCheckerAir {
             .into_iter()
             .chain((0..=self.range_max_bits()).flat_map(|bits| {
                 (0..(1 << bits)).flat_map(move |value| {
-                    [F::from_canonical_u32(value), F::from_canonical_u32(bits)].into_iter()
+                    [F::from_canonical_u32(value), F::from_canonical_usize(bits)].into_iter()
                 })
             }))
             .collect();

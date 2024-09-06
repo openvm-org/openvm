@@ -40,11 +40,11 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for TestSendAir {
 // dummy AIR for testing VariableRangeCheckerBus::range_check
 pub struct TestRangeCheckAir {
     bus: VariableRangeCheckerBus,
-    max_bits: u32,
+    max_bits: usize,
 }
 
 impl TestRangeCheckAir {
-    pub fn new(bus: VariableRangeCheckerBus, max_bits: u32) -> Self {
+    pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
         Self { bus, max_bits }
     }
 }

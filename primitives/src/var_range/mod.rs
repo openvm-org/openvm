@@ -31,14 +31,14 @@ impl VariableRangeCheckerChip {
         self.air.bus
     }
 
-    pub fn range_max_bits(&self) -> u32 {
+    pub fn range_max_bits(&self) -> usize {
         self.air.range_max_bits()
     }
 
-    pub fn add_count(&self, value: u32, max_bits: u32) {
+    pub fn add_count(&self, value: u32, max_bits: usize) {
         // index is 2^max_bits + value - 1 + 1 for the extra [0, 0] row
         // if each [value, max_bits] is valid, the sends multiset will be exactly the receives multiset
-        let idx = ((1 << max_bits) + value) as usize;
+        let idx = (1 << max_bits) + (value as usize);
         assert!(
             idx < self.count.len(),
             "range exceeded: {} >= {}",
