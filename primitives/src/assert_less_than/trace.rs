@@ -9,9 +9,9 @@ use super::{
 };
 use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 
-impl AssertLessThanChip {
+impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
     pub fn generate_trace<F: PrimeField64>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
-        let width: usize = AssertLessThanCols::<F>::width(&self.air);
+        let width: usize = AssertLessThanCols::<F, AUX_LEN>::width(&self.air);
 
         let mut rows_concat = vec![F::zero(); width * pairs.len()];
         for (i, (x, y)) in pairs.iter().enumerate() {
@@ -26,7 +26,7 @@ impl AssertLessThanChip {
     }
 }
 
-impl AssertLessThanAir {
+impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
     pub fn generate_trace_row<F: PrimeField>(
         &self,
         x: u32,
@@ -79,17 +79,17 @@ impl AssertLessThanAir {
 }
 
 // TODO[jpw] stop using Arc<RangeCheckerGateChip> and use &RangeCheckerGateChip (requires not using this trait)
-impl<F: PrimeField> LocalTraceInstructions<F> for AssertLessThanAir {
+impl<F: PrimeField, const AUX_LEN: usize> LocalTraceInstructions<F> for AssertLessThanAir<AUX_LEN> {
     type LocalInput = (u32, u32, Arc<RangeCheckerGateChip>);
 
     fn generate_trace_row(&self, input: (u32, u32, Arc<RangeCheckerGateChip>)) -> Self::Cols<F> {
-        let width: usize = AssertLessThanCols::<F>::width(self);
+        let width: usize = AssertLessThanCols::<F, AUX_LEN>::width(self);
 
         let mut row = vec![F::zero(); width];
         let mut lt_cols = AssertLessThanColsMut::<F>::from_slice(&mut row);
 
         self.generate_trace_row(input.0, input.1, &input.2, &mut lt_cols);
 
-        AssertLessThanCols::<F>::from_slice(&row)
+        AssertLessThanCols::<F, AUX_LEN>::from_slice(&row)
     }
 }

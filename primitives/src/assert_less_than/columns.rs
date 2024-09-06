@@ -29,53 +29,62 @@ impl<T> AssertLessThanIoCols<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, new)]
-pub struct AssertLessThanAuxCols<T> {
+/// AUX_LEN is the number of AUX columns
+/// we know that AUX_LEN = max_bits / decomp + 2 * (max_bits % decomp != 0)
+#[derive(Debug, Clone, PartialEq, Eq, new, AlignedBorrow)]
+pub struct AssertLessThanAuxCols<T, const AUX_LEN: usize> {
     // lower_decomp consists of lower decomposed into limbs of size decomp where we also shift
     // the final limb and store it as the last element of lower decomp so we can range check
-    pub lower_decomp: Vec<T>,
+    pub lower_decomp: [T; AUX_LEN],
 }
 
-impl<T: Clone> AssertLessThanAuxCols<T> {
+impl<T: Clone, const AUX_LEN: usize> AssertLessThanAuxCols<T, AUX_LEN> {
     pub fn from_slice(slc: &[T]) -> Self {
+        assert_eq!(slc.len(), AUX_LEN);
         Self {
-            lower_decomp: slc.to_vec(),
+            lower_decomp: core::array::from_fn(|i| {slc[i].clone()}),
         }
     }
 }
 
-impl<T> AssertLessThanAuxCols<T> {
+impl<T: Clone, const AUX_LEN: usize> AssertLessThanAuxCols<T, AUX_LEN> {
     pub fn flatten(self) -> Vec<T> {
-        self.lower_decomp
+        self.lower_decomp.to_vec()
     }
 
-    pub fn try_from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &AssertLessThanAir) -> Self {
+    pub fn try_from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &AssertLessThanAir<AUX_LEN>) -> Self {
+        let lower_decomp = (0..Self::width(lt_air))
+            .map(|_| iter.next().unwrap())
+            .collect::<Vec<T>>();
         Self {
-            lower_decomp: (0..Self::width(lt_air))
-                .map(|_| iter.next().unwrap())
-                .collect(),
+            lower_decomp: core::array::from_fn(|i| {
+                lower_decomp[i].clone()
+            }),
         }
     }
 
-    pub fn width(lt_air: &AssertLessThanAir) -> usize {
+    pub fn width(lt_air: &AssertLessThanAir<AUX_LEN>) -> usize {
+        // AUX_LEN as usize is also valid
         lt_air.num_limbs + (lt_air.max_bits % lt_air.decomp != 0) as usize 
     }
 
-    pub fn into_expr<AB: AirBuilder>(self) -> AssertLessThanAuxCols<AB::Expr>
+    pub fn into_expr<AB: AirBuilder>(self) -> AssertLessThanAuxCols<AB::Expr, AUX_LEN>
     where
         T: Into<AB::Expr>,
     {
-        AssertLessThanAuxCols::new(self.lower_decomp.into_iter().map(|x| x.into()).collect())
+        AssertLessThanAuxCols {
+            lower_decomp: std::array::from_fn(|i| self.lower_decomp[i].clone().into()),
+        }
     }
 }
 
 #[derive(Clone, new)]
-pub struct AssertLessThanCols<T> {
+pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
     pub io: AssertLessThanIoCols<T>,
-    pub aux: AssertLessThanAuxCols<T>,
+    pub aux: AssertLessThanAuxCols<T, AUX_LEN>,
 }
 
-impl<T: Clone> AssertLessThanCols<T> {
+impl<T: Clone, const AUX_LEN: usize> AssertLessThanCols<T, AUX_LEN> {
     pub fn from_slice(slc: &[T]) -> Self {
         let io = AssertLessThanIoCols::from_slice(&slc[..2]);
         let aux = AssertLessThanAuxCols::from_slice(&slc[2..]);
@@ -84,15 +93,15 @@ impl<T: Clone> AssertLessThanCols<T> {
     }
 }
 
-impl<T> AssertLessThanCols<T> {
+impl<T: Clone, const AUX_LEN: usize> AssertLessThanCols<T, AUX_LEN> {
     pub fn flatten(self) -> Vec<T> {
         let mut flattened = self.io.flatten();
         flattened.extend(self.aux.flatten());
         flattened
     }
 
-    pub fn width(lt_air: &AssertLessThanAir) -> usize {
-        AssertLessThanIoCols::<T>::width() + AssertLessThanAuxCols::<T>::width(lt_air)
+    pub fn width(lt_air: &AssertLessThanAir<AUX_LEN>) -> usize {
+        AssertLessThanIoCols::<T>::width() + AssertLessThanAuxCols::<T, AUX_LEN>::width(lt_air)
     }
 }
 

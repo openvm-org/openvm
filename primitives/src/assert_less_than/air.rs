@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[derive(Copy, Clone, Debug)]
-pub struct AssertLessThanAir {
+pub struct AssertLessThanAir<const AUX_LEN: usize> {
     /// The bus for sends to range chip
     pub bus: RangeCheckBus,
     /// The maximum number of bits for the numbers to compare
@@ -24,7 +24,7 @@ pub struct AssertLessThanAir {
     pub num_limbs: usize,
 }
 
-impl AssertLessThanAir {
+impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
     pub fn new(bus: RangeCheckBus, max_bits: usize, decomp: usize) -> Self {
         debug_assert!(bus.range_max >= (1 << decomp));
         Self {
@@ -44,7 +44,7 @@ impl AssertLessThanAir {
         &self,
         builder: &mut AB,
         io: AssertLessThanIoCols<AB::Expr>,
-        aux: AssertLessThanAuxCols<AB::Var>,
+        aux: AssertLessThanAuxCols<AB::Var, AUX_LEN>,
         condition: impl Into<AB::Expr>,
     ) {
         let x = io.x;
@@ -85,33 +85,33 @@ impl AssertLessThanAir {
     }
 }
 
-impl AirConfig for AssertLessThanAir {
-    type Cols<T> = AssertLessThanCols<T>;
+impl<const AUX_LEN: usize> AirConfig for AssertLessThanAir<AUX_LEN> {
+    type Cols<T> = AssertLessThanCols<T, AUX_LEN>;
 }
 
-impl<F: Field> BaseAir<F> for AssertLessThanAir {
+impl<F: Field, const AUX_LEN: usize> BaseAir<F> for AssertLessThanAir<AUX_LEN> {
     fn width(&self) -> usize {
-        AssertLessThanCols::<F>::width(self)
+        AssertLessThanCols::<F, AUX_LEN>::width(self)
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for AssertLessThanAir {
+impl<AB: InteractionBuilder, const AUX_LEN: usize> Air<AB> for AssertLessThanAir<AUX_LEN> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols = AssertLessThanCols::<AB::Var>::from_slice(local);
+        let local_cols = AssertLessThanCols::<AB::Var, AUX_LEN>::from_slice(local);
 
         SubAir::eval(self, builder, local_cols.io, local_cols.aux);
     }
 }
 
 // sub-air with constraints to check whether one number is less than another
-impl<AB: InteractionBuilder> SubAir<AB> for AssertLessThanAir {
+impl<AB: InteractionBuilder, const AUX_LEN: usize> SubAir<AB> for AssertLessThanAir<AUX_LEN> {
     type IoView = AssertLessThanIoCols<AB::Var>;
-    type AuxView = AssertLessThanAuxCols<AB::Var>;
+    type AuxView = AssertLessThanAuxCols<AB::Var, AUX_LEN>;
 
     // constrain that x < y
     // warning: send for range check must be included for the constraints to be sound
@@ -126,7 +126,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLessThanAir {
     }
 }
 
-impl AssertLessThanAir {
+impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
     /// `count` is the frequency of each range check.
     /// The primary use case is when `count` is boolean, so if `count == 0` then no
     /// range checks are done and the aux columns can all be zero without affecting
@@ -134,7 +134,7 @@ impl AssertLessThanAir {
         &self,
         builder: &mut AB,
         io: AssertLessThanIoCols<AB::Expr>,
-        aux: AssertLessThanAuxCols<AB::Var>,
+        aux: AssertLessThanAuxCols<AB::Var, AUX_LEN>,
         count: impl Into<AB::Expr>,
     ) {
         let io_exprs = AssertLessThanIoCols::<AB::Expr>::new(io.x, io.y);
@@ -156,7 +156,7 @@ impl AssertLessThanAir {
         &self,
         builder: &mut AB,
         io: AssertLessThanIoCols<impl Into<AB::Expr>>,
-        aux: AssertLessThanAuxCols<AB::Var>,
+        aux: AssertLessThanAuxCols<AB::Var, AUX_LEN>,
     ) {
         let io_exprs = AssertLessThanIoCols::<AB::Expr>::new(io.x, io.y);
         let count = AB::F::one();

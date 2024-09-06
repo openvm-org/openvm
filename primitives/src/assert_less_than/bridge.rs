@@ -2,11 +2,11 @@ use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::AssertLessThanAir;
 
-impl AssertLessThanAir {
+impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        lower_decomp: Vec<impl Into<AB::Expr>>,
+        lower_decomp: [impl Into<AB::Expr>; AUX_LEN],
         count: impl Into<AB::Expr>,
     ) {
         let count = count.into();
