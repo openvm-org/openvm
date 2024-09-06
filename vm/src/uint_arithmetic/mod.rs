@@ -1,7 +1,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
-use air::LongArithmeticAir;
+use air::UintArithmeticAir;
 use itertools::Itertools;
 use p3_field::PrimeField32;
 
@@ -29,11 +29,11 @@ pub const fn num_limbs<const ARG_SIZE: usize, const LIMB_SIZE: usize>() -> usize
 }
 
 pub enum WriteRecord<T> {
-    Long(MemoryWriteRecord<16, T>),
+    Uint(MemoryWriteRecord<16, T>),
     Short(MemoryWriteRecord<1, T>),
 }
 
-pub struct LongArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
+pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
@@ -42,8 +42,8 @@ pub struct LongArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T
     pub z_write: WriteRecord<T>,
 }
 
-pub struct LongArithmeticExecutionData<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
-    pub record: LongArithmeticRecord<ARG_SIZE, LIMB_SIZE, T>,
+pub struct UintArithmeticExecutionData<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
+    pub record: UintArithmeticRecord<ARG_SIZE, LIMB_SIZE, T>,
 
     // this may be redundant because we can extract it from z_write,
     // but it's not always the case
@@ -52,15 +52,15 @@ pub struct LongArithmeticExecutionData<const ARG_SIZE: usize, const LIMB_SIZE: u
     pub buffer: Vec<T>,
 }
 
-pub struct LongArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> {
-    pub air: LongArithmeticAir<ARG_SIZE, LIMB_SIZE>,
-    data: Vec<LongArithmeticExecutionData<ARG_SIZE, LIMB_SIZE, T>>,
+pub struct UintArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> {
+    pub air: UintArithmeticAir<ARG_SIZE, LIMB_SIZE>,
+    data: Vec<UintArithmeticExecutionData<ARG_SIZE, LIMB_SIZE, T>>,
     memory_chip: MemoryChipRef<T>,
     pub range_checker_chip: Arc<RangeCheckerGateChip>,
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
-    LongArithmeticChip<ARG_SIZE, LIMB_SIZE, T>
+    UintArithmeticChip<ARG_SIZE, LIMB_SIZE, T>
 {
     pub fn new(
         bus: RangeCheckBus,
@@ -69,7 +69,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
     ) -> Self {
         let mem_oc = memory_chip.borrow().make_offline_checker();
         Self {
-            air: LongArithmeticAir {
+            air: UintArithmeticAir {
                 execution_bus,
                 mem_oc,
                 bus,
@@ -83,7 +83,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> InstructionExecutor<T>
-    for LongArithmeticChip<ARG_SIZE, LIMB_SIZE, T>
+    for UintArithmeticChip<ARG_SIZE, LIMB_SIZE, T>
 {
     fn execute(
         &mut self,
@@ -114,16 +114,16 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
-        let (z, residue) = LongArithmetic::<ARG_SIZE, LIMB_SIZE, T>::solve(opcode, (&x, &y));
+        let (z, residue) = UintArithmetic::<ARG_SIZE, LIMB_SIZE, T>::solve(opcode, (&x, &y));
         let CalculationResidue { result, buffer } = residue;
 
         let z_write: WriteRecord<T> = match z {
-            CalculationResult::Long(limbs) => {
+            CalculationResult::Uint(limbs) => {
                 let to_write = limbs
                     .iter()
                     .map(|x| T::from_canonical_u32(*x))
                     .collect::<Vec<_>>();
-                WriteRecord::Long(memory_chip.write::<16>(
+                WriteRecord::Uint(memory_chip.write::<16>(
                     z_as,
                     z_address,
                     to_write.try_into().unwrap(),
@@ -138,8 +138,8 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             self.range_checker_chip.add_count(*elem);
         }
 
-        self.data.push(LongArithmeticExecutionData {
-            record: LongArithmeticRecord {
+        self.data.push(UintArithmeticExecutionData {
+            record: UintArithmeticRecord {
                 from_state,
                 instruction: instruction.clone(),
                 x_read,
@@ -164,7 +164,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
 }
 
 pub enum CalculationResult<T> {
-    Long(Vec<T>),
+    Uint(Vec<T>),
     Short(bool),
 }
 
@@ -173,11 +173,11 @@ pub struct CalculationResidue<T> {
     pub buffer: Vec<T>,
 }
 
-pub struct LongArithmetic<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> {
+pub struct UintArithmetic<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> {
     _marker: PhantomData<F>,
 }
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
-    LongArithmetic<ARG_SIZE, LIMB_SIZE, F>
+    UintArithmetic<ARG_SIZE, LIMB_SIZE, F>
 {
     pub fn solve(
         opcode: Opcode,
@@ -187,7 +187,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
             Opcode::ADD256 => {
                 let (result, carry) = Self::calc_sum(x, y);
                 (
-                    CalculationResult::Long(result.clone()),
+                    CalculationResult::Uint(result.clone()),
                     CalculationResidue {
                         result,
                         buffer: carry,
@@ -197,7 +197,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
             Opcode::SUB256 => {
                 let (result, carry) = Self::calc_diff(x, y);
                 (
-                    CalculationResult::Long(result.clone()),
+                    CalculationResult::Uint(result.clone()),
                     CalculationResidue {
                         result,
                         buffer: carry,

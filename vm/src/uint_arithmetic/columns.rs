@@ -1,18 +1,18 @@
 use std::iter;
 
-use super::{num_limbs, LongArithmeticAir};
+use super::{num_limbs, UintArithmeticAir};
 use crate::{
     arch::columns::ExecutionState,
     memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
-pub struct LongArithmeticCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone> {
-    pub io: LongArithmeticIoCols<ARG_SIZE, LIMB_SIZE, T>,
-    pub aux: LongArithmeticAuxCols<ARG_SIZE, LIMB_SIZE, T>,
+pub struct UintArithmeticCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone> {
+    pub io: UintArithmeticIoCols<ARG_SIZE, LIMB_SIZE, T>,
+    pub aux: UintArithmeticAuxCols<ARG_SIZE, LIMB_SIZE, T>,
 }
 
 #[derive(Default)]
-pub struct LongArithmeticIoCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone> {
+pub struct UintArithmeticIoCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone> {
     pub from_state: ExecutionState<T>,
     pub x: MemoryData<ARG_SIZE, LIMB_SIZE, T>,
     pub y: MemoryData<ARG_SIZE, LIMB_SIZE, T>,
@@ -57,7 +57,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone> MemoryData<ARG_SIZ
     }
 }
 
-pub struct LongArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
+pub struct UintArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
     pub is_valid: T,
     pub opcode_add_flag: T, // 1 if z_limbs should contain the result of addition
     pub opcode_sub_flag: T, // 1 if z_limbs should contain the result of subtraction (means that opcode is SUB or LT)
@@ -76,15 +76,15 @@ pub struct LongArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, 
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
-    LongArithmeticCols<ARG_SIZE, LIMB_SIZE, T>
+    UintArithmeticCols<ARG_SIZE, LIMB_SIZE, T>
 {
     pub fn from_iterator(
         mut iter: impl Iterator<Item = T>,
-        air: &LongArithmeticAir<ARG_SIZE, LIMB_SIZE>,
+        air: &UintArithmeticAir<ARG_SIZE, LIMB_SIZE>,
     ) -> Self {
-        let io = LongArithmeticIoCols::<ARG_SIZE, LIMB_SIZE, T>::from_iterator(iter.by_ref());
+        let io = UintArithmeticIoCols::<ARG_SIZE, LIMB_SIZE, T>::from_iterator(iter.by_ref());
         let aux =
-            LongArithmeticAuxCols::<ARG_SIZE, LIMB_SIZE, T>::from_iterator(iter.by_ref(), air);
+            UintArithmeticAuxCols::<ARG_SIZE, LIMB_SIZE, T>::from_iterator(iter.by_ref(), air);
 
         Self { io, aux }
     }
@@ -94,14 +94,14 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
     }
 
     // TODO get rid of get_width somehow?
-    pub fn get_width(air: &LongArithmeticAir<ARG_SIZE, LIMB_SIZE>) -> usize {
-        LongArithmeticIoCols::<ARG_SIZE, LIMB_SIZE, T>::get_width()
-            + LongArithmeticAuxCols::<ARG_SIZE, LIMB_SIZE, T>::get_width(air)
+    pub fn get_width(air: &UintArithmeticAir<ARG_SIZE, LIMB_SIZE>) -> usize {
+        UintArithmeticIoCols::<ARG_SIZE, LIMB_SIZE, T>::get_width()
+            + UintArithmeticAuxCols::<ARG_SIZE, LIMB_SIZE, T>::get_width(air)
     }
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
-    LongArithmeticIoCols<ARG_SIZE, LIMB_SIZE, T>
+    UintArithmeticIoCols<ARG_SIZE, LIMB_SIZE, T>
 {
     pub const fn get_width() -> usize {
         3 * num_limbs::<ARG_SIZE, LIMB_SIZE>() + 9
@@ -136,9 +136,9 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
-    LongArithmeticAuxCols<ARG_SIZE, LIMB_SIZE, T>
+    UintArithmeticAuxCols<ARG_SIZE, LIMB_SIZE, T>
 {
-    pub fn get_width(air: &LongArithmeticAir<ARG_SIZE, LIMB_SIZE>) -> usize {
+    pub fn get_width(air: &UintArithmeticAir<ARG_SIZE, LIMB_SIZE>) -> usize {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
         MemoryReadAuxCols::<16, T>::width(&air.mem_oc)
             + MemoryReadAuxCols::<16, T>::width(&air.mem_oc)
@@ -149,7 +149,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
 
     pub fn from_iterator(
         mut iter: impl Iterator<Item = T>,
-        air: &LongArithmeticAir<ARG_SIZE, LIMB_SIZE>,
+        air: &UintArithmeticAir<ARG_SIZE, LIMB_SIZE>,
     ) -> Self {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 

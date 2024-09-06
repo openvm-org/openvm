@@ -5,8 +5,8 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::Domain;
 
 use super::{
-    columns::{LongArithmeticAuxCols, LongArithmeticCols, LongArithmeticIoCols, MemoryData},
-    num_limbs, LongArithmeticChip, WriteRecord,
+    columns::{UintArithmeticAuxCols, UintArithmeticCols, UintArithmeticIoCols, MemoryData},
+    num_limbs, UintArithmeticChip, WriteRecord,
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
@@ -14,7 +14,7 @@ use crate::{
 };
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip<F>
-    for LongArithmeticChip<ARG_SIZE, LIMB_SIZE, F>
+    for UintArithmeticChip<ARG_SIZE, LIMB_SIZE, F>
 {
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
@@ -28,7 +28,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
     }
 
     fn trace_width(&self) -> usize {
-        LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::get_width(&self.air)
+        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::get_width(&self.air)
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
@@ -39,8 +39,8 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
             .iter()
             .map(|operation| {
                 {
-                    LongArithmeticCols {
-                        io: LongArithmeticIoCols {
+                    UintArithmeticCols {
+                        io: UintArithmeticIoCols {
                             from_state: operation.record.from_state.map(F::from_canonical_usize),
                             x: MemoryData::<ARG_SIZE, LIMB_SIZE, F> {
                                 data: operation.record.x_read.data.to_vec(),
@@ -53,7 +53,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                                 address: operation.record.y_read.pointer,
                             },
                             z: match &operation.record.z_write {
-                                WriteRecord::Long(z) => MemoryData {
+                                WriteRecord::Uint(z) => MemoryData {
                                     data: z.data.to_vec(),
                                     address_space: z.address_space,
                                     address: z.pointer,
@@ -71,11 +71,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                                 },
                             },
                             cmp_result: match &operation.record.z_write {
-                                WriteRecord::Long(_) => F::zero(),
+                                WriteRecord::Uint(_) => F::zero(),
                                 WriteRecord::Short(z) => z.data[0],
                             },
                         },
-                        aux: LongArithmeticAuxCols {
+                        aux: UintArithmeticAuxCols {
                             is_valid: F::one(),
                             opcode_add_flag: F::from_bool(
                                 operation.record.instruction.opcode == Opcode::ADD256,
@@ -95,11 +95,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                             read_y_aux_cols: memory_chip
                                 .make_read_aux_cols(operation.record.y_read.clone()),
                             write_z_aux_cols: match &operation.record.z_write {
-                                WriteRecord::Long(z) => memory_chip.make_write_aux_cols(z.clone()),
+                                WriteRecord::Uint(z) => memory_chip.make_write_aux_cols(z.clone()),
                                 WriteRecord::Short(_) => memory_chip.make_disabled_write_aux_cols(),
                             },
                             write_cmp_aux_cols: match &operation.record.z_write {
-                                WriteRecord::Long(_) => memory_chip.make_disabled_write_aux_cols(),
+                                WriteRecord::Uint(_) => memory_chip.make_disabled_write_aux_cols(),
                                 WriteRecord::Short(z) => memory_chip.make_write_aux_cols(z.clone()),
                             },
                         },
@@ -112,9 +112,9 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
         let height = rows.len();
         let padded_height = height.next_power_of_two();
 
-        let blank_row = LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, F> {
+        let blank_row = UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F> {
             io: Default::default(),
-            aux: LongArithmeticAuxCols {
+            aux: UintArithmeticAuxCols {
                 is_valid: Default::default(),
                 opcode_add_flag: Default::default(),
                 opcode_sub_flag: Default::default(),

@@ -2,8 +2,8 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{
-    air::LongArithmeticAir,
-    columns::{LongArithmeticAuxCols, LongArithmeticIoCols},
+    air::UintArithmeticAir,
+    columns::{UintArithmeticAuxCols, UintArithmeticIoCols},
     num_limbs,
 };
 use crate::{
@@ -11,12 +11,12 @@ use crate::{
     memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
 };
 
-impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticAir<ARG_SIZE, LIMB_SIZE> {
+impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, LIMB_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        io: LongArithmeticIoCols<ARG_SIZE, LIMB_SIZE, AB::Var>,
-        aux: LongArithmeticAuxCols<ARG_SIZE, LIMB_SIZE, AB::Var>,
+        io: UintArithmeticIoCols<ARG_SIZE, LIMB_SIZE, AB::Var>,
+        aux: UintArithmeticAuxCols<ARG_SIZE, LIMB_SIZE, AB::Var>,
         expected_opcode: AB::Expr,
     ) {
         let num_limbs_expr = AB::Expr::from_canonical_usize(num_limbs::<ARG_SIZE, LIMB_SIZE>());

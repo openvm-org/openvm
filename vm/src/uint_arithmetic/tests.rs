@@ -6,7 +6,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
-use super::{columns::LongArithmeticCols, CalculationResult, LongArithmetic, LongArithmeticChip};
+use super::{columns::UintArithmeticCols, CalculationResult, UintArithmetic, UintArithmeticChip};
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
     cpu::trace::Instruction,
@@ -16,7 +16,7 @@ type F = BabyBear;
 
 const OPCODES_ARITH: [Opcode; 2] = [Opcode::ADD256, Opcode::SUB256];
 
-fn generate_long_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
+fn generate_uint_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
     rng: &mut StdRng,
 ) -> Vec<u32> {
     assert_eq!(ARG_SIZE % LIMB_SIZE, 0);
@@ -27,7 +27,7 @@ fn generate_long_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
 }
 
 #[test]
-fn long_arithmetic_rand_air_test() {
+fn uint_arithmetic_rand_air_test() {
     let num_ops: usize = 15;
     let bus = RangeCheckBus::new(9, 1 << 16);
     let address_space_range = || 1usize..=2;
@@ -36,7 +36,7 @@ fn long_arithmetic_rand_air_test() {
     const LIMB_SIZE: usize = 16;
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = LongArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
+    let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
         bus,
         tester.execution_bus(),
         tester.memory_chip(),
@@ -46,8 +46,8 @@ fn long_arithmetic_rand_air_test() {
 
     for _ in 0..num_ops {
         let opcode = OPCODES_ARITH[rng.gen_range(0..OPCODES_ARITH.len())];
-        let operand1 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
-        let operand2 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+        let operand1 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+        let operand2 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
 
         let result_as = rng.gen_range(address_space_range());
         let as1 = rng.gen_range(address_space_range());
@@ -72,7 +72,7 @@ fn long_arithmetic_rand_air_test() {
         tester.write::<16>(as2, address2, operand2_f.as_slice().try_into().unwrap());
 
         let result =
-            LongArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
+            UintArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
 
         tester.execute(
             &mut chip,
@@ -82,7 +82,7 @@ fn long_arithmetic_rand_air_test() {
             ),
         );
         match result.0 {
-            CalculationResult::Long(result) => {
+            CalculationResult::Uint(result) => {
                 assert_eq!(
                     result
                         .into_iter()
@@ -109,7 +109,7 @@ fn long_arithmetic_rand_air_test() {
 /// We replace the "output" part of the trace, and we _may_ replace the interactions
 /// based on the desired output. We check that it produces the error we expect.
 #[allow(clippy::too_many_arguments)]
-fn run_bad_long_arithmetic_test(
+fn run_bad_uint_arithmetic_test(
     op: Opcode,
     x: Vec<u32>,
     y: Vec<u32>,
@@ -122,7 +122,7 @@ fn run_bad_long_arithmetic_test(
     let mut tester = MachineChipTestBuilder::default();
     let bus = RangeCheckBus::new(9, 1 << 16);
     let mut chip =
-        LongArithmeticChip::<256, 16, F>::new(bus, tester.execution_bus(), tester.memory_chip());
+        UintArithmeticChip::<256, 16, F>::new(bus, tester.execution_bus(), tester.memory_chip());
 
     let x_f = x
         .iter()
@@ -150,7 +150,7 @@ fn run_bad_long_arithmetic_test(
         ),
     );
 
-    if let CalculationResult::Long(_) = LongArithmetic::<256, 16, F>::solve(op, (&x, &y)).0 {
+    if let CalculationResult::Uint(_) = UintArithmetic::<256, 16, F>::solve(op, (&x, &y)).0 {
         if replace_interactions {
             chip.range_checker_chip.clear();
             for limb in z.iter() {
@@ -164,13 +164,13 @@ fn run_bad_long_arithmetic_test(
     let range_air = range_checker.air;
     let trace = chip.generate_trace();
     let row = trace.row_slice(0).to_vec();
-    let mut cols = LongArithmeticCols::from_iterator(&mut row.into_iter(), &air);
+    let mut cols = UintArithmeticCols::from_iterator(&mut row.into_iter(), &air);
     cols.io.z.data = z.into_iter().map(F::from_canonical_u32).collect();
     cols.aux.buffer = buffer.into_iter().map(F::from_canonical_u32).collect();
     cols.io.cmp_result = F::from_bool(cmp_result);
     let trace = RowMajorMatrix::new(
         cols.flatten(),
-        LongArithmeticCols::<256, 16, F>::get_width(&air),
+        UintArithmeticCols::<256, 16, F>::get_width(&air),
     );
 
     let range_trace = range_checker.generate_trace();
@@ -191,8 +191,8 @@ fn run_bad_long_arithmetic_test(
 }
 
 #[test]
-fn long_add_wrong_carry_air_test() {
-    run_bad_long_arithmetic_test(
+fn uint_add_wrong_carry_air_test() {
+    run_bad_uint_arithmetic_test(
         Opcode::ADD256,
         vec![1]
             .into_iter()
@@ -217,8 +217,8 @@ fn long_add_wrong_carry_air_test() {
 }
 
 #[test]
-fn long_add_out_of_range_air_test() {
-    run_bad_long_arithmetic_test(
+fn uint_add_out_of_range_air_test() {
+    run_bad_uint_arithmetic_test(
         Opcode::ADD256,
         vec![65_000]
             .into_iter()
@@ -243,8 +243,8 @@ fn long_add_out_of_range_air_test() {
 }
 
 #[test]
-fn long_add_wrong_addition_air_test() {
-    run_bad_long_arithmetic_test(
+fn uint_add_wrong_addition_air_test() {
+    run_bad_uint_arithmetic_test(
         Opcode::ADD256,
         vec![65_000]
             .into_iter()
@@ -270,10 +270,10 @@ fn long_add_wrong_addition_air_test() {
 
 // We NEED to check that the carry is 0 or 1
 #[test]
-fn long_add_invalid_carry_air_test() {
+fn uint_add_invalid_carry_air_test() {
     let bad_carry = F::from_canonical_u32(1 << 16).inverse().as_canonical_u32();
 
-    run_bad_long_arithmetic_test(
+    run_bad_uint_arithmetic_test(
         Opcode::ADD256,
         vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
         vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
@@ -289,8 +289,8 @@ fn long_add_invalid_carry_air_test() {
 }
 
 #[test]
-fn long_sub_out_of_range_air_test() {
-    run_bad_long_arithmetic_test(
+fn uint_sub_out_of_range_air_test() {
+    run_bad_uint_arithmetic_test(
         Opcode::SUB256,
         vec![1]
             .into_iter()
@@ -315,8 +315,8 @@ fn long_sub_out_of_range_air_test() {
 }
 
 #[test]
-fn long_sub_wrong_subtraction_air_test() {
-    run_bad_long_arithmetic_test(
+fn uint_sub_wrong_subtraction_air_test() {
+    run_bad_uint_arithmetic_test(
         Opcode::SUB256,
         vec![1]
             .into_iter()
@@ -341,10 +341,10 @@ fn long_sub_wrong_subtraction_air_test() {
 }
 
 #[test]
-fn long_sub_invalid_carry_air_test() {
+fn uint_sub_invalid_carry_air_test() {
     let bad_carry = F::from_canonical_u32(1 << 16).inverse().as_canonical_u32();
 
-    run_bad_long_arithmetic_test(
+    run_bad_uint_arithmetic_test(
         Opcode::SUB256,
         vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
         vec![0; 15].into_iter().chain(std::iter::once(1)).collect(),
@@ -360,7 +360,7 @@ fn long_sub_invalid_carry_air_test() {
 }
 
 #[test]
-fn long_lt_rand_air_test() {
+fn uint_lt_rand_air_test() {
     let num_ops: usize = 15;
     let bus = RangeCheckBus::new(9, 1 << 16);
     let address_space_range = || 1usize..=2;
@@ -369,7 +369,7 @@ fn long_lt_rand_air_test() {
     const LIMB_SIZE: usize = 16;
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = LongArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
+    let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
         bus,
         tester.execution_bus(),
         tester.memory_chip(),
@@ -379,8 +379,8 @@ fn long_lt_rand_air_test() {
 
     for _ in 0..num_ops {
         let opcode = Opcode::LT256;
-        let operand1 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
-        let operand2 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+        let operand1 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+        let operand2 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
 
         let result_as = rng.gen_range(address_space_range());
         let as1 = rng.gen_range(address_space_range());
@@ -405,7 +405,7 @@ fn long_lt_rand_air_test() {
         tester.write::<16>(as2, address2, operand2_f.as_slice().try_into().unwrap());
 
         let result =
-            LongArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
+            UintArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
 
         tester.execute(
             &mut chip,
@@ -415,7 +415,7 @@ fn long_lt_rand_air_test() {
             ),
         );
         match result.0 {
-            CalculationResult::Long(_) => unreachable!(),
+            CalculationResult::Uint(_) => unreachable!(),
             CalculationResult::Short(result) => {
                 assert_eq!(
                     [F::from_bool(result)],
@@ -436,7 +436,7 @@ fn long_lt_rand_air_test() {
 }
 
 #[test]
-fn long_eq_rand_air_test() {
+fn uint_eq_rand_air_test() {
     let num_ops: usize = 15;
     let bus = RangeCheckBus::new(9, 1 << 16);
     let address_space_range = || 1usize..=2;
@@ -445,7 +445,7 @@ fn long_eq_rand_air_test() {
     const LIMB_SIZE: usize = 16;
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = LongArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
+    let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
         bus,
         tester.execution_bus(),
         tester.memory_chip(),
@@ -455,9 +455,9 @@ fn long_eq_rand_air_test() {
 
     for _ in 0..num_ops {
         let opcode = Opcode::EQ256;
-        let operand1 = generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+        let operand1 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
         let operand2 = if rng.gen_bool(0.5) {
-            generate_long_number::<ARG_SIZE, LIMB_SIZE>(&mut rng)
+            generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng)
         } else {
             operand1.clone()
         };
@@ -485,7 +485,7 @@ fn long_eq_rand_air_test() {
         tester.write::<16>(as2, address2, operand2_f.as_slice().try_into().unwrap());
 
         let result =
-            LongArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
+            UintArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
 
         tester.execute(
             &mut chip,
@@ -495,7 +495,7 @@ fn long_eq_rand_air_test() {
             ),
         );
         match result.0 {
-            CalculationResult::Long(_) => unreachable!(),
+            CalculationResult::Uint(_) => unreachable!(),
             CalculationResult::Short(result) => {
                 assert_eq!(
                     [F::from_bool(result)],
@@ -516,8 +516,8 @@ fn long_eq_rand_air_test() {
 }
 
 #[test]
-fn long_lt_wrong_subtraction_test() {
-    run_bad_long_arithmetic_test(
+fn uint_lt_wrong_subtraction_test() {
+    run_bad_uint_arithmetic_test(
         Opcode::LT256,
         vec![65_000]
             .into_iter()
@@ -542,8 +542,8 @@ fn long_lt_wrong_subtraction_test() {
 }
 
 #[test]
-fn long_lt_wrong_carry_test() {
-    run_bad_long_arithmetic_test(
+fn uint_lt_wrong_carry_test() {
+    run_bad_uint_arithmetic_test(
         Opcode::LT256,
         vec![0; 15]
             .into_iter()
@@ -562,8 +562,8 @@ fn long_lt_wrong_carry_test() {
 }
 
 #[test]
-fn long_eq_wrong_positive_test() {
-    run_bad_long_arithmetic_test(
+fn uint_eq_wrong_positive_test() {
+    run_bad_uint_arithmetic_test(
         Opcode::EQ256,
         vec![0; 15]
             .into_iter()

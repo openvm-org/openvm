@@ -6,7 +6,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::LongArithmeticCols, num_limbs};
+use super::{columns::UintArithmeticCols, num_limbs};
 use crate::{
     arch::{
         bus::ExecutionBus,
@@ -15,9 +15,9 @@ use crate::{
     memory::offline_checker::bridge::MemoryOfflineChecker,
 };
 
-/// AIR for the long addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.
+/// AIR for the uint addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.
 #[derive(Copy, Clone, Debug)]
-pub struct LongArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
+pub struct UintArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bus: ExecutionBus,
     pub(super) mem_oc: MemoryOfflineChecker,
 
@@ -26,15 +26,15 @@ pub struct LongArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
 }
 
 impl<F: Field, const ARG_SIZE: usize, const LIMB_SIZE: usize> BaseAir<F>
-    for LongArithmeticAir<ARG_SIZE, LIMB_SIZE>
+    for UintArithmeticAir<ARG_SIZE, LIMB_SIZE>
 {
     fn width(&self) -> usize {
-        LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::get_width(self)
+        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::get_width(self)
     }
 }
 
 impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<AB>
-    for LongArithmeticAir<ARG_SIZE, LIMB_SIZE>
+    for UintArithmeticAir<ARG_SIZE, LIMB_SIZE>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -42,8 +42,8 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let LongArithmeticCols { io, aux } =
-            LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_iterator(
+        let UintArithmeticCols { io, aux } =
+            UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_iterator(
                 local.iter().copied(),
                 self,
             );
