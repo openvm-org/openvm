@@ -1,4 +1,5 @@
 # Overview
+
 Chips in the VM need to perform memory read and write operations. The goal of the memory offline checking is to ensure that memory consistency across all chips. Every memory operation consists of operation type (Read or Write), address (address_space and pointer), data, and timestamp. All memory operations across all chips should happen at distinct timestamps between 1 and 2^29. We assume that memory is initialized at timestamp 0. For simplicity, we assume that all memory operations are enabled (there is a way to disable them in the implementation).
 
 We call an address accessed when it's initialized, finalized, read from, or written to. An address is initialized at timestamp 0 and is finalized at the same timestamp it was last read from or written to (or 0 if there were no operations involving it).
@@ -17,7 +18,7 @@ To initialize and finalize memory, we need a Memory Interface chip. For every `a
 
 Note that all interactions use multiplicity 1. Crucially, the Memory Interface does exactly one such Send and Receive for every `address` used in the segment. In particular, the AIR enforces that all addresses those interactions are done on are distinct.
 
-# Soundness proof
+## Soundness proof
 Assume that the MEMORY_BUS interactions and the constraints mentioned above are satisfied.
 
 Fix any address `address` that is used in the segment. To prove memory consistency, it's enough to prove all memory operations on `address` are consistent. Let's look at all interactions done on MEMORY_BUS involving `address`.
@@ -26,8 +27,59 @@ Suppose the list of operations involving `address` *sorted* by `timestamp` is `o
 
 Using a similar technique, by induction, we can show that `s_i.timestamp = r_{i+1}.timestamp` and `s_i.data = r_{i+1}.data` for all `0 < i < k - 1`. Since `(s_i.address, s_i.data, s_i.timestamp) = (ops_i.address, ops_i.data, ops_i.timestamp)` for all operations and `s_i.data = r_i.data` for Read operations, this proves memory consistency for `address`.
 
-
-# Implementation details
+## Implementation details
 In this model, there is no central memory/offline checker AIR. Every chip is responsible for doing the necessary interactions discussed above for its memory operations. To do this, every chip's AIR  to have some auxiliary columns for every memory operation. The auxiliary columns include `prev_timestamp` and, for Write operations, `prev_data`.
 
 When we use Volatile Memory as the Memory Interface (MemoryAuditChip in the implementation), we do not, on the AIR level, constrain the initial memory. This means that if the first operation on an address is a Read, the corresponding data can be anything -- it's on the program to read from addresses that have been written to. Separately, the MemoryAuditAIR enforces that all addresses are distinct by enforcing sorting, but there are other more efficient ways to do this.
+
+# Batch Memory Access
+
+*Under construction: The below spec is not yet implemented.*
+
+It is common for a chip to perform batch memory accesses. For example, the `FieldExtensionArithmeticChip` reads/writes
+field extension elements which are represented by four contiguous cells.
+The compression function of the `Posiedon2VmChip` reads sixteen contiguous cells and outputs eight. In this section we
+outline how we support such batch accesses by composing with the memory interaction argument detailed above.
+Our implementation supports reading 1, 4, or 8 contiguous cells at a time. One must always an N-cell (a list of N
+contiguous cells) at a memory address whose (canonical representation) is divisible by N.
+
+A batch access of an N-cell is specified by a tuple of the following
+fields: (`address`, `data`, `timestamp`, `prev_data`, `prev_timestamps`),
+where `data, prev_data: [F; N]` and `prev_timestamps: [F; N]`. The pair (`prev_data`, `prev_timestamps`) specifies the
+data and last-access timestamps
+of the cells `address[i], ..., address[i + N - 1]`. The field `data` specifies the new data, and `timestamp` the new
+timestamp.
+A batch access increments the global timestamp by one, and upon access, all last-accessed timestamps for the cells in
+the batch are updated to the same new value `timestamp`.
+Note that a read is simply an access where `data = prev_data`.
+
+We now describe the offline memory checking procedure for supporting exactly two types of accesses: N-cells and 1-cells.
+Every batch access of an N-cell results in sending (`address`, `data[0]`, ..., `data[N - 1]`, `timestamp`) across the
+**memory bus**. To ensure consistency, we must also receive the previous data. For this there are two cases:
+
+- If the N-cell was previously accessed as an N-cell,
+  then (`address`, `prev_data[0]`, ..., `prev_data[N - 1]`, `prev_timestamps[0]`) is received.
+- Otherwise, we receive the N
+  tuples (`address`, `prev_data[0]`, `prev_timestamps[0]`), ..., (`address + N - 1`, `prev_data[N - 1]`, `prev_timestamps[N - 1]`).
+
+Note: The case analysis above is where we assume N-cell accesses happen at addresses divisible by N. Otherwise the
+second
+case would not properly handle the situation in which some but not all of the cells were last accessed to by an N-cell
+access.
+
+For accessing 1-cells, the situation is similar. To access a 1-cell that was previously accessed in a 4-cell, we receive
+(`address`, `prev_data[0]`, ..., `prev_data[N-1]`, `prev_timestamps[0]`) and send N tuples. The `i`th of the `N` tuples
+is either (`address + i`, `prev_data[i]`, `timestamp`) or (`address + i`, `data[i]`, `timestamp`), where it is
+the former (using `prev_data`) if this 1-cell is not being accessed and the latter otherwise.
+
+The interactions of the first type are handled directly by the `MemoryChip`. The interactions of the second type—which
+adapt between the two "word sizes"—are handled by the `MemoryAccessAdapterChip`. Each row of
+the `MemoryAccessAdapterChip`'s trace specifies the data needed to send and receive the interactions.
+
+To support 1-cell, 4-cell, 8-cell, and 16-cell batch accesses, we use three `MemoryAccessAdapterChip`s, one for each
+conversion between adjacent types (1-to-4, 4-to-8, and 8-to-16). This means that to go from sixteen cells accessed as
+1-cells to 16-cells, interactions of all types will be sent/received to translate.
+
+To facilitate trace generation, the `MemoryChip` keeps trace of the last access type of each cell. If a batch access
+covers cells with mixed previous-access-types, the `MemoryChip` will notify the `MemoryAccessAdapterChip`. The
+`MemoryAccessAdapter` will record this memory conversion event in a log that is later used for trace generation.
