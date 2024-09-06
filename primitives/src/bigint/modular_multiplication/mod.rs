@@ -236,7 +236,7 @@ mod test {
     const LIMB_BITS: usize = 10;
     const NUM_LIMB: usize = 26;
 
-    fn evaluate_bigint(limbs: &[BabyBear], limb_bits: usize) -> BigUint {
+    fn evaluate_biguint(limbs: &[BabyBear], limb_bits: usize) -> BigUint {
         let mut res = BigUint::zero();
         let base = BigUint::from_u64(1 << limb_bits).unwrap();
         for limb in limbs.iter().rev() {
@@ -299,8 +299,8 @@ mod test {
             r,
             carries: _carries,
         } = cols.clone();
-        let generated_r = evaluate_bigint(&r, LIMB_BITS);
-        let generated_q = evaluate_bigint(&q, LIMB_BITS);
+        let generated_r = evaluate_biguint(&r, LIMB_BITS);
+        let generated_q = evaluate_biguint(&q, LIMB_BITS);
         assert_eq!(generated_r, expected_r);
         assert_eq!(generated_q, expected_q);
 

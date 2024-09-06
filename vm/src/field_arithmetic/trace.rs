@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
-    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    memory::offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
 };
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
@@ -24,8 +24,8 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 is_mul: F::zero(),
                 is_div: F::zero(),
                 divisor_inv: F::zero(),
-                read_x_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
-                read_y_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                read_x_aux_cols: MemoryReadOrImmediateAuxCols::disabled(self.air.mem_oc),
+                read_y_aux_cols: MemoryReadOrImmediateAuxCols::disabled(self.air.mem_oc),
                 write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
             },
         }
@@ -55,6 +55,8 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
         };
 
         let memory_chip = self.memory_chip.borrow();
+        let offline_checker = memory_chip.make_offline_checker();
+        let range_checker = &memory_chip.range_checker;
 
         FieldArithmeticCols {
             io: FieldArithmeticIoCols {
@@ -70,9 +72,12 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read),
-                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read),
-                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write),
+                read_x_aux_cols: offline_checker
+                    .make_read_or_immediate_aux_cols(range_checker.clone(), x_read),
+                read_y_aux_cols: offline_checker
+                    .make_read_or_immediate_aux_cols(range_checker.clone(), y_read),
+                write_z_aux_cols: offline_checker
+                    .make_write_aux_cols(range_checker.clone(), z_write),
             },
         }
     }

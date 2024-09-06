@@ -11,7 +11,7 @@ use hex::FromHex;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
-    hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_U16S},
+    hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
     vm::config::VmConfig,
 };
 use tracing::Level;
@@ -24,17 +24,13 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
 
     for (input, output) in zip(inputs, expected_outputs) {
         let len: Var<_> = builder.eval(F::from_canonical_usize(input.len()));
-        let mut input_arr = builder.dyn_array(len);
+        let input_arr = builder.dyn_array(len);
         for (i, byte) in input.into_iter().enumerate() {
-            builder.set(&mut input_arr, i, F::from_canonical_u8(byte));
+            builder.set(&input_arr, i, F::from_canonical_u8(byte));
         }
-        let mut expected: Array<_, Var<_>> = builder.dyn_array(KECCAK_DIGEST_U16S);
-        for i in 0..KECCAK_DIGEST_U16S {
-            builder.set(
-                &mut expected,
-                i,
-                F::from_canonical_u16(output[2 * i] as u16 + ((output[2 * i + 1] as u16) << 8)),
-            );
+        let expected: Array<_, Var<_>> = builder.dyn_array(KECCAK_DIGEST_BYTES);
+        for (i, expected_byte) in output.into_iter().enumerate() {
+            builder.set(&expected, i, F::from_canonical_u8(expected_byte));
         }
         let result = builder.keccak256(&input_arr);
 

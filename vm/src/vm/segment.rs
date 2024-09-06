@@ -6,7 +6,8 @@ use std::{
 };
 
 use afs_primitives::{
-    range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip, xor::lookup::XorLookupChip,
+    modular_multiplication::bigint::air::ModularArithmeticBigIntAir, range::bus::RangeCheckBus,
+    range_gate::RangeCheckerGateChip, xor::lookup::XorLookupChip,
 };
 use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
@@ -20,7 +21,11 @@ use crate::{
     arch::{
         bus::ExecutionBus,
         chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
-        instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS},
+        instructions::{
+            Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
+            SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS,
+            SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS,
+        },
     },
     cpu::{trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
@@ -30,6 +35,7 @@ use crate::{
         manager::{MemoryChip, MemoryChipRef},
         offline_checker::bus::MemoryBus,
     },
+    modular_multiplication::ModularArithmeticChip,
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
 };
@@ -149,24 +155,39 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips.push(MachineChipVariant::Keccak256(keccak_chip));
             chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         }
-        // let airs = vec![
-        //     (
-        //         ModularArithmeticChip::new(ModularArithmeticVmAir {
-        //             air: ModularArithmeticBigIntAir::default_for_secp256k1_coord(),
-        //         }),
-        //         ModularArithmeticBigIntAir::secp256k1_coord_prime(),
-        //     ),
-        //     (
-        //         ModularArithmeticChip::new(ModularArithmeticVmAir {
-        //             air: ModularArithmeticBigIntAir::default_for_secp256k1_scalar(),
-        //         }),
-        //         ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
-        //     ),
-        // ];
-        // let mut modular_arithmetic_chips = BTreeMap::new();
-        // for (air, modulus) in airs {
-        //     modular_arithmetic_chips.insert(modulus.clone(), air);
-        // }
+        if config.modular_multiplication_enabled {
+            let airs = vec![
+                (
+                    ModularArithmeticChip::new(
+                        memory_chip.clone(),
+                        ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                        config.bigint_limb_size,
+                    ),
+                    ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                ),
+                (
+                    ModularArithmeticChip::new(
+                        memory_chip.clone(),
+                        ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                        config.bigint_limb_size,
+                    ),
+                    ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                ),
+            ];
+            // let mut modular_arithmetic_chips = BTreeMap::new();
+            // for (air, modulus) in airs {
+            //     assign!(MODULAR_ARITHMETIC_INSTRUCTIONS,);
+            //     modular_arithmetic_chips.insert(modulus.clone(), air);
+            // }
+            assign!(
+                SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS,
+                Rc::new(RefCell::new(airs[0].0.clone()))
+            );
+            assign!(
+                SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS,
+                Rc::new(RefCell::new(airs[1].0.clone()))
+            );
+        }
 
         // Most chips have a reference to the memory chip, and the memory chip has a reference to
         // the range checker chip.

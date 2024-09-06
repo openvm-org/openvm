@@ -28,7 +28,11 @@ impl CanDiff for Halo2Stats {
     }
 }
 
-pub(crate) fn print(cell_tracker: &Halo2CellTracker, babybear_stats: &Halo2Stats) {
+pub(crate) fn print(
+    cell_tracker: &Halo2CellTracker,
+    babybear_stats: &Halo2Stats,
+    num2bits_metrics: &Halo2Stats,
+) {
     if cell_tracker.instances.is_empty() {
         return;
     }
@@ -56,5 +60,12 @@ pub(crate) fn print(cell_tracker: &Halo2CellTracker, babybear_stats: &Halo2Stats
     info!(
         "  - total_lookup_cell: {}",
         babybear_stats.total_lookup_cell
+    );
+    info!("Num2Bits:");
+    info!("  - total_gate_cell: {}", num2bits_metrics.total_gate_cell);
+    info!("  - total_fixed: {}", num2bits_metrics.total_fixed);
+    info!(
+        "  - total_lookup_cell: {}",
+        num2bits_metrics.total_lookup_cell
     );
 }

@@ -48,15 +48,16 @@ impl<F: PrimeField32> ExecutionTester<F> {
         };
         tracing::debug!(?initial_state.timestamp);
 
+        let instruction_cols = InstructionCols::from_instruction(&instruction);
         let final_state = executor.execute(
-            &instruction,
+            instruction,
             initial_state.map(|x| x.as_canonical_u32() as usize),
         );
         self.records.push(DummyExecutionInteractionCols {
             count: F::neg_one(), // send
             initial_state,
             final_state: final_state.map(F::from_canonical_usize),
-            instruction: InstructionCols::from_instruction(&instruction),
+            instruction: instruction_cols,
         })
     }
 

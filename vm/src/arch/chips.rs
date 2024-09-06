@@ -17,6 +17,7 @@ use crate::{
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::manager::MemoryChipRef,
+    modular_multiplication::ModularArithmeticChip,
     program::ProgramChip,
 };
 
@@ -24,7 +25,7 @@ use crate::{
 pub trait InstructionExecutor<F> {
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
+        instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize>;
 }
@@ -48,7 +49,7 @@ pub trait MachineChip<F> {
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
+        instruction: Instruction<F>,
         prev_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         self.borrow_mut().execute(instruction, prev_state)
@@ -88,8 +89,9 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
 pub enum InstructionExecutorVariant<F: PrimeField32> {
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
+    Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
+    ModularArithmetic(Rc<RefCell<ModularArithmeticChip<F>>>),
 }
 
 #[derive(Debug, IntoStaticStr)]
@@ -100,7 +102,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     Memory(MemoryChipRef<F>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
+    Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<RangeCheckerGateChip>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),

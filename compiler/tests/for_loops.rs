@@ -55,14 +55,14 @@ fn test_compiler_nested_array_loop() {
     let outer_len = 100;
     let inner_len = 10;
 
-    let mut array: Array<C, Array<C, Var<_>>> = builder.dyn_array(outer_len);
+    let array: Array<C, Array<C, Var<_>>> = builder.dyn_array(outer_len);
 
     builder.range(0, array.len()).for_each(|i, builder| {
-        let mut inner_array = builder.dyn_array::<Var<_>>(inner_len);
+        let inner_array = builder.dyn_array::<Var<_>>(inner_len);
         builder.range(0, inner_array.len()).for_each(|j, builder| {
-            builder.set(&mut inner_array, j, i + j); //(j * F::from_canonical_u16(300)));
+            builder.set(&inner_array, j, i + j); //(j * F::from_canonical_u16(300)));
         });
-        builder.set(&mut array, i, inner_array);
+        builder.set(&array, i, inner_array);
     });
 
     // Test that the array is correctly initialized.
@@ -89,13 +89,13 @@ fn test_compiler_break() {
     let len = 100;
     let break_len = 10;
 
-    let mut array: Array<C, Var<_>> = builder.dyn_array(len);
+    let array: Array<C, Var<_>> = builder.dyn_array(len);
 
     builder
         .range(0, array.len())
         .may_break()
         .for_each(|i, builder| {
-            builder.set(&mut array, i, i);
+            builder.set(&array, i, i);
 
             builder
                 .if_eq(i, RVar::from(break_len))
@@ -125,7 +125,7 @@ fn test_compiler_break() {
 
     // Test the break instructions in a nested loop.
 
-    let mut array: Array<C, Var<_>> = builder.dyn_array(len);
+    let array: Array<C, Var<_>> = builder.dyn_array(len);
     builder
         .range(0, array.len())
         .may_break()
@@ -139,7 +139,7 @@ fn test_compiler_break() {
                     .then_may_break(|builder| builder.break_loop())
             });
 
-            builder.set(&mut array, i, counter);
+            builder.set(&array, i, counter);
             Ok(())
         });
 
@@ -174,12 +174,12 @@ fn test_compiler_constant_break() {
     let len = 100;
     let break_len = 10;
 
-    let mut array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
+    let array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
     builder
         .range(0, array.len())
         .may_break()
         .for_each(|i, builder| {
-            builder.set(&mut array, i, i);
+            builder.set(&array, i, i);
 
             builder
                 .if_eq(i, RVar::from(break_len))
@@ -200,12 +200,12 @@ fn test_compiler_constant_var_break() {
     let len = 100;
     let break_len: Var<_> = builder.eval(RVar::from(10));
 
-    let mut array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
+    let array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
     builder
         .range(0, array.len())
         .may_break()
         .for_each(|i, builder| {
-            builder.set(&mut array, i, i);
+            builder.set(&array, i, i);
 
             builder
                 .if_eq(i, RVar::from(break_len))

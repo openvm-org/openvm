@@ -4,6 +4,7 @@ use p3_field::{AbstractField, Field};
 use super::{
     air::Poseidon2VmAir,
     columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
+    WIDTH,
 };
 use crate::{
     arch::{
@@ -13,7 +14,7 @@ use crate::{
     cpu::POSEIDON2_DIRECT_BUS,
 };
 
-impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
+impl<F: Field> Poseidon2VmAir<F> {
     /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
     ///
     /// Receives (clk, a, b, c, d, e, cmp) for opcodes, width exposed in `opcode_interaction_width()`
@@ -23,7 +24,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         &self,
         builder: &mut AB,
         io: Poseidon2VmIoCols<AB::Var>,
-        aux: &Poseidon2VmAuxCols<WIDTH, AB::Var>,
+        aux: &Poseidon2VmAuxCols<AB::Var>,
     ) {
         let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
         self.execution_bus.execute_increment_pc(

@@ -1,6 +1,7 @@
 pub use builder::*;
 pub use collections::*;
 pub use instructions::*;
+pub use modular_arithmetic::*;
 use p3_field::{ExtensionField, PrimeField, TwoAdicField};
 pub use poseidon::{DIGEST_SIZE, PERMUTATION_WIDTH};
 pub use ptr::*;

@@ -1,0 +1,38 @@
+name: STARK Recursion Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "stark-backend/**"
+      - "primitives/**"
+      - "vm/**"
+      - "compiler/**"
+      - "ecc/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  AXIOM_FAST_TEST: "1"
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest-64core-256ram
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Run ecc crate tests
+        working-directory: ecc
+        run: |
+          cargo test --profile=fast --features parallel
+

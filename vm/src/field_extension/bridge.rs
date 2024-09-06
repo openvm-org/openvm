@@ -43,10 +43,7 @@ impl FieldExtensionArithmeticAir {
             ..
         } = aux;
 
-        let mut memory_bridge = MemoryBridge::new(
-            self.mem_oc,
-            [read_x_aux_cols, read_y_aux_cols, write_aux_cols],
-        );
+        let memory_bridge = MemoryBridge::new(self.mem_oc);
 
         // TODO[zach]: Change to 1 after proper batch access support.
         // The amount that timestamp increases after each access.
@@ -55,7 +52,7 @@ impl FieldExtensionArithmeticAir {
 
         // Reads for x
         memory_bridge
-            .read(MemoryAddress::new(d, op_b), x, timestamp)
+            .read(MemoryAddress::new(d, op_b), x, timestamp, read_x_aux_cols)
             .eval(builder, is_valid);
 
         timestamp_delta += delta_per_access.into();
@@ -66,6 +63,7 @@ impl FieldExtensionArithmeticAir {
                 MemoryAddress::new(e, op_c),
                 y,
                 timestamp + timestamp_delta.clone(),
+                read_y_aux_cols,
             )
             .eval(builder, is_valid);
 
@@ -77,6 +75,7 @@ impl FieldExtensionArithmeticAir {
                 MemoryAddress::new(d, op_a),
                 z,
                 timestamp + timestamp_delta.clone(),
+                write_aux_cols,
             )
             .eval(builder, is_valid);
 

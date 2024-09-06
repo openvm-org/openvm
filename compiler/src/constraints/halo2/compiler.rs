@@ -78,10 +78,12 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
         let mut vkey_hash = None;
         let mut committed_values_digest = None;
         let mut babybear_metrics: Halo2Stats = Default::default();
+        let mut num2bits_metrics: Halo2Stats = Default::default();
 
         for (instruction, _) in operations {
             let old_stats = stats_snapshot(ctx, range.clone());
             let is_babybear = is_babybear_ir(&instruction);
+            let is_num2bits = is_num2bits_ir(&instruction);
             match instruction {
                 DslIr::ImmV(a, b) => {
                     let x = ctx.load_constant(convert_fr(&b));
@@ -392,11 +394,16 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                 new_stats.diff(&old_stats);
                 babybear_metrics.add_assign(&new_stats);
             }
+            if is_num2bits {
+                let mut new_stats = stats_snapshot(ctx, range.clone());
+                new_stats.diff(&old_stats);
+                num2bits_metrics.add_assign(&new_stats);
+            }
         }
         let vkey_hash = vkey_hash.unwrap_or_else(|| ctx.load_zero());
         let committed_values_digest = committed_values_digest.unwrap_or_else(|| ctx.load_zero());
         halo2_state.builder.assigned_instances = vec![vec![vkey_hash, committed_values_digest]];
-        print(&cell_tracker, &babybear_metrics);
+        print(&cell_tracker, &babybear_metrics, &num2bits_metrics);
     }
 }
 
@@ -461,5 +468,12 @@ fn is_babybear_ir<C: Config>(ir: &DslIr<C>) -> bool {
             | DslIr::AssertEqE(_, _)
             | DslIr::AssertEqEI(_, _)
             | DslIr::WitnessExt(_, _)
+    )
+}
+
+fn is_num2bits_ir<C: Config>(ir: &DslIr<C>) -> bool {
+    matches!(
+        ir,
+        DslIr::CircuitNum2BitsV(_, _, _) | DslIr::CircuitNum2BitsF(_, _)
     )
 }

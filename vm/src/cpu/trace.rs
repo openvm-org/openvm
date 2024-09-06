@@ -1,4 +1,5 @@
 use std::{
+    array,
     collections::{BTreeMap, VecDeque},
     error::Error,
     fmt::Display,
@@ -28,6 +29,7 @@ use crate::{
         },
     },
     cpu::{columns::CpuMemoryAccessCols, WORD_SIZE},
+    memory::offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
     vm::ExecutionSegment,
 };
 
@@ -224,11 +226,6 @@ impl<F: PrimeField32> CpuChip<F> {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let from_state = ExecutionState {
-                pc: pc_usize,
-                timestamp,
-            };
-
             let (instruction, debug_info) =
                 vm.program_chip.borrow_mut().get_instruction(pc_usize)?;
             tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
@@ -295,7 +292,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 let executor = vm.executors.get_mut(&opcode).unwrap();
                 let next_state = InstructionExecutor::execute(
                     executor,
-                    &instruction,
+                    instruction,
                     ExecutionState::new(pc_usize, timestamp),
                 );
                 next_pc = F::from_canonical_usize(next_state.pc);
@@ -434,48 +431,43 @@ impl<F: PrimeField32> CpuChip<F> {
             // and move this logic into generate_trace().
             {
                 let memory_chip = vm.memory_chip.borrow();
+                let offline_checker = memory_chip.make_offline_checker();
+                let range_checker = &memory_chip.range_checker;
 
-                let mut read_cols = read_records
-                    .iter()
-                    .cloned()
-                    .map(CpuMemoryAccessCols::from_read_record)
-                    .collect_vec();
-                let mut reads_aux_cols = read_records
-                    .iter()
-                    .cloned()
-                    .map(|read| memory_chip.make_read_aux_cols(read))
-                    .collect_vec();
+                let read_cols = array::from_fn(|i| {
+                    read_records
+                        .get(i)
+                        .map_or_else(CpuMemoryAccessCols::disabled, |read| {
+                            CpuMemoryAccessCols::from_read_record(read.clone())
+                        })
+                });
+                let reads_aux_cols = array::from_fn(|i| {
+                    read_records.get(i).map_or_else(
+                        || MemoryReadOrImmediateAuxCols::disabled(offline_checker),
+                        |read| {
+                            offline_checker.make_read_or_immediate_aux_cols(
+                                range_checker.clone(),
+                                read.clone(),
+                            )
+                        },
+                    )
+                });
 
-                // icky timestamp calculation for disabled reads
-                let timestamp = read_records
-                    .last()
-                    .map(|read| read.timestamp + F::one())
-                    .unwrap_or(F::from_canonical_usize(from_state.timestamp));
-
-                while read_cols.len() < CPU_MAX_READS_PER_CYCLE {
-                    read_cols.push(CpuMemoryAccessCols::disabled(timestamp));
-                    reads_aux_cols.push(memory_chip.make_disabled_read_aux_cols());
-                }
-
-                let timestamp = write_records
-                    .last()
-                    .map(|write| write.timestamp + F::one())
-                    .unwrap_or(timestamp);
-
-                let mut write_cols = write_records
-                    .iter()
-                    .cloned()
-                    .map(CpuMemoryAccessCols::from_write_record)
-                    .collect_vec();
-                let mut writes_aux_cols = write_records
-                    .iter()
-                    .cloned()
-                    .map(|write| memory_chip.make_write_aux_cols(write))
-                    .collect_vec();
-                while write_cols.len() < CPU_MAX_WRITES_PER_CYCLE {
-                    write_cols.push(CpuMemoryAccessCols::disabled(timestamp));
-                    writes_aux_cols.push(memory_chip.make_disabled_write_aux_cols());
-                }
+                let write_cols = array::from_fn(|i| {
+                    write_records
+                        .get(i)
+                        .map_or_else(CpuMemoryAccessCols::disabled, |write| {
+                            CpuMemoryAccessCols::from_write_record(write.clone())
+                        })
+                });
+                let writes_aux_cols = array::from_fn(|i| {
+                    write_records.get(i).map_or_else(
+                        || MemoryWriteAuxCols::disabled(offline_checker),
+                        |read| {
+                            offline_checker.make_write_aux_cols(range_checker.clone(), read.clone())
+                        },
+                    )
+                });
 
                 let mut operation_flags = BTreeMap::new();
                 for other_opcode in CORE_INSTRUCTIONS {
@@ -493,12 +485,12 @@ impl<F: PrimeField32> CpuChip<F> {
                 let aux = CpuAuxCols {
                     operation_flags,
                     public_value_flags,
-                    reads: read_cols.try_into().unwrap(),
-                    writes: write_cols.try_into().unwrap(),
+                    reads: read_cols,
+                    writes: write_cols,
                     read0_equals_read1,
                     is_equal_vec_aux,
-                    reads_aux_cols: reads_aux_cols.try_into().unwrap(),
-                    writes_aux_cols: writes_aux_cols.try_into().unwrap(),
+                    reads_aux_cols,
+                    writes_aux_cols,
                 };
 
                 let cols = CpuCols { io, aux };

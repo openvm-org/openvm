@@ -1,4 +1,4 @@
-use stark_vm::hashes::keccak::hasher::KECCAK_DIGEST_U16S;
+use stark_vm::hashes::keccak::hasher::KECCAK_DIGEST_BYTES;
 
 use super::{Array, Builder, Config, DslIr, Var};
 
@@ -7,11 +7,12 @@ impl<C: Config> Builder<C> {
     ///
     /// Reference: Section 5 of <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf>
     ///
-    /// Currently `array` will be auto-range checked to all be bytes.
-    /// The output array is a length 16 array of u16 limbs,
-    /// where each `u16` is converted from two bytes as **little-endian**.
+    /// Currently input `array` will be auto-range checked to all be bytes.
+    /// The output array is a length 32 array of u8 bytes.
+    ///
+    /// **SAFETY:** The output array is **not** range checked to be bytes.
     pub fn keccak256(&mut self, array: &Array<C, Var<C::N>>) -> Array<C, Var<C::N>> {
-        let output = self.array::<Var<C::N>>(KECCAK_DIGEST_U16S);
+        let output = self.array::<Var<C::N>>(KECCAK_DIGEST_BYTES);
         self.operations
             .push(DslIr::Keccak256(output.clone(), array.clone()));
         output

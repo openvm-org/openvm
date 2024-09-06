@@ -147,7 +147,6 @@ impl KeccakVmAir {
         let is_padding_byte = local.sponge.is_padding_byte;
         let block_bytes = &local.sponge.block_bytes;
         let remaining_len = local.remaining_len();
-        let step_flags = &local.inner.step_flags;
 
         // is_padding_byte should all be boolean
         for &is_padding_byte in is_padding_byte.iter() {
@@ -160,7 +159,9 @@ impl KeccakVmAir {
                 .assert_one(is_padding_byte[i]);
         }
         // is_padding_byte must stay the same on all rounds in a block
-        let is_last_round = *step_flags.last().unwrap();
+        // we use next instead of local.step_flags.last() because the last row of the trace overall may not
+        // end on a last round
+        let is_last_round = next.inner.step_flags[0];
         let is_not_last_round = not(is_last_round);
         for i in 0..KECCAK_RATE_BYTES {
             builder.when(is_not_last_round.clone()).assert_eq(

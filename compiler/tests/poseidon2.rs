@@ -27,9 +27,9 @@ fn test_compiler_poseidon2_permute() {
     // Execture the permutation in the VM
     // Initialize an array and populate it with the entries.
     let var_width: Var<F> = builder.eval(F::from_canonical_usize(PERMUTATION_WIDTH));
-    let mut random_state = builder.array(var_width);
+    let random_state = builder.array(var_width);
     for (i, val) in random_state_vals.iter().enumerate() {
-        builder.set(&mut random_state, i, *val);
+        builder.set(&random_state, i, *val);
     }
 
     // Assert that the values are set correctly.
@@ -62,16 +62,16 @@ fn test_compiler_poseidon2_hash_1() {
     let random_state_vals: [F; 42] = rng.gen();
     println!("{:?}", random_state_vals);
     let rlen = random_state_vals.len();
-    let mut random_state_v1 = builder.dyn_array(rlen);
+    let random_state_v1 = builder.dyn_array(rlen);
     for (i, val) in random_state_vals.iter().enumerate() {
-        builder.set(&mut random_state_v1, i, *val);
+        builder.set(&random_state_v1, i, *val);
     }
-    let mut random_state_v2 = builder.dyn_array(rlen);
+    let random_state_v2 = builder.dyn_array(rlen);
     for (i, val) in random_state_vals.iter().enumerate() {
-        builder.set(&mut random_state_v2, i, *val);
+        builder.set(&random_state_v2, i, *val);
     }
-    let mut nested_random_state = builder.dyn_array(RVar::one());
-    builder.set(&mut nested_random_state, RVar::zero(), random_state_v2);
+    let nested_random_state = builder.dyn_array(RVar::one());
+    builder.set(&nested_random_state, RVar::zero(), random_state_v2);
 
     let result = builder.poseidon2_hash(&random_state_v1);
     let result_x = builder.poseidon2_hash_x(&nested_random_state);

@@ -10,11 +10,11 @@ pub fn const_fri_config<C: Config>(
     params: &FriParameters,
 ) -> FriConfigVariable<C> {
     let two_adicity = C::F::TWO_ADICITY;
-    let mut generators = builder.array(two_adicity);
-    let mut subgroups = builder.array(two_adicity);
+    let generators = builder.array(two_adicity);
+    let subgroups = builder.array(two_adicity);
     for i in 0..C::F::TWO_ADICITY {
         let constant_generator = C::F::two_adic_generator(i);
-        builder.set(&mut generators, i, constant_generator);
+        builder.set(&generators, i, constant_generator);
 
         let constant_domain = TwoAdicMultiplicativeCoset {
             log_n: i,
@@ -23,7 +23,7 @@ pub fn const_fri_config<C: Config>(
         let domain_value: TwoAdicMultiplicativeCosetVariable<_> = builder.constant(constant_domain);
         // FIXME: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
         // to `Usize::Var` because it calls `builder.eval`.
-        builder.set_value(&mut subgroups, i, domain_value);
+        builder.set_value(&subgroups, i, domain_value);
     }
     FriConfigVariable {
         log_blowup: params.log_blowup,

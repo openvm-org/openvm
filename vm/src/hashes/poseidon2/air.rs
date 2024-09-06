@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::Borrow};
+use std::borrow::Borrow;
 
 use afs_primitives::sub_chip::AirConfig;
 use afs_stark_backend::interaction::InteractionBuilder;
@@ -9,7 +9,7 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 use poseidon2_air::poseidon2::Poseidon2Air;
 
-use super::{columns::Poseidon2VmCols, CHUNK};
+use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{
     arch::bus::ExecutionBus,
     memory::{
@@ -23,31 +23,31 @@ use crate::{
 /// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
 /// `direct` determines whether direct interactions are enabled. By default they are on.
 #[derive(Clone, new, Debug)]
-pub struct Poseidon2VmAir<const WIDTH: usize, F: Clone> {
-    pub inner: Poseidon2Air<WIDTH, F>,
+pub struct Poseidon2VmAir<T> {
+    pub inner: Poseidon2Air<WIDTH, T>,
     pub execution_bus: ExecutionBus,
     pub mem_oc: MemoryOfflineChecker,
     pub direct: bool, // Whether direct interactions are enabled.
 }
 
-impl<const WIDTH: usize, F: Clone> AirConfig for Poseidon2VmAir<WIDTH, F> {
-    type Cols<T> = Poseidon2VmCols<WIDTH, T>;
+impl<F> AirConfig for Poseidon2VmAir<F> {
+    type Cols<T> = Poseidon2VmCols<T>;
 }
 
-impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2VmAir<WIDTH, F> {
+impl<F: Field> BaseAir<F> for Poseidon2VmAir<F> {
     fn width(&self) -> usize {
-        Poseidon2VmCols::<WIDTH, F>::width(self)
+        Poseidon2VmCols::<F>::width(self)
     }
 }
 
-impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDTH, AB::F> {
+impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
     /// Checks and constrains multiplicity indicators, and does subair evaluation
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
         let local: &[<AB>::Var] = (*local).borrow();
 
-        let cols = Poseidon2VmCols::<WIDTH, AB::Var>::from_slice(local, self);
+        let cols = Poseidon2VmCols::<AB::Var>::from_slice(local, self);
 
         self.eval_interactions(builder, cols.io, &cols.aux);
         self.inner
@@ -62,78 +62,92 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
         builder.assert_eq(cols.io.is_opcode * cols.io.cmp, cols.io.cmp);
         // if io.cmp is false, then constrain rhs = lhs + CHUNK
         builder.when(cols.io.is_opcode - cols.io.cmp).assert_eq(
-            cols.aux.rhs,
-            cols.aux.lhs + AB::F::from_canonical_usize(CHUNK),
+            cols.aux.rhs_ptr,
+            cols.aux.lhs_ptr + AB::F::from_canonical_usize(CHUNK),
         );
 
         // Memory access constraints
-        let chunks: usize = WIDTH / 2;
-
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, cols.aux.mem_oc_aux_cols);
+        let memory_bridge = MemoryBridge::new(self.mem_oc);
         let mut clk_offset = 0;
+        let timestamp_base = cols.io.timestamp;
+
         // read addresses when is_opcode:
         // dst <- [a]_d, lhs <- [b]_d
         // Only when opcode is COMPRESS is rhs <- [c]_d read
-        for (io_addr, aux_addr, count) in izip!(
+        for (io_addr, aux_addr, count, mem_aux) in izip!(
             [cols.io.a, cols.io.b, cols.io.c],
-            [cols.aux.dst, cols.aux.lhs, cols.aux.rhs],
-            [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp,]
+            [cols.aux.dst_ptr, cols.aux.lhs_ptr, cols.aux.rhs_ptr],
+            [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp],
+            cols.aux.ptr_aux_cols,
         ) {
-            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
+            let clk = timestamp_base + AB::F::from_canonical_usize(clk_offset);
             clk_offset += 1;
 
             memory_bridge
                 .read(
                     MemoryAddress::new(cols.io.d, io_addr),
-                    // FIXME[jpw]: only works for WORD_SIZE = 1 right now
-                    from_fn(|_| aux_addr),
+                    [aux_addr],
                     clk,
+                    mem_aux.clone(),
                 )
                 .eval(builder, count);
         }
 
-        // READ
-        for i in 0..WIDTH {
+        // First input chunk.
+        {
             let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
-            clk_offset += 1;
-
-            let pointer = if i < chunks {
-                cols.aux.lhs
-            } else {
-                cols.aux.rhs
-            } + AB::F::from_canonical_usize(if i < chunks { i } else { i - chunks });
+            clk_offset += CHUNK;
 
             memory_bridge
                 .read(
-                    MemoryAddress::new(cols.io.e, pointer),
-                    // FIXME[jpw]: only works for WORD_SIZE = 1 right now
-                    from_fn(|_| cols.aux.internal.io.input[i]),
+                    MemoryAddress::new(cols.io.e, cols.aux.lhs_ptr),
+                    cols.aux.internal.io.input[..CHUNK].try_into().unwrap(),
                     clk,
+                    cols.aux.input_aux_cols[0].clone(),
                 )
                 .eval(builder, cols.io.is_opcode);
         }
-
-        // WRITE
-        for i in 0..WIDTH {
+        // Second input chunk.
+        {
             let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
-            clk_offset += 1;
+            clk_offset += CHUNK;
 
-            let pointer = cols.aux.dst + AB::F::from_canonical_usize(i);
-
-            let count = if i < chunks {
-                cols.io.is_opcode.into()
-            } else {
-                cols.io.is_opcode - cols.io.cmp
-            };
+            memory_bridge
+                .read(
+                    MemoryAddress::new(cols.io.e, cols.aux.rhs_ptr),
+                    cols.aux.internal.io.input[CHUNK..].try_into().unwrap(),
+                    clk,
+                    cols.aux.input_aux_cols[1].clone(),
+                )
+                .eval(builder, cols.io.is_opcode);
+        }
+        // First output chunk.
+        {
+            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
+            clk_offset += CHUNK;
 
             memory_bridge
                 .write(
-                    MemoryAddress::new(cols.io.e, pointer),
-                    // FIXME[jpw]: only works for WORD_SIZE = 1 right now
-                    from_fn(|_| cols.aux.internal.io.output[i]),
+                    MemoryAddress::new(cols.io.e, cols.aux.dst_ptr),
+                    cols.aux.internal.io.output[..CHUNK].try_into().unwrap(),
                     clk,
+                    cols.aux.output_aux_cols[0].clone(),
                 )
-                .eval(builder, count);
+                .eval(builder, cols.io.is_opcode);
+        }
+        // Second output chunk.
+        {
+            let clk = cols.io.timestamp + AB::F::from_canonical_usize(clk_offset);
+
+            let pointer = cols.aux.dst_ptr + AB::F::from_canonical_usize(CHUNK);
+            memory_bridge
+                .write(
+                    MemoryAddress::new(cols.io.e, pointer),
+                    cols.aux.internal.io.output[CHUNK..].try_into().unwrap(),
+                    clk,
+                    cols.aux.output_aux_cols[1].clone(),
+                )
+                .eval(builder, cols.io.is_opcode - cols.io.cmp);
         }
     }
 }

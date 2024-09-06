@@ -28,11 +28,11 @@ fn test_compiler_array() {
     let len: usize = 3;
     let mut rng = thread_rng();
 
-    let mut static_array = builder.array::<Var<_>>(len);
+    let static_array = builder.array::<Var<_>>(len);
 
     // Put values statically
     for i in 0..len {
-        builder.set(&mut static_array, i, F::one());
+        builder.set(&static_array, i, F::one());
     }
     // Assert values set.
     for i in 0..len {
@@ -41,17 +41,17 @@ fn test_compiler_array() {
     }
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(len));
-    let mut var_array = builder.array::<Var<_>>(dyn_len);
-    let mut felt_array = builder.array::<Felt<_>>(dyn_len);
-    let mut ext_array = builder.array::<Ext<_, _>>(dyn_len);
+    let var_array = builder.array::<Var<_>>(dyn_len);
+    let felt_array = builder.array::<Felt<_>>(dyn_len);
+    let ext_array = builder.array::<Ext<_, _>>(dyn_len);
     // Put values statically
     let var_vals = (0..len).map(|_| rng.gen::<F>()).collect::<Vec<_>>();
     let felt_vals = (0..len).map(|_| rng.gen::<F>()).collect::<Vec<_>>();
     let ext_vals = (0..len).map(|_| rng.gen::<EF>()).collect::<Vec<_>>();
     for i in 0..len {
-        builder.set(&mut var_array, i, var_vals[i]);
-        builder.set(&mut felt_array, i, felt_vals[i]);
-        builder.set(&mut ext_array, i, ext_vals[i].cons());
+        builder.set(&var_array, i, var_vals[i]);
+        builder.set(&felt_array, i, felt_vals[i]);
+        builder.set(&ext_array, i, ext_vals[i].cons());
     }
     // Assert values set.
     for i in 0..len {
@@ -66,12 +66,12 @@ fn test_compiler_array() {
     // Put values dynamically
     builder.range(0, dyn_len).for_each(|i, builder| {
         builder.set(
-            &mut var_array,
+            &var_array,
             i,
             i * RVar::from_field(F::from_canonical_u32(2)),
         );
-        builder.set(&mut felt_array, i, F::from_canonical_u32(3));
-        builder.set(&mut ext_array, i, EF::from_canonical_u32(4).cons());
+        builder.set(&felt_array, i, F::from_canonical_u32(3));
+        builder.set(&ext_array, i, EF::from_canonical_u32(4).cons());
     });
 
     // Assert values set.
@@ -85,7 +85,7 @@ fn test_compiler_array() {
     });
 
     // Test the derived macro and mixed size allocations.
-    let mut point_array = builder.dyn_array::<Point<_>>(len);
+    let point_array = builder.dyn_array::<Point<_>>(len);
 
     builder.range(0, dyn_len).for_each(|i, builder| {
         let x: Var<_> = builder.eval(F::two());
@@ -102,7 +102,7 @@ fn test_compiler_array() {
             y: y_ptr,
             z: z_ptr,
         };
-        builder.set(&mut point_array, i, point);
+        builder.set(&point_array, i, point);
     });
 
     builder.range(0, dyn_len).for_each(|i, builder| {
@@ -115,10 +115,10 @@ fn test_compiler_array() {
         builder.assert_ext_eq(z, EF::one().cons());
     });
 
-    let mut array = builder.dyn_array::<Array<_, Var<_>>>(len);
+    let array = builder.dyn_array::<Array<_, Var<_>>>(len);
 
     builder.range(0, array.len()).for_each(|i, builder| {
-        builder.set(&mut array, i, var_array.clone());
+        builder.set(&array, i, var_array.clone());
     });
 
     // TODO: this part of the test is extremely slow.

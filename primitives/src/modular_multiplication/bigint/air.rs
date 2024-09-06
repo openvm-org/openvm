@@ -18,6 +18,7 @@ use crate::{
     sub_chip::AirConfig,
 };
 
+#[derive(Clone, Debug)]
 pub struct ModularArithmeticBigIntAir {
     pub modulus: BigUint,
     pub total_bits: usize,
@@ -107,15 +108,13 @@ impl ModularArithmeticBigIntAir {
     }
 
     pub fn secp256k1_scalar_prime() -> BigUint {
-        let lol = BigUint::from_str(
+        BigUint::from_str(
             "115792089237316195423570985008687907852837564279074904382605163141518161494337",
         )
-        .unwrap();
-        print!("{:?}", lol);
-        lol
+        .unwrap()
     }
 
-    pub fn default_for_secp256k1_coord() -> Self {
+    pub fn default_for_secp256k1_coord(limb_bits: usize) -> Self {
         Self::new(
             Self::secp256k1_coord_prime(),
             256,
@@ -123,13 +122,13 @@ impl ModularArithmeticBigIntAir {
             0,
             30,
             30,
-            10,
+            limb_bits,
             16,
             1 << 15,
         )
     }
 
-    pub fn default_for_secp256k1_scalar() -> Self {
+    pub fn default_for_secp256k1_scalar(limb_bits: usize) -> Self {
         Self::new(
             Self::secp256k1_scalar_prime(),
             256,
@@ -137,7 +136,7 @@ impl ModularArithmeticBigIntAir {
             0,
             30,
             30,
-            10,
+            limb_bits,
             16,
             1 << 15,
         )

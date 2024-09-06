@@ -38,8 +38,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     let log_global_max_height =
         builder.eval_expr(fri_proof.commit_phase_commits.len() + RVar::from(log_blowup));
 
-    let mut reduced_openings: Array<_, Array<_, Ext<_, _>>> =
-        builder.array(proof.query_openings.len());
+    let reduced_openings: Array<_, Array<_, Ext<_, _>>> = builder.array(proof.query_openings.len());
 
     builder.cycle_tracker_start("stage-d-2-fri-fold");
     builder
@@ -48,21 +47,21 @@ pub fn verify_two_adic_pcs<C: Config>(
             let query_opening = builder.get(&proof.query_openings, i);
             let index_bits = builder.get(&fri_challenges.query_indices, i);
 
-            let mut ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
-            let mut alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(32);
+            let ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
+            let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(32);
             if builder.flags.static_only {
                 for j in 0..32 {
                     // ATTENTION: don't use set_value here, Fixed will share the same variable.
-                    builder.set(&mut ro, j, C::EF::zero().cons());
-                    builder.set(&mut alpha_pow, j, C::EF::one().cons());
+                    builder.set(&ro, j, C::EF::zero().cons());
+                    builder.set(&alpha_pow, j, C::EF::one().cons());
                 }
             } else {
                 let zero_ef = builder.eval(C::EF::zero().cons());
                 let one_ef = builder.eval(C::EF::one().cons());
                 for j in 0..32 {
                     // Use set_value here to save a copy.
-                    builder.set_value(&mut ro, j, zero_ef);
-                    builder.set_value(&mut alpha_pow, j, one_ef);
+                    builder.set_value(&ro, j, zero_ef);
+                    builder.set_value(&alpha_pow, j, one_ef);
                 }
             }
 
@@ -72,21 +71,21 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
 
-                let mut batch_heights_log2: Array<C, Usize<C::N>> = builder.array(mats.len());
+                let batch_heights_log2: Array<C, Usize<C::N>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
                     let domain = mat.domain;
                     let height_log2: Usize<_> = builder.eval(domain.log_n + RVar::from(log_blowup));
-                    builder.set_value(&mut batch_heights_log2, k, height_log2);
+                    builder.set_value(&batch_heights_log2, k, height_log2);
                 });
-                let mut batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
+                let batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
                     let domain = mat.domain;
                     let dim = DimensionsVariable::<C> {
                         height: builder.eval(domain.size() * RVar::from(blowup)),
                     };
-                    builder.set_value(&mut batch_dims, k, dim);
+                    builder.set_value(&batch_dims, k, dim);
                 });
 
                 let log_batch_max_height = builder.get(&batch_heights_log2, 0);
@@ -159,13 +158,13 @@ pub fn verify_two_adic_pcs<C: Config>(
                             builder.cycle_tracker_end("sp1-fri-fold");
                         });
 
-                        builder.set_value(&mut ro, log_height, cur_ro);
-                        builder.set_value(&mut alpha_pow, log_height, cur_alpha_pow);
+                        builder.set_value(&ro, log_height, cur_ro);
+                        builder.set_value(&alpha_pow, log_height, cur_alpha_pow);
                     });
                 builder.cycle_tracker_end("compute-reduced-opening");
             });
 
-            builder.set_value(&mut reduced_openings, i, ro);
+            builder.set_value(&reduced_openings, i, ro);
         });
     builder.cycle_tracker_end("stage-d-2-fri-fold");
 
@@ -193,13 +192,13 @@ where
         let (commit_val, domains_and_openings_val) = value;
 
         // Allocate the commitment.
-        let mut commit = builder.dyn_array::<Felt<_>>(DIGEST_SIZE);
+        let commit = builder.dyn_array::<Felt<_>>(DIGEST_SIZE);
         let commit_val: [C::F; DIGEST_SIZE] = commit_val.into();
         for (i, f) in commit_val.into_iter().enumerate() {
-            builder.set(&mut commit, i, f);
+            builder.set(&commit, i, f);
         }
 
-        let mut mats = builder
+        let mats = builder
             .dyn_array::<TwoAdicPcsMatsVariable<C>>(RVar::from(domains_and_openings_val.len()));
 
         for (i, (domain, openning)) in domains_and_openings_val.into_iter().enumerate() {
@@ -207,26 +206,26 @@ where
 
             let points_val = openning.iter().map(|(p, _)| *p).collect::<Vec<_>>();
             let values_val = openning.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>();
-            let mut points: Array<_, Ext<_, _>> = builder.dyn_array(points_val.len());
+            let points: Array<_, Ext<_, _>> = builder.dyn_array(points_val.len());
             for (j, point) in points_val.into_iter().enumerate() {
                 let el: Ext<_, _> = builder.eval(point.cons());
-                builder.set_value(&mut points, j, el);
+                builder.set_value(&points, j, el);
             }
-            let mut values: Array<_, Array<_, Ext<_, _>>> = builder.dyn_array(values_val.len());
+            let values: Array<_, Array<_, Ext<_, _>>> = builder.dyn_array(values_val.len());
             for (j, val) in values_val.into_iter().enumerate() {
-                let mut tmp = builder.dyn_array(val.len());
+                let tmp = builder.dyn_array(val.len());
                 for (k, v) in val.into_iter().enumerate() {
                     let el: Ext<_, _> = builder.eval(v.cons());
-                    builder.set_value(&mut tmp, k, el);
+                    builder.set_value(&tmp, k, el);
                 }
-                builder.set_value(&mut values, j, tmp);
+                builder.set_value(&values, j, tmp);
             }
             let mat = TwoAdicPcsMatsVariable {
                 domain,
                 points,
                 values,
             };
-            builder.set_value(&mut mats, i, mat);
+            builder.set_value(&mats, i, mat);
         }
 
         Self {

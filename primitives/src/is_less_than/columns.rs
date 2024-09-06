@@ -51,7 +51,7 @@ impl<T> IsLessThanAuxCols<T> {
         self.lower_decomp
     }
 
-    pub fn try_from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
         Self {
             lower_decomp: (0..Self::width(lt_air))
                 .map(|_| iter.next().unwrap())

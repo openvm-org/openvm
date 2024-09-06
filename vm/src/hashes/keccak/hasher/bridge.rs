@@ -1,5 +1,3 @@
-use std::iter::zip;
-
 use afs_primitives::utils::not;
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
@@ -8,9 +6,8 @@ use p3_field::AbstractField;
 use p3_keccak_air::U64_LIMBS;
 
 use super::{
-    columns::KeccakVmColsRef, KeccakVmAir, KECCAK_ABSORB_READS, KECCAK_DIGEST_BYTES,
-    KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S,
-    NUM_ABSORB_ROUNDS,
+    columns::KeccakVmColsRef, KeccakVmAir, KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES,
+    KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
 };
 use crate::{
     arch::{
@@ -18,7 +15,10 @@ use crate::{
         instructions::Opcode,
     },
     memory::{
-        offline_checker::{bridge::MemoryBridge, columns::MemoryOfflineCheckerAuxCols},
+        offline_checker::{
+            bridge::MemoryBridge,
+            columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+        },
         MemoryAddress,
     },
 };
@@ -121,7 +121,7 @@ impl KeccakVmAir {
         &self,
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
-        mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_EXECUTION_READS],
+        mem_aux: [MemoryReadAuxCols<1, AB::Var>; KECCAK_EXECUTION_READS],
     ) -> AB::Expr {
         let opcode = local.opcode;
         // Only receive opcode if:
@@ -145,16 +145,22 @@ impl KeccakVmAir {
         );
 
         let mut timestamp: AB::Expr = opcode.start_timestamp.into();
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
+        let memory_bridge = MemoryBridge::new(self.mem_oc);
         // Only when it is an input do we want to do memory read for
         // dst <- word[a]_d, src <- word[b]_d
-        for (ptr, addr_sp, value) in izip!(
+        for (ptr, addr_sp, value, mem_aux) in izip!(
             [opcode.a, opcode.b, opcode.c],
             [opcode.d, opcode.d, opcode.f],
-            [opcode.dst, opcode.src, opcode.len]
+            [opcode.dst, opcode.src, opcode.len],
+            mem_aux,
         ) {
             memory_bridge
-                .read(MemoryAddress::new(addr_sp, ptr), [value], timestamp.clone())
+                .read(
+                    MemoryAddress::new(addr_sp, ptr),
+                    [value],
+                    timestamp.clone(),
+                    mem_aux,
+                )
                 .eval(builder, should_receive.clone());
 
             timestamp += AB::Expr::one();
@@ -174,9 +180,9 @@ impl KeccakVmAir {
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
         start_read_timestamp: AB::Expr,
-        mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_ABSORB_READS],
+        mem_aux: [MemoryReadAuxCols<1, AB::Var>; KECCAK_ABSORB_READS],
     ) -> AB::Expr {
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
+        let memory_bridge = MemoryBridge::new(self.mem_oc);
         // Only read input from memory when it is an opcode-related row
         // and only on the first round of block
         let is_input = local.opcode.is_enabled * local.inner.step_flags[0];
@@ -184,8 +190,12 @@ impl KeccakVmAir {
         let mut timestamp = start_read_timestamp;
         // read `state` into `word[src + ...]_e`
         // iterator of state as u16:
-        for (i, (input, is_padding)) in
-            zip(local.sponge.block_bytes, local.sponge.is_padding_byte).enumerate()
+        for (i, (input, is_padding, mem_aux)) in izip!(
+            local.sponge.block_bytes,
+            local.sponge.is_padding_byte,
+            mem_aux
+        )
+        .enumerate()
         {
             let ptr = local.opcode.src + AB::F::from_canonical_usize(i);
             // Only read byte i if it is not padding byte
@@ -199,6 +209,7 @@ impl KeccakVmAir {
                     MemoryAddress::new(local.opcode.e, ptr),
                     [input],
                     timestamp.clone(),
+                    mem_aux,
                 )
                 .eval(builder, count);
 
@@ -212,10 +223,10 @@ impl KeccakVmAir {
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: [MemoryOfflineCheckerAuxCols<1, AB::Var>; KECCAK_DIGEST_WRITES],
+        mem_aux: [MemoryWriteAuxCols<1, AB::Var>; KECCAK_DIGEST_WRITES],
     ) {
         let opcode = local.opcode;
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_aux);
+        let memory_bridge = MemoryBridge::new(self.mem_oc);
 
         let is_final_block = *local.sponge.is_padding_byte.last().unwrap();
         // since keccak-f AIR has this column, we might as well use it
@@ -223,23 +234,29 @@ impl KeccakVmAir {
             local.inner.export,
             opcode.is_enabled * is_final_block * local.is_last_round(),
         );
-        for x in 0..KECCAK_DIGEST_BYTES / 8 {
-            for limb in 0..U64_LIMBS {
-                let index = x * U64_LIMBS + limb;
-                let timestamp =
-                    start_write_timestamp.clone() + AB::Expr::from_canonical_usize(index);
-                let value = local.postimage(0, x, limb);
-                memory_bridge
-                    .write(
-                        MemoryAddress::new(
-                            opcode.e,
-                            opcode.dst + AB::F::from_canonical_usize(index),
-                        ),
-                        [value],
-                        timestamp,
-                    )
-                    .eval(builder, local.inner.export)
-            }
+        // See `constrain_absorb` on how we derive the postimage bytes from u16 limbs
+        // **SAFETY:** because we never XOR the final state, these bytes are NOT range checked.
+        let updated_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
+            let y = i / 5;
+            let x = i % 5;
+            (0..U64_LIMBS).flat_map(move |limb| {
+                let state_limb = local.postimage(y, x, limb);
+                let hi = local.sponge.state_hi[i * U64_LIMBS + limb];
+                let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
+                // Conversion from bytes to u64 is little-endian
+                [lo, hi.into()]
+            })
+        });
+        for (i, digest_byte) in updated_state_bytes.take(KECCAK_DIGEST_WRITES).enumerate() {
+            let timestamp = start_write_timestamp.clone() + AB::Expr::from_canonical_usize(i);
+            memory_bridge
+                .write(
+                    MemoryAddress::new(opcode.e, opcode.dst + AB::F::from_canonical_usize(i)),
+                    [digest_byte],
+                    timestamp,
+                    mem_aux[i].clone(),
+                )
+                .eval(builder, local.inner.export)
         }
     }
 

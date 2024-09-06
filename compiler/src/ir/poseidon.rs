@@ -47,12 +47,12 @@ impl<C: Config> Builder<C> {
         right: &Array<C, Felt<C::F>>,
     ) -> Array<C, Felt<C::F>> {
         let perm_width = PERMUTATION_WIDTH;
-        let mut input = self.dyn_array(perm_width);
+        let input = self.dyn_array(perm_width);
         for i in 0..DIGEST_SIZE {
             let a = self.get(left, i);
             let b = self.get(right, i);
-            self.set(&mut input, i, a);
-            self.set(&mut input, i + DIGEST_SIZE, b);
+            self.set(&input, i, a);
+            self.set(&input, i + DIGEST_SIZE, b);
         }
         self.poseidon2_permute_mut(&input);
         input
@@ -79,9 +79,9 @@ impl<C: Config> Builder<C> {
     /// Reference: [p3_symmetric::PaddingFreeSponge]
     pub fn poseidon2_hash(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
         let perm_width = PERMUTATION_WIDTH;
-        let mut state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
+        let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
         self.range(0, perm_width).for_each(|i, builder| {
-            builder.set(&mut state, i, C::F::zero());
+            builder.set(&state, i, C::F::zero());
         });
 
         let break_flag: Var<_> = self.eval(C::N::zero());
@@ -102,7 +102,7 @@ impl<C: Config> Builder<C> {
                     .for_each(|j, builder| {
                         let index = builder.eval_expr(i + j);
                         let element = builder.get(array, index);
-                        builder.set_value(&mut state, j, element);
+                        builder.set_value(&state, j, element);
                         builder
                             .if_eq(index, last_index.clone())
                             .then_may_break(|builder| {
@@ -125,9 +125,9 @@ impl<C: Config> Builder<C> {
     ) -> Array<C, Felt<C::F>> {
         self.cycle_tracker_start("poseidon2-hash");
         let perm_width = PERMUTATION_WIDTH;
-        let mut state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
+        let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
         self.range(0, perm_width).for_each(|i, builder| {
-            builder.set(&mut state, i, C::F::zero());
+            builder.set(&state, i, C::F::zero());
         });
 
         let idx: Var<_> = self.eval(C::N::zero());
@@ -136,7 +136,7 @@ impl<C: Config> Builder<C> {
             builder.range(0, subarray.len()).for_each(|j, builder| {
                 builder.cycle_tracker_start("poseidon2-hash-setup");
                 let element = builder.get(&subarray, j);
-                builder.set_value(&mut state, idx, element);
+                builder.set_value(&state, idx, element);
                 builder.assign(&idx, idx + C::N::one());
                 builder.cycle_tracker_end("poseidon2-hash-setup");
                 builder
@@ -164,9 +164,9 @@ impl<C: Config> Builder<C> {
         self.cycle_tracker_start("poseidon2-hash-ext");
         let hash_rate = HASH_RATE;
         let perm_width = PERMUTATION_WIDTH;
-        let mut state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
+        let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
         self.range(hash_rate, perm_width).for_each(|i, builder| {
-            builder.set(&mut state, i, C::F::zero());
+            builder.set(&state, i, C::F::zero());
         });
 
         let idx: Var<_> = self.eval(C::N::zero());
@@ -177,7 +177,7 @@ impl<C: Config> Builder<C> {
                 let felts = builder.ext2felt(element);
                 for i in 0..4 {
                     let felt = builder.get(&felts, i);
-                    builder.set_value(&mut state, idx, felt);
+                    builder.set_value(&state, idx, felt);
                     builder.assign(&idx, idx + C::N::one());
                     builder
                         .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))

@@ -11,6 +11,7 @@ on:
       - "vm/**"
       - "compiler/**"
       - "recursion/**"
+      - ".github/workflows/benchmark-call.yml"
   label:
     types: [created]
 
@@ -34,4 +35,16 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
       benchmark_name: vm_verify_fibair
+    secrets: inherit
+  benchmark_static:
+    uses: ./.github/workflows/benchmark-call.yml
+    # run on non-draft pull request with label 'run-benchmark'
+    # and always run on push to main
+    if: |
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      contains(github.event.pull_request.labels.*.name, 'run-benchmark')) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    with:
+      benchmark_name: vm_static_verify_fibair
     secrets: inherit

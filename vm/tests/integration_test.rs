@@ -13,7 +13,7 @@ use p3_field::AbstractField;
 use stark_vm::{
     arch::instructions::Opcode::*,
     cpu::trace::Instruction,
-    hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_U16S},
+    hashes::keccak::hasher::utils::keccak256,
     program::Program,
     vm::{
         config::{MemoryConfig, VmConfig},
@@ -392,14 +392,11 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     ));
 
     // read expected result to check correctness
-    for i in 0..KECCAK_DIGEST_U16S {
-        let mut limb = 0u16;
-        limb |= expected[2 * i] as u16;
-        limb |= (expected[2 * i + 1] as u16) << 8;
+    for (i, expected_byte) in expected.into_iter().enumerate() {
         instructions.push(Instruction::from_isize(
             BNE,
             dst + i as isize,
-            limb as isize,
+            expected_byte as isize,
             -(instructions.len() as isize) + 1, // jump to fail
             2,
             0,
@@ -418,6 +415,34 @@ fn test_vm_keccak() {
         (0u8..136).collect::<Vec<_>>(),
         (0u8..200).collect::<Vec<_>>(),
     ];
+    let mut instructions = inputs
+        .iter()
+        .flat_map(|input| instructions_for_keccak256_test(input))
+        .collect::<Vec<_>>();
+    instructions.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+
+    let program_len = instructions.len();
+
+    let program = Program {
+        instructions,
+        debug_infos: vec![None; program_len],
+    };
+
+    air_test(
+        VmConfig {
+            keccak_enabled: true,
+            ..VmConfig::core()
+        },
+        program,
+        vec![],
+    );
+}
+
+// This test dones one keccak in 24 rows, and then there are 8 dummy padding rows which don't make up a full round
+#[test]
+fn test_vm_keccak_non_full_round() {
+    setup_tracing_with_log_level(Level::TRACE);
+    let inputs = [[[0u8; 32], [1u8; 32]].concat()];
     let mut instructions = inputs
         .iter()
         .flat_map(|input| instructions_for_keccak256_test(input))

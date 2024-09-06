@@ -1,5 +1,15 @@
 //! Backend for proving and verifying mixed-matrix STARKs with univariate polynomial commitment scheme.
 
+// Re-export all Plonky3 crates
+pub use p3_air;
+pub use p3_challenger;
+pub use p3_commit;
+pub use p3_field;
+pub use p3_matrix;
+pub use p3_maybe_rayon;
+pub use p3_uni_stark;
+pub use p3_util;
+
 /// AIR builders for prover and verifier, including support for cross-matrix permutation arguments.
 pub mod air_builders;
 /// Types for tracking matrix in system with multiple commitments, each to multiple matrices.
