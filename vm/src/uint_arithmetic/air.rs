@@ -29,7 +29,7 @@ impl<F: Field, const ARG_SIZE: usize, const LIMB_SIZE: usize> BaseAir<F>
     for UintArithmeticAir<ARG_SIZE, LIMB_SIZE>
 {
     fn width(&self) -> usize {
-        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::get_width(self)
+        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width(self)
     }
 }
 
@@ -65,7 +65,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
             aux.is_valid,
             flags
                 .iter()
-                .fold(AB::Expr::zero(), |acc, flag| acc + (*flag).into()),
+                .fold(AB::Expr::zero(), |acc, &flag| acc + flag.into()),
         );
 
         let x_limbs = &io.x.data;

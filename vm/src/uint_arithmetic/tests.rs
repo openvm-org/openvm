@@ -170,7 +170,7 @@ fn run_bad_uint_arithmetic_test(
     cols.io.cmp_result = F::from_bool(cmp_result);
     let trace = RowMajorMatrix::new(
         cols.flatten(),
-        UintArithmeticCols::<256, 16, F>::get_width(&air),
+        UintArithmeticCols::<256, 16, F>::width(&air),
     );
 
     let range_trace = range_checker.generate_trace();
@@ -194,20 +194,16 @@ fn run_bad_uint_arithmetic_test(
 fn uint_add_wrong_carry_air_test() {
     run_bad_uint_arithmetic_test(
         Opcode::ADD256,
-        vec![1]
-            .into_iter()
+        std::iter::once(1)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![1]
-            .into_iter()
+        std::iter::once(1)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![3]
-            .into_iter()
+        std::iter::once(3)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![1]
-            .into_iter()
+        std::iter::once(1)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
         false,
@@ -220,20 +216,16 @@ fn uint_add_wrong_carry_air_test() {
 fn uint_add_out_of_range_air_test() {
     run_bad_uint_arithmetic_test(
         Opcode::ADD256,
-        vec![65_000]
-            .into_iter()
+        std::iter::once(65_000)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![65_000]
-            .into_iter()
+        std::iter::once(65_000)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![130_000]
-            .into_iter()
+        std::iter::once(130_000)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![0]
-            .into_iter()
+        std::iter::once(0)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
         false,
@@ -246,20 +238,16 @@ fn uint_add_out_of_range_air_test() {
 fn uint_add_wrong_addition_air_test() {
     run_bad_uint_arithmetic_test(
         Opcode::ADD256,
-        vec![65_000]
-            .into_iter()
+        std::iter::once(65_000)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![65_000]
-            .into_iter()
+        std::iter::once(65_000)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![130_000 - (1 << 16)]
-            .into_iter()
+        std::iter::once(130_000 - (1 << 16))
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![0]
-            .into_iter()
+        std::iter::once(0)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
         false,
@@ -292,20 +280,16 @@ fn uint_add_invalid_carry_air_test() {
 fn uint_sub_out_of_range_air_test() {
     run_bad_uint_arithmetic_test(
         Opcode::SUB256,
-        vec![1]
-            .into_iter()
+        std::iter::once(1)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![2]
-            .into_iter()
+        std::iter::once(2)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![F::neg_one().as_canonical_u32()]
-            .into_iter()
+        std::iter::once(F::neg_one().as_canonical_u32())
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![0]
-            .into_iter()
+        std::iter::once(0)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
         false,
@@ -318,20 +302,16 @@ fn uint_sub_out_of_range_air_test() {
 fn uint_sub_wrong_subtraction_air_test() {
     run_bad_uint_arithmetic_test(
         Opcode::SUB256,
-        vec![1]
-            .into_iter()
+        std::iter::once(1)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![2]
-            .into_iter()
+        std::iter::once(2)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![(1 << 16) - 1]
-            .into_iter()
+        std::iter::once((1 << 16) - 1)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![0]
-            .into_iter()
+        std::iter::once(0)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
         false,
@@ -519,20 +499,16 @@ fn uint_eq_rand_air_test() {
 fn uint_lt_wrong_subtraction_test() {
     run_bad_uint_arithmetic_test(
         Opcode::LT256,
-        vec![65_000]
-            .into_iter()
+        std::iter::once(65_000)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![65_000]
-            .into_iter()
+        std::iter::once(65_000)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![1]
-            .into_iter()
+        std::iter::once(1)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
-        vec![0]
-            .into_iter()
+        std::iter::once(0)
             .chain(std::iter::repeat(0).take(15))
             .collect(),
         false,

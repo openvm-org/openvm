@@ -40,10 +40,6 @@ pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T
     pub x_read: MemoryReadRecord<16, T>, // TODO: 16 -> generic expr or smth
     pub y_read: MemoryReadRecord<16, T>, // TODO: 16 -> generic expr or smth
     pub z_write: WriteRecord<T>,
-}
-
-pub struct UintArithmeticExecutionData<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
-    pub record: UintArithmeticRecord<ARG_SIZE, LIMB_SIZE, T>,
 
     // this may be redundant because we can extract it from z_write,
     // but it's not always the case
@@ -54,7 +50,7 @@ pub struct UintArithmeticExecutionData<const ARG_SIZE: usize, const LIMB_SIZE: u
 
 pub struct UintArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> {
     pub air: UintArithmeticAir<ARG_SIZE, LIMB_SIZE>,
-    data: Vec<UintArithmeticExecutionData<ARG_SIZE, LIMB_SIZE, T>>,
+    data: Vec<UintArithmeticRecord<ARG_SIZE, LIMB_SIZE, T>>,
     memory_chip: MemoryChipRef<T>,
     pub range_checker_chip: Arc<RangeCheckerGateChip>,
 }
@@ -138,27 +134,19 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             self.range_checker_chip.add_count(*elem);
         }
 
-        self.data.push(UintArithmeticExecutionData {
-            record: UintArithmeticRecord {
-                from_state,
-                instruction: instruction.clone(),
-                x_read,
-                y_read,
-                z_write,
-            },
+        self.data.push(UintArithmeticRecord {
+            from_state,
+            instruction: instruction.clone(),
+            x_read,
+            y_read,
+            z_write,
             result: result.into_iter().map(T::from_canonical_u32).collect_vec(),
             buffer: buffer.into_iter().map(T::from_canonical_u32).collect_vec(),
         });
 
-        let timestamp_delta = num_limbs::<ARG_SIZE, LIMB_SIZE>() * 2
-            + if opcode == Opcode::ADD256 || opcode == Opcode::SUB256 {
-                num_limbs::<ARG_SIZE, LIMB_SIZE>()
-            } else {
-                1
-            };
         ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: from_state.timestamp + timestamp_delta,
+            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         }
     }
 }
@@ -185,7 +173,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
     ) -> (CalculationResult<u32>, CalculationResidue<u32>) {
         match opcode {
             Opcode::ADD256 => {
-                let (result, carry) = Self::calc_sum(x, y);
+                let (result, carry) = Self::add(x, y);
                 (
                     CalculationResult::Uint(result.clone()),
                     CalculationResidue {
@@ -195,7 +183,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
                 )
             }
             Opcode::SUB256 => {
-                let (result, carry) = Self::calc_diff(x, y);
+                let (result, carry) = Self::subtract(x, y);
                 (
                     CalculationResult::Uint(result.clone()),
                     CalculationResidue {
@@ -205,7 +193,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
                 )
             }
             Opcode::LT256 => {
-                let (diff, carry) = Self::calc_diff(x, y);
+                let (diff, carry) = Self::subtract(x, y);
                 let cmp_result = *carry.last().unwrap() == 1;
                 (
                     CalculationResult::Short(cmp_result),
@@ -227,7 +215,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
                     }
                 }
                 (
-                    CalculationResult::Short(x.iter().zip(y).all(|(x, y)| x == y)),
+                    CalculationResult::Short(x == y),
                     CalculationResidue {
                         result: Default::default(),
                         buffer: inverse,
@@ -238,7 +226,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
         }
     }
 
-    fn calc_sum(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
+    fn add(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
         let mut result = vec![0u32; num_limbs];
         let mut carry = vec![0u32; num_limbs];
@@ -250,7 +238,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
         (result, carry)
     }
 
-    fn calc_diff(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
+    fn subtract(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
         let mut result = vec![0u32; num_limbs];
         let mut carry = vec![0u32; num_limbs];

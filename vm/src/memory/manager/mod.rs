@@ -79,19 +79,6 @@ impl<T: Copy> MemoryWriteRecord<1, T> {
     }
 }
 
-impl<const N: usize, T: Default + Copy> Default for MemoryWriteRecord<N, T> {
-    fn default() -> Self {
-        Self {
-            address_space: T::default(),
-            pointer: T::default(),
-            timestamp: T::default(),
-            prev_timestamps: [T::default(); N],
-            data: [T::default(); N],
-            prev_data: [T::default(); N],
-        }
-    }
-}
-
 pub type MemoryChipRef<F> = Rc<RefCell<MemoryChip<F>>>;
 
 #[derive(Clone, Debug)]

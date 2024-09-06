@@ -5,7 +5,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::Domain;
 
 use super::{
-    columns::{UintArithmeticAuxCols, UintArithmeticCols, UintArithmeticIoCols, MemoryData},
+    columns::{MemoryData, UintArithmeticAuxCols, UintArithmeticCols, UintArithmeticIoCols},
     num_limbs, UintArithmeticChip, WriteRecord,
 };
 use crate::{
@@ -28,7 +28,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
     }
 
     fn trace_width(&self) -> usize {
-        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::get_width(&self.air)
+        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width(&self.air)
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
@@ -39,28 +39,36 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
             .iter()
             .map(|operation| {
                 {
+                    let super::UintArithmeticRecord::<ARG_SIZE, LIMB_SIZE, F> {
+                        from_state,
+                        instruction,
+                        x_read,
+                        y_read,
+                        z_write,
+                        result,
+                        buffer,
+                    } = operation;
                     UintArithmeticCols {
                         io: UintArithmeticIoCols {
-                            from_state: operation.record.from_state.map(F::from_canonical_usize),
+                            from_state: from_state.map(F::from_canonical_usize),
                             x: MemoryData::<ARG_SIZE, LIMB_SIZE, F> {
-                                data: operation.record.x_read.data.to_vec(),
-                                address_space: operation.record.x_read.address_space,
-                                address: operation.record.x_read.pointer,
+                                data: x_read.data.to_vec(),
+                                address_space: x_read.address_space,
+                                address: x_read.pointer,
                             },
                             y: MemoryData {
-                                data: operation.record.y_read.data.to_vec(),
-                                address_space: operation.record.y_read.address_space,
-                                address: operation.record.y_read.pointer,
+                                data: y_read.data.to_vec(),
+                                address_space: y_read.address_space,
+                                address: y_read.pointer,
                             },
-                            z: match &operation.record.z_write {
+                            z: match &z_write {
                                 WriteRecord::Uint(z) => MemoryData {
                                     data: z.data.to_vec(),
                                     address_space: z.address_space,
                                     address: z.pointer,
                                 },
                                 WriteRecord::Short(z) => MemoryData {
-                                    data: operation
-                                        .result
+                                    data: result
                                         .iter()
                                         .cloned()
                                         .chain(std::iter::repeat(F::zero()))
@@ -70,35 +78,25 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                                     address: z.pointer,
                                 },
                             },
-                            cmp_result: match &operation.record.z_write {
+                            cmp_result: match &z_write {
                                 WriteRecord::Uint(_) => F::zero(),
                                 WriteRecord::Short(z) => z.data[0],
                             },
                         },
                         aux: UintArithmeticAuxCols {
                             is_valid: F::one(),
-                            opcode_add_flag: F::from_bool(
-                                operation.record.instruction.opcode == Opcode::ADD256,
-                            ),
-                            opcode_sub_flag: F::from_bool(
-                                operation.record.instruction.opcode == Opcode::SUB256,
-                            ),
-                            opcode_lt_flag: F::from_bool(
-                                operation.record.instruction.opcode == Opcode::LT256,
-                            ),
-                            opcode_eq_flag: F::from_bool(
-                                operation.record.instruction.opcode == Opcode::EQ256,
-                            ),
-                            buffer: operation.buffer.clone(),
-                            read_x_aux_cols: memory_chip
-                                .make_read_aux_cols(operation.record.x_read.clone()),
-                            read_y_aux_cols: memory_chip
-                                .make_read_aux_cols(operation.record.y_read.clone()),
-                            write_z_aux_cols: match &operation.record.z_write {
+                            opcode_add_flag: F::from_bool(instruction.opcode == Opcode::ADD256),
+                            opcode_sub_flag: F::from_bool(instruction.opcode == Opcode::SUB256),
+                            opcode_lt_flag: F::from_bool(instruction.opcode == Opcode::LT256),
+                            opcode_eq_flag: F::from_bool(instruction.opcode == Opcode::EQ256),
+                            buffer: buffer.clone(),
+                            read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),
+                            read_y_aux_cols: memory_chip.make_read_aux_cols(y_read.clone()),
+                            write_z_aux_cols: match &z_write {
                                 WriteRecord::Uint(z) => memory_chip.make_write_aux_cols(z.clone()),
                                 WriteRecord::Short(_) => memory_chip.make_disabled_write_aux_cols(),
                             },
-                            write_cmp_aux_cols: match &operation.record.z_write {
+                            write_cmp_aux_cols: match &z_write {
                                 WriteRecord::Uint(_) => memory_chip.make_disabled_write_aux_cols(),
                                 WriteRecord::Short(z) => memory_chip.make_write_aux_cols(z.clone()),
                             },
