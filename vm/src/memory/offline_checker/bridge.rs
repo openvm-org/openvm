@@ -1,5 +1,5 @@
 use std::{iter::zip, marker::PhantomData};
-
+use itertools::izip;
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
     is_zero::{
@@ -24,13 +24,8 @@ use crate::{
     },
 };
 
-/// The [MemoryBridge] can be created within any AIR evaluation function to be used as the
-/// interface for constraining logical memory read or write operations. The bridge will add
-/// all necessary constraints and interactions.
-///
-/// ## Usage
-/// [MemoryBridge] must be initialized with the correct number of auxiliary columns to match the
-/// exact number of memory operations to be constrained.
+/// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory operations (read/write).
+/// It adds all necessary constraints and interactions.
 #[derive(Clone, Debug)]
 pub struct MemoryBridge<V> {
     offline_checker: MemoryOfflineChecker,
@@ -38,7 +33,7 @@ pub struct MemoryBridge<V> {
 }
 
 impl<V> MemoryBridge<V> {
-    /// Create a new [MemoryBridge] with the given number of auxiliary columns.
+    /// Create a new [MemoryBridge] with the provided offline_checker.
     pub fn new(offline_checker: MemoryOfflineChecker) -> Self {
         Self {
             offline_checker,
@@ -64,7 +59,7 @@ impl<V> MemoryBridge<V> {
         }
     }
 
-    /// Prepare a logical memory read operation.
+    /// Prepare a logical memory read or immediate operation.
     #[must_use]
     pub fn read_or_immediate<T>(
         &self,
@@ -113,9 +108,6 @@ pub struct MemoryReadOperation<T, V, const N: usize> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
     data: [T; N],
-    /// The timestamp of the last write to this address
-    // timestamp_prev: T,
-    /// The timestamp of the current read
     timestamp: T,
     aux: MemoryReadAuxCols<N, V>,
 }
@@ -131,38 +123,22 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
         // NOTE: We do not need to constrain `address_space != 0` since this is done implicitly by
         // the memory interactions argument together with initial/final memory chips.
 
-        self.offline_checker.assert_increasing_timestamps(
+        self.offline_checker.eval_timestamps(
             builder,
             self.timestamp.clone(),
             &self.aux.base,
             enabled.clone(),
         );
 
-        let count = enabled;
-
-        // TODO[zach]: Deduplicate with the other `eval` functions in this file after word converter chip.
-        for i in 0..N {
-            let address = MemoryAddress::new(
-                self.address.address_space.clone(),
-                self.address.pointer.clone() + AB::Expr::from_canonical_usize(i),
-            );
-            self.offline_checker
-                .memory_bus
-                .read(
-                    address.clone(),
-                    [self.data[i].clone()],
-                    self.aux.base.prev_timestamps[i],
-                )
-                .eval(builder, count.clone());
-            self.offline_checker
-                .memory_bus
-                .write(
-                    address,
-                    [self.data[i].clone()],
-                    self.timestamp.clone() + AB::Expr::from_canonical_usize(i),
-                )
-                .eval(builder, count.clone());
-        }
+        self.offline_checker.eval_bulk_access(
+            builder,
+            &self.address,
+            &self.data.clone(),
+            &self.data,
+            &self.timestamp,
+            &self.aux.base.prev_timestamps,
+            enabled,
+        );
     }
 }
 
@@ -179,9 +155,6 @@ pub struct MemoryReadOrImmediateOperation<T, V> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
     data: T,
-    /// The timestamp of the last write to this address
-    // timestamp_prev: T,
-    /// The timestamp of the current read
     timestamp: T,
     aux: MemoryReadOrImmediateAuxCols<V>,
 }
@@ -196,8 +169,8 @@ impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
 
         // `is_immediate` should be an indicator for `address_space == 0` (when `enabled`).
         {
-            let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
-                IsZeroIoCols::<AB::Expr>::new(
+            let addr_space_is_zero_cols = IsZeroCols::new(
+                IsZeroIoCols::new(
                     self.address.address_space.clone(),
                     self.aux.is_immediate.into(),
                 ),
@@ -215,28 +188,22 @@ impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
             .assert_eq(self.data.clone(), self.address.pointer.clone());
 
         // Timestamps should be increasing (when enabled).
-        self.offline_checker.assert_increasing_timestamps(
+        self.offline_checker.eval_timestamps(
             builder,
             self.timestamp.clone(),
             &self.aux.base,
             enabled.clone(),
         );
 
-        let count = enabled * not(self.aux.is_immediate);
-        let [prev_timestamp] = self.aux.base.prev_timestamps;
-
-        self.offline_checker
-            .memory_bus
-            .read(self.address.clone(), [self.data.clone()], prev_timestamp)
-            .eval(builder, count.clone());
-        self.offline_checker
-            .memory_bus
-            .write(
-                self.address.clone(),
-                [self.data.clone()],
-                self.timestamp.clone(),
-            )
-            .eval(builder, count.clone());
+        self.offline_checker.eval_bulk_access(
+            builder,
+            &self.address,
+            &[self.data.clone()],
+            &[self.data],
+            &self.timestamp,
+            &self.aux.base.prev_timestamps,
+            enabled * not(self.aux.is_immediate),
+        );
     }
 }
 
@@ -262,39 +229,22 @@ impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T
         AB: InteractionBuilder<Var = V, Expr = T>,
     {
         let enabled = enabled.into();
-        self.offline_checker.assert_increasing_timestamps(
+        self.offline_checker.eval_timestamps(
             builder,
             self.timestamp.clone(),
             &self.aux.base,
             enabled.clone(),
         );
 
-        let count = enabled.clone();
-
-        // TODO[zach]: Deduplicate with the other `eval` functions in this file after word converter chip.
-        for i in 0..N {
-            let address = MemoryAddress::new(
-                self.address.address_space.clone(),
-                self.address.pointer.clone() + AB::Expr::from_canonical_usize(i),
-            );
-            self.offline_checker
-                .memory_bus
-                .read(
-                    address.clone(),
-                    [self.aux.prev_data[i]],
-                    self.aux.base.prev_timestamps[i],
-                )
-                .eval(builder, count.clone());
-
-            self.offline_checker
-                .memory_bus
-                .write(
-                    address,
-                    [self.data[i].clone()],
-                    self.timestamp.clone() + AB::Expr::from_canonical_usize(i),
-                )
-                .eval(builder, count.clone());
-        }
+        self.offline_checker.eval_bulk_access(
+            builder,
+            &self.address,
+            &self.data,
+            &self.aux.prev_data.map(Into::into),
+            &self.timestamp,
+            &self.aux.base.prev_timestamps,
+            enabled,
+        );
     }
 }
 
@@ -314,7 +264,7 @@ impl MemoryOfflineChecker {
         }
     }
 
-    fn assert_increasing_timestamps<AB: InteractionBuilder, const N: usize>(
+    fn eval_timestamps<AB: InteractionBuilder, const N: usize>(
         &self,
         builder: &mut AB,
         timestamp: AB::Expr,
@@ -330,6 +280,39 @@ impl MemoryOfflineChecker {
                 clk_lt_aux,
                 enabled.clone(),
             );
+        }
+    }
+
+    fn eval_bulk_access<AB, const N: usize>(
+        &self,
+        builder: &mut AB,
+        address: &MemoryAddress<AB::Expr, AB::Expr>,
+        data: &[AB::Expr; N],
+        prev_data: &[AB::Expr; N],
+        timestamp: &AB::Expr,
+        prev_timestamps: &[AB::Var; N],
+        enabled: AB::Expr,
+    )
+    where
+        AB: InteractionBuilder,
+    {
+        for (i, (&prev_timestamp, prev_datum, datum)) in izip!(prev_timestamps, prev_data, data).enumerate() {
+            let address = MemoryAddress::new(
+                address.address_space.clone(),
+                address.pointer.clone() + AB::Expr::from_canonical_usize(i),
+            );
+
+            self.memory_bus
+                .read(address.clone(), [prev_datum.clone()], prev_timestamp)
+                .eval(builder, enabled.clone());
+
+            self.memory_bus
+                .write(
+                    address,
+                    [datum.clone()],
+                    timestamp.clone() + AB::Expr::from_canonical_usize(i),
+                )
+                .eval(builder, enabled.clone());
         }
     }
 }
