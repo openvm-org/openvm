@@ -257,13 +257,13 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
 
         // Below, we do some logic to find a good interaction chunk size
         //
-        // The degree of the dominating constraint in the logup constraints
-        // is bounded by logup_degree = max(1 + max_field_degree * interaction_chunk_size,
+        // The degree of the dominating logup constraint is bounded by
+        // logup_degree = max(1 + max_field_degree * interaction_chunk_size,
         // max_count_degree + max_field_degree * (interaction_chunk_size - 1))
-        // More details about this can be in the function eval_permutation_constraints
+        // More details about this can be found in the function eval_permutation_constraints
         //
         // The goal is to pick interaction_chunk_size so that logup_degree does not
-        // exceed max_constraint_degree, while maximizing interaction_chunk_size
+        // exceed max_constraint_degree (if possible), while maximizing interaction_chunk_size
 
         let mut interaction_chunk_size = (max_constraint_degree - 1) / max_field_degree;
         interaction_chunk_size = interaction_chunk_size
