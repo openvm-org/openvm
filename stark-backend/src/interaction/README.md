@@ -34,8 +34,6 @@ on the main and preprocessed trace polynomials with rotations. This means that w
 $(f_1(\mathbf T),\dotsc,f_{len}(\mathbf T))$ to the $i$-th bus with multiplicity $m(\mathbf T)$, where $\mathbf T$
 refers to the trace (including preprocessed columns) as polynomials (as well as rotations).
 
-**Note:** currently the `count` polynomial **cannot** have any rotations -- it can only use variables from the current (local) row.
-
 ### Outcome
 
 If all row values for `count` for sends are small enough that the sum of all `count` values across all `sends` is strictly smaller than the field characteristic (so no overflows are possible), this enforces that:

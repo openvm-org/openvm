@@ -27,8 +27,6 @@ pub struct MultiStarkKeygenBuilder<'a, SC: StarkGenericConfig> {
     placeholder_main_matrix_in_commit: Vec<Vec<usize>>,
     /// Information for partitioned AIRs
     partitioned_airs: Vec<(&'a dyn AnyRap<SC>, usize, Vec<SingleMatrixCommitPtr>)>,
-    /// Number of interactions to bundle in permutation trace
-    interaction_chunk_size: Option<usize>,
 }
 
 impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
@@ -37,31 +35,24 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             config,
             placeholder_main_matrix_in_commit: vec![vec![]],
             partitioned_airs: vec![],
-            interaction_chunk_size: None,
         }
-    }
-
-    /// Set the number of interactions to bundle in permutation trace
-    pub fn set_interaction_chunk_size(&mut self, size: usize) {
-        self.interaction_chunk_size = Some(size);
     }
 
     /// Generates proving key, resetting the state of the builder.
     /// The verifying key can be obtained from the proving key.
     pub fn generate_pk(&mut self) -> MultiStarkProvingKey<SC> {
-        if self.interaction_chunk_size.is_none() {
-            // If this interaction_chunk_size is not set, use the following as a default
-            // so that logup constraints degree matches max AIR constraint degree, assuming
-            // `fields` and `count` are of degree 1 in all interactions
-            self.interaction_chunk_size = Some(self.all_airs_max_constraint_degree() - 1);
-        }
-        tracing::debug!(self.interaction_chunk_size);
-
-        let interaction_chunk_size = self.interaction_chunk_size.unwrap();
         let mut multi_pk = MultiStarkProvingKey::empty();
+        multi_pk.max_constraint_degree = self.all_airs_max_constraint_degree();
 
         let partitioned_airs = std::mem::take(&mut self.partitioned_airs);
         for (air, num_public_values, partitioned_main_ptrs) in partitioned_airs.into_iter() {
+            let interaction_chunk_size = self.calc_interaction_chunk_size_for_air(
+                air,
+                num_public_values,
+                &partitioned_main_ptrs,
+                multi_pk.max_constraint_degree,
+            );
+
             let (prep_prover_data, prep_verifier_data, symbolic_builder) = self
                 .get_prep_data_and_symbolic_builder(
                     air,
@@ -138,7 +129,6 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             create_commit_to_air_graph(&air_matrices, multi_pk.num_main_trace_commitments);
         // reset state
         self.placeholder_main_matrix_in_commit = vec![vec![]];
-        self.interaction_chunk_size = None;
 
         for pk in multi_pk.per_air.iter() {
             let width = pk.vk.width();
@@ -242,6 +232,45 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             };
             (pdata, vdata)
         })
+    }
+
+    fn calc_interaction_chunk_size_for_air(
+        &self,
+        air: &dyn AnyRap<SC>,
+        num_public_values: usize,
+        partitioned_main_ptrs: &[SingleMatrixCommitPtr],
+        max_constraint_degree: usize,
+    ) -> usize {
+        let (_, _, symbolic_builder) = self.get_prep_data_and_symbolic_builder(
+            air,
+            num_public_values,
+            partitioned_main_ptrs,
+            1,
+        );
+
+        let (max_field_degree, max_count_degree) =
+            symbolic_builder.constraints().max_interaction_degrees();
+
+        if max_field_degree == 0 {
+            return 1;
+        }
+
+        // Below, we do some logic to find a good interaction chunk size
+        //
+        // The degree of the dominating constraint in the logup constraints
+        // is bounded by logup_degree = max(1 + max_field_degree * interaction_chunk_size,
+        // max_count_degree + max_field_degree * (interaction_chunk_size - 1))
+        // More details about this can be in the function eval_permutation_constraints
+        //
+        // The goal is to pick interaction_chunk_size so that logup_degree does not
+        // exceed max_constraint_degree, while maximizing interaction_chunk_size
+
+        let mut interaction_chunk_size = (max_constraint_degree - 1) / max_field_degree;
+        interaction_chunk_size = interaction_chunk_size
+            .min((max_constraint_degree - max_count_degree + max_field_degree) / max_field_degree);
+        interaction_chunk_size = interaction_chunk_size.max(1);
+
+        interaction_chunk_size
     }
 
     fn all_airs_max_constraint_degree(&mut self) -> usize {

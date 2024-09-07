@@ -103,6 +103,13 @@ where
             row_rhs += term;
         }
 
+        // Some analysis on the degrees of row_lhs and row_rhs:
+        //
+        // Let max_field_degree be the maximum degree of all fields across all interactions
+        // for the AIR. Define max_count_degree similarly for the counts of the interactions.
+        //
+        // By construction, the degree of row_lhs is bounded by 1 + max_field_degree * interaction_chunk_size,
+        // and the degree of row_rhs is bounded by max_count_degree + max_field_degree * (interaction_chunk_size-1)
         builder.assert_eq_ext(row_lhs, row_rhs);
 
         phi_0 += perm_local[chunk_idx].into();

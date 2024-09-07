@@ -229,8 +229,6 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
         })
         .collect();
 
-    let interaction_chunk_size = pk.interaction_chunk_size;
-
     // TODO: ===== Permutation Trace Generation should be moved to separate module ====
     // Generate permutation traces
     {
@@ -246,6 +244,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
                 let public_values = &public_values[idx];
                 let interactions = &pk.vk.symbolic_constraints.interactions;
                 let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
+                let interaction_chunk_size = pk.vk.interaction_chunk_size;
                 generate_permutation_trace(
                     interactions,
                     &preprocessed_trace,
@@ -265,6 +264,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
                 let public_values = &public_values[idx];
                 let interactions = &pk.vk.symbolic_constraints.interactions;
                 let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
+                let interaction_chunk_size = pk.vk.interaction_chunk_size;
                 generate_permutation_trace(
                     interactions,
                     &preprocessed_trace,
@@ -284,6 +284,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
                 let public_values = &public_values[idx];
                 let interactions = &pk.vk.symbolic_constraints.interactions;
                 let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
+                let interaction_chunk_size = pk.vk.interaction_chunk_size;
                 generate_permutation_trace(
                     interactions,
                     &preprocessed_trace,
@@ -307,6 +308,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
                     let interactions = &pk.vk.symbolic_constraints.interactions;
                     let preprocessed_trace =
                         pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
+                    let interaction_chunk_size = pk.vk.interaction_chunk_size;
                     generate_permutation_trace(
                         interactions,
                         &preprocessed_trace,
