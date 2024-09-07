@@ -1,33 +1,22 @@
-use afs_compiler::{
-    ir::{
-        Array, BigUintVar, Builder, Config, MemIndex, MemVariable, Ptr, RVar, Var, Variable,
-        NUM_ELEMS,
-    },
-    prelude::DslVariable,
-};
+use afs_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var, NUM_ELEMS};
 use p3_field::{AbstractField, PrimeField64};
 
-// pub type EcPoint<C> = (BigIntVar<C>, BigIntVar<C>);
-#[derive(DslVariable, Clone, Debug)]
-pub struct EcPoint<C: Config> {
-    pub x: BigUintVar<C>,
-    pub y: BigUintVar<C>,
-}
+use crate::types::ECPointVariable;
 
 pub const BIGINT_MAX_BITS: usize = 256;
 
-pub fn scalar_multiply<C>(
+pub fn scalar_multiply_secp256k1<C>(
     builder: &mut Builder<C>,
-    point: &EcPoint<C>,
+    point: &ECPointVariable<C>,
     scalar: BigUintVar<C>,
     window_bits: usize,
-) -> EcPoint<C>
+) -> ECPointVariable<C>
 where
     C: Config,
     C::N: PrimeField64,
 {
     assert_eq!(BIGINT_MAX_BITS % window_bits, 0);
-    let EcPoint { x, y } = point;
+    let ECPointVariable { x, y } = point;
     let num_windows = BIGINT_MAX_BITS / window_bits;
     let window_len = (1usize << window_bits) - 1;
 
@@ -47,14 +36,14 @@ where
                 .map(|_| {
                     let mut curr = increment.clone();
                     // start with increment at index 0 instead of identity just as a dummy value to avoid divide by 0 issues
-                    let cache_vec: Array<C, EcPoint<C>> = builder.dyn_array(window_len);
+                    let cache_vec: Array<C, ECPointVariable<C>> = builder.dyn_array(window_len);
                     for j in 0..window_len {
                         let prev = curr.clone();
                         let (curr_x, curr_y) = builder.ec_add(
                             &(curr.x, curr.y),
                             &(increment.x.clone(), increment.y.clone()),
                         );
-                        curr = EcPoint {
+                        curr = ECPointVariable {
                             x: curr_x,
                             y: curr_y,
                         };
@@ -93,7 +82,7 @@ where
             builder.print_v(p);
         }
     }
-    EcPoint {
+    ECPointVariable {
         x: result_x,
         y: result_y,
     }

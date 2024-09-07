@@ -99,6 +99,8 @@ lazy_static = "1.5.0"
 once_cell = "1.19.0"
 strum_macros = "0.26.4"
 rand = "0.8.5"
+k256 = "0.13.3"
+elliptic-curve = "0.13.8"
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]
