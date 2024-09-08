@@ -217,8 +217,7 @@ which is an element of the original field which we define as $c$. So, we may sim
 ### Unsigned 32-bit integer instructions
 
 The following are instructions on unsigned 32-bit integers. The instructions are chosen to be compatible with RV32I.
-When these instructions are enabled, the ISA must have `WORD_SIZE >= 4`.
-For operations besides CASTU, any VM word will be assumed to have the first `4` cells consisting of **bytes** and the remaining cells equal to zero. We convert from word to `u32` via
+For operations besides CASTF, we refer to the word `word[a]_d` at memory pointer `a` to mean `[a + i]_d` for `i = 0..4`. We convert from word to `u32` via
 
 <!--
 [jpw] I chose bytes instead of u16 here to go with RV32 memory cell alignment. This can be changed as an optimization if needed.
@@ -235,13 +234,13 @@ and let `decompose: u32 -> Word` be the inverse operation.
 Immediates are handled as follows: `compose(word[a]_0) = a.as_canonical_u32()`. Note that RV32 immediates never exceed 20-bits, so any immediate bits inside a 31-bit field.
 
 <!--
-A note on CASTU below: support for casting arbitrary field elements can also be supported by doing a big int less than between the word and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
+A note on CASTF below: support for casting arbitrary field elements can also be supported by doing a big int less than between the word and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
 -->
 
-| Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                                                                            |
-| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **CASTU** | `a, b, _`                                     | Set `word[a]_d` to the unique word such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = proj(word[b]_e)` where `[a + i]_d < 2^8` for `i = 0..3` and `[a + 3]_d < 2^6`. This opcode enforces `proj(word[b]_e)` must be at most 30-bits. If `WORD_SIZE > 4` then all remaining cells in `word[a]_d` must be zero. |
-| **SLTU**  | `a, b, c`                                     | Set `word[a]_d <- compose(word[b]_d) < compose(word[c]_e) ? emb(1) : emb(0)`. The address space `d` is not allowed to be zero.                                                                                                                                                                         |
+| Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                                                                |
+| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **CASTF** | `a, b, _`                                     | Cast a field element to `u32` represented as four bytes in little-endian: Set `word[a]_d` to the unique word such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..3` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
+| **SLTU**  | `a, b, c`                                     | Set `[a]_d <- compose(word[b]_e) < compose(word[c]_f) ? 1 : 0`. The address space `d` is not allowed to be zero.                                                                                                                                                                           |
 
 ### U256 Arithmetic and Logical Operations
 
