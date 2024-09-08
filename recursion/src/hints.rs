@@ -1,4 +1,11 @@
-use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE};
+use afs_compiler::ir::{
+    Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE, NUM_ELEMS,
+    REPR_BITS,
+};
+use afs_ecc::types::{
+    ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
+    ECPointVariable,
+};
 use afs_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
@@ -7,6 +14,7 @@ use afs_stark_backend::{
     },
 };
 use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use num_bigint_dig::BigUint;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
@@ -14,6 +22,7 @@ use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFr
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
+use stark_vm::modular_multiplication::biguint_to_elems;
 
 use crate::types::{
     AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, OpenedValuesVariable,
@@ -403,6 +412,79 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
         stream.extend(h.write());
 
         stream
+    }
+}
+
+impl Hintable<InnerConfig> for BigUint {
+    type HintVariable = BigUintVar<InnerConfig>;
+
+    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+        let ret = builder.dyn_array(NUM_ELEMS);
+        for i in 0..NUM_ELEMS {
+            // FIXME: range check for each element.
+            let v = builder.hint_var();
+            builder.set_value(&ret, i, v);
+        }
+        ret
+    }
+
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
+        vec![biguint_to_elems(self.clone(), REPR_BITS, NUM_ELEMS)]
+    }
+}
+
+impl Hintable<InnerConfig> for ECPoint {
+    type HintVariable = ECPointVariable<InnerConfig>;
+
+    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+        let x = BigUint::read(builder);
+        let y = BigUint::read(builder);
+        // ECPointVariable::`new` checks if the point is on the curve.
+        ECPointVariable { x, y }
+    }
+
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
+        let mut ret: Vec<Vec<<InnerConfig as Config>::N>> = self.x.write();
+        ret.extend(self.y.write());
+        ret
+    }
+}
+
+impl Hintable<InnerConfig> for ECDSASignature {
+    type HintVariable = ECDSASignatureVariable<InnerConfig>;
+
+    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+        let r = BigUint::read(builder);
+        let s = BigUint::read(builder);
+        ECDSASignatureVariable { r, s }
+    }
+
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
+        let mut ret: Vec<Vec<<InnerConfig as Config>::N>> = self.r.write();
+        ret.extend(self.s.write());
+        ret
+    }
+}
+
+impl Hintable<InnerConfig> for ECDSAInput {
+    type HintVariable = ECDSAInputVariable<InnerConfig>;
+
+    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+        let pubkey = ECPoint::read(builder);
+        let sig = ECDSASignature::read(builder);
+        let msg_hash = BigUint::read(builder);
+        Self::HintVariable {
+            pubkey,
+            sig,
+            msg_hash,
+        }
+    }
+
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
+        let mut ret = self.pubkey.write();
+        ret.extend(self.sig.write());
+        ret.extend(self.msg_hash.write());
+        ret
     }
 }
 

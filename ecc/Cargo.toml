@@ -25,8 +25,7 @@ p3-uni-stark = { workspace = true }
 itertools.workspace = true
 
 rand = "0.8.5"
-num-bigint = "0.4.6"
-num-bigint-dig = "0.8.4"
+num-bigint-dig = { workspace = true }
 serde = { workspace = true }
 snark-verifier-sdk = { workspace = true }
 zkhash = { workspace = true }

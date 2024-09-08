@@ -7,7 +7,8 @@ use crate::{
     types::{ECDSAInputVariable, ECPoint, ECPointVariable},
 };
 
-/// Return 1 if the signature is valid. Otherwise, return 0.
+/// Return 1 if the ECDSA verification succeeds. Otherwise, return 0.
+/// **Assumption**: `input` is a valid ECDSA input.
 /// Reference: https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm#Signature_verification_algorithm
 pub fn verify_ecdsa_secp256k1<C: Config>(
     builder: &mut Builder<C>,

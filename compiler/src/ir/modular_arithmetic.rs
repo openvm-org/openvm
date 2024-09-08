@@ -88,6 +88,7 @@ where
     }
 
     pub fn secp256k1_coord_is_zero(&mut self, biguint: &BigUintVar<C>) -> Var<C::N> {
+        // FIXME: this doesn't consider the case `biguint` == `p`.
         let result = self.eval(C::N::one());
         for i in 0..NUM_ELEMS {
             let elem = self.get(biguint, i);
@@ -157,6 +158,7 @@ where
     }
 
     pub fn secp256k1_scalar_is_zero(&mut self, biguint: &BigUintVar<C>) -> Var<C::N> {
+        // FIXME: this doesn't consider the case `biguint` == `n`.
         let result = self.eval(C::N::one());
         for i in 0..NUM_ELEMS {
             let elem = self.get(biguint, i);
