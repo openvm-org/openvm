@@ -16,7 +16,8 @@ use tracing::instrument;
 use super::{functionality::filter::FilterFn, AxdbNodeExecutable};
 use crate::{
     common::{
-        committed_page::CommittedPage, cryptographic_object::CryptographicObject, expr::AxdbExpr,
+        committed_page::CommittedPage, cryptographic_object::CryptographicObject,
+        cryptographic_schema::CryptographicSchema, expr::AxdbExpr,
     },
     utils::table::get_record_batches,
     NUM_IDX_COLS,
@@ -76,7 +77,7 @@ where
         (idx_len, data_len)
     }
 
-    async fn read_input(&self, ctx: &SessionContext) -> CommittedPage<SC> {
+    async fn read_input_page(&self, ctx: &SessionContext) -> CommittedPage<SC> {
         // Convert RecordBatches to a CommittedPage
         // NOTE: only one RecordBatch is supported for now
         let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
@@ -88,6 +89,18 @@ where
         }
         let rb = &record_batches[0];
         CommittedPage::from_record_batch(rb.clone())
+    }
+
+    async fn read_input_schema(&self, ctx: &SessionContext) -> CryptographicSchema {
+        let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
+        if record_batches.len() != 1 {
+            panic!(
+                "Unexpected number of record batches in PageScan: {}",
+                record_batches.len()
+            );
+        }
+        let rb = &record_batches[0];
+        CryptographicSchema::new((*rb.schema()).clone(), NUM_IDX_COLS)
     }
 
     fn filter_name(&self) -> String {
@@ -108,24 +121,8 @@ where
     SC::Challenge: Send + Sync,
 {
     #[instrument(level = "info", skip_all)]
-    async fn execute(&mut self, ctx: &SessionContext, _engine: &E) -> Result<()> {
-        let mut committed_page = self.read_input(ctx).await;
-        self.filter_io.push(committed_page.clone());
-
-        if !self.filters.is_empty() {
-            for filter in &self.filters {
-                committed_page = FilterFn::<SC, E>::execute(filter, &committed_page).await?;
-                self.filter_io.push(committed_page.clone());
-            }
-        }
-
-        self.output = Some(CryptographicObject::CommittedPage(committed_page));
-        Ok(())
-    }
-
-    #[instrument(level = "info", skip_all)]
     async fn keygen(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        let committed_page = self.read_input(ctx).await;
+        let schema = self.read_input_schema(ctx).await;
         if !self.filters.is_empty() {
             // Since filtering does not change the Schema, we can use the same proving key for all filters on this PageScan node
             let filter = &self.filters[0];
@@ -139,7 +136,23 @@ where
             )
             .await?;
         }
-        self.output = Some(committed_page.into());
+        self.output = Some(schema.into());
+        Ok(())
+    }
+
+    #[instrument(level = "info", skip_all)]
+    async fn execute(&mut self, ctx: &SessionContext, _engine: &E) -> Result<()> {
+        let mut committed_page = self.read_input_page(ctx).await;
+        self.filter_io.push(committed_page.clone());
+
+        if !self.filters.is_empty() {
+            for filter in &self.filters {
+                committed_page = FilterFn::<SC, E>::execute(filter, &committed_page).await?;
+                self.filter_io.push(committed_page.clone());
+            }
+        }
+
+        self.output = Some(CryptographicObject::CommittedPage(committed_page));
         Ok(())
     }
 

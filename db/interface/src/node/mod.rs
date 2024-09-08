@@ -30,10 +30,10 @@ pub mod projection;
 #[async_trait]
 #[enum_dispatch]
 pub trait AxdbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
-    /// Runs the node's execution logic without any cryptographic operations
-    async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()>;
     /// Generate the proving key for the node
     async fn keygen(&mut self, ctx: &SessionContext, engine: &E) -> Result<()>;
+    /// Runs the node's execution logic without any cryptographic operations
+    async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()>;
     /// Geenrate the STARK proof for the node
     async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()>;
     /// Verify the STARK proof for the node

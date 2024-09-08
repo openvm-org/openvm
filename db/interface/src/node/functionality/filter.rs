@@ -47,22 +47,6 @@ where
         )
     }
 
-    pub async fn execute(filter: &AxdbExpr, page: &CommittedPage<SC>) -> Result<CommittedPage<SC>> {
-        let (_, comp, right_value) = filter.decompose_binary_expr();
-        let right_value = match right_value {
-            AxdbExpr::Literal(lit) => lit,
-            _ => panic!("Only literal values are currently supported for filter"),
-        };
-        let idx_len = page.page.idx_len();
-        let data_len = page.page.data_len();
-        let page_width = page.page.width();
-
-        let page_controller = Self::page_controller(idx_len, data_len, comp.clone());
-        let filter_output =
-            page_controller.gen_output(page.page.clone(), vec![right_value], page_width, comp);
-        Ok(CommittedPage::new(page.schema.clone(), filter_output))
-    }
-
     pub async fn keygen(
         engine: &E,
         filter: &AxdbExpr,
@@ -79,6 +63,22 @@ where
         let pk = keygen_builder.generate_pk();
         PkUtil::<SC, E>::save_proving_key(node_name, idx_len, data_len, &pk)?;
         Ok(pk)
+    }
+
+    pub async fn execute(filter: &AxdbExpr, page: &CommittedPage<SC>) -> Result<CommittedPage<SC>> {
+        let (_, comp, right_value) = filter.decompose_binary_expr();
+        let right_value = match right_value {
+            AxdbExpr::Literal(lit) => lit,
+            _ => panic!("Only literal values are currently supported for filter"),
+        };
+        let idx_len = page.page.idx_len();
+        let data_len = page.page.data_len();
+        let page_width = page.page.width();
+
+        let page_controller = Self::page_controller(idx_len, data_len, comp.clone());
+        let filter_output =
+            page_controller.gen_output(page.page.clone(), vec![right_value], page_width, comp);
+        Ok(CommittedPage::new(page.schema.clone(), filter_output))
     }
 
     pub async fn prove(

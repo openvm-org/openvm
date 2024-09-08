@@ -47,12 +47,12 @@ where
     SC::Challenge: Send + Sync,
 {
     #[instrument(level = "info", skip_all)]
-    async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
+    async fn keygen(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
         unimplemented!()
     }
 
     #[instrument(level = "info", skip_all)]
-    async fn keygen(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
+    async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
         unimplemented!()
     }
 

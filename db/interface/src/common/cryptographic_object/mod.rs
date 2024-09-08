@@ -1,4 +1,4 @@
-use std::{any::Any, sync::Arc};
+use std::{any::Any, fmt::Debug, sync::Arc};
 
 use afs_page::common::page::Page;
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
@@ -33,7 +33,7 @@ pub trait CryptographicObjectTrait {
     fn page(&self) -> Page;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[enum_dispatch(CryptographicObjectTrait)]
 pub enum CryptographicObject<SC: StarkGenericConfig> {
     CommittedPage(CommittedPage<SC>),
@@ -74,6 +74,19 @@ where
         let page = CryptographicObjectTrait::page(self);
         let exec = CryptographicObjectExec::new(page, schema);
         Ok(Arc::new(exec))
+    }
+}
+
+impl<SC: StarkGenericConfig> Debug for CryptographicObject<SC> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CryptographicObject::CommittedPage(page) => {
+                write!(f, "CryptographicObject::CommittedPage({:?})", page)
+            }
+            CryptographicObject::CryptographicSchema(schema) => {
+                write!(f, "CryptographicObject::CryptographicSchema({:?})", schema)
+            }
+        }
     }
 }
 

@@ -54,11 +54,6 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    // async fn unlock_input(&self) -> Arc<CryptographicObject<SC>> {
-    //     let input = self.input.lock().await;
-    //     let input = input.output().as_ref().unwrap();
-    // }
-
     fn page_stats(&self, cp: &CryptographicObject<SC>) -> (usize, usize, usize) {
         let schema = cp.schema();
         // TODO: handle different data types
@@ -87,6 +82,28 @@ where
     SC::Challenge: Send + Sync,
 {
     #[instrument(level = "info", skip_all)]
+    async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
+        let input = self.input.lock().await;
+        let input = input.output().as_ref().unwrap();
+
+        let (idx_len, data_len, _page_width) = self.page_stats(input);
+        let pk = FilterFn::<SC, E>::keygen(engine, &self.predicate, self.name(), idx_len, data_len)
+            .await?;
+        self.pk = Some(pk);
+
+        println!("input: {:?}", input);
+
+        match input {
+            CryptographicObject::CryptographicSchema(schema) => {
+                let output = CryptographicObject::CryptographicSchema(schema.clone());
+                self.output = Some(output);
+            }
+            _ => panic!("input is not a CryptographicSchema"),
+        }
+        Ok(())
+    }
+
+    #[instrument(level = "info", skip_all)]
     async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
         // let input = self.unlock_input().await;
         let input = self.input.lock().await;
@@ -97,30 +114,6 @@ where
                 self.output = Some(output.into());
             }
             _ => panic!("input is not a CommittedPage<SC>"),
-        }
-        // if let Some(input_page) = input.as_any().downcast_ref::<CommittedPage<_>>() {
-        //     let output = FilterFn::<SC, E>::execute(&self.predicate, &input_page).await?;
-        //     // self.output = Some(output.into());
-        // }
-        Ok(())
-    }
-
-    #[instrument(level = "info", skip_all)]
-    async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        let input = self.input.lock().await;
-        let input = input.output().as_ref().unwrap();
-
-        let (idx_len, data_len, _page_width) = self.page_stats(input);
-        let pk = FilterFn::<SC, E>::keygen(engine, &self.predicate, self.name(), idx_len, data_len)
-            .await?;
-        self.pk = Some(pk);
-
-        match input {
-            CryptographicObject::CryptographicSchema(schema) => {
-                let output = CryptographicObject::CryptographicSchema(schema.clone());
-                self.output = Some(output);
-            }
-            _ => panic!("input is not a CryptographicSchema"),
         }
         Ok(())
     }
