@@ -15,6 +15,7 @@ use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
 use super::{VirtualMachineState, VmConfig, VmCycleTracker, VmMetrics};
@@ -72,6 +73,7 @@ impl<SC: StarkGenericConfig> SegmentResult<SC> {
         self.traces
             .iter()
             .map(RowMajorMatrix::height)
+            .map(log2_strict_usize)
             .max()
             .unwrap()
     }

@@ -84,8 +84,8 @@ pub fn interaction_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC> 
     let range_checker_air = Rc::new(sum_chip.range_checker.air);
 
     let any_raps: Vec<Rc<dyn AnyRap<SC>>> =
-        vec![sum_air, sender_air, receiver_air, range_checker_air];
-    let traces = vec![sum_trace, sender_trace, receiver_trace, range_checker_trace];
+        vec![range_checker_air, sum_air, sender_air, receiver_air];
+    let traces = vec![range_checker_trace, sum_trace, sender_trace, receiver_trace];
     let pvs = vec![vec![], vec![], vec![], vec![]];
 
     StarkForTest {
