@@ -20,6 +20,7 @@ serde_json.workspace = true
 backtrace = { version = "0.3.71", features = ["serde"] }
 strum_macros = "0.26.4"
 num-bigint-dig = { workspace = true }
+num-bigint = "0.4.6"
 num-integer = "0.1.46"
 num-traits = "0.2.19"
 # disable jemalloc to be compatible with afs-starkbackend

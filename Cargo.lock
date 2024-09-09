@@ -99,6 +99,7 @@ dependencies = [
  "backtrace",
  "hex",
  "itertools 0.13.0",
+ "num-bigint 0.4.6",
  "num-bigint-dig",
  "num-integer",
  "num-traits",
