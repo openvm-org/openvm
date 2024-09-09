@@ -2,13 +2,14 @@ use std::{ops::Deref, sync::Arc};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{BigInt, BigUint, Sign};
+use num_integer::Integer;
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField64};
 
 use super::{Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols, OverflowInt};
 use crate::{
-    range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
+    var_range::VariableRangeCheckerChip,
 };
 pub struct ModularMultiplicationAir {
     pub arithmetic: ModularArithmeticAir,
@@ -40,12 +41,12 @@ impl AirConfig for ModularMultiplicationAir {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
-    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
+    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let r = x.clone() * y.clone() % self.modulus.clone();
-        let q = (x.clone() * y.clone()) / self.modulus.clone();
+        let raw_product = x.clone() * y.clone();
+        let (q, r) = raw_product.div_mod_floor(&self.modulus);
         let q = BigInt::from_biguint(Sign::Plus, q);
         let equation: Equation5<isize, OverflowInt<isize>> = |x, y, r, p, q| x * y - p * q - r;
         self.arithmetic

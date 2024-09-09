@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField64};
 
 use super::{Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols, OverflowInt};
 use crate::{
-    range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
+    var_range::VariableRangeCheckerChip,
 };
 pub struct ModularAdditionAir {
     pub arithmetic: ModularArithmeticAir,
@@ -40,7 +40,7 @@ impl AirConfig for ModularAdditionAir {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for ModularAdditionAir {
-    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
+    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;

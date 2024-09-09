@@ -10,8 +10,8 @@ use super::{
     OverflowInt,
 };
 use crate::{
-    range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
+    var_range::VariableRangeCheckerChip,
 };
 pub struct ModularSubtractionAir {
     pub arithmetic: ModularArithmeticAir,
@@ -43,7 +43,7 @@ impl AirConfig for ModularSubtractionAir {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for ModularSubtractionAir {
-    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
+    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;

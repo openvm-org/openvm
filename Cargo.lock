@@ -206,6 +206,7 @@ dependencies = [
  "getset",
  "itertools 0.13.0",
  "num-bigint-dig",
+ "num-integer",
  "num-traits",
  "p3-air",
  "p3-baby-bear",

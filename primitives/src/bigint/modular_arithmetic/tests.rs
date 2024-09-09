@@ -15,7 +15,8 @@ use super::{
     ModularArithmeticCols,
 };
 use crate::{
-    range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions,
+    sub_chip::LocalTraceInstructions,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 // 256 bit prime, 10 limb bits -> 26 limbs.
 const LIMB_BITS: usize = 10;
@@ -35,7 +36,7 @@ fn get_air_and_range_checker(
     limb_bits: usize,
     num_limbs: usize,
     is_mul_div: bool,
-) -> (ModularArithmeticAir, Arc<RangeCheckerGateChip>) {
+) -> (ModularArithmeticAir, Arc<VariableRangeCheckerChip>) {
     let limb_max_abs = if is_mul_div {
         // The equation: x*y - p*q - r, or y*r - x - pq. with num_limbs N = 26
         // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N * 2 + 2^10
@@ -49,9 +50,9 @@ fn get_air_and_range_checker(
 
     let range_bus = 1;
     let range_decomp = 17;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
         range_bus,
-        1 << range_decomp,
+        range_decomp,
     )));
     let q_limbs = if is_mul_div { num_limbs } else { 1 };
     let carry_limbs = if is_mul_div {

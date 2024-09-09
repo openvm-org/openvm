@@ -25,6 +25,7 @@ itertools.workspace = true
 getset = "0.1.2"
 num-bigint-dig = "0.8.4"
 num-traits = "0.2.19"
+num-integer = "0.1.45"
 prime_factorization = "1.0.4"
 
 [dev-dependencies]

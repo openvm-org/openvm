@@ -11,7 +11,7 @@ use crate::{
         utils::big_int_to_limbs,
         CanonicalUint, DefaultLimbConfig, OverflowInt,
     },
-    range_gate::RangeCheckerGateChip,
+    var_range::VariableRangeCheckerChip,
 };
 
 pub mod add;
@@ -176,18 +176,8 @@ impl ModularArithmeticAir {
         q: BigInt,
         r: BigUint,
         equation: Equation5<isize, OverflowInt<isize>>,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> ModularArithmeticCols<F> {
-        let range_check = |bits: usize, value: usize| {
-            let value = value as u32;
-            if bits == self.range_decomp {
-                range_checker.add_count(value);
-            } else {
-                range_checker.add_count(value);
-                range_checker.add_count(value + (1 << self.range_decomp) - (1 << bits));
-            }
-        };
-
         // Quotient and result can be smaller, but padding to the desired length.
         let q_limbs: Vec<isize> = big_int_to_limbs(q.clone(), self.limb_bits)
             .iter()
@@ -196,7 +186,7 @@ impl ModularArithmeticAir {
             .copied()
             .collect();
         for &q in q_limbs.iter() {
-            range_check(self.limb_bits + 1, (q + (1 << self.limb_bits)) as usize);
+            range_checker.add_count((q + (1 << self.limb_bits)) as u32, self.limb_bits + 1);
         }
         let q_f: Vec<F> = q_limbs.iter().map(|&x| Self::to_f(x)).collect();
         let r_canonical =
@@ -217,8 +207,8 @@ impl ModularArithmeticAir {
         );
         let q_overflow = OverflowInt {
             limbs: q_limbs,
-            max_overflow_bits: self.limb_bits,
-            limb_max_abs: (1 << self.limb_bits) - 1,
+            max_overflow_bits: self.limb_bits + 1,
+            limb_max_abs: (1 << self.limb_bits),
         };
         let expr = equation(
             x_canonical.clone().into(),
@@ -231,7 +221,7 @@ impl ModularArithmeticAir {
         let mut carries_f = vec![F::zero(); carries.len()];
         let carry_min_abs = self.get_carry_min_value_abs() as isize;
         for (i, &carry) in carries.iter().enumerate() {
-            range_check(self.get_carry_bits(), (carry + carry_min_abs) as usize);
+            range_checker.add_count((carry + carry_min_abs) as u32, self.get_carry_bits());
             carries_f[i] = Self::to_f(carry);
         }
 
