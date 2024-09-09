@@ -19,6 +19,9 @@ We also discussed that `limb_bits` should be ~10 to handle 256-bit integers, and
 
 ## Implementation details
 
+### Assumptions
+* Inputs `x, y` are of the same length (when represented as limbs) as `p`. They don't necessarily be within `[0, p)`.
+
 ### `OverflowInt<T>`
 
 It's big integer represented as limbs, and also tracks the value limit of each limb.
@@ -67,7 +70,9 @@ fn main() {
 Assuming the modulus prime is of N limbs.
 For multiplication, the columns are: `x, y, q, r` of size N, and `carries` of size 2N-1 (as `x*y` can be of length 2N-1). 
 Division is just a different equation: `yr - x - pq = 0`, so the same columns work.
-For addition and subtractions: `x [+/-] y - r - pq = 0` , the main difference here is that we know `q` is either 1 or 0 (as x and y in `[0, p)` ),
-so the equation should have limb size N, and thus `carries` just be of size N.
+For addition and subtractions: `x [+/-] y - r - pq = 0` , the main difference here is that we know that `q` will just be one limb,
+and thus the equation should have limb size N, and `carries` just be of size N.
 If we combine the operations into one chip, we will also need extra columns: `opcode_add_flag, opcode_sub_flag. opcode_mul_flag , opcode_div_flag`.
 Therefore we will just have separate chips for different operations.
+
+We are unsure if division is actually needed, so commented out for now.

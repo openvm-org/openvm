@@ -99,15 +99,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let range_check = |bits: usize, value: usize| {
-            let value = value as u32;
-            if bits == self.decomp {
-                range_checker.add_count(value);
-            } else {
-                range_checker.add_count(value);
-                range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
-            }
-        };
         let x_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(x, Some(N));
         let x_overflow: OverflowInt<isize> = x_canonical.into();
         let y_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(y, Some(2 * N));

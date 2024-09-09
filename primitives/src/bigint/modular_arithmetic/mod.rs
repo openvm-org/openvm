@@ -1,14 +1,14 @@
 use std::{iter::repeat, sync::Arc};
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use num_bigint_dig::BigUint;
+use num_bigint_dig::{BigInt, BigUint};
 use p3_field::PrimeField64;
 use p3_matrix::Matrix;
 
 use crate::{
     bigint::{
         check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
-        utils::big_uint_to_limbs,
+        utils::big_int_to_limbs,
         CanonicalUint, DefaultLimbConfig, OverflowInt,
     },
     range_gate::RangeCheckerGateChip,
@@ -127,6 +127,11 @@ impl ModularArithmeticAir {
         self.check_carry_sub_air.check_carry_to_zero.carry_bits
     }
 
+    // Converting limb from an isize to a field element.
+    fn to_f<F: PrimeField64>(x: isize) -> F {
+        F::from_canonical_usize(x.unsigned_abs()) * if x >= 0 { F::one() } else { F::neg_one() }
+    }
+
     pub fn eval<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -168,24 +173,11 @@ impl ModularArithmeticAir {
         &self,
         x: BigUint,
         y: BigUint,
-        q: BigUint,
+        q: BigInt,
         r: BigUint,
-        equation: Equation5<isize, CanonicalUint<isize, DefaultLimbConfig>>,
+        equation: Equation5<isize, OverflowInt<isize>>,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> ModularArithmeticCols<F> {
-        // Quotient and result can be smaller, but padding to the desired length.
-        let quotient_f: Vec<F> = big_uint_to_limbs(q.clone(), self.limb_bits)
-            .iter()
-            .chain(repeat(&0))
-            .take(self.q_limbs)
-            .map(|&x| F::from_canonical_usize(x))
-            .collect();
-        let r_f: Vec<F> = big_uint_to_limbs(r.clone(), self.limb_bits)
-            .iter()
-            .chain(repeat(&0))
-            .take(self.num_limbs)
-            .map(|&x| F::from_canonical_usize(x))
-            .collect();
         let range_check = |bits: usize, value: usize| {
             let value = value as u32;
             if bits == self.range_decomp {
@@ -195,35 +187,52 @@ impl ModularArithmeticAir {
                 range_checker.add_count(value + (1 << self.range_decomp) - (1 << bits));
             }
         };
+
+        // Quotient and result can be smaller, but padding to the desired length.
+        let q_limbs: Vec<isize> = big_int_to_limbs(q.clone(), self.limb_bits)
+            .iter()
+            .chain(repeat(&0))
+            .take(self.q_limbs)
+            .copied()
+            .collect();
+        for &q in q_limbs.iter() {
+            range_check(self.limb_bits + 1, (q + (1 << self.limb_bits)) as usize);
+        }
+        let q_f: Vec<F> = q_limbs.iter().map(|&x| Self::to_f(x)).collect();
+        let r_canonical =
+            CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(r, Some(self.num_limbs));
+        let r_f: Vec<F> = r_canonical
+            .limbs
+            .iter()
+            .map(|&x| F::from_canonical_usize(x as usize))
+            .collect();
+
         let x_canonical =
             CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(x, Some(self.num_limbs));
         let y_canonical =
             CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(y, Some(self.num_limbs));
-        let r_canonical =
-            CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(r, Some(self.num_limbs));
         let p_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(
             self.modulus.clone(),
             Some(self.num_limbs),
         );
-        let q_canonical =
-            CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(q, Some(self.q_limbs));
-        for &q in q_canonical.limbs.iter() {
-            range_check(self.limb_bits, q as usize);
-        }
+        let q_overflow = OverflowInt {
+            limbs: q_limbs,
+            max_overflow_bits: self.limb_bits,
+            limb_max_abs: (1 << self.limb_bits) - 1,
+        };
         let expr = equation(
-            x_canonical.clone(),
-            y_canonical.clone(),
-            r_canonical,
-            p_canonical,
-            q_canonical,
+            x_canonical.clone().into(),
+            y_canonical.clone().into(),
+            r_canonical.into(),
+            p_canonical.into(),
+            q_overflow,
         );
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
         let carry_min_abs = self.get_carry_min_value_abs() as isize;
         for (i, &carry) in carries.iter().enumerate() {
             range_check(self.get_carry_bits(), (carry + carry_min_abs) as usize);
-            carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
-                * if carry >= 0 { F::one() } else { F::neg_one() };
+            carries_f[i] = Self::to_f(carry);
         }
 
         ModularArithmeticCols {
@@ -237,7 +246,7 @@ impl ModularArithmeticAir {
                 .iter()
                 .map(|x| F::from_canonical_usize(*x as usize))
                 .collect(),
-            q: quotient_f,
+            q: q_f,
             r: r_f,
             carries: carries_f,
         }

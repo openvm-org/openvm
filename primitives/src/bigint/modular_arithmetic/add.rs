@@ -1,15 +1,12 @@
 use std::{ops::Deref, sync::Arc};
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use num_bigint_dig::BigUint;
+use num_bigint_dig::{BigInt, BigUint, Sign};
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField64};
 
-use super::{
-    CanonicalUint, Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols, OverflowInt,
-};
+use super::{Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols, OverflowInt};
 use crate::{
-    bigint::DefaultLimbConfig,
     range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
 };
@@ -47,17 +44,16 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularAdditionAir {
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let r = (x.clone() + y.clone()) % self.modulus.clone();
-        let q = (x.clone() + y.clone() - r.clone()) / self.modulus.clone();
-        let equation: Equation5<isize, CanonicalUint<isize, DefaultLimbConfig>> =
-            |x, y, r, p, q| {
-                let x = OverflowInt::from(x);
-                let y = OverflowInt::from(y);
-                let r = OverflowInt::from(r);
-                let p = OverflowInt::from(p);
-                let q = OverflowInt::from(q);
-                x + y - r - p * q
-            };
+        let raw_sum = x.clone() + y.clone();
+        let sign = if raw_sum < self.modulus {
+            // x + y - r == 0
+            Sign::NoSign
+        } else {
+            Sign::Plus
+        };
+        let r = raw_sum.clone() % self.modulus.clone();
+        let q = BigInt::from_biguint(sign, (raw_sum - r.clone()) / self.modulus.clone());
+        let equation: Equation5<isize, OverflowInt<isize>> = |x, y, r, p, q| x + y - r - p * q;
         self.arithmetic
             .generate_trace_row(x, y, q, r, equation, range_checker)
     }

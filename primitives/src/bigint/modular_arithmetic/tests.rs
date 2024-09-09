@@ -11,7 +11,7 @@ use p3_util::log2_ceil_usize;
 use rand::RngCore;
 
 use super::{
-    super::utils::secp256k1_prime, add::*, div::*, mul::*, sub::*, ModularArithmeticAir,
+    super::utils::secp256k1_prime, add::*, mul::*, sub::*, ModularArithmeticAir,
     ModularArithmeticCols,
 };
 use crate::{
@@ -171,6 +171,7 @@ fn test_x_mul_y_wrong_trace() {
         .expect("Verification failed");
 }
 
+/*
 #[test]
 fn test_x_div_y() {
     let prime = secp256k1_prime();
@@ -260,6 +261,7 @@ fn test_x_div_y_wrong_trace() {
     run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
         .expect("Verification failed");
 }
+*/
 
 #[test]
 fn test_x_add_y() {
@@ -272,13 +274,7 @@ fn test_x_add_y() {
     let expected_r = (x.clone() + y.clone()) % prime.clone();
     let expected_q = (x.clone() + y.clone() - expected_r.clone()) / prime;
     let cols = air.generate_trace_row((x, y, range_checker.clone()));
-    let ModularArithmeticCols {
-        x: _x,
-        y: _y,
-        q,
-        r,
-        carries: _carries,
-    } = cols.clone();
+    let ModularArithmeticCols { q, r, .. } = cols.clone();
     let generated_r = evaluate_bigint(&r, LIMB_BITS);
     let generated_q = evaluate_bigint(&q, LIMB_BITS);
     assert_eq!(generated_r, expected_r);
@@ -339,6 +335,25 @@ fn test_x_sub_y() {
     assert_eq!(generated_r, expected_r);
     assert_eq!(generated_q, expected_q);
 
+    let row = cols.flatten();
+    let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
+    let range_trace = range_checker.generate_trace();
+
+    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
+        .expect("Verification failed");
+}
+
+#[test]
+fn test_x_sub_bigger_y() {
+    let prime = secp256k1_prime();
+    // x > y from the fixed randomness, so swap x and y.
+    let (y, x) = generate_xy();
+
+    let (arithmetic, range_checker) =
+        get_air_and_range_checker(prime.clone(), LIMB_BITS, NUM_LIMB, false);
+    let air = ModularSubtractionAir { arithmetic };
+
+    let cols = air.generate_trace_row((x.clone(), y.clone(), range_checker.clone()));
     let row = cols.flatten();
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();

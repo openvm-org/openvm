@@ -1,15 +1,11 @@
 use std::{ops::Deref, sync::Arc};
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use num_bigint_dig::BigUint;
-use num_traits::Zero;
+use num_bigint_dig::{BigInt, BigUint, Sign};
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField64};
 
-use super::{
-    CanonicalUint, DefaultLimbConfig, Equation3, Equation5, ModularArithmeticAir,
-    ModularArithmeticCols, OverflowInt,
-};
+use super::{Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols, OverflowInt};
 use crate::{
     range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
@@ -53,16 +49,13 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularSubtractionAir {
             xp += self.modulus.clone();
         }
         let r = xp - y.clone();
-        let q = BigUint::zero();
-        let equation: Equation5<isize, CanonicalUint<isize, DefaultLimbConfig>> =
-            |x, y, r, p, q| {
-                let x = OverflowInt::from(x);
-                let y = OverflowInt::from(y);
-                let r = OverflowInt::from(r);
-                let p = OverflowInt::from(p);
-                let q = OverflowInt::from(q);
-                x - y - r - p * q
-            };
+        let q = if x < y {
+            BigInt::from_biguint(Sign::Minus, r.clone() + y.clone() - x.clone())
+        } else {
+            BigInt::from_biguint(Sign::Plus, x.clone() - y.clone() - r.clone())
+        };
+        let q = q / BigInt::from_biguint(Sign::Plus, self.modulus.clone());
+        let equation: Equation5<isize, OverflowInt<isize>> = |x, y, r, p, q| x - y - r - p * q;
         self.arithmetic
             .generate_trace_row(x, y, q, r, equation, range_checker)
     }

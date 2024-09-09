@@ -13,6 +13,8 @@ pub struct CheckCarryModToZeroCols<T> {
     pub carries: Vec<T>,
 
     // We will check that expr - quotient * modulus = 0, which imples expr is 0 mod modulus.
+    // quotient can be negative, and this means there is no unique way to represent it as limbs but it's fine.
+    // Each limb will be range-checked to be in [-2^limb_bits, 2^limb_bits).
     pub quotient: Vec<T>,
 }
 
@@ -46,13 +48,14 @@ impl CheckCarryModToZeroSubAir {
         cols: CheckCarryModToZeroCols<AB::Var>,
     ) {
         let CheckCarryModToZeroCols { quotient, carries } = cols;
+        let q_offset = AB::F::from_canonical_usize(1 << self.check_carry_to_zero.limb_bits);
         for &q in quotient.iter() {
             range_check(
                 builder,
                 self.check_carry_to_zero.range_checker_bus,
                 self.check_carry_to_zero.decomp,
-                self.check_carry_to_zero.limb_bits,
-                q,
+                self.check_carry_to_zero.limb_bits + 1,
+                q + q_offset,
             );
         }
         let overflow_q = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(

@@ -118,7 +118,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
         let quotient = (x.clone() * x.clone() + y.clone()) / self.modulus.clone();
         let q_limb = big_uint_to_limbs(quotient.clone(), self.limb_bits);
         for &q in q_limb.iter() {
-            range_checker.add_count(q as u32, self.limb_bits);
+            range_checker.add_count((q + (1 << self.limb_bits)) as u32, self.limb_bits + 1);
         }
         let quotient_f: Vec<F> = q_limb.iter().map(|&x| F::from_canonical_usize(x)).collect();
         let x_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(x, Some(N));
@@ -212,13 +212,17 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     .expect("Verification failed");
 }
 
-#[test]
-fn test_check_carry_mod_zero() {
-    let prime = secp256k1_prime();
+fn get_random_biguint() -> BigUint {
     let mut rng = create_seeded_rng();
     let x_len = 4; // in bytes -> 128 bits.
     let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
-    let x = BigUint::new(x_bytes);
+    BigUint::new(x_bytes)
+}
+
+#[test]
+fn test_check_carry_mod_zero() {
+    let prime = secp256k1_prime();
+    let x = get_random_biguint();
     let x_square = x.clone() * x.clone();
     let mut next_p = prime.clone();
     while next_p < x_square {
@@ -232,10 +236,7 @@ fn test_check_carry_mod_zero() {
 #[test]
 fn test_check_carry_mod_zero_fail() {
     let prime = secp256k1_prime();
-    let mut rng = create_seeded_rng();
-    let x_len = 4; // in bytes -> 128 bits.
-    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
-    let x = BigUint::new(x_bytes);
+    let x = get_random_biguint();
     let x_square = x.clone() * x.clone();
     let mut next_p = prime.clone();
     while next_p < x_square {
