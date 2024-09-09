@@ -32,7 +32,7 @@ jobs:
       - name: Run DB unit tests
         working-directory: db/page
         run: |
-          cargo t --features parallel
+          cargo t --features parallel --profile=fast
 
   benchmark-rw:
     uses: ./.github/workflows/benchmark-call.yml
