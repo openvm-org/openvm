@@ -17,6 +17,11 @@ pub struct AssertLessThanAir<const AUX_LEN: usize> {
     pub bus: RangeCheckBus,
     /// The maximum number of bits for the numbers to compare
     /// Soundness requirement: max_bits <= 29
+    ///     max_bits > 29 doesn't work: the approach is to check that y-x-1 is non-negative.
+    ///     For a field with prime modular, this is equivalent to checking that y-x-1 is in
+    ///     the range [0, 2^max_bits - 1]. However, for max_bits > 29, if y is small enough
+    ///     and x is large enough, then y-x-1 is negative but can still be in the range due
+    ///     to the field size not being big enough.
     pub max_bits: usize,
     /// The number of bits to decompose each number into, for less than checking
     pub decomp: usize,
