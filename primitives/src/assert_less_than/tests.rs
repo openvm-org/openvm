@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
@@ -7,38 +7,38 @@ use p3_field::AbstractField;
 use p3_matrix::dense::DenseMatrix;
 
 use super::{super::assert_less_than::AssertLessThanChip, columns::AssertLessThanCols};
-use crate::{
-    assert_less_than::AssertLessThanAir, range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip,
-};
+use crate::
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip}
+;
 
 #[test]
-fn test_flatten_fromslice_roundtrip() {
+fn test_borrow_mut_roundtrip() {
     const AUX_LEN: usize = 2; // number of auxilliary columns is two
 
-    let lt_air = AssertLessThanAir::<AUX_LEN>::new(RangeCheckBus::new(0, 1 << 8), 16, 8);
+    let num_cols = AssertLessThanCols::<usize, AUX_LEN>::width();
+    let mut all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let num_cols = AssertLessThanCols::<usize, AUX_LEN>::width(&lt_air);
-    let all_cols = (0..num_cols).collect::<Vec<usize>>();
+    let lt_cols: &mut AssertLessThanCols<_, AUX_LEN> = (&mut all_cols[..]).borrow_mut();
 
-    let cols_numbered = AssertLessThanCols::<usize, AUX_LEN>::from_slice(&all_cols);
-    let flattened = cols_numbered.flatten();
+    lt_cols.io.x = 2;
+    lt_cols.io.y = 8;
+    lt_cols.aux.lower_decomp[0] = 1;
+    lt_cols.aux.lower_decomp[1] = 0;
 
-    for (i, col) in flattened.iter().enumerate() {
-        assert_eq!(*col, all_cols[i]);
-    }
-
-    assert_eq!(num_cols, flattened.len());
+    assert_eq!(all_cols[0], 2);
+    assert_eq!(all_cols[1], 8);
+    assert_eq!(all_cols[2], 1);
+    assert_eq!(all_cols[3], 0);
 }
 
 #[test]
 fn test_assert_less_than_chip_lt() {
     let max_bits: usize = 16;
     let decomp: usize = 8;
-    let range_max: u32 = 1 << decomp;
-    let bus = RangeCheckBus::new(0, range_max);
+    let bus = VariableRangeCheckerBus::new(0, decomp);
     const AUX_LEN: usize = 2;
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     
     let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, decomp, range_checker);
     let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
@@ -51,15 +51,15 @@ fn test_assert_less_than_chip_lt() {
     .expect("Verification failed");
 }
 
+
 #[test]
 fn test_lt_chip_decomp_does_not_divide() {
     let max_bits: usize = 29;
     let decomp: usize = 8;
-    let range_max: u32 = 1 << decomp;
-    let bus = RangeCheckBus::new(0, range_max);
-    const AUX_LEN: usize = 5;
+    let bus = VariableRangeCheckerBus::new(0, decomp);
+    const AUX_LEN: usize = 4;
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     
     let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, decomp, range_checker);
     let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
@@ -76,11 +76,10 @@ fn test_lt_chip_decomp_does_not_divide() {
 fn test_assert_less_than_negative_1() {
     let max_bits: usize = 16;
     let decomp: usize = 8;
-    let range_max: u32 = 1 << decomp;
-    let bus = RangeCheckBus::new(0, range_max);
+    let bus = VariableRangeCheckerBus::new(0, decomp);
     const AUX_LEN: usize = 2;
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     
     let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, decomp, range_checker);
     let mut trace = chip.generate_trace(vec![(28, 29)]);
@@ -106,17 +105,16 @@ fn test_assert_less_than_negative_1() {
 fn test_assert_less_than_negative_2() {
     let max_bits: usize = 29;
     let decomp: usize = 8;
-    let range_max: u32 = 1 << decomp;
-    let bus = RangeCheckBus::new(0, range_max);
-    const AUX_LEN: usize = 5;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
+    let bus = VariableRangeCheckerBus::new(0, decomp);
+    const AUX_LEN: usize = 4;
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     
     let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, decomp, range_checker);
     let mut trace = chip.generate_trace(vec![(28, 29)]);
     let range_trace = chip.range_checker.generate_trace();
-
+    
     // Make the trace invalid
-    trace.values[2] = AbstractField::from_canonical_u64(range_max as u64);
+    trace.values[2] = AbstractField::from_canonical_u64(1 << decomp as u64);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;

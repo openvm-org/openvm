@@ -7,14 +7,15 @@ use p3_matrix::Matrix;
 
 use super::columns::{AssertLessThanAuxCols, AssertLessThanCols, AssertLessThanIoCols};
 use crate::{
-    range::bus::RangeCheckBus,
+    var_range::bus::VariableRangeCheckerBus,
     sub_chip::{AirConfig, SubAir},
 };
 
+/// AUX_LEN is expected to be (max_bits + decomp - 1) / decomp
 #[derive(Copy, Clone, Debug)]
 pub struct AssertLessThanAir<const AUX_LEN: usize> {
     /// The bus for sends to range chip
-    pub bus: RangeCheckBus,
+    pub bus: VariableRangeCheckerBus,
     /// The maximum number of bits for the numbers to compare
     /// Soundness requirement: max_bits <= 29
     ///     max_bits > 29 doesn't work: the approach is to check that y-x-1 is non-negative.
@@ -30,8 +31,9 @@ pub struct AssertLessThanAir<const AUX_LEN: usize> {
 }
 
 impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
-    pub fn new(bus: RangeCheckBus, max_bits: usize, decomp: usize) -> Self {
-        debug_assert!(bus.range_max >= (1 << decomp));
+    pub fn new(bus: VariableRangeCheckerBus, max_bits: usize, decomp: usize) -> Self {
+        debug_assert!(bus.range_max_bits >= decomp);
+        debug_assert!(AUX_LEN == (max_bits + decomp - 1) / decomp);
         Self {
             bus,
             max_bits,
@@ -55,9 +57,7 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         let x = io.x;
         let y = io.y;
 
-        let local_aux = &aux;
-
-        let lower_decomp = local_aux.lower_decomp.clone();
+        let lower_decomp = aux.lower_decomp;
 
         // this is the desired intermediate value (i.e. y - x - 1)
         let intermed_val = y - x - AB::Expr::one();
@@ -67,7 +67,6 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         let lower = lower_decomp
             .iter()
             .enumerate()
-            .take(self.num_limbs)
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_u64(1 << (i * self.decomp))
             });
@@ -75,18 +74,6 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         // constrain that y-x-1 is equal to the constructed lower value.
         // this enforces that the intermediate value is in the range [0, 2^max_bits - 1], which is equivalent to x < y
         builder.when(condition).assert_eq(intermed_val, lower);
-
-        // Ensuring, in case decomp does not divide max_bits, then the last lower_decomp is
-        // shifted correctly
-        if self.max_bits % self.decomp != 0 {
-            let last_limb_shift = (self.decomp - (self.max_bits % self.decomp)) % self.decomp;
-
-            builder.assert_eq(
-                (*lower_decomp.last().unwrap()).into(),
-                lower_decomp[lower_decomp.len() - 2]
-                    * AB::Expr::from_canonical_u64(1 << last_limb_shift),
-            );
-        }
     }
 }
 
@@ -96,7 +83,7 @@ impl<const AUX_LEN: usize> AirConfig for AssertLessThanAir<AUX_LEN> {
 
 impl<F: Field, const AUX_LEN: usize> BaseAir<F> for AssertLessThanAir<AUX_LEN> {
     fn width(&self) -> usize {
-        AssertLessThanCols::<F, AUX_LEN>::width(self)
+        AssertLessThanCols::<F, AUX_LEN>::width()
     }
 }
 
@@ -105,9 +92,7 @@ impl<AB: InteractionBuilder, const AUX_LEN: usize> Air<AB> for AssertLessThanAir
         let main = builder.main();
 
         let local = main.row_slice(0);
-        let local: &[AB::Var] = (*local).borrow();
-
-        let local_cols = AssertLessThanCols::<AB::Var, AUX_LEN>::from_slice(local);
+        let local_cols: &AssertLessThanCols<_, AUX_LEN> = (*local).borrow();
 
         SubAir::eval(self, builder, local_cols.io, local_cols.aux);
     }
@@ -166,7 +151,7 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         let io_exprs = AssertLessThanIoCols::<AB::Expr>::new(io.x, io.y);
         let count = AB::F::one();
 
-        self.eval_interactions(builder, aux.lower_decomp.clone(), count);
+        self.eval_interactions(builder, aux.lower_decomp, count);
         self.conditional_eval_without_interactions(
             &mut builder.when_transition(),
             io_exprs,

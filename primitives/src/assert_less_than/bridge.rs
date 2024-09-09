@@ -10,12 +10,22 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         count: impl Into<AB::Expr>,
     ) {
         let count = count.into();
+        let lower_decomp = lower_decomp.map(|limb| limb.into());
+
         // we range check the limbs of the lower_decomp so that we know each element
-        // of lower_decomp has at most `decomp` bits
-        for limb in lower_decomp {
-            self.bus
-                .range_check(limb, self.decomp)
-                .eval(builder, count.clone());
+        // of lower_decomp has the correct number of bits
+        for (i, limb) in lower_decomp.iter().enumerate() {
+            if i == self.num_limbs - 1 && self.max_bits % self.decomp != 0 {
+                // the last limb mightfewer than `decomp` bits
+                self.bus
+                    .range_check(limb.clone(), self.max_bits % self.decomp)
+                    .eval(builder, count.clone());
+            } else {
+                // the other limbs must exactly `decomp` bits
+                self.bus
+                    .range_check(limb.clone(), self.decomp)
+                    .eval(builder, count.clone());
+            }
         }
     }
 }

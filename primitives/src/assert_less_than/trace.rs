@@ -1,23 +1,22 @@
-use std::sync::Arc;
+use std::borrow::BorrowMut;
 
 use p3_field::{PrimeField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
-    columns::{AssertLessThanAuxColsMut, AssertLessThanCols, AssertLessThanColsMut},
+    columns::{AssertLessThanAuxCols, AssertLessThanCols},
     AssertLessThanAir, AssertLessThanChip,
 };
-use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
+use crate::var_range::VariableRangeCheckerChip;
 
 impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
     pub fn generate_trace<F: PrimeField64>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
-        let width: usize = AssertLessThanCols::<F, AUX_LEN>::width(&self.air);
+        let width: usize = AssertLessThanCols::<F, AUX_LEN>::width();
 
         let mut rows_concat = vec![F::zero(); width * pairs.len()];
         for (i, (x, y)) in pairs.iter().enumerate() {
-            let mut lt_cols =
-                AssertLessThanColsMut::<F>::from_slice(&mut rows_concat[i * width..(i + 1) * width]);
-
+            let mut lt_cols: &mut AssertLessThanCols<F, AUX_LEN> =
+                (&mut rows_concat[i * width..(i + 1) * width]).borrow_mut();
             self.air
                 .generate_trace_row(*x, *y, &self.range_checker, &mut lt_cols);
         }
@@ -31,11 +30,11 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         &self,
         x: u32,
         y: u32,
-        range_checker: &RangeCheckerGateChip,
-        lt_cols: &mut AssertLessThanColsMut<F>,
+        range_checker: &VariableRangeCheckerChip,
+        lt_cols: &mut AssertLessThanCols<F, AUX_LEN>,
     ) {
-        *lt_cols.io.x = F::from_canonical_u32(x);
-        *lt_cols.io.y = F::from_canonical_u32(y);
+        lt_cols.io.x = F::from_canonical_u32(x);
+        lt_cols.io.y = F::from_canonical_u32(y);
 
         self.generate_trace_row_aux(x, y, range_checker, &mut lt_cols.aux);
     }
@@ -44,8 +43,8 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         &self,
         x: u32,
         y: u32,
-        range_checker: &RangeCheckerGateChip,
-        lt_aux_cols: &mut AssertLessThanAuxColsMut<F>,
+        range_checker: &VariableRangeCheckerChip,
+        lt_aux_cols: &mut AssertLessThanAuxCols<F, AUX_LEN>,
     ) {
         // if x >= y then no valid trace exists
         assert!(x < y);
@@ -55,41 +54,17 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         let lower_u32 = check_less_than & ((1 << self.max_bits) - 1);
 
         // decompose lower_bits into limbs and range check
-        let mut lower_decomp: Vec<F> =
-            Vec::with_capacity(self.num_limbs + (self.max_bits % self.decomp != 0) as usize);
         for i in 0..self.num_limbs {
             let bits = (lower_u32 >> (i * self.decomp)) & ((1 << self.decomp) - 1);
-
-            lower_decomp.push(F::from_canonical_u32(bits));
-            range_checker.add_count(bits);
+            lt_aux_cols.lower_decomp[i] = F::from_canonical_u32(bits);
 
             if i == self.num_limbs - 1 && self.max_bits % self.decomp != 0 {
-                let last_limb_shift = (self.decomp - (self.max_bits % self.decomp)) % self.decomp;
-                let last_limb_shifted = bits << last_limb_shift;
-
-                lower_decomp.push(F::from_canonical_u32(last_limb_shifted));
-                range_checker.add_count(last_limb_shifted);
+                let last_limb_max_bits = self.max_bits % self.decomp;
+                range_checker.add_count(bits, last_limb_max_bits);
+            } else {
+                range_checker.add_count(bits, self.decomp);
             }
         }
-
-        lt_aux_cols
-            .lower_decomp
-            .clone_from_slice(lower_decomp.as_slice());
     }
 }
 
-// TODO[jpw] stop using Arc<RangeCheckerGateChip> and use &RangeCheckerGateChip (requires not using this trait)
-impl<F: PrimeField, const AUX_LEN: usize> LocalTraceInstructions<F> for AssertLessThanAir<AUX_LEN> {
-    type LocalInput = (u32, u32, Arc<RangeCheckerGateChip>);
-
-    fn generate_trace_row(&self, input: (u32, u32, Arc<RangeCheckerGateChip>)) -> Self::Cols<F> {
-        let width: usize = AssertLessThanCols::<F, AUX_LEN>::width(self);
-
-        let mut row = vec![F::zero(); width];
-        let mut lt_cols = AssertLessThanColsMut::<F>::from_slice(&mut row);
-
-        self.generate_trace_row(input.0, input.1, &input.2, &mut lt_cols);
-
-        AssertLessThanCols::<F, AUX_LEN>::from_slice(&row)
-    }
-}
