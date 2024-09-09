@@ -39,20 +39,22 @@ pub fn to_field_vec<F: Field>(src: &[u32]) -> Vec<F> {
     src.iter().map(|s| F::from_canonical_u32(*s)).collect()
 }
 
-pub fn not<F: AbstractField>(a: F) -> F {
-    F::one() - a
+pub fn not<F: AbstractField>(a: impl Into<F>) -> F {
+    F::one() - a.into()
 }
 
-pub fn and<F: AbstractField>(a: F, b: F) -> F {
-    a * b
+pub fn and<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
+    a.into() * b.into()
 }
 
 /// Assumes that a and b are boolean
-pub fn or<F: AbstractField>(a: F, b: F) -> F {
+pub fn or<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
+    let a = a.into();
+    let b = b.into();
     a.clone() + b.clone() - and(a, b)
 }
 
 /// Assumes that a and b are boolean
-pub fn implies<F: AbstractField>(a: F, b: F) -> F {
-    or(F::one() - a, b)
+pub fn implies<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
+    or(F::one() - a.into(), b.into())
 }

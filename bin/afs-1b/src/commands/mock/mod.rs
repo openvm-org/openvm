@@ -2,7 +2,7 @@ mod afi;
 mod read;
 mod write;
 
-use afs_test_utils::page_config::MultitierPageConfig;
+use ax_sdk::page_config::MultitierPageConfig;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
 

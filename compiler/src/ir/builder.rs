@@ -99,7 +99,7 @@ impl std::error::Error for BreakLoop {}
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct BuilderFlags {
-    pub(crate) debug: bool,
+    pub debug: bool,
     /// If true, `builder.break_loop` will take control flow instead of pushing an instruction.
     pub(crate) static_loop: bool,
     /// If true, panic when `builder.break_loop` is called.
@@ -119,6 +119,7 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
+    pub(crate) bigint_repr_size: u32,
     pub flags: BuilderFlags,
     pub is_sub_builder: bool,
 }
@@ -129,6 +130,7 @@ impl<C: Config> Builder<C> {
         stack_ptr: u32,
         nb_public_values: Option<Var<C::N>>,
         flags: BuilderFlags,
+        bigint_repr_size: u32,
     ) -> Self {
         Self {
             stack_ptr,
@@ -137,10 +139,18 @@ impl<C: Config> Builder<C> {
             witness_var_count: 0,
             witness_felt_count: 0,
             witness_ext_count: 0,
+            bigint_repr_size,
             operations: Default::default(),
             nb_public_values,
             flags,
             is_sub_builder: true,
+        }
+    }
+
+    pub fn bigint_builder() -> Self {
+        Self {
+            bigint_repr_size: 30,
+            ..Default::default()
         }
     }
 
@@ -342,8 +352,12 @@ impl<C: Config> Builder<C> {
 
     /// Evaluate a block of operations repeatedly (until a break).
     pub fn do_loop(&mut self, mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>) {
-        let mut loop_body_builder =
-            Builder::<C>::new_sub_builder(self.stack_ptr, self.nb_public_values, self.flags);
+        let mut loop_body_builder = Builder::<C>::new_sub_builder(
+            self.stack_ptr,
+            self.nb_public_values,
+            self.flags,
+            self.bigint_repr_size,
+        );
 
         f(&mut loop_body_builder).expect("should not be break issues in dynamic loop");
 
@@ -633,6 +647,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.stack_ptr,
             self.builder.nb_public_values,
             self.builder.flags,
+            self.builder.bigint_repr_size,
         );
         f(&mut f_builder).expect("BreakLoop should never be returned in a dynamic if");
         let then_instructions = f_builder.operations;
@@ -709,6 +724,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.stack_ptr,
             self.builder.nb_public_values,
             self.builder.flags,
+            self.builder.bigint_repr_size,
         );
 
         // Execute the `then` and `else_then` blocks and collect the instructions.
@@ -719,6 +735,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.stack_ptr,
             self.builder.nb_public_values,
             self.builder.flags,
+            self.builder.bigint_repr_size,
         );
         else_f(&mut else_builder).expect("BreakLoop should never be returned in a dynamic if");
         let else_instructions = else_builder.operations;
@@ -890,6 +907,7 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
             self.builder.stack_ptr,
             self.builder.nb_public_values,
             self.builder.flags,
+            self.builder.bigint_repr_size,
         );
 
         f(loop_variable.into(), &mut loop_body_builder)

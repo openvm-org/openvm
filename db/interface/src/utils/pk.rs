@@ -4,7 +4,7 @@ use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkProvingKey,
 };
-use afs_test_utils::engine::StarkEngine;
+use ax_sdk::engine::StarkEngine;
 use datafusion::arrow::error::Result;
 use p3_field::PrimeField64;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};

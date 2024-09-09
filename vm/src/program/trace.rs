@@ -9,7 +9,7 @@ use super::ProgramChip;
 use crate::arch::chips::MachineChip;
 
 impl<F: PrimeField64> MachineChip<F> for ProgramChip<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         RowMajorMatrix::new_col(
             self.execution_frequencies
                 .iter()

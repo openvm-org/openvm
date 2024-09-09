@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use rand::{prelude::StdRng, SeedableRng};
@@ -50,7 +52,7 @@ lazy_static! {
 
 pub static KZG_PARAMS_FOR_SVK: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| {
     if std::env::var("RANDOM_SRS").is_ok() {
-        read_params(1)
+        read_params(1).as_ref().clone()
     } else {
         build_kzg_params_for_svk(*SVK)
     }
@@ -77,12 +79,12 @@ pub(crate) fn verify_snark(dk: &KzgDecidingKey<Bn256>, snark: &Snark) {
         .expect("PlonkVerifier failed");
 }
 
-pub(crate) fn read_params(k: u32) -> ParamsKZG<Bn256> {
+pub(crate) fn read_params(k: u32) -> Arc<ParamsKZG<Bn256>> {
     if std::env::var("RANDOM_SRS").is_ok() {
         let mut ret = KZG_PARAMS_23.clone();
         ret.downsize(k);
-        ret
+        Arc::new(ret)
     } else {
-        read_params_impl(k)
+        Arc::new(read_params_impl(k))
     }
 }

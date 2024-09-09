@@ -1,8 +1,8 @@
 use std::{cell::RefCell, ops::Deref, rc::Rc, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{rap::AnyRap, verifier::VerificationError};
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
 };
@@ -92,11 +92,11 @@ impl MachineChipTestBuilder<BabyBear> {
 
 impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
     fn default() -> Self {
-        let mem_config = MemoryConfig::new(2, 29, 29, 4); // smaller testing config with smaller decomp_bits
-        let range_checker = Arc::new(RangeCheckerGateChip::new(
+        let mem_config = MemoryConfig::new(2, 29, 29, 16); // smaller testing config with smaller decomp_bits
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
-            1u32 << mem_config.decomp,
-        ));
+            mem_config.decomp,
+        )));
         let memory_chip = MemoryChip::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
         Self {
             memory: MemoryTester::new(Rc::new(RefCell::new(memory_chip))),
@@ -116,9 +116,9 @@ pub struct MachineChipTester {
 
 impl MachineChipTester {
     pub fn load<C: MachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
-        self.traces.push(chip.generate_trace());
         self.public_values.push(chip.generate_public_values());
         self.airs.push(chip.air());
+        self.traces.push(chip.generate_trace());
 
         self
     }

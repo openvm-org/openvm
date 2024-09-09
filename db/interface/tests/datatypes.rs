@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_page::common::page::Page;
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+use ax_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
 use axdb_interface::{
     common::committed_page::CommittedPage, controller::AxdbController, PCS_LOG_DEGREE,
 };

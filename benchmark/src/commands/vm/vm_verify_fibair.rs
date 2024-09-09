@@ -1,4 +1,4 @@
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     utils::{generate_fib_trace_rows, FibonacciAir},
 };

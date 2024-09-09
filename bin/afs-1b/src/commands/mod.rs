@@ -11,9 +11,9 @@ use afs_page::{
     },
     page_btree::PageBTree,
 };
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{config::Com, prover::trace::ProverTraceData};
-use afs_test_utils::page_config::MultitierPageConfig;
+use ax_sdk::page_config::MultitierPageConfig;
 use color_eyre::eyre::Result;
 use logical_interface::{
     afs_input::{types::InputFileOp, AfsInputFile},
@@ -131,7 +131,10 @@ where
     Val<SC>: AbstractField + PrimeField64,
     Com<SC>: Into<[Val<SC>; COMMITMENT_LEN]>,
 {
-    let range_checker = Arc::new(RangeCheckerGateChip::new(2, 1 << DECOMP_BITS));
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+        2,
+        DECOMP_BITS,
+    )));
 
     PageController::new(
         DATA_BUS,

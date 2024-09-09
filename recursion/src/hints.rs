@@ -6,7 +6,7 @@ use afs_stark_backend::{
         types::{Commitments, Proof},
     },
 };
-use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
@@ -94,37 +94,39 @@ impl Hintable<InnerConfig> for InnerChallenge {
     }
 }
 
-pub trait VecAutoHintable<C: Config>: Hintable<C> {}
+/// Implement this on a type `T` that also implements `Hintable<C: Config>`
+/// so that `Hintable<C>` is auto implemented on `Vec<T>`
+pub trait VecAutoHintable {}
 
-impl VecAutoHintable<InnerConfig> for Vec<usize> {}
+impl VecAutoHintable for Vec<usize> {}
 
-impl VecAutoHintable<InnerConfig> for Vec<InnerVal> {}
+impl VecAutoHintable for Vec<InnerVal> {}
 
-impl VecAutoHintable<InnerConfig> for Vec<Vec<InnerChallenge>> {}
+impl VecAutoHintable for Vec<Vec<InnerChallenge>> {}
 
-impl VecAutoHintable<InnerConfig> for AdjacentOpenedValues<InnerChallenge> {}
+impl VecAutoHintable for AdjacentOpenedValues<InnerChallenge> {}
 
-impl VecAutoHintable<InnerConfig> for Vec<AdjacentOpenedValues<InnerChallenge>> {}
+impl VecAutoHintable for Vec<AdjacentOpenedValues<InnerChallenge>> {}
 
-impl VecAutoHintable<InnerConfig> for Vec<Vec<AdjacentOpenedValues<InnerChallenge>>> {}
+impl VecAutoHintable for Vec<Vec<AdjacentOpenedValues<InnerChallenge>>> {}
 
-impl<I: VecAutoHintable<InnerConfig>> Hintable<InnerConfig> for Vec<I> {
-    type HintVariable = Array<InnerConfig, I::HintVariable>;
+impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
+    type HintVariable = Array<C, I::HintVariable>;
 
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let len = builder.hint_var();
-        let mut arr = builder.dyn_array(len);
+        let arr = builder.dyn_array(len);
         builder.range(0, len).for_each(|i, builder| {
             let hint = I::read(builder);
-            builder.set(&mut arr, i, hint);
+            builder.set(&arr, i, hint);
         });
         arr
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
+    fn write(&self) -> Vec<Vec<<C as Config>::N>> {
         let mut stream = Vec::new();
 
-        let len = InnerVal::from_canonical_usize(self.len());
+        let len = C::N::from_canonical_usize(self.len());
         stream.push(vec![len]);
 
         self.iter().for_each(|i| {
@@ -232,10 +234,10 @@ impl Hintable<InnerConfig> for Vec<Vec<InnerChallenge>> {
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let len = builder.hint_var();
-        let mut arr = builder.dyn_array(len);
+        let arr = builder.dyn_array(len);
         builder.range(0, len).for_each(|i, builder| {
             let hint = Vec::<InnerChallenge>::read(builder);
-            builder.set(&mut arr, i, hint);
+            builder.set(&arr, i, hint);
         });
         arr
     }

@@ -9,7 +9,7 @@ use crate::{
         },
         FullLimbs, LimbDimensions,
     },
-    range_gate::RangeCheckerGateChip,
+    var_range::VariableRangeCheckerChip,
 };
 
 pub(super) fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
@@ -41,21 +41,10 @@ fn without_first_limbs<T: Clone>(limbs: &[Vec<T>]) -> Vec<Vec<T>> {
 pub fn generate_modular_multiplication_trace_row(
     modulus: BigUint,
     limb_dimensions: &LimbDimensions,
-    range_checker: Arc<RangeCheckerGateChip>,
-    decomp: usize,
+    range_checker: Arc<VariableRangeCheckerChip>,
     a: BigUint,
     b: BigUint,
 ) -> (ModularMultiplicationCols<usize>, FullLimbs<usize>) {
-    let range_check = |bits: usize, value: usize| {
-        let value = value as u32;
-        if bits == decomp {
-            range_checker.add_count(value);
-        } else {
-            range_checker.add_count(value);
-            range_checker.add_count(value + (1 << decomp) - (1 << bits));
-        }
-    };
-
     let product = a.clone() * b.clone();
     let r = product.clone() % modulus.clone();
     let q = product.clone() / modulus.clone();
@@ -77,7 +66,7 @@ pub fn generate_modular_multiplication_trace_row(
                         .iter()
                         .map(|&limb_size| {
                             let limb = take_limb(bits, limb_size);
-                            range_check(limb_size, limb);
+                            range_checker.add_count(limb as u32, limb_size);
                             elem += limb << shift;
                             shift += limb_size;
                             limb
@@ -95,7 +84,7 @@ pub fn generate_modular_multiplication_trace_row(
         .iter()
         .map(|&limb_size| {
             let limb = take_limb(&mut q_bits, limb_size);
-            range_check(limb_size, limb);
+            range_checker.add_count(limb as u32, limb_size);
             limb
         })
         .collect();

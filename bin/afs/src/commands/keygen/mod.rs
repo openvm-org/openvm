@@ -2,7 +2,7 @@ use std::{fs, marker::PhantomData, time::Instant};
 
 use afs_page::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::{config::PcsProverData, keygen::MultiStarkKeygenBuilder};
-use afs_test_utils::{
+use ax_sdk::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };

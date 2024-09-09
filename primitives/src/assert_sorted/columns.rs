@@ -1,6 +1,9 @@
 use afs_derive::AlignedBorrow;
 
-use crate::is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir};
+use crate::{
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
+    var_range::bus::VariableRangeCheckerBus,
+};
 
 // Since AssertSortedChip contains a LessThanChip subchip, a subset of the columns are those of the
 // LessThanChip
@@ -12,7 +15,7 @@ pub struct AssertSortedCols<T> {
 }
 
 impl<T: Clone> AssertSortedCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: &[usize], decomp: usize) -> Self {
+    pub fn from_slice(slc: &[T], limb_bits: &[usize], max_range_bits: usize) -> Self {
         let key_vec_len = limb_bits.len();
 
         let mut curr_start_idx = 0;
@@ -28,7 +31,10 @@ impl<T: Clone> AssertSortedCols<T> {
         let less_than_next_key = slc[curr_start_idx].clone();
         curr_start_idx = curr_end_idx;
 
-        let lt_chip = IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp);
+        let lt_chip = IsLessThanTupleAir::new(
+            VariableRangeCheckerBus::new(0, max_range_bits),
+            limb_bits.to_vec(),
+        );
         let is_less_than_tuple_aux =
             IsLessThanTupleAuxCols::from_slice(&slc[curr_start_idx..], &lt_chip);
 
@@ -39,13 +45,12 @@ impl<T: Clone> AssertSortedCols<T> {
         }
     }
 
-    pub fn get_width(limb_bits: &[usize], decomp: usize) -> usize {
+    pub fn get_width(limb_bits: &[usize], max_range_bits: usize) -> usize {
         limb_bits.len()
             + 1
             + IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
-                0,
+                VariableRangeCheckerBus::new(0, max_range_bits),
                 limb_bits.to_vec(),
-                decomp,
             ))
     }
 }

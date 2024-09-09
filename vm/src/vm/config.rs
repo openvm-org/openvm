@@ -21,10 +21,12 @@ impl Default for MemoryConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
+    // TODO: VmConfig should just contain CpuOptions to reduce redundancy
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
+    pub keccak_enabled: bool,
     pub modular_multiplication_enabled: bool,
     pub is_less_than_enabled: bool,
     pub memory_config: MemoryConfig,
@@ -33,6 +35,7 @@ pub struct VmConfig {
     /*pub max_program_length: usize,
     pub max_operations: usize,*/
     pub collect_metrics: bool,
+    pub bigint_limb_size: usize,
 }
 
 impl Default for VmConfig {
@@ -42,12 +45,14 @@ impl Default for VmConfig {
             field_extension_enabled: true,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
+            keccak_enabled: false,
             modular_multiplication_enabled: false,
             is_less_than_enabled: false,
             memory_config: Default::default(),
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,
+            bigint_limb_size: 10,
         }
     }
 }
@@ -56,6 +61,17 @@ impl VmConfig {
     pub fn cpu_options(&self) -> CpuOptions {
         CpuOptions {
             num_public_values: self.num_public_values,
+        }
+    }
+
+    pub fn core() -> Self {
+        VmConfig {
+            field_arithmetic_enabled: false,
+            field_extension_enabled: false,
+            compress_poseidon2_enabled: false,
+            perm_poseidon2_enabled: false,
+            keccak_enabled: false,
+            ..Default::default()
         }
     }
 }

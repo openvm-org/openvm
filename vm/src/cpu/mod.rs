@@ -1,5 +1,6 @@
 use core::panic;
 
+use afs_primitives::xor::bus::XorBus;
 pub use air::CpuAir;
 use p3_field::PrimeField32;
 
@@ -24,7 +25,7 @@ pub const INST_WIDTH: usize = 1;
 pub const READ_INSTRUCTION_BUS: usize = 8;
 pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
-pub const IS_LESS_THAN_BUS: usize = 7;
+pub const BYTE_XOR_BUS: XorBus = XorBus(8);
 pub const CPU_MAX_READS_PER_CYCLE: usize = 3;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CPU_MAX_ACCESSES_PER_CYCLE: usize = CPU_MAX_READS_PER_CYCLE + CPU_MAX_WRITES_PER_CYCLE;
@@ -43,7 +44,7 @@ fn timestamp_delta(opcode: Opcode) -> usize {
         FAIL => 0,
         PRINTF => 1,
         SHINTW => 2,
-        HINT_INPUT | HINT_BITS => 0,
+        HINT_INPUT | HINT_BITS | HINT_BYTES => 0,
         CT_START | CT_END => 0,
         NOP => 0,
         _ => panic!("Non-CPU opcode: {:?}", opcode),

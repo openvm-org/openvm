@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+use ax_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
 use axdb_interface::{
     common::{
         committed_page::CommittedPage, cryptographic_object::CryptographicObject,
@@ -46,7 +46,7 @@ pub async fn run_keygen() {
 }
 
 /// Runs execute, prove, and verify on a CommittedPage (Page contains concrete data)
-pub async fn run_execute() {
+pub async fn run_execute_prove_verify() {
     let ctx = SessionContext::new();
 
     // use datafusion::execution::options::CsvReadOptions;
@@ -87,7 +87,7 @@ pub async fn run_execute() {
 #[tokio::test]
 pub async fn test_basic_e2e() {
     run_keygen().await;
-    run_execute().await;
+    run_execute_prove_verify().await;
 }
 
 #[tokio::test]
@@ -99,7 +99,7 @@ pub async fn test_keygen() {
 #[tokio::test]
 #[ignore]
 pub async fn test_execute() {
-    run_execute().await;
+    run_execute_prove_verify().await;
 }
 
 #[tokio::test]

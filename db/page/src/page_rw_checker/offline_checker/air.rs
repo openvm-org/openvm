@@ -72,43 +72,40 @@ impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
         // Making sure every idx block starts with a write
         // not same_idx => write
         // NOTE: constraint degree is 3
-        builder.assert_one(or(
-            AB::Expr::one() - local_offline_checker_cols.is_valid.into(),
-            or(
-                local_offline_checker_cols.same_idx.into(),
-                local_cols.is_write.into(),
-            ),
+        builder.assert_one(or::<AB::Expr>(
+            AB::Expr::one() - local_offline_checker_cols.is_valid,
+            or(local_offline_checker_cols.same_idx, local_cols.is_write),
         ));
 
         // Making sure every idx block ends with a is_final_write or is_final_delete (in the three constraints below)
         // First, when local and next are not extra
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or(
-            AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
+        builder.when_transition().assert_one(or::<AB::Expr>(
+            AB::Expr::one() - next_offline_checker_cols.is_valid,
             or(
-                next_offline_checker_cols.same_idx.into(),
-                local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
+                next_offline_checker_cols.same_idx,
+                local_cols.is_final_write + local_cols.is_final_delete,
             ),
         ));
         // NOTE: constraint degree is 3
         // Second, when local is not extra but next is extra
-        builder.when_transition().assert_one(implies(
+        builder.when_transition().assert_one(implies::<AB::Expr>(
             and(
-                local_offline_checker_cols.is_valid.into(),
-                AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
+                local_offline_checker_cols.is_valid,
+                AB::Expr::one() - next_offline_checker_cols.is_valid,
             ),
-            local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
+            local_cols.is_final_write.into() + local_cols.is_final_delete,
         ));
         // Third, when it's the last row
-        builder.when_last_row().assert_one(implies(
-            local_offline_checker_cols.is_valid.into(),
-            local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
+        builder.when_last_row().assert_one(implies::<AB::Expr>(
+            local_offline_checker_cols.is_valid,
+            local_cols.is_final_write + local_cols.is_final_delete,
         ));
 
         // Making sure that is_initial rows only appear at the start of blocks
         // is_initial => not same_idx
         builder.assert_one(implies(
-            local_cols.is_initial.into(),
+            local_cols.is_initial,
             AB::Expr::one() - local_offline_checker_cols.same_idx,
         ));
 
@@ -129,58 +126,51 @@ impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
 
         // is_final => read
         // NOTE: constraint degree is 3
-        builder.assert_one(or(
-            AB::Expr::one() - local_offline_checker_cols.is_valid.into(),
-            implies(local_cols.is_final_write.into(), local_cols.is_read.into()),
+        builder.assert_one(or::<AB::Expr>(
+            AB::Expr::one() - local_offline_checker_cols.is_valid,
+            implies(local_cols.is_final_write, local_cols.is_read),
         ));
 
         // is_internal => not is_initial
-        builder.assert_one(implies(
-            local_offline_checker_cols.is_receive.into(),
+        builder.assert_one(implies::<AB::Expr>(
+            local_offline_checker_cols.is_receive,
             AB::Expr::one() - local_cols.is_initial,
         ));
 
         // is_internal => not is_final
-        builder.assert_one(implies(
-            local_offline_checker_cols.is_receive.into(),
-            AB::Expr::one()
-                - (local_cols.is_final_write.into() + local_cols.is_final_delete.into()),
+        builder.assert_one(implies::<AB::Expr>(
+            local_offline_checker_cols.is_receive,
+            AB::Expr::one() - (local_cols.is_final_write + local_cols.is_final_delete),
         ));
 
         // next is_final_write or next is_final_delete => local is_internal
-        builder.when_transition().assert_one(implies(
-            next_cols.is_final_write.into() + next_cols.is_final_delete.into(),
-            local_offline_checker_cols.is_receive.into(),
+        builder.when_transition().assert_one(implies::<AB::Expr>(
+            next_cols.is_final_write + next_cols.is_final_delete,
+            local_offline_checker_cols.is_receive,
         ));
 
         // Ensuring that next read => not local delete
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or(
-            AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
-            implies(
-                next_cols.is_read.into(),
-                AB::Expr::one() - local_cols.is_delete,
-            ),
+        builder.when_transition().assert_one(or::<AB::Expr>(
+            AB::Expr::one() - next_offline_checker_cols.is_valid,
+            implies(next_cols.is_read, AB::Expr::one() - local_cols.is_delete),
         ));
 
         // Ensuring local is_final_delete => next not same_idx
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or(
-            AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
+        builder.when_transition().assert_one(or::<AB::Expr>(
+            AB::Expr::one() - next_offline_checker_cols.is_valid,
             implies(
-                local_cols.is_final_delete.into(),
+                local_cols.is_final_delete,
                 AB::Expr::one() - next_offline_checker_cols.same_idx,
             ),
         ));
 
         // Ensuring that next is_final_delete => local is_delete
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or(
-            AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
-            implies(
-                next_cols.is_final_delete.into(),
-                local_cols.is_delete.into(),
-            ),
+        builder.when_transition().assert_one(or::<AB::Expr>(
+            AB::Expr::one() - next_offline_checker_cols.is_valid,
+            implies(next_cols.is_final_delete, local_cols.is_delete),
         ));
 
         SubAir::eval(

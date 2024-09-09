@@ -613,6 +613,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
+        AsmInstruction::HintBytes(src, len) => vec![inst(
+            HINT_BYTES,
+            i32_f(src),
+            F::zero(),
+            F::from_canonical_u32(len),
+            AS::Memory,
+            AS::Memory,
+        )],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             SHINTW,
             i32_f(val),
@@ -766,6 +774,27 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
+        AsmInstruction::Keccak256(dst, src, len) => vec![inst_med(
+            KECCAK256,
+            i32_f(dst),
+            i32_f(src),
+            i32_f(len),
+            AS::Memory,
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::Keccak256FixLen(_dst, _src, _len) => {
+            todo!("len as immediate needs to be handled");
+            // inst_med(
+            //     KECCAK256,
+            //     i32_f(dst),
+            //     i32_f(src),
+            //     i32_f(len),
+            //     AS::Memory,
+            //     AS::Memory,
+            //     AS::Immediate,
+            // )
+        }
         AsmInstruction::CycleTrackerStart(name) => {
             if options.enable_cycle_tracker {
                 vec![dbg(CT_START, name)]

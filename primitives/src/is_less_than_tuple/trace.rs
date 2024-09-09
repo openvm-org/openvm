@@ -8,9 +8,9 @@ use super::{
     IsLessThanTupleAir, IsLessThanTupleChip,
 };
 use crate::{
-    range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
     utils::{fill_slc_to_f, to_field_vec},
+    var_range::VariableRangeCheckerChip,
 };
 
 impl IsLessThanTupleChip {
@@ -42,7 +42,7 @@ impl IsLessThanTupleAir {
         &self,
         x: &[u32],
         y: &[u32],
-        range_checker: &RangeCheckerGateChip,
+        range_checker: &VariableRangeCheckerChip,
         lt_cols: &mut IsLessThanTupleColsMut<F>,
     ) {
         fill_slc_to_f(lt_cols.io.x, x);
@@ -56,7 +56,7 @@ impl IsLessThanTupleAir {
         &self,
         x: &[u32],
         y: &[u32],
-        range_checker: &RangeCheckerGateChip,
+        range_checker: &VariableRangeCheckerChip,
         lt_aux_cols: &mut IsLessThanTupleAuxColsMut<F>,
     ) {
         for i in 0..self.limb_bits.len() {
@@ -96,9 +96,9 @@ impl IsLessThanTupleAir {
     }
 }
 
-// TODO[jpw] stop using Arc<RangeCheckerGateChip> and use &RangeCheckerGateChip (requires not using this trait)
+// TODO[jpw] stop using Arc<VariableRangeCheckerChip> and use &VariableRangeCheckerChip (requires not using this trait)
 impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
-    type LocalInput = (Vec<u32>, Vec<u32>, Arc<RangeCheckerGateChip>);
+    type LocalInput = (Vec<u32>, Vec<u32>, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let width: usize = IsLessThanTupleCols::<F>::width(self);

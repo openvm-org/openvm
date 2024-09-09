@@ -1,6 +1,6 @@
 use std::{collections::HashMap, iter, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{
@@ -9,7 +9,7 @@ use afs_stark_backend::{
     },
     verifier::VerificationError,
 };
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         self,
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -102,7 +102,7 @@ where
     let idx_len = 2;
     let data_len = 3;
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(3 + log_num_ops));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
@@ -131,7 +131,10 @@ where
         decomp: DECOMP_BITS,
     };
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(lt_bus_index, 1 << DECOMP_BITS));
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+        lt_bus_index,
+        DECOMP_BITS,
+    )));
 
     let mut page_controller: PageController<BabyBearPoseidon2Config, BABYBEAR_COMMITMENT_LEN> =
         PageController::new(

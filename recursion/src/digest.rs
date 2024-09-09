@@ -92,18 +92,18 @@ impl<C: Config> FromConstant<C> for DigestVariable<C> {
     fn constant(value: Self::Constant, builder: &mut Builder<C>) -> Self {
         match value {
             DigestVal::F(value) => {
-                let mut array = builder.array(value.len());
+                let array = builder.array(value.len());
                 for (i, val) in value.into_iter().enumerate() {
                     let val = Felt::constant(val, builder);
-                    builder.set(&mut array, i, val);
+                    builder.set(&array, i, val);
                 }
                 Self::Felt(array)
             }
             DigestVal::N(value) => {
-                let mut array = builder.array(value.len());
+                let array = builder.array(value.len());
                 for (i, val) in value.into_iter().enumerate() {
                     let val = Var::constant(val, builder);
-                    builder.set(&mut array, i, val);
+                    builder.set(&array, i, val);
                 }
                 Self::Var(array)
             }

@@ -5,7 +5,7 @@ use afs_page::{
     page_rw_checker::page_controller::{OpType, Operation},
 };
 use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitter};
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };

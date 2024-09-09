@@ -1,5 +1,5 @@
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_blake3::BabyBearBlake3Engine, baby_bear_bytehash::engine_from_byte_hash,
         baby_bear_keccak::BabyBearKeccakEngine, baby_bear_poseidon2,

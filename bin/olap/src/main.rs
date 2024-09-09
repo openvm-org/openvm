@@ -1,4 +1,4 @@
-use afs_test_utils::{config::setup_tracing, page_config::PageConfig};
+use ax_sdk::{config::setup_tracing, page_config::PageConfig};
 use olap::cli::run;
 
 fn main() {

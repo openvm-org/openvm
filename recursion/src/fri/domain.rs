@@ -104,7 +104,7 @@ where
 
         let domain_power: Felt<_> = builder.eval(C::F::one());
 
-        let mut domains = builder.array(num_chunks);
+        let domains = builder.array(num_chunks);
 
         builder.range(0, num_chunks).for_each(|i, builder| {
             let log_n = builder.eval(log_n);
@@ -116,7 +116,7 @@ where
             };
             // FIXME: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
             // to `Usize::Var` because it calls `builder.eval`.
-            builder.set_value(&mut domains, i, domain);
+            builder.set_value(&domains, i, domain);
             builder.assign(&domain_power, domain_power * g_dom);
         });
 
@@ -166,7 +166,7 @@ where
 #[cfg(test)]
 pub(crate) mod tests {
     use afs_compiler::{asm::AsmBuilder, util::execute_program};
-    use afs_test_utils::config::{
+    use ax_sdk::config::{
         baby_bear_poseidon2::{default_config, default_perm, BabyBearPoseidon2Config},
         fri_params::default_fri_params,
     };

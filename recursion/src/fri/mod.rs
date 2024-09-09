@@ -34,7 +34,7 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
     proof: &FriProofVariable<C>,
     challenger: &mut impl ChallengerVariable<C>,
 ) -> FriChallengesVariable<C> {
-    let mut betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
+    let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
 
     builder
         .range(0, proof.commit_phase_commits.len())
@@ -42,7 +42,7 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
             let comm = builder.get(&proof.commit_phase_commits, i);
             challenger.observe_digest(builder, comm);
             let sample = challenger.sample_ext(builder);
-            builder.set(&mut betas, i, sample);
+            builder.set(&betas, i, sample);
         });
 
     let num_query_proofs = proof.query_proofs.len().clone();
@@ -56,10 +56,10 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
 
     let log_max_height =
         builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(config.log_blowup));
-    let mut query_indices = builder.array(config.num_queries);
+    let query_indices = builder.array(config.num_queries);
     builder.range(0, config.num_queries).for_each(|i, builder| {
         let index_bits = challenger.sample_bits(builder, log_max_height);
-        builder.set(&mut query_indices, i, index_bits);
+        builder.set(&query_indices, i, index_bits);
     });
 
     FriChallengesVariable {
@@ -154,7 +154,7 @@ where
             let i_plus_one = builder.eval_expr(i + RVar::one());
             let index_pair = index_bits.shift(builder, i_plus_one);
 
-            let mut evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
+            let evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
             let eval_0: Ext<C::F, C::EF>;
             let eval_1: Ext<C::F, C::EF>;
             if builder.flags.static_only {
@@ -164,13 +164,13 @@ where
                     step.sibling_value,
                     folded_eval,
                 );
-                builder.set_value(&mut evals, 0, eval_0);
-                builder.set_value(&mut evals, 1, eval_1);
+                builder.set_value(&evals, 0, eval_0);
+                builder.set_value(&evals, 1, eval_1);
             } else {
-                builder.set_value(&mut evals, 0, folded_eval);
-                builder.set_value(&mut evals, 1, folded_eval);
+                builder.set_value(&evals, 0, folded_eval);
+                builder.set_value(&evals, 1, folded_eval);
                 // This is faster than branching.
-                builder.set_value(&mut evals, index_sibling_mod_2, step.sibling_value);
+                builder.set_value(&evals, index_sibling_mod_2, step.sibling_value);
                 eval_0 = builder.get(&evals, 0);
                 eval_1 = builder.get(&evals, 1);
             }
@@ -178,11 +178,11 @@ where
             let dims = DimensionsVariable::<C> {
                 height: builder.sll(C::N::one(), log_folded_height),
             };
-            let mut dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
-            builder.set_value(&mut dims_slice, 0, dims);
+            let dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
+            builder.set_value(&dims_slice, 0, dims);
 
-            let mut opened_values = builder.array(1);
-            builder.set_value(&mut opened_values, 0, evals);
+            let opened_values = builder.array(1);
+            builder.set_value(&opened_values, 0, evals);
             builder.cycle_tracker_start("verify-batch-ext");
             verify_batch::<C>(
                 builder,
@@ -410,7 +410,7 @@ where
 {
     builder.cycle_tracker_start("verify-batch-reduce-fast");
     let nb_opened_values: Usize<_> = builder.eval(C::N::zero());
-    let mut nested_opened_values = builder.array(8192);
+    let nested_opened_values = builder.array(8192);
     let start_dim_idx: Usize<_> = builder.eval(dim_idx.clone());
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
     builder
@@ -422,7 +422,7 @@ where
                 .then(|builder| {
                     let opened_values = builder.get(opened_values, i);
                     builder.set_value(
-                        &mut nested_opened_values,
+                        &nested_opened_values,
                         nb_opened_values.clone(),
                         opened_values.clone(),
                     );

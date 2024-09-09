@@ -2,7 +2,7 @@ use std::{fs, marker::PhantomData};
 
 use afs_page::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::config::PcsProverData;
-use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
+use ax_sdk::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::write_bytes;
 use clap::Parser;
 use color_eyre::eyre::Result;
@@ -44,7 +44,6 @@ where
             _page_height,
             idx_limb_bits,
             idx_decomp,
-            range_max,
         ) = filter_setup(config, op);
 
         let page_controller: PageController<SC> = PageController::new(
@@ -52,7 +51,6 @@ where
             RANGE_BUS_INDEX,
             idx_len,
             data_len,
-            range_max as u32,
             idx_limb_bits,
             idx_decomp,
             filter_op.predicate,

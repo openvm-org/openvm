@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use afs_stark_backend::interaction::InteractionType;
-use afs_test_utils::{
+use ax_sdk::{
     config::baby_bear_poseidon2::run_simple_test,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };

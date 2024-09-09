@@ -29,7 +29,7 @@ impl Hintable<C> for InnerDigest {
     }
 }
 
-impl VecAutoHintable<C> for InnerDigest {}
+impl VecAutoHintable for InnerDigest {}
 
 impl Hintable<C> for InnerCommitPhaseStep {
     type HintVariable = FriCommitPhaseProofStepVariable<C>;
@@ -53,7 +53,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
     }
 }
 
-impl VecAutoHintable<C> for InnerCommitPhaseStep {}
+impl VecAutoHintable for InnerCommitPhaseStep {}
 
 impl Hintable<C> for InnerQueryProof {
     type HintVariable = FriQueryProofVariable<C>;
@@ -76,7 +76,7 @@ impl Hintable<C> for InnerQueryProof {
     }
 }
 
-impl VecAutoHintable<C> for InnerQueryProof {}
+impl VecAutoHintable for InnerQueryProof {}
 
 impl Hintable<C> for InnerFriProof {
     type HintVariable = FriProofVariable<C>;
@@ -132,8 +132,8 @@ impl Hintable<C> for InnerBatchOpening {
     }
 }
 
-impl VecAutoHintable<C> for InnerBatchOpening {}
-impl VecAutoHintable<C> for Vec<InnerBatchOpening> {}
+impl VecAutoHintable for InnerBatchOpening {}
+impl VecAutoHintable for Vec<InnerBatchOpening> {}
 
 impl Hintable<C> for InnerPcsProof {
     type HintVariable = TwoAdicPcsProofVariable<C>;

@@ -1,7 +1,10 @@
 use std::marker::PhantomData;
 
 use self::columns::OfflineCheckerCols;
-use crate::{is_equal_vec::IsEqualVecAir, is_less_than_tuple::IsLessThanTupleAir};
+use crate::{
+    is_equal_vec::IsEqualVecAir, is_less_than_tuple::IsLessThanTupleAir,
+    var_range::bus::VariableRangeCheckerBus,
+};
 
 pub mod air;
 pub mod bridge;
@@ -21,7 +24,6 @@ pub struct OfflineChecker {
     pub decomp: usize,
     pub idx_len: usize,
     pub data_len: usize,
-    pub range_bus: usize,
     pub ops_bus: usize,
 
     pub is_equal_idx_air: IsEqualVecAir,
@@ -42,10 +44,12 @@ impl OfflineChecker {
             decomp,
             idx_len,
             data_len,
-            range_bus,
             ops_bus,
             is_equal_idx_air: IsEqualVecAir::new(idx_len),
-            lt_tuple_air: IsLessThanTupleAir::new(range_bus, idx_clk_limb_bits, decomp),
+            lt_tuple_air: IsLessThanTupleAir::new(
+                VariableRangeCheckerBus::new(range_bus, decomp),
+                idx_clk_limb_bits,
+            ),
         }
     }
 

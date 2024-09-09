@@ -4,7 +4,7 @@ use afs_page::inner_join::controller::FKInnerJoinController;
 use afs_stark_backend::{
     config::PcsProverData, keygen::types::MultiStarkProvingKey, prover::types::Proof,
 };
-use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
+use ax_sdk::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::read_from_path;
 use clap::Parser;
 use color_eyre::eyre::Result;

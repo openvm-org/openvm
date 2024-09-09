@@ -8,19 +8,15 @@ use p3_matrix::Matrix;
 use super::columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols};
 use crate::{
     is_equal_vec::IsEqualVecAir,
-    is_less_than::{
-        columns::{IsLessThanAuxCols, IsLessThanIoCols},
-        IsLessThanAir,
-    },
+    is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
     sub_chip::{AirConfig, SubAir},
+    var_range::bus::VariableRangeCheckerBus,
 };
 
 #[derive(Clone, Debug)]
 pub struct IsLessThanTupleAir {
-    /// The bus index for sends to range chip
-    pub bus_index: usize,
     /// The number of bits to decompose each number into, for less than checking
-    pub decomp: usize,
+    pub range_max_bits: usize,
     /// IsLessThanAirs for each tuple element
     pub is_less_than_airs: Vec<IsLessThanAir>,
     /// IsEqualVecAirs
@@ -30,15 +26,15 @@ pub struct IsLessThanTupleAir {
 }
 
 impl IsLessThanTupleAir {
-    pub fn new(bus_index: usize, limb_bits: Vec<usize>, decomp: usize) -> Self {
+    pub fn new(bus: VariableRangeCheckerBus, limb_bits: Vec<usize>) -> Self {
+        let range_max_bits = bus.range_max_bits;
         let is_less_than_airs = limb_bits
             .iter()
-            .map(|&limb_bit| IsLessThanAir::new(bus_index, limb_bit, decomp))
+            .map(|&limb_bit| IsLessThanAir::new(bus, limb_bit))
             .collect::<Vec<_>>();
 
         Self {
-            bus_index,
-            decomp,
+            range_max_bits,
             is_less_than_airs,
             is_equal_vec_air: IsEqualVecAir::new(limb_bits.len()),
             limb_bits,
@@ -62,17 +58,18 @@ impl IsLessThanTupleAir {
         let y = io.y;
 
         // here we constrain that less_than[i] indicates whether x[i] < y[i] using the IsLessThan subchip for each i
-        for i in 0..x.len() {
+        for (i, lt_aux_cols) in aux.less_than_aux.into_iter().enumerate() {
             let x_val = x[i].clone();
             let y_val = y[i].clone();
 
             let lt_io_cols = IsLessThanIoCols::new(x_val, y_val, aux.less_than[i]);
-            let lt_aux_cols = IsLessThanAuxCols::new(
-                aux.less_than_aux[i].lower,
-                aux.less_than_aux[i].lower_decomp.clone(),
-            );
 
-            self.is_less_than_airs[i].eval_without_interactions(builder, lt_io_cols, lt_aux_cols);
+            self.is_less_than_airs[i].conditional_eval_without_interactions(
+                builder,
+                lt_io_cols,
+                lt_aux_cols,
+                AB::F::one(),
+            );
         }
 
         let mut prods = aux.is_equal_vec_aux.prods.clone();

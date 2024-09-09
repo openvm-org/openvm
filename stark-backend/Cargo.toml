@@ -17,8 +17,7 @@ p3-util = { workspace = true }
 rayon = { workspace = true, optional = true }
 itertools.workspace = true
 tracing.workspace = true
-
-serde = { version = "1.0", default-features = false, features = [
+serde = { workspace = true, default-features = false, features = [
     "derive",
     "alloc",
     "rc",
@@ -32,7 +31,7 @@ mimalloc = { version = "0.1.43", optional = true }
 
 [dev-dependencies]
 afs-derive = { path = "../derive" }
-afs-test-utils = { path = "../test-utils" }
+ax-sdk = { path = "../sdk" }
 
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }

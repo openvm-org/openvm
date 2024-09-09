@@ -8,6 +8,7 @@ mod cast_primes;
 pub mod columns;
 pub mod trace;
 
+#[derive(Clone, Debug)]
 pub struct LimbDimensions {
     pub io_limb_sizes: Vec<Vec<usize>>,
     pub q_limb_sizes: Vec<usize>,

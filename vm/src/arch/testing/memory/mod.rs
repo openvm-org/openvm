@@ -47,10 +47,10 @@ impl<F: PrimeField32> MemoryTester<F> {
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let read = RefCell::borrow_mut(&self.chip).read(addr_space, pointer);
+        let read = RefCell::borrow_mut(&self.chip).read_cell(addr_space, pointer);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records
-            .push(self.bus.read(address, read.data, read.prev_timestamp));
+            .push(self.bus.read(address, read.data, read.prev_timestamps[0]));
         self.records
             .push(self.bus.write(address, read.data, read.timestamp));
         read.value()
@@ -58,11 +58,11 @@ impl<F: PrimeField32> MemoryTester<F> {
 
     pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let write = RefCell::borrow_mut(&self.chip).write(addr_space, pointer, value);
+        let write = RefCell::borrow_mut(&self.chip).write_cell(addr_space, pointer, value);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(
             self.bus
-                .read(address, write.prev_data, write.prev_timestamp),
+                .read(address, write.prev_data, write.prev_timestamps[0]),
         );
         self.records
             .push(self.bus.write(address, write.data, write.timestamp));
@@ -86,13 +86,13 @@ impl<F: PrimeField32> MemoryTester<F> {
 }
 
 impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
         let mut values = vec![F::zero(); height * width];
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, record) in values.chunks_mut(width).into_iter().zip(&self.records) {
+        for (row, record) in values.chunks_mut(width).zip(&self.records) {
             let row: &mut DummyMemoryInteractionCols<F, WORD_SIZE> = row.borrow_mut();
             row.address = record.address;
             row.data = record.data;

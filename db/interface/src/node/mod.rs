@@ -7,7 +7,7 @@ use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
     prover::types::Proof,
 };
-use afs_test_utils::engine::StarkEngine;
+use ax_sdk::engine::StarkEngine;
 use async_trait::async_trait;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::LogicalPlan};
 use enum_dispatch::enum_dispatch;

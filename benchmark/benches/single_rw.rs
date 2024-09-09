@@ -14,7 +14,7 @@ use afs_stark_backend::{
     },
     rap::AnyRap,
 };
-use afs_test_utils::{
+use ax_sdk::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     engine::StarkEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,

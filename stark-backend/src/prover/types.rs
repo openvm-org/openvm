@@ -1,6 +1,7 @@
 use derivative::Derivative;
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_util::log2_strict_usize;
 use serde::{Deserialize, Serialize};
 
 use super::opener::OpeningProof;
@@ -91,4 +92,10 @@ pub struct Proof<SC: StarkGenericConfig> {
     /// the values to expose to the verifier in that phase
     pub exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
     // Should we include public values here?
+}
+
+impl<SC: StarkGenericConfig> Proof<SC> {
+    pub fn log_degrees(&self) -> Vec<usize> {
+        self.degrees.iter().map(|d| log2_strict_usize(*d)).collect()
+    }
 }

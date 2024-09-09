@@ -4,6 +4,7 @@ use afs_primitives::{
         IsLessThanTupleAir,
     },
     utils::{implies, or},
+    var_range::bus::VariableRangeCheckerBus,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -21,6 +22,7 @@ pub struct MemoryAuditAir {
 }
 
 impl MemoryAuditAir {
+    // TODO[jpw]: pass in range bus
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
@@ -31,9 +33,8 @@ impl MemoryAuditAir {
         Self {
             memory_bus,
             addr_lt_air: IsLessThanTupleAir::new(
-                RANGE_CHECKER_BUS,
+                VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp),
                 vec![addr_space_max_bits, pointer_max_bits],
-                decomp,
             ),
             for_testing,
         }
@@ -61,10 +62,12 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryAuditAir {
 
         // TODO[jpw]: ideally make this work for testing too
         if !self.for_testing {
+            builder.assert_bool(local.is_extra);
+
             // Ensuring all is_extra rows are at the bottom
             builder
                 .when_transition()
-                .assert_one(implies(local.is_extra.into(), next.is_extra.into()));
+                .assert_one(implies(local.is_extra, next.is_extra));
 
             // Ensuring addr_lt is correct
             let lt_cols = IsLessThanTupleCols::new(
@@ -82,7 +85,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryAuditAir {
             // Ensuring that all addresses are sorted
             builder
                 .when_transition()
-                .assert_one(or(next.is_extra.into(), next.addr_lt.into()));
+                .assert_one(or(next.is_extra, next.addr_lt));
         }
 
         self.eval_interactions(builder, local);

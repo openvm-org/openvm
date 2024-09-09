@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
@@ -16,7 +16,7 @@ use stark_vm::{
     vm::{config::VmConfig, VirtualMachine},
 };
 
-pub fn execute_program_with_config<const WORD_SIZE: usize>(
+pub fn execute_program_with_config(
     config: VmConfig,
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
@@ -45,6 +45,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
             modular_multiplication_enabled: true,
+            bigint_limb_size: 10,
             ..Default::default()
         },
         program,
@@ -112,15 +113,12 @@ pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
     }
 }
 
-pub fn execute_and_prove_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
-    let vm = VirtualMachine::new(
-        VmConfig {
-            num_public_values: 4,
-            ..Default::default()
-        },
-        program,
-        input_stream,
-    );
+pub fn execute_and_prove_program(
+    program: Program<BabyBear>,
+    input_stream: Vec<Vec<BabyBear>>,
+    config: VmConfig,
+) {
+    let vm = VirtualMachine::new(config, program, input_stream);
 
     let result = vm.execute_and_generate().unwrap();
     assert_eq!(

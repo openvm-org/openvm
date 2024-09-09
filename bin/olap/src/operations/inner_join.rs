@@ -2,7 +2,7 @@ use afs_page::{
     common::page::Page,
     inner_join::controller::{IJBuses, T2Format, TableFormat},
 };
-use afs_test_utils::page_config::PageConfig;
+use ax_sdk::page_config::PageConfig;
 use logical_interface::{
     afs_input::{operation::InnerJoinOp, types::AfsOperation},
     afs_interface::AfsInterface,

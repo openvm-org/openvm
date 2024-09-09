@@ -34,6 +34,7 @@ pub enum Opcode {
 
     PERM_POS2 = 40,
     COMP_POS2 = 41,
+    KECCAK256 = 42,
 
     /// Instruction to write the next hint word into memory.
     SHINTW = 50,
@@ -42,6 +43,8 @@ pub enum Opcode {
     HINT_INPUT = 51,
     /// Phantom instruction to prepare the little-endian bit decomposition of a variable for hinting.
     HINT_BITS = 52,
+    /// Phantom instruction to prepare the little-endian byte decomposition of a variable for hinting.
+    HINT_BYTES = 53,
 
     /// Phantom instruction to start tracing
     CT_START = 60,
@@ -73,17 +76,21 @@ impl fmt::Display for Opcode {
     }
 }
 
-pub const CORE_INSTRUCTIONS: [Opcode; 15] = [
-    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS, PUBLISH, CT_START,
-    CT_END, NOP, LOADW2, STOREW2,
+pub const CORE_INSTRUCTIONS: [Opcode; 16] = [
+    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS, HINT_BYTES, PUBLISH,
+    CT_START, CT_END, NOP, LOADW2, STOREW2,
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [Opcode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4DIV];
-pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [Opcode; 8] = [
+pub const UINT256_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [ADD256, SUB256, LT256, EQ256];
+pub const SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [
     SECP256K1_COORD_ADD,
     SECP256K1_COORD_SUB,
     SECP256K1_COORD_MUL,
     SECP256K1_COORD_DIV,
+];
+
+pub const SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [
     SECP256K1_SCALAR_ADD,
     SECP256K1_SCALAR_SUB,
     SECP256K1_SCALAR_MUL,

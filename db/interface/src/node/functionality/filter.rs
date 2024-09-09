@@ -8,7 +8,7 @@ use afs_stark_backend::{
     keygen::types::MultiStarkProvingKey,
     prover::{trace::TraceCommitmentBuilder, types::Proof},
 };
-use afs_test_utils::engine::StarkEngine;
+use ax_sdk::engine::StarkEngine;
 use datafusion::error::Result;
 use p3_field::PrimeField64;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
@@ -40,7 +40,6 @@ where
             RANGE_BUS_IDX,
             idx_len,
             data_len,
-            1 << RANGE_CHECK_BITS as u32,
             BITS_PER_FE,
             RANGE_CHECK_BITS,
             comp,

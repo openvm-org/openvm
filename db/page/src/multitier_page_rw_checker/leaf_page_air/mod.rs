@@ -1,4 +1,7 @@
-use afs_primitives::is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir};
+use afs_primitives::{
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
+    var_range::bus::VariableRangeCheckerBus,
+};
 use getset::Getters;
 
 use super::page_controller::MyLessThanTupleParams;
@@ -92,14 +95,12 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 is_init,
                 is_less_than_tuple_air: Some(LeafPageSubAirs {
                     idx_start: IsLessThanTupleAir::new(
-                        lt_bus_index,
+                        VariableRangeCheckerBus::new(lt_bus_index, is_less_than_tuple_param.decomp),
                         vec![is_less_than_tuple_param.limb_bits; idx_len],
-                        is_less_than_tuple_param.decomp,
                     ),
                     end_idx: IsLessThanTupleAir::new(
-                        lt_bus_index,
+                        VariableRangeCheckerBus::new(lt_bus_index, is_less_than_tuple_param.decomp),
                         vec![is_less_than_tuple_param.limb_bits; idx_len],
-                        is_less_than_tuple_param.decomp,
                     ),
                 }),
                 is_less_than_tuple_param,
@@ -132,9 +133,8 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 * (2 * self.idx_len
                     + 2
                     + 2 * IsLessThanTupleAuxCols::<usize>::width(&IsLessThanTupleAir::new(
-                        0,
+                        VariableRangeCheckerBus::new(0, self.is_less_than_tuple_param.decomp),
                         vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
-                        self.is_less_than_tuple_param.decomp,
                     )))
     }
 
@@ -144,9 +144,8 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 * (2 * self.idx_len
                     + 2
                     + 2 * IsLessThanTupleAuxCols::<usize>::width(&IsLessThanTupleAir::new(
-                        0,
+                        VariableRangeCheckerBus::new(0, self.is_less_than_tuple_param.decomp),
                         vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
-                        self.is_less_than_tuple_param.decomp,
                     )))
             - self.cached_width()
     }

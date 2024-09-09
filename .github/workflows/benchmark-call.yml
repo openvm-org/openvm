@@ -9,6 +9,7 @@ on:
         description: The name of the benchmark to run
         options:
           - vm_verify_fibair
+          - vm_static_verify_fibair
           - single_rw
           - single_filter
       aws_instance_type:
@@ -34,7 +35,7 @@ env:
 jobs:
   start-runner:
     name: Start self-hosted EC2 runner
-    runs-on: [self-hosted, coordinator, staging]
+    runs-on: [ self-hosted, coordinator, staging ]
     outputs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
@@ -49,7 +50,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-0a071ac3e1220fe60 # arm64-rust-dev-32gb
+          ec2-image-id: ami-0d33c5daee4966517 # arm64-rust-dev-32gb
           # ami-06dd8940c223fd887 # arm64-rust-dev-1024gb
           ec2-instance-type: ${{ inputs.aws_instance_type }}
           subnet-id: subnet-08094bf4edad62d10 # staging tooling private subnet
@@ -78,6 +79,16 @@ jobs:
           RUSTFLAGS="-Ctarget-cpu=native" cargo run --profile=fast --bin benchmark --features parallel -- vm_verify_fibair -n 16
 
       - name: Run benchmark
+        if: inputs.benchmark_name == 'vm_static_verify_fibair'
+        working-directory: recursion
+        run: |
+          mkdir -p ../benchmark
+          mkdir -p ../benchmark/tmp
+          bash trusted_setup_s3.sh
+          RUSTFLAGS="-Ctarget-cpu=native" cargo test --profile=fast -p afs-recursion --test recursion --features parallel,static-verifier -- test_fibonacci_program_halo2_verify > ../benchmark/tmp/_result.middle.md
+          sed -n "/prove halo2 verifier circuit/,\$p" ../benchmark/tmp/_result.middle.md > ../benchmark/tmp/_result.md
+
+      - name: Run benchmark
         if: inputs.benchmark_name == 'single_rw'
         run: |
           RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
@@ -90,7 +101,14 @@ jobs:
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" results.md
+          result_path="${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md"
+          count=` s5cmd ls $result_path | wc -l`
+          
+          if [[ $count -gt 0 ]]; then
+            s5cmd cp $result_path results.md
+          else
+            touch results.md
+          fi          
 
           previous_result="$(<results.md)"
 
@@ -122,7 +140,7 @@ jobs:
           echo "${new_result}" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
-      - name: Remove previous comment (if exists)
+      - name: Collapse previous comment (if exists)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
@@ -134,13 +152,17 @@ jobs:
               issue_number: context.issue.number
             });
             for (const comment of comments.data) {
-              if (comment.body.startsWith(previousBenchmark)) {
-                console.log("deleting comment ", comment.id);
-                await github.rest.issues.deleteComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  comment_id: comment.id
-                });
+              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("${{ inputs.benchmark_name }}\n\n")) {
+                console.log("collapse comment ", comment.id);
+                const resp = await github.graphql(`
+                  mutation {
+                    minimizeComment(input: {classifier: OUTDATED, subjectId: "${comment.node_id}"}) {
+                      minimizedComment {
+                        isMinimized
+                      }
+                    }
+                  }
+                `);
               }
             }
 
@@ -156,7 +178,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `${previousBenchmark}\n\n${newBenchmark}`
+              body: `${{ inputs.benchmark_name }}\n\n${previousBenchmark}\n\n${newBenchmark}`
             });
 
       - name: Update latest main result in s3
@@ -189,7 +211,7 @@ jobs:
       - start-runner # required to get output from the start-runner job
       - bench-new # wait for bench-new to finish
       - update-gh-pages # wait for update-gh-pages to finish
-    runs-on: [self-hosted, coordinator, staging]
+    runs-on: [ self-hosted, coordinator, staging ]
     if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
     steps:
       - name: Configure AWS credentials

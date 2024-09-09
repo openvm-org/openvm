@@ -5,29 +5,39 @@ use std::{
     sync::Arc,
 };
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{
+    modular_multiplication::bigint::air::ModularArithmeticBigIntAir,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    xor::lookup::XorLookupChip,
+};
 use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
-use super::{VirtualMachineState, VmConfig, VmMetrics};
+use super::{VirtualMachineState, VmConfig, VmCycleTracker, VmMetrics};
 use crate::{
     arch::{
         bus::ExecutionBus,
         chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
-        instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS},
+        instructions::{
+            Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
+            SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS,
+            SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS,
+        },
     },
-    cpu::{trace::ExecutionError, CpuChip, RANGE_CHECKER_BUS},
+    cpu::{trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
+    hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::{
         manager::{MemoryChip, MemoryChipRef},
         offline_checker::bus::MemoryBus,
     },
-    poseidon2::Poseidon2Chip,
+    modular_multiplication::ModularArithmeticChip,
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
 };
@@ -44,7 +54,7 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
 
-    pub cycle_tracker: CycleTracker,
+    pub cycle_tracker: VmCycleTracker,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,
@@ -63,6 +73,7 @@ impl<SC: StarkGenericConfig> SegmentResult<SC> {
         self.traces
             .iter()
             .map(RowMajorMatrix::height)
+            .map(log2_strict_usize)
             .max()
             .unwrap()
     }
@@ -73,11 +84,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
         let execution_bus = ExecutionBus(0);
         let memory_bus = MemoryBus(1);
-
-        let range_checker = Arc::new(RangeCheckerGateChip::new(
-            RANGE_CHECKER_BUS,
-            1 << config.memory_config.decomp,
-        ));
+        let range_bus =
+            VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
         let memory_chip = Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
             memory_bus,
@@ -101,10 +110,12 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             };
         }
 
+        // NOTE: The order of entries in `chips` must be a linear extension of the dependency DAG.
+        // That is, if chip A holds a strong reference to chip B, then A must precede B in `chips`.
+
         let mut chips = vec![
             MachineChipVariant::Cpu(cpu_chip.clone()),
             MachineChipVariant::Program(program_chip.clone()),
-            MachineChipVariant::Memory(memory_chip.clone()),
         ];
 
         if config.field_arithmetic_enabled {
@@ -137,27 +148,54 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
             chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
         }
-        // let airs = vec![
-        //     (
-        //         ModularArithmeticChip::new(ModularArithmeticVmAir {
-        //             air: ModularArithmeticBigIntAir::default_for_secp256k1_coord(),
-        //         }),
-        //         ModularArithmeticBigIntAir::secp256k1_coord_prime(),
-        //     ),
-        //     (
-        //         ModularArithmeticChip::new(ModularArithmeticVmAir {
-        //             air: ModularArithmeticBigIntAir::default_for_secp256k1_scalar(),
-        //         }),
-        //         ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
-        //     ),
-        // ];
-        // let mut modular_arithmetic_chips = BTreeMap::new();
-        // for (air, modulus) in airs {
-        //     modular_arithmetic_chips.insert(modulus.clone(), air);
-        // }
+        if config.keccak_enabled {
+            let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
+            let keccak_chip = Rc::new(RefCell::new(KeccakVmChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                byte_xor_chip.clone(),
+            )));
+            assign!([Opcode::KECCAK256], keccak_chip);
+            chips.push(MachineChipVariant::Keccak256(keccak_chip));
+            chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
+        }
+        if config.modular_multiplication_enabled {
+            let airs = vec![
+                (
+                    ModularArithmeticChip::new(
+                        memory_chip.clone(),
+                        ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                        config.bigint_limb_size,
+                    ),
+                    ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                ),
+                (
+                    ModularArithmeticChip::new(
+                        memory_chip.clone(),
+                        ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                        config.bigint_limb_size,
+                    ),
+                    ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                ),
+            ];
+            // let mut modular_arithmetic_chips = BTreeMap::new();
+            // for (air, modulus) in airs {
+            //     assign!(MODULAR_ARITHMETIC_INSTRUCTIONS,);
+            //     modular_arithmetic_chips.insert(modulus.clone(), air);
+            // }
+            assign!(
+                SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS,
+                Rc::new(RefCell::new(airs[0].0.clone()))
+            );
+            assign!(
+                SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS,
+                Rc::new(RefCell::new(airs[1].0.clone()))
+            );
+        }
 
-        // TODO: Range checker should be last since other chips' trace generation (including dummy rows)
-        // affect RangeChecker's trace.
+        // Most chips have a reference to the memory chip, and the memory chip has a reference to
+        // the range checker chip.
+        chips.push(MachineChipVariant::Memory(memory_chip.clone()));
         chips.push(MachineChipVariant::RangeChecker(range_checker.clone()));
 
         Self {
@@ -192,11 +230,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             metrics: self.collected_metrics,
         };
 
+        // Drop all strong references to chips other than self.chips, which will be consumed next.
+        drop(self.executors);
+        drop(self.cpu_chip);
+        drop(self.program_chip);
+        drop(self.memory_chip);
+
         for mut chip in self.chips {
             if chip.current_trace_height() != 0 {
                 result.airs.push(chip.air());
-                result.traces.push(chip.generate_trace());
                 result.public_values.push(chip.generate_public_values());
+                result.traces.push(chip.generate_trace());
             }
         }
 
@@ -220,5 +264,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             .iter()
             .map(|chip| chip.current_trace_cells())
             .sum()
+    }
+
+    pub(crate) fn update_chip_metrics(&mut self) {
+        self.collected_metrics.chip_metrics = self.chip_metrics();
+    }
+
+    fn chip_metrics(&self) -> BTreeMap<String, usize> {
+        let mut metrics = BTreeMap::new();
+        for chip in self.chips.iter() {
+            let chip_name: &'static str = chip.into();
+            metrics.insert(chip_name.into(), chip.current_trace_height());
+        }
+        metrics
     }
 }

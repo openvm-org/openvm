@@ -3,7 +3,7 @@ use afs_stark_backend::{
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
     verifier::VerificationError,
 };
-use afs_test_utils::{
+use ax_sdk::{
     config::{
         self,
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},

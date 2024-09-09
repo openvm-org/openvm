@@ -5,8 +5,8 @@ use afs_stark_backend::{
     keygen::types::MultiStarkProvingKey,
     prover::types::Proof,
 };
-use afs_test_utils::engine::StarkEngine;
 use async_trait::async_trait;
+use ax_sdk::engine::StarkEngine;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::TableSource};
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;

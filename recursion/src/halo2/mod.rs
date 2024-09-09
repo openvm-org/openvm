@@ -1,6 +1,7 @@
-mod utils;
+pub mod utils;
 pub mod verifier;
 
+pub mod testing_utils;
 #[cfg(test)]
 mod tests;
 

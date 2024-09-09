@@ -7,16 +7,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-afs-derive = { path = "../derive" }
 p3-field = { workspace = true }
-itertools.workspace = true
-serde = { workspace = true }
-serde_json = { workspace = true }
-p3-bn254-fr = { workspace = true }
 p3-baby-bear = { workspace = true }
-backtrace = { version = "0.3.71", features = ["serde"] }
-afs-test-utils = { path = "../test-utils" }
+p3-bn254-fr = { workspace = true }
+afs-derive = { path = "../derive" }
+ax-sdk = { path = "../sdk" }
 stark-vm = { path = "../vm" }
+tracing.workspace = true
+itertools.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+backtrace = { version = "0.3.71", features = ["serde"] }
 strum_macros = "0.26.4"
 num-bigint = "0.4.6"
 num-bigint-dig = "0.8.4"
@@ -27,6 +28,7 @@ snark-verifier-sdk = { workspace = true, optional = true }
 zkhash = { workspace = true }
 
 [dev-dependencies]
+hex = "0.4.3"
 p3-challenger = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-dft = { workspace = true }
@@ -36,3 +38,4 @@ rand = "0.8.5"
 [features]
 default = []
 halo2-compiler = ["dep:snark-verifier-sdk"]
+parallel = ["stark-vm/parallel"]

@@ -16,19 +16,20 @@ pub struct ListChip {
 }
 
 impl ListChip {
-    pub fn new(bus_index: usize, vals: Vec<u32>, range_checker: Arc<RangeCheckerChip>) -> Self {
+    pub fn new(vals: Vec<u32>, range_checker: Arc<RangeCheckerChip>) -> Self {
+        let bus = range_checker.bus();
         Self {
-            air: ListAir { bus_index },
+            air: ListAir::new(bus),
             vals,
             range_checker,
         }
     }
 
     pub fn range_max(&self) -> u32 {
-        self.range_checker.air.range_max
+        self.range_checker.range_max()
     }
 
     pub fn bus_index(&self) -> usize {
-        self.air.bus_index
+        self.air.bus.index
     }
 }

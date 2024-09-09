@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val};
-use afs_test_utils::engine::StarkEngine;
+use ax_sdk::engine::StarkEngine;
 use datafusion::{
     arrow::array::RecordBatch, error::Result, execution::context::SessionContext,
     logical_expr::LogicalPlan,

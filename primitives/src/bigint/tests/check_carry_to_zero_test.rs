@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, sync::Arc};
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
 use num_traits::FromPrimitive;
 use p3_air::{Air, BaseAir};
@@ -16,8 +16,8 @@ use super::super::{
     OverflowInt,
 };
 use crate::{
-    range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 
 // Testing AIR:
@@ -82,8 +82,8 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
         let cols = TestCarryCols::<N, AB::Var>::from_slice(local);
         let TestCarryCols { x, y, carries } = cols;
 
-        let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB>(x, self.limb_bits);
-        let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB>(y, self.limb_bits);
+        let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(x, self.limb_bits);
+        let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(y, self.limb_bits);
         let expr = (x_overflow.clone() * x_overflow.clone()) - y_overflow.clone();
 
         self.test_carry_sub_air.constrain_carry_to_zero(
@@ -95,19 +95,10 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
-    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
+    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let range_check = |bits: usize, value: usize| {
-            let value = value as u32;
-            if bits == self.decomp {
-                range_checker.add_count(value);
-            } else {
-                range_checker.add_count(value);
-                range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
-            }
-        };
         let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
         let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits, Some(2 * N));
         assert_eq!(x_overflow.limbs.len(), N);
@@ -116,9 +107,9 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
         for (i, &carry) in carries.iter().enumerate() {
-            range_check(
+            range_checker.add_count(
+                (carry + (self.test_carry_sub_air.carry_min_value_abs as isize)) as u32,
                 self.test_carry_sub_air.carry_bits,
-                (carry + (self.test_carry_sub_air.carry_min_value_abs as isize)) as usize,
             );
             carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
@@ -152,7 +143,10 @@ fn test_x_square_minus_y(x: BigUint, y: BigUint) {
     let max_overflow_bits = limb_bits * 2 + log2_ceil_usize(N);
     let range_bus = 1;
     let range_decomp = 16;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+        range_bus,
+        range_decomp,
+    )));
     let check_carry_sub_air =
         CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, max_overflow_bits);
     let test_air = TestCarryAir::<N> {

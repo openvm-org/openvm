@@ -1,7 +1,5 @@
 use afs_compiler::ir::{DslIr, TracedVec, Witness};
-use afs_test_utils::config::{
-    baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters,
-};
+use ax_sdk::config::{baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters};
 use itertools::Itertools;
 use snark_verifier_sdk::{
     evm::{gen_evm_proof_shplonk, gen_evm_verifier_shplonk},
@@ -75,8 +73,8 @@ impl Halo2VerifierCircuit {
         let config_params = circuit.builder.config_params.clone();
         // Wrapper circuit should only have 1 column.
         assert_eq!(config_params.num_advice_per_phase, vec![1]);
-        let vk = keygen_vk(&params, &circuit).unwrap();
-        let pk = keygen_pk(&params, vk, &circuit).unwrap();
+        let vk = keygen_vk(params.as_ref(), &circuit).unwrap();
+        let pk = keygen_pk(params.as_ref(), vk, &circuit).unwrap();
         let num_pvs = circuit.instances().iter().map(|x| x.len()).collect_vec();
         Halo2ProvingPinning {
             pk,

@@ -1,8 +1,8 @@
 use std::{collections::HashSet, sync::Arc};
 
 use afs_primitives::{
-    is_less_than_tuple::columns::IsLessThanTupleCols, range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions,
+    is_less_than_tuple::columns::IsLessThanTupleCols, sub_chip::LocalTraceInstructions,
+    var_range::VariableRangeCheckerChip,
 };
 use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
@@ -41,7 +41,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
         &self,
         page: Page,
         range: (Vec<u32>, Vec<u32>),
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         internal_indices: &HashSet<Vec<u32>>,
     ) -> RowMajorMatrix<Val<SC>>
     where

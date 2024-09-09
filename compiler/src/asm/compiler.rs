@@ -7,7 +7,7 @@ use stark_vm::program::DebugInfo;
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
     asm::AsmInstruction,
-    ir::{Array, DslIr, Ext, Felt, Ptr, RVar, Var},
+    ir::{Array, DslIr, Ext, Felt, Ptr, RVar, Usize, Var},
     prelude::{MemIndex, TracedVec},
 };
 
@@ -548,11 +548,47 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::HintBitsU(_) => {
                     todo!()
                 }
+                DslIr::HintBytes(var, len) => {
+                    self.push(AsmInstruction::HintBytes(var.fp(), len), debug_info);
+                }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
                     (Array::Dyn(dst, _), Array::Dyn(src, _)) => self.push(
                         AsmInstruction::Poseidon2Permute(dst.fp(), src.fp()),
                         debug_info,
                     ),
+                    _ => unimplemented!(),
+                },
+                DslIr::Poseidon2CompressBabyBear(result, left, right) => {
+                    match (result, left, right) {
+                        (Array::Dyn(result, _), Array::Dyn(left, _), Array::Dyn(right, _)) => self
+                            .push(
+                                AsmInstruction::Poseidon2Compress(
+                                    result.fp(),
+                                    left.fp(),
+                                    right.fp(),
+                                ),
+                                debug_info,
+                            ),
+                        _ => unimplemented!(),
+                    }
+                }
+                DslIr::Keccak256(output, input) => match (output, input) {
+                    (Array::Dyn(output, _const_len), Array::Dyn(input, len)) => match len {
+                        Usize::Const(fix_len) => {
+                            self.push(
+                                AsmInstruction::Keccak256FixLen(
+                                    output.fp(),
+                                    input.fp(),
+                                    *fix_len.borrow(),
+                                ),
+                                debug_info,
+                            );
+                        }
+                        Usize::Var(len) => self.push(
+                            AsmInstruction::Keccak256(output.fp(), input.fp(), len.fp()),
+                            debug_info,
+                        ),
+                    },
                     _ => unimplemented!(),
                 },
                 DslIr::Error() => self.push(AsmInstruction::j(self.trap_label), debug_info),
@@ -578,20 +614,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         self.push(AsmInstruction::StoreHintWordI(A0, offset), debug_info)
                     }
                 },
-                DslIr::Poseidon2CompressBabyBear(result, left, right) => {
-                    match (result, left, right) {
-                        (Array::Dyn(result, _), Array::Dyn(left, _), Array::Dyn(right, _)) => self
-                            .push(
-                                AsmInstruction::Poseidon2Compress(
-                                    result.fp(),
-                                    left.fp(),
-                                    right.fp(),
-                                ),
-                                debug_info.clone(),
-                            ),
-                        _ => unimplemented!(),
-                    }
-                }
                 DslIr::Publish(val, index) => {
                     self.push(AsmInstruction::Publish(val.fp(), index.fp()), debug_info);
                 }

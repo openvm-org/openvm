@@ -7,7 +7,9 @@ use num_bigint_dig::BigUint;
 use p3_air::AirBuilder;
 use p3_util::log2_ceil_usize;
 
+pub mod check_carry_mod_to_zero;
 pub mod check_carry_to_zero;
+pub mod modular_multiplication;
 pub mod utils;
 
 #[cfg(test)]
@@ -55,11 +57,11 @@ impl<T> OverflowInt<T> {
         }
     }
 
-    pub fn from_var_vec<AB: AirBuilder>(
-        x: Vec<AB::Var>,
+    pub fn from_var_vec<AB: AirBuilder, V: Into<AB::Expr>>(
+        x: Vec<V>,
         limb_bits: usize,
     ) -> OverflowInt<AB::Expr> {
-        let limbs = x.iter().map(|&x| x.into()).collect();
+        let limbs = x.into_iter().map(|x| x.into()).collect();
         OverflowInt {
             limbs,
             max_overflow_bits: limb_bits,

@@ -1,4 +1,4 @@
-use afs_test_utils::page_config::PageConfig;
+use ax_sdk::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{

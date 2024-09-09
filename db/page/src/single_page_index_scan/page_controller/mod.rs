@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
+    engine::StarkEngine,
     keygen::{
         types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
@@ -13,7 +14,6 @@ use afs_stark_backend::{
     },
     verifier::VerificationError,
 };
-use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
@@ -42,7 +42,7 @@ where
 
     page_traces: Vec<DenseMatrix<Val<SC>>>,
 
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl<SC: StarkGenericConfig> PageController<SC>
@@ -55,12 +55,14 @@ where
         range_bus_index: usize,
         idx_len: usize,
         data_len: usize,
-        range_max: u32,
         idx_limb_bits: usize,
         idx_decomp: usize,
         cmp: Comp,
     ) -> Self {
-        let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus_index, range_max));
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+            range_bus_index,
+            idx_decomp,
+        )));
         Self {
             input_chip: PageIndexScanInputChip::new(
                 page_bus_index,
@@ -114,10 +116,10 @@ where
     }
 
     pub fn update_range_checker(&mut self, idx_decomp: usize) {
-        self.range_checker = Arc::new(RangeCheckerGateChip::new(
-            self.range_checker.bus_index(),
-            1 << idx_decomp,
-        ));
+        self.range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+            self.range_checker.bus().index,
+            idx_decomp,
+        )));
     }
 
     pub fn gen_output(&self, page: Page, x: Vec<u32>, page_width: usize, cmp: Comp) -> Page {
@@ -421,8 +423,7 @@ where
     where
         Val<SC>: PrimeField,
     {
-        // idx_decomp can't change between different pages since range_checker depends on it
-        assert!(1 << idx_decomp == self.range_checker.range_max());
+        assert!(idx_decomp <= self.range_checker.range_max_bits());
 
         assert!(!page_input.is_empty());
 

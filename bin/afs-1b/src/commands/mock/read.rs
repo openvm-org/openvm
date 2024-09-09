@@ -1,5 +1,5 @@
 use afs_page::page_btree::PageBTree;
-use afs_test_utils::page_config::MultitierPageConfig;
+use ax_sdk::page_config::MultitierPageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::utils::string_to_u16_vec;

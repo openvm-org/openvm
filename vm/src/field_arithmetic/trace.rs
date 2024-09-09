@@ -9,34 +9,29 @@ use super::{
     FieldArithmeticChip, FieldArithmeticRecord, Operand,
 };
 use crate::{
-    arch::{chips::MachineChip, columns::ExecutionState, instructions::Opcode},
-    memory::manager::{MemoryRead, MemoryWrite},
+    arch::{chips::MachineChip, instructions::Opcode},
+    memory::offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
 };
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     fn make_blank_row(&self) -> FieldArithmeticCols<F> {
-        let timestamp = self.memory_chip.borrow_mut().timestamp();
-
-        self.generate_row(
-            FieldArithmeticRecord {
-                opcode: Opcode::FADD,
-                from_state: ExecutionState {
-                    pc: 0,
-                    timestamp: timestamp.as_canonical_u32() as usize,
-                },
-                x_read: MemoryRead::disabled(timestamp, F::one()),
-                y_read: MemoryRead::disabled(timestamp, F::one()),
-                z_write: MemoryWrite::disabled(timestamp, F::one()),
+        FieldArithmeticCols {
+            io: Default::default(),
+            aux: FieldArithmeticAuxCols {
+                is_valid: F::zero(),
+                is_add: F::zero(),
+                is_sub: F::zero(),
+                is_mul: F::zero(),
+                is_div: F::zero(),
+                divisor_inv: F::zero(),
+                read_x_aux_cols: MemoryReadOrImmediateAuxCols::disabled(self.air.mem_oc),
+                read_y_aux_cols: MemoryReadOrImmediateAuxCols::disabled(self.air.mem_oc),
+                write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
             },
-            false,
-        )
+        }
     }
 
-    fn generate_row(
-        &self,
-        record: FieldArithmeticRecord<F>,
-        is_valid: bool,
-    ) -> FieldArithmeticCols<F> {
+    fn record_to_cols(&self, record: FieldArithmeticRecord<F>) -> FieldArithmeticCols<F> {
         let FieldArithmeticRecord {
             opcode,
             from_state,
@@ -60,25 +55,29 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
         };
 
         let memory_chip = self.memory_chip.borrow();
+        let offline_checker = memory_chip.make_offline_checker();
+        let range_checker = &memory_chip.range_checker;
 
         FieldArithmeticCols {
             io: FieldArithmeticIoCols {
-                opcode: F::from_canonical_u32(opcode as u32),
                 from_state: from_state.map(F::from_canonical_usize),
                 x: Operand::new(x_read.address_space, x_read.pointer, x),
                 y: Operand::new(y_read.address_space, y_read.pointer, y),
                 z: Operand::new(z_write.address_space, z_write.pointer, z),
             },
             aux: FieldArithmeticAuxCols {
-                is_valid: F::from_bool(is_valid),
+                is_valid: F::one(),
                 is_add,
                 is_sub,
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read),
-                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read),
-                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write),
+                read_x_aux_cols: offline_checker
+                    .make_read_or_immediate_aux_cols(range_checker.clone(), x_read),
+                read_y_aux_cols: offline_checker
+                    .make_read_or_immediate_aux_cols(range_checker.clone(), y_read),
+                write_z_aux_cols: offline_checker
+                    .make_write_aux_cols(range_checker.clone(), z_write),
             },
         }
     }
@@ -86,19 +85,20 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
 
 impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
             .records
             .iter()
             .cloned()
-            .flat_map(|op| self.generate_row(op, true).flatten())
+            .flat_map(|op| self.record_to_cols(op).flatten())
             .collect();
 
         let curr_height = self.records.len();
         let correct_height = curr_height.next_power_of_two();
-        // WARNING: do not clone below because timestamps are different per row
+        // TODO[jpw]: it is better to allocate the full 1d trace matrix first and then mutate buffers
+        let blank_row = self.make_blank_row().flatten();
         let dummy_rows_flattened =
-            (0..correct_height - curr_height).flat_map(|_| self.make_blank_row().flatten());
+            (0..correct_height - curr_height).flat_map(|_| blank_row.clone());
         trace.extend(dummy_rows_flattened);
 
         RowMajorMatrix::new(trace, self.trace_width())

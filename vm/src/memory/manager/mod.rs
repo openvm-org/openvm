@@ -1,34 +1,26 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{array, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
-use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::rap::AnyRap;
-use derive_new::new;
 use p3_commit::PolynomialSpace;
-use p3_field::{Field, PrimeField32};
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use self::{access_cell::AccessCell, interface::MemoryInterface};
+use self::interface::MemoryInterface;
 use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
 use crate::{
     arch::chips::MachineChip,
-    memory::{
-        manager::operation::MemoryOperation,
-        offline_checker::{
-            bridge::MemoryOfflineChecker,
-            bus::MemoryBus,
-            columns::{MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
-        },
-        OpType,
+    memory::offline_checker::{
+        bridge::MemoryOfflineChecker,
+        bus::MemoryBus,
+        columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
     },
     vm::config::MemoryConfig,
 };
 
-pub mod access_cell;
 pub mod dimensions;
 pub mod interface;
-pub mod operation;
-pub mod trace_builder;
 
 const NUM_WORDS: usize = 16;
 
@@ -39,9 +31,11 @@ pub struct TimestampedValue<T> {
 }
 
 /// Represents a single or batch memory read operation.
-/// Can be used to generate [MemoryReadAuxCols].
+///
+/// Also used for "reads" from address space 0 (immediates).
+/// Can be used to generate [MemoryReadAuxCols] or [MemoryReadOrImmediateAuxCols].
 #[derive(Clone, Debug)]
-pub struct MemoryRead<const N: usize, T> {
+pub struct MemoryReadRecord<const N: usize, T> {
     /// The address space in which the read operation occurs.
     pub address_space: T,
     /// The pointer indicating the memory location being read.
@@ -49,34 +43,22 @@ pub struct MemoryRead<const N: usize, T> {
     /// The timestamp of the current read operation.
     pub timestamp: T,
     /// The timestamp of the previous batch access to this location.
-    pub prev_timestamp: T,
+    // TODO[zach]: Should be just prev_timestamp: T.
+    pub(crate) prev_timestamps: [T; N],
     /// The data read from memory.
     pub data: [T; N],
 }
 
-impl<T: Copy> MemoryRead<1, T> {
+impl<T: Copy> MemoryReadRecord<1, T> {
     pub fn value(&self) -> T {
         self.data[0]
-    }
-}
-
-impl<const N: usize, F: Field> MemoryRead<N, F> {
-    /// Will be deprecated.
-    pub fn disabled(timestamp: F, address_space: F) -> Self {
-        Self {
-            address_space,
-            pointer: F::zero(),
-            timestamp,
-            prev_timestamp: F::zero(),
-            data: [F::zero(); N],
-        }
     }
 }
 
 /// Represents a single or batch memory write operation.
 /// Can be used to generate [MemoryWriteAuxCols].
 #[derive(Clone, Debug)]
-pub struct MemoryWrite<const N: usize, T> {
+pub struct MemoryWriteRecord<const N: usize, T> {
     /// The address space in which the write operation occurs.
     pub address_space: T,
     /// The pointer indicating the memory location being written to.
@@ -84,28 +66,14 @@ pub struct MemoryWrite<const N: usize, T> {
     /// The timestamp of the current write operation.
     pub timestamp: T,
     /// The timestamp of the previous batch access to this location.
-    pub prev_timestamp: T,
+    pub(crate) prev_timestamps: [T; N],
     /// The data to be written to memory.
     pub data: [T; N],
     /// The data that existed at the memory location during the previous batch access.
-    pub prev_data: [T; N],
+    pub(crate) prev_data: [T; N],
 }
 
-impl<const N: usize, F: Field> MemoryWrite<N, F> {
-    /// Will be deprecated.
-    pub fn disabled(timestamp: F, address_space: F) -> Self {
-        Self {
-            address_space,
-            pointer: F::zero(),
-            timestamp,
-            prev_timestamp: F::zero(),
-            data: [F::zero(); N],
-            prev_data: [F::zero(); N],
-        }
-    }
-}
-
-impl<T: Copy> MemoryWrite<1, T> {
+impl<T: Copy> MemoryWriteRecord<1, T> {
     pub fn value(&self) -> T {
         self.data[0]
     }
@@ -117,8 +85,8 @@ pub type MemoryChipRef<F> = Rc<RefCell<MemoryChip<F>>>;
 pub struct MemoryChip<F: PrimeField32> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<NUM_WORDS, F>,
-    mem_config: MemoryConfig,
-    pub(crate) range_checker: Arc<RangeCheckerGateChip>,
+    pub(crate) mem_config: MemoryConfig,
+    pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
     timestamp: F,
     /// Maps (addr_space, pointer) to (data, timestamp)
     memory: HashMap<(F, F), TimestampedValue<F>>,
@@ -141,7 +109,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     pub fn with_volatile_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
             memory_bus,
@@ -167,35 +135,47 @@ impl<F: PrimeField32> MemoryChip<F> {
         )
     }
 
-    pub fn read(&mut self, address_space: F, pointer: F) -> MemoryRead<1, F> {
+    pub fn read_cell(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<1, F> {
+        self.read(address_space, pointer)
+    }
+
+    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<N, F> {
         let timestamp = self.timestamp;
         self.timestamp += F::one();
 
         if address_space == F::zero() {
-            return MemoryRead {
+            assert_eq!(N, 1, "cannot batch read from address space 0");
+
+            return MemoryReadRecord {
                 address_space,
                 pointer,
                 timestamp,
-                prev_timestamp: F::zero(),
-                data: [pointer],
+                prev_timestamps: [F::zero(); N],
+                data: array::from_fn(|_| pointer),
             };
         }
 
-        let timestamped_value = self.memory.get_mut(&(address_space, pointer)).unwrap();
-        debug_assert!(timestamped_value.timestamp < timestamp);
+        let prev_entries = array::from_fn(|i| {
+            let cur_ptr = pointer + F::from_canonical_usize(i);
 
-        let prev_timestamp = timestamped_value.timestamp;
-        timestamped_value.timestamp = timestamp;
+            let entry = self.memory.get_mut(&(address_space, cur_ptr)).unwrap();
+            debug_assert!(entry.timestamp < timestamp);
 
-        self.interface_chip
-            .touch_address(address_space, pointer, timestamped_value.value);
+            let prev_entry = *entry;
+            entry.timestamp = timestamp;
 
-        MemoryRead {
+            self.interface_chip
+                .touch_address(address_space, cur_ptr, entry.value);
+
+            prev_entry
+        });
+
+        MemoryReadRecord {
             address_space,
             pointer,
             timestamp,
-            prev_timestamp,
-            data: [timestamped_value.value],
+            prev_timestamps: prev_entries.map(|entry| entry.timestamp),
+            data: prev_entries.map(|entry| entry.value),
         }
     }
 
@@ -206,36 +186,51 @@ impl<F: PrimeField32> MemoryChip<F> {
         self.memory.get(&(addr_space, pointer)).unwrap().value
     }
 
-    pub fn write(&mut self, address_space: F, pointer: F, data: F) -> MemoryWrite<1, F> {
+    pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<1, F> {
+        self.write(address_space, pointer, [data])
+    }
+
+    pub fn write<const N: usize>(
+        &mut self,
+        address_space: F,
+        pointer: F,
+        data: [F; N],
+    ) -> MemoryWriteRecord<N, F> {
         assert_ne!(address_space, F::zero());
 
         let timestamp = self.timestamp;
         self.timestamp += F::one();
 
-        let cell = self
-            .memory
-            .entry((address_space, pointer))
-            .or_insert(TimestampedValue {
-                value: F::zero(),
-                timestamp: F::zero(),
-            });
-        let (prev_timestamp, old_data) = (cell.timestamp, cell.value);
-        assert!(prev_timestamp < timestamp);
+        let prev_entries = array::from_fn(|i| {
+            let cur_ptr = pointer + F::from_canonical_usize(i);
 
-        // Updating AccessCell
-        cell.timestamp = timestamp;
-        cell.value = data;
+            let entry = self
+                .memory
+                .entry((address_space, cur_ptr))
+                .or_insert(TimestampedValue {
+                    value: F::zero(),
+                    timestamp: F::zero(),
+                });
+            debug_assert!(entry.timestamp < timestamp);
 
-        self.interface_chip
-            .touch_address(address_space, pointer, old_data);
+            let prev_entry = *entry;
 
-        MemoryWrite {
+            entry.timestamp = timestamp;
+            entry.value = data[i];
+
+            self.interface_chip
+                .touch_address(address_space, cur_ptr, prev_entry.value);
+
+            prev_entry
+        });
+
+        MemoryWriteRecord {
             address_space,
             pointer,
             timestamp,
-            prev_timestamp,
-            data: [data],
-            prev_data: [old_data],
+            prev_timestamps: prev_entries.map(|entry| entry.timestamp),
+            data,
+            prev_data: prev_entries.map(|entry| entry.value),
         }
     }
 
@@ -253,46 +248,26 @@ impl<F: PrimeField32> MemoryChip<F> {
 
     pub fn make_read_aux_cols<const N: usize>(
         &self,
-        read: MemoryRead<N, F>,
+        read: MemoryReadRecord<N, F>,
     ) -> MemoryReadAuxCols<N, F> {
-        let access = MemoryAccess::from_read(read);
-        self.make_access_cols(access)
+        self.make_offline_checker()
+            .make_read_aux_cols(self.range_checker.clone(), read)
+    }
+
+    pub fn make_disabled_read_aux_cols<const N: usize>(&self) -> MemoryReadAuxCols<N, F> {
+        MemoryReadAuxCols::disabled(self.make_offline_checker())
     }
 
     pub fn make_write_aux_cols<const N: usize>(
         &self,
-        write: MemoryWrite<N, F>,
+        write: MemoryWriteRecord<N, F>,
     ) -> MemoryWriteAuxCols<N, F> {
-        let access = MemoryAccess::from_write(write);
-        self.make_access_cols(access)
+        self.make_offline_checker()
+            .make_write_aux_cols(self.range_checker.clone(), write)
     }
 
-    // Deprecated.
-    pub fn make_access_cols<const N: usize>(
-        &self,
-        memory_access: MemoryAccess<N, F>,
-    ) -> MemoryOfflineCheckerAuxCols<N, F> {
-        let timestamp_prev = memory_access.old_cell.clk.as_canonical_u32();
-        let timestamp = memory_access.op.cell.clk.as_canonical_u32();
-
-        debug_assert!(timestamp_prev < timestamp);
-        let offline_checker = self.make_offline_checker();
-        let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
-            &offline_checker.timestamp_lt_air,
-            (timestamp_prev, timestamp, self.range_checker.clone()),
-        );
-
-        let addr_space_is_zero_cols = offline_checker
-            .is_zero_air
-            .generate_trace_row(memory_access.op.addr_space);
-
-        MemoryOfflineCheckerAuxCols::new(
-            memory_access.old_cell,
-            addr_space_is_zero_cols.io.is_zero,
-            addr_space_is_zero_cols.inv,
-            clk_lt_cols.io.less_than,
-            clk_lt_cols.aux,
-        )
+    pub fn make_disabled_write_aux_cols<const N: usize>(&self) -> MemoryWriteAuxCols<N, F> {
+        MemoryWriteAuxCols::disabled(self.make_offline_checker())
     }
 
     pub fn generate_memory_interface_trace(&self) -> RowMajorMatrix<F> {
@@ -330,8 +305,23 @@ impl<F: PrimeField32> MemoryChip<F> {
         self.timestamp += F::one();
     }
 
+    pub fn increment_timestamp_by(&mut self, change: F) {
+        self.timestamp += change;
+    }
+
     pub fn timestamp(&self) -> F {
         self.timestamp
+    }
+
+    /// Advance the timestamp forward to `to_timestamp`. This should be used when the memory
+    /// timestamp needs to sync up with the execution state because instruction execution
+    /// uses an upper bound on timestamp change.
+    pub fn jump_timestamp(&mut self, to_timestamp: F) {
+        debug_assert!(
+            self.timestamp <= to_timestamp,
+            "Should never jump back in time"
+        );
+        self.timestamp = to_timestamp;
     }
 
     pub fn get_audit_air(&self) -> MemoryAuditAir {
@@ -352,62 +342,10 @@ impl<F: PrimeField32> MemoryChip<F> {
     // }
 }
 
-#[derive(new, Clone, Debug, Default)]
-pub struct MemoryAccess<const WORD_SIZE: usize, T> {
-    pub op: MemoryOperation<WORD_SIZE, T>,
-    pub old_cell: AccessCell<WORD_SIZE, T>,
-}
-
-impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
-    fn disabled_op(timestamp: T, addr_space: T, op_type: OpType) -> MemoryAccess<WORD_SIZE, T> {
-        debug_assert_ne!(
-            addr_space,
-            T::zero(),
-            "Disabled memory operation cannot be immediate"
-        );
-        MemoryAccess::<WORD_SIZE, T>::new(
-            MemoryOperation {
-                addr_space,
-                pointer: T::zero(),
-                op_type: T::from_canonical_u8(op_type as u8),
-                cell: AccessCell::new([T::zero(); WORD_SIZE], timestamp),
-                enabled: T::zero(),
-            },
-            AccessCell::new([T::zero(); WORD_SIZE], T::zero()),
-        )
-    }
-
-    pub fn from_read(read: MemoryRead<WORD_SIZE, T>) -> Self {
-        Self {
-            op: MemoryOperation {
-                addr_space: read.address_space,
-                pointer: read.pointer,
-                op_type: T::zero(),
-                cell: AccessCell::new(read.data, read.timestamp),
-                enabled: T::one(),
-            },
-            old_cell: AccessCell::new(read.data, read.prev_timestamp),
-        }
-    }
-
-    pub fn from_write(write: MemoryWrite<WORD_SIZE, T>) -> Self {
-        Self {
-            op: MemoryOperation {
-                addr_space: write.address_space,
-                pointer: write.pointer,
-                op_type: T::one(),
-                cell: AccessCell::new(write.data, write.timestamp),
-                enabled: T::one(),
-            },
-            old_cell: AccessCell::new(write.prev_data, write.prev_timestamp),
-        }
-    }
-}
-
 // TODO[jpw]: MemoryManager is taking the role of MemoryInterface here, which is weird.
 // Necessary right now because MemoryInterface doesn't own the final memory state.
 impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
         self.generate_memory_interface_trace()
     }
 

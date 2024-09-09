@@ -7,12 +7,14 @@ use p3_bn254_fr::Bn254Fr;
 use p3_field::{ExtensionField, PrimeField};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
-        gates::{circuit::builder::BaseCircuitBuilder, GateInstructions},
+        gates::{circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip},
         halo2_proofs::halo2curves::bn256::Fr,
         utils::{biguint_to_fe, ScalarField},
+        Context,
     },
     util::arithmetic::PrimeField as _,
 };
+use stark_vm::vm::cycle_tracker::span::CanDiff;
 
 use crate::{
     constraints::{
@@ -22,6 +24,7 @@ use crate::{
                 BabyBearExt4Chip,
             },
             poseidon2_perm::{Poseidon2Params, Poseidon2State},
+            stats::{print, Halo2CellTracker, Halo2Stats},
         },
         ConstraintCompiler,
     },
@@ -60,8 +63,9 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
     where
         C: Config<N = Bn254Fr, F = BabyBear, EF = BabyBearExt4>,
     {
+        let mut cell_tracker = Halo2CellTracker::new();
         let range = Arc::new(halo2_state.builder.range_chip());
-        let f_chip = Arc::new(BabyBearChip::new(range));
+        let f_chip = Arc::new(BabyBearChip::new(range.clone()));
         let ext_chip = BabyBearExt4Chip::new(Arc::clone(&f_chip));
         let gate = f_chip.gate();
         let ctx = halo2_state.builder.main(0);
@@ -73,8 +77,13 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
 
         let mut vkey_hash = None;
         let mut committed_values_digest = None;
+        let mut babybear_metrics: Halo2Stats = Default::default();
+        let mut num2bits_metrics: Halo2Stats = Default::default();
 
         for (instruction, _) in operations {
+            let old_stats = stats_snapshot(ctx, range.clone());
+            let is_babybear = is_babybear_ir(&instruction);
+            let is_num2bits = is_num2bits_ir(&instruction);
             match instruction {
                 DslIr::ImmV(a, b) => {
                     let x = ctx.load_constant(convert_fr(&b));
@@ -372,14 +381,29 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     );
                     exts.insert(b.0, x);
                 }
-                // TODO: implement cell tracker.
-                DslIr::CycleTrackerStart(_) | DslIr::CycleTrackerEnd(_) => {}
+                DslIr::CycleTrackerStart(name) => {
+                    cell_tracker.start(name, old_stats.clone());
+                }
+                DslIr::CycleTrackerEnd(name) => {
+                    cell_tracker.end(name, old_stats.clone());
+                }
                 _ => panic!("unsupported {:?}", instruction),
             };
+            if is_babybear {
+                let mut new_stats = stats_snapshot(ctx, range.clone());
+                new_stats.diff(&old_stats);
+                babybear_metrics.add_assign(&new_stats);
+            }
+            if is_num2bits {
+                let mut new_stats = stats_snapshot(ctx, range.clone());
+                new_stats.diff(&old_stats);
+                num2bits_metrics.add_assign(&new_stats);
+            }
         }
         let vkey_hash = vkey_hash.unwrap_or_else(|| ctx.load_zero());
         let committed_values_digest = committed_values_digest.unwrap_or_else(|| ctx.load_zero());
         halo2_state.builder.assigned_instances = vec![vec![vkey_hash, committed_values_digest]];
+        print(&cell_tracker, &babybear_metrics, &num2bits_metrics);
     }
 }
 
@@ -394,4 +418,62 @@ pub fn convert_efr<F: PrimeField, EF: ExtensionField<F>>(a: &EF) -> Vec<Fr> {
     slc.iter()
         .map(|x| biguint_to_fe(&x.as_canonical_biguint()))
         .collect()
+}
+
+// Unfortunately `builder.statistics()` cannot be called when `ctx` exists.
+fn stats_snapshot(ctx: &Context<Fr>, range_chip: Arc<RangeChip<Fr>>) -> Halo2Stats {
+    Halo2Stats {
+        total_gate_cell: ctx.advice.len(),
+        // FIXME: this is inaccurate because of duplicated constants. But it's too slow if we always
+        // check for duplicates.
+        total_fixed: ctx.copy_manager.lock().unwrap().constant_equalities.len(),
+        total_lookup_cell: range_chip.lookup_manager()[0].total_rows(),
+    }
+}
+
+fn is_babybear_ir<C: Config>(ir: &DslIr<C>) -> bool {
+    matches!(
+        ir,
+        DslIr::ImmF(_, _)
+            | DslIr::AddF(_, _, _)
+            | DslIr::AddFI(_, _, _)
+            | DslIr::SubF(_, _, _)
+            | DslIr::MulF(_, _, _)
+            | DslIr::MulFI(_, _, _)
+            | DslIr::DivFIN(_, _, _)
+            | DslIr::CircuitSelectF(_, _, _, _)
+            | DslIr::AssertEqF(_, _)
+            | DslIr::AssertEqFI(_, _)
+            | DslIr::WitnessFelt(_, _)
+            | DslIr::CircuitFelts2Ext(_, _)
+            | DslIr::ImmE(_, _)
+            | DslIr::AddE(_, _, _)
+            | DslIr::AddEF(_, _, _)
+            | DslIr::AddEFI(_, _, _)
+            | DslIr::AddEI(_, _, _)
+            | DslIr::AddEFFI(_, _, _)
+            | DslIr::SubE(_, _, _)
+            | DslIr::SubEF(_, _, _)
+            | DslIr::SubEI(_, _, _)
+            | DslIr::SubEIN(_, _, _)
+            | DslIr::SubEFI(_, _, _)
+            | DslIr::MulE(_, _, _)
+            | DslIr::MulEI(_, _, _)
+            | DslIr::MulEF(_, _, _)
+            | DslIr::MulEFI(_, _, _)
+            | DslIr::DivE(_, _, _)
+            | DslIr::DivEIN(_, _, _)
+            | DslIr::NegE(_, _)
+            | DslIr::CircuitSelectE(_, _, _, _)
+            | DslIr::AssertEqE(_, _)
+            | DslIr::AssertEqEI(_, _)
+            | DslIr::WitnessExt(_, _)
+    )
+}
+
+fn is_num2bits_ir<C: Config>(ir: &DslIr<C>) -> bool {
+    matches!(
+        ir,
+        DslIr::CircuitNum2BitsV(_, _, _) | DslIr::CircuitNum2BitsF(_, _)
+    )
 }

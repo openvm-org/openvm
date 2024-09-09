@@ -335,10 +335,6 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
     ) {
         let fields = fields.into_iter().map(|f| f.into()).collect();
         let count = count.into();
-        assert!(
-            LocalOnlyChecker::check_expr(&count),
-            "Interaction count expression can only use local row"
-        );
         self.interactions.push(Interaction {
             bus_index,
             fields,
@@ -386,8 +382,10 @@ impl<F: Field> PartitionedAirBuilder for SymbolicRapBuilder<F> {
     }
 }
 
+#[allow(dead_code)]
 struct LocalOnlyChecker;
 
+#[allow(dead_code)]
 impl LocalOnlyChecker {
     fn check_var<F: Field>(var: SymbolicVariable<F>) -> bool {
         match var.entry {

@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::{iter, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use derive_new::new;
@@ -7,7 +7,7 @@ use crate::{
     arch::columns::ExecutionState,
     field_arithmetic::FieldArithmeticAir,
     memory::{
-        offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -23,10 +23,9 @@ pub struct FieldArithmeticCols<T> {
     pub aux: FieldArithmeticAuxCols<T>,
 }
 
-#[derive(Copy, Clone, Debug, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, Default, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticIoCols<T> {
-    pub opcode: T,
     pub from_state: ExecutionState<T>,
     pub x: Operand<T>,
     pub y: Operand<T>,
@@ -45,8 +44,8 @@ pub struct FieldArithmeticAuxCols<T> {
     /// `divisor_inv` is y.inverse() when opcode is FDIV and zero otherwise.
     pub divisor_inv: T,
 
-    pub read_x_aux_cols: MemoryReadAuxCols<1, T>,
-    pub read_y_aux_cols: MemoryReadAuxCols<1, T>,
+    pub read_x_aux_cols: MemoryReadOrImmediateAuxCols<T>,
+    pub read_y_aux_cols: MemoryReadOrImmediateAuxCols<T>,
     pub write_z_aux_cols: MemoryWriteAuxCols<1, T>,
 }
 
@@ -77,7 +76,6 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
     #[allow(clippy::should_implement_trait)]
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         Self {
-            opcode: iter.next().unwrap(),
             from_state: ExecutionState::from_iter(iter),
             x: Operand::from_iter(iter),
             y: Operand::from_iter(iter),
@@ -86,22 +84,23 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut result = vec![self.opcode.clone()];
-        result.extend(self.from_state.clone().flatten());
-        result.extend(self.x.flatten());
-        result.extend(self.y.flatten());
-        result.extend(self.z.flatten());
-        result
+        iter::empty()
+            .chain(self.from_state.clone().flatten())
+            .chain(self.x.flatten())
+            .chain(self.y.flatten())
+            .chain(self.z.flatten())
+            .collect()
     }
 }
 
 impl<T: Clone> FieldArithmeticAuxCols<T> {
     pub fn get_width(air: &FieldArithmeticAir) -> usize {
-        6 + (2 * MemoryReadAuxCols::<1, T>::width(&air.mem_oc)
+        6 + (2 * MemoryReadOrImmediateAuxCols::<T>::width(&air.mem_oc)
             + MemoryWriteAuxCols::<1, T>::width(&air.mem_oc))
     }
 
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, air: &FieldArithmeticAir) -> Self {
+        let lt_air = air.mem_oc.timestamp_lt_air;
         let mut next = || iter.next().unwrap();
         Self {
             is_valid: next(),
@@ -110,9 +109,9 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
             is_mul: next(),
             is_div: next(),
             divisor_inv: next(),
-            read_x_aux_cols: MemoryReadAuxCols::try_from_iter(iter, &air.mem_oc.timestamp_lt_air),
-            read_y_aux_cols: MemoryReadAuxCols::try_from_iter(iter, &air.mem_oc.timestamp_lt_air),
-            write_z_aux_cols: MemoryWriteAuxCols::try_from_iter(iter, &air.mem_oc.timestamp_lt_air),
+            read_x_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter, &lt_air),
+            read_y_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter, &lt_air),
+            write_z_aux_cols: MemoryWriteAuxCols::from_iterator(iter, &lt_air),
         }
     }
 
@@ -132,7 +131,7 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug, new)]
+#[derive(Clone, Copy, PartialEq, Debug, Default, new)]
 pub struct Operand<F> {
     pub address_space: F,
     pub address: F,

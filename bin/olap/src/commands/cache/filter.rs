@@ -1,7 +1,7 @@
 use std::{fs, marker::PhantomData, time::Instant};
 
 use afs_stark_backend::{config::PcsProverData, prover::trace::TraceCommitmentBuilder};
-use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
+use ax_sdk::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::write_bytes;
 use clap::Parser;
 use color_eyre::eyre::Result;
@@ -41,7 +41,6 @@ where
             _page_height,
             _idx_limb_bits,
             _idx_decomp,
-            _range_max,
         ) = filter_setup(config, op);
 
         let start = Instant::now();

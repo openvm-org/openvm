@@ -2,7 +2,7 @@ use afs_stark_backend::{
     prover::{trace::TraceCommitmentBuilder, USE_DEBUG_BUILDER},
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
-use afs_test_utils::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
+use ax_sdk::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

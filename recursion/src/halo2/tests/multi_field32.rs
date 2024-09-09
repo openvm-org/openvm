@@ -1,5 +1,5 @@
 use afs_compiler::ir::{Builder, SymbolicExt, Witness};
-use afs_test_utils::config::baby_bear_poseidon2_outer::outer_perm;
+use ax_sdk::config::baby_bear_poseidon2_outer::outer_perm;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_challenger::{CanObserve, CanSample, FieldChallenger};

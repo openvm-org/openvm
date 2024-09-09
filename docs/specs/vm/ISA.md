@@ -136,7 +136,7 @@ Listed below are the instructions offered in each configuration.
 This instruction set is always enabled.
 
 | Mnemonic              | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                      |
-|-----------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| --------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **LW** / **LOADW**    | `a, offset, c`                                | Set `word[a]_d <- word[proj(word[c]_d) + offset]_e`. Loads a word from one address space to another.                                                          |
 | **SW** / **STOREW**   | `a, offset, c`                                | Set `word[proj(word[c]_d) + offset]_e <- word[a]_d`.                                                                                                          |
 | **LW2** / **LOADW2**  | `a, offset, c, size`                          | Set `word[a]_d <- word[proj(word[c]_d) + (proj[f]_g) * size + offset]_e`. Loads word a from one address space to another using a variable multiple of `size`. |
@@ -150,7 +150,7 @@ This instruction set is always enabled.
 
 #### Notes about hints
 
-The `hint_stream` is a stream of words that is processed by calling `SHINTW`. Each call pops the next hint off the stream and writes it to the given place in memory. The `hint_stream` is populated by phantom instructions such as `HINT_INPUT` (resets `hint_stream` to be the next input) and `HINT_BITS` (resets `hint_stream` to be the bit decomposition of a given variable, with a length known at compile time).
+The `hint_stream` is a stream of words that is processed by calling `SHINTW`. Each call pops the next hint off the stream and writes it to the given place in memory. The `hint_stream` is populated by phantom instructions such as `HINT_INPUT` (resets `hint_stream` to be the next input), `HINT_BITS` (resets `hint_stream` to be the bit decomposition of a given variable, with a length known at compile time), and `HINT_BYTES` (byte analog of `HINT_BITS`).
 
 :::info
 Core instructions were chosen so a subset of RISC-V instructions can be directly transpiled to the core instructions, where x0-31 registers are mapped to `word[0-31]_1` register address space.
@@ -166,7 +166,7 @@ This instruction set does native field operations. Some operations may be infeas
 This instruction set should only be enabled when `Word` type represents `[F; WORD_SIZE]` without bit size constraints. In this case the field operations are automatically vectorized.
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                         |
-|----------|-----------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| -------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | **FADD** | `a, b, c`                                     | Set `word[a]_d <- word[b]_e + word[c]_f`. This opcode presumes `a,b` are in the same address space. |
 | **FSUB** | `a, b, c`                                     | Set `word[a]_d <- word[b]_e - word[c]_f`.                                                           |
 | **FMUL** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_e * [c + i]_f` for `i = 0..WORD_SIZE`.                                    |
@@ -217,8 +217,7 @@ which is an element of the original field which we define as $c$. So, we may sim
 ### Unsigned 32-bit integer instructions
 
 The following are instructions on unsigned 32-bit integers. The instructions are chosen to be compatible with RV32I.
-When these instructions are enabled, the ISA must have `WORD_SIZE >= 4`.
-For operations besides CASTU, any VM word will be assumed to have the first `4` cells consisting of **bytes** and the remaining cells equal to zero. We convert from word to `u32` via
+For operations besides CASTF, we refer to the word `word[a]_d` at memory pointer `a` to mean `[a + i]_d` for `i = 0..4`. We convert from word to `u32` via
 
 <!--
 [jpw] I chose bytes instead of u16 here to go with RV32 memory cell alignment. This can be changed as an optimization if needed.
@@ -235,13 +234,13 @@ and let `decompose: u32 -> Word` be the inverse operation.
 Immediates are handled as follows: `compose(word[a]_0) = a.as_canonical_u32()`. Note that RV32 immediates never exceed 20-bits, so any immediate bits inside a 31-bit field.
 
 <!--
-A note on CASTU below: support for casting arbitrary field elements can also be supported by doing a big int less than between the word and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
+A note on CASTF below: support for casting arbitrary field elements can also be supported by doing a big int less than between the word and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
 -->
 
-| Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                                                                            |
-| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **CASTU** | `a, b, _`                                     | Set `word[a]_d` to the unique word such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = proj(word[b]_e)` where `[a + i]_d < 2^8` for `i = 0..3` and `[a + 3]_d < 2^6`. This opcode enforces `proj(word[b]_e)` must be at most 30-bits. If `WORD_SIZE > 4` then all remaining cells in `word[a]_d` must be zero. |
-| **SLTU**  | `a, b, c`                                     | Set `word[a]_d <- compose(word[b]_d) < compose(word[c]_e) ? emb(1) : emb(0)`. The address space `d` is not allowed to be zero.                                                                                                                                                                         |
+| Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                                                                |
+| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **CASTF** | `a, b, _`                                     | Cast a field element to `u32` represented as four bytes in little-endian: Set `word[a]_d` to the unique word such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..3` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
+| **SLTU**  | `a, b, c`                                     | Set `[a]_d <- compose(word[b]_e) < compose(word[c]_f) ? 1 : 0`. The address space `d` is not allowed to be zero.                                                                                                                                                                           |
 
 ### U256 Arithmetic and Logical Operations
 
@@ -294,15 +293,17 @@ Only subsets of these opcodes will be turned on depending on the VM use case.
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a, b, c`                                     | This is a special 2-to-1 compression function.<br/><br/>Let `state[i] <- [proj(word[b]_d) + i]_e` for `i = 0..CHUNK` and `state[CHUNK + i] <- [proj(word[c]_d) + i]_e` for `i = 0..CHUNK`, so `state` has type `[F; 2*CHUNK]`. Note that `state` can be loaded from multiple memory words. <br/><br/>Let `new_state` be the Poseidon2 permutation applied to `state`. Set `[proj(word[a]_d) + i]_e <- new_state[i]` for `i = 0..CHUNK`. Note again the output can be stored in multiple memory words, with excess cells set to zero. <br/><br/>The address space `d` is **not** allowed to be `0`. |
 | **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a, b, 0`                                     | Let `state[i] <- [proj(word[b]_d) + i]_e` for `i = 0..WIDTH` so `state` has type `[F; WIDTH]`.<br/><br/>Let `new_state` be the Poseidon2 permutation applied to `state`. Set `[proj(word[a]_d) + i]_e <- new_state[i]` for `i = 0..WIDTH`. The address space `d` is **not** allowed to be `0`. This is nearly the same as `COMPRESS_POSEIDON2` except that the whole input state is contiguous in memory, and the full output state is written to memory.                                                                                                                                          |
-| **PERM_KECCAK**                                                                                                                                                                                                                    | `a, b, 0`                                     | Let `state[i] <- [proj(word[b]_d) + i]_e` for `i = 0..WIDTH` where `state[i]` is `u16`.<br/><br/>Let `new_state` be the `keccak-f` permutation applied to `state`. Set `[proj(word[a]_d) + i]_e <- new_state[i]` for `i = 0..WIDTH`.                                                                                                                                                                                                                                                                                                                                                               |
+| **KECCAK256**                                                                                                                                                                                                                      | `a, b, c, d, e, f`                            | Let `input` be the **variable length** byte array of length `len <- [c]_f` loaded from memory via `input[i] <- [[b]_d + i]_e` for `i = 0..len`. Let `output = keccak256(input)` as `[u8; 32]`. This opcode sets `[[a]_d + i]_e <- output[i]` for `i = 0..32`. This opcode assumes that the input memory cells are **bytes** and currently **does** range check them. **Safety:** The output is currently **not** range checked to be bytes. <!--ATTENTION: THIS MAY CHANGE IN FUTURE--> The output is written to memory as **bytes**.                                                              |
 
-The `PID` is just some identifier to provide domain separation between different Poseidon2 constants. For now we can set:
+For Poseidon2, the `PID` is just some identifier to provide domain separation between different Poseidon2 constants. For now we can set:
 
 | `PID` | Description                                                                                                                                                                                                                                                         |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0     | [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48) but the Mat4 used is Plonky3's with a Monty reduction |
 
-and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above.
+and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above. For this setting, the input (of size `WIDTH`)
+is read in two batches of size `CHUNK`, and, similarly, the output is written in either one or two batches of
+size `CHUNK`, depending on the output size of the corresponding opcode.
 
 ### Excluded
 

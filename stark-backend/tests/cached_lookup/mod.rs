@@ -5,7 +5,7 @@ use afs_stark_backend::{
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
+use ax_sdk::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;

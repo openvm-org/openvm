@@ -55,6 +55,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             // `fields` and `count` are of degree 1 in all interactions
             self.interaction_chunk_size = Some(self.all_airs_max_constraint_degree() - 1);
         }
+        tracing::debug!(self.interaction_chunk_size);
 
         let interaction_chunk_size = self.interaction_chunk_size.unwrap();
         let mut multi_pk = MultiStarkProvingKey::empty();
@@ -254,7 +255,11 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             );
 
             let symbolic_constraints = symbolic_builder.constraints();
-
+            tracing::debug!(
+                "{} has constraint degree {}",
+                air.name(),
+                symbolic_constraints.max_constraint_degree()
+            );
             max_constraint_degree =
                 max_constraint_degree.max(symbolic_constraints.max_constraint_degree());
         }

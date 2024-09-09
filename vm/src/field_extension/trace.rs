@@ -1,7 +1,4 @@
-use std::array;
-
 use afs_stark_backend::rap::AnyRap;
-use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -15,35 +12,30 @@ use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
     field_extension::chip::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
-        EXTENSION_DEGREE,
+        EXT_DEG,
     },
-    memory::{
-        manager::{MemoryRead, MemoryWrite},
-        OpType,
-    },
+    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
-    ///
-    /// NOTE: may only be called once on a chip. TODO: make consume self or change behavior.
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+    fn generate_trace(mut self) -> RowMajorMatrix<F> {
         let curr_height = self.records.len();
         let correct_height = curr_height.next_power_of_two();
 
         let width = FieldExtensionArithmeticCols::<F>::get_width(&self.air);
-        let dummy_rows_flattened = (0..correct_height - curr_height)
-            .flat_map(|_| self.make_blank_row().flatten())
-            .collect_vec();
+        // TODO[jpw] better to create entire 1d trace matrix first and then mutate buffers
+        let blank_row = self.make_blank_row().flatten();
+        let dummy_rows_flattened =
+            (0..correct_height - curr_height).flat_map(|_| blank_row.clone());
 
         let records = std::mem::take(&mut self.records);
 
-        let mut flattened_trace: Vec<F> = records
+        let flattened_trace: Vec<F> = records
             .into_iter()
             .flat_map(|record| self.cols_from_record(record).flatten())
+            .chain(dummy_rows_flattened)
             .collect();
-
-        flattened_trace.extend(dummy_rows_flattened);
 
         RowMajorMatrix::new(flattened_trace, width)
     }
@@ -80,14 +72,13 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         let divisor_inv = if record.instruction.opcode == Opcode::BBE4DIV {
             FieldExtensionArithmetic::invert(record.y)
         } else {
-            [F::zero(); EXTENSION_DEGREE]
+            [F::zero(); EXT_DEG]
         };
 
         let memory = self.memory_chip.borrow();
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
-                opcode: F::from_canonical_usize(record.instruction.opcode as usize),
                 pc: F::from_canonical_usize(record.pc),
                 timestamp: F::from_canonical_usize(record.timestamp),
                 op_a: record.instruction.op_a,
@@ -106,53 +97,28 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: record.x_reads.map(|read| memory.make_read_aux_cols(read)),
-                read_y_aux_cols: record.y_reads.map(|read| memory.make_read_aux_cols(read)),
-                write_aux_cols: record
-                    .z_writes
-                    .map(|write| memory.make_write_aux_cols(write)),
+                read_x_aux_cols: memory.make_read_aux_cols(record.x_read),
+                read_y_aux_cols: memory.make_read_aux_cols(record.y_read),
+                write_aux_cols: memory.make_write_aux_cols(record.z_write),
             },
         }
     }
 
     fn make_blank_row(&self) -> FieldExtensionArithmeticCols<F> {
-        let timestamp = self.memory_chip.borrow().timestamp();
-
-        let make_aux_col = |op_type| match op_type {
-            OpType::Read => self
-                .memory_chip
-                .borrow()
-                .make_read_aux_cols(MemoryRead::disabled(timestamp, F::one())),
-            OpType::Write => self
-                .memory_chip
-                .borrow()
-                .make_write_aux_cols(MemoryWrite::disabled(timestamp, F::one())),
-        };
+        let oc = self.memory_chip.borrow().make_offline_checker();
 
         FieldExtensionArithmeticCols {
-            io: FieldExtensionArithmeticIoCols {
-                timestamp,
-                opcode: F::from_canonical_u32(Opcode::FE4ADD as u32),
-                pc: F::zero(),
-                op_a: F::zero(),
-                op_b: F::zero(),
-                op_c: F::zero(),
-                d: F::one(),
-                e: F::one(),
-                x: [F::zero(); EXTENSION_DEGREE],
-                y: [F::zero(); EXTENSION_DEGREE],
-                z: [F::zero(); EXTENSION_DEGREE],
-            },
+            io: FieldExtensionArithmeticIoCols::default(),
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: F::zero(),
-                is_add: F::one(),
+                is_add: F::zero(),
                 is_sub: F::zero(),
                 is_mul: F::zero(),
                 is_div: F::zero(),
-                divisor_inv: [F::zero(); EXTENSION_DEGREE],
-                read_x_aux_cols: array::from_fn(|_| make_aux_col(OpType::Read)),
-                read_y_aux_cols: array::from_fn(|_| make_aux_col(OpType::Read)),
-                write_aux_cols: array::from_fn(|_| make_aux_col(OpType::Write)),
+                divisor_inv: [F::zero(); EXT_DEG],
+                read_x_aux_cols: MemoryReadAuxCols::disabled(oc),
+                read_y_aux_cols: MemoryReadAuxCols::disabled(oc),
+                write_aux_cols: MemoryWriteAuxCols::disabled(oc),
             },
         }
     }

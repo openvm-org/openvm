@@ -39,7 +39,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
         .zip(field_types.iter())
         .map(|(name, field_type)| {
             quote! {
-                #name: <#field_type as Hintable<C> >::HintVariable,
+                pub #name: <#field_type as Hintable<C> >::HintVariable,
             }
         })
         .collect();

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{var_range::VariableRangeCheckerChip, xor::lookup::XorLookupChip};
 use afs_stark_backend::rap::AnyRap;
 use enum_dispatch::enum_dispatch;
 use p3_air::BaseAir;
@@ -8,14 +8,16 @@ use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
+use strum_macros::IntoStaticStr;
 
 use crate::{
     arch::columns::ExecutionState,
     cpu::{trace::Instruction, CpuChip},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
+    hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::manager::MemoryChipRef,
-    poseidon2::Poseidon2Chip,
+    modular_multiplication::ModularArithmeticChip,
     program::ProgramChip,
 };
 
@@ -23,14 +25,14 @@ use crate::{
 pub trait InstructionExecutor<F> {
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
-        prev_state: ExecutionState<usize>,
+        instruction: Instruction<F>,
+        from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize>;
 }
 
 #[enum_dispatch]
 pub trait MachineChip<F> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F>;
+    fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>;
@@ -47,7 +49,7 @@ pub trait MachineChip<F> {
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,
-        instruction: &Instruction<F>,
+        instruction: Instruction<F>,
         prev_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
         self.borrow_mut().execute(instruction, prev_state)
@@ -55,8 +57,11 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 }
 
 impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
-        self.borrow_mut().generate_trace()
+    fn generate_trace(self) -> RowMajorMatrix<F> {
+        match Rc::try_unwrap(self) {
+            Ok(ref_cell) => ref_cell.into_inner().generate_trace(),
+            Err(_) => panic!("cannot generate trace while other chips still hold a reference"),
+        }
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
@@ -84,10 +89,12 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
 pub enum InstructionExecutorVariant<F: PrimeField32> {
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
+    Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
+    Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
+    ModularArithmetic(Rc<RefCell<ModularArithmeticChip<F>>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, IntoStaticStr)]
 #[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
     Cpu(Rc<RefCell<CpuChip<F>>>),
@@ -95,13 +102,15 @@ pub enum MachineChipVariant<F: PrimeField32> {
     Memory(MemoryChipRef<F>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
-    RangeChecker(Arc<RangeCheckerGateChip>),
+    Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
+    RangeChecker(Arc<VariableRangeCheckerChip>),
+    Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
+    ByteXor(Arc<XorLookupChip<8>>),
 }
 
-impl<F: PrimeField32> MachineChip<F> for Arc<RangeCheckerGateChip> {
-    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
-        RangeCheckerGateChip::generate_trace(self)
+impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
+        VariableRangeCheckerChip::generate_trace(&self)
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
@@ -112,7 +121,28 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeCheckerGateChip> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.air.range_max as usize
+        1 << (1 + self.air.bus.range_max_bits)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::<F>::width(&self.air)
+    }
+}
+
+impl<F: PrimeField32, const M: usize> MachineChip<F> for Arc<XorLookupChip<M>> {
+    fn generate_trace(self) -> RowMajorMatrix<F> {
+        XorLookupChip::generate_trace(&self)
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        Box::new(self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        1 << (2 * M)
     }
 
     fn trace_width(&self) -> usize {

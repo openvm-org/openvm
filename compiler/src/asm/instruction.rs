@@ -141,6 +141,13 @@ pub enum AsmInstruction<F, EF> {
     /// (a, b, c) are memory pointers to (dst, lhs, rhs)
     Poseidon2Compress(i32, i32, i32),
 
+    /// Perform keccak256 hash on variable length byte array input starting at address `src`.
+    /// Writes output as array of `u16` limbs to address `dst`.
+    /// (a, b, c) are memory pointers to (dst, src, len)
+    Keccak256(i32, i32, i32),
+    /// Same as `Keccak256`, but with fixed length input (hence length is an immediate value).
+    Keccak256FixLen(i32, i32, F),
+
     /// Print a variable.
     PrintV(i32),
 
@@ -153,10 +160,15 @@ pub enum AsmInstruction<F, EF> {
     /// Add next input vector to hint stream.
     HintInputVec(),
 
-    /// HintBits(dst, src).
+    /// HintBits(src, len).
     ///
-    /// Bit decompose the field element `src` and add in little endian to hint stream.
+    /// Bit decompose the field element at pointer `src` to the first `len` little endian bits and add to hint stream.
     HintBits(i32, u32),
+
+    /// HintBytes(src, len).
+    ///
+    /// Byte decompose the field element at pointer `src` to the first `len` little endian bytes and add to hint stream.
+    HintBytes(i32, u32),
 
     /// Stores the next hint stream word into value stored at addr + value.
     StoreHintWordI(i32, F),
@@ -340,9 +352,23 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::Trap => write!(f, "trap"),
             AsmInstruction::Halt => write!(f, "halt"),
-            AsmInstruction::HintBits(dst, len) => write!(f, "hint_bits ({})fp, {}", dst, len),
+            AsmInstruction::HintBits(src, len) => write!(f, "hint_bits ({})fp, {}", src, len),
+            AsmInstruction::HintBytes(src, len) => write!(f, "hint_bytes ({})fp, {}", src, len),
             AsmInstruction::Poseidon2Permute(dst, lhs) => {
                 write!(f, "poseidon2_permute ({})fp, ({})fp", dst, lhs)
+            }
+            AsmInstruction::Poseidon2Compress(result, src1, src2) => {
+                write!(
+                    f,
+                    "poseidon2_compress ({})fp, ({})fp, ({})fp",
+                    result, src1, src2
+                )
+            }
+            AsmInstruction::Keccak256(dst, src, len) => {
+                write!(f, "keccak256 ({dst})fp, ({src})fp, ({len})fp",)
+            }
+            AsmInstruction::Keccak256FixLen(dst, src, len) => {
+                write!(f, "keccak256 ({dst})fp, ({src})fp, {len}",)
             }
             AsmInstruction::PrintF(dst) => {
                 write!(f, "print_f ({})fp", dst)
@@ -356,13 +382,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::HintInputVec() => write!(f, "hint_vec"),
             AsmInstruction::StoreHintWordI(dst, offset) => {
                 write!(f, "shintw ({})fp {}", dst, offset)
-            }
-            AsmInstruction::Poseidon2Compress(result, src1, src2) => {
-                write!(
-                    f,
-                    "poseidon2_compress ({})fp, {})fp, {})fp",
-                    result, src1, src2
-                )
             }
             AsmInstruction::Publish(val, index) => {
                 write!(f, "commit ({})fp ({})fp", val, index)

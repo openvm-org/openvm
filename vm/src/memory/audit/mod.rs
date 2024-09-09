@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use p3_field::PrimeField32;
 
 use self::air::MemoryAuditAir;
@@ -18,7 +18,7 @@ mod tests;
 pub struct MemoryAuditChip<F: PrimeField32> {
     pub air: MemoryAuditAir,
     initial_memory: BTreeMap<(F, F), F>,
-    range_checker: Arc<RangeCheckerGateChip>,
+    range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl<F: PrimeField32> MemoryAuditChip<F> {
@@ -27,7 +27,7 @@ impl<F: PrimeField32> MemoryAuditChip<F> {
         addr_space_max_bits: usize,
         pointer_max_bits: usize,
         decomp: usize,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
             air: MemoryAuditAir::new(

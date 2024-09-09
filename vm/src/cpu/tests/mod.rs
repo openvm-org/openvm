@@ -1,5 +1,10 @@
 use std::iter;
 
+use afs_stark_backend::verifier::VerificationError;
+use ax_sdk::{
+    config::baby_bear_poseidon2::run_simple_test,
+    interaction::dummy_interaction_air::DummyInteractionAir,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::{
@@ -7,28 +12,21 @@ use p3_matrix::{
     Matrix,
 };
 
-use afs_stark_backend::verifier::VerificationError;
-use afs_test_utils::{
-    config::baby_bear_poseidon2::run_simple_test,
-    interaction::dummy_interaction_air::DummyInteractionAir,
-};
-
+use super::{CpuAir, Opcode::*};
 use crate::{
     cpu::{
-        ARITHMETIC_BUS,
         columns::{CpuCols, CpuIoCols},
-        CpuChip, CpuOptions, READ_INSTRUCTION_BUS, trace::Instruction,
+        trace::Instruction,
+        CpuChip, CpuOptions, ARITHMETIC_BUS, READ_INSTRUCTION_BUS,
     },
     field_arithmetic::FieldArithmeticOperation,
     memory::manager::interface::MemoryInterface,
     program::Program,
     vm::{
-        config::{DEFAULT_MAX_SEGMENT_LEN, MemoryConfig, VmConfig},
+        config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
         ExecutionSegment, VirtualMachine,
     },
 };
-
-use super::{CpuAir, Opcode::*};
 
 const TEST_NUM_WORDS: usize = 1;
 const TEST_WORD_SIZE: usize = 1;
@@ -64,8 +62,7 @@ fn test_flatten_fromslice_roundtrip() {
         compress_poseidon2_enabled: false,
         perm_poseidon2_enabled: false,
         num_public_values: 4,
-        is_less_than_enabled: false,
-        modular_arithmetic_enabled: false,
+        ..Default::default()
     };
     let clk_max_bits = 30;
     let decomp = 8;
@@ -290,8 +287,7 @@ fn air_test_change<
     segment.cpu_chip.generate_pvs();
     let mut all_public_values = vec![segment.get_cpu_pis(), vec![], vec![], vec![], vec![]];
 
-    let MemoryInterface::Volatile(memory_audit_chip) =
-        &segment.memory_chip.borrow().interface_chip;
+    let MemoryInterface::Volatile(memory_audit_chip) = &segment.memory_chip.borrow().interface_chip;
 
     let test_result = if field_arithmetic_enabled {
         run_simple_test(

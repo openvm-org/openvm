@@ -5,7 +5,7 @@ use afs_stark_backend::prover::{
     opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
     types::{Commitments, Proof},
 };
-use afs_test_utils::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
+use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_symmetric::Hash;
