@@ -11,7 +11,9 @@ use crate::{
     sub_chip::{AirConfig, SubAir},
 };
 
-/// AUX_LEN is expected to be (max_bits + decomp - 1) / decomp
+/// AUX_LEN is expected to be (max_bits + bus.range_max_bits - 1) / bus.range_max_bits
+/// 
+/// The number of bits to decompose each number into is inferred from bus.range_max_bits
 /// 
 /// The expected max constraint degree of conditional_eval is
 ///     deg(condition) + max(1, deg(io)) 
@@ -27,18 +29,14 @@ pub struct AssertLessThanAir<const AUX_LEN: usize> {
     ///     and x is large enough, then y-x-1 is negative but can still be in the range due
     ///     to the field size not being big enough.
     pub max_bits: usize,
-    /// The number of bits to decompose each number into, for less than checking
-    pub decomp: usize,
 }
 
 impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
-    pub fn new(bus: VariableRangeCheckerBus, max_bits: usize, decomp: usize) -> Self {
-        debug_assert!(bus.range_max_bits >= decomp);
-        debug_assert!(AUX_LEN == (max_bits + decomp - 1) / decomp);
+    pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
+        debug_assert!(AUX_LEN == (max_bits + bus.range_max_bits - 1) / bus.range_max_bits);
         Self {
             bus,
-            max_bits,
-            decomp,
+            max_bits
         }
     }
 
@@ -70,7 +68,7 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
             .iter()
             .enumerate()
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u64(1 << (i * self.decomp))
+                acc + val * AB::Expr::from_canonical_u64(1 << (i * self.bus.range_max_bits))
             });
         
         // constrain that y-x-1 is equal to the constructed lower value.

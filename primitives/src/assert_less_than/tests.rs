@@ -40,7 +40,7 @@ fn test_assert_less_than_chip_lt() {
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     
-    let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, decomp, range_checker);
+    let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, range_checker);
     let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
     
@@ -61,7 +61,7 @@ fn test_lt_chip_decomp_does_not_divide() {
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     
-    let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, decomp, range_checker);
+    let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, range_checker);
     let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
     
@@ -81,7 +81,7 @@ fn test_assert_less_than_negative_1() {
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     
-    let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, decomp, range_checker);
+    let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, range_checker);
     let mut trace = chip.generate_trace(vec![(28, 29)]);
     let range_trace = chip.range_checker.generate_trace();
 
@@ -109,7 +109,7 @@ fn test_assert_less_than_negative_2() {
     const AUX_LEN: usize = 4;
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     
-    let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, decomp, range_checker);
+    let chip = AssertLessThanChip::<AUX_LEN>::new(bus, max_bits, range_checker);
     let mut trace = chip.generate_trace(vec![(28, 29)]);
     let range_trace = chip.range_checker.generate_trace();
     

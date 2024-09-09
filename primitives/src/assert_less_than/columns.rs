@@ -25,12 +25,12 @@ impl<T> AssertLessThanIoCols<T> {
 }
 
 /// AUX_LEN is the number of AUX columns
-/// we have that AUX_LEN = (max_bits + decomp - 1) / decomp
+/// we have that AUX_LEN = (max_bits + bus.range_max_bits - 1) / bus.range_max_bits
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug, Eq, new, PartialEq)]
 pub struct AssertLessThanAuxCols<T, const AUX_LEN: usize> {
-    // lower_decomp consists of lower decomposed into limbs of size decomp 
-    // note: the final limb might have less than decomp bits
+    // lower_decomp consists of lower decomposed into limbs of size bus.range_max_bits 
+    // note: the final limb might have less than bus.range_max_bits bits
     pub lower_decomp: [T; AUX_LEN],
 }
 

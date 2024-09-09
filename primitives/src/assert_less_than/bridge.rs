@@ -15,15 +15,15 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         // we range check the limbs of the lower_decomp so that we know each element
         // of lower_decomp has the correct number of bits
         for (i, limb) in lower_decomp.iter().enumerate() {
-            if i == lower_decomp.len() - 1 && self.max_bits % self.decomp != 0 {
-                // the last limb mightfewer than `decomp` bits
+            if i == lower_decomp.len() - 1 && self.max_bits % self.bus.range_max_bits != 0 {
+                // the last limb might have fewer than `bus.range_max_bits` bits
                 self.bus
-                    .range_check(limb.clone(), self.max_bits % self.decomp)
+                    .range_check(limb.clone(), self.max_bits % self.bus.range_max_bits)
                     .eval(builder, count.clone());
             } else {
-                // the other limbs must exactly `decomp` bits
+                // the other limbs must have exactly `bus.range_max_bits` bits
                 self.bus
-                    .range_check(limb.clone(), self.decomp)
+                    .range_check(limb.clone(), self.bus.range_max_bits)
                     .eval(builder, count.clone());
             }
         }
