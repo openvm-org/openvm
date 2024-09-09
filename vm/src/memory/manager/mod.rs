@@ -92,6 +92,8 @@ pub struct MemoryChip<F: PrimeField32> {
     memory: HashMap<(F, F), TimestampedValue<F>>,
 }
 
+pub const MEMORY_TOP: u32 = (1 << 29) - 1;
+
 impl<F: PrimeField32> MemoryChip<F> {
     // pub fn with_persistent_memory(
     //     memory_dimensions: MemoryDimensions,
@@ -140,6 +142,12 @@ impl<F: PrimeField32> MemoryChip<F> {
     }
 
     pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<N, F> {
+        assert!(
+            address_space == F::zero() || pointer.as_canonical_u32() <= MEMORY_TOP,
+            "memory out of bounds: {:?}",
+            pointer.as_canonical_u32()
+        );
+
         let timestamp = self.timestamp;
         self.timestamp += F::one();
 
@@ -158,7 +166,12 @@ impl<F: PrimeField32> MemoryChip<F> {
         let prev_entries = array::from_fn(|i| {
             let cur_ptr = pointer + F::from_canonical_usize(i);
 
-            let entry = self.memory.get_mut(&(address_space, cur_ptr)).unwrap();
+            let entry = self
+                .memory
+                .get_mut(&(address_space, cur_ptr))
+                .unwrap_or_else(|| {
+                    panic!("read of uninitialized memory ({address_space:?}, {cur_ptr:?})")
+                });
             debug_assert!(entry.timestamp < timestamp);
 
             let prev_entry = *entry;
@@ -197,6 +210,11 @@ impl<F: PrimeField32> MemoryChip<F> {
         data: [F; N],
     ) -> MemoryWriteRecord<N, F> {
         assert_ne!(address_space, F::zero());
+        assert!(
+            address_space == F::zero() || pointer.as_canonical_u32() <= MEMORY_TOP,
+            "memory out of bounds: {:?}",
+            pointer.as_canonical_u32()
+        );
 
         let timestamp = self.timestamp;
         self.timestamp += F::one();

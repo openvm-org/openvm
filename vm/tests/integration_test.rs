@@ -7,9 +7,11 @@ use ax_sdk::{
         setup_tracing_with_log_level,
     },
     engine::StarkEngine,
+    utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
+use rand::Rng;
 use stark_vm::{
     arch::instructions::Opcode::*,
     cpu::trace::Instruction,
@@ -306,37 +308,44 @@ fn test_vm_hint() {
 
 #[test]
 fn test_vm_compress_poseidon2_as2() {
-    let mut instructions = vec![];
-    let input_a = 37;
-    for i in 0..8 {
-        instructions.push(Instruction::from_isize(
-            STOREW,
-            43 - (7 * i),
-            input_a + i,
-            0,
-            0,
-            2,
-        ));
-    }
-    let input_b = 108;
-    for i in 0..8 {
-        instructions.push(Instruction::from_isize(
-            STOREW,
-            2 + (18 * i),
-            input_b + i,
-            0,
-            0,
-            2,
-        ));
-    }
-    let output = 4;
-    // [0]_1 <- input_a
-    // [1]_1 <- input_b
-    instructions.push(Instruction::from_isize(STOREW, input_a, 0, 0, 0, 1));
-    instructions.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
-    instructions.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
+    let mut rng = create_seeded_rng();
 
-    instructions.push(Instruction::from_isize(COMP_POS2, 2, 0, 1, 1, 2));
+    let mut instructions = vec![];
+
+    let lhs_ptr = rng.gen_range(1..1 << 20);
+    for i in 0..8 {
+        // [lhs_ptr + i]_2 <- rnd()
+        instructions.push(Instruction::from_isize(
+            STOREW,
+            rng.gen_range(1..1 << 20),
+            i,
+            lhs_ptr,
+            0,
+            2,
+        ));
+    }
+    let rhs_ptr = rng.gen_range(1..1 << 20);
+    for i in 0..8 {
+        // [rhs_ptr + i]_2 <- rnd()
+        instructions.push(Instruction::from_isize(
+            STOREW,
+            rng.gen_range(1..1 << 20),
+            i,
+            rhs_ptr,
+            0,
+            2,
+        ));
+    }
+    let dst_ptr = rng.gen_range(1..1 << 20);
+
+    // [11]_1 <- lhs_ptr
+    instructions.push(Instruction::from_isize(STOREW, lhs_ptr, 0, 11, 0, 1));
+    // [22]_1 <- rhs_ptr
+    instructions.push(Instruction::from_isize(STOREW, rhs_ptr, 0, 22, 0, 1));
+    // [33]_1 <- rhs_ptr
+    instructions.push(Instruction::from_isize(STOREW, dst_ptr, 0, 33, 0, 1));
+
+    instructions.push(Instruction::from_isize(COMP_POS2, 33, 11, 22, 1, 2));
     instructions.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
     let program_len = instructions.len();
@@ -362,7 +371,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     // dst word[a]_1 <- 3 // use weird offset
     let dst = 3;
     instructions.push(Instruction::from_isize(STOREW, dst, 0, a, 0, 1));
-    // word[2^30 - 1]_1 <- len // emulate stack
+    // word[2^29 - 1]_1 <- len // emulate stack
     instructions.push(Instruction::from_isize(
         STOREW,
         input.len() as isize,
