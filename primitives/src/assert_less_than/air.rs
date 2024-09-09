@@ -45,7 +45,7 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
     ///
     /// Constraints between `io` and `aux` are only enforced when `condition != 0`.
     /// This means `aux` can be all zero independent of what `io` is by setting `condition = 0`.
-    pub(crate) fn conditional_eval_without_interactions<AB: AirBuilder>(
+    pub(super) fn conditional_eval_without_interactions<AB: AirBuilder>(
         &self,
         builder: &mut AB,
         io: AssertLessThanIoCols<AB::Expr>,
