@@ -3,7 +3,7 @@
 use std::sync::{atomic::AtomicU32, Arc};
 
 pub mod air;
-pub mod bridge;
+pub mod bus;
 pub mod columns;
 pub mod trace;
 
@@ -11,38 +11,47 @@ pub mod trace;
 pub mod tests;
 
 pub use air::RangeTupleCheckerAir;
+use bus::RangeTupleCheckerBus;
 
 #[derive(Clone, Default, Debug)]
 pub struct RangeTupleCheckerChip {
     pub air: RangeTupleCheckerAir,
-    sizes: Vec<u32>,
     count: Vec<Arc<AtomicU32>>,
 }
 
 impl RangeTupleCheckerChip {
-    pub fn new(bus_index: usize, sizes: Vec<u32>) -> Self {
-        let mut count = vec![];
-        let range_max = sizes.iter().product();
-        for _ in 0..range_max {
-            count.push(Arc::new(AtomicU32::new(0)));
-        }
+    pub fn new(bus: RangeTupleCheckerBus) -> Self {
+        let range_max = bus.sizes.iter().product();
+        let count = (0..range_max)
+            .map(|_| Arc::new(AtomicU32::new(0)))
+            .collect();
 
         Self {
-            air: RangeTupleCheckerAir {
-                bus_index,
-                sizes: sizes.clone(),
-            },
-            sizes,
+            air: RangeTupleCheckerAir { bus },
             count,
         }
+    }
+
+    pub fn bus(&self) -> RangeTupleCheckerBus {
+        self.air.bus.clone()
+    }
+
+    pub fn sizes(&self) -> Vec<u32> {
+        self.air.bus.sizes.clone()
     }
 
     pub fn add_count(&self, ids: &[u32]) {
         let index = ids
             .iter()
-            .zip(self.sizes.iter())
-            .fold(0, |acc, (id, sz)| acc * sz + id);
-        let val_atomic = &self.count[index as usize];
+            .zip(self.air.bus.sizes.iter())
+            .fold(0, |acc, (id, sz)| acc * sz + id) as usize;
+        assert!(
+            index < self.count.len(),
+            "range exceeded: {} >= {}",
+            index,
+            self.count.len()
+        );
+        let val_atomic = &self.count[index];
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }

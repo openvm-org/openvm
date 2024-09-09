@@ -4,26 +4,26 @@ use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::columns::{RangeTupleCols, RangeTuplePreprocessedCols};
+use crate::range_tuple::bus::RangeTupleCheckerBus;
 
 #[derive(Clone, Default, Debug)]
 pub struct RangeTupleCheckerAir {
-    pub bus_index: usize,
-    pub sizes: Vec<u32>,
+    pub bus: RangeTupleCheckerBus,
 }
 
 impl<F: Field> BaseAir<F> for RangeTupleCheckerAir {
     fn width(&self) -> usize {
-        self.sizes.len()
+        self.bus.sizes.len()
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let height: u32 = self.sizes.iter().product();
-        let mut unrolled_matrix = Vec::with_capacity((height as usize) * self.sizes.len());
-        let mut row = vec![0u32; self.sizes.len()];
+        let height: u32 = self.bus.sizes.iter().product();
+        let mut unrolled_matrix = Vec::with_capacity((height as usize) * self.bus.sizes.len());
+        let mut row = vec![0u32; self.bus.sizes.len()];
         for _ in 0..height {
             unrolled_matrix.extend(row.clone());
-            for i in (0..self.sizes.len()).rev() {
-                if row[i] < self.sizes[i] - 1 {
+            for i in (0..self.bus.sizes.len()).rev() {
+                if row[i] < self.bus.sizes[i] - 1 {
                     row[i] += 1;
                     break;
                 }
@@ -35,7 +35,7 @@ impl<F: Field> BaseAir<F> for RangeTupleCheckerAir {
                 .iter()
                 .map(|&v| F::from_canonical_u32(v))
                 .collect(),
-            self.sizes.len(),
+            self.bus.sizes.len(),
         ))
     }
 }
@@ -50,14 +50,10 @@ impl<AB: InteractionBuilder + PairBuilder> Air<AB> for RangeTupleCheckerAir {
         let main = builder.main();
         let local = main.row_slice(0);
         let local = RangeTupleCols { mult: (*local)[0] };
-        self.eval_interactions(
-            builder,
-            prep_local
-                .counters
-                .iter()
-                .map(|&v| v.into())
-                .collect::<Vec<_>>(),
-            local.mult,
-        );
+
+        // Omit creating separate bridge.rs file for brevity
+        self.bus
+            .receive(prep_local.counters)
+            .eval(builder, local.mult);
     }
 }

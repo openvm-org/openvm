@@ -11,7 +11,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
-use crate::range_tuple::RangeTupleCheckerChip;
+use crate::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
 
 #[test]
 fn test_range_tuple_chip() {
@@ -24,7 +24,8 @@ fn test_range_tuple_chip() {
 
     const LIST_LEN: usize = 64;
 
-    let range_checker = RangeTupleCheckerChip::new(bus_index, sizes.clone());
+    let bus = RangeTupleCheckerBus::new(bus_index, sizes.clone());
+    let range_checker = RangeTupleCheckerChip::new(bus);
     let mut gen_list = || {
         sizes
             .iter()
@@ -80,10 +81,8 @@ fn negative_test_range_tuple_chip() {
 
     let sizes = vec![2, 2, 8];
 
-    let range_checker = RangeTupleCheckerChip::new(bus_index, sizes.clone());
-
-    // generating a trace with a "counter" starting from 1
-    // instead of 0 to test the AIR constraints in range_checker
+    let bus = RangeTupleCheckerBus::new(bus_index, sizes.clone());
+    let range_checker = RangeTupleCheckerChip::new(bus);
 
     let height = sizes.iter().product();
     let range_trace = RowMajorMatrix::new(
