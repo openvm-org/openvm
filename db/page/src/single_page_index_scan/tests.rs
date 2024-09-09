@@ -1,6 +1,7 @@
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    utils::disable_debug_builder,
     verifier::VerificationError,
 };
 use ax_sdk::config::{
@@ -18,7 +19,6 @@ const DATA_LEN: usize = 3;
 const DECOMP: usize = 8;
 const LIMB_BITS: usize = 16;
 
-const LOG_PAGE_HEIGHT: usize = 1;
 const PAGE_WIDTH: usize = 1 + IDX_LEN + DATA_LEN;
 
 #[allow(clippy::too_many_arguments)]
@@ -104,7 +104,7 @@ fn test_single_page_index_scan_lt() {
     let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
     assert_eq!(expected_page_output, page_output);
 
-    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -148,7 +148,7 @@ fn test_single_page_index_scan_lte() {
 
     let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
 
-    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -192,7 +192,7 @@ fn test_single_page_index_scan_eq() {
 
     let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
 
-    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -236,7 +236,7 @@ fn test_single_page_index_scan_gte() {
 
     let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
 
-    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -280,7 +280,7 @@ fn test_single_page_index_scan_gt() {
 
     let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
 
-    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -328,14 +328,12 @@ fn test_single_page_index_scan_wrong_order() {
     ];
     let page_output = Page::from_2d_vec(&page_output, IDX_LEN, DATA_LEN);
 
-    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         index_scan_test(
             &engine,
@@ -382,14 +380,12 @@ fn test_single_page_index_scan_unsorted() {
     ];
     let page_output = Page::from_2d_vec(&page_output, IDX_LEN, DATA_LEN);
 
-    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         index_scan_test(
             &engine,
@@ -436,14 +432,12 @@ fn test_single_page_index_scan_wrong_answer() {
     ];
     let page_output = Page::from_2d_vec(&page_output, IDX_LEN, DATA_LEN);
 
-    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         index_scan_test(
             &engine,

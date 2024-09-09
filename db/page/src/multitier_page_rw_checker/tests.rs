@@ -102,7 +102,7 @@ where
     let idx_len = 2;
     let data_len = 3;
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(3 + log_num_ops));
+    let engine = config::baby_bear_poseidon2::default_engine(27);
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
