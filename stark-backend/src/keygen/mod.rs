@@ -25,8 +25,15 @@ pub struct MultiStarkKeygenBuilder<'a, SC: StarkGenericConfig> {
     /// `placeholder_main_matrix_in_commit[commit_idx][mat_idx] =` matrix width, it is used to store
     /// a placeholder of a main trace matrix that must be committed during proving
     placeholder_main_matrix_in_commit: Vec<Vec<usize>>,
-    /// Information for partitioned AIRs
-    partitioned_airs: Vec<(&'a dyn AnyRap<SC>, usize, Vec<SingleMatrixCommitPtr>)>,
+    /// Information for partitioned AIRs. The tuple is
+    /// (reference to AIR, number of public values, trace pointers, optional interaction_chunk_size)
+    #[allow(clippy::type_complexity)]
+    partitioned_airs: Vec<(
+        &'a dyn AnyRap<SC>,
+        usize,
+        Vec<SingleMatrixCommitPtr>,
+        Option<usize>,
+    )>,
 }
 
 impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
@@ -49,13 +56,18 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         );
 
         let partitioned_airs = std::mem::take(&mut self.partitioned_airs);
-        for (air, num_public_values, partitioned_main_ptrs) in partitioned_airs.into_iter() {
-            let interaction_chunk_size = self.calc_interaction_chunk_size_for_air(
-                air,
-                num_public_values,
-                &partitioned_main_ptrs,
-                multi_pk.max_constraint_degree,
-            );
+        for (air, num_public_values, partitioned_main_ptrs, interaction_chunk_size) in
+            partitioned_airs.into_iter()
+        {
+            let interaction_chunk_size = match interaction_chunk_size {
+                Some(interaction_chunk_size) => interaction_chunk_size,
+                None => self.calc_interaction_chunk_size_for_air(
+                    air,
+                    num_public_values,
+                    &partitioned_main_ptrs,
+                    multi_pk.max_constraint_degree,
+                ),
+            };
 
             let (prep_prover_data, prep_verifier_data, symbolic_builder) = self
                 .get_prep_data_and_symbolic_builder(
@@ -188,9 +200,23 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     /// - Adds main trace to the last main trace commitment.
     #[instrument(level = "debug", skip_all)]
     pub fn add_air(&mut self, air: &'a dyn AnyRap<SC>, num_public_values: usize) {
+        self.add_air_with_interaction_chunk_size(air, num_public_values, None);
+    }
+
+    pub fn add_air_with_interaction_chunk_size(
+        &mut self,
+        air: &'a dyn AnyRap<SC>,
+        num_public_values: usize,
+        interaction_chunk_size: Option<usize>,
+    ) {
         let main_width = <dyn AnyRap<SC> as BaseAir<Val<SC>>>::width(air);
         let ptr = self.add_main_matrix(main_width);
-        self.add_partitioned_air(air, num_public_values, vec![ptr]);
+        self.add_partitioned_air_with_interaction_chunk_size(
+            air,
+            num_public_values,
+            vec![ptr],
+            interaction_chunk_size,
+        );
     }
 
     /// Add a single Interactive AIR with partitioned main trace.
@@ -205,8 +231,27 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         num_public_values: usize,
         partitioned_main_ptrs: Vec<SingleMatrixCommitPtr>,
     ) {
-        self.partitioned_airs
-            .push((air, num_public_values, partitioned_main_ptrs));
+        self.add_partitioned_air_with_interaction_chunk_size(
+            air,
+            num_public_values,
+            partitioned_main_ptrs,
+            None,
+        );
+    }
+
+    pub fn add_partitioned_air_with_interaction_chunk_size(
+        &mut self,
+        air: &'a dyn AnyRap<SC>,
+        num_public_values: usize,
+        partitioned_main_ptrs: Vec<SingleMatrixCommitPtr>,
+        interaction_chunk_size: Option<usize>,
+    ) {
+        self.partitioned_airs.push((
+            air,
+            num_public_values,
+            partitioned_main_ptrs,
+            interaction_chunk_size,
+        ));
     }
 
     /// Default way to add a single Interactive AIR.
@@ -279,7 +324,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
 
     fn all_airs_max_constraint_degree(&mut self) -> usize {
         let mut max_constraint_degree = 0;
-        for (air, num_public_values, partitioned_main_ptrs) in self.partitioned_airs.iter() {
+        for (air, num_public_values, partitioned_main_ptrs, _) in self.partitioned_airs.iter() {
             let (_, _, symbolic_builder) = self.get_prep_data_and_symbolic_builder(
                 *air,
                 *num_public_values,
