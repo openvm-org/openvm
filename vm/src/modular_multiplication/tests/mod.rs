@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use afs_primitives::modular_multiplication::bigint::air::ModularArithmeticBigIntAir;
 use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use p3_baby_bear::BabyBear;
@@ -15,7 +14,10 @@ use crate::{
         testing::MachineChipTestBuilder,
     },
     cpu::trace::Instruction,
-    modular_multiplication::{biguint_to_elems, ModularArithmeticChip},
+    modular_multiplication::{
+        biguint_to_elems, ModularArithmeticChip, NUM_ELEMS, REPR_BITS, SECP256K1_COORD_PRIME,
+        SECP256K1_SCALAR_PRIME,
+    },
 };
 
 #[test]
@@ -25,32 +27,32 @@ fn test_modular_multiplication_runtime() {
     let mut tester: MachineChipTestBuilder<BabyBear> = MachineChipTestBuilder::default();
     let mut coord_chip = ModularArithmeticChip::new(
         tester.memory_chip(),
-        ModularArithmeticBigIntAir::secp256k1_coord_prime(),
-        10,
+        SECP256K1_COORD_PRIME.clone(),
+        REPR_BITS,
     );
     let mut scalar_chip = ModularArithmeticChip::new(
         tester.memory_chip(),
-        ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
-        10,
+        SECP256K1_SCALAR_PRIME.clone(),
+        REPR_BITS,
     );
     let mut rng = create_seeded_rng();
     for _ in 0..100 {
-        let num_digits = 8;
-
-        let a_digits = (0..num_digits).map(|_| rng.next_u32()).collect();
-        let mut a = BigUint::new(a_digits);
-        let b_digits = (0..num_digits).map(|_| rng.next_u32()).collect();
-        let mut b = BigUint::new(b_digits);
+        let mut a_digits = [0; NUM_ELEMS];
+        rng.fill_bytes(&mut a_digits);
+        let mut a = BigUint::from_bytes_le(&a_digits);
+        let mut b_digits = [0; NUM_ELEMS];
+        rng.fill_bytes(&mut b_digits);
+        let mut b = BigUint::from_bytes_le(&b_digits);
         // if these are not true then trace is not guaranteed to be verifiable
         let is_scalar = rng.gen_bool(0.5);
         let (modulus, opcode) = if is_scalar {
             (
-                ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                SECP256K1_SCALAR_PRIME.clone(),
                 SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS[rng.gen_range(0..4)],
             )
         } else {
             (
-                ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                SECP256K1_COORD_PRIME.clone(),
                 SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS[rng.gen_range(0..4)],
             )
         };
@@ -77,8 +79,8 @@ fn test_modular_multiplication_runtime() {
         let address1 = 0;
         let address2 = 100;
         let address3 = 4000;
-        let num_elems = 9;
-        let repr_bits = 30;
+        let num_elems = NUM_ELEMS;
+        let repr_bits = REPR_BITS;
 
         for (i, &elem) in biguint_to_elems(a, repr_bits, num_elems).iter().enumerate() {
             let address = address1 + i;

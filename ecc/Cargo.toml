@@ -37,7 +37,7 @@ elliptic-curve = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 afs-primitives = { path = "../primitives" }
-hex-literal = "0.4.1"
+hex-literal = { workspace = true }
 sha3 = "0.10.8"
 
 [features]

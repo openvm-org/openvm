@@ -1,6 +1,6 @@
 use num_bigint_dig::BigUint;
 use p3_field::{AbstractField, PrimeField64};
-use stark_vm::modular_multiplication::biguint_to_elems;
+use stark_vm::modular_multiplication::{biguint_to_elems, NUM_ELEMS, REPR_BITS};
 
 use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
 
@@ -14,11 +14,6 @@ impl<C: Config> BigUintVar<C> {
         }
     }
 }
-
-/// Number of bits of each field element used.
-pub const REPR_BITS: usize = 30;
-/// Number of field elements used to represent a bigint.
-pub const NUM_ELEMS: usize = 9;
 
 impl<C: Config> Builder<C>
 where

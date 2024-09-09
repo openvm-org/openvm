@@ -1,6 +1,5 @@
 use afs_compiler::ir::{
-    Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE, NUM_ELEMS,
-    REPR_BITS,
+    Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE,
 };
 use afs_ecc::types::{
     ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
@@ -22,7 +21,7 @@ use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFr
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use stark_vm::modular_multiplication::biguint_to_elems;
+use stark_vm::modular_multiplication::{biguint_to_elems, NUM_ELEMS, REPR_BITS};
 
 use crate::types::{
     AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, OpenedValuesVariable,
@@ -419,7 +418,7 @@ impl Hintable<InnerConfig> for BigUint {
     type HintVariable = BigUintVar<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let ret = builder.dyn_array(NUM_ELEMS);
+        let ret = builder.uninit_biguint();
         for i in 0..NUM_ELEMS {
             // FIXME: range check for each element.
             let v = builder.hint_var();

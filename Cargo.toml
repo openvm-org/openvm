@@ -104,6 +104,7 @@ rand = "0.8.5"
 k256 = "0.13.3"
 elliptic-curve = "0.13.8"
 num-bigint-dig = "0.8.4"
+hex-literal = "0.4.1"
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

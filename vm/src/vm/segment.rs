@@ -6,7 +6,6 @@ use std::{
 };
 
 use afs_primitives::{
-    modular_multiplication::bigint::air::ModularArithmeticBigIntAir,
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::lookup::XorLookupChip,
 };
@@ -37,7 +36,9 @@ use crate::{
         manager::{MemoryChip, MemoryChipRef},
         offline_checker::bus::MemoryBus,
     },
-    modular_multiplication::ModularArithmeticChip,
+    modular_multiplication::{
+        ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+    },
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
 };
@@ -164,18 +165,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 (
                     ModularArithmeticChip::new(
                         memory_chip.clone(),
-                        ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                        SECP256K1_COORD_PRIME.clone(),
                         config.bigint_limb_size,
                     ),
-                    ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                    SECP256K1_COORD_PRIME.clone(),
                 ),
                 (
                     ModularArithmeticChip::new(
                         memory_chip.clone(),
-                        ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                        SECP256K1_SCALAR_PRIME.clone(),
                         config.bigint_limb_size,
                     ),
-                    ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                    SECP256K1_SCALAR_PRIME.clone(),
                 ),
             ];
             // let mut modular_arithmetic_chips = BTreeMap::new();

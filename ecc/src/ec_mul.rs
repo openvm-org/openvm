@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var, NUM_ELEMS};
+use afs_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var};
 use p3_field::{AbstractField, PrimeField64};
 
 use crate::types::ECPointVariable;
@@ -72,16 +72,6 @@ where
             }
         },
     );
-    if builder.flags.debug {
-        for i in 0..NUM_ELEMS {
-            let p = builder.get(&result_x, i);
-            builder.print_v(p);
-        }
-        for i in 0..NUM_ELEMS {
-            let p = builder.get(&result_y, i);
-            builder.print_v(p);
-        }
-    }
     ECPointVariable {
         x: result_x,
         y: result_y,

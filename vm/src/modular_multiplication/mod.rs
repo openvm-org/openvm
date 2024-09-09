@@ -1,7 +1,9 @@
 use std::{borrow::Cow, collections::VecDeque};
 
 use afs_primitives::modular_multiplication::bigint::air::ModularArithmeticBigIntAir;
+use hex_literal::hex;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
+use once_cell::sync::Lazy;
 use p3_field::{PrimeField32, PrimeField64};
 
 use self::air::ModularArithmeticVmAir;
@@ -16,6 +18,11 @@ pub mod air;
 // mod columns;
 #[cfg(test)]
 mod tests;
+
+/// Number of bits of each field element used.
+pub const REPR_BITS: usize = 8;
+/// Number of field elements used to represent a bigint.
+pub const NUM_ELEMS: usize = 32;
 
 pub fn elems_to_biguint<F: PrimeField64>(elems: Vec<F>, repr_bits: usize) -> BigUint {
     let mut bits = vec![];
@@ -100,13 +107,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
         match instruction.opcode {
             SECP256K1_COORD_ADD | SECP256K1_COORD_SUB | SECP256K1_COORD_MUL
             | SECP256K1_COORD_DIV => {
-                assert_eq!(modulus, ModularArithmeticBigIntAir::secp256k1_coord_prime())
+                assert_eq!(modulus, *SECP256K1_COORD_PRIME)
             }
             SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB | SECP256K1_SCALAR_MUL
-            | SECP256K1_SCALAR_DIV => assert_eq!(
-                modulus,
-                ModularArithmeticBigIntAir::secp256k1_scalar_prime()
-            ),
+            | SECP256K1_SCALAR_DIV => assert_eq!(modulus, *SECP256K1_SCALAR_PRIME),
             _ => panic!(),
         };
         let mut memory_chip = self.memory_chip.borrow_mut();
@@ -183,14 +187,14 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             air: ModularArithmeticVmAir {
                 air: ModularArithmeticBigIntAir::new(
                     modulus,
-                    256,
-                    16,
+                    REPR_BITS * NUM_ELEMS,
+                    8,
                     0,
-                    30,
-                    30,
+                    REPR_BITS,
+                    REPR_BITS,
                     biguint_limb_size,
-                    16,
-                    1 << 15,
+                    4,
+                    1 << 3,
                 ),
             },
             ops: vec![],
@@ -212,9 +216,9 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
         };
         let modulus = match instruction.opcode {
             SECP256K1_COORD_ADD | SECP256K1_COORD_SUB | SECP256K1_COORD_MUL
-            | SECP256K1_COORD_DIV => ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+            | SECP256K1_COORD_DIV => SECP256K1_COORD_PRIME.clone(),
             SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB | SECP256K1_SCALAR_MUL
-            | SECP256K1_SCALAR_DIV => ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+            | SECP256K1_SCALAR_DIV => SECP256K1_SCALAR_PRIME.clone(),
             _ => panic!(),
         };
         // TODO[zach]: update for word size
@@ -289,4 +293,44 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             argument_2,
         });
     }
+}
+
+pub static SECP256K1_COORD_PRIME: Lazy<BigUint> = Lazy::new(|| {
+    BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+    ))
+});
+
+pub static SECP256K1_SCALAR_PRIME: Lazy<BigUint> = Lazy::new(|| {
+    BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+    ))
+});
+
+pub fn default_for_secp256k1_coord(limb_bits: usize) -> ModularArithmeticBigIntAir {
+    ModularArithmeticBigIntAir::new(
+        SECP256K1_COORD_PRIME.clone(),
+        REPR_BITS * NUM_ELEMS,
+        8,
+        0,
+        REPR_BITS,
+        REPR_BITS,
+        limb_bits,
+        4,
+        1 << 3,
+    )
+}
+
+pub fn default_for_secp256k1_scalar(limb_bits: usize) -> ModularArithmeticBigIntAir {
+    ModularArithmeticBigIntAir::new(
+        SECP256K1_SCALAR_PRIME.clone(),
+        REPR_BITS * NUM_ELEMS,
+        8,
+        0,
+        REPR_BITS,
+        REPR_BITS,
+        limb_bits,
+        4,
+        1 << 3,
+    )
 }
