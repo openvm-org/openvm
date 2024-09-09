@@ -17,7 +17,6 @@ fn secp256k1_coord_prime() -> BigUint {
 }
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_modular_arithmetic_1() {
     let a = BigUint::from_isize(31).unwrap();
     let b = BigUint::from_isize(115).unwrap();
@@ -40,7 +39,6 @@ fn test_compiler_modular_arithmetic_1() {
 }
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_modular_arithmetic_2() {
     let num_digits = 8;
 
@@ -71,7 +69,6 @@ fn test_compiler_modular_arithmetic_2() {
 }
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_modular_arithmetic_conditional() {
     let a = BigUint::from_isize(23).unwrap();
     let b = BigUint::from_isize(41).unwrap();
@@ -115,7 +112,6 @@ fn test_compiler_modular_arithmetic_conditional() {
 }
 
 #[test]
-#[ignore = "currently disabled"]
 #[should_panic]
 fn test_compiler_modular_arithmetic_negative() {
     type F = BabyBear;
@@ -133,7 +129,6 @@ fn test_compiler_modular_arithmetic_negative() {
 }
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_modular_scalar_arithmetic_conditional() {
     let a = BigUint::from_isize(23).unwrap();
     let b = BigUint::from_isize(41).unwrap();
@@ -177,7 +172,6 @@ fn test_compiler_modular_scalar_arithmetic_conditional() {
 }
 
 #[test]
-#[ignore = "currently disabled"]
 #[should_panic]
 fn test_compiler_modular_scalar_arithmetic_negative() {
     type F = BabyBear;
@@ -269,37 +263,31 @@ fn test_ec_add(point_1: Point, point_2: Point, point_3: Point) {
 // tests for x^3 = y^2 + 7
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_ec_double() {
     test_ec_add(Point::new(2, 1), Point::new(2, 1), Point::new(32, -181));
 }
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_ec_ne_add() {
     test_ec_add(Point::new(2, 1), Point::new(32, 181), Point::new(2, -1));
 }
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_ec_add_to_zero() {
     test_ec_add(Point::new(2, 1), Point::new(2, -1), Point::new(0, 0));
 }
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_ec_add_zero_left() {
     test_ec_add(Point::new(0, 0), Point::new(2, 1), Point::new(2, 1))
 }
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_ec_add_zero_right() {
     test_ec_add(Point::new(2, 1), Point::new(0, 0), Point::new(2, 1))
 }
 
 #[test]
-#[ignore = "currently disabled"]
 fn test_compiler_ec_double_zero() {
     test_ec_add(Point::new(0, 0), Point::new(0, 0), Point::new(0, 0))
 }
