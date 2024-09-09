@@ -29,8 +29,6 @@ pub struct AssertLessThanAir<const AUX_LEN: usize> {
     pub max_bits: usize,
     /// The number of bits to decompose each number into, for less than checking
     pub decomp: usize,
-    /// num_limbs is the number of limbs we decompose each input into, not including the last shifted limb
-    pub num_limbs: usize,
 }
 
 impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
@@ -41,7 +39,6 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
             bus,
             max_bits,
             decomp,
-            num_limbs: (max_bits + decomp - 1) / decomp,
         }
     }
 
