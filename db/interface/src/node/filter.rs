@@ -110,7 +110,7 @@ where
         let input = input.output().as_ref().unwrap();
         match input {
             CryptographicObject::CommittedPage(cp) => {
-                let output = FilterFn::<SC, E>::execute(&self.predicate, &cp).await?;
+                let output = FilterFn::<SC, E>::execute(&self.predicate, cp).await?;
                 self.output = Some(output.into());
             }
             _ => panic!("input is not a CommittedPage<SC>"),
