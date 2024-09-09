@@ -6,11 +6,10 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-    # temporary workaround for any PR to main; do not merge this with paths commented out below
-    # paths:
-    #   - "stark-backend/**"
-    #   - "primitives/**"
-    #   - "db/**"
+    paths:
+      - "stark-backend/**"
+      - "primitives/**"
+      - "db/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
