@@ -43,6 +43,10 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     pub fn generate_pk(&mut self) -> MultiStarkProvingKey<SC> {
         let mut multi_pk = MultiStarkProvingKey::empty();
         multi_pk.max_constraint_degree = self.all_airs_max_constraint_degree();
+        tracing::info!(
+            "Max constraint (excluding logup constraints) degree across all AIRs: {}",
+            multi_pk.max_constraint_degree
+        );
 
         let partitioned_airs = std::mem::take(&mut self.partitioned_airs);
         for (air, num_public_values, partitioned_main_ptrs) in partitioned_airs.into_iter() {
