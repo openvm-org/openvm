@@ -12,6 +12,9 @@ use crate::{
 };
 
 /// AUX_LEN is expected to be (max_bits + decomp - 1) / decomp
+/// 
+/// The expected max constraint degree of conditional_eval is
+///     deg(condition) + max(1, deg(io)) 
 #[derive(Copy, Clone, Debug)]
 pub struct AssertLessThanAir<const AUX_LEN: usize> {
     /// The bus for sends to range chip
@@ -60,10 +63,12 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         let lower_decomp = aux.lower_decomp;
 
         // this is the desired intermediate value (i.e. y - x - 1)
+        // deg(intermed_val) = deg(io)
         let intermed_val = y - x - AB::Expr::one();
 
         // Construct lower from lower_decomp:
         // - each limb of lower_decomp will be range checked
+        // deg(lower) = 1
         let lower = lower_decomp
             .iter()
             .enumerate()
@@ -74,6 +79,8 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         // constrain that y-x-1 is equal to the constructed lower value.
         // this enforces that the intermediate value is in the range [0, 2^max_bits - 1], which is equivalent to x < y
         builder.when(condition).assert_eq(intermed_val, lower);
+        // the degree of this constraint is expected to be deg(condition) + max(deg(intermed_val), deg(lower))
+        // since we are constraining condition * intermed_val == condition * lower,
     }
 }
 

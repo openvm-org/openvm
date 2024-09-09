@@ -10,7 +10,7 @@ pub struct AssertLessThanIoCols<T> {
 }
 
 impl<T> AssertLessThanIoCols<T> {
-    pub fn width() -> usize {
+    pub const fn width() -> usize {
         size_of::<AssertLessThanIoCols<u8>>()
     }
 }
@@ -35,11 +35,13 @@ pub struct AssertLessThanAuxCols<T, const AUX_LEN: usize> {
 }
 
 impl<T, const AUX_LEN: usize> AssertLessThanAuxCols<T, AUX_LEN> {
-    pub fn width() -> usize {
+    pub const fn width() -> usize {
         size_of::<AssertLessThanAuxCols<u8, AUX_LEN>>()
     }
 }
 
+// repr(C) is needed to make sure that the compiler does not reorder the fields
+// we assume the order of the fields when using borrow or borrow_mut
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug, new)]
 pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
@@ -48,7 +50,7 @@ pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
 }
 
 impl<T: Clone, const AUX_LEN: usize> AssertLessThanCols<T, AUX_LEN> {
-    pub fn width() -> usize {
+    pub const fn width() -> usize {
         AssertLessThanIoCols::<T>::width() + AssertLessThanAuxCols::<T, AUX_LEN>::width()
     }
 }
