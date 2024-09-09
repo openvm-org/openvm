@@ -145,35 +145,6 @@ where
             }
             _ => panic!("input is not a CommittedPage<SC>"),
         }
-        // let input_page = input.as_any().downcast_ref::<CommittedPage<SC>>().unwrap();
-        // if let None = self
-        //     .output
-        //     .as_ref()
-        //     .unwrap()
-        //     .as_any()
-        //     .downcast_ref::<CommittedPage<SC>>()
-        // {
-        //     panic!("output is not a committed page");
-        // }
-        // let output = self
-        //     .output
-        //     .as_ref()
-        //     .unwrap()
-        //     .as_any()
-        //     .downcast_ref::<CommittedPage<_>>()
-        //     .unwrap();
-        // let (idx_len, data_len, _page_width) = self.page_stats(&input);
-        // let proof = FilterFn::<SC, E>::prove(
-        //     engine,
-        //     &input_page,
-        //     output,
-        //     &self.predicate,
-        //     self.name(),
-        //     idx_len,
-        //     data_len,
-        // )
-        // .await?;
-        // self.proof = Some(proof);
         Ok(())
     }
 

@@ -88,18 +88,6 @@ where
         Self::new(schema, page)
     }
 
-    // pub fn new_for_keygen(schema: Schema, schema_num_idx_fields: usize) -> Self {
-    //     let page_id = generate_random_alpha_string(32);
-    //     let empty_page = Page::from_page_cols(vec![]);
-    //     Self {
-    //         page_id: page_id.to_string(),
-    //         schema,
-    //         schema_num_idx_fields,
-    //         page: empty_page,
-    //         cached_trace: None,
-    //     }
-    // }
-
     pub fn from_cols(cols: Vec<(Field, Arc<dyn Array>)>, idx_len: usize) -> Self {
         let page_id = generate_random_alpha_string(32);
         let alloc_rows = cols.first().unwrap().1.len();
@@ -170,25 +158,6 @@ impl<SC: StarkGenericConfig> CryptographicObjectTrait for CommittedPage<SC> {
         self.page.clone()
     }
 }
-
-// impl<SC: StarkGenericConfig> CryptographicObject for CommittedPage<SC>
-// where
-//     Val<SC>: PrimeField64,
-//     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
-//     PcsProof<SC>: Send + Sync,
-//     Domain<SC>: Send + Sync,
-//     Com<SC>: Send + Sync,
-//     SC::Pcs: Send + Sync,
-//     SC::Challenge: Send + Sync,
-// {
-//     fn schema(&self) -> Schema {
-//         self.schema.clone()
-//     }
-
-//     fn as_any(&self) -> &dyn Any {
-//         self
-//     }
-// }
 
 impl<SC: StarkGenericConfig> std::fmt::Debug for CommittedPage<SC> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
