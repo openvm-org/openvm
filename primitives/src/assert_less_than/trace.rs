@@ -15,10 +15,10 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
 
         let mut rows_concat = vec![F::zero(); width * pairs.len()];
         for (i, (x, y)) in pairs.iter().enumerate() {
-            let mut lt_cols: &mut AssertLessThanCols<F, AUX_LEN> =
-                (&mut rows_concat[i * width..(i + 1) * width]).borrow_mut();
+            let lt_cols: &mut AssertLessThanCols<F, AUX_LEN> =
+                rows_concat[i * width..(i + 1) * width].borrow_mut();
             self.air
-                .generate_trace_row(*x, *y, &self.range_checker, &mut lt_cols);
+                .generate_trace_row(*x, *y, &self.range_checker, lt_cols);
         }
 
         RowMajorMatrix::new(rows_concat, width)

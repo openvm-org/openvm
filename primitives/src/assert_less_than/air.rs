@@ -129,7 +129,7 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         let io_exprs = AssertLessThanIoCols::<AB::Expr>::new(io.x, io.y);
         let count = count.into();
 
-        self.eval_interactions(builder, aux.lower_decomp.clone(), count.clone());
+        self.eval_interactions(builder, aux.lower_decomp, count.clone());
         self.conditional_eval_without_interactions(builder, io_exprs, aux, count);
     }
 
