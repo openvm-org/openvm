@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{is_less_than::IsLessThanAir, range_gate::RangeCheckerGateChip};
+use crate::{is_less_than::IsLessThanAir, var_range::VariableRangeCheckerChip};
 
 pub mod air;
 pub mod bridge;
@@ -13,7 +13,7 @@ pub use air::SumAir;
 
 pub struct SumChip {
     pub air: SumAir,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl SumChip {
@@ -21,14 +21,13 @@ impl SumChip {
         input_bus: usize,
         output_bus: usize,
         key_limb_bits: usize,
-        key_decomp: usize,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
             air: SumAir {
                 input_bus,
                 output_bus,
-                is_lt_air: IsLessThanAir::new(range_checker.air.bus, key_limb_bits, key_decomp),
+                is_lt_air: IsLessThanAir::new(range_checker.air.bus, key_limb_bits),
             },
             range_checker,
         }

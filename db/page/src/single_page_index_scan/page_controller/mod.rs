@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
+use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::StarkEngine,
@@ -42,7 +42,7 @@ where
 
     page_traces: Vec<DenseMatrix<Val<SC>>>,
 
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl<SC: StarkGenericConfig> PageController<SC>
@@ -55,14 +55,13 @@ where
         range_bus_index: usize,
         idx_len: usize,
         data_len: usize,
-        range_max: u32,
         idx_limb_bits: usize,
         idx_decomp: usize,
         cmp: Comp,
     ) -> Self {
-        let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             range_bus_index,
-            range_max,
+            idx_decomp,
         )));
         Self {
             input_chip: PageIndexScanInputChip::new(
@@ -117,9 +116,9 @@ where
     }
 
     pub fn update_range_checker(&mut self, idx_decomp: usize) {
-        self.range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
-            self.range_checker.bus_index(),
-            1 << idx_decomp,
+        self.range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+            self.range_checker.bus().index,
+            idx_decomp,
         )));
     }
 
@@ -424,8 +423,7 @@ where
     where
         Val<SC>: PrimeField,
     {
-        // idx_decomp can't change between different pages since range_checker depends on it
-        assert!(1 << idx_decomp == self.range_checker.range_max());
+        assert!(idx_decomp <= self.range_checker.range_max_bits());
 
         assert!(!page_input.is_empty());
 

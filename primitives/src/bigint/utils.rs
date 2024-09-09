@@ -5,6 +5,8 @@ use num_bigint_dig::BigUint;
 use num_traits::One;
 use p3_field::AbstractField;
 
+use crate::var_range::bus::VariableRangeCheckerBus;
+
 // Checks that the given expression is within bits number of bits.
 pub fn range_check<AB: InteractionBuilder>(
     builder: &mut AB,
@@ -15,16 +17,8 @@ pub fn range_check<AB: InteractionBuilder>(
 ) {
     assert!(bits <= decomp);
     let expr = into_expr.into();
-    if bits == decomp {
-        builder.push_send(range_bus, [expr], AB::F::one());
-    } else {
-        builder.push_send(range_bus, [expr.clone()], AB::F::one());
-        builder.push_send(
-            range_bus,
-            [expr + AB::F::from_canonical_usize((1 << decomp) - (1 << bits))],
-            AB::F::one(),
-        );
-    }
+    let bus = VariableRangeCheckerBus::new(range_bus, decomp);
+    bus.range_check(expr, bits).eval(builder, AB::F::one());
 }
 
 pub fn secp256k1_prime() -> BigUint {

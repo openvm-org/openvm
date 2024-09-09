@@ -4,7 +4,7 @@ use std::{
 };
 
 use afs_primitives::{
-    range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions, utils::to_field_vec,
+    sub_chip::LocalTraceInstructions, utils::to_field_vec, var_range::VariableRangeCheckerChip,
 };
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
@@ -22,7 +22,7 @@ impl IntersectorAir {
         t2: &Page,
         fkey_start: usize,
         fkey_end: usize,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         trace_degree: usize,
     ) -> RowMajorMatrix<F> {
         let mut t1_idx_mult = HashMap::new();

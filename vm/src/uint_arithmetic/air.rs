@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_primitives::{range::bus::RangeCheckBus, utils};
+use afs_primitives::{utils, var_range::bus::VariableRangeCheckerBus};
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -21,7 +21,7 @@ pub struct UintArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bus: ExecutionBus,
     pub(super) mem_oc: MemoryOfflineChecker,
 
-    pub bus: RangeCheckBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
+    pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
     pub base_op: Opcode,
 }
 

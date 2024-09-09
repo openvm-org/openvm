@@ -16,15 +16,15 @@ use crate::{
         trace::generate_modular_multiplication_trace_row,
         FullLimbs,
     },
-    range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
+    var_range::VariableRangeCheckerChip,
 };
 
 impl<F: PrimeField64> ModularMultiplicationPrimesAir<F> {
     pub fn generate_trace(
         &self,
         pairs: Vec<(BigUint, BigUint)>,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> RowMajorMatrix<F> {
         let num_cols: usize = BaseAir::<F>::width(self);
 
@@ -43,28 +43,17 @@ impl<F: PrimeField64> ModularMultiplicationPrimesAir<F> {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationPrimesAir<F> {
-    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
+    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (a, b, range_checker) = input;
         assert!(a.bits() <= self.total_bits);
         assert!(b.bits() <= self.total_bits);
 
-        let range_check = |bits: usize, value: usize| {
-            let value = value as u32;
-            if bits == self.decomp {
-                range_checker.add_count(value);
-            } else {
-                range_checker.add_count(value);
-                range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
-            }
-        };
-
         let (general, full_limbs) = generate_modular_multiplication_trace_row(
             self.modulus.clone(),
             &self.limb_dimensions,
             range_checker.clone(),
-            self.decomp,
             a,
             b,
         );
@@ -99,8 +88,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationPrimesA
                     .map(|reduced| {
                         let residue = reduced % small_modulus;
                         let quotient = reduced / small_modulus;
-                        range_check(self.small_modulus_bits, residue);
-                        range_check(self.quotient_bits, quotient);
+                        range_checker.add_count(residue as u32, self.small_modulus_bits);
+                        range_checker.add_count(quotient as u32, self.quotient_bits);
                         (residue, quotient)
                     });
                 let pq_reduced = system
@@ -116,10 +105,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationPrimesA
                 let total_quotient_shifted = (total / (small_modulus as isize))
                     + (1 << self.quotient_bits)
                     - (1 << self.small_modulus_bits);
-                range_check(
-                    self.quotient_bits,
-                    total_quotient_shifted.to_usize().unwrap(),
-                );
+                range_checker
+                    .add_count(total_quotient_shifted.to_u32().unwrap(), self.quotient_bits);
 
                 SmallModulusSystemCols {
                     a_quotient,

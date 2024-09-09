@@ -1,6 +1,8 @@
 use p3_field::Field;
 use tracing::instrument;
 
+use crate::prover::USE_DEBUG_BUILDER;
+
 // Copied from valida-util
 /// Calculates and returns the multiplicative inverses of each field element, with zero
 /// values remaining unchanged.
@@ -27,4 +29,12 @@ pub fn batch_multiplicative_inverse_allowing_zero<F: Field>(values: Vec<F>) -> V
     }
 
     result
+}
+
+/// Disables the debug builder so there are not debug assert panics.
+/// Commonly used in negative tests to prevent panics.
+pub fn disable_debug_builder() {
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
 }

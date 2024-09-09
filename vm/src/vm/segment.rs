@@ -6,8 +6,9 @@ use std::{
 };
 
 use afs_primitives::{
-    modular_multiplication::bigint::air::ModularArithmeticBigIntAir, range::bus::RangeCheckBus,
-    range_gate::RangeCheckerGateChip, xor::lookup::XorLookupChip,
+    modular_multiplication::bigint::air::ModularArithmeticBigIntAir,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    xor::lookup::XorLookupChip,
 };
 use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
@@ -81,8 +82,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
         let execution_bus = ExecutionBus(0);
         let memory_bus = MemoryBus(1);
-        let range_bus = RangeCheckBus::new(RANGE_CHECKER_BUS, 1 << config.memory_config.decomp);
-        let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
+        let range_bus =
+            VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
         let memory_chip = Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
             memory_bus,

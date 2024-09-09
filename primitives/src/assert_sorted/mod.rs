@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::range_gate::RangeCheckerGateChip;
+use crate::var_range::VariableRangeCheckerChip;
 
 #[cfg(test)]
 pub mod tests;
@@ -22,17 +22,13 @@ pub use air::AssertSortedAir;
 #[derive(Clone, Debug)]
 pub struct AssertSortedChip {
     air: AssertSortedAir,
-    range_checker: Arc<RangeCheckerGateChip>,
+    range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl AssertSortedChip {
-    pub fn new(
-        limb_bits: Vec<usize>,
-        decomp: usize,
-        range_checker: Arc<RangeCheckerGateChip>,
-    ) -> Self {
+    pub fn new(limb_bits: Vec<usize>, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         Self {
-            air: AssertSortedAir::new(range_checker.bus(), limb_bits, decomp),
+            air: AssertSortedAir::new(range_checker.bus(), limb_bits),
             range_checker,
         }
     }

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use afs_primitives::{
-    is_less_than_tuple::IsLessThanTupleAir, range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions,
+    is_less_than_tuple::IsLessThanTupleAir, sub_chip::LocalTraceInstructions,
+    var_range::VariableRangeCheckerChip,
 };
 use itertools::Itertools;
 use p3_field::PrimeField64;
@@ -31,7 +31,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
         child_ids: &[u32],
         mults: &[u32],
         range: (Vec<u32>, Vec<u32>),
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> RowMajorMatrix<F> {
         RowMajorMatrix::new(
             page.iter()

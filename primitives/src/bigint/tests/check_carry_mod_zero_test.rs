@@ -16,9 +16,8 @@ use super::super::{
     OverflowInt,
 };
 use crate::{
-    range::bus::RangeCheckBus,
-    range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 
 // Testing AIR:
@@ -111,24 +110,15 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
-    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
+    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let range_check = |bits: usize, value: usize| {
-            let value = value as u32;
-            if bits == self.decomp {
-                range_checker.add_count(value);
-            } else {
-                range_checker.add_count(value);
-                range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
-            }
-        };
 
         let quotient = (x.clone() * x.clone() + y.clone()) / self.modulus.clone();
         let q_limb = big_uint_to_limbs(quotient.clone(), self.limb_bits);
         for &q in q_limb.iter() {
-            range_check(self.limb_bits, q);
+            range_checker.add_count(q as u32, self.limb_bits);
         }
         let quotient_f: Vec<F> = q_limb.iter().map(|&x| F::from_canonical_usize(x)).collect();
         let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
@@ -146,9 +136,9 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
             .check_carry_to_zero
             .carry_min_value_abs as isize;
         for (i, &carry) in carries.iter().enumerate() {
-            range_check(
+            range_checker.add_count(
+                (carry + carry_min_abs) as u32,
                 self.test_carry_sub_air.check_carry_to_zero.carry_bits,
-                (carry + carry_min_abs) as usize,
             );
             carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
@@ -184,9 +174,9 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
 
     let range_bus = 1;
     let range_decomp = 16;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
         range_bus,
-        1 << range_decomp,
+        range_decomp,
     )));
     let check_carry_sub_air = CheckCarryModToZeroSubAir::new(
         prime.clone(),

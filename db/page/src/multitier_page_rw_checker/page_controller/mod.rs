@@ -1,6 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::StarkEngine,
@@ -150,7 +150,7 @@ where
     pub final_leaf_chips: Vec<LeafPageAir<COMMITMENT_LEN>>,
     pub final_internal_chips: Vec<InternalPageAir<COMMITMENT_LEN>>,
     pub params: PageControllerParams,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
     main_traces: Option<PageControllerMainTrace<SC, COMMITMENT_LEN>>,
     data_traces: Option<PageControllerDataTrace<SC, COMMITMENT_LEN>>,
     commits: Option<PageControllerCommit<SC>>,
@@ -172,7 +172,7 @@ where
         init_param: PageTreeParams,
         final_param: PageTreeParams,
         less_than_tuple_param: MyLessThanTupleParams,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
             init_leaf_chips: (0..init_param.leaf_cap.unwrap_or(1))
@@ -259,7 +259,7 @@ where
         &self,
         mega_page: &mut Page,
         ops: &[Operation],
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         trace_degree: usize,
     ) -> RowMajorMatrix<Val<SC>> {
         self.offline_checker.generate_trace::<SC>(
@@ -726,7 +726,7 @@ fn make_tree_products<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
     root_idx: usize,
     idx_len: usize,
     data_len: usize,
-    range_checker: Arc<RangeCheckerGateChip>,
+    range_checker: Arc<VariableRangeCheckerChip>,
     internal_indices: &HashSet<Vec<u32>>,
     make_mega_page: bool,
     cached_data: Option<(

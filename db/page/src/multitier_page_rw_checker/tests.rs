@@ -1,6 +1,6 @@
 use std::{collections::HashMap, iter, sync::Arc};
 
-use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
+use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{
@@ -131,9 +131,9 @@ where
         decomp: DECOMP_BITS,
     };
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
         lt_bus_index,
-        1 << DECOMP_BITS,
+        DECOMP_BITS,
     )));
 
     let mut page_controller: PageController<BabyBearPoseidon2Config, BABYBEAR_COMMITMENT_LEN> =

@@ -1,6 +1,6 @@
 // use std::{collections::HashMap, iter, sync::Arc};
 
-// use afs_primitives::range_gate::RangeCheckerGateChip;
+// use afs_primitives::var_range::VariableRangeCheckerChip;
 // use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 // use ax_sdk::{
 //     config::baby_bear_poseidon2::run_simple_test_no_pis,
@@ -34,7 +34,7 @@
 //         decomp: DECOMP,
 //     };
 
-//     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
+//     let range_checker = Arc::new(VariableRangeCheckerChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
 //     let mut memory_chip = MemoryChip::new(mem_config, HashMap::new());
 //     let requester = DummyInteractionAir::new(
 //         2 + memory_chip.air.offline_checker.idx_data_width(),
@@ -180,7 +180,7 @@
 //         decomp: DECOMP,
 //     };
 
-//     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
+//     let range_checker = Arc::new(VariableRangeCheckerChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
 //     let mut memory_chip = MemoryChip::new(
 //         ADDR_SPACE_LIMB_BITS,
 //         POINTER_LIMB_BITS,
@@ -237,7 +237,7 @@
 
 // #[test]
 // fn test_offline_checker_negative_data_mismatch() {
-//     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
+//     let range_checker = Arc::new(VariableRangeCheckerChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
 //     let mut memory_chip = MemoryChip::new(
 //         ADDR_SPACE_LIMB_BITS,
 //         POINTER_LIMB_BITS,

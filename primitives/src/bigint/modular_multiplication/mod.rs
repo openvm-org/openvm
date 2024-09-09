@@ -12,8 +12,8 @@ use crate::{
         utils::big_uint_to_limbs,
         OverflowInt,
     },
-    range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
+    var_range::VariableRangeCheckerChip,
 };
 
 // x * y = q * p + r => x * y = r (mod p)
@@ -147,7 +147,7 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
-    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
+    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
@@ -167,15 +167,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
             .take(self.num_limbs)
             .map(|&x| F::from_canonical_usize(x))
             .collect();
-        let range_check = |bits: usize, value: usize| {
-            let value = value as u32;
-            if bits == self.range_decomp {
-                range_checker.add_count(value);
-            } else {
-                range_checker.add_count(value);
-                range_checker.add_count(value + (1 << self.range_decomp) - (1 << bits));
-            }
-        };
         let x_overflow =
             OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(self.num_limbs));
         let y_overflow =
@@ -190,14 +181,14 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
         let q_overflow =
             OverflowInt::<isize>::from_big_uint(quotient, self.limb_bits, Some(self.num_limbs));
         for &q in q_overflow.limbs.iter() {
-            range_check(self.limb_bits, q as usize);
+            range_checker.add_count(q as u32, self.limb_bits);
         }
         let expr = x_overflow.clone() * y_overflow.clone() - r_overflow - p_overflow * q_overflow;
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
         let carry_min_abs = self.get_carry_min_value_abs() as isize;
         for (i, &carry) in carries.iter().enumerate() {
-            range_check(self.get_carry_bits(), (carry + carry_min_abs) as usize);
+            range_checker.add_count((carry + carry_min_abs) as u32, self.get_carry_bits());
             carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
         }
@@ -231,7 +222,7 @@ mod test {
     use rand::RngCore;
 
     use super::{super::utils::secp256k1_prime, *};
-    use crate::range::bus::RangeCheckBus;
+    use crate::var_range::bus::VariableRangeCheckerBus;
     // 256 bit prime, 10 limb bits -> 26 limbs.
     const LIMB_BITS: usize = 10;
     const NUM_LIMB: usize = 26;
@@ -249,7 +240,7 @@ mod test {
         prime: BigUint,
         limb_bits: usize,
         num_limbs: usize,
-    ) -> (ModularMultiplicationAir, Arc<RangeCheckerGateChip>) {
+    ) -> (ModularMultiplicationAir, Arc<VariableRangeCheckerChip>) {
         // The equation: x*y - p*q - r, with num_limbs N = 26
         // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N * 2 + 2^10
         let limb_max_abs = (1 << (2 * limb_bits)) * num_limbs * 2 + (1 << limb_bits);
@@ -258,9 +249,9 @@ mod test {
 
         let range_bus = 1;
         let range_decomp = 17;
-        let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             range_bus,
-            1 << range_decomp,
+            range_decomp,
         )));
         let air = ModularMultiplicationAir::new(
             prime,

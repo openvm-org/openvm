@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
@@ -60,7 +60,7 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for PageIndexScanOu
 /// 3. The allocated rows of the new page are exactly the result of the index scan (via interactions)
 pub struct PageIndexScanOutputChip {
     pub air: PageIndexScanOutputAir,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl PageIndexScanOutputChip {
@@ -70,13 +70,13 @@ impl PageIndexScanOutputChip {
         data_len: usize,
         idx_limb_bits: usize,
         decomp: usize,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
             air: PageIndexScanOutputAir {
                 page_bus_index,
                 inner: IndexedOutputPageAir::new(
-                    range_checker.bus_index(),
+                    range_checker.bus().index,
                     idx_len,
                     data_len,
                     idx_limb_bits,

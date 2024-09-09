@@ -1,6 +1,9 @@
 use std::{rc::Rc, sync::Arc};
 
-use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip, sum::SumChip};
+use afs_primitives::{
+    sum::SumChip,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+};
 use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
     config::{
@@ -37,11 +40,11 @@ pub fn interaction_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC> 
     const INPUT_BUS: usize = 0;
     const OUTPUT_BUS: usize = 1;
     const RANGE_BUS: usize = 2;
-    const RANGE_MAX: u32 = 16;
+    const RANGE_MAX_BITS: usize = 4;
 
-    let range_bus = RangeCheckBus::new(RANGE_BUS, RANGE_MAX);
-    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
-    let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, 4, range_checker);
+    let range_bus = VariableRangeCheckerBus::new(RANGE_BUS, RANGE_MAX_BITS);
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+    let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, range_checker);
 
     let mut sum_trace_u32 = Vec::<(u32, u32, u32, u32)>::new();
     let n = 16;

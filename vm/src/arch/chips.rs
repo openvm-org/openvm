@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::{range_gate::RangeCheckerGateChip, xor::lookup::XorLookupChip};
+use afs_primitives::{var_range::VariableRangeCheckerChip, xor::lookup::XorLookupChip};
 use afs_stark_backend::rap::AnyRap;
 use enum_dispatch::enum_dispatch;
 use p3_air::BaseAir;
@@ -103,14 +103,14 @@ pub enum MachineChipVariant<F: PrimeField32> {
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
-    RangeChecker(Arc<RangeCheckerGateChip>),
+    RangeChecker(Arc<VariableRangeCheckerChip>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
 }
 
-impl<F: PrimeField32> MachineChip<F> for Arc<RangeCheckerGateChip> {
+impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        RangeCheckerGateChip::generate_trace(&self)
+        VariableRangeCheckerChip::generate_trace(&self)
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
@@ -121,7 +121,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeCheckerGateChip> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.air.bus.range_max as usize
+        1 << (1 + self.air.bus.range_max_bits)
     }
 
     fn trace_width(&self) -> usize {

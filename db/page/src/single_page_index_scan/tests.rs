@@ -17,7 +17,6 @@ const IDX_LEN: usize = 2;
 const DATA_LEN: usize = 3;
 const DECOMP: usize = 8;
 const LIMB_BITS: usize = 16;
-const RANGE_MAX: u32 = 1 << DECOMP;
 
 const LOG_PAGE_HEIGHT: usize = 1;
 const PAGE_WIDTH: usize = 1 + IDX_LEN + DATA_LEN;
@@ -81,7 +80,6 @@ fn test_single_page_index_scan_lt() {
         RANGE_BUS_INDEX,
         IDX_LEN,
         DATA_LEN,
-        RANGE_MAX,
         LIMB_BITS,
         DECOMP,
         cmp.clone(),
@@ -135,7 +133,6 @@ fn test_single_page_index_scan_lte() {
         RANGE_BUS_INDEX,
         IDX_LEN,
         DATA_LEN,
-        RANGE_MAX,
         LIMB_BITS,
         DECOMP,
         cmp.clone(),
@@ -180,7 +177,6 @@ fn test_single_page_index_scan_eq() {
         RANGE_BUS_INDEX,
         IDX_LEN,
         DATA_LEN,
-        RANGE_MAX,
         LIMB_BITS,
         DECOMP,
         cmp.clone(),
@@ -225,7 +221,6 @@ fn test_single_page_index_scan_gte() {
         RANGE_BUS_INDEX,
         IDX_LEN,
         DATA_LEN,
-        RANGE_MAX,
         LIMB_BITS,
         DECOMP,
         cmp.clone(),
@@ -270,7 +265,6 @@ fn test_single_page_index_scan_gt() {
         RANGE_BUS_INDEX,
         IDX_LEN,
         DATA_LEN,
-        RANGE_MAX,
         LIMB_BITS,
         DECOMP,
         cmp.clone(),
@@ -315,7 +309,6 @@ fn test_single_page_index_scan_wrong_order() {
         RANGE_BUS_INDEX,
         IDX_LEN,
         DATA_LEN,
-        RANGE_MAX,
         LIMB_BITS,
         DECOMP,
         cmp,
@@ -370,7 +363,6 @@ fn test_single_page_index_scan_unsorted() {
         RANGE_BUS_INDEX,
         IDX_LEN,
         DATA_LEN,
-        RANGE_MAX,
         LIMB_BITS,
         DECOMP,
         cmp,
@@ -425,7 +417,6 @@ fn test_single_page_index_scan_wrong_answer() {
         RANGE_BUS_INDEX,
         IDX_LEN,
         DATA_LEN,
-        RANGE_MAX,
         LIMB_BITS,
         DECOMP,
         cmp,

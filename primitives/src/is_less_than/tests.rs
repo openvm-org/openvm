@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -8,12 +8,23 @@ use p3_matrix::dense::DenseMatrix;
 
 use super::{super::is_less_than::IsLessThanChip, columns::IsLessThanCols};
 use crate::{
-    is_less_than::IsLessThanAir, range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip,
+    is_less_than::IsLessThanAir,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
+
+fn get_tester_is_lt_chip() -> IsLessThanChip {
+    let max_bits: usize = 16;
+    let decomp: usize = 8;
+    let bus = VariableRangeCheckerBus::new(0, decomp);
+
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
+
+    IsLessThanChip::new(max_bits, range_checker)
+}
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
-    let lt_air = IsLessThanAir::new(RangeCheckBus::new(0, 1 << 8), 16, 8);
+    let lt_air = IsLessThanAir::new(VariableRangeCheckerBus::new(0, 8), 16);
 
     let num_cols = IsLessThanCols::<usize>::width(&lt_air);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -30,14 +41,7 @@ fn test_flatten_fromslice_roundtrip() {
 
 #[test]
 fn test_is_less_than_chip_lt() {
-    let max_bits: usize = 16;
-    let decomp: usize = 8;
-    let range_max: u32 = 1 << decomp;
-    let bus = RangeCheckBus::new(0, range_max);
-
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
-
-    let chip = IsLessThanChip::new(bus, max_bits, decomp, range_checker);
+    let chip = get_tester_is_lt_chip();
     let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
@@ -50,14 +54,7 @@ fn test_is_less_than_chip_lt() {
 
 #[test]
 fn test_lt_chip_decomp_does_not_divide() {
-    let max_bits: usize = 30;
-    let decomp: usize = 8;
-    let range_max: u32 = 1 << decomp;
-    let bus = RangeCheckBus::new(0, range_max);
-
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
-
-    let chip = IsLessThanChip::new(bus, max_bits, decomp, range_checker);
+    let chip = get_tester_is_lt_chip();
     let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
@@ -70,22 +67,13 @@ fn test_lt_chip_decomp_does_not_divide() {
 
 #[test]
 fn test_is_less_than_negative() {
-    let max_bits: usize = 16;
-    let decomp: usize = 8;
-    let range_max: u32 = 1 << decomp;
-    let bus = RangeCheckBus::new(0, range_max);
-
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
-
-    let chip = IsLessThanChip::new(bus, max_bits, decomp, range_checker);
+    let chip = get_tester_is_lt_chip();
     let mut trace = chip.generate_trace(vec![(446, 553)]);
     let range_trace = chip.range_checker.generate_trace();
 
     trace.values[2] = AbstractField::from_canonical_u64(0);
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         run_simple_test_no_pis(
             vec![&chip.air, &chip.range_checker.air],

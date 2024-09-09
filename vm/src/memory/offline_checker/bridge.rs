@@ -6,8 +6,8 @@ use afs_primitives::{
         columns::{IsZeroCols, IsZeroIoCols},
         IsZeroAir,
     },
-    range::bus::RangeCheckBus,
     utils::not,
+    var_range::bus::VariableRangeCheckerBus,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
@@ -258,10 +258,10 @@ pub struct MemoryOfflineChecker {
 impl MemoryOfflineChecker {
     // TODO[jpw]: pass in range bus
     pub fn new(memory_bus: MemoryBus, clk_max_bits: usize, decomp: usize) -> Self {
-        let range_bus = RangeCheckBus::new(RANGE_CHECKER_BUS, 1 << decomp);
+        let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp);
         Self {
             memory_bus,
-            timestamp_lt_air: IsLessThanAir::new(range_bus, clk_max_bits, decomp),
+            timestamp_lt_air: IsLessThanAir::new(range_bus, clk_max_bits),
         }
     }
 

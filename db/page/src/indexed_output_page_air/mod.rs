@@ -1,6 +1,6 @@
 use afs_primitives::{
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
-    range::bus::RangeCheckBus,
+    var_range::bus::VariableRangeCheckerBus,
 };
 
 pub mod air;
@@ -29,9 +29,9 @@ impl IndexedOutputPageAir {
         idx_limb_bits: usize,
         idx_decomp: usize,
     ) -> Self {
-        let range_bus = RangeCheckBus::new(range_bus_index, 1 << idx_decomp);
+        let range_bus = VariableRangeCheckerBus::new(range_bus_index, idx_decomp);
         Self {
-            lt_air: IsLessThanTupleAir::new(range_bus, vec![idx_limb_bits; idx_len], idx_decomp),
+            lt_air: IsLessThanTupleAir::new(range_bus, vec![idx_limb_bits; idx_len]),
             idx_len,
             data_len,
             idx_limb_bits,

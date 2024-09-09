@@ -1,4 +1,6 @@
-use afs_primitives::{is_less_than_tuple::IsLessThanTupleAir, range::bus::RangeCheckBus};
+use afs_primitives::{
+    is_less_than_tuple::IsLessThanTupleAir, var_range::bus::VariableRangeCheckerBus,
+};
 
 use self::columns::{IntersectorAuxCols, IntersectorCols, IntersectorIoCols};
 
@@ -30,11 +32,11 @@ impl IntersectorAir {
         idx_limb_bits: usize,
         decomp: usize,
     ) -> Self {
-        let range_bus = RangeCheckBus::new(range_bus_index, 1 << decomp);
+        let range_bus = VariableRangeCheckerBus::new(range_bus_index, decomp);
         Self {
             buses,
             idx_len,
-            lt_chip: IsLessThanTupleAir::new(range_bus, vec![idx_limb_bits; idx_len], decomp),
+            lt_chip: IsLessThanTupleAir::new(range_bus, vec![idx_limb_bits; idx_len]),
         }
     }
 

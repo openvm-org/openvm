@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use air::UintArithmeticAir;
 use itertools::Itertools;
 use p3_field::PrimeField32;
@@ -52,18 +52,22 @@ pub struct UintArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: 
     pub air: UintArithmeticAir<ARG_SIZE, LIMB_SIZE>,
     data: Vec<UintArithmeticRecord<ARG_SIZE, LIMB_SIZE, T>>,
     memory_chip: MemoryChipRef<T>,
-    pub range_checker_chip: Arc<RangeCheckerGateChip>,
+    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
     UintArithmeticChip<ARG_SIZE, LIMB_SIZE, T>
 {
-    pub fn new(
-        bus: RangeCheckBus,
-        execution_bus: ExecutionBus,
-        memory_chip: MemoryChipRef<T>,
-    ) -> Self {
+    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
+        let range_checker_chip = memory_chip.borrow().range_checker.clone();
+        let bus = range_checker_chip.bus();
         let mem_oc = memory_chip.borrow().make_offline_checker();
+        assert!(
+            bus.range_max_bits >= LIMB_SIZE,
+            "range_max_bits {} < LIMB_SIZE {}",
+            bus.range_max_bits,
+            LIMB_SIZE
+        );
         Self {
             air: UintArithmeticAir {
                 execution_bus,
@@ -73,7 +77,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
             },
             data: vec![],
             memory_chip,
-            range_checker_chip: RangeCheckerGateChip::new(bus).into(),
+            range_checker_chip,
         }
     }
 }
@@ -131,7 +135,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
         };
 
         for elem in result.iter() {
-            self.range_checker_chip.add_count(*elem);
+            self.range_checker_chip.add_count(*elem, LIMB_SIZE);
         }
 
         self.data.push(UintArithmeticRecord {

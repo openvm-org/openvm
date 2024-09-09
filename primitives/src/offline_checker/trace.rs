@@ -7,7 +7,7 @@ use super::{
     columns::{OfflineCheckerCols, OfflineCheckerColsMut},
     OfflineCheckerChip, OfflineCheckerOperation,
 };
-use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
+use crate::{sub_chip::LocalTraceInstructions, var_range::VariableRangeCheckerChip};
 
 impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
     OfflineCheckerChip<F, Operation>
@@ -21,7 +21,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
     /// The trace is padded at the end to be of height trace_degree
     pub fn generate_trace(
         &mut self,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         // should be already sorted by address_space, address, timestamp
         accesses: Vec<Operation>,
         dummy_op: Operation,
@@ -110,7 +110,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> OfflineCheckerChip<
         is_receive: bool,
         curr_op: &Operation,
         prev_op: &Operation,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         oc_cols: &mut OfflineCheckerColsMut<F>,
     ) {
         let op_type = curr_op.get_op_type();
@@ -184,7 +184,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
         bool,
         Operation,
         Operation,
-        Arc<RangeCheckerGateChip>,
+        Arc<VariableRangeCheckerChip>,
     );
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> OfflineCheckerCols<F> {

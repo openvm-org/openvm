@@ -1,4 +1,3 @@
-use afs_primitives::range::bus::RangeCheckBus;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
 use p3_baby_bear::BabyBear;
@@ -28,16 +27,14 @@ fn generate_uint_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
 
 #[test]
 fn uint_arithmetic_rand_air_test() {
-    let num_ops: usize = 15;
-    let bus = RangeCheckBus::new(9, 1 << 16);
-    let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 29;
     const ARG_SIZE: usize = 256;
     const LIMB_SIZE: usize = 16;
+    let num_ops: usize = 15;
+    let address_space_range = || 1usize..=2;
+    let address_range = || 0usize..1 << 29;
 
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
-        bus,
         tester.execution_bus(),
         tester.memory_chip(),
     );
@@ -95,12 +92,7 @@ fn uint_arithmetic_rand_air_test() {
         }
     }
 
-    let range_checker_chip = chip.range_checker_chip.clone();
-    let tester = tester
-        .build()
-        .load(chip)
-        .load(range_checker_chip)
-        .finalize();
+    let tester = tester.build().load(chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }
@@ -120,9 +112,8 @@ fn run_bad_uint_arithmetic_test(
     expected_error: VerificationError,
 ) {
     let mut tester = MachineChipTestBuilder::default();
-    let bus = RangeCheckBus::new(9, 1 << 16);
     let mut chip =
-        UintArithmeticChip::<256, 16, F>::new(bus, tester.execution_bus(), tester.memory_chip());
+        UintArithmeticChip::<256, 16, F>::new(tester.execution_bus(), tester.memory_chip());
 
     let x_f = x
         .iter()
@@ -154,7 +145,7 @@ fn run_bad_uint_arithmetic_test(
         if replace_interactions {
             chip.range_checker_chip.clear();
             for limb in z.iter() {
-                chip.range_checker_chip.add_count(*limb);
+                chip.range_checker_chip.add_count(*limb, 16);
             }
         }
     }
@@ -341,16 +332,14 @@ fn uint_sub_invalid_carry_air_test() {
 
 #[test]
 fn uint_lt_rand_air_test() {
-    let num_ops: usize = 15;
-    let bus = RangeCheckBus::new(9, 1 << 16);
-    let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 29;
     const ARG_SIZE: usize = 256;
     const LIMB_SIZE: usize = 16;
+    let num_ops: usize = 15;
+    let address_space_range = || 1usize..=2;
+    let address_range = || 0usize..1 << 29;
 
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
-        bus,
         tester.execution_bus(),
         tester.memory_chip(),
     );
@@ -405,28 +394,21 @@ fn uint_lt_rand_air_test() {
         }
     }
 
-    let range_checker_chip = chip.range_checker_chip.clone();
-    let tester = tester
-        .build()
-        .load(chip)
-        .load(range_checker_chip)
-        .finalize();
+    let tester = tester.build().load(chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }
 
 #[test]
 fn uint_eq_rand_air_test() {
-    let num_ops: usize = 15;
-    let bus = RangeCheckBus::new(9, 1 << 16);
-    let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 29;
     const ARG_SIZE: usize = 256;
     const LIMB_SIZE: usize = 16;
+    let num_ops: usize = 15;
+    let address_space_range = || 1usize..=2;
+    let address_range = || 0usize..1 << 29;
 
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
-        bus,
         tester.execution_bus(),
         tester.memory_chip(),
     );
@@ -485,12 +467,7 @@ fn uint_eq_rand_air_test() {
         }
     }
 
-    let range_checker_chip = chip.range_checker_chip.clone();
-    let tester = tester
-        .build()
-        .load(chip)
-        .load(range_checker_chip)
-        .finalize();
+    let tester = tester.build().load(chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }

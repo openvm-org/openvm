@@ -1,6 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
@@ -16,7 +16,7 @@ impl IndexedPageWriteAir {
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
         page: &Page,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         internal_indices: &HashSet<Vec<u32>>,
     ) -> RowMajorMatrix<Val<SC>>
     where

@@ -1,6 +1,6 @@
 use std::{collections::HashSet, iter, sync::Arc};
 
-use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
+use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
@@ -22,7 +22,7 @@ fn test_single_page(
     engine: &BabyBearPoseidon2Engine,
     page: &Page,
     final_page_chip: &super::IndexedOutputPageAir,
-    range_checker: Arc<RangeCheckerGateChip>,
+    range_checker: Arc<VariableRangeCheckerChip>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
 ) -> Result<(), VerificationError> {
@@ -113,8 +113,8 @@ fn final_page_chip_test() {
         idx_limb_bits,
         idx_decomp,
     );
-    let range_bus = RangeCheckBus::new(range_bus_index, 1 << idx_decomp);
-    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
+    let range_bus = VariableRangeCheckerBus::new(range_bus_index, idx_decomp);
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(idx_decomp));
 

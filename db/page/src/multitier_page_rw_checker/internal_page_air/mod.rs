@@ -1,7 +1,7 @@
 use afs_primitives::{
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
     is_zero::IsZeroAir,
-    range::bus::RangeCheckBus,
+    var_range::bus::VariableRangeCheckerBus,
 };
 use getset::Getters;
 
@@ -50,11 +50,11 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
         let subairs = if is_init {
             None
         } else {
-            let range_bus = RangeCheckBus::new(lt_bus_index, 1 << is_less_than_tuple_param.decomp);
+            let range_bus =
+                VariableRangeCheckerBus::new(lt_bus_index, is_less_than_tuple_param.decomp);
             let air = IsLessThanTupleAir::new(
                 range_bus,
                 vec![is_less_than_tuple_param.limb_bits; idx_len],
-                is_less_than_tuple_param.decomp,
             );
             Some(InternalPageSubAirs {
                 idx1_start: air.clone(),
@@ -101,9 +101,8 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                     + 4
                     + 4 * IsLessThanTupleAuxCols::<usize>::width(                  // aux columns
                         &IsLessThanTupleAir::new(
-                            RangeCheckBus::new(0, 1 << self.is_less_than_tuple_param.decomp),
+                            VariableRangeCheckerBus::new(0, self.is_less_than_tuple_param.decomp),
                             vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
-                            self.is_less_than_tuple_param.decomp,
                         ),
                     )
                     + 1) // is_zero
@@ -116,9 +115,8 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                     + 4
                     + 4 * IsLessThanTupleAuxCols::<usize>::width(                  // aux columns
                         &IsLessThanTupleAir::new(
-                            RangeCheckBus::new(0, 1 << self.is_less_than_tuple_param.decomp),
+                            VariableRangeCheckerBus::new(0, self.is_less_than_tuple_param.decomp),
                             vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
-                            self.is_less_than_tuple_param.decomp,
                         ),
                     )
                     + 1) // is_zero

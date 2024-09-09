@@ -51,7 +51,6 @@ where
             _page_height,
             idx_limb_bits,
             idx_decomp,
-            range_max,
         ) = filter_setup(config, op);
 
         let value = string_to_u16_vec(filter_op.value, idx_len);
@@ -62,7 +61,6 @@ where
             RANGE_BUS_INDEX,
             idx_len,
             data_len,
-            range_max as u32,
             idx_limb_bits,
             idx_decomp,
             filter_op.predicate.clone(),

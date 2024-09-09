@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_primitives::xor::lookup::XorLookupChip;
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{default_perm, engine_from_perm, BabyBearPoseidon2Engine},
@@ -122,9 +122,7 @@ fn negative_test_keccak256() {
     hasher.finalize(&mut out);
     out[0] = rng.gen();
     let tester = build_keccak256_test(vec![(input, Some(out))]);
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         tester.test(get_engine),
         Err(VerificationError::OodEvaluationMismatch)

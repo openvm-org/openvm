@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use afs_primitives::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
+use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::StarkEngine,
@@ -14,6 +14,7 @@ use afs_stark_backend::{
     },
     verifier::VerificationError,
 };
+use p3_air::BaseAir;
 use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
@@ -30,7 +31,7 @@ use crate::{
 ///
 /// It has a `GroupByAir` for the group-by operation, followed by a
 /// `MyFinalPageAir` for the final page operation which uses a
-/// `RangeCheckerGateChip` for the range check.
+/// `VariableRangeCheckerChip` for the range check.
 ///
 /// The `load_page` function is the main entry point for loading a page into the
 /// controller, and it purely returns all necessary traces and commitments for
@@ -43,7 +44,7 @@ where
     Val<SC>: AbstractField,
 {
     pub group_by: GroupByAir,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
     pub final_chip: ReceivingIndexedOutputPageAir,
     _marker: PhantomData<SC>,
 }
@@ -92,8 +93,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             sorted,
             op,
         );
-        let range_bus = RangeCheckBus::new(range_bus_index, 1 << decomp);
-        let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
+        let range_bus = VariableRangeCheckerBus::new(range_bus_index, 1 << decomp);
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let final_chip = ReceivingIndexedOutputPageAir::new(
             output_bus,
             range_bus_index,
@@ -166,7 +167,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     }
 
     pub fn refresh_range_checker(&mut self) {
-        self.range_checker = Arc::new(RangeCheckerGateChip::new(self.range_checker.bus()));
+        self.range_checker = Arc::new(VariableRangeCheckerChip::new(self.range_checker.bus()));
     }
 
     /// Set up the keygen builder for the group-by test case by querying trace widths.
@@ -178,7 +179,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let final_page_ptr = keygen_builder.add_cached_main_matrix(self.final_chip.page_width());
         let group_by_aux_ptr = keygen_builder.add_main_matrix(self.group_by.aux_width());
         let final_page_aux_ptr = keygen_builder.add_main_matrix(self.final_chip.aux_width());
-        let range_checker_ptr = keygen_builder.add_main_matrix(self.range_checker.air_width());
+        let range_checker_ptr =
+            keygen_builder.add_main_matrix(BaseAir::<Val<SC>>::width(&self.range_checker.air));
 
         keygen_builder.add_partitioned_air(&self.group_by, 0, vec![group_by_ptr, group_by_aux_ptr]);
 

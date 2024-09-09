@@ -1,6 +1,6 @@
 use std::{array, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -86,7 +86,7 @@ pub struct MemoryChip<F: PrimeField32> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<NUM_WORDS, F>,
     pub(crate) mem_config: MemoryConfig,
-    pub(crate) range_checker: Arc<RangeCheckerGateChip>,
+    pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
     timestamp: F,
     /// Maps (addr_space, pointer) to (data, timestamp)
     memory: HashMap<(F, F), TimestampedValue<F>>,
@@ -109,7 +109,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     pub fn with_volatile_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
             memory_bus,

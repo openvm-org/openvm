@@ -15,6 +15,7 @@ use crate::{
         LimbDimensions,
     },
     sub_chip::AirConfig,
+    var_range::bus::VariableRangeCheckerBus,
 };
 
 pub struct SmallModulusSystem<F: Field> {
@@ -239,16 +240,8 @@ impl<F: Field> ModularMultiplicationPrimesAir<F> {
     ) {
         assert!(bits <= self.decomp);
         let expr = into_expr.into();
-        if bits == self.decomp {
-            builder.push_send(self.range_bus, [expr], AB::F::one());
-        } else {
-            builder.push_send(self.range_bus, [expr.clone()], AB::F::one());
-            builder.push_send(
-                self.range_bus,
-                [expr + AB::F::from_canonical_usize((1 << self.decomp) - (1 << bits))],
-                AB::F::one(),
-            );
-        }
+        let bus = VariableRangeCheckerBus::new(self.range_bus, self.decomp);
+        bus.range_check(expr, bits).eval(builder, AB::F::one());
     }
 }
 

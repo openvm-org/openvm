@@ -60,7 +60,7 @@ impl<T> IsLessThanAuxCols<T> {
     }
 
     pub fn width(lt_air: &IsLessThanAir) -> usize {
-        lt_air.num_limbs + (lt_air.max_bits % lt_air.decomp != 0) as usize
+        lt_air.num_limbs
     }
 
     pub fn into_expr<AB: AirBuilder>(self) -> IsLessThanAuxCols<AB::Expr>
