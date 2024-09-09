@@ -3,7 +3,7 @@ use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use super::columns::{RangeTupleCols, RangeTuplePreprocessedCols};
+use super::columns::{RangeTupleCols, RangeTuplePreprocessedCols, NUM_RANGE_TUPLE_COLS};
 use crate::range_tuple::bus::RangeTupleCheckerBus;
 
 #[derive(Clone, Default, Debug)]
@@ -19,7 +19,7 @@ impl RangeTupleCheckerAir {
 
 impl<F: Field> BaseAir<F> for RangeTupleCheckerAir {
     fn width(&self) -> usize {
-        self.bus.sizes.len()
+        NUM_RANGE_TUPLE_COLS
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
