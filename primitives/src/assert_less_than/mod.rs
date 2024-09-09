@@ -14,7 +14,7 @@ pub use air::AssertLessThanAir;
 
 /// This chip checks whether one number is less than another. The two numbers have a max number of bits,
 /// given by max_bits. The chip assumes that the two numbers are within max_bits bits. The chip compares
-/// the numbers by decomposing them into limbs of size bus.range_max_bits, and interacts with a 
+/// the numbers by decomposing them into limbs of size bus.range_max_bits, and interacts with a
 /// VariableRangeCheckerChip to range check the decompositions.
 /// The number of auxilliary columns that this chip takes needs to be passed as a const generic.
 /// This is because we want to have a static array storing the auxilliary columns:

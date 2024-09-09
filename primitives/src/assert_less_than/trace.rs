@@ -55,8 +55,8 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         let num_limbs = AssertLessThanAuxCols::<F, AUX_LEN>::width();
         // decompose lower_bits into limbs and range check
         for i in 0..num_limbs {
-            let bits = (lower_u32 >> (i * self.bus.range_max_bits))
-                & ((1 << self.bus.range_max_bits) - 1);
+            let bits =
+                (lower_u32 >> (i * self.bus.range_max_bits)) & ((1 << self.bus.range_max_bits) - 1);
             lt_aux_cols.lower_decomp[i] = F::from_canonical_u32(bits);
 
             if i == num_limbs - 1 && self.max_bits % self.bus.range_max_bits != 0 {
@@ -68,4 +68,3 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
         }
     }
 }
-

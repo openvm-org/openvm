@@ -7,16 +7,16 @@ use p3_matrix::Matrix;
 
 use super::columns::{AssertLessThanAuxCols, AssertLessThanCols, AssertLessThanIoCols};
 use crate::{
-    var_range::bus::VariableRangeCheckerBus,
     sub_chip::{AirConfig, SubAir},
+    var_range::bus::VariableRangeCheckerBus,
 };
 
 /// AUX_LEN is expected to be (max_bits + bus.range_max_bits - 1) / bus.range_max_bits
-/// 
+///
 /// The number of bits to decompose each number into is inferred from bus.range_max_bits
-/// 
+///
 /// The expected max constraint degree of conditional_eval is
-///     deg(condition) + max(1, deg(io)) 
+///     deg(condition) + max(1, deg(io.x), deg(io.y))
 #[derive(Copy, Clone, Debug)]
 pub struct AssertLessThanAir<const AUX_LEN: usize> {
     /// The bus for sends to range chip
@@ -34,10 +34,7 @@ pub struct AssertLessThanAir<const AUX_LEN: usize> {
 impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
         debug_assert!(AUX_LEN == (max_bits + bus.range_max_bits - 1) / bus.range_max_bits);
-        Self {
-            bus,
-            max_bits
-        }
+        Self { bus, max_bits }
     }
 
     /// FOR INTERNAL USE ONLY.
@@ -70,7 +67,7 @@ impl<const AUX_LEN: usize> AssertLessThanAir<AUX_LEN> {
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_u64(1 << (i * self.bus.range_max_bits))
             });
-        
+
         // constrain that y-x-1 is equal to the constructed lower value.
         // this enforces that the intermediate value is in the range [0, 2^max_bits - 1], which is equivalent to x < y
         builder.when(condition).assert_eq(intermed_val, lower);
