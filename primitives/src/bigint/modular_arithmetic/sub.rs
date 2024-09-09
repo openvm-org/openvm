@@ -5,7 +5,10 @@ use num_bigint_dig::{BigInt, BigUint, Sign};
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField64};
 
-use super::{Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols, OverflowInt};
+use super::{
+    super::utils::big_uint_sub, Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols,
+    OverflowInt,
+};
 use crate::{
     range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
@@ -49,11 +52,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularSubtractionAir {
             xp += self.modulus.clone();
         }
         let r = xp - y.clone();
-        let q = if x < y {
-            BigInt::from_biguint(Sign::Minus, r.clone() + y.clone() - x.clone())
-        } else {
-            BigInt::from_biguint(Sign::Plus, x.clone() - y.clone() - r.clone())
-        };
+        let q = big_uint_sub(x.clone(), y.clone() + r.clone());
         let q = q / BigInt::from_biguint(Sign::Plus, self.modulus.clone());
         let equation: Equation5<isize, OverflowInt<isize>> = |x, y, r, p, q| x - y - r - p * q;
         self.arithmetic

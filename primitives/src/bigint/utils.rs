@@ -2,7 +2,7 @@ use std::{collections::VecDeque, ops::Neg};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{BigInt, BigUint, Sign};
-use num_traits::One;
+use num_traits::{One, Zero};
 use p3_field::AbstractField;
 
 use crate::var_range::bus::VariableRangeCheckerBus;
@@ -34,6 +34,14 @@ pub fn big_int_abs(x: BigInt) -> BigUint {
         x.neg().to_biguint().unwrap()
     } else {
         x.to_biguint().unwrap()
+    }
+}
+
+pub fn big_uint_sub(x: BigUint, y: BigUint) -> BigInt {
+    match x.cmp(&y) {
+        std::cmp::Ordering::Less => BigInt::from_biguint(Sign::Minus, y - x),
+        std::cmp::Ordering::Equal => BigInt::zero(),
+        std::cmp::Ordering::Greater => BigInt::from_biguint(Sign::Plus, x - y),
     }
 }
 

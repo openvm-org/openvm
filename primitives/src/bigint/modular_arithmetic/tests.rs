@@ -11,7 +11,7 @@ use p3_util::log2_ceil_usize;
 use rand::RngCore;
 
 use super::{
-    super::utils::secp256k1_prime, add::*, mul::*, sub::*, ModularArithmeticAir,
+    super::utils::secp256k1_prime, add::*, div::*, mul::*, sub::*, ModularArithmeticAir,
     ModularArithmeticCols,
 };
 use crate::{
@@ -171,7 +171,6 @@ fn test_x_mul_y_wrong_trace() {
         .expect("Verification failed");
 }
 
-/*
 #[test]
 fn test_x_div_y() {
     let prime = secp256k1_prime();
@@ -261,7 +260,6 @@ fn test_x_div_y_wrong_trace() {
     run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
         .expect("Verification failed");
 }
-*/
 
 #[test]
 fn test_x_add_y() {
@@ -320,8 +318,8 @@ fn test_x_sub_y() {
     while xp < y {
         xp += prime.clone();
     }
-    let expected_r = xp - y.clone();
-    let expected_q = BigUint::zero();
+    let expected_r = xp.clone() - y.clone();
+    let expected_q = (xp - y.clone()) / prime.clone();
     let cols = air.generate_trace_row((x.clone(), y.clone(), range_checker.clone()));
     let ModularArithmeticCols {
         x: _x,
