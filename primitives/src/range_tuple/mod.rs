@@ -32,12 +32,12 @@ impl RangeTupleCheckerChip {
         }
     }
 
-    pub fn bus(&self) -> RangeTupleCheckerBus {
-        self.air.bus.clone()
+    pub fn bus(&self) -> &RangeTupleCheckerBus {
+        &self.air.bus
     }
 
-    pub fn sizes(&self) -> Vec<u32> {
-        self.air.bus.sizes.clone()
+    pub fn sizes(&self) -> &Vec<u32> {
+        &self.air.bus.sizes
     }
 
     pub fn add_count(&self, ids: &[u32]) {

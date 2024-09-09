@@ -5,5 +5,5 @@ pub struct RangeTupleCols<T> {
 
 #[derive(Default, Clone)]
 pub struct RangeTuplePreprocessedCols<T> {
-    pub counters: Vec<T>,
+    pub tuple: Vec<T>,
 }

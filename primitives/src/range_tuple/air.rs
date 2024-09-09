@@ -11,16 +11,22 @@ pub struct RangeTupleCheckerAir {
     pub bus: RangeTupleCheckerBus,
 }
 
+impl RangeTupleCheckerAir {
+    pub fn height(&self) -> u32 {
+        self.bus.sizes.iter().product()
+    }
+}
+
 impl<F: Field> BaseAir<F> for RangeTupleCheckerAir {
     fn width(&self) -> usize {
         self.bus.sizes.len()
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let height: u32 = self.bus.sizes.iter().product();
-        let mut unrolled_matrix = Vec::with_capacity((height as usize) * self.bus.sizes.len());
+        let mut unrolled_matrix =
+            Vec::with_capacity((self.height() as usize) * self.bus.sizes.len());
         let mut row = vec![0u32; self.bus.sizes.len()];
-        for _ in 0..height {
+        for _ in 0..self.height() {
             unrolled_matrix.extend(row.clone());
             for i in (0..self.bus.sizes.len()).rev() {
                 if row[i] < self.bus.sizes[i] - 1 {
@@ -45,15 +51,13 @@ impl<AB: InteractionBuilder + PairBuilder> Air<AB> for RangeTupleCheckerAir {
         let preprocessed = builder.preprocessed();
         let prep_local = preprocessed.row_slice(0);
         let prep_local = RangeTuplePreprocessedCols {
-            counters: (*prep_local).to_vec(),
+            tuple: (*prep_local).to_vec(),
         };
         let main = builder.main();
         let local = main.row_slice(0);
         let local = RangeTupleCols { mult: (*local)[0] };
 
         // Omit creating separate bridge.rs file for brevity
-        self.bus
-            .receive(prep_local.counters)
-            .eval(builder, local.mult);
+        self.bus.receive(prep_local.tuple).eval(builder, local.mult);
     }
 }

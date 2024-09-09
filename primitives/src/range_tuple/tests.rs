@@ -17,31 +17,42 @@ use crate::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
 fn test_range_tuple_chip() {
     let mut rng = create_seeded_rng();
 
+    const LIST_LEN: usize = 64;
+
     let bus_index = 0;
     let sizes = (0..3)
         .map(|_| 1 << rng.gen_range(1..5))
         .collect::<Vec<u32>>();
 
-    const LIST_LEN: usize = 64;
-
     let bus = RangeTupleCheckerBus::new(bus_index, sizes.clone());
     let range_checker = RangeTupleCheckerChip::new(bus);
-    let mut gen_list = || {
+
+    // generates a valid random tuple given sizes
+    let mut gen_tuple = || {
         sizes
             .iter()
             .map(|&size| rng.gen_range(0..size))
             .collect::<Vec<_>>()
     };
-    // Generating random lists
+
+    // generates a list of random valid tuples
     let num_lists = 10;
     let lists_vals = (0..num_lists)
-        .map(|_| (0..LIST_LEN).map(|_| gen_list()).collect::<Vec<_>>())
+        .map(|_| (0..LIST_LEN).map(|_| gen_tuple()).collect::<Vec<_>>())
         .collect::<Vec<_>>();
 
-    let lists = (0..num_lists)
+    // generate dummy AIR chips for each list
+    let lists_airs = (0..num_lists)
         .map(|_| DummyInteractionAir::new(sizes.len(), true, bus_index))
         .collect::<Vec<DummyInteractionAir>>();
 
+    let mut all_chips = lists_airs
+        .iter()
+        .map(|list| list as &dyn AnyRap<_>)
+        .collect::<Vec<_>>();
+    all_chips.push(&range_checker.air);
+
+    // generate traces for each list
     let lists_traces = lists_vals
         .par_iter()
         .map(|list| {
@@ -61,12 +72,6 @@ fn test_range_tuple_chip() {
 
     let range_trace = range_checker.generate_trace();
 
-    let mut all_chips = lists
-        .iter()
-        .map(|list| list as &dyn AnyRap<_>)
-        .collect::<Vec<_>>();
-    all_chips.push(&range_checker.air);
-
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(range_trace))
@@ -78,7 +83,6 @@ fn test_range_tuple_chip() {
 #[test]
 fn negative_test_range_tuple_chip() {
     let bus_index = 0;
-
     let sizes = vec![2, 2, 8];
 
     let bus = RangeTupleCheckerBus::new(bus_index, sizes.clone());
