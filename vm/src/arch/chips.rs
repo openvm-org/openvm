@@ -93,7 +93,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ModularArithmetic(Rc<RefCell<ModularArithmeticChip<F>>>),
-    UintArithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
+    U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
 }
 
 #[derive(Debug, IntoStaticStr)]
@@ -104,11 +104,11 @@ pub enum MachineChipVariant<F: PrimeField32> {
     Memory(MemoryChipRef<F>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    UintArithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<VariableRangeCheckerChip>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
+    U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
 }
 
 impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {

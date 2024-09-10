@@ -1,3 +1,5 @@
+use std::array::from_fn;
+
 use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -16,21 +18,6 @@ use crate::{
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip<F>
     for UintArithmeticChip<ARG_SIZE, LIMB_SIZE, F>
 {
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.data.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width(&self.air)
-    }
-
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let memory_chip = self.memory_chip.borrow();
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
@@ -42,12 +29,16 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                     let super::UintArithmeticRecord::<ARG_SIZE, LIMB_SIZE, F> {
                         from_state,
                         instruction,
+                        x_ptr_read,
+                        y_ptr_read,
+                        z_ptr_read,
                         x_read,
                         y_read,
                         z_write,
                         result,
                         buffer,
                     } = operation;
+
                     UintArithmeticCols {
                         io: UintArithmeticIoCols {
                             from_state: from_state.map(F::from_canonical_usize),
@@ -55,17 +46,20 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                                 data: x_read.data.to_vec(),
                                 address_space: x_read.address_space,
                                 address: x_read.pointer,
+                                ptr: x_ptr_read.pointer,
                             },
                             y: MemoryData {
                                 data: y_read.data.to_vec(),
                                 address_space: y_read.address_space,
                                 address: y_read.pointer,
+                                ptr: y_ptr_read.pointer,
                             },
                             z: match &z_write {
                                 WriteRecord::Uint(z) => MemoryData {
                                     data: z.data.to_vec(),
                                     address_space: z.address_space,
                                     address: z.pointer,
+                                    ptr: z_ptr_read.pointer,
                                 },
                                 WriteRecord::Short(z) => MemoryData {
                                     data: result
@@ -76,8 +70,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                                         .collect(),
                                     address_space: z.address_space,
                                     address: z.pointer,
+                                    ptr: z_ptr_read.pointer,
                                 },
                             },
+                            d: instruction.d,
                             cmp_result: match &z_write {
                                 WriteRecord::Uint(_) => F::zero(),
                                 WriteRecord::Short(z) => z.data[0],
@@ -90,6 +86,8 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                             opcode_lt_flag: F::from_bool(instruction.opcode == Opcode::LT256),
                             opcode_eq_flag: F::from_bool(instruction.opcode == Opcode::EQ256),
                             buffer: buffer.clone(),
+                            read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
+                                .map(|read| memory_chip.make_read_aux_cols(read.clone())),
                             read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),
                             read_y_aux_cols: memory_chip.make_read_aux_cols(y_read.clone()),
                             write_z_aux_cols: match &z_write {
@@ -119,6 +117,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                 opcode_lt_flag: Default::default(),
                 opcode_eq_flag: Default::default(),
                 buffer: vec![Default::default(); num_limbs],
+                read_ptr_aux_cols: from_fn(|_| MemoryReadAuxCols::disabled(self.air.mem_oc)),
                 read_x_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
                 read_y_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
                 write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
@@ -133,5 +132,20 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
         padded_rows.extend(std::iter::repeat(blank_row).take(padded_height - height));
 
         RowMajorMatrix::new(padded_rows.concat(), width)
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        Box::new(self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.data.len()
+    }
+
+    fn trace_width(&self) -> usize {
+        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width(&self.air)
     }
 }

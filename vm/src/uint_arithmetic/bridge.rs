@@ -1,4 +1,5 @@
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::izip;
 use p3_field::AbstractField;
 
 use super::{
@@ -21,27 +22,50 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
         let mut timestamp_delta = AB::Expr::zero();
 
         let memory_bridge = MemoryBridge::new(self.mem_oc);
-        let timestamp: AB::Expr = io.from_state.timestamp.into();
+        let timestamp: AB::Var = io.from_state.timestamp;
+
+        // Read the operand pointer's values, which are themselves pointers
+        // for the actual IO data.
+        for (ptr, value, mem_aux) in izip!(
+            [io.z.ptr, io.x.ptr, io.y.ptr],
+            [io.z.address, io.x.address, io.y.address],
+            aux.read_ptr_aux_cols
+        ) {
+            memory_bridge
+                .read(
+                    MemoryAddress::new(io.d, ptr), // all use addr space d
+                    [value],
+                    timestamp + timestamp_delta.clone(),
+                    mem_aux,
+                )
+                .eval(builder, aux.is_valid);
+
+            timestamp_delta += AB::Expr::one();
+        }
+
+        // Memory read for x data
         memory_bridge
             .read(
                 MemoryAddress::new(io.x.address_space, io.x.address),
                 io.x.data.try_into().unwrap_or_else(|_| unreachable!()),
-                timestamp.clone() + timestamp_delta.clone(),
+                timestamp + timestamp_delta.clone(),
                 aux.read_x_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
+        // Memory read for y data
         memory_bridge
             .read(
                 MemoryAddress::new(io.y.address_space, io.y.address),
                 io.y.data.try_into().unwrap_or_else(|_| unreachable!()),
-                timestamp.clone() + timestamp_delta.clone(),
+                timestamp + timestamp_delta.clone(),
                 aux.read_y_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
+        // Special handling for writing output z data:
         let enabled = aux.opcode_add_flag + aux.opcode_sub_flag;
         memory_bridge
             .write(
@@ -50,7 +74,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
                     .clone()
                     .try_into()
                     .unwrap_or_else(|_| unreachable!()),
-                timestamp.clone() + timestamp_delta.clone(),
+                timestamp + timestamp_delta.clone(),
                 aux.write_z_aux_cols,
             )
             .eval(builder, enabled.clone());
@@ -61,7 +85,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
             .write(
                 MemoryAddress::new(io.z.address_space, io.z.address),
                 [io.cmp_result],
-                timestamp.clone() + timestamp_delta.clone(),
+                timestamp + timestamp_delta.clone(),
                 aux.write_cmp_aux_cols,
             )
             .eval(builder, enabled.clone());
@@ -75,9 +99,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
             InstructionCols::new(
                 expected_opcode,
                 [
-                    io.z.address,
-                    io.x.address,
-                    io.y.address,
+                    io.z.ptr,
+                    io.x.ptr,
+                    io.y.ptr,
+                    io.d,
                     io.z.address_space,
                     io.x.address_space,
                     io.y.address_space,

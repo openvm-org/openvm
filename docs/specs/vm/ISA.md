@@ -265,11 +265,11 @@ The address spaces `d, e` are not allowed to be zero in any instructions below u
 
 #### Arithmetic Operations
 
-| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                           |
-| -------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| **ADD**  | `a, b, c`                                     | Set `w256[a]_d <- decompose(u256[b]_d + u256[c]_e)` where addition is mod `2^256`.                    |
-| **MUL**  | `a, b, c`                                     | Set `w256[a]_d <- decompose(u256[b]_d * u256[c]_e)` where multiplication is mod `2^256`.              |
-| **SUB**  | `a, b, c`                                     | Set `w256[a]_d <- decompose(u256[b]_d - u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                                       |
+| -------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **ADD**  | `a, b, c`                                     | Set `w256[[a]_d]_e <- decompose(u256[[b]_d]_f + u256[[c]_d]_g)` where addition is mod `2^256`.                    |
+| **SUB**  | `a, b, c`                                     | Set `w256[[a]_d]_e <- decompose(u256[[b]_d]_f - [u256[c]_d]_g)` where subtraction is mod `2^256` with wraparound. |
+| **MUL**  | `a, b, c`                                     | Set `w256[[a]_d]_e <- decompose(u256[[b]_d]_f * u256[[c]_d]_g)` where multiplication is mod `2^256`.              |
 
 <!--
 We don't need this yet:

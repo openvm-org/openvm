@@ -42,6 +42,10 @@ pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
+    pub x_ptr_read: MemoryReadRecord<1, T>,
+    pub y_ptr_read: MemoryReadRecord<1, T>,
+    pub z_ptr_read: MemoryReadRecord<1, T>,
+
     pub x_read: MemoryReadRecord<NUM_LIMBS, T>,
     pub y_read: MemoryReadRecord<NUM_LIMBS, T>,
     pub z_write: WriteRecord<T>,
@@ -98,12 +102,13 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
     ) -> ExecutionState<usize> {
         let Instruction {
             opcode,
-            op_a: z_address,
-            op_b: x_address,
-            op_c: y_address,
-            d: z_as,
-            e: x_as,
-            op_f: y_as,
+            op_a: a,
+            op_b: b,
+            op_c: c,
+            d,
+            e,
+            op_f: f,
+            op_g: g,
             ..
         } = instruction.clone();
         assert!(UINT256_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
@@ -115,14 +120,18 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             memory_chip.timestamp().as_canonical_u32() as usize
         );
 
-        let x_read = memory_chip.read::<NUM_LIMBS>(x_as, x_address);
-        let y_read = memory_chip.read::<NUM_LIMBS>(y_as, y_address);
+        let [z_ptr_read, x_ptr_read, y_ptr_read] =
+            [a, b, c].map(|ptr_of_ptr| memory_chip.read_cell(d, ptr_of_ptr));
+
+        let x_read = memory_chip.read::<NUM_LIMBS>(f, x_ptr_read.value());
+        let y_read = memory_chip.read::<NUM_LIMBS>(g, y_ptr_read.value());
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
         let (z, residue) = UintArithmetic::<ARG_SIZE, LIMB_SIZE, T>::solve(opcode, (&x, &y));
         let CalculationResidue { result, buffer } = residue;
 
+        let z_address_space = e;
         let z_write: WriteRecord<T> = match z {
             CalculationResult::Uint(limbs) => {
                 let to_write = limbs
@@ -130,13 +139,13 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
                     .map(|x| T::from_canonical_u32(*x))
                     .collect::<Vec<_>>();
                 WriteRecord::Uint(memory_chip.write::<NUM_LIMBS>(
-                    z_as,
-                    z_address,
+                    z_address_space,
+                    z_ptr_read.value(),
                     to_write.try_into().unwrap(),
                 ))
             }
             CalculationResult::Short(res) => {
-                WriteRecord::Short(memory_chip.write_cell(z_as, z_address, T::from_bool(res)))
+                WriteRecord::Short(memory_chip.write_cell(e, z_ptr_read.value(), T::from_bool(res)))
             }
         };
 
@@ -147,6 +156,9 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
         self.data.push(UintArithmeticRecord {
             from_state,
             instruction: instruction.clone(),
+            x_ptr_read,
+            y_ptr_read,
+            z_ptr_read,
             x_read,
             y_read,
             z_write,

@@ -142,7 +142,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 memory_chip.clone(),
             )));
             assign!(UINT256_ARITHMETIC_INSTRUCTIONS, uint_arithmetic_chip);
-            chips.push(MachineChipVariant::UintArithmetic(uint_arithmetic_chip));
+            chips.push(MachineChipVariant::U256Arithmetic(uint_arithmetic_chip));
         }
         if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
@@ -201,6 +201,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS,
                 Rc::new(RefCell::new(airs[1].0.clone()))
             );
+        }
+        // Modular multiplication also depends on U256 arithmetic.
+        if config.modular_multiplication_enabled || config.u256_arithmetic_enabled {
+            let u256_chip = Rc::new(RefCell::new(UintArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+            )));
+            chips.push(MachineChipVariant::U256Arithmetic(u256_chip.clone()));
+            assign!(UINT256_ARITHMETIC_INSTRUCTIONS, u256_chip);
         }
 
         // Most chips have a reference to the memory chip, and the memory chip has a reference to

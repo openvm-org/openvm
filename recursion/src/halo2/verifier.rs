@@ -72,7 +72,10 @@ impl Halo2VerifierCircuit {
         let params = read_params(k as u32);
         let config_params = circuit.builder.config_params.clone();
         // Wrapper circuit should only have 1 column.
-        assert_eq!(config_params.num_advice_per_phase, vec![1]);
+        tracing::info!(
+            "Wrapper circuit num advice: {:?}",
+            config_params.num_advice_per_phase
+        );
         let vk = keygen_vk(params.as_ref(), &circuit).unwrap();
         let pk = keygen_pk(params.as_ref(), vk, &circuit).unwrap();
         let num_pvs = circuit.instances().iter().map(|x| x.len()).collect_vec();

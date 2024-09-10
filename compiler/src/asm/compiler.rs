@@ -358,18 +358,18 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
-                DslIr::LessThanU256(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::LessThanU256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
-                        debug_info,
-                    );
-                }
-                DslIr::EqualToU256(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::EqualToU256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
-                        debug_info,
-                    );
-                }
+                // DslIr::LessThanU256(dst, lhs, rhs) => {
+                //     self.push(
+                //         AsmInstruction::LessThanU256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                //         debug_info,
+                //     );
+                // }
+                // DslIr::EqualToU256(dst, lhs, rhs) => {
+                //     self.push(
+                //         AsmInstruction::EqualToU256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                //         debug_info,
+                //     );
+                // }
                 DslIr::LessThanV(dst, lhs, rhs) => {
                     self.push(
                         AsmInstruction::LessThanF(dst.fp(), lhs.fp(), rhs.fp()),
@@ -379,6 +379,12 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::LessThanVI(dst, lhs, rhs) => {
                     self.push(
                         AsmInstruction::LessThanFI(dst.fp(), lhs.fp(), rhs),
+                        debug_info,
+                    );
+                }
+                DslIr::EqU256(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::EqU256(dst.fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
