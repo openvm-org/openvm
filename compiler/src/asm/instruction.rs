@@ -62,6 +62,8 @@ pub enum AsmInstruction<F, EF> {
     LessThanFI(i32, i32, F),
 
     /// U256 equal, dst = lhs == rhs.
+    /// (a, b, c) are memory pointers to (*z, *x, *y), which are
+    /// themselves memory pointers to (z, x, y) where z = (x == y ? 1 : 0)
     EqU256(i32, i32, i32),
 
     /// Add extension, dst = lhs + rhs.

@@ -114,7 +114,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
     UintArithmeticIoCols<ARG_SIZE, LIMB_SIZE, T>
 {
     pub const fn width() -> usize {
-        3 * num_limbs::<ARG_SIZE, LIMB_SIZE>() + 9
+        3 * num_limbs::<ARG_SIZE, LIMB_SIZE>() + 9 + 3 + 1
     }
 
     pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
@@ -224,6 +224,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
             .cloned()
             .collect::<Vec<_>>();
         let memory_aux_cols = [
+            self.read_ptr_aux_cols
+                .iter()
+                .flat_map(|c| c.clone().flatten())
+                .collect::<Vec<_>>(),
             self.read_x_aux_cols.clone().flatten(),
             self.read_y_aux_cols.clone().flatten(),
             self.write_z_aux_cols.clone().flatten(),

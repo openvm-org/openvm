@@ -87,23 +87,22 @@ where
     }
 
     pub fn secp256k1_coord_is_zero(&mut self, biguint: &BigUintVar<C>) -> Var<C::N> {
-        let ret = self.uninit();
+        // TODO: either EqU256 needs to support address space 0 or we just need better pointer handling here.
+        let ret_arr = self.array(1);
         // FIXME: reuse constant zero.
         let big_zero = self.eval_biguint(BigUint::zero());
         self.operations
-            .push(DslIr::EqU256(ret, biguint.clone(), big_zero));
-        self.if_eq(ret, C::N::one()).then_or_else(
-            |builder| {
-                builder.assign(&ret, C::N::one());
-            },
-            |builder| {
-                // FIXME: reuse constant.
-                let big_n = builder.eval_biguint(SECP256K1_COORD_PRIME.clone());
-                builder
-                    .operations
-                    .push(DslIr::EqU256(ret, biguint.clone(), big_n));
-            },
-        );
+            .push(DslIr::EqU256(ret_arr.ptr(), biguint.clone(), big_zero));
+        let ret: Var<_> = self.get(&ret_arr, 0);
+        self.if_ne(ret, C::N::one()).then(|builder| {
+            // FIXME: reuse constant.
+            let big_n = builder.eval_biguint(SECP256K1_COORD_PRIME.clone());
+            builder
+                .operations
+                .push(DslIr::EqU256(ret_arr.ptr(), biguint.clone(), big_n));
+            let _ret: Var<_> = builder.get(&ret_arr, 0);
+            builder.assign(&ret, _ret);
+        });
         ret
     }
 
@@ -165,23 +164,22 @@ where
     }
 
     pub fn secp256k1_scalar_is_zero(&mut self, biguint: &BigUintVar<C>) -> Var<C::N> {
-        let ret = self.uninit();
+        // TODO: either EqU256 needs to support address space 0 or we just need better pointer handling here.
+        let ret_arr = self.array(1);
         // FIXME: reuse constant zero.
         let big_zero = self.eval_biguint(BigUint::zero());
         self.operations
-            .push(DslIr::EqU256(ret, biguint.clone(), big_zero));
-        self.if_eq(ret, C::N::one()).then_or_else(
-            |builder| {
-                builder.assign(&ret, C::N::one());
-            },
-            |builder| {
-                // FIXME: reuse constant.
-                let big_n = builder.eval_biguint(SECP256K1_SCALAR_PRIME.clone());
-                builder
-                    .operations
-                    .push(DslIr::EqU256(ret, biguint.clone(), big_n));
-            },
-        );
+            .push(DslIr::EqU256(ret_arr.ptr(), biguint.clone(), big_zero));
+        let ret: Var<_> = self.get(&ret_arr, 0);
+        self.if_ne(ret, C::N::one()).then(|builder| {
+            // FIXME: reuse constant.
+            let big_n = builder.eval_biguint(SECP256K1_SCALAR_PRIME.clone());
+            builder
+                .operations
+                .push(DslIr::EqU256(ret_arr.ptr(), biguint.clone(), big_n));
+            let _ret: Var<_> = builder.get(&ret_arr, 0);
+            builder.assign(&ret, _ret);
+        });
         ret
     }
 

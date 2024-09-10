@@ -1,4 +1,4 @@
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -46,13 +46,15 @@ fn uint_arithmetic_rand_air_test() {
         let operand1 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
         let operand2 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
 
-        let result_as = rng.gen_range(address_space_range());
-        let as1 = rng.gen_range(address_space_range());
-        let as2 = rng.gen_range(address_space_range());
+        let ptr_as = rng.gen_range(address_space_range()); // d
+        let result_as = rng.gen_range(address_space_range()); // e
+        let as1 = rng.gen_range(address_space_range()); // f
+        let as2 = rng.gen_range(address_space_range()); // g
         let address1 = rng.gen_range(address_range());
         let address2 = rng.gen_range(address_range());
         let address1_ptr = rng.gen_range(address_range());
         let address2_ptr = rng.gen_range(address_range());
+        let result_ptr = rng.gen_range(address_range());
         let result_address = rng.gen_range(address_range());
 
         let operand1_f = operand1
@@ -68,9 +70,10 @@ fn uint_arithmetic_rand_air_test() {
 
         // TODO: 32 -> proper number
         tester.write::<32>(as1, address1, operand1_f.as_slice().try_into().unwrap());
-        tester.write_cell(as1, address1_ptr, F::from_canonical_usize(address1));
+        tester.write_cell(ptr_as, address1_ptr, F::from_canonical_usize(address1));
         tester.write::<32>(as2, address2, operand2_f.as_slice().try_into().unwrap());
-        tester.write_cell(as2, address2_ptr, F::from_canonical_usize(address2));
+        tester.write_cell(ptr_as, address2_ptr, F::from_canonical_usize(address2));
+        tester.write_cell(ptr_as, result_ptr, F::from_canonical_usize(result_address));
 
         let result =
             UintArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
@@ -80,9 +83,10 @@ fn uint_arithmetic_rand_air_test() {
             Instruction::from_usize(
                 opcode,
                 [
-                    result_address,
+                    result_ptr,
                     address1_ptr,
                     address2_ptr,
+                    ptr_as,
                     result_as,
                     as1,
                     as2,
@@ -134,22 +138,25 @@ fn run_bad_uint_arithmetic_test(
         .iter()
         .map(|v| F::from_canonical_u32(*v))
         .collect::<Vec<_>>();
-    tester.write::<32>(1, 0, x_f.as_slice().try_into().unwrap());
-    tester.write_cell(1, 64, F::from_canonical_usize(0));
-    tester.write::<32>(1, 32, y_f.as_slice().try_into().unwrap());
-    tester.write_cell(1, 65, F::from_canonical_usize(32));
+    let ptr_as = 1;
+    let mem_as = 2;
+    tester.write::<32>(mem_as, 0, x_f.as_slice().try_into().unwrap());
+    tester.write_cell(ptr_as, 64, F::from_canonical_usize(0));
+    tester.write::<32>(mem_as, 32, y_f.as_slice().try_into().unwrap());
+    tester.write_cell(ptr_as, 65, F::from_canonical_usize(32));
+    tester.write_cell(ptr_as, 0, F::from_canonical_usize(0));
 
     tester.execute(
         &mut chip,
         Instruction::from_usize(
             op,
             [
-                0,  // result address
-                64, // x address
-                65, // y address
-                2,  // result as
-                1,  // x as
-                1,  // y as
+                0,  // result address ptr
+                64, // x address ptr
+                65, // y address ptr
+                ptr_as, 3,      // result as
+                mem_as, // x as
+                mem_as, // y as
             ],
         ),
     );
@@ -176,9 +183,7 @@ fn run_bad_uint_arithmetic_test(
 
     let range_trace = range_checker.generate_trace();
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
         &expected_error
@@ -213,27 +218,27 @@ fn uint_add_wrong_carry_air_test() {
     );
 }
 
-// #[test]
-// fn uint_add_out_of_range_air_test() {
-//     run_bad_uint_arithmetic_test(
-//         Opcode::ADD256,
-//         std::iter::once(65_000)
-//             .chain(std::iter::repeat(0).take(31))
-//             .collect(),
-//         std::iter::once(65_000)
-//             .chain(std::iter::repeat(0).take(31))
-//             .collect(),
-//         std::iter::once(130_000)
-//             .chain(std::iter::repeat(0).take(31))
-//             .collect(),
-//         std::iter::once(0)
-//             .chain(std::iter::repeat(0).take(31))
-//             .collect(),
-//         false,
-//         false,
-//         VerificationError::NonZeroCumulativeSum,
-//     );
-// }
+#[test]
+fn uint_add_out_of_range_air_test() {
+    run_bad_uint_arithmetic_test(
+        Opcode::ADD256,
+        std::iter::once(65_000)
+            .chain(std::iter::repeat(0).take(31))
+            .collect(),
+        std::iter::once(65_000)
+            .chain(std::iter::repeat(0).take(31))
+            .collect(),
+        std::iter::once(130_000)
+            .chain(std::iter::repeat(0).take(31))
+            .collect(),
+        std::iter::once(0)
+            .chain(std::iter::repeat(0).take(31))
+            .collect(),
+        false,
+        false,
+        VerificationError::NonZeroCumulativeSum,
+    );
+}
 
 #[test]
 fn uint_add_wrong_addition_air_test() {
@@ -277,27 +282,27 @@ fn uint_add_invalid_carry_air_test() {
     );
 }
 
-// #[test]
-// fn uint_sub_out_of_range_air_test() {
-//     run_bad_uint_arithmetic_test(
-//         Opcode::SUB256,
-//         std::iter::once(1)
-//             .chain(std::iter::repeat(0).take(31))
-//             .collect(),
-//         std::iter::once(2)
-//             .chain(std::iter::repeat(0).take(31))
-//             .collect(),
-//         std::iter::once(F::neg_one().as_canonical_u32())
-//             .chain(std::iter::repeat(0).take(31))
-//             .collect(),
-//         std::iter::once(0)
-//             .chain(std::iter::repeat(0).take(31))
-//             .collect(),
-//         false,
-//         false,
-//         VerificationError::NonZeroCumulativeSum,
-//     );
-// }
+#[test]
+fn uint_sub_out_of_range_air_test() {
+    run_bad_uint_arithmetic_test(
+        Opcode::SUB256,
+        std::iter::once(1)
+            .chain(std::iter::repeat(0).take(31))
+            .collect(),
+        std::iter::once(2)
+            .chain(std::iter::repeat(0).take(31))
+            .collect(),
+        std::iter::once(F::neg_one().as_canonical_u32())
+            .chain(std::iter::repeat(0).take(31))
+            .collect(),
+        std::iter::once(0)
+            .chain(std::iter::repeat(0).take(31))
+            .collect(),
+        false,
+        false,
+        VerificationError::NonZeroCumulativeSum,
+    );
+}
 
 #[test]
 fn uint_sub_wrong_subtraction_air_test() {
