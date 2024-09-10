@@ -22,20 +22,17 @@ where
         dst
     }
 
-    // pub fn u256_lt(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
-    //     let dst = self.dyn_array(NUM_ELEMS);
-    //     self.operations.push(DslIr::LessThanU256(
-    //         dst.clone(),
-    //         left.clone(),
-    //         right.clone(),
-    //     ));
-    //     dst
-    // }
+    pub fn u256_lt(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+        let dst = self.dyn_array(NUM_ELEMS);
+        self.operations
+            .push(DslIr::LessThanU256(dst.ptr(), left.clone(), right.clone()));
+        dst
+    }
 
-    // pub fn u256_eq(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
-    //     let dst = self.dyn_array(NUM_ELEMS);
-    //     self.operations
-    //         .push(DslIr::EqualToU256(dst.clone(), left.clone(), right.clone()));
-    //     dst
-    // }
+    pub fn u256_eq(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+        let dst = self.dyn_array(NUM_ELEMS);
+        self.operations
+            .push(DslIr::EqualToU256(dst.ptr(), left.clone(), right.clone()));
+        dst
+    }
 }

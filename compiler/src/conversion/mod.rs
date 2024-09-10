@@ -785,41 +785,45 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::AddU256(dst, src1, src2) => vec![inst_med(
+        AsmInstruction::AddU256(dst, src1, src2) => vec![inst_large(
             ADD256,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
-            AS::Memory,
+            AS::Memory.to_field(),
+            AS::Memory.to_field(),
         )],
-        AsmInstruction::SubU256(dst, src1, src2) => vec![inst_med(
+        AsmInstruction::SubU256(dst, src1, src2) => vec![inst_large(
             SUB256,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
-            AS::Memory,
+            AS::Memory.to_field(),
+            AS::Memory.to_field(),
         )],
-        AsmInstruction::LessThanU256(dst, src1, src2) => vec![inst_med(
+        AsmInstruction::LessThanU256(dst, src1, src2) => vec![inst_large(
             LT256,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
-            AS::Memory,
+            AS::Memory.to_field(),
+            AS::Memory.to_field(),
         )],
-        AsmInstruction::EqualToU256(dst, src1, src2) => vec![inst_med(
+        AsmInstruction::EqualToU256(dst, src1, src2) => vec![inst_large(
             EQ256,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
-            AS::Memory,
+            AS::Memory.to_field(),
+            AS::Memory.to_field(),
         )],
         AsmInstruction::Keccak256(dst, src, len) => vec![inst_med(
             KECCAK256,

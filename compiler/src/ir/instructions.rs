@@ -128,14 +128,11 @@ pub enum DslIr<C: Config> {
     LessThanV(Var<C::N>, Var<C::N>, Var<C::N>),
     /// Compares a variable and an immediate
     LessThanVI(Var<C::N>, Var<C::N>, C::N),
-    // <<<<<<< HEAD
-    //     /// Compare two u256 for <
-    //     LessThanU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    //     /// Compare two u256 for ==
-    //     EqualToU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Compare two u256 for <
+    LessThanU256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
+    /// Compare two u256 for ==
+    EqualToU256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
     // =======
-    /// EQ comparison between two BigUint. Write 1 to output if equal, 0 otherwise.
-    EqU256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
 
     // Control flow.
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
