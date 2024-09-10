@@ -75,7 +75,8 @@ pub struct UintArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, 
     // Refer to air.rs for more details.
     pub buffer: Vec<T>,
 
-    /// Pointer read auxiliary columns for x, y, z
+    /// Pointer read auxiliary columns for [z, x, y].
+    /// **Note** the ordering, which is designed to match the instruction order.
     pub read_ptr_aux_cols: [MemoryReadAuxCols<1, T>; 3],
     // TODO: 32 -> normal thing
     pub read_x_aux_cols: MemoryReadAuxCols<32, T>,

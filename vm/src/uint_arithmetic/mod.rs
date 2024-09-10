@@ -117,7 +117,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             memory_chip.timestamp().as_canonical_u32() as usize
         );
 
-        let [x_ptr_read, y_ptr_read, z_ptr_read] =
+        let [z_ptr_read, x_ptr_read, y_ptr_read] =
             [a, b, c].map(|ptr_of_ptr| memory_chip.read_cell(d, ptr_of_ptr));
 
         let x_read = memory_chip.read::<32>(f, x_ptr_read.value()); // TODO: 32 -> generic expr or smth
@@ -128,6 +128,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
         let (z, residue) = UintArithmetic::<ARG_SIZE, LIMB_SIZE, T>::solve(opcode, (&x, &y));
         let CalculationResidue { result, buffer } = residue;
 
+        let z_address_space = e;
         let z_write: WriteRecord<T> = match z {
             CalculationResult::Uint(limbs) => {
                 let to_write = limbs
@@ -135,7 +136,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
                     .map(|x| T::from_canonical_u32(*x))
                     .collect::<Vec<_>>();
                 WriteRecord::Uint(memory_chip.write::<32>(
-                    e,
+                    z_address_space,
                     z_ptr_read.value(),
                     to_write.try_into().unwrap(),
                 ))

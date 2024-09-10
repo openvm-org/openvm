@@ -38,6 +38,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                         result,
                         buffer,
                     } = operation;
+
                     UintArithmeticCols {
                         io: UintArithmeticIoCols {
                             from_state: from_state.map(F::from_canonical_usize),
@@ -45,17 +46,20 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                                 data: x_read.data.to_vec(),
                                 address_space: x_read.address_space,
                                 address: x_read.pointer,
+                                ptr: x_ptr_read.pointer,
                             },
                             y: MemoryData {
                                 data: y_read.data.to_vec(),
                                 address_space: y_read.address_space,
                                 address: y_read.pointer,
+                                ptr: y_ptr_read.pointer,
                             },
                             z: match &z_write {
                                 WriteRecord::Uint(z) => MemoryData {
                                     data: z.data.to_vec(),
                                     address_space: z.address_space,
                                     address: z.pointer,
+                                    ptr: z_ptr_read.pointer,
                                 },
                                 WriteRecord::Short(z) => MemoryData {
                                     data: result
@@ -66,8 +70,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                                         .collect(),
                                     address_space: z.address_space,
                                     address: z.pointer,
+                                    ptr: z_ptr_read.pointer,
                                 },
                             },
+                            d: instruction.d,
                             cmp_result: match &z_write {
                                 WriteRecord::Uint(_) => F::zero(),
                                 WriteRecord::Short(z) => z.data[0],
@@ -80,6 +86,8 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                             opcode_lt_flag: F::from_bool(instruction.opcode == Opcode::LT256),
                             opcode_eq_flag: F::from_bool(instruction.opcode == Opcode::EQ256),
                             buffer: buffer.clone(),
+                            read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
+                                .map(|read| memory_chip.make_read_aux_cols(read.clone())),
                             read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),
                             read_y_aux_cols: memory_chip.make_read_aux_cols(y_read.clone()),
                             write_z_aux_cols: match &z_write {
