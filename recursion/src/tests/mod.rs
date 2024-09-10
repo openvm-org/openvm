@@ -7,7 +7,9 @@ use afs_primitives::{
 use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
     config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Config, fri_params::default_fri_params, setup_tracing,
+        baby_bear_poseidon2::BabyBearPoseidon2Config,
+        fri_params::{default_fri_params, fri_params_fast_testing},
+        setup_tracing, FriParameters,
     },
     interaction::dummy_interaction_air::DummyInteractionAir,
     utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
@@ -102,7 +104,11 @@ fn test_fibonacci() {
     // test lde = 27
     run_recursive_test(
         fibonacci_stark_for_test::<BabyBearPoseidon2Config>(1 << 24),
-        default_fri_params(),
+        FriParameters {
+            log_blowup: 3,
+            num_queries: 2,
+            proof_of_work_bits: 0,
+        },
     )
 }
 
