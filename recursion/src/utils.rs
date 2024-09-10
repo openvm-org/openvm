@@ -10,9 +10,9 @@ pub fn const_fri_config<C: Config>(
     params: &FriParameters,
 ) -> FriConfigVariable<C> {
     let two_adicity = C::F::TWO_ADICITY;
-    let generators = builder.array(two_adicity);
-    let subgroups = builder.array(two_adicity);
-    for i in 0..C::F::TWO_ADICITY {
+    let generators = builder.array(two_adicity + 1);
+    let subgroups = builder.array(two_adicity + 1);
+    for i in 0..=C::F::TWO_ADICITY {
         let constant_generator = C::F::two_adic_generator(i);
         builder.set(&generators, i, constant_generator);
 

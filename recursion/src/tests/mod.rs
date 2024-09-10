@@ -99,8 +99,9 @@ pub fn interaction_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC> 
 fn test_fibonacci() {
     setup_tracing();
 
+    // test lde = 27
     run_recursive_test(
-        fibonacci_stark_for_test::<BabyBearPoseidon2Config>(16),
+        fibonacci_stark_for_test::<BabyBearPoseidon2Config>(1 << 24),
         default_fri_params(),
     )
 }
