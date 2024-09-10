@@ -118,16 +118,6 @@ impl ModularArithmeticAir {
         3 * self.num_limbs + self.q_limbs + self.carry_limbs
     }
 
-    // fn get_carry_min_value_abs(&self) -> usize {
-    //     self.check_carry_sub_air
-    //         .check_carry_to_zero
-    //         .carry_min_value_abs
-    // }
-
-    // fn get_carry_bits(&self) -> usize {
-    //     self.check_carry_sub_air.check_carry_to_zero.carry_bits
-    // }
-
     // Converting limb from an isize to a field element.
     fn to_f<F: PrimeField64>(x: isize) -> F {
         F::from_canonical_usize(x.unsigned_abs()) * if x >= 0 { F::one() } else { F::neg_one() }

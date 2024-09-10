@@ -1,4 +1,4 @@
-use std::{ops::Neg, sync::Arc};
+use std::sync::Arc;
 
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::FromPrimitive;
@@ -11,18 +11,18 @@ use super::{
 use crate::{
     bigint::{
         check_carry_mod_to_zero::CheckCarryModToZeroCols,
-        check_carry_to_zero::get_carry_max_abs_and_bits, CanonicalUint, DefaultLimbConfig,
-        OverflowInt,
+        check_carry_to_zero::get_carry_max_abs_and_bits, utils::big_int_to_num_limbs,
+        CanonicalUint, DefaultLimbConfig, OverflowInt,
     },
-    range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
+    var_range::VariableRangeCheckerChip,
 };
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
     type LocalInput = (
         (BigUint, BigUint),
         (BigUint, BigUint),
-        Arc<RangeCheckerGateChip>,
+        Arc<VariableRangeCheckerChip>,
     );
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
@@ -51,21 +51,10 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
             CanonicalUint::<F, DefaultLimbConfig>::from_vec(limbs)
         };
         let to_overflow_int = |x: &BigUint| OverflowInt::<isize>::from(to_canonical(x));
-        let bigint_abs = |x: &BigInt| {
-            if x.sign() == Sign::Minus {
-                x.neg().to_biguint().unwrap()
-            } else {
-                x.to_biguint().unwrap()
-            }
-        };
-        let range_check = |bits: usize, value: usize| {
-            let value = value as u32;
-            if bits == self.decomp {
-                range_checker.add_count(value);
-            } else {
-                range_checker.add_count(value);
-                range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
-            }
+        let to_overflow_q = |q_limbs: Vec<isize>| OverflowInt {
+            limbs: q_limbs,
+            max_overflow_bits: self.limb_bits + 1,
+            limb_max_abs: (1 << self.limb_bits),
         };
 
         // ===== λ =====
@@ -76,7 +65,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
         let dx_inv = dx.modpow(&exp, &self.prime);
         let lambda = dy.clone() * dx_inv % self.prime.clone();
         // Compute the quotient and carries of expr: λ * (x2 - x1) - y2 + y1.
-        // expr can be positive or negative, but we need the quotient to be non-negative.
+        // expr can be positive or negative, so does q.
         let lambda_signed = BigInt::from_biguint(Sign::Plus, lambda.clone());
         let x1_signed = BigInt::from_biguint(Sign::Plus, x1.clone());
         let x2_signed = BigInt::from_biguint(Sign::Plus, x2.clone());
@@ -87,11 +76,10 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
             (lambda_signed.clone() * (x2_signed.clone() - x1_signed.clone()) - y2_signed
                 + y1_signed.clone())
                 / prime_signed.clone();
-        let lambda_q_sign = lambda_q_signed.sign();
-        let lambda_q_abs = bigint_abs(&lambda_q_signed);
-        let lambda_q = to_canonical(&lambda_q_abs);
-        for &q in lambda_q.limbs.iter() {
-            range_check(self.limb_bits, q as usize);
+        let lambda_q_limbs: Vec<isize> =
+            big_int_to_num_limbs(lambda_q_signed, self.limb_bits, self.num_limbs);
+        for &q in lambda_q_limbs.iter() {
+            range_checker.add_count((q + (1 << self.limb_bits)) as u32, self.limb_bits + 1);
         }
         // carries for expr: abs(λ * (x2 - x1) - y2 + y1) - λ_q * p
         let lambda_overflow = to_overflow_int(&lambda);
@@ -99,23 +87,18 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
         let x2_overflow = to_overflow_int(&x2);
         let y1_overflow = to_overflow_int(&y1);
         let y2_overflow = to_overflow_int(&y2);
-        let lambda_q_overflow = to_overflow_int(&lambda_q_abs);
+        let lambda_q_overflow = to_overflow_q(lambda_q_limbs.clone());
         let prime_overflow = to_overflow_int(&self.prime);
         // Taking abs of λ * (x2 - x1) - y2 + y1
-        let expr = if lambda_q_sign == Sign::Minus {
-            y2_overflow
-                - y1_overflow.clone()
-                - lambda_overflow.clone() * (x2_overflow.clone() - x1_overflow.clone())
-        } else {
-            lambda_overflow.clone() * (x2_overflow.clone() - x1_overflow.clone()) - y2_overflow
-                + y1_overflow.clone()
-        };
+        let expr = lambda_overflow.clone() * (x2_overflow.clone() - x1_overflow.clone())
+            - y2_overflow
+            + y1_overflow.clone();
         let expr = expr - lambda_q_overflow * prime_overflow.clone();
         let lambda_carries = expr.calculate_carries(self.limb_bits);
         let (carry_min_abs, carry_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         for &carry in lambda_carries.iter() {
-            range_check(carry_bits, (carry + carry_min_abs as isize) as usize);
+            range_checker.add_count((carry + carry_min_abs as isize) as u32, carry_bits);
         }
 
         // ===== x3 =====
@@ -131,15 +114,14 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
             - x2_signed.clone()
             - x3_signed.clone())
             / prime_signed.clone();
-        let x3_q_sign = x3_q_signed.sign();
-        let x3_q_abs = bigint_abs(&x3_q_signed);
-        let x3_q = to_canonical(&x3_q_abs);
-        for &q in x3_q.limbs.iter() {
-            range_check(self.limb_bits, q as usize);
+        let x3_q_limbs: Vec<isize> =
+            big_int_to_num_limbs(x3_q_signed, self.limb_bits, self.num_limbs);
+        for &q in x3_q_limbs.iter() {
+            range_checker.add_count((q + (1 << self.limb_bits)) as u32, self.limb_bits + 1);
         }
         // carries for expr: λ * λ - x1 - x2 - x3 - x3_q * p
         let x3_overflow = to_overflow_int(&x3);
-        let x3_q_overflow = to_overflow_int(&x3_q_abs);
+        let x3_q_overflow = to_overflow_q(x3_q_limbs.clone());
         let expr: OverflowInt<isize> = lambda_overflow.clone() * lambda_overflow.clone()
             - x1_overflow.clone()
             - x2_overflow.clone()
@@ -149,7 +131,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
         let (carry_min_abs, carry_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         for &carry in x3_carries.iter() {
-            range_check(carry_bits, (carry + carry_min_abs as isize) as usize);
+            range_checker.add_count((carry + carry_min_abs as isize) as u32, carry_bits);
         }
 
         // ===== y3 =====
@@ -163,15 +145,14 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
         let y3_q_signed = (y3_signed + lambda_signed.clone() * x3_signed + y1_signed
             - lambda_signed * x1_signed)
             / prime_signed;
-        let y3_q_sign = y3_q_signed.sign();
-        let y3_q_abs = bigint_abs(&y3_q_signed);
-        let y3_q = to_canonical(&y3_q_abs);
-        for &q in y3_q.limbs.iter() {
-            range_check(self.limb_bits, q as usize);
+        let y3_q_limbs: Vec<isize> =
+            big_int_to_num_limbs(y3_q_signed, self.limb_bits, self.num_limbs);
+        for &q in y3_q_limbs.iter() {
+            range_checker.add_count((q + (1 << self.limb_bits)) as u32, self.limb_bits + 1);
         }
         // carries for expr: y3 + λ * x3 + y1 - λ * x1 - y3_q * p
         let y3_overflow = to_overflow_int(&y3);
-        let y3_q_overflow = to_overflow_int(&y3_q_abs);
+        let y3_q_overflow = to_overflow_q(y3_q_limbs.clone());
         let expr: OverflowInt<isize> =
             y3_overflow + lambda_overflow.clone() * x3_overflow.clone() + y1_overflow.clone()
                 - lambda_overflow.clone() * x1_overflow.clone()
@@ -180,7 +161,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
         let (carry_min_abs, carry_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         for &carry in y3_carries.iter() {
-            range_check(carry_bits, (carry + carry_min_abs as isize) as usize);
+            range_checker.add_count((carry + carry_min_abs as isize) as u32, carry_bits);
         }
 
         let io = EcAddIoCols {
@@ -202,30 +183,15 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
             lambda: vec_isize_to_f(lambda_overflow.limbs),
             lambda_check: CheckCarryModToZeroCols {
                 carries: vec_isize_to_f(lambda_carries),
-                quotient: vec_isize_to_f(lambda_q.limbs),
-            },
-            lambda_expr_sign: if lambda_q_sign == Sign::Minus {
-                F::one()
-            } else {
-                F::zero()
+                quotient: vec_isize_to_f(lambda_q_limbs),
             },
             x3_check: CheckCarryModToZeroCols {
                 carries: vec_isize_to_f(x3_carries),
-                quotient: vec_isize_to_f(x3_q.limbs),
-            },
-            x3_expr_sign: if x3_q_sign == Sign::Minus {
-                F::one()
-            } else {
-                F::zero()
+                quotient: vec_isize_to_f(x3_q_limbs),
             },
             y3_check: CheckCarryModToZeroCols {
                 carries: vec_isize_to_f(y3_carries),
-                quotient: vec_isize_to_f(y3_q.limbs),
-            },
-            y3_expr_sign: if y3_q_sign == Sign::Minus {
-                F::one()
-            } else {
-                F::zero()
+                quotient: vec_isize_to_f(y3_q_limbs),
             },
         };
 

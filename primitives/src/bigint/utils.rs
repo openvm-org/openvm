@@ -129,6 +129,16 @@ pub fn big_int_to_limbs(x: BigInt, limb_bits: usize) -> Vec<isize> {
     }
 }
 
+pub fn big_int_to_num_limbs(x: BigInt, limb_bits: usize, num_limbs: usize) -> Vec<isize> {
+    let limbs = big_int_to_limbs(x, limb_bits);
+    limbs
+        .iter()
+        .chain(repeat(&0))
+        .take(num_limbs)
+        .copied()
+        .collect()
+}
+
 pub fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
     deque
         .drain(..limb_size.min(deque.len()))

@@ -12,9 +12,8 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::EccAir;
 use crate::{
     bigint::{utils::secp256k1_prime, DefaultLimbConfig, LimbConfig},
-    range::bus::RangeCheckBus,
-    range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 
 lazy_static! {
@@ -44,14 +43,14 @@ lazy_static! {
     };
 }
 
-fn get_air_and_range_checker() -> (EccAir, Arc<RangeCheckerGateChip>) {
+fn get_air_and_range_checker() -> (EccAir, Arc<VariableRangeCheckerChip>) {
     let prime = secp256k1_prime();
     let b = BigUint::from_u32(7).unwrap();
     let range_bus = 1;
     let range_decomp = 18;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
         range_bus,
-        1 << range_decomp,
+        range_decomp,
     )));
     let limb_bits = DefaultLimbConfig::limb_bits();
     let field_element_bits = 30;
