@@ -776,9 +776,9 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::AddU256(dst, src1, src2) => vec![inst_med(
             ADD256,
+            i32_f(dst),
             i32_f(src1),
             i32_f(src2),
-            i32_f(dst),
             AS::Memory,
             AS::Memory,
             AS::Memory,
