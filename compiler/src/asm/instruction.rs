@@ -61,6 +61,9 @@ pub enum AsmInstruction<F, EF> {
     /// Less than immediate, dst = lhs < rhs.
     LessThanFI(i32, i32, F),
 
+    /// U256 equal, dst = lhs == rhs.
+    EqU256(i32, i32, i32),
+
     /// Add extension, dst = lhs + rhs.
     AddE(i32, i32, i32),
 
@@ -257,6 +260,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::LessThanFI(dst, lhs, rhs) => {
                 write!(f, "lti  ({})fp, ({})fp, {}", dst, lhs, rhs)
+            }
+            AsmInstruction::EqU256(dst, lhs, rhs) => {
+                write!(f, "eq  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
             AsmInstruction::AddE(dst, lhs, rhs) => {
                 write!(f, "eadd ({})fp, ({})fp, ({})fp", dst, lhs, rhs)

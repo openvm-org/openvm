@@ -19,6 +19,7 @@ use crate::{
     memory::manager::MemoryChipRef,
     modular_multiplication::ModularArithmeticChip,
     program::ProgramChip,
+    uint_arithmetic::UintArithmeticChip,
 };
 
 #[enum_dispatch]
@@ -92,6 +93,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ModularArithmetic(Rc<RefCell<ModularArithmeticChip<F>>>),
+    U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
 }
 
 #[derive(Debug, IntoStaticStr)]
@@ -106,6 +108,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     RangeChecker(Arc<VariableRangeCheckerChip>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
+    U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
 }
 
 impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {

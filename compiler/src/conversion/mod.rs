@@ -159,6 +159,15 @@ fn convert_comparison_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Immediate,
         )],
+        AsmInstruction::EqU256(dst, lhs, rhs) => vec![inst_med(
+            EQ256,
+            i32_f(dst),
+            i32_f(lhs),
+            i32_f(rhs),
+            AS::Memory,
+            AS::Memory,
+            AS::Memory,
+        )],
         _ => panic!(
             "Illegal argument to convert_comparison_instruction: {:?}",
             instruction
@@ -681,6 +690,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 )
             }
         }
+        AsmInstruction::EqU256(..) => convert_comparison_instruction(instruction),
         AsmInstruction::AddE(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::MulE(..)

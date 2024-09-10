@@ -28,17 +28,19 @@ pub const fn num_limbs<const ARG_SIZE: usize, const LIMB_SIZE: usize>() -> usize
     (ARG_SIZE + LIMB_SIZE - 1) / LIMB_SIZE
 }
 
+#[derive(Debug)]
 pub enum WriteRecord<T> {
-    Uint(MemoryWriteRecord<16, T>),
+    Uint(MemoryWriteRecord<32, T>),
     Short(MemoryWriteRecord<1, T>),
 }
 
+#[derive(Debug)]
 pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
-    pub x_read: MemoryReadRecord<16, T>, // TODO: 16 -> generic expr or smth
-    pub y_read: MemoryReadRecord<16, T>, // TODO: 16 -> generic expr or smth
+    pub x_read: MemoryReadRecord<32, T>, // TODO: 32 -> generic expr or smth
+    pub y_read: MemoryReadRecord<32, T>, // TODO: 32 -> generic expr or smth
     pub z_write: WriteRecord<T>,
 
     // this may be redundant because we can extract it from z_write,
@@ -48,6 +50,7 @@ pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T
     pub buffer: Vec<T>,
 }
 
+#[derive(Debug)]
 pub struct UintArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> {
     pub air: UintArithmeticAir<ARG_SIZE, LIMB_SIZE>,
     data: Vec<UintArithmeticRecord<ARG_SIZE, LIMB_SIZE, T>>,
@@ -93,8 +96,8 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
         let Instruction {
             opcode,
             op_a: z_address,
-            op_b: x_address,
-            op_c: y_address,
+            op_b: x_ptr_address,
+            op_c: y_ptr_address,
             d: z_as,
             e: x_as,
             op_f: y_as,
@@ -109,8 +112,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             memory_chip.timestamp().as_canonical_u32() as usize
         );
 
-        let x_read = memory_chip.read::<16>(x_as, x_address); // TODO: 16 -> generic expr or smth
-        let y_read = memory_chip.read::<16>(y_as, y_address); // TODO: 16 -> generic expr or smth
+        let x_address = memory_chip.read_cell(x_as, x_ptr_address).value();
+        let y_address = memory_chip.read_cell(y_as, y_ptr_address).value();
+
+        let x_read = memory_chip.read::<32>(x_as, x_address); // TODO: 32 -> generic expr or smth
+        let y_read = memory_chip.read::<32>(y_as, y_address); // TODO: 32 -> generic expr or smth
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
@@ -123,7 +129,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
                     .iter()
                     .map(|x| T::from_canonical_u32(*x))
                     .collect::<Vec<_>>();
-                WriteRecord::Uint(memory_chip.write::<16>(
+                WriteRecord::Uint(memory_chip.write::<32>(
                     z_as,
                     z_address,
                     to_write.try_into().unwrap(),

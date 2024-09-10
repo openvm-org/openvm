@@ -16,21 +16,6 @@ use crate::{
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip<F>
     for UintArithmeticChip<ARG_SIZE, LIMB_SIZE, F>
 {
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.data.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width(&self.air)
-    }
-
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let memory_chip = self.memory_chip.borrow();
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
@@ -133,5 +118,20 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
         padded_rows.extend(std::iter::repeat(blank_row).take(padded_height - height));
 
         RowMajorMatrix::new(padded_rows.concat(), width)
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        Box::new(self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.data.len()
+    }
+
+    fn trace_width(&self) -> usize {
+        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width(&self.air)
     }
 }
