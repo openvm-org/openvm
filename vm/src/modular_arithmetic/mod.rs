@@ -25,6 +25,9 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+#[cfg(test)]
+mod tests;
+
 // Current assumption: modulus is 256 bits.
 // We use 8-bits limb, and so 32 limbs for each operand.
 // TODO: maybe use const generic.
@@ -138,21 +141,28 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T> {
         let y_biguint = limbs_to_biguint(&y);
 
         let z_biguint = match opcode {
-            Opcode::SECP256K1_COORD_ADD => (x_biguint + y_biguint) % &self.modulus,
-            Opcode::SECP256K1_COORD_SUB => {
+            Opcode::SECP256K1_COORD_ADD | Opcode::SECP256K1_SCALAR_ADD => {
+                (x_biguint + y_biguint) % &self.modulus
+            }
+            Opcode::SECP256K1_COORD_SUB | Opcode::SECP256K1_SCALAR_SUB => {
                 while x_biguint < y_biguint {
                     x_biguint += &self.modulus;
                 }
                 (x_biguint - y_biguint) % &self.modulus
             }
-            Opcode::SECP256K1_COORD_MUL => (x_biguint * y_biguint) % &self.modulus,
-            Opcode::SECP256K1_COORD_DIV => {
+            Opcode::SECP256K1_COORD_MUL | Opcode::SECP256K1_SCALAR_MUL => {
+                (x_biguint * y_biguint) % &self.modulus
+            }
+            Opcode::SECP256K1_COORD_DIV | Opcode::SECP256K1_SCALAR_DIV => {
                 let exp = &self.modulus - BigUint::from_u8(2).unwrap();
                 let y_inv = y_biguint.modpow(&exp, &self.modulus);
 
                 (x_biguint * y_inv) % &self.modulus
             }
-            _ => unreachable!(),
+            _ => {
+                println!("op {:?}", opcode);
+                unreachable!()
+            }
         };
         let z_limbs = biguint_to_limbs(z_biguint);
 

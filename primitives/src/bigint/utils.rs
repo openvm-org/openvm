@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::Neg};
+use std::{collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{BigInt, BigUint, Sign};
@@ -29,6 +29,21 @@ pub fn secp256k1_prime() -> BigUint {
         result -= BigUint::one() << power;
     }
     result
+}
+
+pub fn secp256k1_coord_prime() -> BigUint {
+    let mut result = BigUint::one() << 256;
+    for power in [32, 9, 8, 7, 6, 4, 0] {
+        result -= BigUint::one() << power;
+    }
+    result
+}
+
+pub fn secp256k1_scalar_prime() -> BigUint {
+    BigUint::from_str(
+        "115792089237316195423570985008687907852837564279074904382605163141518161494337",
+    )
+    .unwrap()
 }
 
 pub fn get_arithmetic_air(
@@ -102,6 +117,16 @@ pub fn big_uint_to_limbs(x: BigUint, limb_bits: usize) -> Vec<usize> {
 
     (0..total_limbs)
         .map(|_| take_limb(&mut modulus_bits, limb_bits))
+        .collect()
+}
+
+pub fn big_uint_to_num_limbs(x: BigUint, limb_bits: usize, num_limbs: usize) -> Vec<usize> {
+    let limbs = big_uint_to_limbs(x, limb_bits);
+    limbs
+        .iter()
+        .chain(repeat(&0))
+        .take(num_limbs)
+        .copied()
         .collect()
 }
 

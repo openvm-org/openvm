@@ -36,6 +36,7 @@ use crate::{
         manager::{MemoryChip, MemoryChipRef},
         offline_checker::bus::MemoryBus,
     },
+    modular_arithmetic::ModularArithmeticChip as NewModularArithmeticChip,
     modular_multiplication::{
         ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
     },
@@ -163,35 +164,50 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
         if config.modular_multiplication_enabled {
             let airs = vec![
-                (
-                    ModularArithmeticChip::new(
-                        memory_chip.clone(),
-                        SECP256K1_COORD_PRIME.clone(),
-                        config.bigint_limb_size,
-                    ),
+                ModularArithmeticChip::new(
+                    memory_chip.clone(),
                     SECP256K1_COORD_PRIME.clone(),
+                    config.bigint_limb_size,
                 ),
-                (
-                    ModularArithmeticChip::new(
-                        memory_chip.clone(),
-                        SECP256K1_SCALAR_PRIME.clone(),
-                        config.bigint_limb_size,
-                    ),
+                ModularArithmeticChip::new(
+                    memory_chip.clone(),
                     SECP256K1_SCALAR_PRIME.clone(),
+                    config.bigint_limb_size,
                 ),
             ];
-            // let mut modular_arithmetic_chips = BTreeMap::new();
-            // for (air, modulus) in airs {
-            //     assign!(MODULAR_ARITHMETIC_INSTRUCTIONS,);
-            //     modular_arithmetic_chips.insert(modulus.clone(), air);
-            // }
+            let _new_air_coord = NewModularArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                SECP256K1_COORD_PRIME.clone(),
+            );
+            let _new_air_scalar = NewModularArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                SECP256K1_SCALAR_PRIME.clone(),
+            );
+            // FIXME: move to new_airs
+            // Right new air only supports ADD, but we have new air for ADD and old air for others
+            // because they have different limb_bits.
+            // assign!(
+            //     [Opcode::SECP256K1_COORD_ADD],
+            //     Rc::new(RefCell::new(new_air_coord.clone()))
+            // );
+            // assign!(
+            //     [Opcode::SECP256K1_SCALAR_ADD],
+            //     Rc::new(RefCell::new(new_air_scalar.clone()))
+            // );
+
             assign!(
-                SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS,
-                Rc::new(RefCell::new(airs[0].0.clone()))
+                SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS[0..]
+                    .iter()
+                    .copied(),
+                Rc::new(RefCell::new(airs[0].clone()))
             );
             assign!(
-                SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS,
-                Rc::new(RefCell::new(airs[1].0.clone()))
+                SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS[0..]
+                    .iter()
+                    .copied(),
+                Rc::new(RefCell::new(airs[1].clone()))
             );
         }
         // Modular multiplication also depends on U256 arithmetic.
