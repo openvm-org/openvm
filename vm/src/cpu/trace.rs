@@ -7,6 +7,7 @@ use std::{
 
 use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::rap::AnyRap;
+use backtrace::Backtrace;
 use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
@@ -219,6 +220,8 @@ impl<F: PrimeField32> CpuChip<F> {
         let mut cycle_tracker = std::mem::take(&mut vm.cycle_tracker);
         let mut is_done = false;
         let mut collect_metrics = vm.config.collect_metrics;
+        // The backtrace for the previous instruction, if any.
+        let mut prev_backtrace: Option<Backtrace> = None;
 
         let cpu_options = vm.cpu_chip.borrow().air.options;
         let num_public_values = cpu_options.num_public_values;
@@ -230,8 +233,8 @@ impl<F: PrimeField32> CpuChip<F> {
                 vm.program_chip.borrow_mut().get_instruction(pc_usize)?;
             tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
 
-            let dsl_instr = match debug_info {
-                Some(debug_info) => debug_info.dsl_instruction,
+            let dsl_instr = match &debug_info {
+                Some(debug_info) => debug_info.dsl_instruction.to_string(),
                 None => String::new(),
             };
 
@@ -283,6 +286,12 @@ impl<F: PrimeField32> CpuChip<F> {
             }
 
             if opcode == FAIL {
+                if let Some(mut backtrace) = prev_backtrace {
+                    backtrace.resolve();
+                    eprintln!("eDSL program failure; backtrace:\n{:?}", backtrace);
+                } else {
+                    eprintln!("eDSL program failure; no backtrace");
+                }
                 return Err(ExecutionError::Fail(pc_usize));
             }
 
@@ -521,6 +530,8 @@ impl<F: PrimeField32> CpuChip<F> {
                     .and_modify(|count| *count += added_trace_cells)
                     .or_insert(added_trace_cells);
             }
+
+            prev_backtrace = debug_info.and_then(|debug_info| debug_info.trace);
 
             pc = next_pc;
 

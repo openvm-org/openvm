@@ -47,21 +47,14 @@ impl<T> TracedVec<T> {
         self.traces.push(None);
     }
 
-    /// Pushes a value to the vector and records a backtrace if SP1_DEBUG is enabled
+    /// Pushes a value to the vector and records a backtrace if RUST_BACKTRACE is enabled
     pub fn trace_push(&mut self, value: T) {
         self.vec.push(value);
-        match std::env::var("SP1_DEBUG")
-            .unwrap_or("false".to_string())
-            .to_lowercase()
-            .as_str()
-        {
-            "true" => {
-                self.traces.push(Some(Backtrace::new_unresolved()));
-            }
-            _ => {
-                self.traces.push(None);
-            }
-        };
+        if std::env::var_os("RUST_BACKTRACE").is_none() {
+            self.traces.push(None);
+        } else {
+            self.traces.push(Some(Backtrace::new_unresolved()));
+        }
     }
 
     pub fn extend<I: IntoIterator<Item = (T, Option<Backtrace>)>>(&mut self, iter: I) {
