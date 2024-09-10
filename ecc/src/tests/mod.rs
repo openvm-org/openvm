@@ -5,7 +5,9 @@ use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 
-use crate::ec_mul::{scalar_multiply, EcPoint};
+use crate::{ec_mul::scalar_multiply_secp256k1, types::ECPointVariable};
+
+mod ecdsa;
 
 // Please note that these tests are for y^2 = x^3 - 7, which is easier. It has the same scalar field.
 
@@ -25,12 +27,12 @@ fn test_ec_mul(
     let y2_var = builder.eval_biguint(point_2.1);
     let s = builder.eval_biguint(scalar);
 
-    let EcPoint {
+    let ECPointVariable {
         x: x3_var,
         y: y3_var,
-    } = scalar_multiply(
+    } = scalar_multiply_secp256k1(
         &mut builder,
-        &EcPoint {
+        &ECPointVariable {
             x: x1_var,
             y: y1_var,
         },

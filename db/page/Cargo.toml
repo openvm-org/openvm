@@ -22,8 +22,8 @@ parking_lot = "0.12.2"
 tracing.workspace = true
 itertools.workspace = true
 getset = "0.1.2"
-bincode = "1.3.3"
-serde = { version = "1.0", default-features = false, features = ["derive"] }
+bincode = { workspace = true }
+serde = { workspace = true }
 derive_more = "0.99.18"
 hex = "0.4.3"
 

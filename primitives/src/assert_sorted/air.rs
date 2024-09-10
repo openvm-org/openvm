@@ -8,7 +8,7 @@ use p3_matrix::Matrix;
 use super::columns::AssertSortedCols;
 use crate::{
     is_less_than_tuple::{columns::IsLessThanTupleIoCols, IsLessThanTupleAir},
-    range::bus::RangeCheckBus,
+    var_range::bus::VariableRangeCheckerBus,
 };
 
 #[derive(Clone, Debug)]
@@ -17,11 +17,11 @@ pub struct AssertSortedAir {
 }
 
 impl AssertSortedAir {
-    pub fn new(bus: RangeCheckBus, limb_bits: Vec<usize>, decomp: usize) -> Self {
+    pub fn new(bus: VariableRangeCheckerBus, limb_bits: Vec<usize>) -> Self {
         // We do not enable interactions for IsLessThanTupleAir because that AIR assumes
         // that `x, y` are on the same row. We will separately enable interactions for this Air.
         Self {
-            is_less_than_tuple_air: IsLessThanTupleAir::new(bus, limb_bits, decomp),
+            is_less_than_tuple_air: IsLessThanTupleAir::new(bus, limb_bits),
         }
     }
 }
@@ -30,7 +30,7 @@ impl<F: Field> BaseAir<F> for AssertSortedAir {
     fn width(&self) -> usize {
         AssertSortedCols::<F>::get_width(
             &self.is_less_than_tuple_air.limb_bits,
-            self.is_less_than_tuple_air.decomp,
+            self.is_less_than_tuple_air.range_max_bits,
         )
     }
 }
@@ -47,13 +47,13 @@ impl<AB: InteractionBuilder> Air<AB> for AssertSortedAir {
         let local_cols = AssertSortedCols::from_slice(
             local,
             &self.is_less_than_tuple_air.limb_bits,
-            self.is_less_than_tuple_air.decomp,
+            self.is_less_than_tuple_air.range_max_bits,
         );
 
         let next_cols = AssertSortedCols::from_slice(
             next,
             &self.is_less_than_tuple_air.limb_bits,
-            self.is_less_than_tuple_air.decomp,
+            self.is_less_than_tuple_air.range_max_bits,
         );
 
         // constrain that the current key is less than the next

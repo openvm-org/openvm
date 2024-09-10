@@ -13,12 +13,11 @@ use rand::RngCore;
 use super::super::{
     check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
     utils::{big_uint_to_limbs, secp256k1_prime},
-    OverflowInt,
+    CanonicalUint, DefaultLimbConfig, OverflowInt,
 };
 use crate::{
-    range::bus::RangeCheckBus,
-    range_gate::RangeCheckerGateChip,
     sub_chip::{AirConfig, LocalTraceInstructions},
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 
 // Testing AIR:
@@ -111,32 +110,29 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
-    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
+    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let range_check = |bits: usize, value: usize| {
-            let value = value as u32;
-            if bits == self.decomp {
-                range_checker.add_count(value);
-            } else {
-                range_checker.add_count(value);
-                range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
-            }
-        };
 
         let quotient = (x.clone() * x.clone() + y.clone()) / self.modulus.clone();
         let q_limb = big_uint_to_limbs(quotient.clone(), self.limb_bits);
         for &q in q_limb.iter() {
-            range_check(self.limb_bits, q);
+            range_checker.add_count((q + (1 << self.limb_bits)) as u32, self.limb_bits + 1);
         }
         let quotient_f: Vec<F> = q_limb.iter().map(|&x| F::from_canonical_usize(x)).collect();
-        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
-        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits, Some(2 * N));
-        let q_overflow = OverflowInt::<isize>::from_big_uint(quotient, self.limb_bits, None);
+        let x_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(x, Some(N));
+        let x_overflow: OverflowInt<isize> = x_canonical.into();
+        let y_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(y, Some(2 * N));
+        let y_overflow: OverflowInt<isize> = y_canonical.into();
+        let q_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(quotient, None);
+        let q_overflow: OverflowInt<isize> = q_canonical.into();
         assert_eq!(q_overflow.limbs.len(), 1);
-        let p_overflow =
-            OverflowInt::<isize>::from_big_uint(self.modulus.clone(), self.limb_bits, Some(N * 2));
+        let p_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(
+            self.modulus.clone(),
+            Some(N * 2),
+        );
+        let p_overflow: OverflowInt<isize> = p_canonical.into();
         let expr =
             x_overflow.clone() * x_overflow.clone() + y_overflow.clone() - p_overflow * q_overflow;
         let carries = expr.calculate_carries(self.limb_bits);
@@ -146,9 +142,9 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
             .check_carry_to_zero
             .carry_min_value_abs as isize;
         for (i, &carry) in carries.iter().enumerate() {
-            range_check(
+            range_checker.add_count(
+                (carry + carry_min_abs) as u32,
                 self.test_carry_sub_air.check_carry_to_zero.carry_bits,
-                (carry + carry_min_abs) as usize,
             );
             carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
@@ -184,9 +180,9 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
 
     let range_bus = 1;
     let range_decomp = 16;
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
         range_bus,
-        1 << range_decomp,
+        range_decomp,
     )));
     let check_carry_sub_air = CheckCarryModToZeroSubAir::new(
         prime.clone(),
@@ -216,13 +212,17 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     .expect("Verification failed");
 }
 
-#[test]
-fn test_check_carry_mod_zero() {
-    let prime = secp256k1_prime();
+fn get_random_biguint() -> BigUint {
     let mut rng = create_seeded_rng();
     let x_len = 4; // in bytes -> 128 bits.
     let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
-    let x = BigUint::new(x_bytes);
+    BigUint::new(x_bytes)
+}
+
+#[test]
+fn test_check_carry_mod_zero() {
+    let prime = secp256k1_prime();
+    let x = get_random_biguint();
     let x_square = x.clone() * x.clone();
     let mut next_p = prime.clone();
     while next_p < x_square {
@@ -236,10 +236,7 @@ fn test_check_carry_mod_zero() {
 #[test]
 fn test_check_carry_mod_zero_fail() {
     let prime = secp256k1_prime();
-    let mut rng = create_seeded_rng();
-    let x_len = 4; // in bytes -> 128 bits.
-    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
-    let x = BigUint::new(x_bytes);
+    let x = get_random_biguint();
     let x_square = x.clone() * x.clone();
     let mut next_p = prime.clone();
     while next_p < x_square {

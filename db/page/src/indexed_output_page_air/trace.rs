@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use afs_primitives::{
-    is_less_than_tuple::columns::IsLessThanTupleCols, range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions,
+    is_less_than_tuple::columns::IsLessThanTupleCols, sub_chip::LocalTraceInstructions,
+    var_range::VariableRangeCheckerChip,
 };
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
@@ -25,7 +25,7 @@ impl IndexedOutputPageAir {
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
         page: &Page,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> RowMajorMatrix<Val<SC>>
     where
         Val<SC>: PrimeField,

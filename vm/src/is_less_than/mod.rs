@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use afs_primitives::{
     is_less_than::{columns::IsLessThanCols, IsLessThanAir},
-    range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
+    var_range::VariableRangeCheckerChip,
 };
 use columns::IsLessThanVmCols;
 use p3_field::PrimeField32;
@@ -23,7 +23,7 @@ pub struct IsLessThanVmAir {
 
 pub struct IsLessThanChip<F: PrimeField32> {
     pub air: IsLessThanVmAir,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
     pub rows: Vec<IsLessThanVmCols<F>>,
 }
 
@@ -32,7 +32,7 @@ impl<F: PrimeField32> IsLessThanChip<F> {
         bus_index: usize,
         max_bits: usize,
         decomp: usize,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
             air: IsLessThanVmAir {

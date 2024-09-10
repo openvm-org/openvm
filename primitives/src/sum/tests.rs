@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::to_field_vec,
@@ -11,20 +11,22 @@ use p3_field::AbstractField;
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 
 use crate::{
-    is_less_than::columns::IsLessThanCols, range::bus::RangeCheckBus,
-    range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions, sum::SumChip,
+    is_less_than::columns::IsLessThanCols,
+    sub_chip::LocalTraceInstructions,
+    sum::SumChip,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 
 const INPUT_BUS: usize = 0;
 const OUTPUT_BUS: usize = 1;
 const RANGE_BUS: usize = 2;
-const RANGE_MAX: u32 = 16;
+const RANGE_MAX_BITS: usize = 4;
 
 fn assert_verification_error(
     result: impl FnOnce() -> Result<(), VerificationError>,
     expected_error: VerificationError,
 ) {
-    USE_DEBUG_BUILDER.with(|debug| *debug.lock().unwrap() = false);
+    disable_debug_builder();
     assert_eq!(result(), Err(expected_error));
 }
 
@@ -52,10 +54,11 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
         receiver_air.field_width() + 1,
     );
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
-        RANGE_BUS, RANGE_MAX,
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+        RANGE_BUS,
+        RANGE_MAX_BITS,
     )));
-    let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, 4, range_checker);
+    let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, RANGE_MAX_BITS, range_checker);
 
     let mut rows: Vec<Vec<BabyBear>> = Vec::new();
     for i in 0..sum_trace_u32.len() {

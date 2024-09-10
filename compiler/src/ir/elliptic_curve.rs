@@ -2,7 +2,7 @@ use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use p3_field::{AbstractField, PrimeField64};
 
-use crate::ir::{modular_arithmetic::BigUintVar, Builder, Config};
+use crate::ir::{modular_arithmetic::BigUintVar, Builder, Config, Var};
 
 impl<C: Config> Builder<C>
 where
@@ -97,5 +97,15 @@ where
         );
 
         (result_x, result_y)
+    }
+
+    /// Assert (x, y) is on the curve.
+    pub fn ec_is_on_curve(&mut self, x: &BigUintVar<C>, y: &BigUintVar<C>) -> Var<C::N> {
+        let x2 = self.secp256k1_coord_mul(x, x);
+        let x3 = self.secp256k1_coord_mul(&x2, x);
+        let c7 = self.eval_biguint(7u64.into());
+        let x3_plus_7 = self.secp256k1_coord_add(&x3, &c7);
+        let y2 = self.secp256k1_coord_mul(y, y);
+        self.secp256k1_coord_eq(&y2, &x3_plus_7)
     }
 }

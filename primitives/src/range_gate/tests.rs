@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
+use afs_stark_backend::{rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
     config::baby_bear_blake3::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
@@ -95,9 +95,7 @@ fn negative_test_range_gate_chip() {
         2,
     );
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         run_simple_test_no_pis(vec![&range_checker.air], vec![range_trace]),
         Err(VerificationError::OodEvaluationMismatch),

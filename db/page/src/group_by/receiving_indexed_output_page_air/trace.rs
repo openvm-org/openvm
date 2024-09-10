@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
@@ -22,7 +22,7 @@ impl ReceivingIndexedOutputPageAir {
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
         page: &Page,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> RowMajorMatrix<Val<SC>>
     where
         Val<SC>: PrimeField,

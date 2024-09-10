@@ -1,6 +1,9 @@
 use num_bigint_dig::BigUint;
+use num_traits::Zero;
 use p3_field::{AbstractField, PrimeField64};
-use stark_vm::modular_multiplication::biguint_to_elems;
+use stark_vm::modular_multiplication::{
+    biguint_to_elems, NUM_ELEMS, REPR_BITS, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+};
 
 use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
 
@@ -14,11 +17,6 @@ impl<C: Config> BigUintVar<C> {
         }
     }
 }
-
-/// Number of bits of each field element used.
-pub const REPR_BITS: usize = 30;
-/// Number of field elements used to represent a bigint.
-pub const NUM_ELEMS: usize = 9;
 
 impl<C: Config> Builder<C>
 where
@@ -84,20 +82,28 @@ where
     }
 
     pub fn assert_secp256k1_coord_eq(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) {
-        self.assert_var_array_eq(left, right);
+        let res = self.secp256k1_coord_eq(left, right);
+        self.assert_var_eq(res, C::N::one());
     }
 
     pub fn secp256k1_coord_is_zero(&mut self, biguint: &BigUintVar<C>) -> Var<C::N> {
-        let result = self.eval(C::N::one());
-        for i in 0..NUM_ELEMS {
-            let elem = self.get(biguint, i);
-            self.if_ne(elem, C::N::zero()).then(|builder| {
-                // FIXME: early break might improve performance.
-                builder.assign(&result, C::N::zero());
-            });
-        }
-
-        result
+        // TODO: either EqU256 needs to support address space 0 or we just need better pointer handling here.
+        let ret_arr = self.array(1);
+        // FIXME: reuse constant zero.
+        let big_zero = self.eval_biguint(BigUint::zero());
+        self.operations
+            .push(DslIr::EqU256(ret_arr.ptr(), biguint.clone(), big_zero));
+        let ret: Var<_> = self.get(&ret_arr, 0);
+        self.if_ne(ret, C::N::one()).then(|builder| {
+            // FIXME: reuse constant.
+            let big_n = builder.eval_biguint(SECP256K1_COORD_PRIME.clone());
+            builder
+                .operations
+                .push(DslIr::EqU256(ret_arr.ptr(), biguint.clone(), big_n));
+            let _ret: Var<_> = builder.get(&ret_arr, 0);
+            builder.assign(&ret, _ret);
+        });
+        ret
     }
 
     pub fn secp256k1_coord_set_to_zero(&mut self, biguint: &BigUintVar<C>) {
@@ -153,19 +159,28 @@ where
     }
 
     pub fn assert_secp256k1_scalar_eq(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) {
-        self.assert_var_array_eq(left, right);
+        let res = self.secp256k1_scalar_eq(left, right);
+        self.assert_var_eq(res, C::N::one());
     }
 
     pub fn secp256k1_scalar_is_zero(&mut self, biguint: &BigUintVar<C>) -> Var<C::N> {
-        let result = self.eval(C::N::one());
-        for i in 0..NUM_ELEMS {
-            let elem = self.get(biguint, i);
-            self.if_ne(elem, C::N::zero()).then(|builder| {
-                builder.assign(&result, C::N::zero());
-            });
-        }
-
-        result
+        // TODO: either EqU256 needs to support address space 0 or we just need better pointer handling here.
+        let ret_arr = self.array(1);
+        // FIXME: reuse constant zero.
+        let big_zero = self.eval_biguint(BigUint::zero());
+        self.operations
+            .push(DslIr::EqU256(ret_arr.ptr(), biguint.clone(), big_zero));
+        let ret: Var<_> = self.get(&ret_arr, 0);
+        self.if_ne(ret, C::N::one()).then(|builder| {
+            // FIXME: reuse constant.
+            let big_n = builder.eval_biguint(SECP256K1_SCALAR_PRIME.clone());
+            builder
+                .operations
+                .push(DslIr::EqU256(ret_arr.ptr(), biguint.clone(), big_n));
+            let _ret: Var<_> = builder.get(&ret_arr, 0);
+            builder.assign(&ret, _ret);
+        });
+        ret
     }
 
     pub fn secp256k1_scalar_eq(

@@ -9,14 +9,14 @@ use super::columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupl
 use crate::{
     is_equal_vec::IsEqualVecAir,
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
-    range::bus::RangeCheckBus,
     sub_chip::{AirConfig, SubAir},
+    var_range::bus::VariableRangeCheckerBus,
 };
 
 #[derive(Clone, Debug)]
 pub struct IsLessThanTupleAir {
     /// The number of bits to decompose each number into, for less than checking
-    pub decomp: usize,
+    pub range_max_bits: usize,
     /// IsLessThanAirs for each tuple element
     pub is_less_than_airs: Vec<IsLessThanAir>,
     /// IsEqualVecAirs
@@ -26,14 +26,15 @@ pub struct IsLessThanTupleAir {
 }
 
 impl IsLessThanTupleAir {
-    pub fn new(bus: RangeCheckBus, limb_bits: Vec<usize>, decomp: usize) -> Self {
+    pub fn new(bus: VariableRangeCheckerBus, limb_bits: Vec<usize>) -> Self {
+        let range_max_bits = bus.range_max_bits;
         let is_less_than_airs = limb_bits
             .iter()
-            .map(|&limb_bit| IsLessThanAir::new(bus, limb_bit, decomp))
+            .map(|&limb_bit| IsLessThanAir::new(bus, limb_bit))
             .collect::<Vec<_>>();
 
         Self {
-            decomp,
+            range_max_bits,
             is_less_than_airs,
             is_equal_vec_air: IsEqualVecAir::new(limb_bits.len()),
             limb_bits,

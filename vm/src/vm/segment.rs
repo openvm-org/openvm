@@ -6,14 +6,15 @@ use std::{
 };
 
 use afs_primitives::{
-    modular_multiplication::bigint::air::ModularArithmeticBigIntAir, range::bus::RangeCheckBus,
-    range_gate::RangeCheckerGateChip, xor::lookup::XorLookupChip,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    xor::lookup::XorLookupChip,
 };
 use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
 use super::{VirtualMachineState, VmConfig, VmCycleTracker, VmMetrics};
@@ -24,7 +25,7 @@ use crate::{
         instructions::{
             Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
             SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS,
-            SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS,
+            SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS,
         },
     },
     cpu::{trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS},
@@ -35,8 +36,11 @@ use crate::{
         manager::{MemoryChip, MemoryChipRef},
         offline_checker::bus::MemoryBus,
     },
-    modular_multiplication::ModularArithmeticChip,
+    modular_multiplication::{
+        ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+    },
     program::{Program, ProgramChip},
+    uint_arithmetic::UintArithmeticChip,
     vm::cycle_tracker::CycleTracker,
 };
 
@@ -71,6 +75,7 @@ impl<SC: StarkGenericConfig> SegmentResult<SC> {
         self.traces
             .iter()
             .map(RowMajorMatrix::height)
+            .map(log2_strict_usize)
             .max()
             .unwrap()
     }
@@ -81,8 +86,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
         let execution_bus = ExecutionBus(0);
         let memory_bus = MemoryBus(1);
-        let range_bus = RangeCheckBus::new(RANGE_CHECKER_BUS, 1 << config.memory_config.decomp);
-        let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus));
+        let range_bus =
+            VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
         let memory_chip = Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
             memory_bus,
@@ -160,18 +166,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 (
                     ModularArithmeticChip::new(
                         memory_chip.clone(),
-                        ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                        SECP256K1_COORD_PRIME.clone(),
                         config.bigint_limb_size,
                     ),
-                    ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+                    SECP256K1_COORD_PRIME.clone(),
                 ),
                 (
                     ModularArithmeticChip::new(
                         memory_chip.clone(),
-                        ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                        SECP256K1_SCALAR_PRIME.clone(),
                         config.bigint_limb_size,
                     ),
-                    ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+                    SECP256K1_SCALAR_PRIME.clone(),
                 ),
             ];
             // let mut modular_arithmetic_chips = BTreeMap::new();
@@ -187,6 +193,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS,
                 Rc::new(RefCell::new(airs[1].0.clone()))
             );
+        }
+        // Modular multiplication also depends on U256 arithmetic.
+        if config.modular_multiplication_enabled || config.u256_arithmetic_enabled {
+            let u256_chip = Rc::new(RefCell::new(UintArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+            )));
+            chips.push(MachineChipVariant::U256Arithmetic(u256_chip.clone()));
+            assign!(UINT256_ARITHMETIC_INSTRUCTIONS, u256_chip);
         }
 
         // Most chips have a reference to the memory chip, and the memory chip has a reference to

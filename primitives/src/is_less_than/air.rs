@@ -7,31 +7,31 @@ use p3_matrix::Matrix;
 
 use super::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols};
 use crate::{
-    range::bus::RangeCheckBus,
     sub_chip::{AirConfig, SubAir},
+    var_range::bus::VariableRangeCheckerBus,
 };
 
 #[derive(Copy, Clone, Debug)]
 pub struct IsLessThanAir {
     /// The bus for sends to range chip
-    pub bus: RangeCheckBus,
+    pub bus: VariableRangeCheckerBus,
     /// The maximum number of bits for the numbers to compare
     pub max_bits: usize,
-    /// The number of bits to decompose each number into, for less than checking
-    pub decomp: usize,
-    /// num_limbs is the number of limbs we decompose each input into, not including the last shifted limb
+    /// num_limbs is the number of limbs we decompose each input into
     pub num_limbs: usize,
 }
 
 impl IsLessThanAir {
-    pub fn new(bus: RangeCheckBus, max_bits: usize, decomp: usize) -> Self {
-        debug_assert!(bus.range_max >= (1 << decomp));
+    pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
         Self {
             bus,
             max_bits,
-            decomp,
-            num_limbs: (max_bits + decomp - 1) / decomp,
+            num_limbs: (max_bits + bus.range_max_bits - 1) / bus.range_max_bits,
         }
+    }
+
+    pub fn range_max_bits(&self) -> usize {
+        self.bus.range_max_bits
     }
 
     /// FOR INTERNAL USE ONLY.
@@ -63,9 +63,8 @@ impl IsLessThanAir {
         let lower = lower_decomp
             .iter()
             .enumerate()
-            .take(self.num_limbs)
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u64(1 << (i * self.decomp))
+                acc + val * AB::Expr::from_canonical_u64(1 << (i * self.range_max_bits()))
             });
 
         // constrain that the lower + less_than * 2^limb_bits is the correct intermediate sum
@@ -75,18 +74,6 @@ impl IsLessThanAir {
             lower + less_than.clone() * AB::Expr::from_canonical_u64(1 << self.max_bits);
 
         builder.when(condition).assert_eq(intermed_val, check_val);
-
-        // Ensuring, in case decomp does not divide max_bits, then the last lower_decomp is
-        // shifted correctly
-        if self.max_bits % self.decomp != 0 {
-            let last_limb_shift = (self.decomp - (self.max_bits % self.decomp)) % self.decomp;
-
-            builder.assert_eq(
-                (*lower_decomp.last().unwrap()).into(),
-                lower_decomp[lower_decomp.len() - 2]
-                    * AB::Expr::from_canonical_u64(1 << last_limb_shift),
-            );
-        }
 
         // constrain that less_than is a boolean
         builder.assert_bool(less_than);

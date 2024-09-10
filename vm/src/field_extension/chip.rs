@@ -94,7 +94,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
 
         ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: from_state.timestamp + Self::accesses_per_instruction(opcode),
+            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         }
     }
 }
@@ -108,11 +108,6 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             records: vec![],
             memory_chip: memory,
         }
-    }
-
-    pub fn accesses_per_instruction(opcode: Opcode) -> usize {
-        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
-        3 * EXT_DEG
     }
 
     pub fn current_height(&self) -> usize {

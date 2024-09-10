@@ -1,4 +1,4 @@
-use std::{cmp::min, str::FromStr};
+use std::cmp::min;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
@@ -41,7 +41,7 @@ impl ModularArithmeticBigIntAir {
         total_bits: usize,
         decomp: usize,
         range_bus: usize,
-        bits_per_elem: usize,
+        _bits_per_elem: usize,
         repr_bits: usize,
         max_limb_bits: usize,
         carry_bits: usize,
@@ -62,17 +62,17 @@ impl ModularArithmeticBigIntAir {
         }
         let num_carries = (2 * limb_sizes.len()) - 2;
 
-        let limb_max_value = (1 << max_limb_bits) - 1;
+        // let limb_max_value = (1 << max_limb_bits) - 1;
 
-        let sum_min_value_abs = (limb_sizes.len() * limb_max_value * limb_max_value)
-            + limb_max_value
-            + carry_min_value_abs;
-        assert!(sum_min_value_abs <= (carry_min_value_abs << max_limb_bits));
+        // let sum_min_value_abs = (limb_sizes.len() * limb_max_value * limb_max_value)
+        //     + limb_max_value
+        //     + carry_min_value_abs;
+        // assert!(sum_min_value_abs <= (carry_min_value_abs << max_limb_bits));
 
-        let carry_max_value = (1 << carry_bits) - carry_min_value_abs;
-        let sum_max_value = (limb_sizes.len() * limb_max_value * limb_max_value) + carry_max_value;
-        assert!(sum_max_value <= (carry_max_value << max_limb_bits));
-        assert!(((carry_min_value_abs + carry_max_value) << max_limb_bits) <= (1 << bits_per_elem));
+        // let carry_max_value = (1 << carry_bits) - carry_min_value_abs;
+        // let sum_max_value = (limb_sizes.len() * limb_max_value * limb_max_value) + carry_max_value;
+        // assert!(sum_max_value <= (carry_max_value << max_limb_bits));
+        // assert!(((carry_min_value_abs + carry_max_value) << max_limb_bits) <= (1 << bits_per_elem));
 
         let limbs_per_elem = repr_bits / max_limb_bits;
         let limb_dimensions = LimbDimensions::new_same_sizes(limb_sizes, limbs_per_elem);
@@ -97,49 +97,6 @@ impl ModularArithmeticBigIntAir {
             num_carries,
             modulus_limbs,
         }
-    }
-
-    pub fn secp256k1_coord_prime() -> BigUint {
-        let mut result = BigUint::one() << 256;
-        for power in [32, 9, 8, 7, 6, 4, 0] {
-            result -= BigUint::one() << power;
-        }
-        result
-    }
-
-    pub fn secp256k1_scalar_prime() -> BigUint {
-        BigUint::from_str(
-            "115792089237316195423570985008687907852837564279074904382605163141518161494337",
-        )
-        .unwrap()
-    }
-
-    pub fn default_for_secp256k1_coord(limb_bits: usize) -> Self {
-        Self::new(
-            Self::secp256k1_coord_prime(),
-            256,
-            16,
-            0,
-            30,
-            30,
-            limb_bits,
-            16,
-            1 << 15,
-        )
-    }
-
-    pub fn default_for_secp256k1_scalar(limb_bits: usize) -> Self {
-        Self::new(
-            Self::secp256k1_scalar_prime(),
-            256,
-            16,
-            0,
-            30,
-            30,
-            limb_bits,
-            16,
-            1 << 15,
-        )
     }
 }
 

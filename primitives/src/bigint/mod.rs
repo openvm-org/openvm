@@ -1,5 +1,6 @@
 use std::{
     cmp::{max, min},
+    marker::PhantomData,
     ops::{Add, Mul, Sub},
 };
 
@@ -9,11 +10,23 @@ use p3_util::log2_ceil_usize;
 
 pub mod check_carry_mod_to_zero;
 pub mod check_carry_to_zero;
-pub mod modular_multiplication;
+pub mod modular_arithmetic;
 pub mod utils;
 
 #[cfg(test)]
 pub mod tests;
+
+pub trait LimbConfig {
+    fn limb_bits() -> usize;
+}
+
+#[derive(Debug, Clone)]
+pub struct DefaultLimbConfig;
+impl LimbConfig for DefaultLimbConfig {
+    fn limb_bits() -> usize {
+        10
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct OverflowInt<T> {
@@ -31,17 +44,20 @@ pub struct OverflowInt<T> {
     pub max_overflow_bits: usize,
 }
 
-impl<T> OverflowInt<T> {
-    pub fn from_big_uint(
-        x: BigUint,
-        limb_bits: usize,
-        min_limbs: Option<usize>,
-    ) -> OverflowInt<isize> {
+// It's also a big unit similar to OverflowInt, but its limbs don't overflow.
+#[derive(Debug, Clone)]
+pub struct CanonicalUint<T, C: LimbConfig> {
+    pub limbs: Vec<T>,
+    _marker: PhantomData<C>,
+}
+
+impl<T, C: LimbConfig> CanonicalUint<T, C> {
+    pub fn from_big_uint(x: BigUint, min_limbs: Option<usize>) -> CanonicalUint<isize, C> {
         let mut x_bits = utils::big_uint_to_bits(x);
         let mut x_limbs: Vec<isize> = vec![];
         let mut limbs_len = 0;
         while !x_bits.is_empty() {
-            let limb = utils::take_limb(&mut x_bits, limb_bits);
+            let limb = utils::take_limb(&mut x_bits, C::limb_bits());
             x_limbs.push(limb as isize);
             limbs_len += 1;
         }
@@ -50,13 +66,24 @@ impl<T> OverflowInt<T> {
                 x_limbs.extend(vec![0; min_limbs - limbs_len]);
             }
         }
-        OverflowInt {
+        CanonicalUint {
             limbs: x_limbs,
-            max_overflow_bits: limb_bits,
-            limb_max_abs: (1 << limb_bits) - 1,
+            _marker: PhantomData::<C>,
         }
     }
+}
 
+impl<T, C: LimbConfig> From<CanonicalUint<T, C>> for OverflowInt<T> {
+    fn from(x: CanonicalUint<T, C>) -> OverflowInt<T> {
+        OverflowInt {
+            limbs: x.limbs,
+            max_overflow_bits: C::limb_bits(),
+            limb_max_abs: (1 << C::limb_bits()) - 1,
+        }
+    }
+}
+
+impl<T> OverflowInt<T> {
     pub fn from_var_vec<AB: AirBuilder, V: Into<AB::Expr>>(
         x: Vec<V>,
         limb_bits: usize,

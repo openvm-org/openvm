@@ -1,23 +1,30 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_field::AbstractField;
 
 use super::super::is_less_than_tuple::IsLessThanTupleChip;
 use crate::{
     is_less_than_tuple::{columns::IsLessThanTupleCols, IsLessThanTupleAir},
-    range::bus::RangeCheckBus,
-    range_gate::RangeCheckerGateChip,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
+
+fn get_range_bus() -> VariableRangeCheckerBus {
+    let range_max_bits: usize = 8;
+    VariableRangeCheckerBus::new(0, range_max_bits)
+}
+fn get_tester_range_chip() -> Arc<VariableRangeCheckerChip> {
+    let bus = get_range_bus();
+    Arc::new(VariableRangeCheckerChip::new(bus))
+}
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
     let limb_bits = vec![16, 8, 20, 20];
-    let decomp = 8;
-    let bus = RangeCheckBus::new(0, 1 << decomp);
+    let bus = get_range_bus();
 
-    let lt_air = IsLessThanTupleAir::new(bus, limb_bits.clone(), decomp);
+    let lt_air = IsLessThanTupleAir::new(bus, limb_bits.clone());
 
     let num_cols = IsLessThanTupleCols::<usize>::width(&lt_air);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -35,12 +42,9 @@ fn test_flatten_fromslice_roundtrip() {
 #[test]
 fn test_is_less_than_tuple_chip() {
     let limb_bits: Vec<usize> = vec![16, 8];
-    let decomp: usize = 6;
-    let bus = RangeCheckBus::new(0, 1 << decomp);
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
-
-    let chip = IsLessThanTupleChip::new(limb_bits, decomp, range_checker);
+    let range_checker = get_tester_range_chip();
+    let chip = IsLessThanTupleChip::new(limb_bits, range_checker);
     let range_checker = chip.range_checker.as_ref();
 
     let trace = chip.generate_trace(vec![
@@ -60,21 +64,16 @@ fn test_is_less_than_tuple_chip() {
 #[test]
 fn test_is_less_than_tuple_chip_negative() {
     let limb_bits: Vec<usize> = vec![16, 8];
-    let decomp: usize = 8;
-    let bus = RangeCheckBus::new(0, 1 << decomp);
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus));
-
-    let chip = IsLessThanTupleChip::new(limb_bits, decomp, range_checker);
+    let range_checker = get_tester_range_chip();
+    let chip = IsLessThanTupleChip::new(limb_bits, range_checker);
     let range_checker = chip.range_checker.as_ref();
     let mut trace = chip.generate_trace(vec![(vec![14321, 123], vec![26678, 233])]);
     let range_checker_trace = range_checker.generate_trace();
 
     trace.values[2] = AbstractField::from_canonical_u64(0);
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         run_simple_test_no_pis(
             vec![&chip.air, &range_checker.air],

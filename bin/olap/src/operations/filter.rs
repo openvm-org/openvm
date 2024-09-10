@@ -12,17 +12,7 @@ pub const RANGE_BUS_INDEX: usize = 1;
 pub fn filter_setup(
     config: &PageConfig,
     op: AfsOperation,
-) -> (
-    Instant,
-    FilterOp,
-    usize,
-    usize,
-    usize,
-    usize,
-    usize,
-    usize,
-    usize,
-) {
+) -> (Instant, FilterOp, usize, usize, usize, usize, usize, usize) {
     let start = Instant::now();
     let filter_op = FilterOp::parse(op.args).unwrap();
     let idx_len = config.page.index_bytes / 2;
@@ -31,7 +21,6 @@ pub fn filter_setup(
     let page_height = config.page.height;
     let idx_limb_bits = config.page.bits_per_fe;
     let idx_decomp = RANGE_CHECK_BITS;
-    let range_max = 1 << idx_decomp;
     (
         start,
         filter_op,
@@ -41,7 +30,6 @@ pub fn filter_setup(
         page_height,
         idx_limb_bits,
         idx_decomp,
-        range_max,
     )
 }
 

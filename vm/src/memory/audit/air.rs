@@ -3,8 +3,8 @@ use afs_primitives::{
         columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
         IsLessThanTupleAir,
     },
-    range::bus::RangeCheckBus,
     utils::{implies, or},
+    var_range::bus::VariableRangeCheckerBus,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -33,9 +33,8 @@ impl MemoryAuditAir {
         Self {
             memory_bus,
             addr_lt_air: IsLessThanTupleAir::new(
-                RangeCheckBus::new(RANGE_CHECKER_BUS, 1 << decomp),
+                VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp),
                 vec![addr_space_max_bits, pointer_max_bits],
-                decomp,
             ),
             for_testing,
         }

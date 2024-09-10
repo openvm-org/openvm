@@ -1,6 +1,7 @@
 name: DB Unit Tests
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main"]
   pull_request:
@@ -20,7 +21,7 @@ env:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-64core-256ram
 
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +33,7 @@ jobs:
       - name: Run DB unit tests
         working-directory: db/page
         run: |
-          cargo t --features parallel
+          cargo t --features parallel --profile=fast
 
   benchmark-rw:
     uses: ./.github/workflows/benchmark-call.yml

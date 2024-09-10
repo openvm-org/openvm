@@ -1,8 +1,8 @@
 use std::{collections::HashSet, sync::Arc};
 
 use afs_primitives::{
-    offline_checker::OfflineCheckerOperation, range::bus::RangeCheckBus,
-    range_gate::RangeCheckerGateChip,
+    offline_checker::OfflineCheckerOperation,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
@@ -171,7 +171,7 @@ where
     traces: Option<PageRWTraces<Val<SC>>>,
     page_commitments: Option<PageCommitments<SC>>,
 
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl<SC: StarkGenericConfig> PageController<SC> {
@@ -211,9 +211,9 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             traces: None,
             page_commitments: None,
 
-            range_checker: Arc::new(RangeCheckerGateChip::new(RangeCheckBus::new(
+            range_checker: Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
                 range_bus_index,
-                1 << idx_decomp,
+                idx_decomp,
             ))),
         }
     }
@@ -226,7 +226,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     }
 
     pub fn reset_range_checker(&mut self, _idx_decomp: usize) {
-        self.range_checker = Arc::new(RangeCheckerGateChip::new(self.range_checker.air.bus));
+        self.range_checker = Arc::new(VariableRangeCheckerChip::new(self.range_checker.air.bus));
     }
 
     /// Used to load the initial page and the operations
@@ -427,7 +427,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         &self,
         page: &mut Page,
         ops: &[Operation],
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         trace_degree: usize,
     ) -> RowMajorMatrix<Val<SC>>
     where

@@ -10,6 +10,7 @@ pub mod tests;
 
 pub use air::VariableRangeCheckerAir;
 use bus::VariableRangeCheckerBus;
+use columns::NUM_VARIABLE_RANGE_COLS;
 
 #[derive(Debug)]
 pub struct VariableRangeCheckerChip {
@@ -35,6 +36,10 @@ impl VariableRangeCheckerChip {
         self.air.range_max_bits()
     }
 
+    pub fn air_width(&self) -> usize {
+        NUM_VARIABLE_RANGE_COLS
+    }
+
     pub fn add_count(&self, value: u32, max_bits: usize) {
         // index is 2^max_bits + value - 1 + 1 for the extra [0, 0] row
         // if each [value, max_bits] is valid, the sends multiset will be exactly the receives multiset
@@ -47,5 +52,11 @@ impl VariableRangeCheckerChip {
         );
         let val_atomic = &self.count[idx];
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn clear(&self) {
+        for i in 0..self.count.len() {
+            self.count[i].store(0, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 }

@@ -7,8 +7,8 @@ use afs_primitives::{
         columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols},
         IsLessThanTupleAir,
     },
-    range::bus::RangeCheckBus,
     sub_chip::{AirConfig, SubAir},
+    var_range::bus::VariableRangeCheckerBus,
 };
 use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
@@ -64,9 +64,8 @@ impl PageIndexScanInputAir {
         cmp: Comp,
     ) -> Self {
         let is_less_than_tuple_air = IsLessThanTupleAir::new(
-            RangeCheckBus::new(range_bus_index, 1 << decomp),
+            VariableRangeCheckerBus::new(range_bus_index, decomp),
             vec![idx_limb_bits; idx_len],
-            decomp,
         );
         let is_equal_vec_air = IsEqualVecAir::new(idx_len);
 
@@ -164,7 +163,7 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
                 self.idx_len,
                 self.data_len,
                 &is_less_than_tuple_air.limb_bits,
-                is_less_than_tuple_air.decomp,
+                is_less_than_tuple_air.range_max_bits,
                 Comp::Lt,
             ),
             PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
@@ -178,7 +177,7 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
                 self.idx_len,
                 self.data_len,
                 &is_less_than_tuple_air.limb_bits,
-                is_less_than_tuple_air.decomp,
+                is_less_than_tuple_air.range_max_bits,
                 Comp::Lte,
             ),
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => {
@@ -229,7 +228,7 @@ where
                 ..
             }) => (
                 &is_less_than_tuple_air.limb_bits,
-                is_less_than_tuple_air.decomp,
+                is_less_than_tuple_air.range_max_bits,
             ),
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => (&vec![], 0),
         };

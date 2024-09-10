@@ -51,6 +51,32 @@ impl<F: Field> SymbolicConstraints<F> {
         // But we pad it to a power of two so that we can efficiently decompose the quotient.
         log2_ceil_usize(constraint_degree - 1)
     }
+
+    /// Returns the maximum field degree and count degree across all interactions
+    pub fn max_interaction_degrees(&self) -> (usize, usize) {
+        let max_field_degree = self
+            .interactions
+            .iter()
+            .map(|interaction| {
+                interaction
+                    .fields
+                    .iter()
+                    .map(|field| field.degree_multiple())
+                    .max()
+                    .unwrap_or(0)
+            })
+            .max()
+            .unwrap_or(0);
+
+        let max_count_degree = self
+            .interactions
+            .iter()
+            .map(|interaction| interaction.count.degree_multiple())
+            .max()
+            .unwrap_or(0);
+
+        (max_field_degree, max_count_degree)
+    }
 }
 
 #[instrument(name = "evaluate constraints symbolically", skip_all, level = "debug")]

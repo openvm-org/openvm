@@ -1,6 +1,6 @@
 use afs_primitives::{
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
-    range::bus::RangeCheckBus,
+    var_range::bus::VariableRangeCheckerBus,
 };
 
 use crate::multitier_page_rw_checker::page_controller::MyLessThanTupleParams;
@@ -143,11 +143,10 @@ impl<T> InternalPageMetadataCols<T> {
             };
             new_start += 2 * idx_len + 2;
             let mut aux_allocs = vec![];
-            let range_bus = RangeCheckBus::new(0, 1 << is_less_than_tuple_params.decomp);
+            let range_bus = VariableRangeCheckerBus::new(0, is_less_than_tuple_params.decomp);
             let aux_size = IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
                 range_bus,
                 vec![is_less_than_tuple_params.limb_bits; idx_len],
-                is_less_than_tuple_params.decomp,
             ));
             for i in 0..4 {
                 aux_allocs.push(IsLessThanTupleAuxCols::from_slice(
@@ -155,7 +154,6 @@ impl<T> InternalPageMetadataCols<T> {
                     &IsLessThanTupleAir::new(
                         range_bus,
                         vec![is_less_than_tuple_params.limb_bits; idx_len],
-                        is_less_than_tuple_params.decomp,
                     ),
                 ))
             }

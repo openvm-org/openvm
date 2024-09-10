@@ -131,8 +131,8 @@ pub struct MultiStarkProvingKey<SC: StarkGenericConfig> {
     /// The number of challenges to sample in each challenge phase.
     /// The length determines the global number of challenge phases.
     pub num_challenges_to_sample: Vec<usize>,
-    /// Number of interactions to bundle in permutation trace
-    pub interaction_chunk_size: usize,
+    /// Maximum degree of constraints (excluding logup constraints) across all AIRs
+    pub max_constraint_degree: usize,
 }
 
 impl<SC: StarkGenericConfig> Default for MultiStarkProvingKey<SC> {
@@ -151,7 +151,7 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
                 commit_to_air_index: vec![vec![]],
             },
             num_challenges_to_sample: Vec::new(),
-            interaction_chunk_size: 1,
+            max_constraint_degree: 0,
         }
     }
 
@@ -159,7 +159,7 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
         per_air: Vec<StarkProvingKey<SC>>,
         num_main_trace_commitments: usize,
         num_challenges_to_sample: Vec<usize>,
-        interaction_chunk_size: usize,
+        max_constraint_degree: usize,
     ) -> Self {
         let air_matrices = per_air
             .iter()
@@ -172,7 +172,7 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
             num_main_trace_commitments,
             main_commit_to_air_graph,
             num_challenges_to_sample,
-            interaction_chunk_size,
+            max_constraint_degree,
         }
     }
 
@@ -182,7 +182,6 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
             main_commit_to_air_graph: self.main_commit_to_air_graph.clone(),
             num_main_trace_commitments: self.num_main_trace_commitments,
             num_challenges_to_sample: self.num_challenges_to_sample.clone(),
-            interaction_chunk_size: self.interaction_chunk_size,
         }
     }
 
@@ -222,8 +221,6 @@ pub struct MultiStarkVerifyingKey<SC: StarkGenericConfig> {
     /// The number of challenges to sample in each challenge phase.
     /// The length determines the global number of challenge phases.
     pub num_challenges_to_sample: Vec<usize>,
-    /// Number of interactions to bundle in permutation trace
-    pub interaction_chunk_size: usize,
 }
 
 impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
@@ -231,7 +228,6 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
         per_air: Vec<StarkVerifyingKey<SC>>,
         num_main_trace_commitments: usize,
         num_challenges_to_sample: Vec<usize>,
-        interaction_chunk_size: usize,
     ) -> Self {
         let air_matrices = per_air.iter().map(|vk| vk.main_graph.clone()).collect_vec();
         let main_commit_to_air_graph =
@@ -241,7 +237,6 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
             num_main_trace_commitments,
             main_commit_to_air_graph,
             num_challenges_to_sample,
-            interaction_chunk_size,
         }
     }
 

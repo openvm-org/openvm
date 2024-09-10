@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_primitives::{range::bus::RangeCheckBus, utils};
+use afs_primitives::{utils, var_range::bus::VariableRangeCheckerBus};
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -10,7 +10,7 @@ use super::{columns::UintArithmeticCols, num_limbs};
 use crate::{
     arch::{
         bus::ExecutionBus,
-        instructions::{Opcode, LONG_ARITHMETIC_INSTRUCTIONS},
+        instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
     memory::offline_checker::bridge::MemoryOfflineChecker,
 };
@@ -21,7 +21,7 @@ pub struct UintArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bus: ExecutionBus,
     pub(super) mem_oc: MemoryOfflineChecker,
 
-    pub bus: RangeCheckBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
+    pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
     pub base_op: Opcode,
 }
 
@@ -133,7 +133,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
 
         let expected_opcode = flags
             .iter()
-            .zip(LONG_ARITHMETIC_INSTRUCTIONS)
+            .zip(UINT256_ARITHMETIC_INSTRUCTIONS)
             .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
             });

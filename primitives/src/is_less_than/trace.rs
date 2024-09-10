@@ -7,7 +7,7 @@ use super::{
     columns::{IsLessThanAuxColsMut, IsLessThanCols, IsLessThanColsMut},
     IsLessThanAir, IsLessThanChip,
 };
-use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
+use crate::{sub_chip::LocalTraceInstructions, var_range::VariableRangeCheckerChip};
 
 impl IsLessThanChip {
     pub fn generate_trace<F: PrimeField64>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
@@ -31,7 +31,7 @@ impl IsLessThanAir {
         &self,
         x: u32,
         y: u32,
-        range_checker: &RangeCheckerGateChip,
+        range_checker: &VariableRangeCheckerChip,
         lt_cols: &mut IsLessThanColsMut<F>,
     ) {
         let less_than = if x < y { 1 } else { 0 };
@@ -47,7 +47,7 @@ impl IsLessThanAir {
         &self,
         x: u32,
         y: u32,
-        range_checker: &RangeCheckerGateChip,
+        range_checker: &VariableRangeCheckerChip,
         lt_aux_cols: &mut IsLessThanAuxColsMut<F>,
     ) {
         // obtain the lower_bits
@@ -55,40 +55,37 @@ impl IsLessThanAir {
         let lower_u32 = check_less_than & ((1 << self.max_bits) - 1);
 
         // decompose lower_bits into limbs and range check
-        let mut lower_decomp: Vec<F> =
-            Vec::with_capacity(self.num_limbs + (self.max_bits % self.decomp != 0) as usize);
+        let mut lower_decomp: Vec<F> = Vec::with_capacity(self.num_limbs);
+        let mask = (1 << self.range_max_bits()) - 1;
+        let mut bits_remaining = self.max_bits;
         for i in 0..self.num_limbs {
-            let bits = (lower_u32 >> (i * self.decomp)) & ((1 << self.decomp) - 1);
+            let limb = (lower_u32 >> (i * self.range_max_bits())) & mask;
 
-            lower_decomp.push(F::from_canonical_u32(bits));
-            range_checker.add_count(bits);
-
-            if i == self.num_limbs - 1 && self.max_bits % self.decomp != 0 {
-                let last_limb_shift = (self.decomp - (self.max_bits % self.decomp)) % self.decomp;
-                let last_limb_shifted = bits << last_limb_shift;
-
-                lower_decomp.push(F::from_canonical_u32(last_limb_shifted));
-                range_checker.add_count(last_limb_shifted);
-            }
+            lower_decomp.push(F::from_canonical_u32(limb));
+            range_checker.add_count(limb, bits_remaining.min(self.range_max_bits()));
+            bits_remaining = bits_remaining.saturating_sub(self.range_max_bits());
         }
 
         lt_aux_cols
             .lower_decomp
-            .clone_from_slice(lower_decomp.as_slice());
+            .copy_from_slice(lower_decomp.as_slice());
     }
 }
 
-// TODO[jpw] stop using Arc<RangeCheckerGateChip> and use &RangeCheckerGateChip (requires not using this trait)
+// TODO[jpw] stop using Arc<VariableRangeCheckerChip> and use &VariableRangeCheckerChip (requires not using this trait)
 impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
-    type LocalInput = (u32, u32, Arc<RangeCheckerGateChip>);
+    type LocalInput = (u32, u32, Arc<VariableRangeCheckerChip>);
 
-    fn generate_trace_row(&self, input: (u32, u32, Arc<RangeCheckerGateChip>)) -> Self::Cols<F> {
+    fn generate_trace_row(
+        &self,
+        (x, y, range_checker): (u32, u32, Arc<VariableRangeCheckerChip>),
+    ) -> Self::Cols<F> {
         let width: usize = IsLessThanCols::<F>::width(self);
 
         let mut row = vec![F::zero(); width];
         let mut lt_cols = IsLessThanColsMut::<F>::from_slice(&mut row);
 
-        self.generate_trace_row(input.0, input.1, &input.2, &mut lt_cols);
+        self.generate_trace_row(x, y, &range_checker, &mut lt_cols);
 
         IsLessThanCols::<F>::from_slice(&row)
     }

@@ -8,6 +8,7 @@ afs-stark-backend = { path = "../stark-backend" }
 afs-compiler = { path = "../compiler" }
 ax-sdk = { path = "../sdk" }
 afs-derive = { path = "../derive" }
+afs-ecc = { path = "../ecc" }
 stark-vm = { path = "../vm" }
 p3-air = { workspace = true }
 p3-field = { workspace = true }
@@ -36,6 +37,7 @@ serde_json.workspace = true
 tracing.workspace = true
 lazy_static.workspace = true
 once_cell = { workspace = true, optional = true }
+num-bigint-dig = { workspace = true }
 
 [dev-dependencies]
 afs-primitives = { path = "../primitives" }

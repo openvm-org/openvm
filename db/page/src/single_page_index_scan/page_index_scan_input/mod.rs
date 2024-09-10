@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
@@ -28,7 +28,7 @@ pub enum Comp {
 /// 2. Sends all rows of the page that match the predicate index OP x where x is the public value
 pub struct PageIndexScanInputChip {
     pub air: PageIndexScanInputAir,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
     pub cmp: Comp,
 }
 
@@ -40,12 +40,12 @@ impl PageIndexScanInputChip {
         data_len: usize,
         idx_limb_bits: usize,
         decomp: usize,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         cmp: Comp,
     ) -> Self {
         let air = PageIndexScanInputAir::new(
             page_bus_index,
-            range_checker.bus_index(),
+            range_checker.bus().index,
             idx_len,
             data_len,
             idx_limb_bits,

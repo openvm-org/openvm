@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
+use crate::var_range::VariableRangeCheckerChip;
 
 #[cfg(test)]
 pub mod tests;
@@ -14,23 +14,18 @@ pub use air::IsLessThanAir;
 
 /// This chip checks whether one number is less than another. The two numbers have a max number of bits,
 /// given by limb_bits. The chip assumes that the two numbers are within limb_bits bits. The chip compares
-/// the numbers by decomposing them into limbs of size decomp bits, and interacts with a RangeCheckerGateChip
+/// the numbers by decomposing them into limbs of size decomp bits, and interacts with a VariableRangeCheckerChip
 /// to range check the decompositions.
 #[derive(Clone, Debug)]
 pub struct IsLessThanChip {
     pub air: IsLessThanAir,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl IsLessThanChip {
-    pub fn new(
-        bus: RangeCheckBus,
-        limb_bits: usize,
-        decomp_bits: usize,
-        range_checker: Arc<RangeCheckerGateChip>,
-    ) -> Self {
+    pub fn new(max_bits: usize, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         Self {
-            air: IsLessThanAir::new(bus, limb_bits, decomp_bits),
+            air: IsLessThanAir::new(range_checker.bus(), max_bits),
             range_checker,
         }
     }

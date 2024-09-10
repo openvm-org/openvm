@@ -1,6 +1,6 @@
 use std::{array, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -86,11 +86,13 @@ pub struct MemoryChip<F: PrimeField32> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<NUM_WORDS, F>,
     pub(crate) mem_config: MemoryConfig,
-    pub(crate) range_checker: Arc<RangeCheckerGateChip>,
+    pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
     timestamp: F,
     /// Maps (addr_space, pointer) to (data, timestamp)
     memory: HashMap<(F, F), TimestampedValue<F>>,
 }
+
+pub const MEMORY_TOP: u32 = (1 << 29) - 1;
 
 impl<F: PrimeField32> MemoryChip<F> {
     // pub fn with_persistent_memory(
@@ -109,7 +111,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     pub fn with_volatile_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
             memory_bus,
@@ -140,8 +142,14 @@ impl<F: PrimeField32> MemoryChip<F> {
     }
 
     pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<N, F> {
+        assert!(
+            address_space == F::zero() || pointer.as_canonical_u32() <= MEMORY_TOP,
+            "memory out of bounds: {:?}",
+            pointer.as_canonical_u32()
+        );
+
         let timestamp = self.timestamp;
-        self.timestamp += F::from_canonical_usize(N);
+        self.timestamp += F::one();
 
         if address_space == F::zero() {
             assert_eq!(N, 1, "cannot batch read from address space 0");
@@ -157,13 +165,17 @@ impl<F: PrimeField32> MemoryChip<F> {
 
         let prev_entries = array::from_fn(|i| {
             let cur_ptr = pointer + F::from_canonical_usize(i);
-            let cur_timestamp = timestamp + F::from_canonical_usize(i);
 
-            let entry = self.memory.get_mut(&(address_space, cur_ptr)).unwrap();
-            debug_assert!(entry.timestamp < cur_timestamp);
+            let entry = self
+                .memory
+                .get_mut(&(address_space, cur_ptr))
+                .unwrap_or_else(|| {
+                    panic!("read of uninitialized memory ({address_space:?}, {cur_ptr:?})")
+                });
+            debug_assert!(entry.timestamp < timestamp);
 
             let prev_entry = *entry;
-            entry.timestamp = cur_timestamp;
+            entry.timestamp = timestamp;
 
             self.interface_chip
                 .touch_address(address_space, cur_ptr, entry.value);
@@ -198,13 +210,17 @@ impl<F: PrimeField32> MemoryChip<F> {
         data: [F; N],
     ) -> MemoryWriteRecord<N, F> {
         assert_ne!(address_space, F::zero());
+        assert!(
+            address_space == F::zero() || pointer.as_canonical_u32() <= MEMORY_TOP,
+            "memory out of bounds: {:?}",
+            pointer.as_canonical_u32()
+        );
 
         let timestamp = self.timestamp;
-        self.timestamp += F::from_canonical_usize(N);
+        self.timestamp += F::one();
 
         let prev_entries = array::from_fn(|i| {
             let cur_ptr = pointer + F::from_canonical_usize(i);
-            let cur_timestamp = timestamp + F::from_canonical_usize(i);
 
             let entry = self
                 .memory
@@ -213,11 +229,11 @@ impl<F: PrimeField32> MemoryChip<F> {
                     value: F::zero(),
                     timestamp: F::zero(),
                 });
-            debug_assert!(entry.timestamp < cur_timestamp);
+            debug_assert!(entry.timestamp < timestamp);
 
             let prev_entry = *entry;
 
-            entry.timestamp = cur_timestamp;
+            entry.timestamp = timestamp;
             entry.value = data[i];
 
             self.interface_chip

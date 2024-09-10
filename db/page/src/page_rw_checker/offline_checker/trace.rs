@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::{offline_checker::OfflineCheckerChip, range_gate::RangeCheckerGateChip};
+use afs_primitives::{offline_checker::OfflineCheckerChip, var_range::VariableRangeCheckerChip};
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 #[cfg(feature = "parallel")]
@@ -27,7 +27,7 @@ impl PageOfflineChecker {
         &self,
         page: &mut Page,
         mut ops: Vec<Operation>,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         trace_degree: usize,
     ) -> RowMajorMatrix<Val<SC>>
     where
@@ -211,7 +211,7 @@ impl PageOfflineChecker {
         curr_op: &Operation,
         prev_op: &Operation,
         is_valid: bool,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         oc_cols: &mut PageOfflineCheckerColsMut<F>,
     ) {
         let offline_checker_chip =

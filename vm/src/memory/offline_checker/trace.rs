@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use afs_primitives::{
-    is_less_than::columns::IsLessThanAuxCols, is_zero::IsZeroAir, range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions,
+    is_less_than::columns::IsLessThanAuxCols, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
+    var_range::VariableRangeCheckerChip,
 };
 use p3_field::PrimeField32;
 
@@ -19,7 +19,7 @@ use crate::memory::{
 impl MemoryOfflineChecker {
     pub fn make_read_aux_cols<const N: usize, F: PrimeField32>(
         &self,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         read: MemoryReadRecord<N, F>,
     ) -> MemoryReadAuxCols<N, F> {
         assert!(
@@ -34,7 +34,7 @@ impl MemoryOfflineChecker {
 
     pub fn make_read_or_immediate_aux_cols<F: PrimeField32>(
         &self,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         read: MemoryReadRecord<1, F>,
     ) -> MemoryReadOrImmediateAuxCols<F> {
         let [prev_timestamp] = read.prev_timestamps;
@@ -53,7 +53,7 @@ impl MemoryOfflineChecker {
 
     pub fn make_write_aux_cols<const N: usize, F: PrimeField32>(
         &self,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         write: MemoryWriteRecord<N, F>,
     ) -> MemoryWriteAuxCols<N, F> {
         MemoryWriteAuxCols::new(
@@ -65,7 +65,7 @@ impl MemoryOfflineChecker {
 
     fn generate_timestamp_lt_cols<const N: usize, F: PrimeField32>(
         &self,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         prev_timestamps: &[F; N],
         timestamp: F,
     ) -> [IsLessThanAuxCols<F>; N] {

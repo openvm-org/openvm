@@ -41,7 +41,6 @@ where
             _page_height,
             _idx_limb_bits,
             _idx_decomp,
-            _range_max,
         ) = filter_setup(config, op);
 
         let start = Instant::now();

@@ -3,7 +3,7 @@
 /// from FinalPageAir), but the new interactions are in bridge.rs
 use std::sync::Arc;
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField};
@@ -74,7 +74,7 @@ impl FinalTableAir {
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
         page: &Page,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> RowMajorMatrix<Val<SC>>
     where
         Val<SC>: PrimeField,

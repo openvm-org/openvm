@@ -1,7 +1,7 @@
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 
-use crate::cpu::CpuOptions;
+use crate::{cpu::CpuOptions, modular_multiplication::REPR_BITS};
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
 
@@ -29,6 +29,7 @@ pub struct VmConfig {
     pub keccak_enabled: bool,
     pub modular_multiplication_enabled: bool,
     pub is_less_than_enabled: bool,
+    pub u256_arithmetic_enabled: bool,
     pub memory_config: MemoryConfig,
     pub num_public_values: usize,
     pub max_segment_len: usize,
@@ -48,11 +49,12 @@ impl Default for VmConfig {
             keccak_enabled: false,
             modular_multiplication_enabled: false,
             is_less_than_enabled: false,
+            u256_arithmetic_enabled: false,
             memory_config: Default::default(),
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,
-            bigint_limb_size: 10,
+            bigint_limb_size: REPR_BITS,
         }
     }
 }

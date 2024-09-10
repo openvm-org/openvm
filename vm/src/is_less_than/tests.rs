@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use afs_primitives::{is_less_than::columns::IsLessThanIoCols, range_gate::RangeCheckerGateChip};
+use afs_primitives::{
+    is_less_than::columns::IsLessThanIoCols, var_range::VariableRangeCheckerChip,
+};
 use ax_sdk::{
     config::baby_bear_blake3::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
@@ -19,7 +21,7 @@ const DECOMP: usize = 10;
 #[test]
 fn test_less_than() {
     let mut rng = create_seeded_rng();
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECK_BUS, 1 << DECOMP));
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(RANGE_CHECK_BUS, 1 << DECOMP));
     let mut chip: IsLessThanChip<BabyBear> =
         IsLessThanChip::new(LESS_THAN_BUS, 10, DECOMP, range_checker.clone());
 

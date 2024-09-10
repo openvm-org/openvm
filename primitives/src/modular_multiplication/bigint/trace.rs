@@ -13,15 +13,15 @@ use crate::{
         trace::generate_modular_multiplication_trace_row,
         FullLimbs,
     },
-    range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
+    var_range::VariableRangeCheckerChip,
 };
 
 impl ModularArithmeticBigIntAir {
     pub fn generate_trace<F: PrimeField64>(
         &self,
         pairs: Vec<(BigUint, BigUint)>,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: Arc<VariableRangeCheckerChip>,
     ) -> RowMajorMatrix<F> {
         let num_cols: usize = BaseAir::<F>::width(self);
 
@@ -40,28 +40,17 @@ impl ModularArithmeticBigIntAir {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for ModularArithmeticBigIntAir {
-    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
+    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (a, b, range_checker) = input;
         assert!(a.bits() <= self.total_bits);
         assert!(b.bits() <= self.total_bits);
 
-        let range_check = |bits: usize, value: usize| {
-            let value = value as u32;
-            if bits == self.decomp {
-                range_checker.add_count(value);
-            } else {
-                range_checker.add_count(value);
-                range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
-            }
-        };
-
         let (general, full_limbs) = generate_modular_multiplication_trace_row(
             self.modulus.clone(),
             &self.limb_dimensions,
             range_checker.clone(),
-            self.decomp,
             a,
             b,
         );
@@ -94,9 +83,9 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularArithmeticBigIntAir {
                 assert_eq!(sums[i] % (1 << self.max_limb_bits), 0);
                 let carry = sums[i] >> self.max_limb_bits;
                 sums[i + 1] += carry;
-                range_check(
+                range_checker.add_count(
+                    (carry + (self.carry_min_value_abs as isize)) as u32,
                     self.carry_bits,
-                    (carry + (self.carry_min_value_abs as isize)) as usize,
                 );
                 F::from_canonical_usize(carry.unsigned_abs())
                     * if carry >= 0 { F::one() } else { F::neg_one() }
