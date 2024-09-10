@@ -136,14 +136,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
             chips.push(MachineChipVariant::FieldExtension(field_extension_chip))
         }
-        if config.uint256_arithmetic_enabled {
-            let uint_arithmetic_chip = Rc::new(RefCell::new(UintArithmeticChip::<256, 8, F>::new(
-                execution_bus,
-                memory_chip.clone(),
-            )));
-            assign!(UINT256_ARITHMETIC_INSTRUCTIONS, uint_arithmetic_chip);
-            chips.push(MachineChipVariant::U256Arithmetic(uint_arithmetic_chip));
-        }
         if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
                 Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
