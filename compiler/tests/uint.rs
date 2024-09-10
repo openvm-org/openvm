@@ -1,4 +1,4 @@
-use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, util::execute_program};
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
@@ -28,12 +28,6 @@ fn test_huest() {
     builder.assert_var_array_eq(&c_var, &c_check_var);
     builder.halt();
 
-    let program = builder.clone().compile_isa_with_options(CompilerOptions {
-        compile_prints: false,
-        enable_cycle_tracker: false,
-        field_arithmetic_enabled: false,
-        field_extension_enabled: false,
-        field_less_than_enabled: false,
-    });
+    let program = builder.clone().compile_isa();
     execute_program(program, vec![]);
 }
