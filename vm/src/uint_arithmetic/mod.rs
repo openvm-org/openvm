@@ -145,6 +145,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
                 ))
             }
             CalculationResult::Short(res) => {
+                println!("writing cell: {:?} {:?}", e, z_ptr_read.value());
                 WriteRecord::Short(memory_chip.write_cell(e, z_ptr_read.value(), T::from_bool(res)))
             }
         };
