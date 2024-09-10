@@ -55,14 +55,11 @@ pub fn get_arithmetic_air(
     range_decomp: usize,
 ) -> ModularArithmeticAir {
     let limb_max_abs = if is_mul_div {
-        // The equation: x*y - p*q - r, or y*r - x - pq. with num_limbs N = 26
-        // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N * 2 + 2^10
         (1 << (2 * limb_bits)) * num_limbs * 2 + (1 << limb_bits)
     } else {
         // x +- y -r -pq
         (1 << (2 * limb_bits)) + (1 << limb_bits) * 3
     };
-    // overflow bits: log(max_abs) => 26
     let max_overflow_bits = log2_ceil_usize(limb_max_abs);
 
     let q_limbs = if is_mul_div { num_limbs } else { 1 };
