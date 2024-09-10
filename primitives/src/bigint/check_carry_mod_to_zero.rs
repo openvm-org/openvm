@@ -18,6 +18,7 @@ pub struct CheckCarryModToZeroCols<T> {
     pub quotient: Vec<T>,
 }
 
+#[derive(Clone, Debug)]
 pub struct CheckCarryModToZeroSubAir {
     pub modulus_limbs: Vec<usize>,
 

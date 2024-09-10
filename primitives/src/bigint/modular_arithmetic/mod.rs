@@ -69,6 +69,7 @@ impl<T: Clone> ModularArithmeticCols<T> {
 type Equation3<T, S> = fn(S, S, S) -> OverflowInt<T>;
 type Equation5<T, S> = fn(S, S, S, S, S) -> OverflowInt<T>;
 
+#[derive(Clone, Debug)]
 pub struct ModularArithmeticAir {
     pub check_carry_sub_air: CheckCarryModToZeroSubAir,
     // The modulus p

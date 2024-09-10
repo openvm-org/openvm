@@ -7,12 +7,15 @@ use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
-use p3_util::log2_ceil_usize;
 use rand::RngCore;
 
 use super::{
-    super::utils::secp256k1_prime, add::*, div::*, mul::*, sub::*, ModularArithmeticAir,
-    ModularArithmeticCols,
+    super::utils::{get_arithmetic_air, secp256k1_prime},
+    add::*,
+    div::*,
+    mul::*,
+    sub::*,
+    ModularArithmeticAir, ModularArithmeticCols,
 };
 use crate::{
     sub_chip::LocalTraceInstructions,
@@ -37,39 +40,21 @@ fn get_air_and_range_checker(
     num_limbs: usize,
     is_mul_div: bool,
 ) -> (ModularArithmeticAir, Arc<VariableRangeCheckerChip>) {
-    let limb_max_abs = if is_mul_div {
-        // The equation: x*y - p*q - r, or y*r - x - pq. with num_limbs N = 26
-        // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N * 2 + 2^10
-        (1 << (2 * limb_bits)) * num_limbs * 2 + (1 << limb_bits)
-    } else {
-        // x +- y -r -pq
-        (1 << (2 * limb_bits)) + (1 << limb_bits) * 3
-    };
-    // overflow bits: log(max_abs) => 26
-    let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-
     let range_bus = 1;
     let range_decomp = 17;
     let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
         range_bus,
         range_decomp,
     )));
-    let q_limbs = if is_mul_div { num_limbs } else { 1 };
-    let carry_limbs = if is_mul_div {
-        2 * num_limbs - 1
-    } else {
-        num_limbs
-    };
-    let air = ModularArithmeticAir::new(
+    let air = get_arithmetic_air(
         prime,
         limb_bits,
-        max_overflow_bits,
         num_limbs,
-        q_limbs,
-        carry_limbs,
+        is_mul_div,
         range_bus,
         range_decomp,
     );
+
     (air, range_checker)
 }
 

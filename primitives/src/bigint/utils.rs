@@ -4,7 +4,9 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::{One, Zero};
 use p3_field::AbstractField;
+use p3_util::log2_ceil_usize;
 
+use super::modular_arithmetic::ModularArithmeticAir;
 use crate::var_range::bus::VariableRangeCheckerBus;
 
 // Checks that the given expression is within bits number of bits.
@@ -27,6 +29,43 @@ pub fn secp256k1_prime() -> BigUint {
         result -= BigUint::one() << power;
     }
     result
+}
+
+pub fn get_arithmetic_air(
+    prime: BigUint,
+    limb_bits: usize,
+    num_limbs: usize,
+    is_mul_div: bool,
+    range_bus: usize,
+    range_decomp: usize,
+) -> ModularArithmeticAir {
+    let limb_max_abs = if is_mul_div {
+        // The equation: x*y - p*q - r, or y*r - x - pq. with num_limbs N = 26
+        // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N * 2 + 2^10
+        (1 << (2 * limb_bits)) * num_limbs * 2 + (1 << limb_bits)
+    } else {
+        // x +- y -r -pq
+        (1 << (2 * limb_bits)) + (1 << limb_bits) * 3
+    };
+    // overflow bits: log(max_abs) => 26
+    let max_overflow_bits = log2_ceil_usize(limb_max_abs);
+
+    let q_limbs = if is_mul_div { num_limbs } else { 1 };
+    let carry_limbs = if is_mul_div {
+        2 * num_limbs - 1
+    } else {
+        num_limbs
+    };
+    ModularArithmeticAir::new(
+        prime,
+        limb_bits,
+        max_overflow_bits,
+        num_limbs,
+        q_limbs,
+        carry_limbs,
+        range_bus,
+        range_decomp,
+    )
 }
 
 pub fn big_int_abs(x: BigInt) -> BigUint {

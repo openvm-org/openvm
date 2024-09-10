@@ -7,6 +7,7 @@ pub struct CheckCarryToZeroCols<T> {
     pub carries: Vec<T>,
 }
 
+#[derive(Clone, Debug)]
 pub struct CheckCarryToZeroSubAir {
     // The number of bits for each limb (not overflowed). Example: 10.
     pub limb_bits: usize,
