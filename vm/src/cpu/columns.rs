@@ -202,7 +202,7 @@ impl<T: Clone> CpuAuxCols<T> {
 
         let reads_aux_cols = array::from_fn(|_| {
             start = end;
-            end += MemoryReadOrImmediateAuxCols::<T>::width(&cpu_air.memory_offline_checker);
+            end += MemoryReadOrImmediateAuxCols::<T>::width();
             MemoryReadOrImmediateAuxCols::from_slice(
                 &slc[start..end],
                 &cpu_air.memory_offline_checker,
@@ -210,7 +210,7 @@ impl<T: Clone> CpuAuxCols<T> {
         });
         let writes_aux_cols = array::from_fn(|_| {
             start = end;
-            end += MemoryWriteAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
+            end += MemoryWriteAuxCols::<WORD_SIZE, T>::width();
             MemoryWriteAuxCols::from_slice(&slc[start..end], &cpu_air.memory_offline_checker)
         });
 
@@ -262,14 +262,12 @@ impl<T: Clone> CpuAuxCols<T> {
     }
 
     pub fn get_width(cpu_air: &CpuAir) -> usize {
-        let oc = &cpu_air.memory_offline_checker;
         CORE_INSTRUCTIONS.len()
             + cpu_air.options.num_public_values
             + CPU_MAX_READS_PER_CYCLE
-                * (CpuMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width(oc))
+                * (CpuMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width())
             + CPU_MAX_WRITES_PER_CYCLE
-                * (CpuMemoryAccessCols::<T>::width()
-                    + MemoryWriteAuxCols::<WORD_SIZE, T>::width(oc))
+                * (CpuMemoryAccessCols::<T>::width() + MemoryWriteAuxCols::<WORD_SIZE, T>::width())
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
     }

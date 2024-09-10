@@ -1,7 +1,7 @@
 use std::{array, mem::size_of};
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::is_less_than::IsLessThanAir;
+use afs_primitives::assert_less_than::AssertLessThanAir;
 
 use crate::{
     field_extension::{air::FieldExtensionArithmeticAir, chip::EXT_DEG},
@@ -62,8 +62,20 @@ impl<T> FieldExtensionArithmeticCols<T> {
         FieldExtensionArithmeticIoCols::<T>::get_width()
             + FieldExtensionArithmeticAuxCols::<T>::get_width(&air.mem_oc)
     }
+}
 
-    pub(crate) fn from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+impl<T: Clone> FieldExtensionArithmeticCols<T> {
+    pub(crate) fn flatten(&self) -> Vec<T> {
+        self.io
+            .flatten()
+            .into_iter()
+            .chain(self.aux.flatten())
+            .collect()
+    }
+    pub(crate) fn from_iter<I: Iterator<Item = T>>(
+        iter: &mut I,
+        lt_air: &AssertLessThanAir<2>,
+    ) -> Self {
         let mut next = || iter.next().unwrap();
 
         Self {
@@ -91,16 +103,6 @@ impl<T> FieldExtensionArithmeticCols<T> {
                 write_aux_cols: MemoryWriteAuxCols::from_iterator(iter, lt_air),
             },
         }
-    }
-}
-
-impl<T: Clone> FieldExtensionArithmeticCols<T> {
-    pub(crate) fn flatten(&self) -> Vec<T> {
-        self.io
-            .flatten()
-            .into_iter()
-            .chain(self.aux.flatten())
-            .collect()
     }
 }
 
@@ -132,8 +134,8 @@ impl<T> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
         EXT_DEG
             + 5
-            + 2 * MemoryReadAuxCols::<EXT_DEG, T>::width(oc)
-            + MemoryWriteAuxCols::<EXT_DEG, T>::width(oc)
+            + 2 * MemoryReadAuxCols::<EXT_DEG, T>::width()
+            + MemoryWriteAuxCols::<EXT_DEG, T>::width()
     }
 }
 

@@ -95,8 +95,7 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
 
 impl<T: Clone> FieldArithmeticAuxCols<T> {
     pub fn get_width(air: &FieldArithmeticAir) -> usize {
-        6 + (2 * MemoryReadOrImmediateAuxCols::<T>::width(&air.mem_oc)
-            + MemoryWriteAuxCols::<1, T>::width(&air.mem_oc))
+        6 + (2 * MemoryReadOrImmediateAuxCols::<T>::width() + MemoryWriteAuxCols::<1, T>::width())
     }
 
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, air: &FieldArithmeticAir) -> Self {

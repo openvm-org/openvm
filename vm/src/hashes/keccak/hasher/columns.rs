@@ -183,8 +183,8 @@ pub const NUM_KECCAK_SPONGE_COLS: usize = size_of::<KeccakSpongeCols<u8>>();
 
 impl<T> KeccakMemoryCols<T> {
     pub fn width(mem_oc: &MemoryOfflineChecker) -> usize {
-        (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS) * MemoryReadAuxCols::<1, T>::width(mem_oc)
-            + KECCAK_DIGEST_WRITES * MemoryWriteAuxCols::<1, T>::width(mem_oc)
+        (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS) * MemoryReadAuxCols::<1, T>::width()
+            + KECCAK_DIGEST_WRITES * MemoryWriteAuxCols::<1, T>::width()
     }
 
     pub fn from_slice(slc: &[T], mem_oc: &MemoryOfflineChecker) -> Self

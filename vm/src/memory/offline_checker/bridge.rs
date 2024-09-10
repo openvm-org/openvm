@@ -1,7 +1,7 @@
 use std::{iter::zip, marker::PhantomData};
 
 use afs_primitives::{
-    is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
+    assert_less_than::{columns::AssertLessThanIoCols, AssertLessThanAir},
     is_zero::{
         columns::{IsZeroCols, IsZeroIoCols},
         IsZeroAir,
@@ -24,6 +24,10 @@ use crate::{
         MemoryAddress,
     },
 };
+
+/// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will be decomposed into)
+/// for the `AssertLessThanAir` in the `MemoryOfflineChecker`.
+pub(super) const AUX_LEN: usize = 2;
 
 /// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory operations (read/write).
 /// It adds all necessary constraints and interactions.
@@ -252,7 +256,7 @@ impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T
 #[derive(Clone, Copy, Debug)]
 pub struct MemoryOfflineChecker {
     pub memory_bus: MemoryBus,
-    pub timestamp_lt_air: IsLessThanAir,
+    pub timestamp_lt_air: AssertLessThanAir<AUX_LEN>,
 }
 
 impl MemoryOfflineChecker {
@@ -261,7 +265,7 @@ impl MemoryOfflineChecker {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp);
         Self {
             memory_bus,
-            timestamp_lt_air: IsLessThanAir::new(range_bus, clk_max_bits),
+            timestamp_lt_air: AssertLessThanAir::new(range_bus, clk_max_bits),
         }
     }
 
@@ -274,7 +278,7 @@ impl MemoryOfflineChecker {
     ) {
         for (prev_timestamp, clk_lt_aux) in zip(base.prev_timestamps, base.clk_lt_aux.clone()) {
             let clk_lt_io_cols =
-                IsLessThanIoCols::<AB::Expr>::new(prev_timestamp, timestamp.clone(), AB::F::one());
+                AssertLessThanIoCols::<AB::Expr>::new(prev_timestamp, timestamp.clone());
             self.timestamp_lt_air.conditional_eval(
                 builder,
                 clk_lt_io_cols,

@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use afs_primitives::{
-    is_less_than::columns::IsLessThanAuxCols, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
-    var_range::VariableRangeCheckerChip,
+    assert_less_than::columns::AssertLessThanAuxCols, is_zero::IsZeroAir,
+    sub_chip::LocalTraceInstructions, var_range::VariableRangeCheckerChip,
 };
 use p3_field::PrimeField32;
 
 use super::{
-    bridge::MemoryOfflineChecker,
+    bridge::{MemoryOfflineChecker, AUX_LEN},
     columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 use crate::memory::{
@@ -68,19 +68,18 @@ impl MemoryOfflineChecker {
         range_checker: Arc<VariableRangeCheckerChip>,
         prev_timestamps: &[F; N],
         timestamp: F,
-    ) -> [IsLessThanAuxCols<F>; N] {
+    ) -> [AssertLessThanAuxCols<F, AUX_LEN>; N] {
         prev_timestamps.map(|prev_timestamp| {
             debug_assert!(prev_timestamp.as_canonical_u32() < timestamp.as_canonical_u32());
-
-            LocalTraceInstructions::generate_trace_row(
-                &self.timestamp_lt_air,
-                (
-                    prev_timestamp.as_canonical_u32(),
-                    timestamp.as_canonical_u32(),
-                    range_checker.clone(),
-                ),
-            )
-            .aux
+            let mut aux: AssertLessThanAuxCols<F, AUX_LEN> =
+                AssertLessThanAuxCols::<F, AUX_LEN>::new([F::zero(); AUX_LEN]);
+            self.timestamp_lt_air.generate_trace_row_aux(
+                prev_timestamp.as_canonical_u32(),
+                timestamp.as_canonical_u32(),
+                &range_checker,
+                &mut aux,
+            );
+            aux
         })
     }
 }

@@ -152,11 +152,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
 {
     pub fn width(air: &UintArithmeticAir<ARG_SIZE, LIMB_SIZE>) -> usize {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-        3 * MemoryReadAuxCols::<1, T>::width(&air.mem_oc)
-            + MemoryReadAuxCols::<NUM_LIMBS, T>::width(&air.mem_oc)
-            + MemoryReadAuxCols::<NUM_LIMBS, T>::width(&air.mem_oc)
-            + MemoryWriteAuxCols::<NUM_LIMBS, T>::width(&air.mem_oc)
-            + MemoryWriteAuxCols::<1, T>::width(&air.mem_oc)
+        3 * MemoryReadAuxCols::<1, T>::width()
+            + MemoryReadAuxCols::<NUM_LIMBS, T>::width()
+            + MemoryReadAuxCols::<NUM_LIMBS, T>::width()
+            + MemoryWriteAuxCols::<NUM_LIMBS, T>::width()
+            + MemoryWriteAuxCols::<1, T>::width()
             + (5 + num_limbs)
     }
 
@@ -174,22 +174,22 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
         let buffer = iter.by_ref().take(num_limbs).collect();
 
         let mem_oc = &air.mem_oc;
-        let width_for_cell = MemoryReadAuxCols::<1, T>::width(mem_oc);
+        let width_for_cell = MemoryReadAuxCols::<1, T>::width();
         let read_ptr_aux_cols = [(); 3].map(|_| {
             MemoryReadAuxCols::<1, T>::from_slice(
                 &iter.by_ref().take(width_for_cell).collect::<Vec<_>>(),
                 mem_oc,
             )
         });
-        let width = MemoryReadAuxCols::<NUM_LIMBS, T>::width(mem_oc);
+        let width = MemoryReadAuxCols::<32, T>::width();
         let read_x_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let read_y_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let write_z_slice = {
-            let width = MemoryWriteAuxCols::<NUM_LIMBS, T>::width(mem_oc);
+            let width = MemoryWriteAuxCols::<32, T>::width();
             iter.by_ref().take(width).collect::<Vec<_>>()
         };
         let write_cmp_slice = {
-            let width = MemoryWriteAuxCols::<1, T>::width(mem_oc);
+            let width = MemoryWriteAuxCols::<1, T>::width();
             iter.by_ref().take(width).collect::<Vec<_>>()
         };
 

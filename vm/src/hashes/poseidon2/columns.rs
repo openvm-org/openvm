@@ -156,9 +156,9 @@ impl<T: Field> Poseidon2VmIoCols<T> {
 impl<T: Clone> Poseidon2VmAuxCols<T> {
     pub fn width(air: &Poseidon2VmAir<T>) -> usize {
         3 + Poseidon2Cols::<WIDTH, T>::get_width(&air.inner)
-            + 3 * MemoryReadAuxCols::<1, T>::width(&air.mem_oc)
-            + 2 * MemoryReadAuxCols::<CHUNK, T>::width(&air.mem_oc)
-            + 2 * MemoryWriteAuxCols::<CHUNK, T>::width(&air.mem_oc)
+            + 3 * MemoryReadAuxCols::<1, T>::width()
+            + 2 * MemoryReadAuxCols::<CHUNK, T>::width()
+            + 2 * MemoryWriteAuxCols::<CHUNK, T>::width()
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -199,17 +199,17 @@ impl<T: Clone> Poseidon2VmAuxCols<T> {
 
         let ptr_aux_cols = array::from_fn(|_| {
             start = end;
-            end += MemoryReadAuxCols::<1, T>::width(&air.mem_oc);
+            end += MemoryReadAuxCols::<1, T>::width();
             MemoryReadAuxCols::from_slice(&slc[start..end], &air.mem_oc)
         });
         let input_aux_cols = array::from_fn(|_| {
             start = end;
-            end += MemoryReadAuxCols::<CHUNK, T>::width(&air.mem_oc);
+            end += MemoryReadAuxCols::<CHUNK, T>::width();
             MemoryReadAuxCols::from_slice(&slc[start..end], &air.mem_oc)
         });
         let output_aux_cols = array::from_fn(|_| {
             start = end;
-            end += MemoryWriteAuxCols::<CHUNK, T>::width(&air.mem_oc);
+            end += MemoryWriteAuxCols::<CHUNK, T>::width();
             MemoryWriteAuxCols::from_slice(&slc[start..end], &air.mem_oc)
         });
 
