@@ -75,9 +75,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
             InstructionCols::new(
                 expected_opcode,
                 [
-                    io.z.address,
-                    io.x.address,
-                    io.y.address,
+                    io.z.ptr,
+                    io.x.ptr,
+                    io.y.ptr,
+                    io.d,
                     io.z.address_space,
                     io.x.address_space,
                     io.y.address_space,

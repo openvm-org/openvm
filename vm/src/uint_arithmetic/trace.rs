@@ -1,3 +1,5 @@
+use std::array::from_fn;
+
 use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -27,6 +29,9 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                     let super::UintArithmeticRecord::<ARG_SIZE, LIMB_SIZE, F> {
                         from_state,
                         instruction,
+                        x_ptr_read,
+                        y_ptr_read,
+                        z_ptr_read,
                         x_read,
                         y_read,
                         z_write,
@@ -104,6 +109,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                 opcode_lt_flag: Default::default(),
                 opcode_eq_flag: Default::default(),
                 buffer: vec![Default::default(); num_limbs],
+                read_ptr_aux_cols: from_fn(|_| MemoryReadAuxCols::disabled(self.air.mem_oc)),
                 read_x_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
                 read_y_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
                 write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),

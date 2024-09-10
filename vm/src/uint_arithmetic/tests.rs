@@ -25,81 +25,88 @@ fn generate_uint_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
         .collect()
 }
 
-// #[test]
-// fn uint_arithmetic_rand_air_test() {
-//     const ARG_SIZE: usize = 256;
-//     const LIMB_SIZE: usize = 8;
-//     let num_ops: usize = 15;
-//     let address_space_range = || 1usize..=2;
-//     let address_range = || 0usize..1 << 29;
-//
-//     let mut tester = MachineChipTestBuilder::default();
-//     let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
-//         tester.execution_bus(),
-//         tester.memory_chip(),
-//     );
-//
-//     let mut rng = create_seeded_rng();
-//
-//     for _ in 0..num_ops {
-//         let opcode = OPCODES_ARITH[rng.gen_range(0..OPCODES_ARITH.len())];
-//         let operand1 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
-//         let operand2 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
-//
-//         let result_as = rng.gen_range(address_space_range());
-//         let as1 = rng.gen_range(address_space_range());
-//         let as2 = rng.gen_range(address_space_range());
-//         let address1 = rng.gen_range(address_range());
-//         let address2 = rng.gen_range(address_range());
-//         let address1_ptr = rng.gen_range(address_range());
-//         let address2_ptr = rng.gen_range(address_range());
-//         let result_address = rng.gen_range(address_range());
-//
-//         let operand1_f = operand1
-//             .clone()
-//             .into_iter()
-//             .map(F::from_canonical_u32)
-//             .collect::<Vec<_>>();
-//         let operand2_f = operand2
-//             .clone()
-//             .into_iter()
-//             .map(F::from_canonical_u32)
-//             .collect::<Vec<_>>();
-//
-//         // TODO: 32 -> proper number
-//         tester.write::<32>(as1, address1, operand1_f.as_slice().try_into().unwrap());
-//         tester.write_cell(as1, address1_ptr, F::from_canonical_usize(address1));
-//         tester.write::<32>(as2, address2, operand2_f.as_slice().try_into().unwrap());
-//         tester.write_cell(as2, address2_ptr, F::from_canonical_usize(address2));
-//
-//         let result =
-//             UintArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
-//
-//         tester.execute(
-//             &mut chip,
-//             Instruction::from_usize(
-//                 opcode,
-//                 [result_address, address1_ptr, address2_ptr, result_as, as1, as2],
-//             ),
-//         );
-//         match result.0 {
-//             CalculationResult::Uint(result) => {
-//                 assert_eq!(
-//                     result
-//                         .into_iter()
-//                         .map(F::from_canonical_u32)
-//                         .collect::<Vec<_>>(),
-//                     tester.read::<32>(result_as, result_address)
-//                 )
-//             }
-//             CalculationResult::Short(_) => unreachable!(),
-//         }
-//     }
-//
-//     let tester = tester.build().load(chip).finalize();
-//
-//     tester.simple_test().expect("Verification failed");
-// }
+#[test]
+fn uint_arithmetic_rand_air_test() {
+    const ARG_SIZE: usize = 256;
+    const LIMB_SIZE: usize = 8;
+    let num_ops: usize = 15;
+    let address_space_range = || 1usize..=2;
+    let address_range = || 0usize..1 << 29;
+
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
+        tester.execution_bus(),
+        tester.memory_chip(),
+    );
+
+    let mut rng = create_seeded_rng();
+
+    for _ in 0..num_ops {
+        let opcode = OPCODES_ARITH[rng.gen_range(0..OPCODES_ARITH.len())];
+        let operand1 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+        let operand2 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
+
+        let result_as = rng.gen_range(address_space_range());
+        let as1 = rng.gen_range(address_space_range());
+        let as2 = rng.gen_range(address_space_range());
+        let address1 = rng.gen_range(address_range());
+        let address2 = rng.gen_range(address_range());
+        let address1_ptr = rng.gen_range(address_range());
+        let address2_ptr = rng.gen_range(address_range());
+        let result_address = rng.gen_range(address_range());
+
+        let operand1_f = operand1
+            .clone()
+            .into_iter()
+            .map(F::from_canonical_u32)
+            .collect::<Vec<_>>();
+        let operand2_f = operand2
+            .clone()
+            .into_iter()
+            .map(F::from_canonical_u32)
+            .collect::<Vec<_>>();
+
+        // TODO: 32 -> proper number
+        tester.write::<32>(as1, address1, operand1_f.as_slice().try_into().unwrap());
+        tester.write_cell(as1, address1_ptr, F::from_canonical_usize(address1));
+        tester.write::<32>(as2, address2, operand2_f.as_slice().try_into().unwrap());
+        tester.write_cell(as2, address2_ptr, F::from_canonical_usize(address2));
+
+        let result =
+            UintArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
+
+        tester.execute(
+            &mut chip,
+            Instruction::from_usize(
+                opcode,
+                [
+                    result_address,
+                    address1_ptr,
+                    address2_ptr,
+                    result_as,
+                    as1,
+                    as2,
+                ],
+            ),
+        );
+        match result.0 {
+            CalculationResult::Uint(result) => {
+                assert_eq!(
+                    result
+                        .into_iter()
+                        .map(F::from_canonical_u32)
+                        .collect::<Vec<_>>(),
+                    tester.read::<32>(result_as, result_address)
+                )
+            }
+            CalculationResult::Short(_) => unreachable!(),
+        }
+    }
+
+    let tester = tester.build().load(chip).finalize();
+
+    tester.simple_test().expect("Verification failed");
+}
 
 /// Given a fake trace of a single operation, setup a chip and run the test.
 /// We replace the "output" part of the trace, and we _may_ replace the interactions
@@ -332,148 +339,6 @@ fn uint_sub_invalid_carry_air_test() {
         VerificationError::OodEvaluationMismatch,
     );
 }
-
-// #[test]
-// fn uint_lt_rand_air_test() {
-//     const ARG_SIZE: usize = 256;
-//     const LIMB_SIZE: usize = 8;
-//     let num_ops: usize = 15;
-//     let address_space_range = || 1usize..=2;
-//     let address_range = || 0usize..1 << 29;
-//
-//     let mut tester = MachineChipTestBuilder::default();
-//     let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
-//         tester.execution_bus(),
-//         tester.memory_chip(),
-//     );
-//
-//     let mut rng = create_seeded_rng();
-//
-//     for _ in 0..num_ops {
-//         let opcode = Opcode::LT256;
-//         let operand1 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
-//         let operand2 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
-//
-//         let result_as = rng.gen_range(address_space_range());
-//         let as1 = rng.gen_range(address_space_range());
-//         let as2 = rng.gen_range(address_space_range());
-//         let address1 = rng.gen_range(address_range());
-//         let address2 = rng.gen_range(address_range());
-//         let result_address = rng.gen_range(address_range());
-//
-//         let operand1_f = operand1
-//             .clone()
-//             .into_iter()
-//             .map(F::from_canonical_u32)
-//             .collect::<Vec<_>>();
-//         let operand2_f = operand2
-//             .clone()
-//             .into_iter()
-//             .map(F::from_canonical_u32)
-//             .collect::<Vec<_>>();
-//
-//         // TODO: 32 -> proper number
-//         tester.write::<32>(as1, address1, operand1_f.as_slice().try_into().unwrap());
-//         tester.write::<32>(as2, address2, operand2_f.as_slice().try_into().unwrap());
-//
-//         let result =
-//             UintArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
-//
-//         tester.execute(
-//             &mut chip,
-//             Instruction::from_usize(
-//                 opcode,
-//                 [result_address, address1, address2, result_as, as1, as2],
-//             ),
-//         );
-//         match result.0 {
-//             CalculationResult::Uint(_) => unreachable!(),
-//             CalculationResult::Short(result) => {
-//                 assert_eq!(
-//                     [F::from_bool(result)],
-//                     tester.read::<1>(result_as, result_address)
-//                 )
-//             }
-//         }
-//     }
-//
-//     let tester = tester.build().load(chip).finalize();
-//
-//     tester.simple_test().expect("Verification failed");
-// }
-
-// #[test]
-// fn uint_eq_rand_air_test() {
-//     const ARG_SIZE: usize = 256;
-//     const LIMB_SIZE: usize = 8;
-//     let num_ops: usize = 15;
-//     let address_space_range = || 1usize..=2;
-//     let address_range = || 0usize..1 << 29;
-//
-//     let mut tester = MachineChipTestBuilder::default();
-//     let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
-//         tester.execution_bus(),
-//         tester.memory_chip(),
-//     );
-//
-//     let mut rng = create_seeded_rng();
-//
-//     for _ in 0..num_ops {
-//         let opcode = Opcode::EQ256;
-//         let operand1 = generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng);
-//         let operand2 = if rng.gen_bool(0.5) {
-//             generate_uint_number::<ARG_SIZE, LIMB_SIZE>(&mut rng)
-//         } else {
-//             operand1.clone()
-//         };
-//
-//         let result_as = rng.gen_range(address_space_range());
-//         let as1 = rng.gen_range(address_space_range());
-//         let as2 = rng.gen_range(address_space_range());
-//         let address1 = rng.gen_range(address_range());
-//         let address2 = rng.gen_range(address_range());
-//         let result_address = rng.gen_range(address_range());
-//
-//         let operand1_f = operand1
-//             .clone()
-//             .into_iter()
-//             .map(F::from_canonical_u32)
-//             .collect::<Vec<_>>();
-//         let operand2_f = operand2
-//             .clone()
-//             .into_iter()
-//             .map(F::from_canonical_u32)
-//             .collect::<Vec<_>>();
-//
-//         // TODO: 32 -> proper number
-//         tester.write::<32>(as1, address1, operand1_f.as_slice().try_into().unwrap());
-//         tester.write::<32>(as2, address2, operand2_f.as_slice().try_into().unwrap());
-//
-//         let result =
-//             UintArithmetic::<ARG_SIZE, LIMB_SIZE, F>::solve(opcode, (&operand1, &operand2));
-//
-//         tester.execute(
-//             &mut chip,
-//             Instruction::from_usize(
-//                 opcode,
-//                 [result_address, address1, address2, result_as, as1, as2],
-//             ),
-//         );
-//         match result.0 {
-//             CalculationResult::Uint(_) => unreachable!(),
-//             CalculationResult::Short(result) => {
-//                 assert_eq!(
-//                     [F::from_bool(result)],
-//                     tester.read::<1>(result_as, result_address)
-//                 )
-//             }
-//         }
-//     }
-//
-//     let tester = tester.build().load(chip).finalize();
-//
-//     tester.simple_test().expect("Verification failed");
-// }
 
 #[test]
 fn uint_lt_wrong_subtraction_test() {
