@@ -24,6 +24,7 @@ mod ref_ptr;
 mod select;
 mod symbolic;
 mod types;
+mod uint;
 mod utils;
 mod var;
 

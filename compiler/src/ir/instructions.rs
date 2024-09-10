@@ -38,6 +38,8 @@ pub enum DslIr<C: Config> {
     AddSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Add two modular BigInts over scalar field.
     AddSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Add two u256
+    AddU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Subtractions.
     /// Subtracts two variables (var = var - var).
@@ -66,6 +68,8 @@ pub enum DslIr<C: Config> {
     SubSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Subtracts two modular BigInts over scalar field.
     SubSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Subtract two u256
+    SubU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Multiplications.
     /// Multiplies two variables (var = var * var).
@@ -124,6 +128,10 @@ pub enum DslIr<C: Config> {
     LessThanV(Var<C::N>, Var<C::N>, Var<C::N>),
     /// Compares a variable and an immediate
     LessThanVI(Var<C::N>, Var<C::N>, C::N),
+    /// Compare two u256 for <
+    LessThanU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Compare two u256 for ==
+    EqualToU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Control flow.
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).

@@ -1,6 +1,6 @@
 use std::iter;
 
-use super::{num_limbs, UintArithmeticAir};
+use super::{num_limbs, UintArithmeticAir, NUM_LIMBS};
 use crate::{
     arch::columns::ExecutionState,
     memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -68,10 +68,9 @@ pub struct UintArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, 
     // Refer to air.rs for more details.
     pub buffer: Vec<T>,
 
-    // TODO: 16 -> normal thing
-    pub read_x_aux_cols: MemoryReadAuxCols<16, T>,
-    pub read_y_aux_cols: MemoryReadAuxCols<16, T>,
-    pub write_z_aux_cols: MemoryWriteAuxCols<16, T>,
+    pub read_x_aux_cols: MemoryReadAuxCols<NUM_LIMBS, T>,
+    pub read_y_aux_cols: MemoryReadAuxCols<NUM_LIMBS, T>,
+    pub write_z_aux_cols: MemoryWriteAuxCols<NUM_LIMBS, T>,
     pub write_cmp_aux_cols: MemoryWriteAuxCols<1, T>,
 }
 
@@ -140,9 +139,9 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
 {
     pub fn width(air: &UintArithmeticAir<ARG_SIZE, LIMB_SIZE>) -> usize {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-        MemoryReadAuxCols::<16, T>::width(&air.mem_oc)
-            + MemoryReadAuxCols::<16, T>::width(&air.mem_oc)
-            + MemoryWriteAuxCols::<16, T>::width(&air.mem_oc)
+        MemoryReadAuxCols::<NUM_LIMBS, T>::width(&air.mem_oc)
+            + MemoryReadAuxCols::<NUM_LIMBS, T>::width(&air.mem_oc)
+            + MemoryWriteAuxCols::<NUM_LIMBS, T>::width(&air.mem_oc)
             + MemoryWriteAuxCols::<1, T>::width(&air.mem_oc)
             + (5 + num_limbs)
     }
@@ -161,11 +160,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
         let buffer = iter.by_ref().take(num_limbs).collect();
 
         let mem_oc = &air.mem_oc;
-        let width = MemoryReadAuxCols::<16, T>::width(mem_oc);
+        let width = MemoryReadAuxCols::<NUM_LIMBS, T>::width(mem_oc);
         let read_x_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let read_y_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let write_z_slice = {
-            let width = MemoryWriteAuxCols::<16, T>::width(mem_oc);
+            let width = MemoryWriteAuxCols::<NUM_LIMBS, T>::width(mem_oc);
             iter.by_ref().take(width).collect::<Vec<_>>()
         };
         let write_cmp_slice = {
@@ -173,9 +172,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
             iter.by_ref().take(width).collect::<Vec<_>>()
         };
 
-        let read_x_aux_cols = MemoryReadAuxCols::<16, T>::from_slice(&read_x_slice, mem_oc);
-        let read_y_aux_cols = MemoryReadAuxCols::<16, T>::from_slice(&read_y_slice, mem_oc);
-        let write_z_aux_cols = MemoryWriteAuxCols::<16, T>::from_slice(&write_z_slice, mem_oc);
+        let read_x_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_x_slice, mem_oc);
+        let read_y_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_y_slice, mem_oc);
+        let write_z_aux_cols =
+            MemoryWriteAuxCols::<NUM_LIMBS, T>::from_slice(&write_z_slice, mem_oc);
         let write_cmp_aux_cols = MemoryWriteAuxCols::<1, T>::from_slice(&write_cmp_slice, mem_oc);
 
         Self {

@@ -24,21 +24,26 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+pub const NUM_LIMBS: usize = 32; // This is used in some places where const generics are hard to use.
+                                 // Of course, TODO make it something normal
+
 pub const fn num_limbs<const ARG_SIZE: usize, const LIMB_SIZE: usize>() -> usize {
     (ARG_SIZE + LIMB_SIZE - 1) / LIMB_SIZE
 }
 
+#[derive(Debug)]
 pub enum WriteRecord<T> {
-    Uint(MemoryWriteRecord<16, T>),
+    Uint(MemoryWriteRecord<NUM_LIMBS, T>),
     Short(MemoryWriteRecord<1, T>),
 }
 
+#[derive(Debug)]
 pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
-    pub x_read: MemoryReadRecord<16, T>, // TODO: 16 -> generic expr or smth
-    pub y_read: MemoryReadRecord<16, T>, // TODO: 16 -> generic expr or smth
+    pub x_read: MemoryReadRecord<NUM_LIMBS, T>,
+    pub y_read: MemoryReadRecord<NUM_LIMBS, T>,
     pub z_write: WriteRecord<T>,
 
     // this may be redundant because we can extract it from z_write,
@@ -48,6 +53,7 @@ pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T
     pub buffer: Vec<T>,
 }
 
+#[derive(Debug)]
 pub struct UintArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> {
     pub air: UintArithmeticAir<ARG_SIZE, LIMB_SIZE>,
     data: Vec<UintArithmeticRecord<ARG_SIZE, LIMB_SIZE, T>>,
@@ -109,8 +115,8 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             memory_chip.timestamp().as_canonical_u32() as usize
         );
 
-        let x_read = memory_chip.read::<16>(x_as, x_address); // TODO: 16 -> generic expr or smth
-        let y_read = memory_chip.read::<16>(y_as, y_address); // TODO: 16 -> generic expr or smth
+        let x_read = memory_chip.read::<NUM_LIMBS>(x_as, x_address);
+        let y_read = memory_chip.read::<NUM_LIMBS>(y_as, y_address);
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
@@ -123,7 +129,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
                     .iter()
                     .map(|x| T::from_canonical_u32(*x))
                     .collect::<Vec<_>>();
-                WriteRecord::Uint(memory_chip.write::<16>(
+                WriteRecord::Uint(memory_chip.write::<NUM_LIMBS>(
                     z_as,
                     z_address,
                     to_write.try_into().unwrap(),

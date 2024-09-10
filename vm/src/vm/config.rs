@@ -24,6 +24,7 @@ pub struct VmConfig {
     // TODO: VmConfig should just contain CpuOptions to reduce redundancy
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+    pub uint256_arithmetic_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
     pub keccak_enabled: bool,
@@ -43,6 +44,7 @@ impl Default for VmConfig {
         VmConfig {
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
+            uint256_arithmetic_enabled: true,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
             keccak_enabled: false,

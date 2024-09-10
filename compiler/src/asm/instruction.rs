@@ -97,6 +97,18 @@ pub enum AsmInstruction<F, EF> {
     /// Modular divide, dst = lhs / rhs.
     DivSecp256k1Scalar(i32, i32, i32),
 
+    /// uint add, dst = lhs + rhs.
+    AddU256(i32, i32, i32),
+
+    /// uint subtract, dst = lhs - rhs.
+    SubU256(i32, i32, i32),
+
+    /// uint less than, dst = lhs < rhs.
+    LessThanU256(i32, i32, i32),
+
+    /// uint equal to, dst = lhs == rhs.
+    EqualToU256(i32, i32, i32),
+
     /// Jump.
     Jump(i32, F),
 
@@ -447,6 +459,18 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                     "divide_secp256k1_scalar ({})fp ({})fp ({})fp",
                     dst, src1, src2
                 )
+            }
+            AsmInstruction::AddU256(dst, src1, src2) => {
+                write!(f, "add_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::SubU256(dst, src1, src2) => {
+                write!(f, "sub_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::LessThanU256(dst, src1, src2) => {
+                write!(f, "lt_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::EqualToU256(dst, src1, src2) => {
+                write!(f, "eq_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
             }
         }
     }

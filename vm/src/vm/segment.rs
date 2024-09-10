@@ -25,7 +25,7 @@ use crate::{
         instructions::{
             Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
             SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS,
-            SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS,
+            SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS,
         },
     },
     cpu::{trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS},
@@ -40,6 +40,7 @@ use crate::{
         ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
     },
     program::{Program, ProgramChip},
+    uint_arithmetic::UintArithmeticChip,
     vm::cycle_tracker::CycleTracker,
 };
 
@@ -134,6 +135,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             )));
             assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
             chips.push(MachineChipVariant::FieldExtension(field_extension_chip))
+        }
+        if config.uint256_arithmetic_enabled {
+            let uint_arithmetic_chip = Rc::new(RefCell::new(UintArithmeticChip::<256, 8, F>::new(
+                execution_bus,
+                memory_chip.clone(),
+            )));
+            assign!(UINT256_ARITHMETIC_INSTRUCTIONS, uint_arithmetic_chip);
+            chips.push(MachineChipVariant::UintArithmetic(uint_arithmetic_chip));
         }
         if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
