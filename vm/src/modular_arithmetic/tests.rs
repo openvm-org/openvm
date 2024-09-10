@@ -27,20 +27,56 @@ fn test_modular_multiplication_runtime() {
     setup_tracing();
 
     let mut tester: MachineChipTestBuilder<BabyBear> = MachineChipTestBuilder::default();
-    let mut coord_chip = ModularArithmeticChip::new(
+    let mut coord_add_chip = ModularArithmeticChip::new(
         tester.execution_bus(),
         tester.memory_chip(),
         secp256k1_coord_prime(),
+        super::ModularArithmeticOp::Add,
     );
-    let mut scalar_chip = ModularArithmeticChip::new(
+    let mut coord_sub_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.memory_chip(),
+        secp256k1_coord_prime(),
+        super::ModularArithmeticOp::Sub,
+    );
+    let mut coord_mul_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.memory_chip(),
+        secp256k1_coord_prime(),
+        super::ModularArithmeticOp::Mul,
+    );
+    let mut coord_div_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.memory_chip(),
+        secp256k1_coord_prime(),
+        super::ModularArithmeticOp::Div,
+    );
+    let mut scalar_add_chip = ModularArithmeticChip::new(
         tester.execution_bus(),
         tester.memory_chip(),
         secp256k1_scalar_prime(),
+        super::ModularArithmeticOp::Add,
+    );
+    let mut scalar_sub_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.memory_chip(),
+        secp256k1_scalar_prime(),
+        super::ModularArithmeticOp::Sub,
+    );
+    let mut scalar_mul_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.memory_chip(),
+        secp256k1_scalar_prime(),
+        super::ModularArithmeticOp::Mul,
+    );
+    let mut scalar_div_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.memory_chip(),
+        secp256k1_scalar_prime(),
+        super::ModularArithmeticOp::Div,
     );
     let mut rng = create_seeded_rng();
 
-    // FIXME: change when sub, mul, div are supported.
-    let supported_ops = 1;
     for _ in 0..100 {
         let num_digits = 8;
 
@@ -53,14 +89,15 @@ fn test_modular_multiplication_runtime() {
         let (modulus, opcode) = if is_scalar {
             (
                 secp256k1_scalar_prime(),
-                SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS[rng.gen_range(0..supported_ops)],
+                SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS[rng.gen_range(0..4)],
             )
         } else {
             (
                 secp256k1_coord_prime(),
-                SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS[rng.gen_range(0..supported_ops)],
+                SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS[rng.gen_range(0..4)],
             )
         };
+        println!("opcode: {}", opcode);
 
         a %= modulus.clone();
         b %= modulus.clone();
@@ -121,11 +158,38 @@ fn test_modular_multiplication_runtime() {
             0,
             1,
         );
-        if is_scalar {
-            tester.execute(&mut scalar_chip, instruction);
-        } else {
-            tester.execute(&mut coord_chip, instruction);
-        }
+        let chip = match opcode {
+            SECP256K1_COORD_ADD | SECP256K1_SCALAR_ADD => {
+                if is_scalar {
+                    &mut scalar_add_chip
+                } else {
+                    &mut coord_add_chip
+                }
+            }
+            SECP256K1_COORD_SUB | SECP256K1_SCALAR_SUB => {
+                if is_scalar {
+                    &mut scalar_sub_chip
+                } else {
+                    &mut coord_sub_chip
+                }
+            }
+            SECP256K1_COORD_MUL | SECP256K1_SCALAR_MUL => {
+                if is_scalar {
+                    &mut scalar_mul_chip
+                } else {
+                    &mut coord_mul_chip
+                }
+            }
+            SECP256K1_COORD_DIV | SECP256K1_SCALAR_DIV => {
+                if is_scalar {
+                    &mut scalar_div_chip
+                } else {
+                    &mut coord_div_chip
+                }
+            }
+            _ => panic!("Unexpected opcode"),
+        };
+        tester.execute(chip, instruction);
         for (i, &elem) in big_uint_to_num_limbs(r, repr_bits, num_elems)
             .iter()
             .rev()

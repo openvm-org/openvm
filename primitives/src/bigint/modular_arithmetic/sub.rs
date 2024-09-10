@@ -14,6 +14,8 @@ use crate::{
     sub_chip::{AirConfig, LocalTraceInstructions, SubAir},
     var_range::VariableRangeCheckerChip,
 };
+
+#[derive(Clone, Debug)]
 pub struct ModularSubtractionAir {
     pub arithmetic: ModularArithmeticAir,
 }

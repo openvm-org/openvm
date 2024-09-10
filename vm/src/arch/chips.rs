@@ -17,7 +17,9 @@ use crate::{
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::MemoryChipRef,
-    modular_arithmetic::ModularArithmeticChip as NewModularArithmeticChip,
+    modular_arithmetic::{
+        ModularArithmeticChip as NewModularArithmeticChip, PrimitiveArithmeticAir,
+    },
     modular_multiplication::ModularArithmeticChip,
     program::ProgramChip,
     uint_arithmetic::UintArithmeticChip,
@@ -95,7 +97,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ModularArithmetic(Rc<RefCell<ModularArithmeticChip<F>>>),
     // FIXME: remove above and rename (no New)
-    NewModularArithmetic(Rc<RefCell<NewModularArithmeticChip<F>>>),
+    NewModularArithmetic(Rc<RefCell<NewModularArithmeticChip<F, PrimitiveArithmeticAir>>>),
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
 }
 

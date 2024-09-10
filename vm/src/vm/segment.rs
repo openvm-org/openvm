@@ -24,8 +24,7 @@ use crate::{
         chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
         instructions::{
             Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
-            SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS,
-            SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS,
+            UINT256_ARITHMETIC_INSTRUCTIONS,
         },
     },
     cpu::{trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS},
@@ -33,9 +32,9 @@ use crate::{
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
-    modular_arithmetic::ModularArithmeticChip as NewModularArithmeticChip,
-    modular_multiplication::{
-        ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+    modular_arithmetic::{
+        ModularArithmeticChip as NewModularArithmeticChip, ModularArithmeticOp,
+        SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
     },
     program::{Program, ProgramChip},
     uint_arithmetic::UintArithmeticChip,
@@ -160,51 +159,85 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         }
         if config.modular_multiplication_enabled {
-            let airs = vec![
-                ModularArithmeticChip::new(
-                    memory_chip.clone(),
-                    SECP256K1_COORD_PRIME.clone(),
-                    config.bigint_limb_size,
-                ),
-                ModularArithmeticChip::new(
-                    memory_chip.clone(),
-                    SECP256K1_SCALAR_PRIME.clone(),
-                    config.bigint_limb_size,
-                ),
-            ];
-            let _new_air_coord = NewModularArithmeticChip::new(
+            let add_coord = NewModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
+                ModularArithmeticOp::Add,
             );
-            let _new_air_scalar = NewModularArithmeticChip::new(
+            let add_scalar = NewModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
+                ModularArithmeticOp::Add,
             );
-            // FIXME: move to new_airs
-            // Right new air only supports ADD, but we have new air for ADD and old air for others
-            // because they have different limb_bits.
-            // assign!(
-            //     [Opcode::SECP256K1_COORD_ADD],
-            //     Rc::new(RefCell::new(new_air_coord.clone()))
-            // );
-            // assign!(
-            //     [Opcode::SECP256K1_SCALAR_ADD],
-            //     Rc::new(RefCell::new(new_air_scalar.clone()))
-            // );
-
-            assign!(
-                SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS[0..]
-                    .iter()
-                    .copied(),
-                Rc::new(RefCell::new(airs[0].clone()))
+            let sub_coord = NewModularArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                SECP256K1_COORD_PRIME.clone(),
+                ModularArithmeticOp::Sub,
+            );
+            let sub_scalar = NewModularArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                SECP256K1_SCALAR_PRIME.clone(),
+                ModularArithmeticOp::Sub,
+            );
+            let mul_coord = NewModularArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                SECP256K1_COORD_PRIME.clone(),
+                ModularArithmeticOp::Mul,
+            );
+            let mul_scalar = NewModularArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                SECP256K1_SCALAR_PRIME.clone(),
+                ModularArithmeticOp::Mul,
+            );
+            let div_coord = NewModularArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                SECP256K1_COORD_PRIME.clone(),
+                ModularArithmeticOp::Div,
+            );
+            let div_scalar = NewModularArithmeticChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                SECP256K1_SCALAR_PRIME.clone(),
+                ModularArithmeticOp::Div,
             );
             assign!(
-                SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS[0..]
-                    .iter()
-                    .copied(),
-                Rc::new(RefCell::new(airs[1].clone()))
+                [Opcode::SECP256K1_COORD_ADD],
+                Rc::new(RefCell::new(add_coord.clone()))
+            );
+            assign!(
+                [Opcode::SECP256K1_SCALAR_ADD],
+                Rc::new(RefCell::new(add_scalar.clone()))
+            );
+            assign!(
+                [Opcode::SECP256K1_COORD_SUB],
+                Rc::new(RefCell::new(sub_coord.clone()))
+            );
+            assign!(
+                [Opcode::SECP256K1_SCALAR_SUB],
+                Rc::new(RefCell::new(sub_scalar.clone()))
+            );
+            assign!(
+                [Opcode::SECP256K1_COORD_MUL],
+                Rc::new(RefCell::new(mul_coord.clone()))
+            );
+            assign!(
+                [Opcode::SECP256K1_SCALAR_MUL],
+                Rc::new(RefCell::new(mul_scalar.clone()))
+            );
+            assign!(
+                [Opcode::SECP256K1_COORD_DIV],
+                Rc::new(RefCell::new(div_coord.clone()))
+            );
+            assign!(
+                [Opcode::SECP256K1_SCALAR_DIV],
+                Rc::new(RefCell::new(div_scalar.clone()))
             );
         }
         // Modular multiplication also depends on U256 arithmetic.

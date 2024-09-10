@@ -1,4 +1,3 @@
-use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -6,14 +5,14 @@ use super::{
     columns::{
         MemoryData, ModularArithmeticAuxCols, ModularArithmeticCols, ModularArithmeticIoCols,
     },
-    ModularArithmeticChip, ModularArithmeticRecord,
+    ModularArithmeticChip, ModularArithmeticRecord, PrimitiveArithmeticAir,
 };
 use crate::{
     arch::chips::MachineChip,
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
-impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F> {
+impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, PrimitiveArithmeticAir> {
     fn air<SC: p3_uni_stark::StarkGenericConfig>(
         &self,
     ) -> Box<dyn afs_stark_backend::rap::AnyRap<SC>>

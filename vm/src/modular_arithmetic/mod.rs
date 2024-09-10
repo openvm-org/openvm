@@ -2,14 +2,21 @@ use std::sync::Arc;
 
 use afs_primitives::{
     bigint::{
-        modular_arithmetic::add::ModularAdditionAir,
+        modular_arithmetic::{
+            add::ModularAdditionAir, div::ModularDivisionAir, mul::ModularMultiplicationAir,
+            sub::ModularSubtractionAir, ModularArithmeticCols,
+        },
         utils::{big_uint_mod_inverse, get_arithmetic_air},
     },
+    sub_chip::{LocalTraceInstructions, SubAir},
     var_range::VariableRangeCheckerChip,
 };
+use afs_stark_backend::interaction::InteractionBuilder;
+use hex_literal::hex;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
-use p3_field::PrimeField32;
+use once_cell::sync::Lazy;
+use p3_field::{PrimeField32, PrimeField64};
 
 use crate::{
     arch::{
@@ -39,6 +46,18 @@ pub const NUM_LIMBS: usize = 32;
 // Max bits that can fit into our field element.
 pub const FIELD_ELEMENT_BITS: usize = 30;
 
+pub static SECP256K1_COORD_PRIME: Lazy<BigUint> = Lazy::new(|| {
+    BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+    ))
+});
+
+pub static SECP256K1_SCALAR_PRIME: Lazy<BigUint> = Lazy::new(|| {
+    BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+    ))
+});
+
 #[derive(Clone, Debug)]
 pub struct ModularArithmeticRecord<T: PrimeField32> {
     pub from_state: ExecutionState<usize>,
@@ -54,8 +73,70 @@ pub struct ModularArithmeticRecord<T: PrimeField32> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ModularArithmeticAir {
-    pub air: ModularAdditionAir,
+pub enum PrimitiveArithmeticAir {
+    Add(ModularAdditionAir),
+    Sub(ModularSubtractionAir),
+    Mul(ModularMultiplicationAir),
+    Div(ModularDivisionAir),
+}
+
+type TraceInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
+impl PrimitiveArithmeticAir {
+    pub fn generate_trace_row<F: PrimeField64>(
+        &self,
+        input: TraceInput,
+    ) -> ModularArithmeticCols<F> {
+        match self {
+            Self::Add(air) => LocalTraceInstructions::generate_trace_row(air, input),
+            Self::Sub(air) => LocalTraceInstructions::generate_trace_row(air, input),
+            Self::Mul(air) => LocalTraceInstructions::generate_trace_row(air, input),
+            Self::Div(air) => LocalTraceInstructions::generate_trace_row(air, input),
+        }
+    }
+
+    pub fn eval<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        io: ModularArithmeticCols<AB::Var>,
+        aux: (),
+    ) {
+        match self {
+            Self::Add(air) => SubAir::eval(air, builder, io, aux),
+            Self::Sub(air) => SubAir::eval(air, builder, io, aux),
+            Self::Mul(air) => SubAir::eval(air, builder, io, aux),
+            Self::Div(air) => SubAir::eval(air, builder, io, aux),
+        }
+    }
+
+    pub fn is_expected_opcode(&self, opcode: Opcode) -> bool {
+        match self {
+            Self::Add(_) => {
+                [Opcode::SECP256K1_COORD_ADD, Opcode::SECP256K1_SCALAR_ADD].contains(&opcode)
+            }
+            Self::Sub(_) => {
+                [Opcode::SECP256K1_COORD_SUB, Opcode::SECP256K1_SCALAR_SUB].contains(&opcode)
+            }
+            Self::Mul(_) => {
+                [Opcode::SECP256K1_COORD_MUL, Opcode::SECP256K1_SCALAR_MUL].contains(&opcode)
+            }
+            Self::Div(_) => {
+                [Opcode::SECP256K1_COORD_DIV, Opcode::SECP256K1_SCALAR_DIV].contains(&opcode)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ModularArithmeticOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModularArithmeticAir<A> {
+    pub air: A,
     pub execution_bus: ExecutionBus,
     pub mem_oc: MemoryOfflineChecker,
 
@@ -64,8 +145,8 @@ pub struct ModularArithmeticAir {
 }
 
 #[derive(Clone, Debug)]
-pub struct ModularArithmeticChip<T: PrimeField32> {
-    pub air: ModularArithmeticAir,
+pub struct ModularArithmeticChip<T: PrimeField32, A> {
+    pub air: ModularArithmeticAir<A>,
     data: Vec<ModularArithmeticRecord<T>>,
 
     memory_chip: MemoryChipRef<T>,
@@ -74,35 +155,52 @@ pub struct ModularArithmeticChip<T: PrimeField32> {
     modulus: BigUint,
 }
 
-impl<T: PrimeField32> ModularArithmeticChip<T> {
+impl<T: PrimeField32> ModularArithmeticChip<T, PrimitiveArithmeticAir> {
     pub fn new(
         execution_bus: ExecutionBus,
         memory_chip: MemoryChipRef<T>,
         modulus: BigUint,
+        op: ModularArithmeticOp,
     ) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let mem_oc = memory_chip.borrow().make_offline_checker();
-        let primitive_arithmetic_addsub = get_arithmetic_air(
+        let (carry_limbs, q_limbs, is_mul_div) = match op {
+            ModularArithmeticOp::Add | ModularArithmeticOp::Sub => (NUM_LIMBS, 1, false),
+            ModularArithmeticOp::Mul | ModularArithmeticOp::Div => {
+                (NUM_LIMBS * 2 - 1, NUM_LIMBS, true)
+            }
+        };
+        let primitive_arithmetic_air = get_arithmetic_air(
             modulus.clone(),
             LIMB_SIZE,
             FIELD_ELEMENT_BITS,
             NUM_LIMBS,
-            false,
+            is_mul_div,
             range_checker_chip.bus().index,
             range_checker_chip.bus().range_max_bits,
         );
-        let add_subair = ModularAdditionAir {
-            arithmetic: primitive_arithmetic_addsub,
+        let subair = match op {
+            ModularArithmeticOp::Add => PrimitiveArithmeticAir::Add(ModularAdditionAir {
+                arithmetic: primitive_arithmetic_air,
+            }),
+            ModularArithmeticOp::Sub => PrimitiveArithmeticAir::Sub(ModularSubtractionAir {
+                arithmetic: primitive_arithmetic_air,
+            }),
+            ModularArithmeticOp::Mul => PrimitiveArithmeticAir::Mul(ModularMultiplicationAir {
+                arithmetic: primitive_arithmetic_air,
+            }),
+            ModularArithmeticOp::Div => PrimitiveArithmeticAir::Div(ModularDivisionAir {
+                arithmetic: primitive_arithmetic_air,
+            }),
         };
 
         Self {
             air: ModularArithmeticAir {
-                air: add_subair,
+                air: subair,
                 execution_bus,
                 mem_oc,
-                // FIXME: it's different for mul/div
-                carry_limbs: NUM_LIMBS,
-                q_limbs: 1,
+                carry_limbs,
+                q_limbs,
             },
             data: vec![],
             memory_chip,
@@ -112,7 +210,7 @@ impl<T: PrimeField32> ModularArithmeticChip<T> {
     }
 }
 
-impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T> {
+impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T, PrimitiveArithmeticAir> {
     fn execute(
         &mut self,
         instruction: Instruction<T>,
@@ -127,12 +225,25 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T> {
         let Instruction {
             opcode,
             op_a: x_address_ptr,
-            op_b: y_address_ptr,
-            op_c: z_address_ptr,
+            op_b: b_address_ptr,
+            op_c: c_address_ptr,
             d,
             e,
             ..
         } = instruction.clone();
+        assert!(self.air.air.is_expected_opcode(opcode));
+
+        let (y_address_ptr, z_address_ptr) = match opcode {
+            Opcode::SECP256K1_COORD_ADD
+            | Opcode::SECP256K1_SCALAR_ADD
+            | Opcode::SECP256K1_COORD_MUL
+            | Opcode::SECP256K1_SCALAR_MUL => (b_address_ptr, c_address_ptr),
+            Opcode::SECP256K1_COORD_SUB
+            | Opcode::SECP256K1_SCALAR_SUB
+            | Opcode::SECP256K1_COORD_DIV
+            | Opcode::SECP256K1_SCALAR_DIV => (c_address_ptr, b_address_ptr),
+            _ => panic!(),
+        };
 
         let x_address_read = memory_chip.read_cell(d, x_address_ptr);
         let y_address_read = memory_chip.read_cell(d, y_address_ptr);
@@ -145,6 +256,8 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T> {
         let y = y_read.data.map(|x| x.as_canonical_u32());
         let mut x_biguint = limbs_to_biguint(&x);
         let y_biguint = limbs_to_biguint(&y);
+        println!("x_biguint {}", x_biguint);
+        println!("y_biguint {}", y_biguint);
 
         let z_biguint = match opcode {
             Opcode::SECP256K1_COORD_ADD | Opcode::SECP256K1_SCALAR_ADD => {
@@ -169,6 +282,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T> {
                 unreachable!()
             }
         };
+        println!("z_biguint {}", z_biguint);
         let z_limbs = biguint_to_limbs(z_biguint);
 
         let z_write = memory_chip.write::<NUM_LIMBS>(
@@ -196,15 +310,17 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T> {
     }
 }
 
+// little endian.
 fn limbs_to_biguint(x: &[u32]) -> BigUint {
     let mut result = BigUint::zero();
     let base = BigUint::from_u32(1 << LIMB_SIZE).unwrap();
-    for limb in x {
+    for limb in x.iter().rev() {
         result = result * &base + BigUint::from_u32(*limb).unwrap();
     }
     result
 }
 
+// little endian.
 fn biguint_to_limbs(mut x: BigUint) -> [u32; NUM_LIMBS] {
     let mut result = [0; NUM_LIMBS];
     let base = BigUint::from_u32(1 << LIMB_SIZE).unwrap();
@@ -213,6 +329,5 @@ fn biguint_to_limbs(mut x: BigUint) -> [u32; NUM_LIMBS] {
         x /= &base;
     }
     assert!(x.is_zero());
-    result.reverse();
     result
 }
