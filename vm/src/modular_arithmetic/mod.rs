@@ -1,12 +1,7 @@
 use std::sync::Arc;
 
 use afs_primitives::{
-    bigint::{
-        modular_arithmetic::{
-            add::ModularAdditionAir, ModularArithmeticAir as PrimitiveArithmeticAir,
-        },
-        utils::get_arithmetic_air,
-    },
+    bigint::{modular_arithmetic::add::ModularAdditionAir, utils::get_arithmetic_air},
     var_range::VariableRangeCheckerChip,
 };
 use num_bigint_dig::BigUint;
@@ -26,6 +21,7 @@ use crate::{
 };
 
 pub mod air;
+pub mod bridge;
 pub mod columns;
 pub mod trace;
 
@@ -40,6 +36,9 @@ pub struct ModularArithmeticRecord<T: PrimeField32> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
+    pub x_address_read: MemoryReadRecord<1, T>,
+    pub y_address_read: MemoryReadRecord<1, T>,
+    pub z_address_read: MemoryReadRecord<1, T>,
     // Each limb is 8 bits (byte), 32 limbs for 256 bits.
     pub x_read: MemoryReadRecord<NUM_LIMBS, T>,
     pub y_read: MemoryReadRecord<NUM_LIMBS, T>,
@@ -51,6 +50,9 @@ pub struct ModularArithmeticAir {
     pub air: ModularAdditionAir,
     pub execution_bus: ExecutionBus,
     pub mem_oc: MemoryOfflineChecker,
+
+    pub carry_limbs: usize,
+    pub q_limbs: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +91,9 @@ impl<T: PrimeField32> ModularArithmeticChip<T> {
                 air: add_subair,
                 execution_bus,
                 mem_oc,
+                // FIXME: it's different for mul/div
+                carry_limbs: NUM_LIMBS,
+                q_limbs: 1,
             },
             data: vec![],
             memory_chip,
@@ -120,12 +125,12 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T> {
             ..
         } = instruction.clone();
 
-        let x_address = memory_chip.read_cell(d, x_address_ptr).value();
-        let y_address = memory_chip.read_cell(d, y_address_ptr).value();
-        let z_address = memory_chip.read_cell(d, z_address_ptr).value();
+        let x_address_read = memory_chip.read_cell(d, x_address_ptr);
+        let y_address_read = memory_chip.read_cell(d, y_address_ptr);
+        let z_address_read = memory_chip.read_cell(d, z_address_ptr);
 
-        let x_read = memory_chip.read::<NUM_LIMBS>(e, x_address);
-        let y_read = memory_chip.read::<NUM_LIMBS>(e, y_address);
+        let x_read = memory_chip.read::<NUM_LIMBS>(e, x_address_read.value());
+        let y_read = memory_chip.read::<NUM_LIMBS>(e, y_address_read.value());
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
@@ -151,12 +156,18 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T> {
         };
         let z_limbs = biguint_to_limbs(z_biguint);
 
-        let z_write =
-            memory_chip.write::<NUM_LIMBS>(e, z_address, z_limbs.map(|x| T::from_canonical_u32(x)));
+        let z_write = memory_chip.write::<NUM_LIMBS>(
+            e,
+            z_address_read.value(),
+            z_limbs.map(|x| T::from_canonical_u32(x)),
+        );
 
         let record = ModularArithmeticRecord {
             from_state,
             instruction,
+            x_address_read,
+            y_address_read,
+            z_address_read,
             x_read,
             y_read,
             z_write,

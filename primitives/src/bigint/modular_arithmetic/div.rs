@@ -5,13 +5,14 @@ use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::FromPrimitive;
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField64};
+use p3_matrix::Matrix;
 
 use super::{
     super::utils::big_uint_sub, Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols,
     OverflowInt,
 };
 use crate::{
-    sub_chip::{AirConfig, LocalTraceInstructions},
+    sub_chip::{AirConfig, LocalTraceInstructions, SubAir},
     var_range::VariableRangeCheckerChip,
 };
 pub struct ModularDivisionAir {
@@ -34,8 +35,25 @@ impl<F: Field> BaseAir<F> for ModularDivisionAir {
 
 impl<AB: InteractionBuilder> Air<AB> for ModularDivisionAir {
     fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let local = main.row_slice(0);
+        let local = ModularArithmeticCols::<AB::Var>::from_slice(
+            &local,
+            self.num_limbs,
+            self.q_limbs,
+            self.carry_limbs,
+        );
+        SubAir::eval(self, builder, local, ());
+    }
+}
+
+impl<AB: InteractionBuilder> SubAir<AB> for ModularDivisionAir {
+    type IoView = ModularArithmeticCols<AB::Var>;
+    type AuxView = ();
+
+    fn eval(&self, builder: &mut AB, io: Self::IoView, _aux: Self::AuxView) {
         let equation: Equation3<AB::Expr, OverflowInt<AB::Expr>> = |x, y, r| r * y - x;
-        self.arithmetic.eval(builder, equation);
+        self.arithmetic.eval(builder, io, equation);
     }
 }
 

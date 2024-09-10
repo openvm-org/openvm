@@ -1,3 +1,4 @@
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -39,10 +40,13 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F> {
             .map(|record| {
                 let ModularArithmeticRecord {
                     from_state,
-                    instruction,
+                    instruction: _instruction, // FIXME: use opcode
                     x_read,
                     y_read,
                     z_write,
+                    x_address_read,
+                    y_address_read,
+                    z_address_read,
                 } = record;
                 let io = ModularArithmeticIoCols {
                     from_state: from_state.map(F::from_canonical_usize),
@@ -61,11 +65,50 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F> {
                         address_space: z_write.address_space,
                         address: z_write.pointer,
                     },
+                    x_address: MemoryData {
+                        data: x_address_read.data.to_vec(),
+                        address_space: x_address_read.address_space,
+                        address: x_address_read.pointer,
+                    },
+                    y_address: MemoryData {
+                        data: y_address_read.data.to_vec(),
+                        address_space: y_address_read.address_space,
+                        address: y_address_read.pointer,
+                    },
+                    z_address: MemoryData {
+                        data: z_address_read.data.to_vec(),
+                        address_space: z_address_read.address_space,
+                        address: z_address_read.pointer,
+                    },
                 };
+                let x_limbs = x_read
+                    .data
+                    .iter()
+                    .map(|x| x.as_canonical_u32())
+                    .collect::<Vec<_>>();
+                let x_biguint = super::limbs_to_biguint(&x_limbs);
+                let y_limbs = y_read
+                    .data
+                    .iter()
+                    .map(|x| x.as_canonical_u32())
+                    .collect::<Vec<_>>();
+                let y_biguint = super::limbs_to_biguint(&y_limbs);
+                let primitive_row = self.air.air.generate_trace_row((
+                    x_biguint,
+                    y_biguint,
+                    self.range_checker_chip.clone(),
+                ));
+
                 let aux = ModularArithmeticAuxCols {
+                    is_valid: F::one(),
                     read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),
                     read_y_aux_cols: memory_chip.make_read_aux_cols(y_read.clone()),
                     write_z_aux_cols: memory_chip.make_write_aux_cols(z_write.clone()),
+                    x_address_aux_cols: memory_chip.make_read_aux_cols(x_address_read.clone()),
+                    y_address_aux_cols: memory_chip.make_read_aux_cols(y_address_read.clone()),
+                    z_address_aux_cols: memory_chip.make_read_aux_cols(z_address_read.clone()),
+                    carries: primitive_row.carries,
+                    q: primitive_row.q,
                 };
                 ModularArithmeticCols { io, aux }.flatten()
             })
@@ -77,9 +120,15 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F> {
         let blank_row = ModularArithmeticCols {
             io: Default::default(),
             aux: ModularArithmeticAuxCols {
+                is_valid: Default::default(),
                 read_x_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
                 read_y_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
                 write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
+                x_address_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                y_address_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                z_address_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
+                carries: vec![F::zero(); self.air.carry_limbs],
+                q: vec![F::zero(); self.air.q_limbs],
             },
         }
         .flatten();
