@@ -29,7 +29,7 @@ impl<F: Field, const ARG_SIZE: usize, const LIMB_SIZE: usize> BaseAir<F>
     for UintArithmeticAir<ARG_SIZE, LIMB_SIZE>
 {
     fn width(&self) -> usize {
-        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width(self)
+        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width()
     }
 }
 
@@ -44,8 +44,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
 
         let UintArithmeticCols { io, aux } =
             UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_iterator(
-                local.iter().copied(),
-                self,
+                local.iter().copied()
             );
 
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();

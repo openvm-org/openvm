@@ -181,11 +181,11 @@ fn run_bad_uint_arithmetic_test(
     let range_air = range_checker.air;
     let trace = chip.generate_trace();
     let row = trace.row_slice(0).to_vec();
-    let mut cols = UintArithmeticCols::from_iterator(&mut row.into_iter(), &air);
+    let mut cols = UintArithmeticCols::<256, 8, F>::from_iterator(&mut row.into_iter());
     cols.io.z.data = z.into_iter().map(F::from_canonical_u32).collect();
     cols.aux.buffer = buffer.into_iter().map(F::from_canonical_u32).collect();
     cols.io.cmp_result = F::from_bool(cmp_result);
-    let trace = RowMajorMatrix::new(cols.flatten(), UintArithmeticCols::<256, 8, F>::width(&air));
+    let trace = RowMajorMatrix::new(cols.flatten(), UintArithmeticCols::<256, 8, F>::width());
 
     let range_trace = range_checker.generate_trace();
 

@@ -24,9 +24,9 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 is_mul: F::zero(),
                 is_div: F::zero(),
                 divisor_inv: F::zero(),
-                read_x_aux_cols: MemoryReadOrImmediateAuxCols::disabled(self.air.mem_oc),
-                read_y_aux_cols: MemoryReadOrImmediateAuxCols::disabled(self.air.mem_oc),
-                write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
+                read_x_aux_cols: MemoryReadOrImmediateAuxCols::disabled(),
+                read_y_aux_cols: MemoryReadOrImmediateAuxCols::disabled(),
+                write_z_aux_cols: MemoryWriteAuxCols::disabled(),
             },
         }
     }
@@ -116,6 +116,6 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
     }
 
     fn trace_width(&self) -> usize {
-        FieldArithmeticCols::<F>::get_width(&self.air)
+        FieldArithmeticCols::<F>::get_width()
     }
 }

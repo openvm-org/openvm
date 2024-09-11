@@ -273,7 +273,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     }
 
     pub fn make_disabled_read_aux_cols<const N: usize>(&self) -> MemoryReadAuxCols<N, F> {
-        MemoryReadAuxCols::disabled(self.make_offline_checker())
+        MemoryReadAuxCols::disabled()
     }
 
     pub fn make_write_aux_cols<const N: usize>(
@@ -285,7 +285,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     }
 
     pub fn make_disabled_write_aux_cols<const N: usize>(&self) -> MemoryWriteAuxCols<N, F> {
-        MemoryWriteAuxCols::disabled(self.make_offline_checker())
+        MemoryWriteAuxCols::disabled()
     }
 
     pub fn generate_memory_interface_trace(&self) -> RowMajorMatrix<F> {

@@ -117,11 +117,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                 opcode_lt_flag: Default::default(),
                 opcode_eq_flag: Default::default(),
                 buffer: vec![Default::default(); num_limbs],
-                read_ptr_aux_cols: from_fn(|_| MemoryReadAuxCols::disabled(self.air.mem_oc)),
-                read_x_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
-                read_y_aux_cols: MemoryReadAuxCols::disabled(self.air.mem_oc),
-                write_z_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
-                write_cmp_aux_cols: MemoryWriteAuxCols::disabled(self.air.mem_oc),
+                read_ptr_aux_cols: from_fn(|_| MemoryReadAuxCols::disabled()),
+                read_x_aux_cols: MemoryReadAuxCols::disabled(),
+                read_y_aux_cols: MemoryReadAuxCols::disabled(),
+                write_z_aux_cols: MemoryWriteAuxCols::disabled(),
+                write_cmp_aux_cols: MemoryWriteAuxCols::disabled(),
             },
         }
         .flatten();
@@ -146,6 +146,6 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
     }
 
     fn trace_width(&self) -> usize {
-        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width(&self.air)
+        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width()
     }
 }

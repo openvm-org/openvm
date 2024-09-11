@@ -99,27 +99,26 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
 
     pub fn from_iterator(mut iter: impl Iterator<Item = T>, air: &ModularArithmeticAir) -> Self {
         let is_valid = iter.next().unwrap();
-        let mem_oc = &air.mem_oc;
         let width = MemoryReadAuxCols::<NUM_LIMBS, T>::width();
         let read_x_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let read_x_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_x_slice, mem_oc);
+        let read_x_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_x_slice);
 
         let read_y_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let read_y_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_y_slice, mem_oc);
+        let read_y_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_y_slice);
 
         let write_z_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let write_z_aux_cols =
-            MemoryWriteAuxCols::<NUM_LIMBS, T>::from_slice(&write_z_slice, mem_oc);
+            MemoryWriteAuxCols::<NUM_LIMBS, T>::from_slice(&write_z_slice);
 
         let width2 = MemoryReadAuxCols::<1, T>::width();
         let x_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();
-        let x_address_aux_cols = MemoryReadAuxCols::<1, T>::from_slice(&x_address_slice, mem_oc);
+        let x_address_aux_cols = MemoryReadAuxCols::<1, T>::from_slice(&x_address_slice);
 
         let y_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();
-        let y_address_aux_cols = MemoryReadAuxCols::<1, T>::from_slice(&y_address_slice, mem_oc);
+        let y_address_aux_cols = MemoryReadAuxCols::<1, T>::from_slice(&y_address_slice);
 
         let z_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();
-        let z_address_aux_cols = MemoryReadAuxCols::<1, T>::from_slice(&z_address_slice, mem_oc);
+        let z_address_aux_cols = MemoryReadAuxCols::<1, T>::from_slice(&z_address_slice);
 
         let carries = iter.by_ref().take(air.carry_limbs).collect::<Vec<_>>();
         let q = iter.by_ref().take(air.q_limbs).collect::<Vec<_>>();

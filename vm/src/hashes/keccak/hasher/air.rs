@@ -25,7 +25,7 @@ impl<F> BaseAir<F> for KeccakVmAir {
         NUM_KECCAK_PERM_COLS
             + NUM_KECCAK_SPONGE_COLS
             + NUM_KECCAK_OPCODE_COLS
-            + KeccakMemoryCols::<F>::width(&self.mem_oc)
+            + KeccakMemoryCols::<F>::width()
     }
 }
 
@@ -50,7 +50,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         self.constrain_padding(builder, local, next);
         self.constrain_consistency_across_rounds(builder, local, next);
 
-        let mem = KeccakMemoryCols::from_slice(local.mem_oc, &self.mem_oc);
+        let mem = KeccakMemoryCols::from_slice(local.mem_oc);
         // Interactions:
         self.constrain_absorb(builder, local, next);
         let start_read_timestamp = self.eval_opcode_interactions(builder, local, mem.op_reads);

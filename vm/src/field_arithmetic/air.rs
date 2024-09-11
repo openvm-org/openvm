@@ -30,7 +30,7 @@ impl AirConfig for FieldArithmeticAir {
 
 impl<F: Field> BaseAir<F> for FieldArithmeticAir {
     fn width(&self) -> usize {
-        FieldArithmeticCols::<F>::get_width(self)
+        FieldArithmeticCols::<F>::get_width()
     }
 }
 
@@ -38,7 +38,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local = FieldArithmeticCols::from_iter(&mut local.iter().copied(), self);
+        let local = FieldArithmeticCols::from_iter(&mut local.iter().copied());
 
         let FieldArithmeticCols { io, aux } = local;
 

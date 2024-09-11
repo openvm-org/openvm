@@ -23,7 +23,7 @@ impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
         let curr_height = self.records.len();
         let correct_height = curr_height.next_power_of_two();
 
-        let width = FieldExtensionArithmeticCols::<F>::get_width(&self.air);
+        let width = FieldExtensionArithmeticCols::<F>::get_width();
         // TODO[jpw] better to create entire 1d trace matrix first and then mutate buffers
         let blank_row = self.make_blank_row().flatten();
         let dummy_rows_flattened =
@@ -105,8 +105,6 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
     }
 
     fn make_blank_row(&self) -> FieldExtensionArithmeticCols<F> {
-        let oc = self.memory_chip.borrow().make_offline_checker();
-
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols::default(),
             aux: FieldExtensionArithmeticAuxCols {
@@ -116,9 +114,9 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
                 is_mul: F::zero(),
                 is_div: F::zero(),
                 divisor_inv: [F::zero(); EXT_DEG],
-                read_x_aux_cols: MemoryReadAuxCols::disabled(oc),
-                read_y_aux_cols: MemoryReadAuxCols::disabled(oc),
-                write_aux_cols: MemoryWriteAuxCols::disabled(oc),
+                read_x_aux_cols: MemoryReadAuxCols::disabled(),
+                read_y_aux_cols: MemoryReadAuxCols::disabled(),
+                write_aux_cols: MemoryWriteAuxCols::disabled(),
             },
         }
     }

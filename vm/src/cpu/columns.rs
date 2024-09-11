@@ -204,14 +204,13 @@ impl<T: Clone> CpuAuxCols<T> {
             start = end;
             end += MemoryReadOrImmediateAuxCols::<T>::width();
             MemoryReadOrImmediateAuxCols::from_slice(
-                &slc[start..end],
-                &cpu_air.memory_offline_checker,
+                &slc[start..end]
             )
         });
         let writes_aux_cols = array::from_fn(|_| {
             start = end;
             end += MemoryWriteAuxCols::<WORD_SIZE, T>::width();
-            MemoryWriteAuxCols::from_slice(&slc[start..end], &cpu_air.memory_offline_checker)
+            MemoryWriteAuxCols::from_slice(&slc[start..end])
         });
 
         Self {
@@ -280,8 +279,6 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             operation_flags.insert(opcode, F::from_bool(opcode == Opcode::NOP));
         }
 
-        let offline_checker = chip.memory_chip.borrow().make_offline_checker();
-
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
             (vec![F::zero()], vec![F::zero()]),
@@ -294,9 +291,9 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
             reads_aux_cols: array::from_fn(|_| {
-                MemoryReadOrImmediateAuxCols::disabled(offline_checker)
+                MemoryReadOrImmediateAuxCols::disabled()
             }),
-            writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled(offline_checker)),
+            writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
         }
     }
 }

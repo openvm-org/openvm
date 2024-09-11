@@ -3,16 +3,15 @@
 
 use std::{
     array,
-    borrow::{Borrow, BorrowMut},
+    borrow::Borrow,
     iter,
     mem::size_of,
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::assert_less_than::{columns::AssertLessThanAuxCols, AssertLessThanAir};
+use afs_primitives::assert_less_than::columns::AssertLessThanAuxCols;
 use p3_field::AbstractField;
 
-use super::bridge::MemoryOfflineChecker;
 use crate::memory::offline_checker::bridge::AUX_LEN;
 
 // repr(C) is needed to make sure that the compiler does not reorder the fields
@@ -30,14 +29,13 @@ pub(super) struct MemoryBaseAuxCols<T, const N: usize> {
 }
 
 impl<const N: usize, T: Clone> MemoryBaseAuxCols<T, N> {
-    pub fn from_slice(slc: &[T], oc: &MemoryOfflineChecker) -> Self {
+    pub fn from_slice(slc: &[T]) -> Self {
         let base_aux_cols: &MemoryBaseAuxCols<T, N> = slc.borrow();
         base_aux_cols.clone()
     }
 
     pub fn from_iterator<I: Iterator<Item = T>>(
-        iter: &mut I,
-        lt_air: &AssertLessThanAir<AUX_LEN>,
+        iter: &mut I
     ) -> Self {
         let sm = iter.take(Self::width()).collect::<Vec<T>>();
         let base_aux_cols: &MemoryBaseAuxCols<T, N> = sm[..].borrow();
@@ -57,7 +55,7 @@ impl<const N: usize, T> MemoryBaseAuxCols<T, N> {
             .collect()
     }
 
-    pub fn width() -> usize {
+    pub const fn width() -> usize {
         size_of::<MemoryBaseAuxCols<u8, N>>()
     }
 }
@@ -85,20 +83,19 @@ impl<const N: usize, T> MemoryWriteAuxCols<N, T> {
 }
 
 impl<const N: usize, T: Clone> MemoryWriteAuxCols<N, T> {
-    pub fn from_slice(slc: &[T], oc: &MemoryOfflineChecker) -> Self {
+    pub fn from_slice(slc: &[T]) -> Self {
         let width = MemoryBaseAuxCols::<T, N>::width();
         Self {
-            base: MemoryBaseAuxCols::from_slice(&slc[..width], oc),
+            base: MemoryBaseAuxCols::from_slice(&slc[..width]),
             prev_data: array::from_fn(|i| slc[width + i].clone()),
         }
     }
 
     pub fn from_iterator<I: Iterator<Item = T>>(
-        iter: &mut I,
-        lt_air: &AssertLessThanAir<AUX_LEN>,
+        iter: &mut I
     ) -> Self {
         Self {
-            base: MemoryBaseAuxCols::from_iterator(iter, lt_air),
+            base: MemoryBaseAuxCols::from_iterator(iter),
             prev_data: array::from_fn(|_| iter.next().unwrap()),
         }
     }
@@ -112,15 +109,15 @@ impl<const N: usize, T> MemoryWriteAuxCols<N, T> {
             .collect()
     }
 
-    pub fn width() -> usize {
+    pub const fn width() -> usize {
         size_of::<MemoryWriteAuxCols<N, u8>>()
     }
 }
 
 impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<N, F> {
-    pub fn disabled(mem_oc: MemoryOfflineChecker) -> Self {
+    pub fn disabled() -> Self {
         let width = MemoryWriteAuxCols::<N, F>::width();
-        MemoryWriteAuxCols::from_slice(&vec![F::zero(); width], &mem_oc)
+        MemoryWriteAuxCols::from_slice(&vec![F::zero(); width])
     }
 }
 
@@ -145,18 +142,17 @@ impl<const N: usize, T> MemoryReadAuxCols<N, T> {
 }
 
 impl<const N: usize, T: Clone> MemoryReadAuxCols<N, T> {
-    pub fn from_slice(slc: &[T], oc: &MemoryOfflineChecker) -> Self {
+    pub fn from_slice(slc: &[T]) -> Self {
         Self {
-            base: MemoryBaseAuxCols::from_slice(slc, oc),
+            base: MemoryBaseAuxCols::from_slice(slc),
         }
     }
 
     pub fn from_iterator<I: Iterator<Item = T>>(
-        iter: &mut I,
-        lt_air: &AssertLessThanAir<AUX_LEN>,
+        iter: &mut I
     ) -> Self {
         Self {
-            base: MemoryBaseAuxCols::from_iterator(iter, lt_air),
+            base: MemoryBaseAuxCols::from_iterator(iter),
         }
     }
 }
@@ -166,15 +162,15 @@ impl<const N: usize, T> MemoryReadAuxCols<N, T> {
         self.base.flatten()
     }
 
-    pub fn width() -> usize {
+    pub const fn width() -> usize {
         size_of::<MemoryReadAuxCols<N, u8>>()
     }
 }
 
 impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<N, F> {
-    pub fn disabled(mem_oc: MemoryOfflineChecker) -> Self {
+    pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<N, F>::width();
-        MemoryReadAuxCols::from_slice(&vec![F::zero(); width], &mem_oc)
+        MemoryReadAuxCols::from_slice(&vec![F::zero(); width])
     }
 }
 
@@ -204,10 +200,10 @@ impl<T> MemoryReadOrImmediateAuxCols<T> {
 }
 
 impl<T: Clone> MemoryReadOrImmediateAuxCols<T> {
-    pub fn from_slice(slc: &[T], oc: &MemoryOfflineChecker) -> Self {
+    pub fn from_slice(slc: &[T]) -> Self {
         let width = MemoryBaseAuxCols::<T, 1>::width();
         Self {
-            base: MemoryBaseAuxCols::from_slice(&slc[..width], oc),
+            base: MemoryBaseAuxCols::from_slice(&slc[..width]),
             is_immediate: slc[width].clone(),
             is_zero_aux: slc[width + 1].clone(),
         }
@@ -215,10 +211,9 @@ impl<T: Clone> MemoryReadOrImmediateAuxCols<T> {
 
     pub fn from_iterator<I: Iterator<Item = T>>(
         iter: &mut I,
-        lt_air: &AssertLessThanAir<AUX_LEN>,
     ) -> Self {
         Self {
-            base: MemoryBaseAuxCols::from_iterator(iter, lt_air),
+            base: MemoryBaseAuxCols::from_iterator(iter),
             is_immediate: iter.next().unwrap(),
             is_zero_aux: iter.next().unwrap(),
         }
@@ -234,14 +229,14 @@ impl<T> MemoryReadOrImmediateAuxCols<T> {
             .collect()
     }
 
-    pub fn width() -> usize {
+    pub const fn width() -> usize {
         size_of::<MemoryReadOrImmediateAuxCols<u8>>()
     }
 }
 
 impl<F: AbstractField + Copy> MemoryReadOrImmediateAuxCols<F> {
-    pub fn disabled(mem_oc: MemoryOfflineChecker) -> Self {
+    pub fn disabled() -> Self {
         let width = MemoryReadOrImmediateAuxCols::<F>::width();
-        MemoryReadOrImmediateAuxCols::from_slice(&vec![F::zero(); width], &mem_oc)
+        MemoryReadOrImmediateAuxCols::from_slice(&vec![F::zero(); width])
     }
 }

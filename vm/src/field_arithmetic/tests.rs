@@ -128,11 +128,11 @@ fn field_arithmetic_air_zero_div_zero() {
     let air = field_arithmetic_chip.air;
     let trace = field_arithmetic_chip.generate_trace();
     let row = trace.row_slice(0).to_vec();
-    let mut cols = FieldArithmeticCols::from_iter(&mut row.into_iter(), &air);
+    let mut cols = FieldArithmeticCols::from_iter(&mut row.into_iter());
     cols.io.y.value = BabyBear::zero();
     let trace = RowMajorMatrix::new(
         cols.flatten(),
-        FieldArithmeticCols::<BabyBear>::get_width(&air),
+        FieldArithmeticCols::<BabyBear>::get_width(),
     );
 
     USE_DEBUG_BUILDER.with(|debug| {

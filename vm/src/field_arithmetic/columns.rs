@@ -5,7 +5,6 @@ use derive_new::new;
 
 use crate::{
     arch::columns::ExecutionState,
-    field_arithmetic::FieldArithmeticAir,
     memory::{
         offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
@@ -50,14 +49,14 @@ pub struct FieldArithmeticAuxCols<T> {
 }
 
 impl<T: Clone> FieldArithmeticCols<T> {
-    pub fn get_width(air: &FieldArithmeticAir) -> usize {
-        FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width(air)
+    pub const fn get_width() -> usize {
+        FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
     }
 
-    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, air: &FieldArithmeticAir) -> Self {
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         Self {
             io: FieldArithmeticIoCols::from_iter(iter),
-            aux: FieldArithmeticAuxCols::from_iter(iter, air),
+            aux: FieldArithmeticAuxCols::from_iter(iter),
         }
     }
 
@@ -69,7 +68,7 @@ impl<T: Clone> FieldArithmeticCols<T> {
 }
 
 impl<T: Clone> FieldArithmeticIoCols<T> {
-    pub fn get_width() -> usize {
+    pub const fn get_width() -> usize {
         size_of::<FieldArithmeticIoCols<u8>>()
     }
 
@@ -94,12 +93,11 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
 }
 
 impl<T: Clone> FieldArithmeticAuxCols<T> {
-    pub fn get_width(air: &FieldArithmeticAir) -> usize {
+    pub const fn get_width() -> usize {
         6 + (2 * MemoryReadOrImmediateAuxCols::<T>::width() + MemoryWriteAuxCols::<1, T>::width())
     }
 
-    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, air: &FieldArithmeticAir) -> Self {
-        let lt_air = air.mem_oc.timestamp_lt_air;
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         let mut next = || iter.next().unwrap();
         Self {
             is_valid: next(),
@@ -108,9 +106,9 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
             is_mul: next(),
             is_div: next(),
             divisor_inv: next(),
-            read_x_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter, &lt_air),
-            read_y_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter, &lt_air),
-            write_z_aux_cols: MemoryWriteAuxCols::from_iterator(iter, &lt_air),
+            read_x_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter),
+            read_y_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter),
+            write_z_aux_cols: MemoryWriteAuxCols::from_iterator(iter),
         }
     }
 
