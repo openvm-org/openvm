@@ -44,7 +44,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
 
         let UintArithmeticCols { io, aux } =
             UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_iterator(
-                local.iter().copied()
+                local.iter().copied(),
             );
 
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();

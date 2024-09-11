@@ -39,9 +39,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
         let main = builder.main();
 
         let local = main.row_slice(0);
-        let local_cols = FieldExtensionArithmeticCols::from_iter(
-            &mut local.iter().copied()
-        );
+        let local_cols = FieldExtensionArithmeticCols::from_iter(&mut local.iter().copied());
 
         let FieldExtensionArithmeticCols { io, aux } = local_cols;
 

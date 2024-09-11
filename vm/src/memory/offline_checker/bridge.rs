@@ -117,7 +117,6 @@ pub struct MemoryReadOperation<T, V, const N: usize> {
     aux: MemoryReadAuxCols<N, V>,
 }
 
-
 /// The expected max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to MemoryOfflineChecker::eval_bulk_access

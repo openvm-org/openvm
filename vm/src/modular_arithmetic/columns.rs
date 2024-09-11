@@ -107,8 +107,7 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
         let read_y_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_y_slice);
 
         let write_z_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let write_z_aux_cols =
-            MemoryWriteAuxCols::<NUM_LIMBS, T>::from_slice(&write_z_slice);
+        let write_z_aux_cols = MemoryWriteAuxCols::<NUM_LIMBS, T>::from_slice(&write_z_slice);
 
         let width2 = MemoryReadAuxCols::<1, T>::width();
         let x_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();

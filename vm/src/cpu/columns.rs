@@ -203,9 +203,7 @@ impl<T: Clone> CpuAuxCols<T> {
         let reads_aux_cols = array::from_fn(|_| {
             start = end;
             end += MemoryReadOrImmediateAuxCols::<T>::width();
-            MemoryReadOrImmediateAuxCols::from_slice(
-                &slc[start..end]
-            )
+            MemoryReadOrImmediateAuxCols::from_slice(&slc[start..end])
         });
         let writes_aux_cols = array::from_fn(|_| {
             start = end;
@@ -290,9 +288,7 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             writes: array::from_fn(|_| CpuMemoryAccessCols::disabled()),
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
-            reads_aux_cols: array::from_fn(|_| {
-                MemoryReadOrImmediateAuxCols::disabled()
-            }),
+            reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
         }
     }

@@ -1,12 +1,7 @@
 //! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`,
 //! `MemoryReadWithImmediateAuxCols`, and `MemoryWriteAuxCols`.
 
-use std::{
-    array,
-    borrow::Borrow,
-    iter,
-    mem::size_of,
-};
+use std::{array, borrow::Borrow, iter, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::assert_less_than::columns::AssertLessThanAuxCols;
@@ -34,9 +29,7 @@ impl<const N: usize, T: Clone> MemoryBaseAuxCols<T, N> {
         base_aux_cols.clone()
     }
 
-    pub fn from_iterator<I: Iterator<Item = T>>(
-        iter: &mut I
-    ) -> Self {
+    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         let sm = iter.take(Self::width()).collect::<Vec<T>>();
         let base_aux_cols: &MemoryBaseAuxCols<T, N> = sm[..].borrow();
         base_aux_cols.clone()
@@ -91,9 +84,7 @@ impl<const N: usize, T: Clone> MemoryWriteAuxCols<N, T> {
         }
     }
 
-    pub fn from_iterator<I: Iterator<Item = T>>(
-        iter: &mut I
-    ) -> Self {
+    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         Self {
             base: MemoryBaseAuxCols::from_iterator(iter),
             prev_data: array::from_fn(|_| iter.next().unwrap()),
@@ -148,9 +139,7 @@ impl<const N: usize, T: Clone> MemoryReadAuxCols<N, T> {
         }
     }
 
-    pub fn from_iterator<I: Iterator<Item = T>>(
-        iter: &mut I
-    ) -> Self {
+    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         Self {
             base: MemoryBaseAuxCols::from_iterator(iter),
         }
@@ -209,9 +198,7 @@ impl<T: Clone> MemoryReadOrImmediateAuxCols<T> {
         }
     }
 
-    pub fn from_iterator<I: Iterator<Item = T>>(
-        iter: &mut I,
-    ) -> Self {
+    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         Self {
             base: MemoryBaseAuxCols::from_iterator(iter),
             is_immediate: iter.next().unwrap(),

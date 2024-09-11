@@ -87,12 +87,9 @@ pub struct UintArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
     UintArithmeticCols<ARG_SIZE, LIMB_SIZE, T>
 {
-    pub fn from_iterator(
-        mut iter: impl Iterator<Item = T>
-    ) -> Self {
+    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
         let io = UintArithmeticIoCols::<ARG_SIZE, LIMB_SIZE, T>::from_iterator(iter.by_ref());
-        let aux =
-            UintArithmeticAuxCols::<ARG_SIZE, LIMB_SIZE, T>::from_iterator(iter.by_ref());
+        let aux = UintArithmeticAuxCols::<ARG_SIZE, LIMB_SIZE, T>::from_iterator(iter.by_ref());
 
         Self { io, aux }
     }
@@ -159,9 +156,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
             + (5 + num_limbs)
     }
 
-    pub fn from_iterator(
-        mut iter: impl Iterator<Item = T>
-    ) -> Self {
+    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 
         let is_valid = iter.next().unwrap();
@@ -174,7 +169,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
         let width_for_cell = MemoryReadAuxCols::<1, T>::width();
         let read_ptr_aux_cols = [(); 3].map(|_| {
             MemoryReadAuxCols::<1, T>::from_slice(
-                &iter.by_ref().take(width_for_cell).collect::<Vec<_>>()
+                &iter.by_ref().take(width_for_cell).collect::<Vec<_>>(),
             )
         });
         let width = MemoryReadAuxCols::<32, T>::width();
@@ -191,8 +186,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
 
         let read_x_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_x_slice);
         let read_y_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_y_slice);
-        let write_z_aux_cols =
-            MemoryWriteAuxCols::<NUM_LIMBS, T>::from_slice(&write_z_slice);
+        let write_z_aux_cols = MemoryWriteAuxCols::<NUM_LIMBS, T>::from_slice(&write_z_slice);
         let write_cmp_aux_cols = MemoryWriteAuxCols::<1, T>::from_slice(&write_cmp_slice);
 
         Self {

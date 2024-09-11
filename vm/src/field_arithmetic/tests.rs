@@ -130,10 +130,7 @@ fn field_arithmetic_air_zero_div_zero() {
     let row = trace.row_slice(0).to_vec();
     let mut cols = FieldArithmeticCols::from_iter(&mut row.into_iter());
     cols.io.y.value = BabyBear::zero();
-    let trace = RowMajorMatrix::new(
-        cols.flatten(),
-        FieldArithmeticCols::<BabyBear>::get_width(),
-    );
+    let trace = RowMajorMatrix::new(cols.flatten(), FieldArithmeticCols::<BabyBear>::get_width());
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;

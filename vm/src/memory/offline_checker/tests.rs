@@ -1,8 +1,8 @@
 use p3_baby_bear::BabyBear;
 
-use crate::memory::offline_checker::
-    columns::{MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols}
-;
+use crate::memory::offline_checker::columns::{
+    MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
+};
 
 #[test]
 fn test_write_aux_cols_width() {

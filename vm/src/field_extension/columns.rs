@@ -4,7 +4,7 @@ use afs_derive::AlignedBorrow;
 
 use crate::{
     field_extension::chip::EXT_DEG,
-    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols}
+    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 /// Columns for field extension chip.
@@ -68,9 +68,7 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
             .chain(self.aux.flatten())
             .collect()
     }
-    pub(crate) fn from_iter<I: Iterator<Item = T>>(
-        iter: &mut I
-    ) -> Self {
+    pub(crate) fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         let mut next = || iter.next().unwrap();
 
         Self {
