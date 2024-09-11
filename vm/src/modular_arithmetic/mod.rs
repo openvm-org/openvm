@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use afs_primitives::{
-    bigint::{modular_arithmetic::add::ModularAdditionAir, utils::get_arithmetic_air},
+    bigint::{
+        modular_arithmetic::add::ModularAdditionAir,
+        utils::{big_uint_mod_inverse, get_arithmetic_air},
+    },
     var_range::VariableRangeCheckerChip,
 };
 use num_bigint_dig::BigUint;
@@ -158,8 +161,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T> {
                 (x_biguint * y_biguint) % &self.modulus
             }
             Opcode::SECP256K1_COORD_DIV | Opcode::SECP256K1_SCALAR_DIV => {
-                let exp = &self.modulus - BigUint::from_u8(2).unwrap();
-                let y_inv = y_biguint.modpow(&exp, &self.modulus);
+                let y_inv = big_uint_mod_inverse(&y_biguint, &self.modulus);
 
                 (x_biguint * y_inv) % &self.modulus
             }

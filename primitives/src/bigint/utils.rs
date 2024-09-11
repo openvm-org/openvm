@@ -1,7 +1,7 @@
-use std::{collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
+use std::{borrow::Cow, collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use num_bigint_dig::{BigInt, BigUint, Sign};
+use num_bigint_dig::{algorithms::mod_inverse, BigInt, BigUint, Sign};
 use num_traits::{One, Zero};
 use p3_field::AbstractField;
 
@@ -86,6 +86,13 @@ pub fn big_uint_sub(x: BigUint, y: BigUint) -> BigInt {
         std::cmp::Ordering::Equal => BigInt::zero(),
         std::cmp::Ordering::Greater => BigInt::from_biguint(Sign::Plus, x - y),
     }
+}
+
+pub fn big_uint_mod_inverse(x: &BigUint, modulus: &BigUint) -> BigUint {
+    mod_inverse(Cow::Borrowed(x), Cow::Borrowed(modulus))
+        .unwrap()
+        .to_biguint()
+        .unwrap()
 }
 
 // Convert a big uint bits by first conerting to bytes (little endian).

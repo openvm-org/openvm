@@ -10,7 +10,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
 use super::{
-    super::utils::{get_arithmetic_air, secp256k1_prime},
+    super::utils::{big_uint_mod_inverse, get_arithmetic_air, secp256k1_prime},
     add::*,
     div::*,
     mul::*,
@@ -164,8 +164,7 @@ fn test_x_mul_y_wrong_trace() {
 fn test_x_div_y() {
     let prime = secp256k1_prime();
     let (x, y) = generate_xy();
-    let exp = prime.clone() - BigUint::from_u8(2).unwrap();
-    let y_inv = y.modpow(&exp, &prime);
+    let y_inv = big_uint_mod_inverse(&y, &prime);
 
     let expected_r = x.clone() * y_inv.clone() % prime.clone();
 

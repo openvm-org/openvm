@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
 use num_bigint_dig::{BigInt, BigUint, Sign};
-use num_traits::FromPrimitive;
 use p3_field::PrimeField64;
 
 use super::{
+    air::EccAir,
     columns::{EcAddAuxCols, EcAddCols, EcAddIoCols},
-    EcPoint, EccAir,
+    EcPoint,
 };
 use crate::{
     bigint::{
         check_carry_mod_to_zero::CheckCarryModToZeroCols,
-        check_carry_to_zero::get_carry_max_abs_and_bits, utils::big_int_to_num_limbs,
+        check_carry_to_zero::get_carry_max_abs_and_bits,
+        utils::{big_int_to_num_limbs, big_uint_mod_inverse},
         CanonicalUint, DefaultLimbConfig, OverflowInt,
     },
     sub_chip::LocalTraceInstructions,
@@ -61,8 +62,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
         // Compute lambda: λ = (y2 - y1) / (x2 - x1).
         let dx = (self.prime.clone() + x2.clone() - x1.clone()) % self.prime.clone();
         let dy = (self.prime.clone() + y2.clone() - y1.clone()) % self.prime.clone();
-        let exp = self.prime.clone() - BigUint::from_u8(2).unwrap();
-        let dx_inv = dx.modpow(&exp, &self.prime);
+        let dx_inv = big_uint_mod_inverse(&dx, &self.prime);
         let lambda = dy.clone() * dx_inv % self.prime.clone();
         // Compute the quotient and carries of expr: λ * (x2 - x1) - y2 + y1.
         // expr can be positive or negative, so does q.

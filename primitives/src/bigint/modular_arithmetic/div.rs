@@ -2,14 +2,13 @@ use std::{ops::Deref, sync::Arc};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{BigInt, BigUint, Sign};
-use num_traits::FromPrimitive;
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField64};
 use p3_matrix::Matrix;
 
 use super::{
-    super::utils::big_uint_sub, Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols,
-    OverflowInt,
+    super::utils::{big_uint_mod_inverse, big_uint_sub},
+    Equation3, Equation5, ModularArithmeticAir, ModularArithmeticCols, OverflowInt,
 };
 use crate::{
     sub_chip::{AirConfig, LocalTraceInstructions, SubAir},
@@ -66,8 +65,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularDivisionAir {
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let exp = self.modulus.clone() - BigUint::from_u8(2).unwrap();
-        let y_inv = y.modpow(&exp, &self.modulus);
+        let y_inv = big_uint_mod_inverse(&y, &self.modulus);
         let r = x.clone() * y_inv.clone() % self.modulus.clone();
         let q = big_uint_sub(y.clone() * r.clone(), x.clone());
         let q = q / BigInt::from_biguint(Sign::Plus, self.modulus.clone());

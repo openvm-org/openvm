@@ -9,7 +9,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::EccAir;
+use super::air::EccAir;
 use crate::{
     bigint::{utils::secp256k1_prime, DefaultLimbConfig, LimbConfig},
     sub_chip::LocalTraceInstructions,
