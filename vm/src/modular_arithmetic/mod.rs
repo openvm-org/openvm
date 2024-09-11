@@ -34,6 +34,9 @@ mod tests;
 pub const LIMB_SIZE: usize = 8;
 pub const NUM_LIMBS: usize = 32;
 
+// Max bits that can fit into our field element.
+pub const FIELD_ELEMENT_BITS: usize = 30;
+
 #[derive(Clone, Debug)]
 pub struct ModularArithmeticRecord<T: PrimeField32> {
     pub from_state: ExecutionState<usize>,
@@ -80,6 +83,7 @@ impl<T: PrimeField32> ModularArithmeticChip<T> {
         let primitive_arithmetic_addsub = get_arithmetic_air(
             modulus.clone(),
             LIMB_SIZE,
+            FIELD_ELEMENT_BITS,
             NUM_LIMBS,
             false,
             range_checker_chip.bus().index,
