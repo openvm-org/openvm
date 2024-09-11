@@ -16,13 +16,13 @@ use strum_macros::IntoStaticStr;
 use crate::{
     arch::columns::ExecutionState,
     castf::CastFChip,
-    cpu::{trace::Instruction, CpuChip},
+    cpu::CpuChip,
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::MemoryChipRef,
     modular_arithmetic::{ModularArithmeticAirVariant, ModularArithmeticChip},
-    program::ProgramChip,
+    program::{Instruction, ProgramChip},
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };

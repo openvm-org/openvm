@@ -10,8 +10,8 @@ use crate::{
         bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
         instructions::Opcode,
     },
-    cpu::trace::Instruction,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    program::Instruction,
 };
 
 mod air;

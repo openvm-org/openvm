@@ -7,7 +7,7 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
+    program::Instruction,
     field_arithmetic::columns::Operand,
 };
 

@@ -16,7 +16,7 @@ use crate::{
         },
         testing::MachineChipTestBuilder,
     },
-    cpu::trace::Instruction,
+    program::Instruction,
     modular_arithmetic::ModularArithmeticChip,
 };
 

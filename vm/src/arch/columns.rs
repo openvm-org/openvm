@@ -4,7 +4,7 @@ use afs_derive::AlignedBorrow;
 use itertools::Itertools;
 use p3_field::{AbstractField, Field};
 
-use crate::cpu::trace::Instruction;
+use crate::program::Instruction;
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow)]
 #[repr(C)]

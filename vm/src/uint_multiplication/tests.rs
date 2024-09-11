@@ -14,7 +14,8 @@ use rand::{rngs::StdRng, Rng};
 use super::{columns::UintMultiplicationCols, solve_uint_multiplication, UintMultiplicationChip};
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
-    cpu::{trace::Instruction, RANGE_TUPLE_CHECKER_BUS},
+    cpu::RANGE_TUPLE_CHECKER_BUS,
+    program::Instruction,
 };
 
 type F = BabyBear;

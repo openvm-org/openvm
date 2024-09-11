@@ -17,7 +17,7 @@ use crate::{
         instructions::{Opcode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
         testing::MachineChipTestBuilder,
     },
-    cpu::trace::Instruction,
+    program::Instruction,
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
 };
 

@@ -15,7 +15,7 @@ use crate::{
         chips::{InstructionExecutor, MachineChip},
         columns::{ExecutionState, InstructionCols},
     },
-    cpu::trace::Instruction,
+    program::Instruction,
 };
 
 pub mod air;

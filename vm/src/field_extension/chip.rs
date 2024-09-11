@@ -12,7 +12,7 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
+    program::Instruction,
     field_extension::air::FieldExtensionArithmeticAir,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
 };

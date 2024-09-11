@@ -11,7 +11,7 @@ use crate::{
         bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
         instructions::Opcode::*,
     },
-    cpu::trace::Instruction,
+    program::Instruction,
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         tree::Hasher,

@@ -13,8 +13,9 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     arch::chips::MachineChip,
-    cpu::{trace::Instruction, RANGE_CHECKER_BUS},
+    cpu::RANGE_CHECKER_BUS,
     memory::{offline_checker::MemoryBus, MemoryChip},
+    program::Instruction,
     vm::config::MemoryConfig,
 };
 

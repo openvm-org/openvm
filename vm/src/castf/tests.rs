@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
-    cpu::trace::Instruction,
+    program::Instruction,
 };
 
 type F = BabyBear;

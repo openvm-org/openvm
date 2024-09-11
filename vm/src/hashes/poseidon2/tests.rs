@@ -19,7 +19,7 @@ use crate::{
         instructions::Opcode::*,
         testing::{MachineChipTestBuilder, MachineChipTester},
     },
-    cpu::trace::Instruction,
+    program::Instruction,
     hashes::poseidon2::Poseidon2VmIoCols,
 };
 

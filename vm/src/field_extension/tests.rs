@@ -18,7 +18,7 @@ use crate::{
             MachineChipTestBuilder,
         },
     },
-    cpu::trace::Instruction,
+    program::Instruction,
     field_extension::chip::{FieldExtensionArithmetic, FieldExtensionArithmeticChip},
 };
 

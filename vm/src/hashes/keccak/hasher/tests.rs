@@ -22,7 +22,8 @@ use crate::{
         instructions::Opcode,
         testing::{MachineChipTestBuilder, MachineChipTester},
     },
-    cpu::{trace::Instruction, BYTE_XOR_BUS},
+    cpu::BYTE_XOR_BUS,
+    program::Instruction,
 };
 
 fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {

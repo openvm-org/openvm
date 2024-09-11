@@ -11,8 +11,7 @@ use ax_sdk::{
 use p3_baby_bear::BabyBear;
 use p3_field::{PrimeField, PrimeField32};
 use stark_vm::{
-    cpu::trace::Instruction,
-    program::Program,
+    program::{Instruction, Program},
     vm::{config::VmConfig, VirtualMachine},
 };
 

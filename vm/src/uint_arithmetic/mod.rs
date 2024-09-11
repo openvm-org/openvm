@@ -12,8 +12,8 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    program::Instruction,
 };
 
 #[cfg(test)]
