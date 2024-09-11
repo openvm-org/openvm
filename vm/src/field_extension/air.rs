@@ -12,7 +12,7 @@ use crate::{
         instructions::Opcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
     },
     field_extension::chip::FieldExtensionArithmetic,
-    memory::offline_checker::bridge::MemoryOfflineChecker,
+    memory::offline_checker::MemoryOfflineChecker,
 };
 
 /// Field extension arithmetic chip.

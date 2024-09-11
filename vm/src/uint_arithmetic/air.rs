@@ -12,7 +12,7 @@ use crate::{
         bus::ExecutionBus,
         instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
-    memory::offline_checker::bridge::MemoryOfflineChecker,
+    memory::offline_checker::MemoryOfflineChecker,
 };
 
 /// AIR for the uint addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.

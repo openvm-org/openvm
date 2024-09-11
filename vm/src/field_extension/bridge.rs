@@ -8,7 +8,7 @@ use super::{
 use crate::{
     arch::columns::{ExecutionState, InstructionCols},
     field_extension::columns::FieldExtensionArithmeticAuxCols,
-    memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
+    memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
 impl FieldExtensionArithmeticAir {

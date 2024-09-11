@@ -1,13 +1,15 @@
 use afs_derive::AlignedBorrow;
 
-pub mod audit;
+mod audit;
 // pub mod expand;
 // pub mod expand_interface;
-pub mod manager;
+mod manager;
 pub mod offline_checker;
 #[cfg(test)]
-pub mod tests;
+mod tests;
 pub mod tree;
+
+pub use manager::*;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {

@@ -16,7 +16,7 @@ use super::{
 use crate::{
     arch::{bus::ExecutionBus, instructions::Opcode::*},
     memory::{
-        offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
+        offline_checker::{MemoryBridge, MemoryOfflineChecker},
         MemoryAddress,
     },
 };

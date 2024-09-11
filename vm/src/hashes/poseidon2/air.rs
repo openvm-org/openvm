@@ -13,7 +13,7 @@ use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{
     arch::bus::ExecutionBus,
     memory::{
-        offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
+        offline_checker::{MemoryBridge, MemoryOfflineChecker},
         MemoryAddress,
     },
 };

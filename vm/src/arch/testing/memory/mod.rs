@@ -11,9 +11,8 @@ use rand::{seq::SliceRandom, Rng};
 use crate::{
     arch::chips::MachineChip,
     memory::{
-        manager::MemoryChipRef,
-        offline_checker::bus::{MemoryBus, MemoryBusInteraction},
-        MemoryAddress, OpType,
+        offline_checker::{MemoryBus, MemoryBusInteraction},
+        MemoryAddress, MemoryChipRef, OpType,
     },
 };
 

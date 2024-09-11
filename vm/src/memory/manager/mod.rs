@@ -12,9 +12,7 @@ use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
 use crate::{
     arch::chips::MachineChip,
     memory::offline_checker::{
-        bridge::MemoryOfflineChecker,
-        bus::MemoryBus,
-        columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+        MemoryBus, MemoryOfflineChecker, MemoryReadAuxCols, MemoryWriteAuxCols,
     },
     vm::config::MemoryConfig,
 };

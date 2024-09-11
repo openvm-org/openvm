@@ -14,7 +14,7 @@ use crate::{
     },
     cpu::trace::Instruction,
     field_extension::air::FieldExtensionArithmeticAir,
-    memory::manager::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
 };
 
 pub const BETA: usize = 11;

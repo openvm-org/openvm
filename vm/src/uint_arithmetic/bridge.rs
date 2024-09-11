@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     arch::columns::InstructionCols,
-    memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
+    memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, LIMB_SIZE> {

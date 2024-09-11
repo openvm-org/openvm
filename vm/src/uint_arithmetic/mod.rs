@@ -13,7 +13,7 @@ use crate::{
         instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
     cpu::trace::Instruction,
-    memory::manager::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
 };
 
 #[cfg(test)]

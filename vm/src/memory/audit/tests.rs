@@ -16,7 +16,7 @@ use rand::Rng;
 
 use crate::{
     cpu::RANGE_CHECKER_BUS,
-    memory::{audit::MemoryAuditChip, manager::TimestampedValue, offline_checker::bus::MemoryBus},
+    memory::{audit::MemoryAuditChip, manager::TimestampedValue, offline_checker::MemoryBus},
 };
 
 type Val = BabyBear;

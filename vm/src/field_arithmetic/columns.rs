@@ -7,7 +7,7 @@ use crate::{
     arch::columns::ExecutionState,
     field_arithmetic::FieldArithmeticAir,
     memory::{
-        offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+        offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };

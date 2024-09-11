@@ -12,7 +12,7 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
-    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip<F>

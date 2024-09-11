@@ -5,10 +5,7 @@ use afs_primitives::is_less_than::IsLessThanAir;
 
 use crate::{
     field_extension::{air::FieldExtensionArithmeticAir, chip::EXT_DEG},
-    memory::offline_checker::{
-        bridge::MemoryOfflineChecker,
-        columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
-    },
+    memory::offline_checker::{MemoryOfflineChecker, MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 /// Columns for field extension chip.

@@ -6,7 +6,7 @@ use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 use super::air::Poseidon2VmAir;
 use crate::{
     hashes::poseidon2::{CHUNK, WIDTH},
-    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 /// Columns for Poseidon2Vm AIR.

@@ -3,7 +3,7 @@ use std::iter;
 use super::{num_limbs, UintArithmeticAir, NUM_LIMBS};
 use crate::{
     arch::columns::ExecutionState,
-    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 pub struct UintArithmeticCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone> {

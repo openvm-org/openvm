@@ -14,7 +14,7 @@ use rand::{rngs::StdRng, SeedableRng};
 use crate::{
     arch::chips::MachineChip,
     cpu::{trace::Instruction, RANGE_CHECKER_BUS},
-    memory::{manager::MemoryChip, offline_checker::bus::MemoryBus},
+    memory::{offline_checker::MemoryBus, MemoryChip},
     vm::config::MemoryConfig,
 };
 
@@ -25,7 +25,7 @@ pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
 
 use super::{bus::ExecutionBus, chips::InstructionExecutor};
-use crate::memory::manager::MemoryChipRef;
+use crate::memory::MemoryChipRef;
 
 #[derive(Clone, Debug)]
 pub struct MachineChipTestBuilder<F: PrimeField32> {

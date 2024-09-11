@@ -32,10 +32,7 @@ use crate::{
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-    memory::{
-        manager::{MemoryChip, MemoryChipRef},
-        offline_checker::bus::MemoryBus,
-    },
+    memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
     modular_arithmetic::ModularArithmeticChip as NewModularArithmeticChip,
     modular_multiplication::{
         ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,

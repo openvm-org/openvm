@@ -12,10 +12,7 @@ use super::{
     KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES,
     KECCAK_RATE_U16S,
 };
-use crate::memory::offline_checker::{
-    bridge::MemoryOfflineChecker,
-    columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
-};
+use crate::memory::offline_checker::{MemoryOfflineChecker, MemoryReadAuxCols, MemoryWriteAuxCols};
 
 #[derive(Clone, Copy, Debug)]
 pub struct KeccakVmColsRef<'a, T> {

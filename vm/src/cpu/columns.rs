@@ -13,8 +13,8 @@ use super::{
 use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
     memory::{
-        manager::{MemoryReadRecord, MemoryWriteRecord},
-        offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+        offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+        MemoryReadRecord, MemoryWriteRecord,
     },
 };
 

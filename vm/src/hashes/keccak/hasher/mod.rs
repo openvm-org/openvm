@@ -22,7 +22,7 @@ use crate::{
         instructions::Opcode,
     },
     cpu::trace::Instruction,
-    memory::manager::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
 };
 
 /// Memory reads to get dst, src, len

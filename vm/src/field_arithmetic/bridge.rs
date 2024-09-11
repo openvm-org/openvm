@@ -4,7 +4,7 @@ use p3_field::AbstractField;
 use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
 use crate::{
     arch::columns::InstructionCols, field_arithmetic::columns::FieldArithmeticAuxCols,
-    memory::offline_checker::bridge::MemoryBridge,
+    memory::offline_checker::MemoryBridge,
 };
 
 /// Receives all IO columns from another chip.

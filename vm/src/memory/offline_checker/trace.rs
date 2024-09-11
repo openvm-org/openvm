@@ -12,7 +12,7 @@ use super::{
 };
 use crate::memory::{
     manager::{MemoryReadRecord, MemoryWriteRecord},
-    offline_checker::columns::MemoryReadOrImmediateAuxCols,
+    offline_checker::MemoryReadOrImmediateAuxCols,
 };
 
 // NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in parallelized trace generation.

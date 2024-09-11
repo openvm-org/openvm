@@ -15,10 +15,7 @@ use crate::{
         instructions::Opcode,
     },
     memory::{
-        offline_checker::{
-            bridge::MemoryBridge,
-            columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
