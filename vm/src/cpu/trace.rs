@@ -1,8 +1,6 @@
 use std::{
     array,
     collections::{BTreeMap, VecDeque},
-    error::Error,
-    fmt::Display,
 };
 
 use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
@@ -23,65 +21,13 @@ use crate::{
     arch::{
         chips::{InstructionExecutor, MachineChip},
         columns::ExecutionState,
-        instructions::{
-            Opcode::{self, *},
-            CORE_INSTRUCTIONS,
-        },
+        instructions::{Opcode::*, CORE_INSTRUCTIONS},
     },
     cpu::{columns::CpuMemoryAccessCols, WORD_SIZE},
     memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+    program::ExecutionError,
     vm::ExecutionSegment,
 };
-
-#[derive(Debug)]
-pub enum ExecutionError {
-    Fail(usize),
-    PcOutOfBounds(usize, usize),
-    DisabledOperation(usize, Opcode),
-    HintOutOfBounds(usize),
-    EndOfInputStream(usize),
-    PublicValueIndexOutOfBounds(usize, usize, usize),
-    PublicValueNotEqual(usize, usize, usize, usize),
-}
-
-impl Display for ExecutionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExecutionError::Fail(pc) => write!(f, "execution failed at pc = {}", pc),
-            ExecutionError::PcOutOfBounds(pc, program_len) => write!(
-                f,
-                "pc = {} out of bounds for program of length {}",
-                pc, program_len
-            ),
-            ExecutionError::DisabledOperation(pc, op) => {
-                write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
-            }
-            ExecutionError::HintOutOfBounds(pc) => write!(f, "at pc = {}", pc),
-            ExecutionError::EndOfInputStream(pc) => write!(f, "at pc = {}", pc),
-            ExecutionError::PublicValueIndexOutOfBounds(
-                pc,
-                num_public_values,
-                public_value_index,
-            ) => write!(
-                f,
-                "at pc = {}, tried to publish into index {} when num_public_values = {}",
-                pc, public_value_index, num_public_values
-            ),
-            ExecutionError::PublicValueNotEqual(
-                pc,
-                public_value_index,
-                existing_value,
-                new_value,
-            ) => write!(
-                f,
-                "at pc = {}, tried to publish value {} into index {}, but already had {}",
-                pc, new_value, public_value_index, existing_value
-            ),
-        }
-    }
-}
-
-impl Error for ExecutionError {}
 
 impl<F: PrimeField32> CpuChip<F> {
     pub fn execute(vm: &mut ExecutionSegment<F>) -> Result<(), ExecutionError> {

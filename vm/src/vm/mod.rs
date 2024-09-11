@@ -8,8 +8,8 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 pub use segment::ExecutionSegment;
 
 use crate::{
-    cpu::{trace::ExecutionError, CpuOptions, CpuState},
-    program::Program,
+    cpu::{CpuOptions, CpuState},
+    program::{ExecutionError, Program},
     vm::{config::VmConfig, cycle_tracker::CanPrint, segment::SegmentResult},
 };
 

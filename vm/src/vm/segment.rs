@@ -29,9 +29,7 @@ use crate::{
         },
     },
     castf::CastFChip,
-    cpu::{
-        trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
-    },
+    cpu::{CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -39,7 +37,7 @@ use crate::{
     modular_arithmetic::{
         ModularArithmeticChip, ModularArithmeticOp, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
     },
-    program::{Program, ProgramChip},
+    program::{ExecutionError, Program, ProgramChip},
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
     vm::cycle_tracker::CycleTracker,
