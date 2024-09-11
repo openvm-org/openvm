@@ -7,8 +7,7 @@ use afs_primitives::{
 use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
     config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Config,
-        fri_params::{default_fri_params, fri_params_fast_testing},
+        baby_bear_poseidon2::BabyBearPoseidon2Config, fri_params::default_fri_params,
         setup_tracing, FriParameters,
     },
     interaction::dummy_interaction_air::DummyInteractionAir,

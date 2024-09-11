@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     arch::columns::InstructionCols,
-    memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
+    memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
 impl ModularArithmeticAir {
