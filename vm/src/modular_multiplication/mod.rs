@@ -10,7 +10,7 @@ use self::air::ModularArithmeticVmAir;
 use crate::{
     arch::{chips::InstructionExecutor, columns::ExecutionState, instructions::Opcode::*},
     cpu::trace::Instruction,
-    memory::manager::MemoryChipRef,
+    memory::MemoryChipRef,
     vm::ExecutionSegment,
 };
 

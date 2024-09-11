@@ -1,4 +1,4 @@
-use std::{iter::zip, marker::PhantomData};
+use std::iter::zip;
 
 use afs_primitives::{
     assert_less_than::{columns::AssertLessThanIoCols, AssertLessThanAir},
@@ -34,29 +34,25 @@ pub(super) const AUX_LEN: usize = 2;
 /// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory operations (read/write).
 /// It adds all necessary constraints and interactions.
 #[derive(Clone, Debug)]
-pub struct MemoryBridge<V> {
+pub struct MemoryBridge {
     offline_checker: MemoryOfflineChecker,
-    _marker: PhantomData<V>,
 }
 
-impl<V> MemoryBridge<V> {
+impl MemoryBridge {
     /// Create a new [MemoryBridge] with the provided offline_checker.
     pub fn new(offline_checker: MemoryOfflineChecker) -> Self {
-        Self {
-            offline_checker,
-            _marker: PhantomData,
-        }
+        Self { offline_checker }
     }
 
     /// Prepare a logical memory read operation.
     #[must_use]
-    pub fn read<T, const N: usize>(
+    pub fn read<'a, T, V, const N: usize>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; N],
         timestamp: impl Into<T>,
-        aux: MemoryReadAuxCols<N, V>,
-    ) -> MemoryReadOperation<T, V, N> {
+        aux: &'a MemoryReadAuxCols<N, V>,
+    ) -> MemoryReadOperation<'a, T, V, N> {
         MemoryReadOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
@@ -68,13 +64,13 @@ impl<V> MemoryBridge<V> {
 
     /// Prepare a logical memory read or immediate operation.
     #[must_use]
-    pub fn read_or_immediate<T>(
+    pub fn read_or_immediate<'a, T, V>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: impl Into<T>,
         timestamp: impl Into<T>,
-        aux: MemoryReadOrImmediateAuxCols<V>,
-    ) -> MemoryReadOrImmediateOperation<T, V> {
+        aux: &'a MemoryReadOrImmediateAuxCols<V>,
+    ) -> MemoryReadOrImmediateOperation<'a, T, V> {
         MemoryReadOrImmediateOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
@@ -86,13 +82,13 @@ impl<V> MemoryBridge<V> {
 
     /// Prepare a logical memory write operation.
     #[must_use]
-    pub fn write<T, const N: usize>(
+    pub fn write<'a, T, V, const N: usize>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; N],
         timestamp: impl Into<T>,
-        aux: MemoryWriteAuxCols<N, V>,
-    ) -> MemoryWriteOperation<T, V, N> {
+        aux: &'a MemoryWriteAuxCols<N, V>,
+    ) -> MemoryWriteOperation<'a, T, V, N> {
         MemoryWriteOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
@@ -111,18 +107,18 @@ impl<V> MemoryBridge<V> {
 /// The generic `T` type is intended to be `AB::Expr` where `AB` is the [AirBuilder].
 /// The auxiliary columns are not expected to be expressions, so the generic `V` type is intended
 /// to be `AB::Var`.
-pub struct MemoryReadOperation<T, V, const N: usize> {
+pub struct MemoryReadOperation<'a, T, V, const N: usize> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
     data: [T; N],
     timestamp: T,
-    aux: MemoryReadAuxCols<N, V>,
+    aux: &'a MemoryReadAuxCols<N, V>,
 }
 
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
-impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F, V, N> {
+impl<'a, F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<'a, F, V, N> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -161,12 +157,12 @@ impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F,
 /// The generic `T` type is intended to be `AB::Expr` where `AB` is the [AirBuilder].
 /// The auxiliary columns are not expected to be expressions, so the generic `V` type is intended
 /// to be `AB::Var`.
-pub struct MemoryReadOrImmediateOperation<T, V> {
+pub struct MemoryReadOrImmediateOperation<'a, T, V> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
     data: T,
     timestamp: T,
-    aux: MemoryReadOrImmediateAuxCols<V>,
+    aux: &'a MemoryReadOrImmediateAuxCols<V>,
 }
 
 /// The max degree of constraints is:
@@ -176,7 +172,7 @@ pub struct MemoryReadOrImmediateOperation<T, V> {
 /// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
-impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
+impl<'a, F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'a, F, V> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -230,19 +226,19 @@ impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
 /// Includes constraints for `timestamp_prev < timestamp`.
 ///
 /// **Note:** This can be used as a logical read operation by setting `data_prev = data`.
-pub struct MemoryWriteOperation<T, V, const N: usize> {
+pub struct MemoryWriteOperation<'a, T, V, const N: usize> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
     data: [T; N],
     /// The timestamp of the current read
     timestamp: T,
-    aux: MemoryWriteAuxCols<N, V>,
+    aux: &'a MemoryWriteAuxCols<N, V>,
 }
 
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
-impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T, V, N> {
+impl<'a, T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'a, T, V, N> {
     /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where

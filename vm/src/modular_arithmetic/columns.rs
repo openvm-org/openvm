@@ -3,7 +3,7 @@ use std::iter;
 use super::{ModularArithmeticAir, NUM_LIMBS};
 use crate::{
     arch::columns::ExecutionState,
-    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 pub struct ModularArithmeticCols<T: Clone> {

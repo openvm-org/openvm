@@ -4,7 +4,7 @@ use afs_primitives::var_range::VariableRangeCheckerChip;
 use p3_field::PrimeField32;
 
 use self::air::MemoryAuditAir;
-use crate::memory::offline_checker::bus::MemoryBus;
+use crate::memory::offline_checker::MemoryBus;
 
 pub mod air;
 pub mod bridge;

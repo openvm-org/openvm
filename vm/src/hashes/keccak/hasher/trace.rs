@@ -19,10 +19,7 @@ use crate::{
         columns::{KeccakOpcodeCols, KeccakVmColsMut},
         KECCAK_ABSORB_READS, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
     },
-    memory::{
-        manager::{MemoryReadRecord, MemoryWriteRecord},
-        offline_checker::columns::MemoryReadAuxCols,
-    },
+    memory::{offline_checker::MemoryReadAuxCols, MemoryReadRecord, MemoryWriteRecord},
 };
 
 impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {

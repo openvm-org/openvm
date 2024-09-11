@@ -4,7 +4,7 @@ use afs_derive::AlignedBorrow;
 
 use crate::{
     field_extension::chip::EXT_DEG,
-    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 /// Columns for field extension chip.

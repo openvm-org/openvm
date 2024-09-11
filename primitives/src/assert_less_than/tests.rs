@@ -16,7 +16,7 @@ fn test_borrow_mut_roundtrip() {
     let num_cols = AssertLessThanCols::<usize, AUX_LEN>::width();
     let mut all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let lt_cols: &mut AssertLessThanCols<_, AUX_LEN> = (&mut all_cols[..]).borrow_mut();
+    let lt_cols: &mut AssertLessThanCols<_, AUX_LEN> = all_cols[..].borrow_mut();
 
     lt_cols.io.x = 2;
     lt_cols.io.y = 8;

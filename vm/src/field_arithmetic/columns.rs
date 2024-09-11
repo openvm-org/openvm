@@ -6,7 +6,7 @@ use derive_new::new;
 use crate::{
     arch::columns::ExecutionState,
     memory::{
-        offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+        offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };

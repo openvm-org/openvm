@@ -11,7 +11,7 @@ use crate::{
         bus::ExecutionBus,
         instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
     },
-    memory::offline_checker::bridge::MemoryOfflineChecker,
+    memory::offline_checker::MemoryOfflineChecker,
 };
 
 #[derive(Clone, Copy, Debug)]

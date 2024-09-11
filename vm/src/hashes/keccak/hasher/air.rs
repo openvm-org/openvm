@@ -9,7 +9,7 @@ use super::{
     columns::{KeccakMemoryCols, KeccakVmColsRef, NUM_KECCAK_OPCODE_COLS, NUM_KECCAK_SPONGE_COLS},
     KECCAK_RATE_BYTES,
 };
-use crate::{arch::bus::ExecutionBus, memory::offline_checker::bridge::MemoryOfflineChecker};
+use crate::{arch::bus::ExecutionBus, memory::offline_checker::MemoryOfflineChecker};
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakVmAir {

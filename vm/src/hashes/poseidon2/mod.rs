@@ -13,9 +13,8 @@ use crate::{
     },
     cpu::trace::Instruction,
     memory::{
-        manager::{MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
-        offline_checker::bridge::MemoryOfflineChecker,
-        tree::Hasher,
+        offline_checker::MemoryOfflineChecker, tree::Hasher, MemoryChip, MemoryChipRef,
+        MemoryReadRecord, MemoryWriteRecord,
     },
 };
 

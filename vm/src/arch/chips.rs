@@ -16,7 +16,7 @@ use crate::{
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-    memory::manager::MemoryChipRef,
+    memory::MemoryChipRef,
     modular_arithmetic::ModularArithmeticChip as NewModularArithmeticChip,
     modular_multiplication::ModularArithmeticChip,
     program::ProgramChip,

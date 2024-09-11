@@ -4,7 +4,7 @@ use p3_field::AbstractField;
 use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
 use crate::{
     arch::columns::InstructionCols, field_arithmetic::columns::FieldArithmeticAuxCols,
-    memory::offline_checker::bridge::MemoryBridge,
+    memory::offline_checker::MemoryBridge,
 };
 
 /// Receives all IO columns from another chip.
@@ -49,7 +49,7 @@ impl FieldArithmeticAir {
                 operand1.memory_address(),
                 operand1.value,
                 timestamp.clone(),
-                aux.read_x_aux_cols,
+                &aux.read_x_aux_cols,
             )
             .eval(builder, is_valid);
         timestamp += is_valid.into();
@@ -59,7 +59,7 @@ impl FieldArithmeticAir {
                 operand2.memory_address(),
                 operand2.value,
                 timestamp.clone(),
-                aux.read_y_aux_cols,
+                &aux.read_y_aux_cols,
             )
             .eval(builder, is_valid);
         timestamp += is_valid.into();
@@ -69,7 +69,7 @@ impl FieldArithmeticAir {
                 result.memory_address(),
                 [result.value],
                 timestamp,
-                aux.write_z_aux_cols,
+                &aux.write_z_aux_cols,
             )
             .eval(builder, is_valid);
     }

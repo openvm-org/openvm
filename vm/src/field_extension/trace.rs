@@ -14,7 +14,7 @@ use crate::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
         EXT_DEG,
     },
-    memory::offline_checker::columns::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
 impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {

@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
-    memory::offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+    memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
 };
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {

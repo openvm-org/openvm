@@ -9,7 +9,7 @@ use crate::{
         bus::ExecutionBus,
         instructions::{Opcode, Opcode::*},
     },
-    memory::manager::MemoryChipRef,
+    memory::MemoryChipRef,
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]

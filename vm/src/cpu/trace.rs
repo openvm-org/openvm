@@ -30,7 +30,7 @@ use crate::{
         },
     },
     cpu::{columns::CpuMemoryAccessCols, WORD_SIZE},
-    memory::offline_checker::columns::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+    memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
     vm::ExecutionSegment,
 };
 

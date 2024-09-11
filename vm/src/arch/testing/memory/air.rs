@@ -5,7 +5,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
 use p3_matrix::Matrix;
 
-use crate::memory::{offline_checker::bus::MemoryBus, MemoryAddress};
+use crate::memory::{offline_checker::MemoryBus, MemoryAddress};
 
 #[derive(Clone, Copy, Debug, AlignedBorrow, derive_new::new)]
 #[repr(C)]

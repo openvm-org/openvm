@@ -1,6 +1,8 @@
-pub mod bridge;
-pub mod bus;
-pub mod columns;
-#[cfg(test)]
-mod tests;
-pub mod trace;
+mod bridge;
+mod bus;
+mod columns;
+mod trace;
+
+pub use bridge::*;
+pub use bus::*;
+pub use columns::*;
