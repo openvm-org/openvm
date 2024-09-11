@@ -314,13 +314,13 @@ compose_ec(w: EcArray) -> EcPoint {
 }
 ```
 
-where `compose` is the one in `u256` and modular arithmetic above. And let `decompose_ec(p: EcPoint) -> EcArray ` be the inverse of `compose_ec`.
+where `compose` is the one in modular arithmetic above. And let `decompose_ec(p: EcPoint) -> EcArray ` be the inverse of `compose_ec`.
 
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                  |
 | -------- | --------------------------------------------- | ------------------------------------------------------------ |
-| **SECP256K1_EC_ADD_NE**  | `a, b, c`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e @ EcArray[[c]_d]_e)` where `@` is group operation on secp256k1. Assume the x coordinate of two inputs are distinct, the result is undefined otherwise.                   |
-| **SECP256K1_EC_DOUBLE**  | `a, b, _`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e @ EcArray[[b]_d]_e)` where `@` is group operation on secp256k1. This double the input point.                 |
+| **SECP256K1_EC_ADD_NE**  | `a, b, c`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e + EcArray[[c]_d]_e)` where `+` is group operation on secp256k1. Assume the x coordinate of two inputs are distinct, the result is undefined otherwise.                   |
+| **SECP256K1_EC_DOUBLE**  | `a, b, _`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e + EcArray[[b]_d]_e)` where `+` is group operation on secp256k1. This double the input point.                 |
 
 ### Hash function precompiles
 
