@@ -119,10 +119,8 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
         // Resize with dummy `is_opcode = 0`
         opcode_blocks.resize(num_blocks, Default::default());
 
-        let memory = self.memory_chip.borrow();
-        let mem_oc = memory.make_offline_checker();
-        let range_checker = memory.range_checker.clone();
-        drop(memory);
+        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+
         // Use unsafe alignment so we can parallely write to the matrix
         let trace_width = self.trace_width();
         let mut trace = RowMajorMatrix::new(vec![F::zero(); num_rows * trace_width], trace_width);
@@ -159,9 +157,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                 let mut slc_idx = 0;
                 if let Some(op_reads) = diff.op_reads {
                     for record in op_reads {
-                        let aux = mem_oc
-                            .make_read_aux_cols(range_checker.clone(), record)
-                            .flatten();
+                        let aux = aux_cols_factory.make_read_aux_cols(record).flatten();
                         first_row.mem_oc[slc_idx..][..aux.len()].copy_from_slice(&aux);
                         slc_idx += aux.len();
                     }
@@ -169,9 +165,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                 slc_idx = KECCAK_EXECUTION_READS * MemoryReadAuxCols::<F, 1>::width();
                 for record in block.bytes_read {
                     // TODO[jpw] make_read_aux_cols should directly write into slice
-                    let aux = mem_oc
-                        .make_read_aux_cols(range_checker.clone(), record)
-                        .flatten();
+                    let aux = aux_cols_factory.make_read_aux_cols(record).flatten();
                     first_row.mem_oc[slc_idx..][..aux.len()].copy_from_slice(&aux);
                     slc_idx += aux.len();
                 }
@@ -186,9 +180,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                         * MemoryReadAuxCols::<F, 1>::width();
                     for record in digest_writes {
                         // TODO: these aux columns are only used for the last row - can we share them with aux reads in first row?
-                        let aux = mem_oc
-                            .make_write_aux_cols(range_checker.clone(), record)
-                            .flatten();
+                        let aux = aux_cols_factory.make_write_aux_cols(record).flatten();
                         last_row.mem_oc[slc_idx..][..aux.len()].copy_from_slice(&aux);
                         slc_idx += aux.len();
                     }

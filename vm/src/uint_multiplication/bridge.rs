@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     arch::{columns::InstructionCols, instructions::Opcode},
-    memory::{offline_checker::MemoryBridge, MemoryAddress},
+    memory::MemoryAddress,
 };
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_LIMBS, LIMB_BITS> {
@@ -18,7 +18,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
         io: &UintMultiplicationIoCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
         aux: &UintMultiplicationAuxCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
     ) {
-        let memory_bridge = MemoryBridge::new(self.mem_oc);
         let timestamp: AB::Var = io.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -35,7 +34,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
             [io.z.address, io.x.address, io.y.address],
             &aux.read_ptr_aux_cols
         ) {
-            memory_bridge
+            self.memory_bridge
                 .read(
                     MemoryAddress::new(io.ptr_as, ptr),
                     [value],
@@ -45,7 +44,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
                 .eval(builder, aux.is_valid);
         }
 
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(io.address_as, io.x.address),
                 io.x.data,
@@ -54,7 +53,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
             )
             .eval(builder, aux.is_valid);
 
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(io.address_as, io.y.address),
                 io.y.data,
@@ -63,7 +62,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
             )
             .eval(builder, aux.is_valid);
 
-        memory_bridge
+        self.memory_bridge
             .write(
                 MemoryAddress::new(io.address_as, io.z.address),
                 io.z.data,

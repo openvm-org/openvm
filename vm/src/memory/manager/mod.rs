@@ -1,6 +1,11 @@
-use std::{array, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{array, cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc, sync::Arc};
 
-use afs_primitives::var_range::VariableRangeCheckerChip;
+use afs_primitives::{
+    assert_less_than::{columns::AssertLessThanAuxCols, AssertLessThanAir},
+    is_zero::IsZeroAir,
+    sub_chip::LocalTraceInstructions,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+};
 use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -11,8 +16,10 @@ use self::interface::MemoryInterface;
 use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
 use crate::{
     arch::chips::MachineChip,
+    cpu::RANGE_CHECKER_BUS,
     memory::offline_checker::{
-        MemoryBus, MemoryOfflineChecker, MemoryReadAuxCols, MemoryWriteAuxCols,
+        MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
+        MemoryWriteAuxCols, AUX_LEN,
     },
     vm::config::MemoryConfig,
 };
@@ -127,8 +134,8 @@ impl<F: PrimeField32> MemoryChip<F> {
         }
     }
 
-    pub fn make_offline_checker(&self) -> MemoryOfflineChecker {
-        MemoryOfflineChecker::new(
+    pub fn memory_bridge(&self) -> MemoryBridge {
+        MemoryBridge::new(
             self.memory_bus,
             self.mem_config.clk_max_bits,
             self.mem_config.decomp,
@@ -262,28 +269,16 @@ impl<F: PrimeField32> MemoryChip<F> {
             });
     }
 
-    pub fn make_read_aux_cols<const N: usize>(
-        &self,
-        read: MemoryReadRecord<F, N>,
-    ) -> MemoryReadAuxCols<F, N> {
-        self.make_offline_checker()
-            .make_read_aux_cols(self.range_checker.clone(), read)
-    }
-
-    pub fn make_disabled_read_aux_cols<const N: usize>(&self) -> MemoryReadAuxCols<F, N> {
-        MemoryReadAuxCols::disabled()
-    }
-
-    pub fn make_write_aux_cols<const N: usize>(
-        &self,
-        write: MemoryWriteRecord<F, N>,
-    ) -> MemoryWriteAuxCols<F, N> {
-        self.make_offline_checker()
-            .make_write_aux_cols(self.range_checker.clone(), write)
-    }
-
-    pub fn make_disabled_write_aux_cols<const N: usize>(&self) -> MemoryWriteAuxCols<F, N> {
-        MemoryWriteAuxCols::disabled()
+    pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
+        let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.mem_config.decomp);
+        MemoryAuxColsFactory {
+            range_checker: self.range_checker.clone(),
+            timestamp_lt_air: AssertLessThanAir::<AUX_LEN>::new(
+                range_bus,
+                self.mem_config.clk_max_bits,
+            ),
+            _marker: Default::default(),
+        }
     }
 
     pub fn generate_memory_interface_trace(&self) -> RowMajorMatrix<F> {
@@ -378,5 +373,76 @@ impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
 
     fn trace_width(&self) -> usize {
         self.get_audit_air().air_width()
+    }
+}
+
+pub struct MemoryAuxColsFactory<T> {
+    range_checker: Arc<VariableRangeCheckerChip>,
+    timestamp_lt_air: AssertLessThanAir<AUX_LEN>,
+    _marker: PhantomData<T>,
+}
+
+// NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in parallelized trace generation.
+impl<F: PrimeField32> MemoryAuxColsFactory<F> {
+    pub fn make_read_aux_cols<const N: usize>(
+        &self,
+        read: MemoryReadRecord<F, N>,
+    ) -> MemoryReadAuxCols<F, N> {
+        assert!(
+            !read.address_space.is_zero(),
+            "cannot make `MemoryReadAuxCols` for address space 0"
+        );
+        MemoryReadAuxCols::new(
+            read.prev_timestamps,
+            self.generate_timestamp_lt_cols(&read.prev_timestamps, read.timestamp),
+        )
+    }
+
+    pub fn make_read_or_immediate_aux_cols(
+        &self,
+        read: MemoryReadRecord<F, 1>,
+    ) -> MemoryReadOrImmediateAuxCols<F> {
+        let [prev_timestamp] = read.prev_timestamps;
+
+        let addr_space_is_zero_cols = IsZeroAir.generate_trace_row(read.address_space);
+        let [timestamp_lt_cols] =
+            self.generate_timestamp_lt_cols(&[prev_timestamp], read.timestamp);
+
+        MemoryReadOrImmediateAuxCols::new(
+            prev_timestamp,
+            addr_space_is_zero_cols.io.is_zero,
+            addr_space_is_zero_cols.inv,
+            timestamp_lt_cols,
+        )
+    }
+
+    pub fn make_write_aux_cols<const N: usize>(
+        &self,
+        write: MemoryWriteRecord<F, N>,
+    ) -> MemoryWriteAuxCols<F, N> {
+        MemoryWriteAuxCols::new(
+            write.prev_data,
+            write.prev_timestamps,
+            self.generate_timestamp_lt_cols(&write.prev_timestamps, write.timestamp),
+        )
+    }
+
+    fn generate_timestamp_lt_cols<const N: usize>(
+        &self,
+        prev_timestamps: &[F; N],
+        timestamp: F,
+    ) -> [AssertLessThanAuxCols<F, AUX_LEN>; N] {
+        prev_timestamps.map(|prev_timestamp| {
+            debug_assert!(prev_timestamp.as_canonical_u32() < timestamp.as_canonical_u32());
+            let mut aux: AssertLessThanAuxCols<F, AUX_LEN> =
+                AssertLessThanAuxCols::<F, AUX_LEN>::new([F::zero(); AUX_LEN]);
+            self.timestamp_lt_air.generate_trace_row_aux(
+                prev_timestamp.as_canonical_u32(),
+                timestamp.as_canonical_u32(),
+                &self.range_checker,
+                &mut aux,
+            );
+            aux
+        })
     }
 }

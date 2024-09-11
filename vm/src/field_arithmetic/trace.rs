@@ -54,9 +54,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             F::zero()
         };
 
-        let memory_chip = self.memory_chip.borrow();
-        let offline_checker = memory_chip.make_offline_checker();
-        let range_checker = &memory_chip.range_checker;
+        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
 
         FieldArithmeticCols {
             io: FieldArithmeticIoCols {
@@ -72,12 +70,9 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: offline_checker
-                    .make_read_or_immediate_aux_cols(range_checker.clone(), x_read),
-                read_y_aux_cols: offline_checker
-                    .make_read_or_immediate_aux_cols(range_checker.clone(), y_read),
-                write_z_aux_cols: offline_checker
-                    .make_write_aux_cols(range_checker.clone(), z_write),
+                read_x_aux_cols: aux_cols_factory.make_read_or_immediate_aux_cols(x_read),
+                read_y_aux_cols: aux_cols_factory.make_read_or_immediate_aux_cols(y_read),
+                write_z_aux_cols: aux_cols_factory.make_write_aux_cols(z_write),
             },
         }
     }

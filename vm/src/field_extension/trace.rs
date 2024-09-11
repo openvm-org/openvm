@@ -75,7 +75,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             [F::zero(); EXT_DEG]
         };
 
-        let memory = self.memory_chip.borrow();
+        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
@@ -97,9 +97,9 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
                 is_mul,
                 is_div,
                 divisor_inv,
-                read_x_aux_cols: memory.make_read_aux_cols(record.x_read),
-                read_y_aux_cols: memory.make_read_aux_cols(record.y_read),
-                write_aux_cols: memory.make_write_aux_cols(record.z_write),
+                read_x_aux_cols: aux_cols_factory.make_read_aux_cols(record.x_read),
+                read_y_aux_cols: aux_cols_factory.make_read_aux_cols(record.y_read),
+                write_aux_cols: aux_cols_factory.make_write_aux_cols(record.z_write),
             },
         }
     }

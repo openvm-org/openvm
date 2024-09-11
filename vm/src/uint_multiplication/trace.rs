@@ -18,7 +18,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
     for UintMultiplicationChip<F, NUM_LIMBS, LIMB_BITS>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let memory_chip = self.memory_chip.borrow();
+        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+
         let width = self.trace_width();
         let height = self.data.len();
         let padded_height = height.next_power_of_two();
@@ -64,10 +65,10 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 is_valid: F::one(),
                 carry: array::from_fn(|i| carry[i]),
                 read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
-                    .map(|read| memory_chip.make_read_aux_cols(read.clone())),
-                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),
-                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read.clone()),
-                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write.clone()),
+                    .map(|read| aux_cols_factory.make_read_aux_cols(read.clone())),
+                read_x_aux_cols: aux_cols_factory.make_read_aux_cols(x_read.clone()),
+                read_y_aux_cols: aux_cols_factory.make_read_aux_cols(y_read.clone()),
+                write_z_aux_cols: aux_cols_factory.make_write_aux_cols(z_write.clone()),
             };
         }
         RowMajorMatrix::new(rows, width)

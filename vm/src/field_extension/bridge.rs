@@ -8,7 +8,7 @@ use super::{
 use crate::{
     arch::columns::{ExecutionState, InstructionCols},
     field_extension::columns::FieldExtensionArithmeticAuxCols,
-    memory::{offline_checker::MemoryBridge, MemoryAddress},
+    memory::MemoryAddress,
 };
 
 impl FieldExtensionArithmeticAir {
@@ -42,8 +42,6 @@ impl FieldExtensionArithmeticAir {
             ..
         } = aux;
 
-        let memory_bridge = MemoryBridge::new(self.mem_oc);
-
         let mut timestamp_delta = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
@@ -51,7 +49,7 @@ impl FieldExtensionArithmeticAir {
         };
 
         // Reads for x
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(d, op_b),
                 x,
@@ -61,7 +59,7 @@ impl FieldExtensionArithmeticAir {
             .eval(builder, is_valid);
 
         // Reads for y
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(e, op_c),
                 y,
@@ -71,7 +69,7 @@ impl FieldExtensionArithmeticAir {
             .eval(builder, is_valid);
 
         // Writes for z
-        memory_bridge
+        self.memory_bridge
             .write(
                 MemoryAddress::new(d, op_a),
                 z,

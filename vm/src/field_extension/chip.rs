@@ -101,8 +101,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
 
 impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
     pub fn new(execution_bus: ExecutionBus, memory: MemoryChipRef<F>) -> Self {
-        let air =
-            FieldExtensionArithmeticAir::new(execution_bus, memory.borrow().make_offline_checker());
+        let air = FieldExtensionArithmeticAir::new(execution_bus, memory.borrow().memory_bridge());
         Self {
             air,
             records: vec![],

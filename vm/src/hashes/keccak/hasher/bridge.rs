@@ -15,7 +15,7 @@ use crate::{
         instructions::Opcode,
     },
     memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -142,7 +142,6 @@ impl KeccakVmAir {
         );
 
         let mut timestamp: AB::Expr = opcode.start_timestamp.into();
-        let memory_bridge = MemoryBridge::new(self.mem_oc);
         // Only when it is an input do we want to do memory read for
         // dst <- word[a]_d, src <- word[b]_d
         for (ptr, addr_sp, value, mem_aux) in izip!(
@@ -151,7 +150,7 @@ impl KeccakVmAir {
             [opcode.dst, opcode.src, opcode.len],
             &mem_aux,
         ) {
-            memory_bridge
+            self.memory_bridge
                 .read(
                     MemoryAddress::new(addr_sp, ptr),
                     [value],
@@ -179,7 +178,6 @@ impl KeccakVmAir {
         start_read_timestamp: AB::Expr,
         mem_aux: [MemoryReadAuxCols<AB::Var, 1>; KECCAK_ABSORB_READS],
     ) -> AB::Expr {
-        let memory_bridge = MemoryBridge::new(self.mem_oc);
         // Only read input from memory when it is an opcode-related row
         // and only on the first round of block
         let is_input = local.opcode.is_enabled * local.inner.step_flags[0];
@@ -201,7 +199,7 @@ impl KeccakVmAir {
             let count = is_input.clone() * not(is_padding);
 
             // reminder: input is currently range checked to be 8-bits in `constrain_absorb` by the XOR lookup
-            memory_bridge
+            self.memory_bridge
                 .read(
                     MemoryAddress::new(local.opcode.e, ptr),
                     [input],
@@ -223,7 +221,6 @@ impl KeccakVmAir {
         mem_aux: [MemoryWriteAuxCols<AB::Var, 1>; KECCAK_DIGEST_WRITES],
     ) {
         let opcode = local.opcode;
-        let memory_bridge = MemoryBridge::new(self.mem_oc);
 
         let is_final_block = *local.sponge.is_padding_byte.last().unwrap();
         // since keccak-f AIR has this column, we might as well use it
@@ -246,7 +243,7 @@ impl KeccakVmAir {
         });
         for (i, digest_byte) in updated_state_bytes.take(KECCAK_DIGEST_WRITES).enumerate() {
             let timestamp = start_write_timestamp.clone() + AB::Expr::from_canonical_usize(i);
-            memory_bridge
+            self.memory_bridge
                 .write(
                     MemoryAddress::new(opcode.e, opcode.dst + AB::F::from_canonical_usize(i)),
                     [digest_byte],

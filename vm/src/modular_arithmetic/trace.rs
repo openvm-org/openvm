@@ -31,7 +31,7 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, ModularArithme
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let memory_chip = self.memory_chip.borrow();
+        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
 
         let rows = self
             .data
@@ -100,12 +100,12 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, ModularArithme
 
                 let aux = ModularArithmeticAuxCols {
                     is_valid: F::one(),
-                    read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),
-                    read_y_aux_cols: memory_chip.make_read_aux_cols(y_read.clone()),
-                    write_z_aux_cols: memory_chip.make_write_aux_cols(z_write.clone()),
-                    x_address_aux_cols: memory_chip.make_read_aux_cols(x_address_read.clone()),
-                    y_address_aux_cols: memory_chip.make_read_aux_cols(y_address_read.clone()),
-                    z_address_aux_cols: memory_chip.make_read_aux_cols(z_address_read.clone()),
+                    read_x_aux_cols: aux_cols_factory.make_read_aux_cols(x_read.clone()),
+                    read_y_aux_cols: aux_cols_factory.make_read_aux_cols(y_read.clone()),
+                    write_z_aux_cols: aux_cols_factory.make_write_aux_cols(z_write.clone()),
+                    x_address_aux_cols: aux_cols_factory.make_read_aux_cols(x_address_read.clone()),
+                    y_address_aux_cols: aux_cols_factory.make_read_aux_cols(y_address_read.clone()),
+                    z_address_aux_cols: aux_cols_factory.make_read_aux_cols(z_address_read.clone()),
                     carries: primitive_row.carries,
                     q: primitive_row.q,
                     opcode: F::from_canonical_u8(record.instruction.opcode as u8),

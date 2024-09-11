@@ -5,10 +5,7 @@ use super::{
     columns::{ModularArithmeticAuxCols, ModularArithmeticIoCols},
     ModularArithmeticAirVariant, ModularArithmeticVmAir,
 };
-use crate::{
-    arch::columns::InstructionCols,
-    memory::{offline_checker::MemoryBridge, MemoryAddress},
-};
+use crate::{arch::columns::InstructionCols, memory::MemoryAddress};
 
 impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -18,10 +15,9 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
         aux: ModularArithmeticAuxCols<AB::Var>,
     ) {
         let mut timestamp_delta = AB::Expr::zero();
-        let memory_bridge = MemoryBridge::new(self.mem_oc);
         let timestamp: AB::Expr = io.from_state.timestamp.into();
 
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(io.x_address.address_space, io.x_address.address),
                 io.x_address
@@ -34,7 +30,7 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(io.y_address.address_space, io.y_address.address),
                 io.y_address
@@ -47,7 +43,7 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(io.z_address.address_space, io.z_address.address),
                 io.z_address
@@ -60,7 +56,7 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(io.x.address_space, io.x.address),
                 io.x.data.try_into().unwrap_or_else(|_| unreachable!()),
@@ -70,7 +66,7 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(io.y.address_space, io.y.address),
                 io.y.data.try_into().unwrap_or_else(|_| unreachable!()),
@@ -80,7 +76,7 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        memory_bridge
+        self.memory_bridge
             .write(
                 MemoryAddress::new(io.z.address_space, io.z.address),
                 io.z.data.try_into().unwrap_or_else(|_| unreachable!()),

@@ -12,10 +12,7 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{
     arch::bus::ExecutionBus,
-    memory::{
-        offline_checker::{MemoryBridge, MemoryOfflineChecker},
-        MemoryAddress,
-    },
+    memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
 /// Poseidon2 Air, VM version.
@@ -26,7 +23,7 @@ use crate::{
 pub struct Poseidon2VmAir<T> {
     pub inner: Poseidon2Air<WIDTH, T>,
     pub execution_bus: ExecutionBus,
-    pub mem_oc: MemoryOfflineChecker,
+    pub memory_bridge: MemoryBridge,
     pub direct: bool, // Whether direct interactions are enabled.
 }
 
@@ -67,8 +64,6 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
         );
 
         // Memory access constraints
-        let memory_bridge = MemoryBridge::new(self.mem_oc);
-
         let timestamp = cols.io.timestamp;
         let mut timestamp_delta = 0;
         let mut timestamp_pp = || {
@@ -85,7 +80,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
             [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp],
             &cols.aux.ptr_aux_cols,
         ) {
-            memory_bridge
+            self.memory_bridge
                 .read(
                     MemoryAddress::new(cols.io.d, io_addr),
                     [aux_addr],
@@ -99,7 +94,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
         let [output1_aux_cols, output2_aux_cols] = cols.aux.output_aux_cols;
 
         // First input chunk.
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(cols.io.e, cols.aux.lhs_ptr),
                 cols.aux.internal.io.input[..CHUNK].try_into().unwrap(),
@@ -109,7 +104,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
             .eval(builder, cols.io.is_opcode);
 
         // Second input chunk.
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(cols.io.e, cols.aux.rhs_ptr),
                 cols.aux.internal.io.input[CHUNK..].try_into().unwrap(),
@@ -119,7 +114,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
             .eval(builder, cols.io.is_opcode);
 
         // First output chunk.
-        memory_bridge
+        self.memory_bridge
             .write(
                 MemoryAddress::new(cols.io.e, cols.aux.dst_ptr),
                 cols.aux.internal.io.output[..CHUNK].try_into().unwrap(),
@@ -130,7 +125,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
 
         // Second output chunk.
         let pointer = cols.aux.dst_ptr + AB::F::from_canonical_usize(CHUNK);
-        memory_bridge
+        self.memory_bridge
             .write(
                 MemoryAddress::new(cols.io.e, pointer),
                 cols.aux.internal.io.output[CHUNK..].try_into().unwrap(),

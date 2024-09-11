@@ -6,10 +6,7 @@ use super::{
     air::UintArithmeticAir,
     columns::{UintArithmeticAuxCols, UintArithmeticIoCols},
 };
-use crate::{
-    arch::columns::InstructionCols,
-    memory::{offline_checker::MemoryBridge, MemoryAddress},
-};
+use crate::{arch::columns::InstructionCols, memory::MemoryAddress};
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, LIMB_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -21,7 +18,6 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
     ) {
         let mut timestamp_delta = AB::Expr::zero();
 
-        let memory_bridge = MemoryBridge::new(self.mem_oc);
         let timestamp: AB::Var = io.from_state.timestamp;
 
         // Read the operand pointer's values, which are themselves pointers
@@ -31,7 +27,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
             [io.z.address, io.x.address, io.y.address],
             &aux.read_ptr_aux_cols
         ) {
-            memory_bridge
+            self.memory_bridge
                 .read(
                     MemoryAddress::new(io.d, ptr), // all use addr space d
                     [value],
@@ -44,7 +40,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
         }
 
         // Memory read for x data
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(io.x.address_space, io.x.address),
                 io.x.data.try_into().unwrap_or_else(|_| unreachable!()),
@@ -55,7 +51,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
         timestamp_delta += AB::Expr::one();
 
         // Memory read for y data
-        memory_bridge
+        self.memory_bridge
             .read(
                 MemoryAddress::new(io.y.address_space, io.y.address),
                 io.y.data.try_into().unwrap_or_else(|_| unreachable!()),
@@ -67,7 +63,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
 
         // Special handling for writing output z data:
         let enabled = aux.opcode_add_flag + aux.opcode_sub_flag;
-        memory_bridge
+        self.memory_bridge
             .write(
                 MemoryAddress::new(io.z.address_space, io.z.address),
                 io.z.data
@@ -81,7 +77,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
         timestamp_delta += enabled;
 
         let enabled = aux.opcode_lt_flag + aux.opcode_eq_flag;
-        memory_bridge
+        self.memory_bridge
             .write(
                 MemoryAddress::new(io.z.address_space, io.z.address),
                 [io.cmp_result],

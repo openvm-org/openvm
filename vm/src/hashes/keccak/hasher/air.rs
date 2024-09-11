@@ -9,12 +9,12 @@ use super::{
     columns::{KeccakMemoryCols, KeccakVmColsRef, NUM_KECCAK_OPCODE_COLS, NUM_KECCAK_SPONGE_COLS},
     KECCAK_RATE_BYTES,
 };
-use crate::{arch::bus::ExecutionBus, memory::offline_checker::MemoryOfflineChecker};
+use crate::{arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge};
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakVmAir {
     pub execution_bus: ExecutionBus,
-    pub mem_oc: MemoryOfflineChecker,
+    pub memory_bridge: MemoryBridge,
     /// Bus to send 8-bit XOR requests to.
     pub xor_bus: XorBus,
     // TODO: add configuration for enabling direct non-memory interactions

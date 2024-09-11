@@ -440,9 +440,7 @@ impl<F: PrimeField32> CpuChip<F> {
             // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
             // and move this logic into generate_trace().
             {
-                let memory_chip = vm.memory_chip.borrow();
-                let offline_checker = memory_chip.make_offline_checker();
-                let range_checker = &memory_chip.range_checker;
+                let aux_cols_factory = vm.memory_chip.borrow().aux_cols_factory();
 
                 let read_cols = array::from_fn(|i| {
                     read_records
@@ -452,15 +450,11 @@ impl<F: PrimeField32> CpuChip<F> {
                         })
                 });
                 let reads_aux_cols = array::from_fn(|i| {
-                    read_records.get(i).map_or_else(
-                        MemoryReadOrImmediateAuxCols::disabled,
-                        |read| {
-                            offline_checker.make_read_or_immediate_aux_cols(
-                                range_checker.clone(),
-                                read.clone(),
-                            )
-                        },
-                    )
+                    read_records
+                        .get(i)
+                        .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
+                            aux_cols_factory.make_read_or_immediate_aux_cols(read.clone())
+                        })
                 });
 
                 let write_cols = array::from_fn(|i| {
@@ -473,8 +467,8 @@ impl<F: PrimeField32> CpuChip<F> {
                 let writes_aux_cols = array::from_fn(|i| {
                     write_records
                         .get(i)
-                        .map_or_else(MemoryWriteAuxCols::disabled, |read| {
-                            offline_checker.make_write_aux_cols(range_checker.clone(), read.clone())
+                        .map_or_else(MemoryWriteAuxCols::disabled, |write| {
+                            aux_cols_factory.make_write_aux_cols(write.clone())
                         })
                 });
 

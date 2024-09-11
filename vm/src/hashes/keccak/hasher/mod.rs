@@ -89,9 +89,9 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         memory_chip: MemoryChipRef<F>,
         byte_xor_chip: Arc<XorLookupChip<8>>,
     ) -> Self {
-        let mem_oc = memory_chip.borrow().make_offline_checker();
+        let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            air: KeccakVmAir::new(execution_bus, mem_oc, byte_xor_chip.bus()),
+            air: KeccakVmAir::new(execution_bus, memory_bridge, byte_xor_chip.bus()),
             memory_chip,
             byte_xor_chip,
             records: Vec::new(),

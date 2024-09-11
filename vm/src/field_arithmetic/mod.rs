@@ -43,11 +43,11 @@ pub struct FieldArithmeticChip<F: PrimeField32> {
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     #[allow(clippy::new_without_default)]
     pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<F>) -> Self {
-        let mem_oc = memory_chip.borrow().make_offline_checker();
+        let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: FieldArithmeticAir {
                 execution_bus,
-                mem_oc,
+                memory_bridge,
             },
             records: vec![],
             memory_chip,

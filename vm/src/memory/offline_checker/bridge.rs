@@ -29,19 +29,21 @@ use crate::{
 /// for the `AssertLessThanAir` in the `MemoryOfflineChecker`.
 /// Warning: This requires that (clk_max_bits + decomp - 1) / decomp = AUX_LEN
 ///         in MemoryOfflineChecker (or whenever AssertLessThanAir is used)
-pub(super) const AUX_LEN: usize = 2;
+pub(crate) const AUX_LEN: usize = 2;
 
 /// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory operations (read/write).
 /// It adds all necessary constraints and interactions.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct MemoryBridge {
     offline_checker: MemoryOfflineChecker,
 }
 
 impl MemoryBridge {
     /// Create a new [MemoryBridge] with the provided offline_checker.
-    pub fn new(offline_checker: MemoryOfflineChecker) -> Self {
-        Self { offline_checker }
+    pub fn new(memory_bus: MemoryBus, clk_max_bits: usize, decomp: usize) -> Self {
+        Self {
+            offline_checker: MemoryOfflineChecker::new(memory_bus, clk_max_bits, decomp),
+        }
     }
 
     /// Prepare a logical memory read operation.
@@ -265,14 +267,13 @@ impl<'a, T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperati
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct MemoryOfflineChecker {
-    pub memory_bus: MemoryBus,
-    pub timestamp_lt_air: AssertLessThanAir<AUX_LEN>,
+struct MemoryOfflineChecker {
+    memory_bus: MemoryBus,
+    timestamp_lt_air: AssertLessThanAir<AUX_LEN>,
 }
 
 impl MemoryOfflineChecker {
-    // TODO[jpw]: pass in range bus
-    pub fn new(memory_bus: MemoryBus, clk_max_bits: usize, decomp: usize) -> Self {
+    fn new(memory_bus: MemoryBus, clk_max_bits: usize, decomp: usize) -> Self {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp);
         Self {
             memory_bus,

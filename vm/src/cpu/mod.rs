@@ -109,12 +109,12 @@ impl<F: PrimeField32> CpuChip<F> {
         memory_chip: MemoryChipRef<F>,
         state: CpuState,
     ) -> Self {
-        let memory_offline_checker = memory_chip.borrow().make_offline_checker();
+        let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: CpuAir {
                 options,
                 execution_bus,
-                memory_offline_checker,
+                memory_bridge,
             },
             rows: vec![],
             state,

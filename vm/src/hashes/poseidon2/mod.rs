@@ -1,4 +1,4 @@
-use std::{array, cell::Ref};
+use std::array;
 
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use columns::*;
@@ -13,8 +13,9 @@ use crate::{
     },
     cpu::trace::Instruction,
     memory::{
-        offline_checker::MemoryOfflineChecker, tree::Hasher, MemoryChip, MemoryChipRef,
-        MemoryReadRecord, MemoryWriteRecord,
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        tree::Hasher,
+        MemoryAuxColsFactory, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
     },
 };
 
@@ -45,13 +46,13 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
     pub fn from_poseidon2_config(
         config: Poseidon2Config<WIDTH, F>,
         execution_bus: ExecutionBus,
-        mem_oc: MemoryOfflineChecker,
+        memory_bridge: MemoryBridge,
     ) -> Self {
         let inner = Poseidon2Air::<WIDTH, F>::from_config(config, 0);
         Self {
             inner,
             execution_bus,
-            mem_oc,
+            memory_bridge,
             direct: true,
         }
     }
@@ -87,7 +88,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
         let air = Poseidon2VmAir::<F>::from_poseidon2_config(
             p2_config,
             execution_bus,
-            memory_chip.borrow().make_offline_checker(),
+            memory_chip.borrow().memory_bridge(),
         );
         Self {
             air,
@@ -97,7 +98,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
     }
 
     fn record_to_cols(
-        memory_chip: &Ref<MemoryChip<F>>,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
         record: Poseidon2Record<F>,
     ) -> Poseidon2VmCols<F> {
         let dst_ptr = record.dst_ptr_read.value();
@@ -109,21 +110,19 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
             record.rhs_ptr_read,
         ]
         .map(|maybe_read| {
-            maybe_read.map_or_else(
-                || memory_chip.make_disabled_read_aux_cols(),
-                |read| memory_chip.make_read_aux_cols(read),
-            )
+            maybe_read.map_or_else(MemoryReadAuxCols::disabled, |read| {
+                aux_cols_factory.make_read_aux_cols(read)
+            })
         });
 
-        let input_aux_cols =
-            [record.lhs_read, record.rhs_read].map(|read| memory_chip.make_read_aux_cols(read));
+        let input_aux_cols = [record.lhs_read, record.rhs_read]
+            .map(|read| aux_cols_factory.make_read_aux_cols(read));
 
         let output_aux_cols =
             [Some(record.output1_write), record.output2_write].map(|maybe_write| {
-                maybe_write.map_or_else(
-                    || memory_chip.make_disabled_write_aux_cols(),
-                    |write| memory_chip.make_write_aux_cols(write),
-                )
+                maybe_write.map_or_else(MemoryWriteAuxCols::disabled, |write| {
+                    aux_cols_factory.make_write_aux_cols(write)
+                })
             });
 
         Poseidon2VmCols {

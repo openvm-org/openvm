@@ -72,11 +72,11 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             NUM_LIMBS * (1 << LIMB_BITS)
         );
 
-        let mem_oc = memory_chip.borrow().make_offline_checker();
+        let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: UintMultiplicationAir {
                 execution_bus,
-                mem_oc,
+                memory_bridge,
                 bus: bus.clone(),
             },
             data: vec![],

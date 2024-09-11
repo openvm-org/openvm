@@ -21,10 +21,10 @@ impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
         let correct_len = row_len.next_power_of_two();
         let diff = correct_len - row_len;
 
-        let memory_chip = memory_chip.borrow();
+        let aux_cols_factory = memory_chip.borrow().aux_cols_factory();
         let mut flat_rows: Vec<_> = records
             .into_iter()
-            .flat_map(|record| Self::record_to_cols(&memory_chip, record).flatten())
+            .flat_map(|record| Self::record_to_cols(&aux_cols_factory, record).flatten())
             .collect();
         for _ in 0..diff {
             flat_rows.extend(Poseidon2VmCols::<F>::blank_row(&air).flatten());

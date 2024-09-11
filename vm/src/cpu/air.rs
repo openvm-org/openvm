@@ -15,10 +15,7 @@ use super::{
 };
 use crate::{
     arch::{bus::ExecutionBus, instructions::Opcode::*},
-    memory::{
-        offline_checker::{MemoryBridge, MemoryOfflineChecker},
-        MemoryAddress,
-    },
+    memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
 /// Air for the CPU. Carries no state and does not own execution.
@@ -26,7 +23,7 @@ use crate::{
 pub struct CpuAir {
     pub options: CpuOptions,
     pub execution_bus: ExecutionBus,
-    pub memory_offline_checker: MemoryOfflineChecker,
+    pub memory_bridge: MemoryBridge,
 }
 
 impl<F: Field> BaseAir<F> for CpuAir {
@@ -328,9 +325,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         // FIXME[zach]: Properly constrain op.enabled based on opcode.
 
         let mut op_timestamp: AB::Expr = io.timestamp.into();
-        let memory_bridge = MemoryBridge::new(self.memory_offline_checker);
         for (read, read_aux_cols) in zip(&reads, reads_aux_cols) {
-            memory_bridge
+            self.memory_bridge
                 .read_or_immediate(
                     MemoryAddress::new(read.address_space, read.pointer),
                     read.value,
@@ -342,7 +338,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         }
 
         for (write, write_aux_cols) in zip(&writes, writes_aux_cols) {
-            memory_bridge
+            self.memory_bridge
                 .write(
                     MemoryAddress::new(write.address_space, write.pointer),
                     [write.value],

@@ -2,10 +2,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
-use crate::{
-    arch::columns::InstructionCols, field_arithmetic::columns::FieldArithmeticAuxCols,
-    memory::offline_checker::MemoryBridge,
-};
+use crate::{arch::columns::InstructionCols, field_arithmetic::columns::FieldArithmeticAuxCols};
 
 /// Receives all IO columns from another chip.
 impl FieldArithmeticAir {
@@ -42,9 +39,8 @@ impl FieldArithmeticAir {
             ),
         );
 
-        let memory_bridge = MemoryBridge::new(self.mem_oc);
         let mut timestamp: AB::Expr = from_state.timestamp.into();
-        memory_bridge
+        self.memory_bridge
             .read_or_immediate(
                 operand1.memory_address(),
                 operand1.value,
@@ -54,7 +50,7 @@ impl FieldArithmeticAir {
             .eval(builder, is_valid);
         timestamp += is_valid.into();
 
-        memory_bridge
+        self.memory_bridge
             .read_or_immediate(
                 operand2.memory_address(),
                 operand2.value,
@@ -64,7 +60,7 @@ impl FieldArithmeticAir {
             .eval(builder, is_valid);
         timestamp += is_valid.into();
 
-        memory_bridge
+        self.memory_bridge
             .write(
                 result.memory_address(),
                 [result.value],

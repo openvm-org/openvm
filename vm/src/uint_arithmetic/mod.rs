@@ -70,8 +70,8 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
 {
     pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
+        let memory_bridge = memory_chip.borrow().memory_bridge();
         let bus = range_checker_chip.bus();
-        let mem_oc = memory_chip.borrow().make_offline_checker();
         assert!(
             bus.range_max_bits >= LIMB_SIZE,
             "range_max_bits {} < LIMB_SIZE {}",
@@ -81,7 +81,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
         Self {
             air: UintArithmeticAir {
                 execution_bus,
-                mem_oc,
+                memory_bridge,
                 bus,
                 base_op: Opcode::ADD256,
             },

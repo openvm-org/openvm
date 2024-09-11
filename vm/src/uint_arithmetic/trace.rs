@@ -19,7 +19,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
     for UintArithmeticChip<ARG_SIZE, LIMB_SIZE, F>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let memory_chip = self.memory_chip.borrow();
+        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
         let rows = self
             .data
@@ -87,16 +87,20 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip
                             opcode_eq_flag: F::from_bool(instruction.opcode == Opcode::EQ256),
                             buffer: buffer.clone(),
                             read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
-                                .map(|read| memory_chip.make_read_aux_cols(read.clone())),
-                            read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),
-                            read_y_aux_cols: memory_chip.make_read_aux_cols(y_read.clone()),
+                                .map(|read| aux_cols_factory.make_read_aux_cols(read.clone())),
+                            read_x_aux_cols: aux_cols_factory.make_read_aux_cols(x_read.clone()),
+                            read_y_aux_cols: aux_cols_factory.make_read_aux_cols(y_read.clone()),
                             write_z_aux_cols: match &z_write {
-                                WriteRecord::Uint(z) => memory_chip.make_write_aux_cols(z.clone()),
-                                WriteRecord::Short(_) => memory_chip.make_disabled_write_aux_cols(),
+                                WriteRecord::Uint(z) => {
+                                    aux_cols_factory.make_write_aux_cols(z.clone())
+                                }
+                                WriteRecord::Short(_) => MemoryWriteAuxCols::disabled(),
                             },
                             write_cmp_aux_cols: match &z_write {
-                                WriteRecord::Uint(_) => memory_chip.make_disabled_write_aux_cols(),
-                                WriteRecord::Short(z) => memory_chip.make_write_aux_cols(z.clone()),
+                                WriteRecord::Uint(_) => MemoryWriteAuxCols::disabled(),
+                                WriteRecord::Short(z) => {
+                                    aux_cols_factory.make_write_aux_cols(z.clone())
+                                }
                             },
                         },
                     }

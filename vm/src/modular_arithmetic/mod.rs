@@ -22,9 +22,7 @@ use crate::{
         instructions::Opcode,
     },
     cpu::trace::Instruction,
-    memory::{
-        offline_checker::MemoryOfflineChecker, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
-    },
+    memory::{offline_checker::MemoryBridge, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
 };
 
 pub mod air;
@@ -136,7 +134,7 @@ pub enum ModularArithmeticOp {
 pub struct ModularArithmeticVmAir<A> {
     pub air: A,
     pub execution_bus: ExecutionBus,
-    pub mem_oc: MemoryOfflineChecker,
+    pub memory_bridge: MemoryBridge,
 
     pub carry_limbs: usize,
     pub q_limbs: usize,
@@ -161,7 +159,7 @@ impl<T: PrimeField32> ModularArithmeticChip<T, ModularArithmeticAirVariant> {
         op: ModularArithmeticOp,
     ) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
-        let mem_oc = memory_chip.borrow().make_offline_checker();
+        let memory_bridge = memory_chip.borrow().memory_bridge();
         let (carry_limbs, q_limbs, is_mul_div) = match op {
             ModularArithmeticOp::Add | ModularArithmeticOp::Sub => (NUM_LIMBS, 1, false),
             ModularArithmeticOp::Mul | ModularArithmeticOp::Div => {
@@ -198,7 +196,7 @@ impl<T: PrimeField32> ModularArithmeticChip<T, ModularArithmeticAirVariant> {
             air: ModularArithmeticVmAir {
                 air: subair,
                 execution_bus,
-                mem_oc,
+                memory_bridge,
                 carry_limbs,
                 q_limbs,
             },
