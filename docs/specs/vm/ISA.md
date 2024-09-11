@@ -246,13 +246,14 @@ A note on CASTF below: support for casting arbitrary field elements can also be 
 
 We name these opcodes `ADD`, etc, below for brevity but in the code they must distinguish between `ADD` for `u32` and `ADD` for `u256`.
 
-Since we work over a 31-bit field, we will represent `u256` as 16-bit limbs. Let `Word256 = [u16; 16]`. For notational purposes we let `w256[a]_d: Word256` denote the array of limbs `w256[a + i]_d` for i = 0..16`. Explicitly, the conversion between the limb representation and the actual unsigned integer is given by
-
-**Note:** we assume 16-bit limbs are the most efficient for cell-saving, but this can be changed if needed.
+Let `Word256 = [u8; 32]`. Although we work over a 31-bit field, and we can in theory represent `u256` as larger limbs (e.g. 16bits), we choose to operate on bytes because 
+(1): a lot of data we work with are naturally in bytes and 
+(2): to be consistent with modular arithmetic below.
+For notational purposes we let `w256[a]_d: Word256` denote the array of limbs `w256[a + i]_d` for i = 0..32`. Explicitly, the conversion between the limb representation and the actual unsigned integer is given by
 
 ```
 compose(w: Word256) -> u256 {
-    return sum_{i=0}^15 w[i] * 2^{16i}
+    return sum_{i=0}^31 w[i] * 2^{8i}
 }
 ```
 
@@ -267,9 +268,9 @@ The address spaces `d, e` are not allowed to be zero in any instructions below u
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                                       |
 | -------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **ADD**  | `a, b, c`                                     | Set `w256[[a]_d]_e <- decompose(u256[[b]_d]_f + u256[[c]_d]_g)` where addition is mod `2^256`.                    |
-| **SUB**  | `a, b, c`                                     | Set `w256[[a]_d]_e <- decompose(u256[[b]_d]_f - [u256[c]_d]_g)` where subtraction is mod `2^256` with wraparound. |
-| **MUL**  | `a, b, c`                                     | Set `w256[[a]_d]_e <- decompose(u256[[b]_d]_f * u256[[c]_d]_g)` where multiplication is mod `2^256`.              |
+| **ADD**  | `a, b, c`                                     | Set `w256[[a]_d]_e <- decompose(u256[[b]_d]_e + u256[[c]_d]_e)` where addition is mod `2^256`.                    |
+| **SUB**  | `a, b, c`                                     | Set `w256[[a]_d]_e <- decompose(u256[[b]_d]_e - [u256[c]_d]_e)` where subtraction is mod `2^256` with wraparound. |
+| **MUL**  | `a, b, c`                                     | Set `w256[[a]_d]_e <- decompose(u256[[b]_d]_e * u256[[c]_d]_e)` where multiplication is mod `2^256`.              |
 
 <!--
 We don't need this yet:
@@ -282,6 +283,44 @@ We don't need this yet:
 | -------- | --------------------------------------------- | ------------------------------------------------------------ |
 | **LT**   | `a, b, c`                                     | Set `word[a]_d <- u256[b]_d < u256[c]_e ? emb(1) : emb(0)`.  |
 | **EQ**   | `a, b, c`                                     | Set `word[a]_d <- u256[b]_d == u256[c]_e ? emb(1) : emb(0)`. |
+
+### Modular arithmetic
+
+For some technical reasons we cannot have limb bits greater than 12 (it will overflow the field element in intermediate computations), so the big uints are represented as `BigUint = [u8; 32]`.
+
+We will have similar notation as `u256` and let `bigu[a]_d: BigUint` denote the array of limbs `bigu[a + i]_d` for `i = 0..32` The conversion between limbs and the big uint is the same as for `u256` above.
+The modulus we will use for now are the coordinate field and scalar field of `secp256k1`.
+
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                  |
+| -------- | --------------------------------------------- | ------------------------------------------------------------ |
+| **SECP256K1_COORD_ADD**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e + bigu[[c]_d]_e)` where addition is mod coordinate field.                   |
+| **SECP256K1_COORD_SUB**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e - bigu[[c]_d]_e)` where addition is mod coordinate field.                   |
+| **SECP256K1_COORD_MUL**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e * bigu[[c]_d]_e)` where addition is mod coordinate field.                   |
+| **SECP256K1_COORD_DIV**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e / bigu[[c]_d]_e)` where addition is mod coordinate field.                   |
+| **SECP256K1_SCALAR_ADD**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e + bigu[[c]_d]_e)` where addition is mod scalar field.                   |
+| **SECP256K1_SCALAR_SUB**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e - bigu[[c]_d]_e)` where addition is mod scalar field.                   |
+| **SECP256K1_SCALAR_MUL**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e * bigu[[c]_d]_e)` where addition is mod scalar field.                   |
+| **SECP256K1_SCALAR_DIV**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e / bigu[[c]_d]_e)` where addition is mod scalar field.                   |
+
+### Elliptic curve operations
+
+An elliptic curve point `EcPoint(x, y)` is a pair of big uint in a prime field (secp256k1). `x` and `y` will be represented as `BigUint` with 32 8-bit limbs, and thus an `EcPoint` needs 64 elements in total. Let `EcArray = [u8; 64]`.
+
+```
+compose_ec(w: EcArray) -> EcPoint {
+    let x = compose(w[..32]);
+    let y = compose(w[32..]);
+    return EcPoint(x, y);
+}
+```
+
+where `compose` is the one in `u256` and modular arithmetic above. And let `decompose_ec(p: EcPoint) -> EcArray ` be the inverse of `compose_ec`.
+
+
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                  |
+| -------- | --------------------------------------------- | ------------------------------------------------------------ |
+| **SECP256K1_EC_ADD_NE**  | `a, b, c`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e @ EcArray[[c]_d]_e)` where `@` is group operation on secp256k1. Assume the x coordinate of two inputs are distinct, the result is undefined otherwise.                   |
+| **SECP256K1_EC_DOUBLE**  | `a, b, _`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e @ EcArray[[b]_d]_e)` where `@` is group operation on secp256k1. This double the input point.                 |
 
 ### Hash function precompiles
 
