@@ -27,6 +27,8 @@ use crate::{
 
 /// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will be decomposed into)
 /// for the `AssertLessThanAir` in the `MemoryOfflineChecker`.
+/// Warning: This requires that (clk_max_bits + decomp - 1) / decomp = AUX_LEN
+///         in MemoryOfflineChecker (or whenever AssertLessThanAir is used)
 pub(super) const AUX_LEN: usize = 2;
 
 /// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory operations (read/write).
@@ -117,9 +119,9 @@ pub struct MemoryReadOperation<T, V, const N: usize> {
     aux: MemoryReadAuxCols<N, V>,
 }
 
-/// The expected max degree of constraints is:
+/// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
-/// eval_bulk_access: refer to MemoryOfflineChecker::eval_bulk_access
+/// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
 impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F, V, N> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
@@ -167,13 +169,13 @@ pub struct MemoryReadOrImmediateOperation<T, V> {
     aux: MemoryReadOrImmediateAuxCols<V>,
 }
 
-/// The expected max degree of constraints is:
+/// The max degree of constraints is:
 /// IsZeroAir.subair_eval:
 ///         deg(enabled) + max(deg(address.address_space) + deg(aux.is_immediate),
 ///                           deg(address.address_space) + deg(aux.is_zero_aux))
 /// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
-/// eval_bulk_access: refer to MemoryOfflineChecker::eval_bulk_access
+/// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
 impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
@@ -237,9 +239,9 @@ pub struct MemoryWriteOperation<T, V, const N: usize> {
     aux: MemoryWriteAuxCols<N, V>,
 }
 
-/// The expected max degree of constraints is:
+/// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
-/// eval_bulk_access: refer to MemoryOfflineChecker::eval_bulk_access
+/// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
 impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T, V, N> {
     /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
@@ -282,7 +284,7 @@ impl MemoryOfflineChecker {
         }
     }
 
-    // Has expected max constraint degree of:
+    // The max degree of constraints is:
     // deg(enabled) + max(1, deg(timestamp))
     // Note: deg(prev_timestamp) = 1 since prev_timestamp is Var
     fn eval_timestamps<AB: InteractionBuilder, const N: usize>(

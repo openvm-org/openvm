@@ -172,11 +172,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
                 &iter.by_ref().take(width_for_cell).collect::<Vec<_>>(),
             )
         });
-        let width = MemoryReadAuxCols::<32, T>::width();
+        let width = MemoryReadAuxCols::<NUM_LIMBS, T>::width();
         let read_x_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let read_y_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let write_z_slice = {
-            let width = MemoryWriteAuxCols::<32, T>::width();
+            let width = MemoryWriteAuxCols::<NUM_LIMBS, T>::width();
             iter.by_ref().take(width).collect::<Vec<_>>()
         };
         let write_cmp_slice = {

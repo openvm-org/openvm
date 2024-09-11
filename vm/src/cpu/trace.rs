@@ -453,7 +453,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 });
                 let reads_aux_cols = array::from_fn(|i| {
                     read_records.get(i).map_or_else(
-                        || MemoryReadOrImmediateAuxCols::disabled(),
+                        MemoryReadOrImmediateAuxCols::disabled,
                         |read| {
                             offline_checker.make_read_or_immediate_aux_cols(
                                 range_checker.clone(),
@@ -472,7 +472,7 @@ impl<F: PrimeField32> CpuChip<F> {
                 });
                 let writes_aux_cols = array::from_fn(|i| {
                     write_records.get(i).map_or_else(
-                        || MemoryWriteAuxCols::disabled(),
+                        MemoryWriteAuxCols::disabled,
                         |read| {
                             offline_checker.make_write_aux_cols(range_checker.clone(), read.clone())
                         },

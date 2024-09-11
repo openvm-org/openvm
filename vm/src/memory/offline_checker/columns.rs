@@ -24,6 +24,7 @@ pub(super) struct MemoryBaseAuxCols<T, const N: usize> {
 }
 
 impl<const N: usize, T: Clone> MemoryBaseAuxCols<T, N> {
+    /// TODO[arayi]: Since we have AlignedBorrow, should remove all from_slice, from_iterator, and flatten in a future PR.
     pub fn from_slice(slc: &[T]) -> Self {
         let base_aux_cols: &MemoryBaseAuxCols<T, N> = slc.borrow();
         base_aux_cols.clone()
@@ -43,7 +44,7 @@ impl<const N: usize, T> MemoryBaseAuxCols<T, N> {
             .chain(
                 self.clk_lt_aux
                     .into_iter()
-                    .flat_map(|x| iter::empty().chain(x.lower_decomp).collect::<Vec<T>>()),
+                    .flat_map(|x| x.lower_decomp),
             )
             .collect()
     }
