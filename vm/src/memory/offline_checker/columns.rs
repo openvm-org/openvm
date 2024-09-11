@@ -41,11 +41,7 @@ impl<const N: usize, T> MemoryBaseAuxCols<T, N> {
     pub fn flatten(self) -> Vec<T> {
         iter::empty()
             .chain(self.prev_timestamps)
-            .chain(
-                self.clk_lt_aux
-                    .into_iter()
-                    .flat_map(|x| x.lower_decomp),
-            )
+            .chain(self.clk_lt_aux.into_iter().flat_map(|x| x.lower_decomp))
             .collect()
     }
 
@@ -257,16 +253,10 @@ mod tests {
         type F = BabyBear;
 
         let disabled = MemoryReadAuxCols::<1, F>::disabled();
-        assert_eq!(
-            disabled.flatten().len(),
-            MemoryReadAuxCols::<1, F>::width()
-        );
+        assert_eq!(disabled.flatten().len(), MemoryReadAuxCols::<1, F>::width());
 
         let disabled = MemoryReadAuxCols::<4, F>::disabled();
-        assert_eq!(
-            disabled.flatten().len(),
-            MemoryReadAuxCols::<4, F>::width()
-        );
+        assert_eq!(disabled.flatten().len(), MemoryReadAuxCols::<4, F>::width());
     }
 
     #[test]
