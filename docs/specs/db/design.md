@@ -10,20 +10,20 @@ is unbounded.
 
 - **Logical Table**: The table with typed columns as appears in a normal database. The table has a fixed schema and underlying data stored in a variable unbounded number of rows.
 - **Logical Page**: A logical table where the number of rows does not exceed some maximum limit set by the system (e.g., around 1 million). The columns of the table are still typed. [This corresponds to `RecordBatch` type in Datafusion.]
-- **Physical Page**: <!--[jpw] not sure this is a good name--> The representation of a logical page as a trace matrix over a small prime field. A typed column in logical page may be transformed to multiple columns in the trace matrix (e.g., we default to storing 2 bytes = 16 bits per column).
-  The physical page comes with a physical schema, which is deterministically derived from the logical schema. The physical schema specifies the mapping from the logical columns to the physical columns in the trace matrix as well as range guarantees (in bits) for each physical column. At present we will derive physical schema from logical schema without additional configuration parameters. The trace matrix is resized to have height a power of 2 by padding with **unallocated** rows, always at the bottom of the matrix. We do not yet enforce that different physical pages all have the same global height, but may choose to do so in the future.
-- **Physical Dataframe**: An ordered list of physical pages that all have the same physical schema. The list may be unbounded in length. The physical dataframe is used to represent a logical table as a sequence of trace matrices over a small prime field. _Note:_ a physical dataframe is never directly materialized within a single STARK. This is an important distinction.
-- **Committed Page**: A physical page together with the LDE of the trace matrix and the associated Merkle tree of the LDE. When we colloquially say _cached trace_, we are referring to caching of the entire committed page. Recall that the trace commitment is the Merkle root of the Merkle tree of the LDE matrix.
-  - More generally, if we have a commitment format `page_commit(physical_page) -> (PageProverData, PageCommitment)`, then a committed page is a physical page together with the associated `(PageProverData, PageCommitment)`. The default `page_commit` we use is the Merkle tree of the LDE matrix. The **page commitment** (alias commitment of the page) is the `PageCommitment` of the physical page.
-- **Committed Dataframe**: We specify a commitment format `df_commit(page_commits: Vec<PageCommitment>) -> (DfProverData, DfCommitment)` for a vector of page commitments. A committed dataframe is a physical dataframe together with the `df_commit(page_commits)` of the commitments of the physical pages in the physical dataframe. The `page_commits` vector can be of arbitrary unbounded length. The **dataframe commitment** is the `DfCommitment` associated to the committed dataframe.
+- **Cryptographic Page**: <!--[jpw] not sure this is a good name--> The representation of a logical page as a trace matrix over a small prime field. A typed column in logical page may be transformed to multiple columns in the trace matrix (e.g., we default to storing 2 bytes = 16 bits per column).
+  The cryptographic page comes with a cryptographic schema, which is deterministically derived from the logical schema. The cryptographic schema specifies the mapping from the logical columns to the cryptographic columns in the trace matrix as well as range guarantees (in bits) for each cryptographic column. At present we will derive cryptographic schema from logical schema without additional configuration parameters. The trace matrix is resized to have height a power of 2 by padding with **unallocated** rows, always at the bottom of the matrix. We do not yet enforce that different cryptographic pages all have the same global height, but may choose to do so in the future.
+- **Cryptographic Table**: An ordered list of cryptographic pages that all have the same cryptographic schema. The list may be unbounded in length. The cryptographic table is used to represent a logical table as a sequence of trace matrices over a small prime field. _Note:_ a cryptographic table is never directly materialized within a single STARK. This is an important distinction.
+- **Committed Page**: A cryptographic page together with the LDE of the trace matrix and the associated Merkle tree of the LDE. When we colloquially say _cached trace_, we are referring to caching of the entire committed page. Recall that the trace commitment is the Merkle root of the Merkle tree of the LDE matrix.
+  - More generally, if we have a commitment format `page_commit(cryptographic_page) -> (PageProverData, PageCommitment)`, then a committed page is a cryptographic page together with the associated `(PageProverData, PageCommitment)`. The default `page_commit` we use is the Merkle tree of the LDE matrix. The **page commitment** (alias commitment of the page) is the `PageCommitment` of the cryptographic page.
+- **Committed Table**: We specify a commitment format `df_commit(page_commits: Vec<PageCommitment>) -> (DfProverData, DfCommitment)` for a vector of page commitments. A committed table is a cryptographic table together with the `df_commit(page_commits)` of the commitments of the cryptographic pages in the cryptographic table. The `page_commits` vector can be of arbitrary unbounded length. The **table commitment** is the `DfCommitment` associated to the committed table.
   - We discuss practical options for `df_commit` below, but the two main candidates are flat hash and Merkle tree root, extended by zero padding, for the vector of page commitments.
-- **Page Directory**: A vector of page commitments. We will use page directory to refer to the `Vec<PageCommitment>` associated to a committed dataframe.
+- **Page Directory**: A vector of page commitments. We will use page directory to refer to the `Vec<PageCommitment>` associated to a committed table.
 
 ## Introduction
 
 We can now describe the functionality of a verifiable database. Data is organized into logical
-tables following a relational database model, and logical tables are stored in committed dataframes.
-The committed dataframes are accessible to Provers.
+tables following a relational database model, and logical tables are stored in committed tables.
+The committed tables are accessible to Provers.
 
 Provers will have the ability to prove correct execution of a **query** on a logical table.
 A query is a function mapping a collection of logical tables to an output logical table, where the function is specified in a special SQL-dialect we discuss below. The query may have **placeholder** values, which are indeterminate values that are replaced by user inputs when the query is executed.
@@ -39,9 +39,9 @@ We will now describe a framework such that given a fixed query `Q` with placehol
 a SNARK(STARK) circuit dependent on the query _but not the input tables or query input values_
 such that successful verification of a proof of the circuit is equivalent to verification of the statement
 
-- For committed dataframes `t_1, ..., t_n` and query input values `x_1, ..., x_r`, execution of the query `Q(t_1, ..., t_n; x_1, ..., x_r)` results in a committed dataframe `t_out`.
+- For committed tables `t_1, ..., t_n` and query input values `x_1, ..., x_r`, execution of the query `Q(t_1, ..., t_n; x_1, ..., x_r)` results in a committed table `t_out`.
 
-The public values of the proof consist of the dataframe commitments of `t_1, ..., t_n, t_out` and the hash of the input values `x_1, ..., x_r`.
+The public values of the proof consist of the table commitments of `t_1, ..., t_n, t_out` and the hash of the input values `x_1, ..., x_r`.
 To clarify, query input values refers to the values to replace placeholder values in the query.
 
 ## Architecture
@@ -50,60 +50,60 @@ In a traditional database, the query is parsed and then optimized based on the l
 
 We will use existing database planners to generate the logical plan for the query, making sure that the logical plan generation does **not** depend on the concrete values in the logical input tables. Hence the logical plan should only depend on the logical table schemas and the query itself.
 
-For each logical operation `Op_l` (of which there is a finite list), we define a **dataframe operation** `Op_c` with the same input/output format as the logical operation but where the logical tables are replaced by page directories. The statement of `Op_c` is of the form:
+For each logical operation `Op_l` (of which there is a finite list), we define a **table operation** `Op_c` with the same input/output format as the logical operation but where the logical tables are replaced by page directories. The statement of `Op_c` is of the form:
 
-- Given committed dataframes `t_1, ..., t_n` and `query_input_values`, there is output committed dataframe `t_out` such that the logical tables represented by `t_out` equals `Op_l` applied to the logical tables represented by `t_1, ..., t_n`, and the application of `Op_c` to `page_dir(t_1), ..., page_dir(t_n); query_input_values` results in `page_dir(t_out)`.
+- Given committed tables `t_1, ..., t_n` and `query_input_values`, there is output committed table `t_out` such that the logical tables represented by `t_out` equals `Op_l` applied to the logical tables represented by `t_1, ..., t_n`, and the application of `Op_c` to `page_dir(t_1), ..., page_dir(t_n); query_input_values` results in `page_dir(t_out)`.
 
-We claim, with proof by construction, that each logical operation (among a list of the common logical plan operations in a typical database) has a corresponding dataframe operation.
+We claim, with proof by construction, that each logical operation (among a list of the common logical plan operations in a typical database) has a corresponding table operation.
 
-More specifically, we define a dataframe operation to mean a function in a **Database VM** where the input and output page directories are read/written as arrays of page commitments in the VM's memory. These arrays are treated as having _variable length_, so they are stored on the heap in memory. The `query_input_values` is passed as a struct allocated on the memory heap.
+More specifically, we define a table operation to mean a function in a **Database VM** where the input and output page directories are read/written as arrays of page commitments in the VM's memory. These arrays are treated as having _variable length_, so they are stored on the heap in memory. The `query_input_values` is passed as a struct allocated on the memory heap.
 The Database VM will be a VM created using the [Modular VM framework](../vm/README.md) with
 continuations enabled.
 
-We construct the dataframe operation for a logical operation as follows:
+We construct the table operation for a logical operation as follows:
 
 The Database VM will have special opcodes, which we call page-level **execution opcodes**, which operate on committed pages. This means the opcodes take the form
 
-- Given input committed pages `p_1, ..., p_n`, there exists output commited pages `q_1, ..., q_m` such that the opcode execution on `page_commit(p_1), ..., page_commit(p_n)` results in `page_commit(q_1), ..., page_commit(q_m)` and the physical pages underlying `q_i`s equals the output of execution of a physical page operation (e.g., `Filter`) on the physical pages underlying `p_i`s. Note that unlike dataframe operations, execution opcodes can have multiple output pages.
+- Given input committed pages `p_1, ..., p_n`, there exists output commited pages `q_1, ..., q_m` such that the opcode execution on `page_commit(p_1), ..., page_commit(p_n)` results in `page_commit(q_1), ..., page_commit(q_m)` and the cryptographic pages underlying `q_i`s equals the output of execution of a cryptographic page operation (e.g., `Filter`) on the cryptographic pages underlying `p_i`s. Note that unlike table operations, execution opcodes can have multiple output pages.
 
-An execution opcode's spec depends on the physical page operation and the physical schema of each input page. The spec will _not_ depend on the concrete values in the input pages. The spec should also not depend on the height of the page, unless otherwise specified.
+An execution opcode's spec depends on the cryptographic page operation and the cryptographic schema of each input page. The spec will _not_ depend on the concrete values in the input pages. The spec should also not depend on the height of the page, unless otherwise specified.
 
-We claim there is a finite number of classes of physical page operations such that each dataframe
+We claim there is a finite number of classes of cryptographic page operations such that each table
 operations can be written as a function using a finite set of execution opcodes from these classes.
-Here by a class of physical page operations we mean an infinite collection of page operations that
+Here by a class of cryptographic page operations we mean an infinite collection of page operations that
 can all be described with the same spec (e.g., `Filter` on predicate) but with concrete instances
-of the operation depending on the physical schemas of the input pages as well as other parameters (e.g., the physical column indices to filter on). <!--TODO[jpw] more precise definition-->
+of the operation depending on the cryptographic schemas of the input pages as well as other parameters (e.g., the cryptographic column indices to filter on). <!--TODO[jpw] more precise definition-->
 
 #### Example: Filter
 
-The dataframe operation for filter with a fixed predicate has query input value that defines the
-predicate condition, and the dataframe operation requires two execution opcodes: `Filter` and `Merge`.
+The table operation for filter with a fixed predicate has query input value that defines the
+predicate condition, and the table operation requires two execution opcodes: `Filter` and `Merge`.
 
-The dataframe operation first loops through the input page directory and calls `Filter` opcode
+The table operation first loops through the input page directory and calls `Filter` opcode
 on each page commitment in the directory. This outputs a page directory of the same length where
-the output pages can be under-allocated. Then the dataframe operation calls the `Merge` opcode
+the output pages can be under-allocated. Then the table operation calls the `Merge` opcode
 multiple times to reduce the page directory to a possibly smaller length where output pages
 are near full allocation.
 
 ### Database VM Proving
 
-We describe how to prove the execution of a dataframe operation in such a VM using a
+We describe how to prove the execution of a table operation in such a VM using a
 STARK-aggregation framework.
 
 #### Execution Opcode STARKs
 
-For each execution opcode, we generate a multi-trace STARK with logup interactions that proves the execution of the physical page operation on materialized physical pages. When `page_commit` is via the LDE Merkle tree, the physical pages are materialized as partitioned traces (alias for cached traces, but we will see below we may not necessarily cache them), and the page commitments
+For each execution opcode, we generate a multi-trace STARK with logup interactions that proves the execution of the cryptographic page operation on materialized cryptographic pages. When `page_commit` is via the LDE Merkle tree, the cryptographic pages are materialized as partitioned traces (alias for cached traces, but we will see below we may not necessarily cache them), and the page commitments
 (but not the pages themselves!) are contained in the proof of the STARK. In general, the requirement
 on the STARK is that the proof of the STARK contains the page commitments of all input and output committed pages -- these may be contained in the public values or the proof commitments.
 
-Our notion of _class_ of physical page operations corresponds directly to a class of STARKs that
+Our notion of _class_ of cryptographic page operations corresponds directly to a class of STARKs that
 we can implement in a uniform way at the software engineering level.
 
 For each concrete instance of an execution opcode, the verifying key of the STARK becomes a unique
 identifier for the execution opcode. The verifying key embeds the spec of the execution opcode,
-including the physical schemas of the input and output pages.
+including the cryptographic schemas of the input and output pages.
 
-#### Dataframe Operation via Aggregation
+#### Table Operation via Aggregation
 
 Our Database VM will contain all opcodes needed for STARK aggregation. In other words, _the
 Database VM will be an instance of an Aggregation VM with continuations enabled_.
@@ -117,59 +117,59 @@ The verification function will have access to the execution proof, which contain
 There are two options for how the verification functions are implemented:
 
 1. The verification function is fully dynamic, so the Database VM program code is independent of what execution opcodes are used and the entire framework is context free. The verification function will take the execution opcode's verifying key as a dynamic input and compute `hash(vkey)`. It then either checks `hash(vkey)` is in some static list or keeps a dynamic list of all vkeys used, which will need to be exposed as a public commitment.
-2. The verification function treats each execution vkey as a compile-time constant. Explicitly this means a call to `execution_opcode` in the dataframe operation is really a call to the `verify_stark(execution_opcode_vkey, _)` function ([implementation](https://github.com/axiom-crypto/afs-prototype/blob/264d6a5b59451253ece37a8ddc0f52d1eb378cb0/recursion/src/stark/mod.rs#L128)) where `execution_opcode_vkey` is known at compile time and hardcoded into the function code. This approach likely has better performance than the fully universal approach.
+2. The verification function treats each execution vkey as a compile-time constant. Explicitly this means a call to `execution_opcode` in the table operation is really a call to the `verify_stark(execution_opcode_vkey, _)` function ([implementation](https://github.com/axiom-crypto/afs-prototype/blob/264d6a5b59451253ece37a8ddc0f52d1eb378cb0/recursion/src/stark/mod.rs#L128)) where `execution_opcode_vkey` is known at compile time and hardcoded into the function code. This approach likely has better performance than the fully universal approach.
 
-Since the implementation of a dataframe operation should be able to specify the exact
+Since the implementation of a table operation should be able to specify the exact
 execution opcodes it will call, it is more optimal to use Option 2.
 
-We have described how a dataframe operation is implemented as a function in the Database VM,
+We have described how a table operation is implemented as a function in the Database VM,
 with execution opcode calls being themselves function calls to STARK verification functions.
 Observe that to prove the execution of this function in the Database VM, we require as input
 all STARK proofs of the execution opcode STARKs called by the function. We discuss how these
 are obtained in a maximally parallel fashion below.
 
-#### Physical Dataframe Operation Unrolling
+#### Cryptographic Table Operation Unrolling
 
-Each execution opcode should have a backend implementation that can be run separately from the STARK proving. We call this the **physical implementation**. This physical implementation can
-be separate from any trace generation and operates on physical pages.
-The only functional requirement on physical implementation is that it generates the output physical page from the input physical pages according to the physical page operation spec.
+Each execution opcode should have a backend implementation that can be run separately from the STARK proving. We call this the **cryptographic implementation**. This cryptographic implementation can
+be separate from any trace generation and operates on cryptographic pages.
+The only functional requirement on cryptographic implementation is that it generates the output cryptographic page from the input cryptographic pages according to the cryptographic page operation spec.
 
-Each dataframe operation needs to have an unrolled physical implementation. This is a backend
+Each table operation needs to have an unrolled cryptographic implementation. This is a backend
 implementation with async scheduling purely designed for backend performance. It will need to
-generate its own execution plan tree and async call the physical implementations of the necessary execution opcodes. (We call it unrolled because while the dataframe operation in the Database VM operates on page directories, the physical implementation operates on physical pages within physical dataframes.)
+generate its own execution plan tree and async call the cryptographic implementations of the necessary execution opcodes. (We call it unrolled because while the table operation in the Database VM operates on page directories, the cryptographic implementation operates on cryptographic pages within cryptographic tables.)
 
-The dataframe operation's physical implementation must output a log of all execution opcodes called, together with the **input and output** physical pages from their physical implementations.
+The table operation's cryptographic implementation must output a log of all execution opcodes called, together with the **input and output** cryptographic pages from their cryptographic implementations.
 
-We will collect the STARK proofs of all execution opcodes needed in a dataframe operation in a
-fully offline fashion: given the dataframe operation, we execute its unrolled physical implementation on physical dataframes offline, ahead of any proving.
-The resulting logs will contain the input and output physical pages of all execution opcode physical implementations.
+We will collect the STARK proofs of all execution opcodes needed in a table operation in a
+fully offline fashion: given the table operation, we execute its unrolled cryptographic implementation on cryptographic tables offline, ahead of any proving.
+The resulting logs will contain the input and output cryptographic pages of all execution opcode cryptographic implementations.
 
 We will generate STARK proofs of these execution opcodes fully in parallel.
 
-1. Each execution opcode operates on committed pages. The opcode's physical implementation log supplies the physical page associated to the committed page. As part of proof generation, we run the `page_commit` function on the input physical pages to generate the input committed pages.
+1. Each execution opcode operates on committed pages. The opcode's cryptographic implementation log supplies the cryptographic page associated to the committed page. As part of proof generation, we run the `page_commit` function on the input cryptographic pages to generate the input committed pages.
 
 The above approach results in the least scheduling complexity and best parallel proving latency
-as it removes execution opcode dependency considerations from dataframe operation. An alternative approach, which gives better overall cost (measured in terms of total serial proving time) is:
+as it removes execution opcode dependency considerations from table operation. An alternative approach, which gives better overall cost (measured in terms of total serial proving time) is:
 
-2. The dataframe operation either: (a) specifies a special proving scheduler or (b) automatically creates the scheduling DAG from the physical implementation. Using either of these approaches, the scheduler creates a DAG for proving execution opcode STARKs, where the output committed page from opcode A is directly passed as the input committed page to opcode B. The scheduler then proves the STARKs in topological order.
+2. The table operation either: (a) specifies a special proving scheduler or (b) automatically creates the scheduling DAG from the cryptographic implementation. Using either of these approaches, the scheduler creates a DAG for proving execution opcode STARKs, where the output committed page from opcode A is directly passed as the input committed page to opcode B. The scheduler then proves the STARKs in topological order.
 
 We default to Option 1.
 
 ### Full Query Execution
 
-We have described how to construct dataframe operations in a Database VM together with
-unrolled physical implementations. Using this framework, the full
+We have described how to construct table operations in a Database VM together with
+unrolled cryptographic implementations. Using this framework, the full
 execution of a query can be expressed as a Database VM program which makes calls to
-dataframe operations. The query execution program is a serial traversal of the logical plan tree,
-from leaves to root, where dataframe operations are called as functions.
+table operations. The query execution program is a serial traversal of the logical plan tree,
+from leaves to root, where table operations are called as functions.
 
 To summarize, at the end we will have a function for query execution with inputs consisting of
 in-memory page directories and query input values, and output consisting of a page directory.
 To complete query execution, the query execution program must compute `df_commit(input_page_dir[i])`
-for all input page directories and `df_commit(output_page_dir)` and expose these dataframe
+for all input page directories and `df_commit(output_page_dir)` and expose these table
 commitments as public values. It must also compute `hash(query_input_values)` and expose it as a public value.
 
-- An important detail is that the explicit calls to `df_commit` are only done on the inputs and outputs of the full query. The intermediate dataframes that arise within the query execution are
+- An important detail is that the explicit calls to `df_commit` are only done on the inputs and outputs of the full query. The intermediate tables that arise within the query execution are
   all handled via the VM's memory architecture.
 
 Since the Database VM has continuations, the query execution program can have variable unbounded
