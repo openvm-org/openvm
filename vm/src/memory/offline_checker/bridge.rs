@@ -117,6 +117,10 @@ pub struct MemoryReadOperation<T, V, const N: usize> {
     aux: MemoryReadAuxCols<N, V>,
 }
 
+
+/// The expected max degree of constraints is:
+/// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
+/// eval_bulk_access: refer to MemoryOfflineChecker::eval_bulk_access
 impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<F, V, N> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
@@ -164,6 +168,13 @@ pub struct MemoryReadOrImmediateOperation<T, V> {
     aux: MemoryReadOrImmediateAuxCols<V>,
 }
 
+/// The expected max degree of constraints is:
+/// IsZeroAir.subair_eval:
+///         deg(enabled) + max(deg(address.address_space) + deg(aux.is_immediate),
+///                           deg(address.address_space) + deg(aux.is_zero_aux))
+/// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
+/// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
+/// eval_bulk_access: refer to MemoryOfflineChecker::eval_bulk_access
 impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<F, V> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
@@ -227,6 +238,9 @@ pub struct MemoryWriteOperation<T, V, const N: usize> {
     aux: MemoryWriteAuxCols<N, V>,
 }
 
+/// The expected max degree of constraints is:
+/// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
+/// eval_bulk_access: refer to MemoryOfflineChecker::eval_bulk_access
 impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<T, V, N> {
     /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
@@ -269,6 +283,9 @@ impl MemoryOfflineChecker {
         }
     }
 
+    // Has expected max constraint degree of:
+    // deg(enabled) + max(1, deg(timestamp))
+    // Note: deg(prev_timestamp) = 1 since prev_timestamp is Var
     fn eval_timestamps<AB: InteractionBuilder, const N: usize>(
         &self,
         builder: &mut AB,
@@ -288,6 +305,10 @@ impl MemoryOfflineChecker {
         }
     }
 
+    // At the core, eval_bulk_access is a bunch of push_sends and push_receives.
+    // The max constraint degree of expressions in sends/recieves is:
+    // max(max_deg(data), max_deg(prev_data), max_deg(timestamp), max_deg(prev_timestamps))
+    // Also, each one of them has count with degree: deg(enabled)
     #[allow(clippy::too_many_arguments)]
     fn eval_bulk_access<AB, const N: usize>(
         &self,
