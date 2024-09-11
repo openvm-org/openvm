@@ -25,7 +25,7 @@ use stark_vm::{
 use tracing::Level;
 
 const LIMB_BITS: usize = 29;
-const DECOMP: usize = 5;
+const DECOMP: usize = 16;
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig {
