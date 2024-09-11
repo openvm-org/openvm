@@ -292,7 +292,7 @@ impl MemoryOfflineChecker {
         base: &MemoryBaseAuxCols<AB::Var, N>,
         enabled: AB::Expr,
     ) {
-        for (prev_timestamp, clk_lt_aux) in zip(base.prev_timestamps, base.clk_lt_aux.clone()) {
+        for (prev_timestamp, clk_lt_aux) in zip(base.prev_timestamps, base.clk_lt_aux) {
             let clk_lt_io_cols =
                 AssertLessThanIoCols::<AB::Expr>::new(prev_timestamp, timestamp.clone());
             self.timestamp_lt_air.conditional_eval(

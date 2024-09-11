@@ -53,6 +53,7 @@ impl<T: Clone> FieldArithmeticCols<T> {
         FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         Self {
             io: FieldArithmeticIoCols::from_iter(iter),
@@ -97,6 +98,7 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
         6 + (2 * MemoryReadOrImmediateAuxCols::<T>::width() + MemoryWriteAuxCols::<1, T>::width())
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         let mut next = || iter.next().unwrap();
         Self {
