@@ -26,6 +26,7 @@ pub const READ_INSTRUCTION_BUS: usize = 8;
 pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const BYTE_XOR_BUS: XorBus = XorBus(8);
+pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
 pub const CPU_MAX_READS_PER_CYCLE: usize = 3;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CPU_MAX_ACCESSES_PER_CYCLE: usize = CPU_MAX_READS_PER_CYCLE + CPU_MAX_WRITES_PER_CYCLE;

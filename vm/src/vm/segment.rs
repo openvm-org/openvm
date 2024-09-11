@@ -6,6 +6,7 @@ use std::{
 };
 
 use afs_primitives::{
+    range_tuple::{bus::RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::lookup::XorLookupChip,
 };
@@ -28,7 +29,9 @@ use crate::{
             SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS,
         },
     },
-    cpu::{trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS},
+    cpu::{
+        trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
+    },
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -39,6 +42,7 @@ use crate::{
     },
     program::{Program, ProgramChip},
     uint_arithmetic::UintArithmeticChip,
+    uint_multiplication::UintMultiplicationChip,
     vm::cycle_tracker::CycleTracker,
 };
 
@@ -216,7 +220,19 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips.push(MachineChipVariant::U256Arithmetic(u256_chip.clone()));
             assign!(UINT256_ARITHMETIC_INSTRUCTIONS, u256_chip);
         }
-
+        if config.u256_multiplication_enabled {
+            let range_tuple_bus =
+                RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, vec![32, 32 * (1 << 8)]);
+            let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+            let u256_mult_chip = Rc::new(RefCell::new(UintMultiplicationChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                range_tuple_checker.clone(),
+            )));
+            assign!([Opcode::MUL256], u256_mult_chip);
+            chips.push(MachineChipVariant::U256Multiplication(u256_mult_chip));
+            chips.push(MachineChipVariant::RangeTupleChecker(range_tuple_checker));
+        }
         // Most chips have a reference to the memory chip, and the memory chip has a reference to
         // the range checker chip.
         chips.push(MachineChipVariant::Memory(memory_chip.clone()));
