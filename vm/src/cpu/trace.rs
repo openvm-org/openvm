@@ -471,12 +471,11 @@ impl<F: PrimeField32> CpuChip<F> {
                         })
                 });
                 let writes_aux_cols = array::from_fn(|i| {
-                    write_records.get(i).map_or_else(
-                        MemoryWriteAuxCols::disabled,
-                        |read| {
+                    write_records
+                        .get(i)
+                        .map_or_else(MemoryWriteAuxCols::disabled, |read| {
                             offline_checker.make_write_aux_cols(range_checker.clone(), read.clone())
-                        },
-                    )
+                        })
                 });
 
                 let mut operation_flags = BTreeMap::new();
