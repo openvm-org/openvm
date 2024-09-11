@@ -83,7 +83,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
             [cols.io.a, cols.io.b, cols.io.c],
             [cols.aux.dst_ptr, cols.aux.lhs_ptr, cols.aux.rhs_ptr],
             [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp],
-            cols.aux.ptr_aux_cols,
+            &cols.aux.ptr_aux_cols,
         ) {
             memory_bridge
                 .read(
@@ -104,7 +104,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
                 MemoryAddress::new(cols.io.e, cols.aux.lhs_ptr),
                 cols.aux.internal.io.input[..CHUNK].try_into().unwrap(),
                 timestamp_pp(),
-                input1_aux_cols,
+                &input1_aux_cols,
             )
             .eval(builder, cols.io.is_opcode);
 
@@ -114,7 +114,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
                 MemoryAddress::new(cols.io.e, cols.aux.rhs_ptr),
                 cols.aux.internal.io.input[CHUNK..].try_into().unwrap(),
                 timestamp_pp(),
-                input2_aux_cols,
+                &input2_aux_cols,
             )
             .eval(builder, cols.io.is_opcode);
 
@@ -124,7 +124,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
                 MemoryAddress::new(cols.io.e, cols.aux.dst_ptr),
                 cols.aux.internal.io.output[..CHUNK].try_into().unwrap(),
                 timestamp_pp(),
-                output1_aux_cols,
+                &output1_aux_cols,
             )
             .eval(builder, cols.io.is_opcode);
 
@@ -135,7 +135,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
                 MemoryAddress::new(cols.io.e, pointer),
                 cols.aux.internal.io.output[CHUNK..].try_into().unwrap(),
                 timestamp_pp(),
-                output2_aux_cols,
+                &output2_aux_cols,
             )
             .eval(builder, cols.io.is_opcode - cols.io.cmp);
 

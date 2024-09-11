@@ -29,7 +29,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
         for (ptr, value, mem_aux) in izip!(
             [io.z.ptr, io.x.ptr, io.y.ptr],
             [io.z.address, io.x.address, io.y.address],
-            aux.read_ptr_aux_cols
+            &aux.read_ptr_aux_cols
         ) {
             memory_bridge
                 .read(
@@ -49,7 +49,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
                 MemoryAddress::new(io.x.address_space, io.x.address),
                 io.x.data.try_into().unwrap_or_else(|_| unreachable!()),
                 timestamp + timestamp_delta.clone(),
-                aux.read_x_aux_cols,
+                &aux.read_x_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
@@ -60,7 +60,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
                 MemoryAddress::new(io.y.address_space, io.y.address),
                 io.y.data.try_into().unwrap_or_else(|_| unreachable!()),
                 timestamp + timestamp_delta.clone(),
-                aux.read_y_aux_cols,
+                &aux.read_y_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
@@ -75,7 +75,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
                     .try_into()
                     .unwrap_or_else(|_| unreachable!()),
                 timestamp + timestamp_delta.clone(),
-                aux.write_z_aux_cols,
+                &aux.write_z_aux_cols,
             )
             .eval(builder, enabled.clone());
         timestamp_delta += enabled;
@@ -86,7 +86,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
                 MemoryAddress::new(io.z.address_space, io.z.address),
                 [io.cmp_result],
                 timestamp + timestamp_delta.clone(),
-                aux.write_cmp_aux_cols,
+                &aux.write_cmp_aux_cols,
             )
             .eval(builder, enabled.clone());
         timestamp_delta += enabled;

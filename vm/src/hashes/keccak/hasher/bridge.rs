@@ -152,7 +152,7 @@ impl KeccakVmAir {
             [opcode.a, opcode.b, opcode.c],
             [opcode.d, opcode.d, opcode.f],
             [opcode.dst, opcode.src, opcode.len],
-            mem_aux,
+            &mem_aux,
         ) {
             memory_bridge
                 .read(
@@ -193,7 +193,7 @@ impl KeccakVmAir {
         for (i, (input, is_padding, mem_aux)) in izip!(
             local.sponge.block_bytes,
             local.sponge.is_padding_byte,
-            mem_aux
+            &mem_aux
         )
         .enumerate()
         {
@@ -254,7 +254,7 @@ impl KeccakVmAir {
                     MemoryAddress::new(opcode.e, opcode.dst + AB::F::from_canonical_usize(i)),
                     [digest_byte],
                     timestamp,
-                    mem_aux[i].clone(),
+                    &mem_aux[i],
                 )
                 .eval(builder, local.inner.export)
         }

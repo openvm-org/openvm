@@ -335,7 +335,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
                     MemoryAddress::new(read.address_space, read.pointer),
                     read.value,
                     op_timestamp.clone(),
-                    read_aux_cols,
+                    &read_aux_cols,
                 )
                 .eval(builder, read.enabled);
             op_timestamp += read.enabled.into();
@@ -347,7 +347,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
                     MemoryAddress::new(write.address_space, write.pointer),
                     [write.value],
                     op_timestamp.clone(),
-                    write_aux_cols,
+                    &write_aux_cols,
                 )
                 .eval(builder, write.enabled);
             op_timestamp += write.enabled.into();

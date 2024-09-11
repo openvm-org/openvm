@@ -30,7 +30,7 @@ impl ModularArithmeticAir {
                     .try_into()
                     .unwrap_or_else(|_| unreachable!()),
                 timestamp.clone() + timestamp_delta.clone(),
-                aux.x_address_aux_cols,
+                &aux.x_address_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
@@ -43,7 +43,7 @@ impl ModularArithmeticAir {
                     .try_into()
                     .unwrap_or_else(|_| unreachable!()),
                 timestamp.clone() + timestamp_delta.clone(),
-                aux.y_address_aux_cols,
+                &aux.y_address_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
@@ -56,7 +56,7 @@ impl ModularArithmeticAir {
                     .try_into()
                     .unwrap_or_else(|_| unreachable!()),
                 timestamp.clone() + timestamp_delta.clone(),
-                aux.z_address_aux_cols,
+                &aux.z_address_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
@@ -66,7 +66,7 @@ impl ModularArithmeticAir {
                 MemoryAddress::new(io.x.address_space, io.x.address),
                 io.x.data.try_into().unwrap_or_else(|_| unreachable!()),
                 timestamp.clone() + timestamp_delta.clone(),
-                aux.read_x_aux_cols,
+                &aux.read_x_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
@@ -76,7 +76,7 @@ impl ModularArithmeticAir {
                 MemoryAddress::new(io.y.address_space, io.y.address),
                 io.y.data.try_into().unwrap_or_else(|_| unreachable!()),
                 timestamp.clone() + timestamp_delta.clone(),
-                aux.read_y_aux_cols,
+                &aux.read_y_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
@@ -86,7 +86,7 @@ impl ModularArithmeticAir {
                 MemoryAddress::new(io.z.address_space, io.z.address),
                 io.z.data.try_into().unwrap_or_else(|_| unreachable!()),
                 timestamp.clone() + timestamp_delta.clone(),
-                aux.write_z_aux_cols,
+                &aux.write_z_aux_cols,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();

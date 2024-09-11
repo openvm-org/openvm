@@ -56,7 +56,7 @@ impl FieldExtensionArithmeticAir {
                 MemoryAddress::new(d, op_b),
                 x,
                 timestamp_pp(),
-                read_x_aux_cols,
+                &read_x_aux_cols,
             )
             .eval(builder, is_valid);
 
@@ -66,7 +66,7 @@ impl FieldExtensionArithmeticAir {
                 MemoryAddress::new(e, op_c),
                 y,
                 timestamp_pp(),
-                read_y_aux_cols,
+                &read_y_aux_cols,
             )
             .eval(builder, is_valid);
 
@@ -76,7 +76,7 @@ impl FieldExtensionArithmeticAir {
                 MemoryAddress::new(d, op_a),
                 z,
                 timestamp_pp(),
-                write_aux_cols,
+                &write_aux_cols,
             )
             .eval(builder, is_valid);
 
