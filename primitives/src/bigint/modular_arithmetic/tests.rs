@@ -21,9 +21,9 @@ use crate::{
     sub_chip::LocalTraceInstructions,
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-// 256 bit prime, 10 limb bits -> 26 limbs.
-const LIMB_BITS: usize = 10;
-const NUM_LIMB: usize = 26;
+// 256 bit prime
+const LIMB_BITS: usize = 8;
+const NUM_LIMB: usize = 32;
 
 fn evaluate_bigint(limbs: &[BabyBear], limb_bits: usize) -> BigUint {
     let mut res = BigUint::zero();

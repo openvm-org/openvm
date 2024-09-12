@@ -117,7 +117,7 @@ impl ModularArithmeticAir {
     }
 
     pub fn width(&self) -> usize {
-        3 * self.num_limbs + self.q_limbs + self.carry_limbs
+        3 * self.num_limbs + self.q_limbs + self.carry_limbs + 1
     }
 
     // Converting limb from an isize to a field element.

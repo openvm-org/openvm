@@ -1,8 +1,8 @@
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_field::{AbstractField, PrimeField64};
-use stark_vm::modular_multiplication::{
-    biguint_to_elems, NUM_ELEMS, REPR_BITS, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+use stark_vm::modular_arithmetic::{
+    big_uint_to_num_limbs, LIMB_SIZE, NUM_LIMBS, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
 };
 
 use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
@@ -23,9 +23,12 @@ where
     C::N: PrimeField64,
 {
     pub fn eval_biguint(&mut self, biguint: BigUint) -> BigUintVar<C> {
-        let array = self.dyn_array(NUM_ELEMS);
+        let array = self.dyn_array(NUM_LIMBS);
 
-        let elems: Vec<C::N> = biguint_to_elems(biguint, REPR_BITS, NUM_ELEMS);
+        let elems: Vec<C::N> = big_uint_to_num_limbs(biguint, LIMB_SIZE, NUM_LIMBS)
+            .into_iter()
+            .map(C::N::from_canonical_usize)
+            .collect();
         for (i, &elem) in elems.iter().enumerate() {
             self.set(&array, i, elem);
         }
@@ -34,7 +37,7 @@ where
     }
 
     pub fn uninit_biguint(&mut self) -> BigUintVar<C> {
-        self.dyn_array(NUM_ELEMS)
+        self.dyn_array(NUM_LIMBS)
     }
 
     fn mod_operation(
@@ -43,7 +46,7 @@ where
         right: &BigUintVar<C>,
         operation: impl Fn(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>) -> DslIr<C>,
     ) -> BigUintVar<C> {
-        let dst = self.dyn_array(NUM_ELEMS);
+        let dst = self.dyn_array(NUM_LIMBS);
         self.operations
             .push(operation(dst.clone(), left.clone(), right.clone()));
         dst
@@ -107,7 +110,7 @@ where
     }
 
     pub fn secp256k1_coord_set_to_zero(&mut self, biguint: &BigUintVar<C>) {
-        for i in 0..NUM_ELEMS {
+        for i in 0..NUM_LIMBS {
             self.set(biguint, i, C::N::zero());
         }
     }

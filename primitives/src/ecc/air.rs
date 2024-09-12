@@ -61,7 +61,7 @@ impl<F: Field> BaseAir<F> for EccAir {
     fn width(&self) -> usize {
         // x, y, lambda, and the quotients are size of num_limbs.
         // carries are 2 * carries - 1.
-        self.num_limbs * 16 - 3
+        self.num_limbs * 16 - 2
     }
 }
 

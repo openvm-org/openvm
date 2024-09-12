@@ -3,7 +3,7 @@ use std::{iter::Zip, vec::IntoIter};
 use backtrace::Backtrace;
 use p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
-use stark_vm::modular_multiplication::REPR_BITS;
+use stark_vm::modular_arithmetic::LIMB_SIZE;
 
 use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
@@ -143,7 +143,7 @@ impl<C: Config> Builder<C> {
 
     pub fn bigint_builder() -> Self {
         Self {
-            bigint_repr_size: REPR_BITS as u32,
+            bigint_repr_size: LIMB_SIZE as u32,
             ..Default::default()
         }
     }

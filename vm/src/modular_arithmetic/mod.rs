@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
+pub use afs_primitives::bigint::utils::*;
 use afs_primitives::{
-    bigint::{
-        modular_arithmetic::{
-            add::ModularAdditionAir, div::ModularDivisionAir, mul::ModularMultiplicationAir,
-            sub::ModularSubtractionAir, ModularArithmeticCols,
-        },
-        utils::{big_uint_mod_inverse, get_arithmetic_air},
+    bigint::modular_arithmetic::{
+        add::ModularAdditionAir, div::ModularDivisionAir, mul::ModularMultiplicationAir,
+        sub::ModularSubtractionAir, ModularArithmeticCols,
     },
     sub_chip::{LocalTraceInstructions, SubAir},
     var_range::VariableRangeCheckerChip,
