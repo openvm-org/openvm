@@ -51,7 +51,7 @@ impl MemoryBridge {
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; N],
         timestamp: impl Into<T>,
-        aux: &'a MemoryReadAuxCols<N, V>,
+        aux: &'a MemoryReadAuxCols<V, N>,
     ) -> MemoryReadOperation<'a, T, V, N> {
         MemoryReadOperation {
             offline_checker: self.offline_checker,
@@ -87,7 +87,7 @@ impl MemoryBridge {
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; N],
         timestamp: impl Into<T>,
-        aux: &'a MemoryWriteAuxCols<N, V>,
+        aux: &'a MemoryWriteAuxCols<V, N>,
     ) -> MemoryWriteOperation<'a, T, V, N> {
         MemoryWriteOperation {
             offline_checker: self.offline_checker,
@@ -112,7 +112,7 @@ pub struct MemoryReadOperation<'a, T, V, const N: usize> {
     address: MemoryAddress<T, T>,
     data: [T; N],
     timestamp: T,
-    aux: &'a MemoryReadAuxCols<N, V>,
+    aux: &'a MemoryReadAuxCols<V, N>,
 }
 
 /// The max degree of constraints is:
@@ -232,7 +232,7 @@ pub struct MemoryWriteOperation<'a, T, V, const N: usize> {
     data: [T; N],
     /// The timestamp of the current read
     timestamp: T,
-    aux: &'a MemoryWriteAuxCols<N, V>,
+    aux: &'a MemoryWriteAuxCols<V, N>,
 }
 
 /// The max degree of constraints is:

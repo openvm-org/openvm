@@ -46,11 +46,11 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     /// `divisor_inv` is y.inverse() when opcode is BBE4DIV and zero otherwise.
     pub divisor_inv: [T; EXT_DEG],
     /// The aux columns for the x reads.
-    pub read_x_aux_cols: MemoryReadAuxCols<EXT_DEG, T>,
+    pub read_x_aux_cols: MemoryReadAuxCols<T, EXT_DEG>,
     /// The aux columns for the y reads.
-    pub read_y_aux_cols: MemoryReadAuxCols<EXT_DEG, T>,
+    pub read_y_aux_cols: MemoryReadAuxCols<T, EXT_DEG>,
     /// The aux columns for the z writes.
-    pub write_aux_cols: MemoryWriteAuxCols<EXT_DEG, T>,
+    pub write_aux_cols: MemoryWriteAuxCols<T, EXT_DEG>,
 }
 
 impl<T> FieldExtensionArithmeticCols<T> {
@@ -127,8 +127,8 @@ impl<T> FieldExtensionArithmeticAuxCols<T> {
     pub const fn get_width() -> usize {
         EXT_DEG
             + 5
-            + 2 * MemoryReadAuxCols::<EXT_DEG, T>::width()
-            + MemoryWriteAuxCols::<EXT_DEG, T>::width()
+            + 2 * MemoryReadAuxCols::<T, EXT_DEG>::width()
+            + MemoryWriteAuxCols::<T, EXT_DEG>::width()
     }
 }
 

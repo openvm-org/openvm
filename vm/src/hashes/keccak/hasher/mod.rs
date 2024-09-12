@@ -66,17 +66,17 @@ pub struct KeccakVmChip<F: PrimeField32> {
 #[derive(Clone, Debug)]
 pub struct KeccakRecord<F> {
     pub pc: F,
-    pub dst_read: MemoryReadRecord<1, F>,
-    pub src_read: MemoryReadRecord<1, F>,
-    pub len_read: MemoryReadRecord<1, F>,
+    pub dst_read: MemoryReadRecord<F, 1>,
+    pub src_read: MemoryReadRecord<F, 1>,
+    pub len_read: MemoryReadRecord<F, 1>,
     pub input_blocks: Vec<KeccakInputBlock<F>>,
-    pub digest_writes: [MemoryWriteRecord<1, F>; KECCAK_DIGEST_WRITES],
+    pub digest_writes: [MemoryWriteRecord<F, 1>; KECCAK_DIGEST_WRITES],
 }
 
 #[derive(Clone, Debug)]
 pub struct KeccakInputBlock<F> {
     /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES].
-    pub bytes_read: Vec<MemoryReadRecord<1, F>>,
+    pub bytes_read: Vec<MemoryReadRecord<F, 1>>,
     /// Bytes with padding. Can be derived from `bytes_read` but we store for convenience.
     pub padded_bytes: [u8; KECCAK_RATE_BYTES],
     pub remaining_len: usize,

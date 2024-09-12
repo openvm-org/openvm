@@ -32,11 +32,11 @@ pub(crate) struct FieldExtensionArithmeticRecord<F> {
     pub(crate) y: [F; EXT_DEG],
     pub(crate) z: [F; EXT_DEG],
     /// Memory accesses for reading `x`.
-    pub(crate) x_read: MemoryReadRecord<EXT_DEG, F>,
+    pub(crate) x_read: MemoryReadRecord<F, EXT_DEG>,
     /// Memory accesses for reading `y`.
-    pub(crate) y_read: MemoryReadRecord<EXT_DEG, F>,
+    pub(crate) y_read: MemoryReadRecord<F, EXT_DEG>,
     /// Memory accesses for writing `z`.
-    pub(crate) z_write: MemoryWriteRecord<EXT_DEG, F>,
+    pub(crate) z_write: MemoryWriteRecord<F, EXT_DEG>,
 }
 
 /// A chip for performing arithmetic operations over the field extension

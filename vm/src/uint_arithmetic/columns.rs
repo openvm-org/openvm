@@ -77,11 +77,11 @@ pub struct UintArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, 
 
     /// Pointer read auxiliary columns for [z, x, y].
     /// **Note** the ordering, which is designed to match the instruction order.
-    pub read_ptr_aux_cols: [MemoryReadAuxCols<1, T>; 3],
-    pub read_x_aux_cols: MemoryReadAuxCols<NUM_LIMBS, T>,
-    pub read_y_aux_cols: MemoryReadAuxCols<NUM_LIMBS, T>,
-    pub write_z_aux_cols: MemoryWriteAuxCols<NUM_LIMBS, T>,
-    pub write_cmp_aux_cols: MemoryWriteAuxCols<1, T>,
+    pub read_ptr_aux_cols: [MemoryReadAuxCols<T, 1>; 3],
+    pub read_x_aux_cols: MemoryReadAuxCols<T, NUM_LIMBS>,
+    pub read_y_aux_cols: MemoryReadAuxCols<T, NUM_LIMBS>,
+    pub write_z_aux_cols: MemoryWriteAuxCols<T, NUM_LIMBS>,
+    pub write_cmp_aux_cols: MemoryWriteAuxCols<T, 1>,
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
@@ -148,11 +148,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
 {
     pub const fn width() -> usize {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-        3 * MemoryReadAuxCols::<1, T>::width()
-            + MemoryReadAuxCols::<NUM_LIMBS, T>::width()
-            + MemoryReadAuxCols::<NUM_LIMBS, T>::width()
-            + MemoryWriteAuxCols::<NUM_LIMBS, T>::width()
-            + MemoryWriteAuxCols::<1, T>::width()
+        3 * MemoryReadAuxCols::<T, 1>::width()
+            + MemoryReadAuxCols::<T, NUM_LIMBS>::width()
+            + MemoryReadAuxCols::<T, NUM_LIMBS>::width()
+            + MemoryWriteAuxCols::<T, NUM_LIMBS>::width()
+            + MemoryWriteAuxCols::<T, 1>::width()
             + (5 + num_limbs)
     }
 
@@ -166,28 +166,28 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
         let opcode_eq_flag = iter.next().unwrap();
         let buffer = iter.by_ref().take(num_limbs).collect();
 
-        let width_for_cell = MemoryReadAuxCols::<1, T>::width();
+        let width_for_cell = MemoryReadAuxCols::<T, 1>::width();
         let read_ptr_aux_cols = [(); 3].map(|_| {
-            MemoryReadAuxCols::<1, T>::from_slice(
+            MemoryReadAuxCols::<T, 1>::from_slice(
                 &iter.by_ref().take(width_for_cell).collect::<Vec<_>>(),
             )
         });
-        let width = MemoryReadAuxCols::<NUM_LIMBS, T>::width();
+        let width = MemoryReadAuxCols::<T, NUM_LIMBS>::width();
         let read_x_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let read_y_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let write_z_slice = {
-            let width = MemoryWriteAuxCols::<NUM_LIMBS, T>::width();
+            let width = MemoryWriteAuxCols::<T, NUM_LIMBS>::width();
             iter.by_ref().take(width).collect::<Vec<_>>()
         };
         let write_cmp_slice = {
-            let width = MemoryWriteAuxCols::<1, T>::width();
+            let width = MemoryWriteAuxCols::<T, 1>::width();
             iter.by_ref().take(width).collect::<Vec<_>>()
         };
 
-        let read_x_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_x_slice);
-        let read_y_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_y_slice);
-        let write_z_aux_cols = MemoryWriteAuxCols::<NUM_LIMBS, T>::from_slice(&write_z_slice);
-        let write_cmp_aux_cols = MemoryWriteAuxCols::<1, T>::from_slice(&write_cmp_slice);
+        let read_x_aux_cols = MemoryReadAuxCols::<T, NUM_LIMBS>::from_slice(&read_x_slice);
+        let read_y_aux_cols = MemoryReadAuxCols::<T, NUM_LIMBS>::from_slice(&read_y_slice);
+        let write_z_aux_cols = MemoryWriteAuxCols::<T, NUM_LIMBS>::from_slice(&write_z_slice);
+        let write_cmp_aux_cols = MemoryWriteAuxCols::<T, 1>::from_slice(&write_cmp_slice);
 
         Self {
             is_valid,

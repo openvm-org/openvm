@@ -118,7 +118,7 @@ impl KeccakVmAir {
         &self,
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
-        mem_aux: [MemoryReadAuxCols<1, AB::Var>; KECCAK_EXECUTION_READS],
+        mem_aux: [MemoryReadAuxCols<AB::Var, 1>; KECCAK_EXECUTION_READS],
     ) -> AB::Expr {
         let opcode = local.opcode;
         // Only receive opcode if:
@@ -177,7 +177,7 @@ impl KeccakVmAir {
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
         start_read_timestamp: AB::Expr,
-        mem_aux: [MemoryReadAuxCols<1, AB::Var>; KECCAK_ABSORB_READS],
+        mem_aux: [MemoryReadAuxCols<AB::Var, 1>; KECCAK_ABSORB_READS],
     ) -> AB::Expr {
         let memory_bridge = MemoryBridge::new(self.mem_oc);
         // Only read input from memory when it is an opcode-related row
@@ -220,7 +220,7 @@ impl KeccakVmAir {
         builder: &mut AB,
         local: KeccakVmColsRef<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: [MemoryWriteAuxCols<1, AB::Var>; KECCAK_DIGEST_WRITES],
+        mem_aux: [MemoryWriteAuxCols<AB::Var, 1>; KECCAK_DIGEST_WRITES],
     ) {
         let opcode = local.opcode;
         let memory_bridge = MemoryBridge::new(self.mem_oc);

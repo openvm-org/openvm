@@ -37,9 +37,9 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
             /// hi-byte of post-state
             post_hi: [u8; KECCAK_RATE_U16S],
             /// if first block
-            op_reads: Option<[MemoryReadRecord<1, F>; 3]>,
+            op_reads: Option<[MemoryReadRecord<F, 1>; 3]>,
             /// if last block
-            digest_writes: Option<[MemoryWriteRecord<1, F>; KECCAK_DIGEST_WRITES]>,
+            digest_writes: Option<[MemoryWriteRecord<F, 1>; KECCAK_DIGEST_WRITES]>,
         }
 
         impl<F> Default for StateDiff<F> {
@@ -166,7 +166,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                         slc_idx += aux.len();
                     }
                 }
-                slc_idx = KECCAK_EXECUTION_READS * MemoryReadAuxCols::<1, F>::width();
+                slc_idx = KECCAK_EXECUTION_READS * MemoryReadAuxCols::<F, 1>::width();
                 for record in block.bytes_read {
                     // TODO[jpw] make_read_aux_cols should directly write into slice
                     let aux = mem_oc
@@ -183,7 +183,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                     opcode.is_enabled * F::from_bool(block.remaining_len < KECCAK_RATE_BYTES);
                 if let Some(digest_writes) = diff.digest_writes {
                     slc_idx = (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS)
-                        * MemoryReadAuxCols::<1, F>::width();
+                        * MemoryReadAuxCols::<F, 1>::width();
                     for record in digest_writes {
                         // TODO: these aux columns are only used for the last row - can we share them with aux reads in first row?
                         let aux = mem_oc

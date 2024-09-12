@@ -27,9 +27,9 @@ use crate::memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord};
 pub struct FieldArithmeticRecord<F> {
     pub opcode: Opcode,
     pub from_state: ExecutionState<usize>,
-    pub x_read: MemoryReadRecord<1, F>,
-    pub y_read: MemoryReadRecord<1, F>,
-    pub z_write: MemoryWriteRecord<1, F>,
+    pub x_read: MemoryReadRecord<F, 1>,
+    pub y_read: MemoryReadRecord<F, 1>,
+    pub z_write: MemoryWriteRecord<F, 1>,
 }
 
 #[derive(Clone, Debug)]

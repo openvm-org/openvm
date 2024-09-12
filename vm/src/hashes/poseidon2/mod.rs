@@ -157,16 +157,16 @@ struct Poseidon2Record<F> {
     instruction: Instruction<F>,
     from_state: ExecutionState<usize>,
     internal_cols: Poseidon2Cols<WIDTH, F>,
-    dst_ptr_read: MemoryReadRecord<1, F>,
-    lhs_ptr_read: MemoryReadRecord<1, F>,
+    dst_ptr_read: MemoryReadRecord<F, 1>,
+    lhs_ptr_read: MemoryReadRecord<F, 1>,
     // None for permute (since rhs_ptr is computed from lhs_ptr).
-    rhs_ptr_read: Option<MemoryReadRecord<1, F>>,
+    rhs_ptr_read: Option<MemoryReadRecord<F, 1>>,
     rhs_ptr: F,
-    lhs_read: MemoryReadRecord<CHUNK, F>,
-    rhs_read: MemoryReadRecord<CHUNK, F>,
-    output1_write: MemoryWriteRecord<CHUNK, F>,
+    lhs_read: MemoryReadRecord<F, CHUNK>,
+    rhs_read: MemoryReadRecord<F, CHUNK>,
+    output1_write: MemoryWriteRecord<F, CHUNK>,
     // None for compress (since output is of size CHUNK).
-    output2_write: Option<MemoryWriteRecord<CHUNK, F>>,
+    output2_write: Option<MemoryWriteRecord<F, CHUNK>>,
 }
 
 impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {

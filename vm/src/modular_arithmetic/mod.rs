@@ -44,13 +44,13 @@ pub struct ModularArithmeticRecord<T: PrimeField32> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
-    pub x_address_read: MemoryReadRecord<1, T>,
-    pub y_address_read: MemoryReadRecord<1, T>,
-    pub z_address_read: MemoryReadRecord<1, T>,
+    pub x_address_read: MemoryReadRecord<T, 1>,
+    pub y_address_read: MemoryReadRecord<T, 1>,
+    pub z_address_read: MemoryReadRecord<T, 1>,
     // Each limb is 8 bits (byte), 32 limbs for 256 bits.
-    pub x_read: MemoryReadRecord<NUM_LIMBS, T>,
-    pub y_read: MemoryReadRecord<NUM_LIMBS, T>,
-    pub z_write: MemoryWriteRecord<NUM_LIMBS, T>,
+    pub x_read: MemoryReadRecord<T, NUM_LIMBS>,
+    pub y_read: MemoryReadRecord<T, NUM_LIMBS>,
+    pub z_write: MemoryWriteRecord<T, NUM_LIMBS>,
 }
 
 #[derive(Clone, Debug)]

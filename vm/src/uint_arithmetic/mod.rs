@@ -33,8 +33,8 @@ pub const fn num_limbs<const ARG_SIZE: usize, const LIMB_SIZE: usize>() -> usize
 
 #[derive(Debug)]
 pub enum WriteRecord<T> {
-    Uint(MemoryWriteRecord<NUM_LIMBS, T>),
-    Short(MemoryWriteRecord<1, T>),
+    Uint(MemoryWriteRecord<T, NUM_LIMBS>),
+    Short(MemoryWriteRecord<T, 1>),
 }
 
 #[derive(Debug)]
@@ -42,12 +42,12 @@ pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
-    pub x_ptr_read: MemoryReadRecord<1, T>,
-    pub y_ptr_read: MemoryReadRecord<1, T>,
-    pub z_ptr_read: MemoryReadRecord<1, T>,
+    pub x_ptr_read: MemoryReadRecord<T, 1>,
+    pub y_ptr_read: MemoryReadRecord<T, 1>,
+    pub z_ptr_read: MemoryReadRecord<T, 1>,
 
-    pub x_read: MemoryReadRecord<NUM_LIMBS, T>,
-    pub y_read: MemoryReadRecord<NUM_LIMBS, T>,
+    pub x_read: MemoryReadRecord<T, NUM_LIMBS>,
+    pub y_read: MemoryReadRecord<T, NUM_LIMBS>,
     pub z_write: WriteRecord<T>,
 
     // this may be redundant because we can extract it from z_write,

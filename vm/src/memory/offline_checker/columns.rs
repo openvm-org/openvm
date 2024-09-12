@@ -50,13 +50,14 @@ impl<const N: usize, T> MemoryBaseAuxCols<T, N> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemoryWriteAuxCols<const N: usize, T> {
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, Eq, AlignedBorrow)]
+pub struct MemoryWriteAuxCols<T, const N: usize> {
     pub(super) base: MemoryBaseAuxCols<T, N>,
     pub(super) prev_data: [T; N],
 }
 
-impl<const N: usize, T> MemoryWriteAuxCols<N, T> {
+impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
     pub fn new(
         prev_data: [T; N],
         prev_timestamps: [T; N],
@@ -72,7 +73,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<N, T> {
     }
 }
 
-impl<const N: usize, T: Clone> MemoryWriteAuxCols<N, T> {
+impl<const N: usize, T: Clone> MemoryWriteAuxCols<T, N> {
     pub fn from_slice(slc: &[T]) -> Self {
         let width = MemoryBaseAuxCols::<T, N>::width();
         Self {
@@ -89,7 +90,7 @@ impl<const N: usize, T: Clone> MemoryWriteAuxCols<N, T> {
     }
 }
 
-impl<const N: usize, T> MemoryWriteAuxCols<N, T> {
+impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
     pub fn flatten(self) -> Vec<T> {
         iter::empty()
             .chain(self.base.flatten())
@@ -98,24 +99,24 @@ impl<const N: usize, T> MemoryWriteAuxCols<N, T> {
     }
 
     pub const fn width() -> usize {
-        size_of::<MemoryWriteAuxCols<N, u8>>()
+        size_of::<MemoryWriteAuxCols<u8, N>>()
     }
 }
 
-impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<N, F> {
+impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<F, N> {
     pub fn disabled() -> Self {
-        let width = MemoryWriteAuxCols::<N, F>::width();
+        let width = MemoryWriteAuxCols::<F, N>::width();
         MemoryWriteAuxCols::from_slice(&vec![F::zero(); width])
     }
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemoryReadAuxCols<const N: usize, T> {
+#[derive(Clone, Debug, PartialEq, Eq, AlignedBorrow)]
+pub struct MemoryReadAuxCols<T, const N: usize> {
     pub(super) base: MemoryBaseAuxCols<T, N>,
 }
 
-impl<const N: usize, T> MemoryReadAuxCols<N, T> {
+impl<const N: usize, T> MemoryReadAuxCols<T, N> {
     pub fn new(
         prev_timestamps: [T; N],
         clk_lt_aux: [AssertLessThanAuxCols<T, AUX_LEN>; N],
@@ -129,7 +130,7 @@ impl<const N: usize, T> MemoryReadAuxCols<N, T> {
     }
 }
 
-impl<const N: usize, T: Clone> MemoryReadAuxCols<N, T> {
+impl<const N: usize, T: Clone> MemoryReadAuxCols<T, N> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             base: MemoryBaseAuxCols::from_slice(slc),
@@ -143,24 +144,25 @@ impl<const N: usize, T: Clone> MemoryReadAuxCols<N, T> {
     }
 }
 
-impl<const N: usize, T> MemoryReadAuxCols<N, T> {
+impl<const N: usize, T> MemoryReadAuxCols<T, N> {
     pub fn flatten(self) -> Vec<T> {
         self.base.flatten()
     }
 
     pub const fn width() -> usize {
-        size_of::<MemoryReadAuxCols<N, u8>>()
+        size_of::<MemoryReadAuxCols<u8, N>>()
     }
 }
 
-impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<N, F> {
+impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<F, N> {
     pub fn disabled() -> Self {
-        let width = MemoryReadAuxCols::<N, F>::width();
+        let width = MemoryReadAuxCols::<F, N>::width();
         MemoryReadAuxCols::from_slice(&vec![F::zero(); width])
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, Eq, AlignedBorrow)]
 pub struct MemoryReadOrImmediateAuxCols<T> {
     pub(super) base: MemoryBaseAuxCols<T, 1>,
     pub(super) is_immediate: T,
@@ -235,16 +237,16 @@ mod tests {
     fn test_write_aux_cols_width() {
         type F = BabyBear;
 
-        let disabled = MemoryWriteAuxCols::<1, F>::disabled();
+        let disabled = MemoryWriteAuxCols::<F, 1>::disabled();
         assert_eq!(
             disabled.flatten().len(),
-            MemoryWriteAuxCols::<1, F>::width()
+            MemoryWriteAuxCols::<F, 1>::width()
         );
 
-        let disabled = MemoryWriteAuxCols::<4, F>::disabled();
+        let disabled = MemoryWriteAuxCols::<F, 4>::disabled();
         assert_eq!(
             disabled.flatten().len(),
-            MemoryWriteAuxCols::<4, F>::width()
+            MemoryWriteAuxCols::<F, 4>::width()
         );
     }
 
@@ -252,11 +254,11 @@ mod tests {
     fn test_read_aux_cols_width() {
         type F = BabyBear;
 
-        let disabled = MemoryReadAuxCols::<1, F>::disabled();
-        assert_eq!(disabled.flatten().len(), MemoryReadAuxCols::<1, F>::width());
+        let disabled = MemoryReadAuxCols::<F, 1>::disabled();
+        assert_eq!(disabled.flatten().len(), MemoryReadAuxCols::<F, 1>::width());
 
-        let disabled = MemoryReadAuxCols::<4, F>::disabled();
-        assert_eq!(disabled.flatten().len(), MemoryReadAuxCols::<4, F>::width());
+        let disabled = MemoryReadAuxCols::<F, 4>::disabled();
+        assert_eq!(disabled.flatten().len(), MemoryReadAuxCols::<F, 4>::width());
     }
 
     #[test]

@@ -20,8 +20,8 @@ impl MemoryOfflineChecker {
     pub fn make_read_aux_cols<const N: usize, F: PrimeField32>(
         &self,
         range_checker: Arc<VariableRangeCheckerChip>,
-        read: MemoryReadRecord<N, F>,
-    ) -> MemoryReadAuxCols<N, F> {
+        read: MemoryReadRecord<F, N>,
+    ) -> MemoryReadAuxCols<F, N> {
         assert!(
             !read.address_space.is_zero(),
             "cannot make `MemoryReadAuxCols` for address space 0"
@@ -35,7 +35,7 @@ impl MemoryOfflineChecker {
     pub fn make_read_or_immediate_aux_cols<F: PrimeField32>(
         &self,
         range_checker: Arc<VariableRangeCheckerChip>,
-        read: MemoryReadRecord<1, F>,
+        read: MemoryReadRecord<F, 1>,
     ) -> MemoryReadOrImmediateAuxCols<F> {
         let [prev_timestamp] = read.prev_timestamps;
 
@@ -54,8 +54,8 @@ impl MemoryOfflineChecker {
     pub fn make_write_aux_cols<const N: usize, F: PrimeField32>(
         &self,
         range_checker: Arc<VariableRangeCheckerChip>,
-        write: MemoryWriteRecord<N, F>,
-    ) -> MemoryWriteAuxCols<N, F> {
+        write: MemoryWriteRecord<F, N>,
+    ) -> MemoryWriteAuxCols<F, N> {
         MemoryWriteAuxCols::new(
             write.prev_data,
             write.prev_timestamps,

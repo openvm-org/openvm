@@ -106,7 +106,7 @@ impl<F: Field> CpuMemoryAccessCols<F> {
         }
     }
 
-    pub fn from_read_record(read: MemoryReadRecord<1, F>) -> Self {
+    pub fn from_read_record(read: MemoryReadRecord<F, 1>) -> Self {
         CpuMemoryAccessCols {
             address_space: read.address_space,
             pointer: read.pointer,
@@ -116,7 +116,7 @@ impl<F: Field> CpuMemoryAccessCols<F> {
         }
     }
 
-    pub fn from_write_record(write: MemoryWriteRecord<1, F>) -> Self {
+    pub fn from_write_record(write: MemoryWriteRecord<F, 1>) -> Self {
         CpuMemoryAccessCols {
             address_space: write.address_space,
             pointer: write.pointer,
@@ -164,7 +164,7 @@ pub struct CpuAuxCols<T> {
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
     pub reads_aux_cols: [MemoryReadOrImmediateAuxCols<T>; CPU_MAX_READS_PER_CYCLE],
-    pub writes_aux_cols: [MemoryWriteAuxCols<1, T>; CPU_MAX_WRITES_PER_CYCLE],
+    pub writes_aux_cols: [MemoryWriteAuxCols<T, 1>; CPU_MAX_WRITES_PER_CYCLE],
 }
 
 impl<T: Clone> CpuAuxCols<T> {
@@ -207,7 +207,7 @@ impl<T: Clone> CpuAuxCols<T> {
         });
         let writes_aux_cols = array::from_fn(|_| {
             start = end;
-            end += MemoryWriteAuxCols::<WORD_SIZE, T>::width();
+            end += MemoryWriteAuxCols::<T, WORD_SIZE>::width();
             MemoryWriteAuxCols::from_slice(&slc[start..end])
         });
 
@@ -264,7 +264,7 @@ impl<T: Clone> CpuAuxCols<T> {
             + CPU_MAX_READS_PER_CYCLE
                 * (CpuMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width())
             + CPU_MAX_WRITES_PER_CYCLE
-                * (CpuMemoryAccessCols::<T>::width() + MemoryWriteAuxCols::<WORD_SIZE, T>::width())
+                * (CpuMemoryAccessCols::<T>::width() + MemoryWriteAuxCols::<T, WORD_SIZE>::width())
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
     }

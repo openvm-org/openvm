@@ -45,7 +45,7 @@ pub struct FieldArithmeticAuxCols<T> {
 
     pub read_x_aux_cols: MemoryReadOrImmediateAuxCols<T>,
     pub read_y_aux_cols: MemoryReadOrImmediateAuxCols<T>,
-    pub write_z_aux_cols: MemoryWriteAuxCols<1, T>,
+    pub write_z_aux_cols: MemoryWriteAuxCols<T, 1>,
 }
 
 impl<T: Clone> FieldArithmeticCols<T> {
@@ -95,7 +95,7 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
 
 impl<T: Clone> FieldArithmeticAuxCols<T> {
     pub const fn get_width() -> usize {
-        6 + (2 * MemoryReadOrImmediateAuxCols::<T>::width() + MemoryWriteAuxCols::<1, T>::width())
+        6 + (2 * MemoryReadOrImmediateAuxCols::<T>::width() + MemoryWriteAuxCols::<T, 1>::width())
     }
 
     #[allow(clippy::should_implement_trait)]

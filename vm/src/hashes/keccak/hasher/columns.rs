@@ -99,11 +99,11 @@ pub struct KeccakSpongeCols<T> {
 // Grouping all memory aux columns together because they can't use AlignedBorrow
 #[derive(Clone, Debug)]
 pub struct KeccakMemoryCols<T> {
-    pub op_reads: [MemoryReadAuxCols<1, T>; KECCAK_EXECUTION_READS],
+    pub op_reads: [MemoryReadAuxCols<T, 1>; KECCAK_EXECUTION_READS],
     // TODO[jpw] switch to word_size=8
-    pub absorb_reads: [MemoryReadAuxCols<1, T>; KECCAK_ABSORB_READS],
+    pub absorb_reads: [MemoryReadAuxCols<T, 1>; KECCAK_ABSORB_READS],
     // TODO[jpw] switch to word_size=? (4 or 8 or 16)
-    pub digest_writes: [MemoryWriteAuxCols<1, T>; KECCAK_DIGEST_WRITES],
+    pub digest_writes: [MemoryWriteAuxCols<T, 1>; KECCAK_DIGEST_WRITES],
 }
 
 impl<'a, T: Copy> KeccakVmColsRef<'a, T> {
@@ -180,8 +180,8 @@ pub const NUM_KECCAK_SPONGE_COLS: usize = size_of::<KeccakSpongeCols<u8>>();
 
 impl<T> KeccakMemoryCols<T> {
     pub const fn width() -> usize {
-        (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS) * MemoryReadAuxCols::<1, T>::width()
-            + KECCAK_DIGEST_WRITES * MemoryWriteAuxCols::<1, T>::width()
+        (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS) * MemoryReadAuxCols::<T, 1>::width()
+            + KECCAK_DIGEST_WRITES * MemoryWriteAuxCols::<T, 1>::width()
     }
 
     pub fn from_slice(slc: &[T]) -> Self

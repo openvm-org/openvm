@@ -33,7 +33,7 @@ pub struct TimestampedValue<T> {
 /// Also used for "reads" from address space 0 (immediates).
 /// Can be used to generate [MemoryReadAuxCols] or [MemoryReadOrImmediateAuxCols].
 #[derive(Clone, Debug)]
-pub struct MemoryReadRecord<const N: usize, T> {
+pub struct MemoryReadRecord<T, const N: usize> {
     /// The address space in which the read operation occurs.
     pub address_space: T,
     /// The pointer indicating the memory location being read.
@@ -47,7 +47,7 @@ pub struct MemoryReadRecord<const N: usize, T> {
     pub data: [T; N],
 }
 
-impl<T: Copy> MemoryReadRecord<1, T> {
+impl<T: Copy> MemoryReadRecord<T, 1> {
     pub fn value(&self) -> T {
         self.data[0]
     }
@@ -56,7 +56,7 @@ impl<T: Copy> MemoryReadRecord<1, T> {
 /// Represents a single or batch memory write operation.
 /// Can be used to generate [MemoryWriteAuxCols].
 #[derive(Clone, Debug)]
-pub struct MemoryWriteRecord<const N: usize, T> {
+pub struct MemoryWriteRecord<T, const N: usize> {
     /// The address space in which the write operation occurs.
     pub address_space: T,
     /// The pointer indicating the memory location being written to.
@@ -71,7 +71,7 @@ pub struct MemoryWriteRecord<const N: usize, T> {
     pub(crate) prev_data: [T; N],
 }
 
-impl<T: Copy> MemoryWriteRecord<1, T> {
+impl<T: Copy> MemoryWriteRecord<T, 1> {
     pub fn value(&self) -> T {
         self.data[0]
     }
@@ -135,11 +135,11 @@ impl<F: PrimeField32> MemoryChip<F> {
         )
     }
 
-    pub fn read_cell(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<1, F> {
+    pub fn read_cell(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, 1> {
         self.read(address_space, pointer)
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<N, F> {
+    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, N> {
         assert!(
             address_space == F::zero() || pointer.as_canonical_u32() <= MEMORY_TOP,
             "memory out of bounds: {:?}",
@@ -197,7 +197,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         self.memory.get(&(addr_space, pointer)).unwrap().value
     }
 
-    pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<1, F> {
+    pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<F, 1> {
         self.write(address_space, pointer, [data])
     }
 
@@ -206,7 +206,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         address_space: F,
         pointer: F,
         data: [F; N],
-    ) -> MemoryWriteRecord<N, F> {
+    ) -> MemoryWriteRecord<F, N> {
         assert_ne!(address_space, F::zero());
         assert!(
             address_space == F::zero() || pointer.as_canonical_u32() <= MEMORY_TOP,
@@ -264,25 +264,25 @@ impl<F: PrimeField32> MemoryChip<F> {
 
     pub fn make_read_aux_cols<const N: usize>(
         &self,
-        read: MemoryReadRecord<N, F>,
-    ) -> MemoryReadAuxCols<N, F> {
+        read: MemoryReadRecord<F, N>,
+    ) -> MemoryReadAuxCols<F, N> {
         self.make_offline_checker()
             .make_read_aux_cols(self.range_checker.clone(), read)
     }
 
-    pub fn make_disabled_read_aux_cols<const N: usize>(&self) -> MemoryReadAuxCols<N, F> {
+    pub fn make_disabled_read_aux_cols<const N: usize>(&self) -> MemoryReadAuxCols<F, N> {
         MemoryReadAuxCols::disabled()
     }
 
     pub fn make_write_aux_cols<const N: usize>(
         &self,
-        write: MemoryWriteRecord<N, F>,
-    ) -> MemoryWriteAuxCols<N, F> {
+        write: MemoryWriteRecord<F, N>,
+    ) -> MemoryWriteAuxCols<F, N> {
         self.make_offline_checker()
             .make_write_aux_cols(self.range_checker.clone(), write)
     }
 
-    pub fn make_disabled_write_aux_cols<const N: usize>(&self) -> MemoryWriteAuxCols<N, F> {
+    pub fn make_disabled_write_aux_cols<const N: usize>(&self) -> MemoryWriteAuxCols<F, N> {
         MemoryWriteAuxCols::disabled()
     }
 

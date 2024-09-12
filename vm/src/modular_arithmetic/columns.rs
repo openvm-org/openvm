@@ -73,12 +73,12 @@ impl<T: Clone> ModularArithmeticIoCols<T> {
 pub struct ModularArithmeticAuxCols<T: Clone> {
     // 0 for padding rows.
     pub is_valid: T,
-    pub read_x_aux_cols: MemoryReadAuxCols<NUM_LIMBS, T>,
-    pub read_y_aux_cols: MemoryReadAuxCols<NUM_LIMBS, T>,
-    pub write_z_aux_cols: MemoryWriteAuxCols<NUM_LIMBS, T>,
-    pub x_address_aux_cols: MemoryReadAuxCols<1, T>,
-    pub y_address_aux_cols: MemoryReadAuxCols<1, T>,
-    pub z_address_aux_cols: MemoryReadAuxCols<1, T>,
+    pub read_x_aux_cols: MemoryReadAuxCols<T, NUM_LIMBS>,
+    pub read_y_aux_cols: MemoryReadAuxCols<T, NUM_LIMBS>,
+    pub write_z_aux_cols: MemoryWriteAuxCols<T, NUM_LIMBS>,
+    pub x_address_aux_cols: MemoryReadAuxCols<T, 1>,
+    pub y_address_aux_cols: MemoryReadAuxCols<T, 1>,
+    pub z_address_aux_cols: MemoryReadAuxCols<T, 1>,
 
     pub carries: Vec<T>,
     pub q: Vec<T>,
@@ -87,37 +87,37 @@ pub struct ModularArithmeticAuxCols<T: Clone> {
 impl<T: Clone> ModularArithmeticAuxCols<T> {
     pub fn width(air: &ModularArithmeticAir) -> usize {
         // FIXME: the length of carries and q depend on operation
-        MemoryReadAuxCols::<NUM_LIMBS, T>::width()
-            + MemoryReadAuxCols::<NUM_LIMBS, T>::width()
-            + MemoryWriteAuxCols::<NUM_LIMBS, T>::width()
-            + MemoryReadAuxCols::<1, T>::width()
-            + MemoryReadAuxCols::<1, T>::width()
-            + MemoryReadAuxCols::<1, T>::width()
+        MemoryReadAuxCols::<T, NUM_LIMBS>::width()
+            + MemoryReadAuxCols::<T, NUM_LIMBS>::width()
+            + MemoryWriteAuxCols::<T, NUM_LIMBS>::width()
+            + MemoryReadAuxCols::<T, 1>::width()
+            + MemoryReadAuxCols::<T, 1>::width()
+            + MemoryReadAuxCols::<T, 1>::width()
             + air.carry_limbs
             + air.q_limbs
     }
 
     pub fn from_iterator(mut iter: impl Iterator<Item = T>, air: &ModularArithmeticAir) -> Self {
         let is_valid = iter.next().unwrap();
-        let width = MemoryReadAuxCols::<NUM_LIMBS, T>::width();
+        let width = MemoryReadAuxCols::<T, NUM_LIMBS>::width();
         let read_x_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let read_x_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_x_slice);
+        let read_x_aux_cols = MemoryReadAuxCols::<T, NUM_LIMBS>::from_slice(&read_x_slice);
 
         let read_y_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let read_y_aux_cols = MemoryReadAuxCols::<NUM_LIMBS, T>::from_slice(&read_y_slice);
+        let read_y_aux_cols = MemoryReadAuxCols::<T, NUM_LIMBS>::from_slice(&read_y_slice);
 
         let write_z_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let write_z_aux_cols = MemoryWriteAuxCols::<NUM_LIMBS, T>::from_slice(&write_z_slice);
+        let write_z_aux_cols = MemoryWriteAuxCols::<T, NUM_LIMBS>::from_slice(&write_z_slice);
 
-        let width2 = MemoryReadAuxCols::<1, T>::width();
+        let width2 = MemoryReadAuxCols::<T, 1>::width();
         let x_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();
-        let x_address_aux_cols = MemoryReadAuxCols::<1, T>::from_slice(&x_address_slice);
+        let x_address_aux_cols = MemoryReadAuxCols::<T, 1>::from_slice(&x_address_slice);
 
         let y_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();
-        let y_address_aux_cols = MemoryReadAuxCols::<1, T>::from_slice(&y_address_slice);
+        let y_address_aux_cols = MemoryReadAuxCols::<T, 1>::from_slice(&y_address_slice);
 
         let z_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();
-        let z_address_aux_cols = MemoryReadAuxCols::<1, T>::from_slice(&z_address_slice);
+        let z_address_aux_cols = MemoryReadAuxCols::<T, 1>::from_slice(&z_address_slice);
 
         let carries = iter.by_ref().take(air.carry_limbs).collect::<Vec<_>>();
         let q = iter.by_ref().take(air.q_limbs).collect::<Vec<_>>();
