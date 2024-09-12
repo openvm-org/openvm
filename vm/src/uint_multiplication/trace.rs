@@ -1,4 +1,4 @@
-use std::array;
+use std::{array, borrow::BorrowMut};
 
 use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap};
 use p3_commit::PolynomialSpace;
@@ -14,72 +14,73 @@ use super::{
 };
 use crate::arch::chips::MachineChip;
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize, F: PrimeField32> MachineChip<F>
-    for UintMultiplicationChip<NUM_LIMBS, LIMB_BITS, F>
+impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChip<F>
+    for UintMultiplicationChip<F, NUM_LIMBS, LIMB_BITS>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let memory_chip = self.memory_chip.borrow();
-        let rows = self
-            .data
-            .iter()
-            .map(|operation| {
-                {
-                    let super::UintMultiplicationRecord::<NUM_LIMBS, LIMB_BITS, F> {
-                        from_state,
-                        instruction,
-                        x_ptr_read,
-                        y_ptr_read,
-                        z_ptr_read,
-                        x_read,
-                        y_read,
-                        z_write,
-                        carry,
-                    } = operation;
-
-                    UintMultiplicationCols {
-                        io: UintMultiplicationIoCols {
-                            from_state: from_state.map(F::from_canonical_usize),
-                            x: MemoryData::<NUM_LIMBS, LIMB_BITS, F> {
-                                data: x_read.data,
-                                address: x_read.pointer,
-                                ptr_to_address: x_ptr_read.pointer,
-                            },
-                            y: MemoryData::<NUM_LIMBS, LIMB_BITS, F> {
-                                data: y_read.data,
-                                address: y_read.pointer,
-                                ptr_to_address: y_ptr_read.pointer,
-                            },
-                            z: MemoryData::<NUM_LIMBS, LIMB_BITS, F> {
-                                data: z_write.data,
-                                address: z_write.pointer,
-                                ptr_to_address: z_ptr_read.pointer,
-                            },
-                            ptr_as: instruction.d,
-                            address_as: instruction.e,
-                        },
-                        aux: UintMultiplicationAuxCols {
-                            is_valid: F::one(),
-                            carry: array::from_fn(|i| carry[i]),
-                            read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
-                                .map(|read| memory_chip.make_read_aux_cols(read.clone())),
-                            read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),
-                            read_y_aux_cols: memory_chip.make_read_aux_cols(y_read.clone()),
-                            write_z_aux_cols: memory_chip.make_write_aux_cols(z_write.clone()),
-                        },
-                    }
-                }
-                .flatten()
-            })
-            .collect::<Vec<_>>();
-
-        let height = rows.len();
+        let width = self.trace_width();
+        let height = self.data.len();
         let padded_height = height.next_power_of_two();
-        let blank_row = UintMultiplicationCols::<NUM_LIMBS, LIMB_BITS, F>::default().flatten();
-        let padded_rows = rows
-            .into_iter()
-            .chain(std::iter::repeat(blank_row).take(padded_height - height))
-            .collect::<Vec<_>>();
-        RowMajorMatrix::new(padded_rows.concat(), self.trace_width())
+        let mut rows = vec![F::zero(); width * padded_height];
+
+        for (i, operation) in self.data.iter().enumerate() {
+            let start_idx = i * width;
+            let end_idx = start_idx + width;
+            let row: &mut UintMultiplicationCols<F, NUM_LIMBS, LIMB_BITS> =
+                rows[start_idx..end_idx].borrow_mut();
+
+            let super::UintMultiplicationRecord::<F, NUM_LIMBS, LIMB_BITS> {
+                from_state,
+                instruction,
+                x_ptr_read,
+                y_ptr_read,
+                z_ptr_read,
+                x_read,
+                y_read,
+                z_write,
+                carry,
+            } = operation;
+
+            row.io = UintMultiplicationIoCols {
+                from_state: from_state.map(F::from_canonical_usize),
+                x: MemoryData::<F, NUM_LIMBS, LIMB_BITS> {
+                    data: x_read.data,
+                    address: x_read.pointer,
+                    ptr_to_address: x_ptr_read.pointer,
+                },
+                y: MemoryData::<F, NUM_LIMBS, LIMB_BITS> {
+                    data: y_read.data,
+                    address: y_read.pointer,
+                    ptr_to_address: y_ptr_read.pointer,
+                },
+                z: MemoryData::<F, NUM_LIMBS, LIMB_BITS> {
+                    data: z_write.data,
+                    address: z_write.pointer,
+                    ptr_to_address: z_ptr_read.pointer,
+                },
+                ptr_as: instruction.d,
+                address_as: instruction.e,
+            };
+
+            row.aux = UintMultiplicationAuxCols {
+                is_valid: F::one(),
+                carry: array::from_fn(|i| carry[i]),
+                read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
+                    .map(|read| memory_chip.make_read_aux_cols(read.clone())),
+                read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),
+                read_y_aux_cols: memory_chip.make_read_aux_cols(y_read.clone()),
+                write_z_aux_cols: memory_chip.make_write_aux_cols(z_write.clone()),
+            };
+        }
+
+        for i in height..padded_height {
+            let row: &mut UintMultiplicationCols<F, NUM_LIMBS, LIMB_BITS> =
+                rows[i * width..(i + 1) * width].borrow_mut();
+            row.io = UintMultiplicationIoCols::<F, NUM_LIMBS, LIMB_BITS>::default();
+            row.aux = UintMultiplicationAuxCols::<F, NUM_LIMBS, LIMB_BITS>::default();
+        }
+        RowMajorMatrix::new(rows, self.trace_width())
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
@@ -94,6 +95,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize, F: PrimeField32> MachineChi
     }
 
     fn trace_width(&self) -> usize {
-        UintMultiplicationCols::<NUM_LIMBS, LIMB_BITS, F>::width()
+        UintMultiplicationCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }

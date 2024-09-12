@@ -26,28 +26,28 @@ pub use columns::*;
 pub mod tests;
 
 #[derive(Debug)]
-pub struct UintMultiplicationRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize, T> {
+pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
-    pub x_ptr_read: MemoryReadRecord<1, T>,
-    pub y_ptr_read: MemoryReadRecord<1, T>,
-    pub z_ptr_read: MemoryReadRecord<1, T>,
-    pub x_read: MemoryReadRecord<NUM_LIMBS, T>,
-    pub y_read: MemoryReadRecord<NUM_LIMBS, T>,
-    pub z_write: MemoryWriteRecord<NUM_LIMBS, T>,
+    pub x_ptr_read: MemoryReadRecord<T, 1>,
+    pub y_ptr_read: MemoryReadRecord<T, 1>,
+    pub z_ptr_read: MemoryReadRecord<T, 1>,
+    pub x_read: MemoryReadRecord<T, NUM_LIMBS>,
+    pub y_read: MemoryReadRecord<T, NUM_LIMBS>,
+    pub z_write: MemoryWriteRecord<T, NUM_LIMBS>,
     pub carry: Vec<T>,
 }
 
 #[derive(Debug)]
-pub struct UintMultiplicationChip<const NUM_LIMBS: usize, const LIMB_BITS: usize, T: PrimeField32> {
+pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>,
-    data: Vec<UintMultiplicationRecord<NUM_LIMBS, LIMB_BITS, T>>,
+    data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize, T: PrimeField32>
-    UintMultiplicationChip<NUM_LIMBS, LIMB_BITS, T>
+impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    UintMultiplicationChip<T, NUM_LIMBS, LIMB_BITS>
 {
     pub fn new(
         execution_bus: ExecutionBus,
@@ -86,8 +86,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize, T: PrimeField32>
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize, T: PrimeField32> InstructionExecutor<T>
-    for UintMultiplicationChip<NUM_LIMBS, LIMB_BITS, T>
+impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<T>
+    for UintMultiplicationChip<T, NUM_LIMBS, LIMB_BITS>
 {
     fn execute(
         &mut self,

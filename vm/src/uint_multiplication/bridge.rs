@@ -15,8 +15,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        io: UintMultiplicationIoCols<NUM_LIMBS, LIMB_BITS, AB::Var>,
-        aux: UintMultiplicationAuxCols<NUM_LIMBS, LIMB_BITS, AB::Var>,
+        io: &UintMultiplicationIoCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
+        aux: &UintMultiplicationAuxCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
     ) {
         let memory_bridge = MemoryBridge::new(self.mem_oc);
         let timestamp: AB::Var = io.from_state.timestamp;
@@ -33,14 +33,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
                 io.y.ptr_to_address
             ],
             [io.z.address, io.x.address, io.y.address],
-            aux.read_ptr_aux_cols
+            &aux.read_ptr_aux_cols
         ) {
             memory_bridge
                 .read(
                     MemoryAddress::new(io.ptr_as, ptr),
                     [value],
                     timestamp_pp(),
-                    &mem_aux,
+                    mem_aux,
                 )
                 .eval(builder, aux.is_valid);
         }

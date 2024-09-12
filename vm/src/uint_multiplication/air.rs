@@ -22,7 +22,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
     for UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
-        UintMultiplicationCols::<NUM_LIMBS, LIMB_BITS, F>::width()
+        UintMultiplicationCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 
@@ -31,14 +31,9 @@ impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BIT
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-
         let local = main.row_slice(0);
-        let local: &[AB::Var] = (*local).borrow();
 
-        let UintMultiplicationCols { io, aux } =
-            UintMultiplicationCols::<NUM_LIMBS, LIMB_BITS, AB::Var>::from_iterator(
-                local.iter().copied(),
-            );
+        let UintMultiplicationCols::<_, NUM_LIMBS, LIMB_BITS> { io, aux } = (*local).borrow();
         builder.assert_bool(aux.is_valid);
 
         let x_limbs = &io.x.data;

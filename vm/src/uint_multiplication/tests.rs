@@ -1,4 +1,4 @@
-use std::{array, iter, sync::Arc};
+use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
 use afs_primitives::range_tuple::{bus::RangeTupleCheckerBus, RangeTupleCheckerChip};
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
@@ -26,7 +26,7 @@ fn generate_uint_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 
 fn run_uint_multiplication_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     tester: &mut MachineChipTestBuilder<F>,
-    chip: &mut UintMultiplicationChip<NUM_LIMBS, LIMB_BITS, F>,
+    chip: &mut UintMultiplicationChip<F, NUM_LIMBS, LIMB_BITS>,
     x: Vec<u32>,
     y: Vec<u32>,
     rng: &mut StdRng,
@@ -89,7 +89,7 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
     let range_tuple_chip: Arc<RangeTupleCheckerChip> = Arc::new(RangeTupleCheckerChip::new(bus));
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintMultiplicationChip::<NUM_LIMBS, LIMB_BITS, F>::new(
+    let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.memory_chip(),
         range_tuple_chip.clone(),
@@ -100,15 +100,15 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
 
     let mult_air = chip.air.clone();
     let mult_trace = chip.generate_trace();
-    let mult_trace_row = mult_trace.row_slice(0).to_vec();
-    let mut mult_trace_cols = UintMultiplicationCols::<NUM_LIMBS, LIMB_BITS, F>::from_iterator(
-        mult_trace_row.into_iter(),
-    );
+
+    let mut mult_trace_vec = mult_trace.row_slice(0).to_vec();
+    let mult_trace_cols: &mut UintMultiplicationCols<F, NUM_LIMBS, LIMB_BITS> =
+        (*mult_trace_vec).borrow_mut();
     mult_trace_cols.io.z.data = array::from_fn(|i| F::from_canonical_u32(z[i]));
     mult_trace_cols.aux.carry = array::from_fn(|i| F::from_canonical_u32(carry[i]));
-    let mult_trace = RowMajorMatrix::new(
-        mult_trace_cols.flatten(),
-        UintMultiplicationCols::<NUM_LIMBS, LIMB_BITS, F>::width(),
+    let mult_trace: p3_matrix::dense::DenseMatrix<BabyBear> = RowMajorMatrix::new(
+        mult_trace_vec,
+        UintMultiplicationCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
     );
 
     let range_air = range_tuple_chip.air.clone();
@@ -140,7 +140,7 @@ fn uint_multiplication_rand_air_test() {
     let range_tuple_chip: Arc<RangeTupleCheckerChip> = Arc::new(RangeTupleCheckerChip::new(bus));
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintMultiplicationChip::<NUM_LIMBS, LIMB_BITS, F>::new(
+    let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.memory_chip(),
         range_tuple_chip.clone(),

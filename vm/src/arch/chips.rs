@@ -101,7 +101,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     // FIXME: remove above and rename (no New)
     NewModularArithmetic(Rc<RefCell<NewModularArithmeticChip<F>>>),
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
-    U256Multiplication(Rc<RefCell<UintMultiplicationChip<32, 8, F>>>),
+    U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
 }
 
 #[derive(Debug, IntoStaticStr)]
@@ -118,7 +118,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
-    U256Multiplication(Rc<RefCell<UintMultiplicationChip<32, 8, F>>>),
+    U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
 }
 
 impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
