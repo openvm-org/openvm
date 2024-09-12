@@ -9,6 +9,7 @@ use super::{
     OverflowInt,
 };
 
+#[derive(Clone)]
 pub struct CheckCarryModToZeroCols<T> {
     pub carries: Vec<T>,
 

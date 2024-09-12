@@ -2,18 +2,21 @@ use super::EcPoint;
 use crate::bigint::{check_carry_mod_to_zero::CheckCarryModToZeroCols, CanonicalUint, LimbConfig};
 
 // Add two disinct points.
+#[derive(Clone)]
 pub struct EcAddCols<T, C: LimbConfig> {
     pub io: EcAddIoCols<T, C>,
-    pub aux: EcAddAuxCols<T>,
+    pub aux: EcAuxCols<T>,
 }
 
+#[derive(Clone)]
 pub struct EcAddIoCols<T, C: LimbConfig> {
     pub p1: EcPoint<T, C>,
     pub p2: EcPoint<T, C>,
     pub p3: EcPoint<T, C>,
 }
 
-pub struct EcAddAuxCols<T> {
+#[derive(Clone)]
+pub struct EcAuxCols<T> {
     pub is_valid: T,
     pub lambda: Vec<T>,
     pub lambda_check: CheckCarryModToZeroCols<T>,
@@ -35,7 +38,7 @@ impl<T: Clone, C: LimbConfig> EcAddCols<T, C> {
 
     pub fn from_slice(slc: &[T], num_limbs: usize) -> Self {
         let io = EcAddIoCols::from_slice(&slc[..6 * num_limbs], num_limbs);
-        let aux = EcAddAuxCols::from_slice(&slc[6 * num_limbs..], num_limbs);
+        let aux = EcAuxCols::from_slice(&slc[6 * num_limbs..], num_limbs);
 
         Self { io, aux }
     }
@@ -80,7 +83,7 @@ impl<T: Clone, C: LimbConfig> EcAddIoCols<T, C> {
     }
 }
 
-impl<T: Clone> EcAddAuxCols<T> {
+impl<T: Clone> EcAuxCols<T> {
     pub fn flatten(&self) -> Vec<T> {
         let mut flattened = vec![];
 
