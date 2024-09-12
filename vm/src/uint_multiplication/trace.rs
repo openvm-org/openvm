@@ -1,3 +1,5 @@
+use std::array;
+
 use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -38,26 +40,26 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize, F: PrimeField32> MachineChi
                         io: UintMultiplicationIoCols {
                             from_state: from_state.map(F::from_canonical_usize),
                             x: MemoryData::<NUM_LIMBS, LIMB_BITS, F> {
-                                data: x_read.data.to_vec(),
+                                data: x_read.data,
                                 address: x_read.pointer,
                                 ptr_to_address: x_ptr_read.pointer,
                             },
                             y: MemoryData::<NUM_LIMBS, LIMB_BITS, F> {
-                                data: y_read.data.to_vec(),
+                                data: y_read.data,
                                 address: y_read.pointer,
                                 ptr_to_address: y_ptr_read.pointer,
                             },
                             z: MemoryData::<NUM_LIMBS, LIMB_BITS, F> {
-                                data: z_write.data.to_vec(),
+                                data: z_write.data,
                                 address: z_write.pointer,
                                 ptr_to_address: z_ptr_read.pointer,
                             },
-                            d: instruction.d,
-                            e: instruction.e,
+                            ptr_as: instruction.d,
+                            address_as: instruction.e,
                         },
                         aux: UintMultiplicationAuxCols {
                             is_valid: F::one(),
-                            carry: carry.clone(),
+                            carry: array::from_fn(|i| carry[i]),
                             read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
                                 .map(|read| memory_chip.make_read_aux_cols(read.clone())),
                             read_x_aux_cols: memory_chip.make_read_aux_cols(x_read.clone()),

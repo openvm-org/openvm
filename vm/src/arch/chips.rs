@@ -114,9 +114,9 @@ pub enum MachineChipVariant<F: PrimeField32> {
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<VariableRangeCheckerChip>),
+    RangeTupleChecker(Arc<RangeTupleCheckerChip>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
-    RangeTupleChecker(Arc<RangeTupleCheckerChip>),
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<32, 8, F>>>),
 }

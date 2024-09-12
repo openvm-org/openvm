@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{array, iter, sync::Arc};
 
 use afs_primitives::range_tuple::{bus::RangeTupleCheckerBus, RangeTupleCheckerChip};
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
@@ -104,8 +104,8 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
     let mut mult_trace_cols = UintMultiplicationCols::<NUM_LIMBS, LIMB_BITS, F>::from_iterator(
         mult_trace_row.into_iter(),
     );
-    mult_trace_cols.io.z.data = z.into_iter().map(F::from_canonical_u32).collect();
-    mult_trace_cols.aux.carry = carry.into_iter().map(F::from_canonical_u32).collect();
+    mult_trace_cols.io.z.data = array::from_fn(|i| F::from_canonical_u32(z[i]));
+    mult_trace_cols.aux.carry = array::from_fn(|i| F::from_canonical_u32(carry[i]));
     let mult_trace = RowMajorMatrix::new(
         mult_trace_cols.flatten(),
         UintMultiplicationCols::<NUM_LIMBS, LIMB_BITS, F>::width(),
@@ -162,17 +162,15 @@ fn uint_multiplication_rand_air_test() {
 fn negative_uint_multiplication_wrong_calc_test() {
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
+    // x = 00...0001
+    // y = 00...0001
+    // z = 00...0002
+    // carry = 00...0000
     run_negative_uint_multiplication_test::<NUM_LIMBS, LIMB_BITS>(
-        std::iter::once(1)
-            .chain(std::iter::repeat(0).take(31))
-            .collect(),
-        std::iter::once(1)
-            .chain(std::iter::repeat(0).take(31))
-            .collect(),
-        std::iter::once(2)
-            .chain(std::iter::repeat(0).take(31))
-            .collect(),
-        std::iter::repeat(0).take(32).collect(),
+        iter::once(1).chain(iter::repeat(0).take(31)).collect(),
+        iter::once(1).chain(iter::repeat(0).take(31)).collect(),
+        iter::once(2).chain(iter::repeat(0).take(31)).collect(),
+        iter::repeat(0).take(32).collect(),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -181,19 +179,15 @@ fn negative_uint_multiplication_wrong_calc_test() {
 fn negative_uint_multiplication_wrong_carry_test() {
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
+    // x = 00...0001
+    // y = 00...0001
+    // z = 00...0001
+    // carry = 00...0001
     run_negative_uint_multiplication_test::<NUM_LIMBS, LIMB_BITS>(
-        std::iter::once(1)
-            .chain(std::iter::repeat(0).take(31))
-            .collect(),
-        std::iter::once(1)
-            .chain(std::iter::repeat(0).take(31))
-            .collect(),
-        std::iter::once(1)
-            .chain(std::iter::repeat(0).take(31))
-            .collect(),
-        std::iter::once(1)
-            .chain(std::iter::repeat(0).take(31))
-            .collect(),
+        iter::once(1).chain(iter::repeat(0).take(31)).collect(), // 10000000...
+        iter::once(1).chain(iter::repeat(0).take(31)).collect(), // 10000000...
+        iter::once(1).chain(iter::repeat(0).take(31)).collect(), // 10000000...
+        iter::once(1).chain(iter::repeat(0).take(31)).collect(),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -202,17 +196,19 @@ fn negative_uint_multiplication_wrong_carry_test() {
 fn negative_uint_multiplication_out_of_range_z_test() {
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
+    // x = 00...000[2^8] (out of range)
+    // y = 00...0001
+    // z = 00...000[2^8] (out of range)
+    // carry = 00...0000
     run_negative_uint_multiplication_test::<NUM_LIMBS, LIMB_BITS>(
-        std::iter::once(1 << LIMB_BITS)
-            .chain(std::iter::repeat(0).take(31))
+        iter::once(1 << LIMB_BITS)
+            .chain(iter::repeat(0).take(31))
             .collect(),
-        std::iter::once(1)
-            .chain(std::iter::repeat(0).take(31))
+        iter::once(1).chain(iter::repeat(0).take(31)).collect(),
+        iter::once(1 << LIMB_BITS)
+            .chain(iter::repeat(0).take(31))
             .collect(),
-        std::iter::once(1 << LIMB_BITS)
-            .chain(std::iter::repeat(0).take(31))
-            .collect(),
-        std::iter::repeat(0).take(32).collect(),
+        iter::repeat(0).take(32).collect(),
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -221,21 +217,25 @@ fn negative_uint_multiplication_out_of_range_z_test() {
 fn negative_uint_multiplication_out_of_range_carry_test() {
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
+    // x = 00...000[2^8] (out of range)
+    // y = 00...000[2^8] (out of range)
+    // z = 00...0100
+    // carry = 00...001[2^8] (out of range)
     run_negative_uint_multiplication_test::<NUM_LIMBS, LIMB_BITS>(
-        std::iter::once(1 << LIMB_BITS)
-            .chain(std::iter::repeat(0).take(31))
+        iter::once(1 << LIMB_BITS)
+            .chain(iter::repeat(0).take(31))
             .collect(),
-        std::iter::once(1 << LIMB_BITS)
-            .chain(std::iter::repeat(0).take(31))
+        iter::once(1 << LIMB_BITS)
+            .chain(iter::repeat(0).take(31))
             .collect(),
-        std::iter::repeat(0)
+        iter::repeat(0)
             .take(2)
-            .chain(std::iter::once(1))
-            .chain(std::iter::repeat(0).take(29))
+            .chain(iter::once(1))
+            .chain(iter::repeat(0).take(29))
             .collect(),
-        std::iter::once(1 << LIMB_BITS)
-            .chain(std::iter::once(1))
-            .chain(std::iter::repeat(0).take(30))
+        iter::once(1 << LIMB_BITS)
+            .chain(iter::once(1))
+            .chain(iter::repeat(0).take(30))
             .collect(),
         VerificationError::NonZeroCumulativeSum,
     );

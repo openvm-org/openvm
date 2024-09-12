@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use afs_primitives::range_tuple::RangeTupleCheckerChip;
-use air::UintMultiplicationAir;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -15,10 +14,13 @@ use crate::{
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
 };
 
-pub mod air;
-pub mod bridge;
-pub mod columns;
-pub mod trace;
+mod air;
+mod bridge;
+mod columns;
+mod trace;
+
+pub use air::*;
+pub use columns::*;
 
 #[cfg(test)]
 pub mod tests;
@@ -52,14 +54,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize, T: PrimeField32>
         memory_chip: MemoryChipRef<T>,
         range_tuple_chip: Arc<RangeTupleCheckerChip>,
     ) -> Self {
-        assert!(LIMB_BITS < 16, "LIMB_BITS >= 16");
+        assert!(LIMB_BITS < 16, "LIMB_BITS {} >= 16", LIMB_BITS);
 
         let bus = range_tuple_chip.bus();
-        assert!(
-            bus.sizes.len() == 2,
-            "bus.sizes.len() {} != 2",
-            bus.sizes.len()
-        );
+
+        assert_eq!(bus.sizes.len(), 2);
         assert!(
             bus.sizes[0] >= 1 << LIMB_BITS,
             "bus.sizes[0] {} < 2^LIMB_BITS {}",
@@ -167,7 +166,7 @@ fn solve_uint_multiplication<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         for j in 0..=i {
             result[i] += x[j] * y[i - j];
         }
-        carry[i] = result[i] / (1 << LIMB_BITS);
+        carry[i] = result[i] >> LIMB_BITS;
         result[i] %= 1 << LIMB_BITS;
     }
     (result, carry)

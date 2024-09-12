@@ -20,7 +20,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
     ) {
         let memory_bridge = MemoryBridge::new(self.mem_oc);
         let timestamp: AB::Var = io.from_state.timestamp;
-        let mut timestamp_delta = AB::Expr::zero();
+        let mut timestamp_delta: usize = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+        };
 
         for (ptr, value, mem_aux) in izip!(
             [
@@ -33,61 +37,54 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
         ) {
             memory_bridge
                 .read(
-                    MemoryAddress::new(io.d, ptr),
+                    MemoryAddress::new(io.ptr_as, ptr),
                     [value],
-                    timestamp + timestamp_delta.clone(),
+                    timestamp_pp(),
                     &mem_aux,
                 )
                 .eval(builder, aux.is_valid);
-            timestamp_delta += AB::Expr::one();
         }
 
         memory_bridge
             .read(
-                MemoryAddress::new(io.e, io.x.address),
-                io.x.data.try_into().unwrap_or_else(|_| unreachable!()),
-                timestamp + timestamp_delta.clone(),
+                MemoryAddress::new(io.address_as, io.x.address),
+                io.x.data,
+                timestamp_pp(),
                 &aux.read_x_aux_cols,
             )
             .eval(builder, aux.is_valid);
-        timestamp_delta += AB::Expr::one();
 
         memory_bridge
             .read(
-                MemoryAddress::new(io.e, io.y.address),
-                io.y.data.try_into().unwrap_or_else(|_| unreachable!()),
-                timestamp + timestamp_delta.clone(),
+                MemoryAddress::new(io.address_as, io.y.address),
+                io.y.data,
+                timestamp_pp(),
                 &aux.read_y_aux_cols,
             )
             .eval(builder, aux.is_valid);
-        timestamp_delta += AB::Expr::one();
 
         memory_bridge
             .write(
-                MemoryAddress::new(io.e, io.z.address),
-                io.z.data
-                    .clone()
-                    .try_into()
-                    .unwrap_or_else(|_| unreachable!()),
-                timestamp + timestamp_delta.clone(),
+                MemoryAddress::new(io.address_as, io.z.address),
+                io.z.data,
+                timestamp_pp(),
                 &aux.write_z_aux_cols,
             )
             .eval(builder, aux.is_valid);
-        timestamp_delta += AB::Expr::one();
 
         self.execution_bus.execute_increment_pc(
             builder,
             aux.is_valid,
             io.from_state.map(Into::into),
-            timestamp_delta,
+            AB::F::from_canonical_usize(timestamp_delta),
             InstructionCols::new(
                 AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
                 [
                     io.z.ptr_to_address,
                     io.x.ptr_to_address,
                     io.y.ptr_to_address,
-                    io.d,
-                    io.e,
+                    io.ptr_as,
+                    io.address_as,
                 ],
             ),
         );

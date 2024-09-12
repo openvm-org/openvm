@@ -222,7 +222,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
         if config.u256_multiplication_enabled {
             let range_tuple_bus =
-                RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, vec![32, 32 * (1 << 8)]);
+                RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, vec![(1 << 8), 32 * (1 << 8)]);
             let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
             let u256_mult_chip = Rc::new(RefCell::new(UintMultiplicationChip::new(
                 execution_bus,
