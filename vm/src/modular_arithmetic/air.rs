@@ -6,7 +6,7 @@ use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use super::{columns::ModularArithmeticCols, ModularArithmeticVmAir, ModularArithmeticAirVariant};
+use super::{columns::ModularArithmeticCols, ModularArithmeticAirVariant, ModularArithmeticVmAir};
 
 impl<F: Field> BaseAir<F> for ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     fn width(&self) -> usize {

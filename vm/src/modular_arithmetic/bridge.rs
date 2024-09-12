@@ -3,7 +3,7 @@ use p3_field::AbstractField;
 
 use super::{
     columns::{ModularArithmeticAuxCols, ModularArithmeticIoCols},
-    ModularArithmeticVmAir, ModularArithmeticAirVariant,
+    ModularArithmeticAirVariant, ModularArithmeticVmAir,
 };
 use crate::{
     arch::columns::InstructionCols,

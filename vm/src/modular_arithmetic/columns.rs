@@ -1,6 +1,6 @@
 use std::iter;
 
-use super::{ModularArithmeticVmAir, ModularArithmeticAirVariant, NUM_LIMBS};
+use super::{ModularArithmeticAirVariant, ModularArithmeticVmAir, NUM_LIMBS};
 use crate::{
     arch::columns::ExecutionState,
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},

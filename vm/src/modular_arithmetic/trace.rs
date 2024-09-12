@@ -5,7 +5,7 @@ use super::{
     columns::{
         MemoryData, ModularArithmeticAuxCols, ModularArithmeticCols, ModularArithmeticIoCols,
     },
-    ModularArithmeticChip, ModularArithmeticRecord, ModularArithmeticAirVariant, NUM_LIMBS,
+    ModularArithmeticAirVariant, ModularArithmeticChip, ModularArithmeticRecord, NUM_LIMBS,
 };
 use crate::{
     arch::{chips::MachineChip, columns::ExecutionState},
