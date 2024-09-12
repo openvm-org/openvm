@@ -24,7 +24,7 @@ pub trait LimbConfig {
 pub struct DefaultLimbConfig;
 impl LimbConfig for DefaultLimbConfig {
     fn limb_bits() -> usize {
-        10
+        8
     }
 }
 

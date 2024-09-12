@@ -11,7 +11,7 @@ use crate::arch::instructions::Opcode;
 
 impl<F: Field> BaseAir<F> for ModularArithmeticAir<PrimitiveArithmeticAir> {
     fn width(&self) -> usize {
-        todo!()
+        ModularArithmeticCols::<F>::width(self)
     }
 }
 

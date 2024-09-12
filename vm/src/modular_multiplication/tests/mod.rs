@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[test]
-fn test_modular_multiplication_runtime() {
+fn test_11modular_multiplication_runtime() {
     setup_tracing();
 
     let mut tester: MachineChipTestBuilder<BabyBear> = MachineChipTestBuilder::default();

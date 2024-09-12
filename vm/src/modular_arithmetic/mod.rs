@@ -224,26 +224,26 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T, Primit
 
         let Instruction {
             opcode,
-            op_a: x_address_ptr,
-            op_b: b_address_ptr,
-            op_c: c_address_ptr,
+            op_a: z_address_ptr,
+            op_b: x_address_ptr,
+            op_c: y_address_ptr,
             d,
             e,
             ..
         } = instruction.clone();
         assert!(self.air.air.is_expected_opcode(opcode));
 
-        let (y_address_ptr, z_address_ptr) = match opcode {
-            Opcode::SECP256K1_COORD_ADD
-            | Opcode::SECP256K1_SCALAR_ADD
-            | Opcode::SECP256K1_COORD_MUL
-            | Opcode::SECP256K1_SCALAR_MUL => (b_address_ptr, c_address_ptr),
-            Opcode::SECP256K1_COORD_SUB
-            | Opcode::SECP256K1_SCALAR_SUB
-            | Opcode::SECP256K1_COORD_DIV
-            | Opcode::SECP256K1_SCALAR_DIV => (c_address_ptr, b_address_ptr),
-            _ => panic!(),
-        };
+        // let (y_address_ptr, z_address_ptr) = match opcode {
+        //     Opcode::SECP256K1_COORD_ADD
+        //     | Opcode::SECP256K1_SCALAR_ADD
+        //     | Opcode::SECP256K1_COORD_MUL
+        //     | Opcode::SECP256K1_SCALAR_MUL => (b_address_ptr, c_address_ptr),
+        //     Opcode::SECP256K1_COORD_SUB
+        //     | Opcode::SECP256K1_SCALAR_SUB
+        //     | Opcode::SECP256K1_COORD_DIV
+        //     | Opcode::SECP256K1_SCALAR_DIV => (c_address_ptr, b_address_ptr),
+        //     _ => panic!(),
+        // };
 
         let x_address_read = memory_chip.read_cell(d, x_address_ptr);
         let y_address_read = memory_chip.read_cell(d, y_address_ptr);
@@ -256,8 +256,6 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T, Primit
         let y = y_read.data.map(|x| x.as_canonical_u32());
         let mut x_biguint = limbs_to_biguint(&x);
         let y_biguint = limbs_to_biguint(&y);
-        println!("x_biguint {}", x_biguint);
-        println!("y_biguint {}", y_biguint);
 
         let z_biguint = match opcode {
             Opcode::SECP256K1_COORD_ADD | Opcode::SECP256K1_SCALAR_ADD => {
@@ -282,7 +280,6 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T, Primit
                 unreachable!()
             }
         };
-        println!("z_biguint {}", z_biguint);
         let z_limbs = biguint_to_limbs(z_biguint);
 
         let z_write = memory_chip.write::<NUM_LIMBS>(
@@ -311,7 +308,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T, Primit
 }
 
 // little endian.
-fn limbs_to_biguint(x: &[u32]) -> BigUint {
+pub fn limbs_to_biguint(x: &[u32]) -> BigUint {
     let mut result = BigUint::zero();
     let base = BigUint::from_u32(1 << LIMB_SIZE).unwrap();
     for limb in x.iter().rev() {
@@ -321,7 +318,7 @@ fn limbs_to_biguint(x: &[u32]) -> BigUint {
 }
 
 // little endian.
-fn biguint_to_limbs(mut x: BigUint) -> [u32; NUM_LIMBS] {
+pub fn biguint_to_limbs(mut x: BigUint) -> [u32; NUM_LIMBS] {
     let mut result = [0; NUM_LIMBS];
     let base = BigUint::from_u32(1 << LIMB_SIZE).unwrap();
     for r in result.iter_mut() {

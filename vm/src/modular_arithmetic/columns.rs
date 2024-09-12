@@ -31,7 +31,6 @@ impl<T: Clone> ModularArithmeticCols<T> {
     }
 }
 
-#[derive(Default)]
 pub struct ModularArithmeticIoCols<T: Clone> {
     pub from_state: ExecutionState<T>,
     pub x: MemoryData<T>,
@@ -46,12 +45,12 @@ impl<T: Clone> ModularArithmeticIoCols<T> {
     pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
         Self {
             from_state: ExecutionState::from_iter(iter.by_ref()),
-            x: MemoryData::from_iterator(iter.by_ref()),
-            y: MemoryData::from_iterator(iter.by_ref()),
-            z: MemoryData::from_iterator(iter.by_ref()),
-            x_address: MemoryData::from_iterator(iter.by_ref()),
-            y_address: MemoryData::from_iterator(iter.by_ref()),
-            z_address: MemoryData::from_iterator(iter.by_ref()),
+            x: MemoryData::from_iterator(iter.by_ref(), NUM_LIMBS),
+            y: MemoryData::from_iterator(iter.by_ref(), NUM_LIMBS),
+            z: MemoryData::from_iterator(iter.by_ref(), NUM_LIMBS),
+            x_address: MemoryData::from_iterator(iter.by_ref(), 1),
+            y_address: MemoryData::from_iterator(iter.by_ref(), 1),
+            z_address: MemoryData::from_iterator(iter.by_ref(), 1),
         }
     }
 
@@ -69,6 +68,8 @@ impl<T: Clone> ModularArithmeticIoCols<T> {
     }
 
     pub fn width() -> usize {
+        // from_state = 2, memory_data = 2 + len,
+        // 2 + 3 * (len + 2) + 3 * 3
         NUM_LIMBS * 3 + 17
     }
 }
@@ -98,6 +99,7 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
             + MemoryReadAuxCols::<T, 1>::width()
             + air.carry_limbs
             + air.q_limbs
+            + 1
     }
 
     pub fn from_iterator(
@@ -112,17 +114,18 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
         let read_y_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let read_y_aux_cols = MemoryReadAuxCols::<T, NUM_LIMBS>::from_slice(&read_y_slice);
 
+        let width = MemoryWriteAuxCols::<T, NUM_LIMBS>::width();
         let write_z_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let write_z_aux_cols = MemoryWriteAuxCols::<T, NUM_LIMBS>::from_slice(&write_z_slice);
 
-        let width2 = MemoryReadAuxCols::<T, 1>::width();
-        let x_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();
+        let width = MemoryReadAuxCols::<T, 1>::width();
+        let x_address_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let x_address_aux_cols = MemoryReadAuxCols::<T, 1>::from_slice(&x_address_slice);
 
-        let y_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();
+        let y_address_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let y_address_aux_cols = MemoryReadAuxCols::<T, 1>::from_slice(&y_address_slice);
 
-        let z_address_slice = iter.by_ref().take(width2).collect::<Vec<_>>();
+        let z_address_slice = iter.by_ref().take(width).collect::<Vec<_>>();
         let z_address_aux_cols = MemoryReadAuxCols::<T, 1>::from_slice(&z_address_slice);
 
         let carries = iter.by_ref().take(air.carry_limbs).collect::<Vec<_>>();
@@ -157,6 +160,7 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct MemoryData<T: Clone> {
     pub data: Vec<T>,
     pub address_space: T,
@@ -164,9 +168,9 @@ pub struct MemoryData<T: Clone> {
 }
 
 impl<T: Clone> MemoryData<T> {
-    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
+    pub fn from_iterator(mut iter: impl Iterator<Item = T>, data_len: usize) -> Self {
         Self {
-            data: iter.by_ref().take(NUM_LIMBS).collect(),
+            data: iter.by_ref().take(data_len).collect(),
             address_space: iter.next().unwrap(),
             address: iter.next().unwrap(),
         }

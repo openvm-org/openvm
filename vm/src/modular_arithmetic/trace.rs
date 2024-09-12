@@ -5,10 +5,10 @@ use super::{
     columns::{
         MemoryData, ModularArithmeticAuxCols, ModularArithmeticCols, ModularArithmeticIoCols,
     },
-    ModularArithmeticChip, ModularArithmeticRecord, PrimitiveArithmeticAir,
+    ModularArithmeticChip, ModularArithmeticRecord, PrimitiveArithmeticAir, NUM_LIMBS,
 };
 use crate::{
-    arch::chips::MachineChip,
+    arch::{chips::MachineChip, columns::ExecutionState},
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
@@ -116,8 +116,26 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, PrimitiveArith
         let height = rows.len();
         let padded_height = height.next_power_of_two();
 
+        let dummy_mem_data = MemoryData {
+            data: vec![F::zero(); NUM_LIMBS],
+            address_space: F::zero(),
+            address: F::zero(),
+        };
+        let dummy_mem_addr = MemoryData {
+            data: vec![F::zero()],
+            address_space: F::zero(),
+            address: F::zero(),
+        };
         let blank_row = ModularArithmeticCols {
-            io: Default::default(),
+            io: ModularArithmeticIoCols {
+                from_state: ExecutionState::default(),
+                x: dummy_mem_data.clone(),
+                y: dummy_mem_data.clone(),
+                z: dummy_mem_data.clone(),
+                x_address: dummy_mem_addr.clone(),
+                y_address: dummy_mem_addr.clone(),
+                z_address: dummy_mem_addr.clone(),
+            },
             aux: ModularArithmeticAuxCols {
                 is_valid: Default::default(),
                 read_x_aux_cols: MemoryReadAuxCols::disabled(),
