@@ -10,7 +10,7 @@ use super::{
     columns::{
         MemoryData, UintMultiplicationAuxCols, UintMultiplicationCols, UintMultiplicationIoCols,
     },
-    UintMultiplicationChip,
+    UintMultiplicationChip, UintMultiplicationRecord,
 };
 use crate::arch::chips::MachineChip;
 
@@ -24,13 +24,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
         let padded_height = height.next_power_of_two();
         let mut rows = vec![F::zero(); width * padded_height];
 
-        for (i, operation) in self.data.iter().enumerate() {
-            let start_idx = i * width;
-            let end_idx = start_idx + width;
-            let row: &mut UintMultiplicationCols<F, NUM_LIMBS, LIMB_BITS> =
-                rows[start_idx..end_idx].borrow_mut();
-
-            let super::UintMultiplicationRecord::<F, NUM_LIMBS, LIMB_BITS> {
+        for (row, operation) in rows.chunks_mut(width).zip(self.data) {
+            let UintMultiplicationRecord::<F, NUM_LIMBS, LIMB_BITS> {
                 from_state,
                 instruction,
                 x_ptr_read,
@@ -41,6 +36,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 z_write,
                 carry,
             } = operation;
+
+            let row: &mut UintMultiplicationCols<F, NUM_LIMBS, LIMB_BITS> = row.borrow_mut();
 
             row.io = UintMultiplicationIoCols {
                 from_state: from_state.map(F::from_canonical_usize),
@@ -73,14 +70,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 write_z_aux_cols: memory_chip.make_write_aux_cols(z_write.clone()),
             };
         }
-
-        for i in height..padded_height {
-            let row: &mut UintMultiplicationCols<F, NUM_LIMBS, LIMB_BITS> =
-                rows[i * width..(i + 1) * width].borrow_mut();
-            row.io = UintMultiplicationIoCols::<F, NUM_LIMBS, LIMB_BITS>::default();
-            row.aux = UintMultiplicationAuxCols::<F, NUM_LIMBS, LIMB_BITS>::default();
-        }
-        RowMajorMatrix::new(rows, self.trace_width())
+        RowMajorMatrix::new(rows, width)
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>

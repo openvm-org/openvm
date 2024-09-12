@@ -1,7 +1,6 @@
-use std::{array, mem::size_of};
+use std::mem::size_of;
 
 use afs_derive::AlignedBorrow;
-use p3_field::PrimeField32;
 
 use crate::{
     arch::columns::ExecutionState,
@@ -24,19 +23,8 @@ impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Default
-    for UintMultiplicationCols<F, NUM_LIMBS, LIMB_BITS>
-{
-    fn default() -> Self {
-        Self {
-            io: Default::default(),
-            aux: Default::default(),
-        }
-    }
-}
-
 #[repr(C)]
-#[derive(Default, AlignedBorrow)]
+#[derive(AlignedBorrow)]
 pub struct UintMultiplicationIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<T>,
     pub x: MemoryData<T, NUM_LIMBS, LIMB_BITS>,
@@ -73,21 +61,6 @@ impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Default
-    for UintMultiplicationAuxCols<F, NUM_LIMBS, LIMB_BITS>
-{
-    fn default() -> Self {
-        Self {
-            is_valid: Default::default(),
-            carry: array::from_fn(|_| Default::default()),
-            read_ptr_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled()),
-            read_x_aux_cols: MemoryReadAuxCols::disabled(),
-            read_y_aux_cols: MemoryReadAuxCols::disabled(),
-            write_z_aux_cols: MemoryWriteAuxCols::disabled(),
-        }
-    }
-}
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct MemoryData<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -99,17 +72,5 @@ pub struct MemoryData<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> MemoryData<T, NUM_LIMBS, LIMB_BITS> {
     pub fn width() -> usize {
         size_of::<MemoryData<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
-}
-
-impl<T: Default, const NUM_LIMBS: usize, const LIMB_BITS: usize> Default
-    for MemoryData<T, NUM_LIMBS, LIMB_BITS>
-{
-    fn default() -> Self {
-        Self {
-            data: array::from_fn(|_| Default::default()),
-            address: Default::default(),
-            ptr_to_address: Default::default(),
-        }
     }
 }
