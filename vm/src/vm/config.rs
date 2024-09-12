@@ -1,7 +1,7 @@
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 
-use crate::{cpu::CpuOptions, modular_multiplication::REPR_BITS};
+use crate::cpu::CpuOptions;
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
 
@@ -54,7 +54,7 @@ impl Default for VmConfig {
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,
-            bigint_limb_size: REPR_BITS,
+            bigint_limb_size: 8,
         }
     }
 }
