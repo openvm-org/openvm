@@ -94,13 +94,16 @@ for an [Aggregation VM](../vm/stark.md) with continuations enabled as follows:
 Given a verifying key `VKEY`, we lower it to the function in the Aggregation VM given by
 
 ```rust
-fn verify_page_op(VKEY, input_page_commits, output_page_commits, input_values) {
-    let proof = hint_proof(VKEY, input_page_commits, output_page_commits);
-    assert!(verify_stark(VKEY, proof, query_input_values));
+fn verify_page_op(VKEY, input_page_commits, input_values) -> Vec<PageCommitments> {
+    let proof = hint_proof(VKEY, input_page_commits, input_values);
+    assert!(verify_stark(VKEY, proof, input_values));
+    let page_commits = get_page_commits(proof);
+    let output_page_commits = page_commits[input_page_commits.len()..];
+    output_page_commits
 }
 ```
 
-We make the important assumption that the runtime of the Aggregation VM has oracle access to all necessary page operation proofs and is able to hint them into program memory.
+We make the important assumption that the runtime of the Aggregation VM has oracle access to all necessary page operation proofs and is able to hint them into program memory. Note here the `input_page_commits, input_values` are enough to identify the proof, while the `output_page_commits` may be obtained from the proof afterwards.
 
 We mention there are two different ways this lowering to the Aggregation VM can be done:
 
@@ -125,14 +128,58 @@ are obtained in a maximally parallel fashion below.
 
 #### Example: Filter
 
-The table operation for filter with a fixed predicate has query input value that defines the
-predicate condition, and the table operation requires two execution opcodes: `Filter` and `Merge`.
+Suppose we have a cryptographic page height of 2 and we start with a 1-column table with logical pages `[[0,5],[2,6],[7]]`. Let `PAGE_FILTER` be the operation of filtering on a page for `a < $x`. Let `PAGE_COMPACT_UNIT` be the operation that takes 2 pages `(carry_over, to_compact)` as input, then output `(new_carry_over, full_page)`. This operation appends `to_compact` to `carry_over` and if the height is `>= 2`, splits the first 2 rows into `full_page`.
 
-The table operation first loops through the input page directory and calls `Filter` opcode
-on each page commitment in the directory. This outputs a page directory of the same length where
-the output pages can be under-allocated. Then the table operation calls the `Merge` opcode
-multiple times to reduce the page directory to a possibly smaller length where output pages
-are near full allocation.
+The table operation `FILTER` has execution defined by:
+
+```rust
+fn table_filter(input_table: CryptographicTable, x: Type) -> CryptographicTable {
+    let mut filtered_pages = input_table.pages.par_iter().map(|page|
+        PAGE_FILTER.execute(page, x)
+    ).collect();
+    let mut carry_over = filtered_pages[0];
+    for page in filtered_pages.iter().skip(1) {
+        let (new_carry_over, full_page) = PAGE_COMPACT_UNIT.execute(carry_over, page);
+        carry_over = new_carry_over;
+        output_pages.push(full_page);
+    }
+    if !carry_over.is_empty() {
+        output_pages.push(carry_over);
+    }
+    CryptographicTable { pages: output_pages }
+}
+```
+
+where all `PAGE_FILTER.execute` can be parallelized.
+What this does for our specific example when `x = 4` is:
+
+- `PAGE_FILTER` each input page to get `[0],[2],[]`
+- `PAGE_COMPACT_UNIT([0],[2]) = ([], [0,2])`
+- `PAGE_COMPACT_UNIT([],[]) = ([], [])`
+
+Final output table is `[[0,2]]`.
+
+The `FILTER` table operation verification will look like the following IR code:
+
+```rust
+fn verify_table_filter(input_page_commits: Vec<PageCommits>, x: Type) -> Vec<PageCommits> {
+    let mut filtered_page_commits = Vec::with_capacity(input_page_commits.len());
+    for page_commit in input_page_commits {
+        let filtered_page_commit = verify_page_op(PAGE_FILTER_VKEY, page_commit, x.flatten()); // x.flatten() flattens Type into vector of field elements
+        filtered_page_commits.push(filtered_page_commit);
+    }
+    let mut carry_over_commit = filtered_page_commits[0];
+    let mut output_page_commits = Vec::new();
+    for filtered_page_commit in filtered_page_commits {
+        let (new_carry_over_commit, full_page_commit) = verify_page_op(PAGE_COMPACT_UNIT_VKEY, carry_over_commit, filtered_page_commit);
+        output_page_commits.push(full_page_commit);
+    }
+    if carry_over_commit != EMPTY_PAGE_COMMIT {
+        output_page_commits.push(carry_over_commit);
+    }
+    output_page_commits
+}
+```
 
 ### Database VM Proving
 
@@ -175,4 +222,15 @@ The overall proving flow can be viewed as having two main parts:
 1. Proving of all page operation verification STARK proofs needed
 2. Proving of the query verification program in the Aggregation VM using continuations.
 
-TODO: discuss hinting of proofs in continuation segments
+#### Hinting
+
+The query verification program is proven in the Aggregation VM using continuations.
+This means that the program execution is broken up into segments, and the consistency
+of memory between segments is handled by the continuations framework.
+We emphasized above that in order for this Aggregation VM to support the Database IR,
+it needs to be able to support the operation `hint_proof(VKEY, input_pages, input_values)`. We will implement this in conjunction with continuations:
+
+- There will be a continuations scheduler who serially executes the runtime of the program to determine where to segment the runtime, and to snapshot the memory and program states at the segment boundaries. This scheduler prepares the necessary input data to generate a VM circuit proof for each segment.
+  - The scheduler can either run the entire runtime once offline, and then define the segments and initiate each segment proof, **or** it can progressively initialize proofs as each segment becomes ready.
+- We **require** that the continuations scheduler has database access to all page operation proofs necessary for the full query verification. During the runtime of the program, the scheduler can directly fetch the required proofs to hint from the database. The scheduler includes these proofs as part of the overall input data to that segment. The prover of the segment circuit will only require as input the proofs needed in that segment and not require database access to all page operation proofs.
+  - There are different mechanisms to achieve this, which we will discuss elsewhere.
