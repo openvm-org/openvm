@@ -86,6 +86,7 @@ pub struct ModularArithmeticAuxCols<T: Clone> {
 
     pub carries: Vec<T>,
     pub q: Vec<T>,
+    pub opcode: T,
 }
 
 impl<T: Clone> ModularArithmeticAuxCols<T> {
@@ -99,7 +100,7 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
             + MemoryReadAuxCols::<T, 1>::width()
             + air.carry_limbs
             + air.q_limbs
-            + 1
+            + 2
     }
 
     pub fn from_iterator(
@@ -130,7 +131,7 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
 
         let carries = iter.by_ref().take(air.carry_limbs).collect::<Vec<_>>();
         let q = iter.by_ref().take(air.q_limbs).collect::<Vec<_>>();
-
+        let opcode = iter.next().unwrap();
         Self {
             is_valid,
             read_x_aux_cols,
@@ -141,6 +142,7 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
             z_address_aux_cols,
             carries,
             q,
+            opcode,
         }
     }
 
@@ -156,7 +158,14 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
         ]
         .concat();
 
-        [valid, mem, self.carries.clone(), self.q.clone()].concat()
+        [
+            valid,
+            mem,
+            self.carries.clone(),
+            self.q.clone(),
+            vec![self.opcode.clone()],
+        ]
+        .concat()
     }
 }
 

@@ -3,11 +3,10 @@ use std::borrow::Borrow;
 use afs_primitives::bigint::modular_arithmetic::ModularArithmeticCols as PrimitiveArithmeticCols;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field};
+use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::{columns::ModularArithmeticCols, ModularArithmeticAir, PrimitiveArithmeticAir};
-use crate::arch::instructions::Opcode;
 
 impl<F: Field> BaseAir<F> for ModularArithmeticAir<PrimitiveArithmeticAir> {
     fn width(&self) -> usize {
@@ -34,7 +33,6 @@ impl<AB: InteractionBuilder> Air<AB> for ModularArithmeticAir<PrimitiveArithmeti
         };
         self.air.eval(builder, cols, ());
 
-        let expected_opcode = AB::Expr::from_canonical_u8(Opcode::SECP256K1_COORD_ADD as u8);
-        self.eval_interactions(builder, io, aux, expected_opcode);
+        self.eval_interactions(builder, io, aux);
     }
 }

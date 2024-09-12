@@ -16,7 +16,6 @@ impl ModularArithmeticAir<PrimitiveArithmeticAir> {
         builder: &mut AB,
         io: ModularArithmeticIoCols<AB::Var>,
         aux: ModularArithmeticAuxCols<AB::Var>,
-        expected_opcode: AB::Expr,
     ) {
         let mut timestamp_delta = AB::Expr::zero();
         let memory_bridge = MemoryBridge::new(self.mem_oc);
@@ -97,11 +96,11 @@ impl ModularArithmeticAir<PrimitiveArithmeticAir> {
             io.from_state.map(Into::into),
             timestamp_delta,
             InstructionCols::new(
-                expected_opcode,
+                aux.opcode,
                 [
-                    io.z.address,
-                    io.x.address,
-                    io.y.address,
+                    io.z_address.address,
+                    io.x_address.address,
+                    io.y_address.address,
                     io.x_address.address_space,
                     io.x.address_space,
                 ],
