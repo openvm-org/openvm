@@ -33,8 +33,7 @@ use crate::{
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
     modular_arithmetic::{
-        ModularArithmeticChip as NewModularArithmeticChip, ModularArithmeticOp,
-        SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+        ModularArithmeticChip, ModularArithmeticOp, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
     },
     program::{Program, ProgramChip},
     uint_arithmetic::UintArithmeticChip,
@@ -159,49 +158,49 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         }
         if config.modular_multiplication_enabled {
-            let add_coord = NewModularArithmeticChip::new(
+            let add_coord = ModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
                 ModularArithmeticOp::Add,
             );
-            let add_scalar = NewModularArithmeticChip::new(
+            let add_scalar = ModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
                 ModularArithmeticOp::Add,
             );
-            let sub_coord = NewModularArithmeticChip::new(
+            let sub_coord = ModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
                 ModularArithmeticOp::Sub,
             );
-            let sub_scalar = NewModularArithmeticChip::new(
+            let sub_scalar = ModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
                 ModularArithmeticOp::Sub,
             );
-            let mul_coord = NewModularArithmeticChip::new(
+            let mul_coord = ModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
                 ModularArithmeticOp::Mul,
             );
-            let mul_scalar = NewModularArithmeticChip::new(
+            let mul_scalar = ModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
                 ModularArithmeticOp::Mul,
             );
-            let div_coord = NewModularArithmeticChip::new(
+            let div_coord = ModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
                 ModularArithmeticOp::Div,
             );
-            let div_scalar = NewModularArithmeticChip::new(
+            let div_scalar = ModularArithmeticChip::new(
                 execution_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),

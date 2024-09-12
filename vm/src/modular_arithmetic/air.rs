@@ -6,15 +6,15 @@ use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use super::{columns::ModularArithmeticCols, ModularArithmeticAir, PrimitiveArithmeticAir};
+use super::{columns::ModularArithmeticCols, ModularArithmeticVmAir, ModularArithmeticAirVariant};
 
-impl<F: Field> BaseAir<F> for ModularArithmeticAir<PrimitiveArithmeticAir> {
+impl<F: Field> BaseAir<F> for ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     fn width(&self) -> usize {
         ModularArithmeticCols::<F>::width(self)
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for ModularArithmeticAir<PrimitiveArithmeticAir> {
+impl<AB: InteractionBuilder> Air<AB> for ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 

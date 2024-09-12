@@ -5,14 +5,14 @@ use super::{
     columns::{
         MemoryData, ModularArithmeticAuxCols, ModularArithmeticCols, ModularArithmeticIoCols,
     },
-    ModularArithmeticChip, ModularArithmeticRecord, PrimitiveArithmeticAir, NUM_LIMBS,
+    ModularArithmeticChip, ModularArithmeticRecord, ModularArithmeticAirVariant, NUM_LIMBS,
 };
 use crate::{
     arch::{chips::MachineChip, columns::ExecutionState},
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
-impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, PrimitiveArithmeticAir> {
+impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, ModularArithmeticAirVariant> {
     fn air<SC: p3_uni_stark::StarkGenericConfig>(
         &self,
     ) -> Box<dyn afs_stark_backend::rap::AnyRap<SC>>

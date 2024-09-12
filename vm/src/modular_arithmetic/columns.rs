@@ -1,6 +1,6 @@
 use std::iter;
 
-use super::{ModularArithmeticAir, PrimitiveArithmeticAir, NUM_LIMBS};
+use super::{ModularArithmeticVmAir, ModularArithmeticAirVariant, NUM_LIMBS};
 use crate::{
     arch::columns::ExecutionState,
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -12,13 +12,13 @@ pub struct ModularArithmeticCols<T: Clone> {
 }
 
 impl<T: Clone> ModularArithmeticCols<T> {
-    pub fn width(air: &ModularArithmeticAir<PrimitiveArithmeticAir>) -> usize {
+    pub fn width(air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>) -> usize {
         ModularArithmeticIoCols::<T>::width() + ModularArithmeticAuxCols::<T>::width(air)
     }
 
     pub fn from_iterator(
         mut iter: impl Iterator<Item = T>,
-        air: &ModularArithmeticAir<PrimitiveArithmeticAir>,
+        air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>,
     ) -> Self {
         Self {
             io: ModularArithmeticIoCols::from_iterator(iter.by_ref()),
@@ -90,7 +90,7 @@ pub struct ModularArithmeticAuxCols<T: Clone> {
 }
 
 impl<T: Clone> ModularArithmeticAuxCols<T> {
-    pub fn width(air: &ModularArithmeticAir<PrimitiveArithmeticAir>) -> usize {
+    pub fn width(air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>) -> usize {
         // FIXME: the length of carries and q depend on operation
         MemoryReadAuxCols::<T, NUM_LIMBS>::width()
             + MemoryReadAuxCols::<T, NUM_LIMBS>::width()
@@ -105,7 +105,7 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
 
     pub fn from_iterator(
         mut iter: impl Iterator<Item = T>,
-        air: &ModularArithmeticAir<PrimitiveArithmeticAir>,
+        air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>,
     ) -> Self {
         let is_valid = iter.next().unwrap();
         let width = MemoryReadAuxCols::<T, NUM_LIMBS>::width();

@@ -73,7 +73,7 @@ pub struct ModularArithmeticRecord<T: PrimeField32> {
 }
 
 #[derive(Clone, Debug)]
-pub enum PrimitiveArithmeticAir {
+pub enum ModularArithmeticAirVariant {
     Add(ModularAdditionAir),
     Sub(ModularSubtractionAir),
     Mul(ModularMultiplicationAir),
@@ -81,7 +81,7 @@ pub enum PrimitiveArithmeticAir {
 }
 
 type TraceInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
-impl PrimitiveArithmeticAir {
+impl ModularArithmeticAirVariant {
     pub fn generate_trace_row<F: PrimeField64>(
         &self,
         input: TraceInput,
@@ -135,7 +135,7 @@ pub enum ModularArithmeticOp {
 }
 
 #[derive(Clone, Debug)]
-pub struct ModularArithmeticAir<A> {
+pub struct ModularArithmeticVmAir<A> {
     pub air: A,
     pub execution_bus: ExecutionBus,
     pub mem_oc: MemoryOfflineChecker,
@@ -146,7 +146,7 @@ pub struct ModularArithmeticAir<A> {
 
 #[derive(Clone, Debug)]
 pub struct ModularArithmeticChip<T: PrimeField32, A> {
-    pub air: ModularArithmeticAir<A>,
+    pub air: ModularArithmeticVmAir<A>,
     data: Vec<ModularArithmeticRecord<T>>,
 
     memory_chip: MemoryChipRef<T>,
@@ -155,7 +155,7 @@ pub struct ModularArithmeticChip<T: PrimeField32, A> {
     modulus: BigUint,
 }
 
-impl<T: PrimeField32> ModularArithmeticChip<T, PrimitiveArithmeticAir> {
+impl<T: PrimeField32> ModularArithmeticChip<T, ModularArithmeticAirVariant> {
     pub fn new(
         execution_bus: ExecutionBus,
         memory_chip: MemoryChipRef<T>,
@@ -180,22 +180,24 @@ impl<T: PrimeField32> ModularArithmeticChip<T, PrimitiveArithmeticAir> {
             range_checker_chip.bus().range_max_bits,
         );
         let subair = match op {
-            ModularArithmeticOp::Add => PrimitiveArithmeticAir::Add(ModularAdditionAir {
+            ModularArithmeticOp::Add => ModularArithmeticAirVariant::Add(ModularAdditionAir {
                 arithmetic: primitive_arithmetic_air,
             }),
-            ModularArithmeticOp::Sub => PrimitiveArithmeticAir::Sub(ModularSubtractionAir {
+            ModularArithmeticOp::Sub => ModularArithmeticAirVariant::Sub(ModularSubtractionAir {
                 arithmetic: primitive_arithmetic_air,
             }),
-            ModularArithmeticOp::Mul => PrimitiveArithmeticAir::Mul(ModularMultiplicationAir {
-                arithmetic: primitive_arithmetic_air,
-            }),
-            ModularArithmeticOp::Div => PrimitiveArithmeticAir::Div(ModularDivisionAir {
+            ModularArithmeticOp::Mul => {
+                ModularArithmeticAirVariant::Mul(ModularMultiplicationAir {
+                    arithmetic: primitive_arithmetic_air,
+                })
+            }
+            ModularArithmeticOp::Div => ModularArithmeticAirVariant::Div(ModularDivisionAir {
                 arithmetic: primitive_arithmetic_air,
             }),
         };
 
         Self {
-            air: ModularArithmeticAir {
+            air: ModularArithmeticVmAir {
                 air: subair,
                 execution_bus,
                 mem_oc,
@@ -210,7 +212,9 @@ impl<T: PrimeField32> ModularArithmeticChip<T, PrimitiveArithmeticAir> {
     }
 }
 
-impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T, PrimitiveArithmeticAir> {
+impl<T: PrimeField32> InstructionExecutor<T>
+    for ModularArithmeticChip<T, ModularArithmeticAirVariant>
+{
     fn execute(
         &mut self,
         instruction: Instruction<T>,
@@ -232,18 +236,6 @@ impl<T: PrimeField32> InstructionExecutor<T> for ModularArithmeticChip<T, Primit
             ..
         } = instruction.clone();
         assert!(self.air.air.is_expected_opcode(opcode));
-
-        // let (y_address_ptr, z_address_ptr) = match opcode {
-        //     Opcode::SECP256K1_COORD_ADD
-        //     | Opcode::SECP256K1_SCALAR_ADD
-        //     | Opcode::SECP256K1_COORD_MUL
-        //     | Opcode::SECP256K1_SCALAR_MUL => (b_address_ptr, c_address_ptr),
-        //     Opcode::SECP256K1_COORD_SUB
-        //     | Opcode::SECP256K1_SCALAR_SUB
-        //     | Opcode::SECP256K1_COORD_DIV
-        //     | Opcode::SECP256K1_SCALAR_DIV => (c_address_ptr, b_address_ptr),
-        //     _ => panic!(),
-        // };
 
         let x_address_read = memory_chip.read_cell(d, x_address_ptr);
         let y_address_read = memory_chip.read_cell(d, y_address_ptr);

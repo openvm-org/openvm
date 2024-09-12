@@ -3,14 +3,14 @@ use p3_field::AbstractField;
 
 use super::{
     columns::{ModularArithmeticAuxCols, ModularArithmeticIoCols},
-    ModularArithmeticAir, PrimitiveArithmeticAir,
+    ModularArithmeticVmAir, ModularArithmeticAirVariant,
 };
 use crate::{
     arch::columns::InstructionCols,
     memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
-impl ModularArithmeticAir<PrimitiveArithmeticAir> {
+impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
