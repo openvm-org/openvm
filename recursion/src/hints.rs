@@ -21,7 +21,7 @@ use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFr
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use stark_vm::modular_multiplication::{biguint_to_elems, NUM_ELEMS, REPR_BITS};
+use stark_vm::modular_arithmetic::{big_uint_to_num_limbs, LIMB_SIZE, NUM_LIMBS};
 
 use crate::types::{
     AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, OpenedValuesVariable,
@@ -419,7 +419,7 @@ impl Hintable<InnerConfig> for BigUint {
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let ret = builder.uninit_biguint();
-        for i in 0..NUM_ELEMS {
+        for i in 0..NUM_LIMBS {
             // FIXME: range check for each element.
             let v = builder.hint_var();
             builder.set_value(&ret, i, v);
@@ -428,7 +428,10 @@ impl Hintable<InnerConfig> for BigUint {
     }
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        vec![biguint_to_elems(self.clone(), REPR_BITS, NUM_ELEMS)]
+        vec![big_uint_to_num_limbs(self.clone(), LIMB_SIZE, NUM_LIMBS)
+            .iter()
+            .map(|x| <InnerConfig as Config>::N::from_canonical_usize(*x))
+            .collect()]
     }
 }
 

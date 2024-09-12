@@ -148,10 +148,10 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
 }
 
 // number of limbs of X, assuming it's 128 bits and limb bits is 10.
-const N: usize = 13;
+const N: usize = 16;
 
 fn test_x_square_minus_y(x: BigUint, y: BigUint) {
-    let limb_bits = 10;
+    let limb_bits = 8;
     let num_limbs = N;
     // The equation: x^2 - y
     // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N + 2^10

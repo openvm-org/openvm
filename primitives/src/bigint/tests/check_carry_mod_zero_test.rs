@@ -168,10 +168,10 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
 }
 
 // number of limbs of X.
-const N: usize = 13;
+const N: usize = 16;
 
 fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
-    let limb_bits = 10;
+    let limb_bits = 8;
     let num_limbs = N;
     // The equation: x^2 + y = 0 (mod p)
     // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N + 2^10
@@ -202,6 +202,8 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     let row = test_air
         .generate_trace_row((x, y, range_checker.clone()))
         .flatten();
+    println!("row: {}", row.len());
+    println!("width: {}", BaseAir::<BabyBear>::width(&test_air));
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&test_air));
     let range_trace = range_checker.generate_trace();
 
