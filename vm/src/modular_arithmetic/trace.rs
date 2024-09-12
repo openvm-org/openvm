@@ -108,6 +108,7 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, PrimitiveArith
                     z_address_aux_cols: memory_chip.make_read_aux_cols(z_address_read.clone()),
                     carries: primitive_row.carries,
                     q: primitive_row.q,
+                    opcode: F::from_canonical_u8(record.instruction.opcode as u8),
                 };
                 ModularArithmeticCols { io, aux }.flatten()
             })
@@ -146,6 +147,7 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, PrimitiveArith
                 z_address_aux_cols: MemoryReadAuxCols::disabled(),
                 carries: vec![F::zero(); self.air.carry_limbs],
                 q: vec![F::zero(); self.air.q_limbs],
+                opcode: F::zero(),
             },
         }
         .flatten();

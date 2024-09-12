@@ -25,6 +25,7 @@ mod tests;
 // Op(x, y) = r (mod p), where Op is one of +, -, *, /
 #[derive(Clone)]
 pub struct ModularArithmeticCols<T> {
+    pub is_valid: T,
     pub x: Vec<T>,
     pub y: Vec<T>,
     pub q: Vec<T>,
@@ -43,13 +44,14 @@ impl<T: Clone> ModularArithmeticCols<T> {
         let r = slc[2 * num_limbs..3 * num_limbs].to_vec();
         let carries = slc[3 * num_limbs..3 * num_limbs + carry_limbs].to_vec();
         let q = slc[3 * num_limbs + carry_limbs..3 * num_limbs + carry_limbs + q_limbs].to_vec();
-
+        let is_valid = slc[3 * num_limbs + carry_limbs + q_limbs].clone();
         Self {
             x,
             y,
             q,
             r,
             carries,
+            is_valid,
         }
     }
 
@@ -61,7 +63,7 @@ impl<T: Clone> ModularArithmeticCols<T> {
         flattened.extend_from_slice(&self.r);
         flattened.extend_from_slice(&self.carries);
         flattened.extend_from_slice(&self.q);
-
+        flattened.push(self.is_valid.clone());
         flattened
     }
 }
@@ -135,6 +137,7 @@ impl ModularArithmeticAir {
             q,
             r,
             carries,
+            is_valid,
         } = cols;
 
         let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(x, self.limb_bits);
@@ -149,6 +152,7 @@ impl ModularArithmeticAir {
                 carries,
                 quotient: q,
             },
+            is_valid,
         );
     }
 
@@ -223,6 +227,7 @@ impl ModularArithmeticAir {
             q: q_f,
             r: r_f,
             carries: carries_f,
+            is_valid: F::one(),
         }
     }
 }

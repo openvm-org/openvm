@@ -47,9 +47,11 @@ impl CheckCarryToZeroSubAir {
         builder: &mut AB,
         expr: OverflowInt<AB::Expr>,
         cols: CheckCarryToZeroCols<AB::Var>,
+        is_valid: AB::Var,
     ) {
         assert_eq!(expr.limbs.len(), cols.carries.len());
         assert!(expr.max_overflow_bits <= self.field_element_bits);
+        builder.assert_bool(is_valid);
         let (carry_min_value_abs, carry_abs_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         // 1. Constrain the limbs size of carries.
@@ -60,6 +62,7 @@ impl CheckCarryToZeroSubAir {
                 self.decomp,
                 carry_abs_bits,
                 carry + AB::F::from_canonical_usize(carry_min_value_abs),
+                is_valid,
             );
         }
 

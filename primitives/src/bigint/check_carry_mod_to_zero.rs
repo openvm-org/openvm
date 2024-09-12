@@ -47,8 +47,10 @@ impl CheckCarryModToZeroSubAir {
         builder: &mut AB,
         expr: OverflowInt<AB::Expr>,
         cols: CheckCarryModToZeroCols<AB::Var>,
+        is_valid: AB::Var,
     ) {
         let CheckCarryModToZeroCols { quotient, carries } = cols;
+        builder.assert_bool(is_valid);
         let q_offset = AB::F::from_canonical_usize(1 << self.check_carry_to_zero.limb_bits);
         for &q in quotient.iter() {
             range_check(
@@ -57,6 +59,7 @@ impl CheckCarryModToZeroSubAir {
                 self.check_carry_to_zero.decomp,
                 self.check_carry_to_zero.limb_bits + 1,
                 q + q_offset,
+                is_valid,
             );
         }
         let overflow_q = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
@@ -78,6 +81,7 @@ impl CheckCarryModToZeroSubAir {
             builder,
             expr,
             CheckCarryToZeroCols { carries },
+            is_valid,
         );
     }
 }

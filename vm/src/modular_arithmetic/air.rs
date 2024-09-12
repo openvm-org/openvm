@@ -30,6 +30,7 @@ impl<AB: InteractionBuilder> Air<AB> for ModularArithmeticAir<PrimitiveArithmeti
             r: io.z.data.clone(),
             q: aux.q.clone(),
             carries: aux.carries.clone(),
+            is_valid: aux.is_valid,
         };
         self.air.eval(builder, cols, ());
 

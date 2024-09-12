@@ -33,11 +33,13 @@ pub struct TestCarryCols<const N: usize, T> {
     pub carries: Vec<T>,
     // quotient limbs, length is going to be 1 as x^2 , y and p are all 256 bits.
     pub quotient: Vec<T>,
+
+    pub is_valid: T,
 }
 
 impl<const N: usize, T: Clone> TestCarryCols<N, T> {
     pub fn get_width() -> usize {
-        5 * N + 1
+        5 * N + 2
     }
 
     pub fn from_slice(slc: &[T]) -> Self {
@@ -45,12 +47,13 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
         let y = slc[N..3 * N].to_vec();
         let carries = slc[3 * N..5 * N].to_vec();
         let quotient = slc[5 * N..5 * N + 1].to_vec();
-
+        let is_valid = slc[5 * N + 1].clone();
         Self {
             x,
             y,
             quotient,
             carries,
+            is_valid,
         }
     }
 
@@ -61,7 +64,7 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
         flattened.extend_from_slice(&self.y);
         flattened.extend_from_slice(&self.carries);
         flattened.extend_from_slice(&self.quotient);
-
+        flattened.push(self.is_valid.clone());
         flattened
     }
 }
@@ -96,6 +99,7 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
             y,
             carries,
             quotient,
+            is_valid,
         } = cols;
 
         let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(x, self.limb_bits);
@@ -106,6 +110,7 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
             builder,
             expr,
             CheckCarryModToZeroCols { carries, quotient },
+            is_valid,
         );
     }
 }
@@ -157,6 +162,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 .collect(),
             quotient: quotient_f,
             carries: carries_f,
+            is_valid: F::one(),
         }
     }
 }

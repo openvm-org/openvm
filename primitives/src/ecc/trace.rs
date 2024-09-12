@@ -180,6 +180,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccAir {
         };
 
         let aux = EcAddAuxCols {
+            is_valid: F::one(),
             lambda: vec_isize_to_f(lambda_overflow.limbs),
             lambda_check: CheckCarryModToZeroCols {
                 carries: vec_isize_to_f(lambda_carries),

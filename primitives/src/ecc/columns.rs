@@ -14,6 +14,7 @@ pub struct EcAddIoCols<T, C: LimbConfig> {
 }
 
 pub struct EcAddAuxCols<T> {
+    pub is_valid: T,
     pub lambda: Vec<T>,
     pub lambda_check: CheckCarryModToZeroCols<T>,
 
@@ -90,7 +91,7 @@ impl<T: Clone> EcAddAuxCols<T> {
         flattened.extend_from_slice(&self.x3_check.carries);
         flattened.extend_from_slice(&self.y3_check.quotient);
         flattened.extend_from_slice(&self.y3_check.carries);
-
+        flattened.push(self.is_valid.clone());
         flattened
     }
 
@@ -102,8 +103,9 @@ impl<T: Clone> EcAddAuxCols<T> {
         let x3_check_c = slc[5 * num_limbs - 1..7 * num_limbs - 2].to_vec();
         let y3_check_q = slc[7 * num_limbs - 2..8 * num_limbs - 2].to_vec();
         let y3_check_c = slc[8 * num_limbs - 2..10 * num_limbs - 3].to_vec();
-
+        let is_valid = slc[10 * num_limbs - 3].clone();
         Self {
+            is_valid,
             lambda,
             lambda_check: CheckCarryModToZeroCols {
                 quotient: lambda_check_q,

@@ -82,13 +82,7 @@ fn test_x_mul_y() {
     let expected_r = x.clone() * y.clone() % prime.clone();
     let expected_q = x.clone() * y.clone() / prime;
     let cols = air.generate_trace_row((x, y, range_checker.clone()));
-    let ModularArithmeticCols {
-        x: _x,
-        y: _y,
-        q,
-        r,
-        carries: _carries,
-    } = cols.clone();
+    let ModularArithmeticCols { q, r, .. } = cols.clone();
     let generated_r = evaluate_bigint(&r, LIMB_BITS);
     let generated_q = evaluate_bigint(&q, LIMB_BITS);
     assert_eq!(generated_r, expected_r);
@@ -173,13 +167,7 @@ fn test_x_div_y() {
     let air = ModularDivisionAir { arithmetic };
     let expected_q = (y.clone() * expected_r.clone() - x.clone()) / prime.clone();
     let cols = air.generate_trace_row((x.clone(), y.clone(), range_checker.clone()));
-    let ModularArithmeticCols {
-        x: _x,
-        y: _y,
-        q,
-        r,
-        carries: _carries,
-    } = cols.clone();
+    let ModularArithmeticCols { q, r, .. } = cols.clone();
     let generated_r = evaluate_bigint(&r, LIMB_BITS);
     let generated_q = evaluate_bigint(&q, LIMB_BITS);
     assert_eq!(generated_r, expected_r);
@@ -309,13 +297,7 @@ fn test_x_sub_y() {
     let expected_r = xp.clone() - y.clone();
     let expected_q = (xp - y.clone()) / prime.clone();
     let cols = air.generate_trace_row((x.clone(), y.clone(), range_checker.clone()));
-    let ModularArithmeticCols {
-        x: _x,
-        y: _y,
-        q,
-        r,
-        carries: _carries,
-    } = cols.clone();
+    let ModularArithmeticCols { q, r, .. } = cols.clone();
     let generated_r = evaluate_bigint(&r, LIMB_BITS);
     let generated_q = evaluate_bigint(&q, LIMB_BITS);
     assert_eq!(generated_r, expected_r);

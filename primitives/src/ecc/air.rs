@@ -86,19 +86,19 @@ impl<AB: InteractionBuilder> Air<AB> for EccAir {
         let y2: OverflowInt<AB::Expr> = io.p2.y.into();
         let expr = lambda.clone() * (x2.clone() - x1.clone()) - y2 + y1.clone();
         self.check_carry
-            .constrain_carry_mod_to_zero(builder, expr, aux.lambda_check);
+            .constrain_carry_mod_to_zero(builder, expr, aux.lambda_check, aux.is_valid);
 
         // x3 = λ * λ - x1 - x2
         let x3: OverflowInt<AB::Expr> = io.p3.x.into();
         let expr = lambda.clone() * lambda.clone() - x1.clone() - x2.clone() - x3.clone();
         self.check_carry
-            .constrain_carry_mod_to_zero(builder, expr, aux.x3_check);
+            .constrain_carry_mod_to_zero(builder, expr, aux.x3_check, aux.is_valid);
 
         // t = y1 - λ * x1
         // y3 = -(λ * x3 + t) = -λ * x3 - y1 + λ * x1
         let y3: OverflowInt<AB::Expr> = io.p3.y.into();
         let expr = y3 + lambda.clone() * x3 + y1 - lambda * x1;
         self.check_carry
-            .constrain_carry_mod_to_zero(builder, expr, aux.y3_check);
+            .constrain_carry_mod_to_zero(builder, expr, aux.y3_check, aux.is_valid);
     }
 }

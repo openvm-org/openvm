@@ -31,19 +31,26 @@ pub struct TestCarryCols<const N: usize, T> {
     pub y: Vec<T>,
     // 2N
     pub carries: Vec<T>,
+
+    pub is_valid: T,
 }
 
 impl<const N: usize, T: Clone> TestCarryCols<N, T> {
     pub fn get_width() -> usize {
-        5 * N
+        5 * N + 1
     }
 
     pub fn from_slice(slc: &[T]) -> Self {
         let x = slc[0..N].to_vec();
         let y = slc[N..3 * N].to_vec();
         let carries = slc[3 * N..5 * N].to_vec();
-
-        Self { x, y, carries }
+        let is_valid = slc[5 * N].clone();
+        Self {
+            x,
+            y,
+            carries,
+            is_valid,
+        }
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -52,7 +59,7 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
         flattened.extend_from_slice(&self.x);
         flattened.extend_from_slice(&self.y);
         flattened.extend_from_slice(&self.carries);
-
+        flattened.push(self.is_valid.clone());
         flattened
     }
 }
@@ -81,7 +88,12 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
         let cols = TestCarryCols::<N, AB::Var>::from_slice(local);
-        let TestCarryCols { x, y, carries } = cols;
+        let TestCarryCols {
+            x,
+            y,
+            carries,
+            is_valid,
+        } = cols;
 
         let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(x, self.limb_bits);
         let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(y, self.limb_bits);
@@ -91,6 +103,7 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
             builder,
             expr,
             CheckCarryToZeroCols { carries },
+            is_valid,
         );
     }
 }
@@ -129,6 +142,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 .map(|x| F::from_canonical_usize(*x as usize))
                 .collect(),
             carries: carries_f,
+            is_valid: F::one(),
         }
     }
 }

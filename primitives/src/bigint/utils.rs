@@ -3,7 +3,6 @@ use std::{borrow::Cow, collections::VecDeque, iter::repeat, ops::Neg, str::FromS
 use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{algorithms::mod_inverse, BigInt, BigUint, Sign};
 use num_traits::{One, Zero};
-use p3_field::AbstractField;
 
 use super::modular_arithmetic::ModularArithmeticAir;
 use crate::var_range::bus::VariableRangeCheckerBus;
@@ -15,11 +14,12 @@ pub fn range_check<AB: InteractionBuilder>(
     decomp: usize,    // The ranger checker checks the numbers are within decomp bits.
     bits: usize,
     into_expr: impl Into<AB::Expr>,
+    count: impl Into<AB::Expr>,
 ) {
     assert!(bits <= decomp);
     let expr = into_expr.into();
     let bus = VariableRangeCheckerBus::new(range_bus, decomp);
-    bus.range_check(expr, bits).eval(builder, AB::F::one());
+    bus.range_check(expr, bits).eval(builder, count);
 }
 
 pub fn secp256k1_prime() -> BigUint {
