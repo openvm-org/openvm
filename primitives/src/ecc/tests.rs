@@ -1,5 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::config::baby_bear_blake3::run_simple_test_no_pis;
 use lazy_static::lazy_static;
 use num_bigint_dig::BigUint;
@@ -10,7 +11,7 @@ use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
-    air::{EccAddUnequalAir, EccAirConfig, EccDoubleAir},
+    air::{EcAddUnequalAir, EcAirConfig, EccDoubleAir},
     columns::EcDoubleCols,
 };
 use crate::{
@@ -70,7 +71,7 @@ fn evaluate_bigint(limbs: &[BabyBear], limb_bits: usize) -> BigUint {
     res
 }
 
-fn get_air_config_and_range_checker() -> (EccAirConfig, Arc<VariableRangeCheckerChip>) {
+fn get_air_config_and_range_checker() -> (EcAirConfig, Arc<VariableRangeCheckerChip>) {
     let prime = secp256k1_prime();
     let b = BigUint::from_u32(7).unwrap();
     let range_bus = 1;
@@ -81,7 +82,7 @@ fn get_air_config_and_range_checker() -> (EccAirConfig, Arc<VariableRangeChecker
     )));
     let limb_bits = DefaultLimbConfig::limb_bits();
     let field_element_bits = 30;
-    let config = EccAirConfig::new(
+    let config = EcAirConfig::new(
         prime,
         b,
         range_bus,
@@ -95,7 +96,7 @@ fn get_air_config_and_range_checker() -> (EccAirConfig, Arc<VariableRangeChecker
 
 fn test_ec_add(p1: (BigUint, BigUint), p2: (BigUint, BigUint), expected_p3: (BigUint, BigUint)) {
     let (config, range_checker) = get_air_config_and_range_checker();
-    let air = EccAddUnequalAir { config };
+    let air = EcAddUnequalAir { config };
     let input = (p1, p2, range_checker.clone());
     let cols = air.generate_trace_row(input);
     let EcAddCols { io, aux: _ } = cols.clone();
@@ -129,12 +130,11 @@ fn test_ec_add2() {
 }
 
 #[test]
-#[should_panic]
 fn test_ec_add_fail() {
     let p1 = EcPoints[0].clone();
     let p2 = EcPoints[1].clone();
     let (config, range_checker) = get_air_config_and_range_checker();
-    let air = EccAddUnequalAir { config };
+    let air = EcAddUnequalAir { config };
     let input = (p1, p2, range_checker.clone());
     let cols = air.generate_trace_row(input);
 
@@ -143,8 +143,12 @@ fn test_ec_add_fail() {
     let range_trace = range_checker.generate_trace();
     trace.row_mut(0)[0] += BabyBear::one();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    disable_debug_builder();
+    assert_eq!(
+        run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace]),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected constraint to fail"
+    );
 }
 
 #[test]
@@ -170,7 +174,6 @@ fn test_ec_double() {
 }
 
 #[test]
-#[should_panic]
 fn test_ec_double_wrong_trace() {
     let p1 = EcPoints[3].clone();
     let (config, range_checker) = get_air_config_and_range_checker();
@@ -183,6 +186,10 @@ fn test_ec_double_wrong_trace() {
     trace.row_mut(0)[0] += BabyBear::one();
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    disable_debug_builder();
+    assert_eq!(
+        run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace]),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected constraint to fail"
+    );
 }

@@ -5,7 +5,7 @@ use num_traits::FromPrimitive;
 use p3_field::PrimeField64;
 
 use super::{
-    air::{EccAddUnequalAir, EccDoubleAir},
+    air::{EcAddUnequalAir, EccDoubleAir},
     columns::{EcAddCols, EcAddIoCols, EcAuxCols, EcDoubleCols, EcDoubleIoCols},
     utils::*,
     EcModularConfig, EcPoint,
@@ -19,7 +19,7 @@ use crate::{
     var_range::VariableRangeCheckerChip,
 };
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for EccAddUnequalAir {
+impl<F: PrimeField64> LocalTraceInstructions<F> for EcAddUnequalAir {
     type LocalInput = (
         (BigUint, BigUint),
         (BigUint, BigUint),

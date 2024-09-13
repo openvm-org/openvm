@@ -12,7 +12,7 @@ use crate::{
     sub_chip::AirConfig,
 };
 
-pub struct EccAirConfig {
+pub struct EcAirConfig {
     // e.g. secp256k1 is 2^256 - 2^32 - 977.
     pub prime: BigUint,
 
@@ -30,12 +30,12 @@ pub struct EccAirConfig {
     pub decomp: usize,
 }
 
-pub struct EccAddUnequalAir {
-    pub config: EccAirConfig,
+pub struct EcAddUnequalAir {
+    pub config: EcAirConfig,
 }
 
-impl Deref for EccAddUnequalAir {
-    type Target = EccAirConfig;
+impl Deref for EcAddUnequalAir {
+    type Target = EcAirConfig;
 
     fn deref(&self) -> &Self::Target {
         &self.config
@@ -43,18 +43,18 @@ impl Deref for EccAddUnequalAir {
 }
 
 pub struct EccDoubleAir {
-    pub config: EccAirConfig,
+    pub config: EcAirConfig,
 }
 
 impl Deref for EccDoubleAir {
-    type Target = EccAirConfig;
+    type Target = EcAirConfig;
 
     fn deref(&self) -> &Self::Target {
         &self.config
     }
 }
 
-impl EccAirConfig {
+impl EcAirConfig {
     pub fn new(
         prime: BigUint,
         b: BigUint,
@@ -72,7 +72,7 @@ impl EccAirConfig {
             field_element_bits,
         );
 
-        EccAirConfig {
+        EcAirConfig {
             prime,
             b,
             limb_bits,
@@ -83,13 +83,13 @@ impl EccAirConfig {
     }
 }
 
-impl<F: Field> BaseAir<F> for EccAddUnequalAir {
+impl<F: Field> BaseAir<F> for EcAddUnequalAir {
     fn width(&self) -> usize {
         EcAddCols::<F, DefaultLimbConfig>::width(self)
     }
 }
 
-impl AirConfig for EccAddUnequalAir {
+impl AirConfig for EcAddUnequalAir {
     type Cols<T> = EcAddCols<T, DefaultLimbConfig>;
 }
 
@@ -103,7 +103,7 @@ impl AirConfig for EccDoubleAir {
     type Cols<T> = EcDoubleCols<T, DefaultLimbConfig>;
 }
 
-impl<AB: InteractionBuilder> Air<AB> for EccAddUnequalAir {
+impl<AB: InteractionBuilder> Air<AB> for EcAddUnequalAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -152,7 +152,7 @@ impl<AB: InteractionBuilder> Air<AB> for EccDoubleAir {
         let y1: OverflowInt<AB::Expr> = io.p1.y.into();
         let two = AB::Expr::two();
         let two = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(vec![two], 2);
-        let three = AB::Expr::two() + AB::Expr::one();
+        let three = AB::Expr::from_canonical_usize(3);
         let three = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(vec![three], 2);
         let expr = lambda.clone() * two * y1.clone() - three * x1.clone() * x1.clone();
         self.check_carry

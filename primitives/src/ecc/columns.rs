@@ -1,4 +1,4 @@
-use super::{air::EccAirConfig, EcPoint};
+use super::{air::EcAirConfig, EcPoint};
 use crate::bigint::{check_carry_mod_to_zero::CheckCarryModToZeroCols, CanonicalUint, LimbConfig};
 
 // Add two disinct points.
@@ -56,7 +56,7 @@ impl<T: Clone, C: LimbConfig> EcAddCols<T, C> {
         Self { io, aux }
     }
 
-    pub fn width(config: &EccAirConfig) -> usize {
+    pub fn width(config: &EcAirConfig) -> usize {
         EcAddIoCols::<T, C>::width(config) + EcAuxCols::<T>::width(config)
     }
 }
@@ -78,7 +78,7 @@ impl<T: Clone, C: LimbConfig> EcDoubleCols<T, C> {
         Self { io, aux }
     }
 
-    pub fn width(config: &EccAirConfig) -> usize {
+    pub fn width(config: &EcAirConfig) -> usize {
         EcDoubleIoCols::<T, C>::width(config) + EcAuxCols::<T>::width(config)
     }
 }
@@ -121,7 +121,7 @@ impl<T: Clone, C: LimbConfig> EcAddIoCols<T, C> {
         Self { p1, p2, p3 }
     }
 
-    pub fn width(config: &EccAirConfig) -> usize {
+    pub fn width(config: &EcAirConfig) -> usize {
         6 * config.num_limbs
     }
 }
@@ -156,7 +156,7 @@ impl<T: Clone, C: LimbConfig> EcDoubleIoCols<T, C> {
         Self { p1, p2 }
     }
 
-    pub fn width(config: &EccAirConfig) -> usize {
+    pub fn width(config: &EcAirConfig) -> usize {
         4 * config.num_limbs
     }
 }
@@ -203,7 +203,7 @@ impl<T: Clone> EcAuxCols<T> {
         }
     }
 
-    pub fn width(config: &EccAirConfig) -> usize {
+    pub fn width(config: &EcAirConfig) -> usize {
         // TODO: this only works for 256bits prime, generalize when we need to support other fields.
         // Current assumptions:
         // q and carries for x and y are num_limbs and 2num_limbs - 1 respectively.
