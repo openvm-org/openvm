@@ -428,7 +428,7 @@ impl Hintable<InnerConfig> for BigUint {
     }
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        vec![big_uint_to_num_limbs(self.clone(), LIMB_SIZE, NUM_LIMBS)
+        vec![big_uint_to_num_limbs(self, LIMB_SIZE, NUM_LIMBS)
             .iter()
             .map(|x| <InnerConfig as Config>::N::from_canonical_usize(*x))
             .collect()]
