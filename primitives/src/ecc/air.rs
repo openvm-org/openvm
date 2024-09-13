@@ -1,16 +1,18 @@
+use std::ops::Deref;
+
 use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::BigUint;
 use p3_air::{Air, BaseAir};
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::columns::EcAddCols;
+use super::columns::{EcAddCols, EcDoubleCols};
 use crate::{
     bigint::{check_carry_mod_to_zero::CheckCarryModToZeroSubAir, DefaultLimbConfig, OverflowInt},
     sub_chip::AirConfig,
 };
 
-pub struct EccAir {
+pub struct EccAirConfig {
     // e.g. secp256k1 is 2^256 - 2^32 - 977.
     pub prime: BigUint,
 
@@ -28,7 +30,31 @@ pub struct EccAir {
     pub decomp: usize,
 }
 
-impl EccAir {
+pub struct EccAddUnequalAir {
+    pub config: EccAirConfig,
+}
+
+impl Deref for EccAddUnequalAir {
+    type Target = EccAirConfig;
+
+    fn deref(&self) -> &Self::Target {
+        &self.config
+    }
+}
+
+pub struct EccDoubleAir {
+    pub config: EccAirConfig,
+}
+
+impl Deref for EccDoubleAir {
+    type Target = EccAirConfig;
+
+    fn deref(&self) -> &Self::Target {
+        &self.config
+    }
+}
+
+impl EccAirConfig {
     pub fn new(
         prime: BigUint,
         b: BigUint,
@@ -46,7 +72,7 @@ impl EccAir {
             field_element_bits,
         );
 
-        EccAir {
+        EccAirConfig {
             prime,
             b,
             limb_bits,
@@ -57,19 +83,27 @@ impl EccAir {
     }
 }
 
-impl<F: Field> BaseAir<F> for EccAir {
+impl<F: Field> BaseAir<F> for EccAddUnequalAir {
     fn width(&self) -> usize {
-        // x, y, lambda, and the quotients are size of num_limbs.
-        // carries are 2 * carries - 1.
-        self.num_limbs * 16 - 2
+        EcAddCols::<F, DefaultLimbConfig>::width(self)
     }
 }
 
-impl AirConfig for EccAir {
+impl AirConfig for EccAddUnequalAir {
     type Cols<T> = EcAddCols<T, DefaultLimbConfig>;
 }
 
-impl<AB: InteractionBuilder> Air<AB> for EccAir {
+impl<F: Field> BaseAir<F> for EccDoubleAir {
+    fn width(&self) -> usize {
+        EcDoubleCols::<F, DefaultLimbConfig>::width(self)
+    }
+}
+
+impl AirConfig for EccDoubleAir {
+    type Cols<T> = EcDoubleCols<T, DefaultLimbConfig>;
+}
+
+impl<AB: InteractionBuilder> Air<AB> for EccAddUnequalAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -100,5 +134,45 @@ impl<AB: InteractionBuilder> Air<AB> for EccAir {
         let expr = y3 + lambda.clone() * x3 + y1 - lambda * x1;
         self.check_carry
             .constrain_carry_mod_to_zero(builder, expr, aux.y3_check, aux.is_valid);
+    }
+}
+
+impl<AB: InteractionBuilder> Air<AB> for EccDoubleAir {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let local = main.row_slice(0);
+        let local = EcDoubleCols::<AB::Var, DefaultLimbConfig>::from_slice(&local, self.num_limbs);
+
+        let EcDoubleCols { io, aux } = local;
+
+        println!("double1");
+        // λ = (3 * x1^2) / (2 * y1)
+        let lambda =
+            OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(aux.lambda, self.limb_bits);
+        let x1: OverflowInt<AB::Expr> = io.p1.x.into();
+        let y1: OverflowInt<AB::Expr> = io.p1.y.into();
+        let two = AB::Expr::two();
+        let two = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(vec![two], 2);
+        let three = AB::Expr::two() + AB::Expr::one();
+        let three = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(vec![three], 2);
+        let expr = lambda.clone() * two * y1.clone() - three * x1.clone() * x1.clone();
+        self.check_carry
+            .constrain_carry_mod_to_zero(builder, expr, aux.lambda_check, aux.is_valid);
+
+        println!("double2");
+        // Note: below are almost the same as add unequal, but it's just 10 lines so probably not worth to dedup.
+        // x3 = λ * λ - x1 - x1
+        let x3: OverflowInt<AB::Expr> = io.p2.x.into();
+        let expr = lambda.clone() * lambda.clone() - x1.clone() - x1.clone() - x3.clone();
+        self.check_carry
+            .constrain_carry_mod_to_zero(builder, expr, aux.x3_check, aux.is_valid);
+        println!("double3");
+        // t = y1 - λ * x1
+        // y3 = -(λ * x3 + t) = -λ * x3 - y1 + λ * x1
+        let y3: OverflowInt<AB::Expr> = io.p2.y.into();
+        let expr = y3 + lambda.clone() * x3 + y1 - lambda * x1;
+        self.check_carry
+            .constrain_carry_mod_to_zero(builder, expr, aux.y3_check, aux.is_valid);
+        println!("double4");
     }
 }

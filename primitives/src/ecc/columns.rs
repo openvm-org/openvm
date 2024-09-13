@@ -1,4 +1,4 @@
-use super::EcPoint;
+use super::{air::EccAirConfig, EcPoint};
 use crate::bigint::{check_carry_mod_to_zero::CheckCarryModToZeroCols, CanonicalUint, LimbConfig};
 
 // Add two disinct points.
@@ -8,11 +8,24 @@ pub struct EcAddCols<T, C: LimbConfig> {
     pub aux: EcAuxCols<T>,
 }
 
+// Double a point.
+#[derive(Clone)]
+pub struct EcDoubleCols<T, C: LimbConfig> {
+    pub io: EcDoubleIoCols<T, C>,
+    pub aux: EcAuxCols<T>,
+}
+
 #[derive(Clone)]
 pub struct EcAddIoCols<T, C: LimbConfig> {
     pub p1: EcPoint<T, C>,
     pub p2: EcPoint<T, C>,
     pub p3: EcPoint<T, C>,
+}
+
+#[derive(Clone)]
+pub struct EcDoubleIoCols<T, C: LimbConfig> {
+    pub p1: EcPoint<T, C>,
+    pub p2: EcPoint<T, C>,
 }
 
 #[derive(Clone)]
@@ -41,6 +54,32 @@ impl<T: Clone, C: LimbConfig> EcAddCols<T, C> {
         let aux = EcAuxCols::from_slice(&slc[6 * num_limbs..], num_limbs);
 
         Self { io, aux }
+    }
+
+    pub fn width(config: &EccAirConfig) -> usize {
+        EcAddIoCols::<T, C>::width(config) + EcAuxCols::<T>::width(config)
+    }
+}
+
+impl<T: Clone, C: LimbConfig> EcDoubleCols<T, C> {
+    pub fn flatten(&self) -> Vec<T> {
+        let mut flattened = vec![];
+
+        flattened.extend_from_slice(&self.io.flatten());
+        flattened.extend_from_slice(&self.aux.flatten());
+
+        flattened
+    }
+
+    pub fn from_slice(slc: &[T], num_limbs: usize) -> Self {
+        let io = EcDoubleIoCols::from_slice(&slc[..4 * num_limbs], num_limbs);
+        let aux = EcAuxCols::from_slice(&slc[4 * num_limbs..], num_limbs);
+
+        Self { io, aux }
+    }
+
+    pub fn width(config: &EccAirConfig) -> usize {
+        EcDoubleIoCols::<T, C>::width(config) + EcAuxCols::<T>::width(config)
     }
 }
 
@@ -80,6 +119,45 @@ impl<T: Clone, C: LimbConfig> EcAddIoCols<T, C> {
         };
 
         Self { p1, p2, p3 }
+    }
+
+    pub fn width(config: &EccAirConfig) -> usize {
+        6 * config.num_limbs
+    }
+}
+
+impl<T: Clone, C: LimbConfig> EcDoubleIoCols<T, C> {
+    pub fn flatten(&self) -> Vec<T> {
+        let mut flattened = vec![];
+
+        flattened.extend_from_slice(&self.p1.x.limbs);
+        flattened.extend_from_slice(&self.p1.y.limbs);
+        flattened.extend_from_slice(&self.p2.x.limbs);
+        flattened.extend_from_slice(&self.p2.y.limbs);
+
+        flattened
+    }
+
+    pub fn from_slice(slc: &[T], num_limbs: usize) -> Self {
+        let x1 = slc[0..num_limbs].to_vec();
+        let y1 = slc[num_limbs..2 * num_limbs].to_vec();
+        let x2 = slc[2 * num_limbs..3 * num_limbs].to_vec();
+        let y2 = slc[3 * num_limbs..4 * num_limbs].to_vec();
+
+        let p1 = EcPoint {
+            x: CanonicalUint::<T, C>::from_vec(x1),
+            y: CanonicalUint::<T, C>::from_vec(y1),
+        };
+        let p2 = EcPoint {
+            x: CanonicalUint::<T, C>::from_vec(x2),
+            y: CanonicalUint::<T, C>::from_vec(y2),
+        };
+
+        Self { p1, p2 }
+    }
+
+    pub fn width(config: &EccAirConfig) -> usize {
+        4 * config.num_limbs
     }
 }
 
@@ -123,5 +201,10 @@ impl<T: Clone> EcAuxCols<T> {
                 carries: y3_check_c,
             },
         }
+    }
+
+    pub fn width(config: &EccAirConfig) -> usize {
+        // CheckCarryModToZeroCols is 3 * num_limbs- 1.
+        10 * config.num_limbs - 2
     }
 }

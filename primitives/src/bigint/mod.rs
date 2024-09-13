@@ -113,6 +113,7 @@ impl OverflowInt<isize> {
         let mut carry = 0;
         for i in 0..self.limbs.len() {
             carry = (carry + self.limbs[i]) >> limb_bits;
+            println!("i, carry: {}, {}", i, carry);
             carries.push(carry);
         }
         carries

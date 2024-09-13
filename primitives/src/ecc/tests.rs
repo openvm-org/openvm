@@ -9,7 +9,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::air::EccAir;
+use super::air::{EccAddUnequalAir, EccAirConfig, EccDoubleAir};
 use crate::{
     bigint::{utils::secp256k1_prime, DefaultLimbConfig, LimbConfig},
     sub_chip::LocalTraceInstructions,
@@ -43,7 +43,7 @@ lazy_static! {
     };
 }
 
-fn get_air_and_range_checker() -> (EccAir, Arc<VariableRangeCheckerChip>) {
+fn get_air_config_and_range_checker() -> (EccAirConfig, Arc<VariableRangeCheckerChip>) {
     let prime = secp256k1_prime();
     let b = BigUint::from_u32(7).unwrap();
     let range_bus = 1;
@@ -54,7 +54,7 @@ fn get_air_and_range_checker() -> (EccAir, Arc<VariableRangeCheckerChip>) {
     )));
     let limb_bits = DefaultLimbConfig::limb_bits();
     let field_element_bits = 30;
-    let air = EccAir::new(
+    let config = EccAirConfig::new(
         prime,
         b,
         range_bus,
@@ -63,12 +63,27 @@ fn get_air_and_range_checker() -> (EccAir, Arc<VariableRangeCheckerChip>) {
         field_element_bits,
     );
 
-    (air, range_checker)
+    (config, range_checker)
 }
 
 fn test_ec_add(p1: (BigUint, BigUint), p2: (BigUint, BigUint)) {
-    let (air, range_checker) = get_air_and_range_checker();
+    let (config, range_checker) = get_air_config_and_range_checker();
+    let air = EccAddUnequalAir { config };
     let input = (p1, p2, range_checker.clone());
+    let cols = air.generate_trace_row(input);
+
+    let row = cols.flatten();
+    let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
+    let range_trace = range_checker.generate_trace();
+
+    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
+        .expect("Verification failed");
+}
+
+fn test_ec_double(p1: (BigUint, BigUint)) {
+    let (config, range_checker) = get_air_config_and_range_checker();
+    let air = EccDoubleAir { config };
+    let input = (p1, range_checker.clone());
     let cols = air.generate_trace_row(input);
 
     let row = cols.flatten();
@@ -112,7 +127,8 @@ fn test_ec_add4() {
 fn test_ec_add_fail() {
     let p1 = EcPoints[0].clone();
     let p2 = EcPoints[1].clone();
-    let (air, range_checker) = get_air_and_range_checker();
+    let (config, range_checker) = get_air_config_and_range_checker();
+    let air = EccAddUnequalAir { config };
     let input = (p1, p2, range_checker.clone());
     let cols = air.generate_trace_row(input);
 
@@ -123,4 +139,16 @@ fn test_ec_add_fail() {
 
     run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
         .expect("Verification failed");
+}
+
+#[test]
+fn test_ec_double1() {
+    let p1 = EcPoints[1].clone();
+    test_ec_double(p1);
+}
+
+#[test]
+fn test_ec_double2() {
+    let p1 = EcPoints[3].clone();
+    test_ec_double(p1);
 }
