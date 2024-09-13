@@ -131,7 +131,6 @@ pub fn big_int_to_limbs(x: BigInt, limb_bits: usize) -> Vec<isize> {
 pub fn big_int_to_num_limbs(x: BigInt, limb_bits: usize, num_limbs: usize) -> Vec<isize> {
     let limbs = big_int_to_limbs(x, limb_bits);
     let num_limbs = max(num_limbs, limbs.len());
-    println!("limbs: {:?}", limbs);
     limbs
         .iter()
         .chain(repeat(&0))
