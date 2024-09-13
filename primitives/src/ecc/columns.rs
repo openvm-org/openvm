@@ -178,13 +178,13 @@ impl<T: Clone> EcAuxCols<T> {
 
     pub fn from_slice(slc: &[T], num_limbs: usize) -> Self {
         let lambda = slc[0..num_limbs].to_vec();
-        let lambda_check_q = slc[num_limbs..2 * num_limbs].to_vec();
-        let lambda_check_c = slc[2 * num_limbs..4 * num_limbs - 1].to_vec();
-        let x3_check_q = slc[4 * num_limbs - 1..5 * num_limbs - 1].to_vec();
-        let x3_check_c = slc[5 * num_limbs - 1..7 * num_limbs - 2].to_vec();
-        let y3_check_q = slc[7 * num_limbs - 2..8 * num_limbs - 2].to_vec();
-        let y3_check_c = slc[8 * num_limbs - 2..10 * num_limbs - 3].to_vec();
-        let is_valid = slc[10 * num_limbs - 3].clone();
+        let lambda_check_q = slc[num_limbs..2 * num_limbs + 1].to_vec();
+        let lambda_check_c = slc[2 * num_limbs + 1..4 * num_limbs + 1].to_vec();
+        let x3_check_q = slc[4 * num_limbs + 1..5 * num_limbs + 1].to_vec();
+        let x3_check_c = slc[5 * num_limbs + 1..7 * num_limbs].to_vec();
+        let y3_check_q = slc[7 * num_limbs..8 * num_limbs].to_vec();
+        let y3_check_c = slc[8 * num_limbs..10 * num_limbs - 1].to_vec();
+        let is_valid = slc[10 * num_limbs - 1].clone();
         Self {
             is_valid,
             lambda,
@@ -204,7 +204,17 @@ impl<T: Clone> EcAuxCols<T> {
     }
 
     pub fn width(config: &EccAirConfig) -> usize {
-        // CheckCarryModToZeroCols is 3 * num_limbs- 1.
-        10 * config.num_limbs - 2
+        // TODO: this only works for 256bits prime, generalize when we need to support other fields.
+        // Current assumptions:
+        // q and carries for x and y are num_limbs and 2num_limbs - 1 respectively.
+        // Lambda is different: in the ec-double case, λ (2 * y1) - (3 * x1^2) = q * p
+        // so q can be larger (in abs) be ~ p * 3 and more than 256 bits.
+        // so the q have length num_limbs + 1, and makes carris 2num_limbs.
+        // So overall:
+        // 1                         // is_valid
+        // + num_limbs               // lambda
+        // + 2* (3num_limbs - 1)     // x and y check
+        // + 3num_limbs + 1          // lambda_check
+        10 * config.num_limbs
     }
 }

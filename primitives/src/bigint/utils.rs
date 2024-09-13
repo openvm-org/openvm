@@ -1,8 +1,8 @@
-use std::{borrow::Cow, collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
+use std::{borrow::Cow, cmp::max, collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{algorithms::mod_inverse, BigInt, BigUint, Sign};
-use num_traits::{One, Zero};
+use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 
 use super::modular_arithmetic::ModularArithmeticAir;
 use crate::var_range::bus::VariableRangeCheckerBus;
@@ -95,29 +95,21 @@ pub fn big_uint_mod_inverse(x: &BigUint, modulus: &BigUint) -> BigUint {
         .unwrap()
 }
 
-// Convert a big uint bits by first conerting to bytes (little endian).
-// So the number of bits is multiple of 8.
-pub fn big_uint_to_bits(x: &BigUint) -> VecDeque<usize> {
-    let mut result = VecDeque::new();
-    for byte in x.to_bytes_le() {
-        for i in 0..8 {
-            result.push_back(((byte >> i) as usize) & 1);
-        }
+// little endian.
+pub fn big_uint_to_limbs(x: &BigUint, limb_bits: usize) -> Vec<usize> {
+    let mut result = Vec::new();
+    let mut x = x.clone();
+    let base = BigUint::from_u32(1 << limb_bits).unwrap();
+    while x > BigUint::zero() {
+        result.push((x.clone() % &base).to_usize().unwrap());
+        x /= &base;
     }
     result
 }
 
-pub fn big_uint_to_limbs(x: &BigUint, limb_bits: usize) -> Vec<usize> {
-    let total_limbs = (x.bits() + limb_bits - 1) / limb_bits;
-    let mut modulus_bits = big_uint_to_bits(x);
-
-    (0..total_limbs)
-        .map(|_| take_limb(&mut modulus_bits, limb_bits))
-        .collect()
-}
-
-pub fn big_uint_to_num_limbs(x: BigUint, limb_bits: usize, num_limbs: usize) -> Vec<usize> {
-    let limbs = big_uint_to_limbs(&x, limb_bits);
+pub fn big_uint_to_num_limbs(x: &BigUint, limb_bits: usize, num_limbs: usize) -> Vec<usize> {
+    let limbs = big_uint_to_limbs(x, limb_bits);
+    let num_limbs = max(num_limbs, limbs.len());
     limbs
         .iter()
         .chain(repeat(&0))
@@ -138,6 +130,8 @@ pub fn big_int_to_limbs(x: BigInt, limb_bits: usize) -> Vec<isize> {
 
 pub fn big_int_to_num_limbs(x: BigInt, limb_bits: usize, num_limbs: usize) -> Vec<isize> {
     let limbs = big_int_to_limbs(x, limb_bits);
+    let num_limbs = max(num_limbs, limbs.len());
+    println!("limbs: {:?}", limbs);
     limbs
         .iter()
         .chain(repeat(&0))

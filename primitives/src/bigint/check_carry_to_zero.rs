@@ -51,9 +51,6 @@ impl CheckCarryToZeroSubAir {
     ) {
         assert_eq!(expr.limbs.len(), cols.carries.len());
         assert!(expr.max_overflow_bits <= self.field_element_bits);
-        println!("expr.limbs: {:?}", expr.limbs);
-        println!("max_overflow_bits: {}", expr.max_overflow_bits);
-        println!("field_element_bits: {}", self.field_element_bits);
         builder.assert_bool(is_valid);
         let (carry_min_value_abs, carry_abs_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
@@ -72,9 +69,6 @@ impl CheckCarryToZeroSubAir {
         // 2. Constrain the carries and expr.
         let mut previous_carry = AB::Expr::zero();
         for (i, limb) in expr.limbs.iter().enumerate() {
-            // println!("i: {}", i);
-            // println!("limb: {:?}", limb);
-            // println!("previous_carry: {:?}", previous_carry);
             builder.assert_eq(
                 limb.clone() + previous_carry.clone(),
                 cols.carries[i] * AB::F::from_canonical_usize(1 << self.limb_bits),

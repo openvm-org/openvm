@@ -131,6 +131,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EccDoubleAir {
         for &q in lambda_q_limbs.iter() {
             range_checker.add_count((q + (1 << self.limb_bits)) as u32, self.limb_bits + 1);
         }
+        println!("lambda_q_limbs: {:?}", lambda_q_limbs.len());
         let (lambda_carries, max_overflow_bits) =
             compute_lambda_carries_double(&config, &x1, &y1, &lambda, lambda_q_limbs.clone());
         let (carry_min_abs, carry_bits) =

@@ -66,7 +66,7 @@ pub(super) fn compute_lambda_q_limbs(
     let prime_signed = BigInt::from_biguint(Sign::Plus, config.prime.clone());
     let lambda_q_signed: BigInt =
         (lambda_signed * (x2_signed - x1_signed) - y2_signed + y1_signed) / prime_signed;
-    big_int_to_num_limbs(lambda_q_signed, config.limb_bits, config.num_limbs)
+    big_int_to_num_limbs(lambda_q_signed, config.limb_bits, config.num_limbs + 1)
 }
 
 pub(super) fn compute_lambda_carries(
@@ -195,14 +195,9 @@ pub(super) fn compute_lambda_q_limbs_double(
     let prime_signed = BigInt::from_biguint(Sign::Plus, config.prime.clone());
     let two = BigInt::from_u8(2).unwrap();
     let three = BigInt::from_u8(3).unwrap();
-    println!("x1_signed: {}", x1_signed);
-    println!("y1_signed: {}", y1_signed);
-    println!("prime_signed: {}", prime_signed);
-    println!("lambda: {}", lambda);
     let lambda_q_signed: BigInt =
         (lambda_signed * two * y1_signed - three * x1_signed.clone() * x1_signed) / prime_signed;
-    println!("lambda_q_signed: {}", lambda_q_signed);
-    big_int_to_num_limbs(lambda_q_signed, config.limb_bits, config.num_limbs)
+    big_int_to_num_limbs(lambda_q_signed, config.limb_bits, config.num_limbs + 1)
 }
 
 pub(super) fn compute_lambda_carries_double(

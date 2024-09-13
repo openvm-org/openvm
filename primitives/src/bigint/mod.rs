@@ -52,21 +52,12 @@ pub struct CanonicalUint<T, C: LimbConfig> {
 
 impl<T, C: LimbConfig> CanonicalUint<T, C> {
     pub fn from_big_uint(x: &BigUint, min_limbs: Option<usize>) -> CanonicalUint<isize, C> {
-        let mut x_bits = utils::big_uint_to_bits(x);
-        let mut x_limbs: Vec<isize> = vec![];
-        let mut limbs_len = 0;
-        while !x_bits.is_empty() {
-            let limb = utils::take_limb(&mut x_bits, C::limb_bits());
-            x_limbs.push(limb as isize);
-            limbs_len += 1;
-        }
-        if let Some(min_limbs) = min_limbs {
-            if limbs_len < min_limbs {
-                x_limbs.extend(vec![0; min_limbs - limbs_len]);
-            }
-        }
+        let limbs = match min_limbs {
+            Some(min_limbs) => utils::big_uint_to_num_limbs(x, C::limb_bits(), min_limbs),
+            None => utils::big_uint_to_limbs(x, C::limb_bits()),
+        };
         CanonicalUint {
-            limbs: x_limbs,
+            limbs: limbs.into_iter().map(|x| x as isize).collect(),
             _marker: PhantomData::<C>,
         }
     }
@@ -113,7 +104,6 @@ impl OverflowInt<isize> {
         let mut carry = 0;
         for i in 0..self.limbs.len() {
             carry = (carry + self.limbs[i]) >> limb_bits;
-            println!("i, carry: {}, {}", i, carry);
             carries.push(carry);
         }
         carries

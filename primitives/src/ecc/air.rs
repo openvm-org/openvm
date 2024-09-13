@@ -145,7 +145,6 @@ impl<AB: InteractionBuilder> Air<AB> for EccDoubleAir {
 
         let EcDoubleCols { io, aux } = local;
 
-        println!("double1");
         // λ = (3 * x1^2) / (2 * y1)
         let lambda =
             OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(aux.lambda, self.limb_bits);
@@ -159,20 +158,17 @@ impl<AB: InteractionBuilder> Air<AB> for EccDoubleAir {
         self.check_carry
             .constrain_carry_mod_to_zero(builder, expr, aux.lambda_check, aux.is_valid);
 
-        println!("double2");
         // Note: below are almost the same as add unequal, but it's just 10 lines so probably not worth to dedup.
         // x3 = λ * λ - x1 - x1
         let x3: OverflowInt<AB::Expr> = io.p2.x.into();
         let expr = lambda.clone() * lambda.clone() - x1.clone() - x1.clone() - x3.clone();
         self.check_carry
             .constrain_carry_mod_to_zero(builder, expr, aux.x3_check, aux.is_valid);
-        println!("double3");
         // t = y1 - λ * x1
         // y3 = -(λ * x3 + t) = -λ * x3 - y1 + λ * x1
         let y3: OverflowInt<AB::Expr> = io.p2.y.into();
         let expr = y3 + lambda.clone() * x3 + y1 - lambda * x1;
         self.check_carry
             .constrain_carry_mod_to_zero(builder, expr, aux.y3_check, aux.is_valid);
-        println!("double4");
     }
 }
