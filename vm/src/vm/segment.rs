@@ -11,6 +11,7 @@ use afs_primitives::{
     xor::lookup::XorLookupChip,
 };
 use afs_stark_backend::rap::AnyRap;
+use backtrace::Backtrace;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -18,18 +19,21 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
-use super::{VirtualMachineState, VmConfig, VmCycleTracker, VmMetrics};
+use super::{
+    cycle_tracker::CycleTracker, VirtualMachineState, VmConfig, VmCycleTracker, VmMetrics,
+};
 use crate::{
     arch::{
         bus::ExecutionBus,
-        chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
+        chips::{InstructionExecutor, InstructionExecutorVariant, MachineChip, MachineChipVariant},
+        columns::ExecutionState,
         instructions::{
-            Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
+            Opcode, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
             UINT256_ARITHMETIC_INSTRUCTIONS,
         },
     },
     castf::CastFChip,
-    cpu::{CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS},
+    cpu::{CpuChip, StreamsAndMetrics, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -40,9 +44,9 @@ use crate::{
     program::{ExecutionError, Program, ProgramChip},
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
-    vm::cycle_tracker::CycleTracker,
 };
 
+#[derive(Debug)]
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
 
@@ -102,7 +106,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         )));
         let program_chip = Rc::new(RefCell::new(ProgramChip::new(program)));
 
-        let mut executors = BTreeMap::new();
+        let mut executors: BTreeMap<Opcode, InstructionExecutorVariant<F>> = BTreeMap::new();
         macro_rules! assign {
             ($opcodes: expr, $executor: expr) => {
                 for opcode in $opcodes {
@@ -118,6 +122,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             MachineChipVariant::Cpu(cpu_chip.clone()),
             MachineChipVariant::Program(program_chip.clone()),
         ];
+
+        for opcode in CORE_INSTRUCTIONS {
+            executors.insert(opcode, cpu_chip.clone().into());
+        }
 
         if config.field_arithmetic_enabled {
             let field_arithmetic_chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
@@ -285,7 +293,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             program_chip,
             memory_chip,
             input_stream: state.input_stream,
-            hint_stream: state.hint_stream,
+            hint_stream: state.hint_stream.clone(),
             collected_metrics: Default::default(),
             cycle_tracker: CycleTracker::new(),
         }
@@ -293,7 +301,138 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
     /// Stopping is triggered by should_segment()
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        CpuChip::execute(self)
+        let mut timestamp: usize = self.cpu_chip.borrow().state.timestamp;
+        let mut pc = F::from_canonical_usize(self.cpu_chip.borrow().state.pc);
+
+        let mut collect_metrics = self.config.collect_metrics;
+        // The backtrace for the previous instruction, if any.
+        let mut prev_backtrace: Option<Backtrace> = None;
+
+        self.cpu_chip.borrow_mut().streams_and_metrics = Some(StreamsAndMetrics {
+            input_stream: self.input_stream.clone(),
+            hint_stream: self.hint_stream.clone(),
+            cycle_tracker: self.cycle_tracker.clone(),
+            collected_metrics: self.collected_metrics.clone(),
+        });
+
+        loop {
+            let pc_usize = pc.as_canonical_u64() as usize;
+
+            let (instruction, debug_info) =
+                RefCell::borrow_mut(&self.program_chip).get_instruction(pc_usize)?;
+            tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
+
+            let dsl_instr = match &debug_info {
+                Some(debug_info) => debug_info.dsl_instruction.to_string(),
+                None => String::new(),
+            };
+
+            let opcode = instruction.opcode;
+
+            let next_pc;
+
+            let prev_trace_cells = self.current_trace_cells();
+
+            if opcode == Opcode::FAIL {
+                if let Some(mut backtrace) = prev_backtrace {
+                    backtrace.resolve();
+                    eprintln!("eDSL program failure; backtrace:\n{:?}", backtrace);
+                } else {
+                    eprintln!("eDSL program failure; no backtrace");
+                }
+                return Err(ExecutionError::Fail(pc_usize));
+            }
+
+            if self.executors.contains_key(&opcode) {
+                let executor = self.executors.get_mut(&opcode).unwrap();
+                match InstructionExecutor::execute(
+                    executor,
+                    instruction,
+                    ExecutionState::new(pc_usize, timestamp),
+                ) {
+                    Ok(next_state) => {
+                        next_pc = F::from_canonical_usize(next_state.pc);
+                        timestamp = next_state.timestamp;
+                    }
+                    Err(e) => return Err(e),
+                }
+            } else {
+                return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
+            }
+
+            let now_trace_cells = self.current_trace_cells();
+            let added_trace_cells = now_trace_cells - prev_trace_cells;
+
+            if collect_metrics {
+                let mut cpu_chip = self.cpu_chip.borrow_mut();
+                let collected_metrics = &mut cpu_chip
+                    .streams_and_metrics
+                    .as_mut()
+                    .unwrap()
+                    .collected_metrics;
+                collected_metrics
+                    .opcode_counts
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+
+                if !dsl_instr.is_empty() {
+                    collected_metrics
+                        .dsl_counts
+                        .entry(dsl_instr)
+                        .and_modify(|count| *count += 1)
+                        .or_insert(1);
+                }
+
+                collected_metrics
+                    .opcode_trace_cells
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += added_trace_cells)
+                    .or_insert(added_trace_cells);
+            }
+
+            prev_backtrace = debug_info.and_then(|debug_info| debug_info.trace);
+
+            pc = next_pc;
+
+            // clock_cycle += 1;
+            if opcode == Opcode::TERMINATE && collect_metrics {
+                self.update_chip_metrics();
+                // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
+                collect_metrics = false;
+            }
+            if opcode == Opcode::TERMINATE
+            // && vm
+            //     .cpu_chip
+            //     .borrow()
+            //     .current_trace_height()
+            //     .is_power_of_two()
+            {
+                // is_done = true;
+                break;
+            }
+            if self.should_segment() {
+                panic!("continuations not supported");
+                // break
+            }
+        }
+
+        let streams_and_ct_refs = self
+            .cpu_chip
+            .borrow_mut()
+            .streams_and_metrics
+            .take()
+            .unwrap();
+        self.hint_stream = streams_and_ct_refs.hint_stream;
+        self.input_stream = streams_and_ct_refs.input_stream;
+        self.collected_metrics = streams_and_ct_refs.collected_metrics;
+        self.cycle_tracker = streams_and_ct_refs.cycle_tracker;
+
+        if collect_metrics {
+            self.update_chip_metrics();
+        }
+
+        Ok(())
     }
 
     /// Compile the AIRs and trace generation outputs for the chips used in this segment

@@ -1,4 +1,5 @@
 use core::panic;
+use std::collections::VecDeque;
 
 use afs_primitives::xor::bus::XorBus;
 pub use air::CpuAir;
@@ -7,9 +8,10 @@ use p3_field::PrimeField32;
 use crate::{
     arch::{
         bus::ExecutionBus,
-        instructions::{Opcode, Opcode::*},
+        instructions::Opcode::{self, *},
     },
     memory::MemoryChipRef,
+    vm::{metrics::VmMetrics, VmCycleTracker},
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
@@ -76,6 +78,15 @@ impl CpuState {
     }
 }
 
+#[derive(Debug)]
+pub struct StreamsAndMetrics<F> {
+    pub input_stream: VecDeque<Vec<F>>,
+    pub hint_stream: VecDeque<F>,
+
+    pub cycle_tracker: VmCycleTracker,
+    pub collected_metrics: VmMetrics,
+}
+
 /// Chip for the CPU. Carries all state and owns execution.
 #[derive(Debug)]
 pub struct CpuChip<F: PrimeField32> {
@@ -86,6 +97,8 @@ pub struct CpuChip<F: PrimeField32> {
     pub start_state: CpuState,
     pub public_values: Vec<Option<F>>,
     pub memory_chip: MemoryChipRef<F>,
+
+    pub streams_and_metrics: Option<StreamsAndMetrics<F>>,
 }
 
 impl<F: PrimeField32> CpuChip<F> {
@@ -121,6 +134,7 @@ impl<F: PrimeField32> CpuChip<F> {
             start_state: state,
             public_values: vec![None; options.num_public_values],
             memory_chip,
+            streams_and_metrics: None,
         }
     }
 }

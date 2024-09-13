@@ -1,11 +1,7 @@
-use std::{
-    array,
-    collections::{BTreeMap, VecDeque},
-};
+use std::{array, collections::BTreeMap};
 
 use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::rap::AnyRap;
-use backtrace::Backtrace;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -25,377 +21,300 @@ use crate::{
     },
     cpu::{columns::CpuMemoryAccessCols, WORD_SIZE},
     memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
-    program::ExecutionError,
-    vm::ExecutionSegment,
+    program::{ExecutionError, Instruction},
 };
 
-impl<F: PrimeField32> CpuChip<F> {
-    pub fn execute(vm: &mut ExecutionSegment<F>) -> Result<(), ExecutionError> {
-        let mut clock_cycle: usize = vm.cpu_chip.borrow().state.clock_cycle;
-        let mut timestamp: usize = vm.cpu_chip.borrow().state.timestamp;
-        let mut pc = F::from_canonical_usize(vm.cpu_chip.borrow().state.pc);
+impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
+    fn execute(
+        &mut self,
+        instruction: Instruction<F>,
+        from_state: ExecutionState<usize>,
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        let mut timestamp = from_state.timestamp;
+        let pc = F::from_canonical_usize(from_state.pc);
 
-        debug_assert_eq!(
-            timestamp,
-            vm.memory_chip.borrow().timestamp().as_canonical_u32() as usize
-        );
-
-        let mut hint_stream = vm.hint_stream.clone();
-        let mut cycle_tracker = std::mem::take(&mut vm.cycle_tracker);
-        #[allow(unused_assignments)]
-        let mut is_done = false;
-        let mut collect_metrics = vm.config.collect_metrics;
-        // The backtrace for the previous instruction, if any.
-        let mut prev_backtrace: Option<Backtrace> = None;
-
-        let cpu_options = vm.cpu_chip.borrow().air.options;
+        let cpu_options = self.air.options;
         let num_public_values = cpu_options.num_public_values;
 
-        loop {
-            let pc_usize = pc.as_canonical_u64() as usize;
+        let pc_usize = pc.as_canonical_u64() as usize;
 
-            let (instruction, debug_info) =
-                vm.program_chip.borrow_mut().get_instruction(pc_usize)?;
-            tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
+        let opcode = instruction.opcode;
+        let a = instruction.op_a;
+        let b = instruction.op_b;
+        let c = instruction.op_c;
+        let d = instruction.d;
+        let e = instruction.e;
+        let f = instruction.op_f;
+        let g = instruction.op_g;
+        let debug = instruction.debug.clone();
 
-            let dsl_instr = match &debug_info {
-                Some(debug_info) => debug_info.dsl_instruction.to_string(),
-                None => String::new(),
-            };
+        let io = CpuIoCols {
+            timestamp: F::from_canonical_usize(timestamp),
+            pc,
+            opcode: F::from_canonical_usize(opcode as usize),
+            op_a: a,
+            op_b: b,
+            op_c: c,
+            d,
+            e,
+            op_f: f,
+            op_g: g,
+        };
 
-            let opcode = instruction.opcode;
-            let a = instruction.op_a;
-            let b = instruction.op_b;
-            let c = instruction.op_c;
-            let d = instruction.d;
-            let e = instruction.e;
-            let f = instruction.op_f;
-            let g = instruction.op_g;
-            let debug = instruction.debug.clone();
+        let mut next_pc = pc + F::one();
 
-            let io = CpuIoCols {
-                timestamp: F::from_canonical_usize(timestamp),
-                pc,
-                opcode: F::from_canonical_usize(opcode as usize),
-                op_a: a,
-                op_b: b,
-                op_c: c,
-                d,
-                e,
-                op_f: f,
-                op_g: g,
-            };
+        let mut write_records = vec![];
+        let mut read_records = vec![];
 
-            let mut next_pc = pc + F::one();
-
-            let mut write_records = vec![];
-            let mut read_records = vec![];
-
-            let prev_trace_cells = vm.current_trace_cells();
-
-            macro_rules! read {
-                ($addr_space: expr, $pointer: expr) => {{
-                    assert!(read_records.len() < CPU_MAX_READS_PER_CYCLE);
-                    let mut memory_chip = vm.memory_chip.borrow_mut();
-                    read_records.push(memory_chip.read_cell($addr_space, $pointer));
-                    read_records[read_records.len() - 1].data[0]
-                }};
-            }
-
-            macro_rules! write {
-                ($addr_space: expr, $pointer: expr, $data: expr) => {{
-                    assert!(write_records.len() < CPU_MAX_WRITES_PER_CYCLE);
-                    let mut memory_chip = vm.memory_chip.borrow_mut();
-                    write_records.push(memory_chip.write_cell($addr_space, $pointer, $data));
-                }};
-            }
-
-            if opcode == FAIL {
-                if let Some(mut backtrace) = prev_backtrace {
-                    backtrace.resolve();
-                    eprintln!("eDSL program failure; backtrace:\n{:?}", backtrace);
-                } else {
-                    eprintln!("eDSL program failure; no backtrace");
-                }
-                return Err(ExecutionError::Fail(pc_usize));
-            }
-
-            let mut public_value_flags = vec![F::zero(); num_public_values];
-
-            if vm.executors.contains_key(&opcode) {
-                let executor = vm.executors.get_mut(&opcode).unwrap();
-                let next_state = InstructionExecutor::execute(
-                    executor,
-                    instruction,
-                    ExecutionState::new(pc_usize, timestamp),
+        macro_rules! read {
+            ($addr_space: expr, $pointer: expr) => {{
+                assert!(read_records.len() < CPU_MAX_READS_PER_CYCLE);
+                read_records.push(
+                    self.memory_chip
+                        .borrow_mut()
+                        .read_cell($addr_space, $pointer),
                 );
-                match next_state {
-                    Ok(next_state) => {
-                        next_pc = F::from_canonical_usize(next_state.pc);
-                        timestamp = next_state.timestamp;
-                    }
-                    Err(e) => return Err(e),
+                read_records[read_records.len() - 1].data[0]
+            }};
+        }
+
+        macro_rules! write {
+            ($addr_space: expr, $pointer: expr, $data: expr) => {{
+                assert!(write_records.len() < CPU_MAX_WRITES_PER_CYCLE);
+                write_records.push(self.memory_chip.borrow_mut().write_cell(
+                    $addr_space,
+                    $pointer,
+                    $data,
+                ));
+            }};
+        }
+
+        let mut public_value_flags = vec![F::zero(); num_public_values];
+
+        let streams_and_metrics = self.streams_and_metrics.as_mut().unwrap();
+        let hint_stream = &mut streams_and_metrics.hint_stream;
+
+        match opcode {
+            // d[a] <- e[d[c] + b]
+            LOADW => {
+                let base_pointer = read!(d, c);
+                let value = read!(e, base_pointer + b);
+                write!(d, a, value);
+            }
+            // e[d[c] + b] <- d[a]
+            STOREW => {
+                let base_pointer = read!(d, c);
+                let value = read!(d, a);
+                write!(e, base_pointer + b, value);
+            }
+            // d[a] <- e[d[c] + b + d[f] * g]
+            LOADW2 => {
+                let base_pointer = read!(d, c);
+                let index = read!(d, f);
+                let value = read!(e, base_pointer + b + index * g);
+                write!(d, a, value);
+            }
+            // e[d[c] + b + mem[f] * g] <- d[a]
+            STOREW2 => {
+                let base_pointer = read!(d, c);
+                let value = read!(d, a);
+                let index = read!(d, f);
+                write!(e, base_pointer + b + index * g, value);
+            }
+            // d[a] <- pc + INST_WIDTH, pc <- pc + b
+            JAL => {
+                write!(d, a, pc + F::from_canonical_usize(INST_WIDTH));
+                next_pc = pc + b;
+            }
+            // If d[a] = e[b], pc <- pc + c
+            BEQ => {
+                let left = read!(d, a);
+                let right = read!(e, b);
+                if left == right {
+                    next_pc = pc + c;
                 }
-            } else {
-                match opcode {
-                    // d[a] <- e[d[c] + b]
-                    LOADW => {
-                        let base_pointer = read!(d, c);
-                        let value = read!(e, base_pointer + b);
-                        write!(d, a, value);
-                    }
-                    // e[d[c] + b] <- d[a]
-                    STOREW => {
-                        let base_pointer = read!(d, c);
-                        let value = read!(d, a);
-                        write!(e, base_pointer + b, value);
-                    }
-                    // d[a] <- e[d[c] + b + d[f] * g]
-                    LOADW2 => {
-                        let base_pointer = read!(d, c);
-                        let index = read!(d, f);
-                        let value = read!(e, base_pointer + b + index * g);
-                        write!(d, a, value);
-                    }
-                    // e[d[c] + b + mem[f] * g] <- d[a]
-                    STOREW2 => {
-                        let base_pointer = read!(d, c);
-                        let value = read!(d, a);
-                        let index = read!(d, f);
-                        write!(e, base_pointer + b + index * g, value);
-                    }
-                    // d[a] <- pc + INST_WIDTH, pc <- pc + b
-                    JAL => {
-                        write!(d, a, pc + F::from_canonical_usize(INST_WIDTH));
-                        next_pc = pc + b;
-                    }
-                    // If d[a] = e[b], pc <- pc + c
-                    BEQ => {
-                        let left = read!(d, a);
-                        let right = read!(e, b);
-                        if left == right {
-                            next_pc = pc + c;
-                        }
-                    }
-                    // If d[a] != e[b], pc <- pc + c
-                    BNE => {
-                        let left = read!(d, a);
-                        let right = read!(e, b);
-                        if left != right {
-                            next_pc = pc + c;
-                        }
-                    }
-                    TERMINATE | NOP => {
-                        next_pc = pc;
-                    }
-                    PUBLISH => {
-                        let public_value_index = read!(d, a).as_canonical_u64() as usize;
-                        let value = read!(e, b);
-                        if public_value_index >= num_public_values {
-                            return Err(ExecutionError::PublicValueIndexOutOfBounds(
+            }
+            // If d[a] != e[b], pc <- pc + c
+            BNE => {
+                let left = read!(d, a);
+                let right = read!(e, b);
+                if left != right {
+                    next_pc = pc + c;
+                }
+            }
+            TERMINATE | NOP => {
+                next_pc = pc;
+            }
+            PUBLISH => {
+                let public_value_index = read!(d, a).as_canonical_u64() as usize;
+                let value = read!(e, b);
+                if public_value_index >= num_public_values {
+                    return Err(ExecutionError::PublicValueIndexOutOfBounds(
+                        pc_usize,
+                        num_public_values,
+                        public_value_index,
+                    ));
+                }
+                public_value_flags[public_value_index] = F::one();
+
+                let public_values = &mut self.public_values;
+                match public_values[public_value_index] {
+                    None => public_values[public_value_index] = Some(value),
+                    Some(exising_value) => {
+                        if value != exising_value {
+                            return Err(ExecutionError::PublicValueNotEqual(
                                 pc_usize,
-                                num_public_values,
                                 public_value_index,
+                                exising_value.as_canonical_u64() as usize,
+                                value.as_canonical_u64() as usize,
                             ));
                         }
-                        public_value_flags[public_value_index] = F::one();
-
-                        let public_values = &mut vm.cpu_chip.borrow_mut().public_values;
-                        match public_values[public_value_index] {
-                            None => public_values[public_value_index] = Some(value),
-                            Some(exising_value) => {
-                                if value != exising_value {
-                                    return Err(ExecutionError::PublicValueNotEqual(
-                                        pc_usize,
-                                        public_value_index,
-                                        exising_value.as_canonical_u64() as usize,
-                                        value.as_canonical_u64() as usize,
-                                    ));
-                                }
-                            }
-                        }
                     }
-                    PRINTF => {
-                        let value = read!(d, a);
-                        println!("{}", value);
-                    }
-                    HINT_INPUT => {
-                        let hint = match vm.input_stream.pop_front() {
-                            Some(hint) => hint,
-                            None => return Err(ExecutionError::EndOfInputStream(pc_usize)),
-                        };
-                        hint_stream = VecDeque::new();
-                        hint_stream.push_back(F::from_canonical_usize(hint.len()));
-                        hint_stream.extend(hint);
-                    }
-                    HINT_BITS => {
-                        let val = vm.memory_chip.borrow_mut().unsafe_read_cell(d, a);
-                        let mut val = val.as_canonical_u32();
-
-                        let len = c.as_canonical_u32();
-                        hint_stream = VecDeque::new();
-                        for _ in 0..len {
-                            hint_stream.push_back(F::from_canonical_u32(val & 1));
-                            val >>= 1;
-                        }
-                    }
-                    HINT_BYTES => {
-                        let val = vm.memory_chip.borrow_mut().unsafe_read_cell(d, a);
-                        let mut val = val.as_canonical_u32();
-
-                        let len = c.as_canonical_u32();
-                        hint_stream = VecDeque::new();
-                        for _ in 0..len {
-                            hint_stream.push_back(F::from_canonical_u32(val & 0xff));
-                            val >>= 8;
-                        }
-                    }
-                    // e[d[a] + b] <- hint_stream.next()
-                    SHINTW => {
-                        let hint = match hint_stream.pop_front() {
-                            Some(hint) => hint,
-                            None => return Err(ExecutionError::HintOutOfBounds(pc_usize)),
-                        };
-                        let base_pointer = read!(d, a);
-                        write!(e, base_pointer + b, hint);
-                    }
-                    CT_START => cycle_tracker.start(debug, vm.collected_metrics.clone()),
-                    CT_END => cycle_tracker.end(debug, vm.collected_metrics.clone()),
-                    _ => return Err(ExecutionError::DisabledOperation(pc_usize, opcode)),
-                };
-                timestamp += timestamp_delta(opcode);
-            }
-
-            // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
-            // and move this logic into generate_trace().
-            {
-                let aux_cols_factory = vm.memory_chip.borrow().aux_cols_factory();
-
-                let read_cols = array::from_fn(|i| {
-                    read_records
-                        .get(i)
-                        .map_or_else(CpuMemoryAccessCols::disabled, |read| {
-                            CpuMemoryAccessCols::from_read_record(read.clone())
-                        })
-                });
-                let reads_aux_cols = array::from_fn(|i| {
-                    read_records
-                        .get(i)
-                        .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
-                            aux_cols_factory.make_read_or_immediate_aux_cols(read.clone())
-                        })
-                });
-
-                let write_cols = array::from_fn(|i| {
-                    write_records
-                        .get(i)
-                        .map_or_else(CpuMemoryAccessCols::disabled, |write| {
-                            CpuMemoryAccessCols::from_write_record(write.clone())
-                        })
-                });
-                let writes_aux_cols = array::from_fn(|i| {
-                    write_records
-                        .get(i)
-                        .map_or_else(MemoryWriteAuxCols::disabled, |write| {
-                            aux_cols_factory.make_write_aux_cols(write.clone())
-                        })
-                });
-
-                let mut operation_flags = BTreeMap::new();
-                for other_opcode in CORE_INSTRUCTIONS {
-                    operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
                 }
-
-                let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
-                    &IsEqualVecAir::new(WORD_SIZE),
-                    (vec![read_cols[0].value], vec![read_cols[1].value]),
-                );
-
-                let read0_equals_read1 = is_equal_vec_cols.io.is_equal;
-                let is_equal_vec_aux = is_equal_vec_cols.aux;
-
-                let aux = CpuAuxCols {
-                    operation_flags,
-                    public_value_flags,
-                    reads: read_cols,
-                    writes: write_cols,
-                    read0_equals_read1,
-                    is_equal_vec_aux,
-                    reads_aux_cols,
-                    writes_aux_cols,
+            }
+            PRINTF => {
+                let value = read!(d, a);
+                println!("{}", value);
+            }
+            HINT_INPUT => {
+                let hint = match streams_and_metrics.input_stream.pop_front() {
+                    Some(hint) => hint,
+                    None => {
+                        return Err(ExecutionError::EndOfInputStream(pc_usize));
+                    }
                 };
-
-                let cols = CpuCols { io, aux };
-                vm.cpu_chip.borrow_mut().rows.push(cols.flatten());
+                hint_stream.clear();
+                hint_stream.push_back(F::from_canonical_usize(hint.len()));
+                hint_stream.extend(hint);
             }
+            HINT_BITS => {
+                let val = self.memory_chip.borrow().unsafe_read_cell(d, a);
+                let mut val = val.as_canonical_u32();
 
-            let now_trace_cells = vm.current_trace_cells();
-            let added_trace_cells = now_trace_cells - prev_trace_cells;
-
-            if collect_metrics {
-                vm.collected_metrics
-                    .opcode_counts
-                    .entry(opcode.to_string())
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
-
-                if !dsl_instr.is_empty() {
-                    vm.collected_metrics
-                        .dsl_counts
-                        .entry(dsl_instr)
-                        .and_modify(|count| *count += 1)
-                        .or_insert(1);
+                let len = c.as_canonical_u32();
+                hint_stream.clear();
+                for _ in 0..len {
+                    hint_stream.push_back(F::from_canonical_u32(val & 1));
+                    val >>= 1;
                 }
+            }
+            HINT_BYTES => {
+                let val = self.memory_chip.borrow().unsafe_read_cell(d, a);
+                let mut val = val.as_canonical_u32();
 
-                vm.collected_metrics
-                    .opcode_trace_cells
-                    .entry(opcode.to_string())
-                    .and_modify(|count| *count += added_trace_cells)
-                    .or_insert(added_trace_cells);
+                let len = c.as_canonical_u32();
+                hint_stream.clear();
+                for _ in 0..len {
+                    hint_stream.push_back(F::from_canonical_u32(val & 0xff));
+                    val >>= 8;
+                }
+            }
+            // e[d[a] + b] <- hint_stream.next()
+            SHINTW => {
+                let hint = match hint_stream.pop_front() {
+                    Some(hint) => hint,
+                    None => {
+                        return Err(ExecutionError::HintOutOfBounds(pc_usize));
+                    }
+                };
+                let base_pointer = read!(d, a);
+                write!(e, base_pointer + b, hint);
+            }
+            CT_START => {
+                let collected_metrics = streams_and_metrics.collected_metrics.clone();
+                streams_and_metrics
+                    .cycle_tracker
+                    .start(debug, collected_metrics);
+            }
+            CT_END => {
+                let collected_metrics = streams_and_metrics.collected_metrics.clone();
+                streams_and_metrics
+                    .cycle_tracker
+                    .end(debug, collected_metrics);
+            }
+            _ => unreachable!(),
+        };
+        timestamp += timestamp_delta(opcode);
+
+        // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
+        // and move this logic into generate_trace().
+        {
+            let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+
+            let read_cols = array::from_fn(|i| {
+                read_records
+                    .get(i)
+                    .map_or_else(CpuMemoryAccessCols::disabled, |read| {
+                        CpuMemoryAccessCols::from_read_record(read.clone())
+                    })
+            });
+            let reads_aux_cols = array::from_fn(|i| {
+                read_records
+                    .get(i)
+                    .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
+                        aux_cols_factory.make_read_or_immediate_aux_cols(read.clone())
+                    })
+            });
+
+            let write_cols = array::from_fn(|i| {
+                write_records
+                    .get(i)
+                    .map_or_else(CpuMemoryAccessCols::disabled, |write| {
+                        CpuMemoryAccessCols::from_write_record(write.clone())
+                    })
+            });
+            let writes_aux_cols = array::from_fn(|i| {
+                write_records
+                    .get(i)
+                    .map_or_else(MemoryWriteAuxCols::disabled, |write| {
+                        aux_cols_factory.make_write_aux_cols(write.clone())
+                    })
+            });
+
+            let mut operation_flags = BTreeMap::new();
+            for other_opcode in CORE_INSTRUCTIONS {
+                operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
             }
 
-            prev_backtrace = debug_info.and_then(|debug_info| debug_info.trace);
+            let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
+                &IsEqualVecAir::new(WORD_SIZE),
+                (vec![read_cols[0].value], vec![read_cols[1].value]),
+            );
 
-            pc = next_pc;
+            let read0_equals_read1 = is_equal_vec_cols.io.is_equal;
+            let is_equal_vec_aux = is_equal_vec_cols.aux;
 
-            clock_cycle += 1;
-            if opcode == TERMINATE && collect_metrics {
-                vm.update_chip_metrics();
-                // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
-                collect_metrics = false;
-            }
-            if opcode == TERMINATE
-                && vm
-                    .cpu_chip
-                    .borrow()
-                    .current_trace_height()
-                    .is_power_of_two()
-            {
-                is_done = true;
-                break;
-            }
-            if vm.should_segment() {
-                panic!("continuations not supported");
-                // break
-            }
-        }
-        if collect_metrics {
-            vm.update_chip_metrics();
+            let aux = CpuAuxCols {
+                operation_flags,
+                public_value_flags,
+                reads: read_cols,
+                writes: write_cols,
+                read0_equals_read1,
+                is_equal_vec_aux,
+                reads_aux_cols,
+                writes_aux_cols,
+            };
+
+            let cols = CpuCols { io, aux };
+            self.rows.push(cols.flatten());
         }
 
         // Update CPU chip state with all changes from this segment.
-        vm.cpu_chip.borrow_mut().set_state(CpuState {
-            clock_cycle,
+        self.set_state(CpuState {
+            clock_cycle: self.state.clock_cycle + 1,
             timestamp,
-            pc: pc.as_canonical_u64() as usize,
-            is_done,
+            pc: next_pc.as_canonical_u64() as usize,
+            is_done: opcode == TERMINATE,
         });
-        vm.hint_stream = hint_stream;
-        vm.cycle_tracker = cycle_tracker;
 
-        Ok(())
+        Ok(ExecutionState::new(
+            next_pc.as_canonical_u64() as usize,
+            timestamp,
+        ))
     }
+}
 
+impl<F: PrimeField32> CpuChip<F> {
     /// Pad with NOP rows.
     pub fn pad_rows(&mut self) {
         let curr_height = self.rows.len();
@@ -415,9 +334,7 @@ impl<F: PrimeField32> CpuChip<F> {
 
 impl<F: PrimeField32> MachineChip<F> for CpuChip<F> {
     fn generate_trace(mut self) -> RowMajorMatrix<F> {
-        if !self.state.is_done {
-            self.pad_rows();
-        }
+        self.pad_rows();
 
         RowMajorMatrix::new(self.rows.concat(), CpuCols::<F>::get_width(&self.air))
     }

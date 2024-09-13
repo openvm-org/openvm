@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, mem::take};
+use std::{cell::RefCell, collections::VecDeque, mem::take, rc::Rc};
 
 use cycle_tracker::CycleTracker;
 use metrics::VmMetrics;
@@ -75,9 +75,11 @@ impl<F: PrimeField32> VirtualMachine<F> {
             self.segments.len() + 1
         );
         let program = self.program.clone();
-        let mut segment = ExecutionSegment::new(self.config, program, state);
-        segment.cycle_tracker = cycle_tracker;
-        self.segments.push(segment);
+        let segment = ExecutionSegment::new(self.config, program, state);
+        let segment_rc = Rc::new(RefCell::new(segment));
+        segment_rc.borrow_mut().cycle_tracker = cycle_tracker;
+        self.segments
+            .push(Rc::try_unwrap(segment_rc).unwrap().into_inner());
     }
 
     /// Retrieves the current state of the VM by querying the last segment.
