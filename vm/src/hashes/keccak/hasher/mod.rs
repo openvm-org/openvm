@@ -22,7 +22,7 @@ use crate::{
         instructions::Opcode,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
-    program::Instruction,
+    program::{ExecutionError, Instruction},
 };
 
 /// Memory reads to get dst, src, len
@@ -104,7 +104,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -208,10 +208,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let to_timestamp = from_state.timestamp + timestamp_change;
         memory.jump_timestamp(F::from_canonical_usize(to_timestamp));
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: to_timestamp,
-        }
+        })
     }
 }
 

@@ -11,12 +11,12 @@ use crate::{
         bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
         instructions::Opcode::*,
     },
-    program::Instruction,
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         tree::Hasher,
         MemoryAuxColsFactory, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
     },
+    program::{ExecutionError, Instruction},
 };
 
 #[cfg(test)]
@@ -178,7 +178,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let mut memory_chip = self.memory_chip.borrow_mut();
 
         let Instruction {
@@ -254,10 +254,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             output2_write,
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

@@ -129,8 +129,13 @@ impl<F: PrimeField32> CpuChip<F> {
                     instruction,
                     ExecutionState::new(pc_usize, timestamp),
                 );
-                next_pc = F::from_canonical_usize(next_state.pc);
-                timestamp = next_state.timestamp;
+                match next_state {
+                    Ok(next_state) => {
+                        next_pc = F::from_canonical_usize(next_state.pc);
+                        timestamp = next_state.timestamp;
+                    }
+                    Err(e) => return Err(e),
+                }
             } else {
                 match opcode {
                     // d[a] <- e[d[c] + b]

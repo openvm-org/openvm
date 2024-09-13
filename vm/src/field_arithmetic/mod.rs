@@ -7,8 +7,8 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
     },
-    program::Instruction,
     field_arithmetic::columns::Operand,
+    program::{ExecutionError, Instruction},
 };
 
 #[cfg(test)]
@@ -60,7 +60,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: z_address,
@@ -98,10 +98,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
         });
         tracing::trace!("op = {:?}", self.records.last().unwrap());
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: from_state.timestamp + FieldArithmeticAir::TIMESTAMP_DELTA,
-        }
+        })
     }
 }
 

@@ -22,7 +22,7 @@ use crate::{
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::MemoryChipRef,
     modular_arithmetic::{ModularArithmeticAirVariant, ModularArithmeticChip},
-    program::{Instruction, ProgramChip},
+    program::{ExecutionError, Instruction, ProgramChip},
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
@@ -33,7 +33,7 @@ pub trait InstructionExecutor<F> {
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize>;
+    ) -> Result<ExecutionState<usize>, ExecutionError>;
 }
 
 #[enum_dispatch]
@@ -57,7 +57,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
         &mut self,
         instruction: Instruction<F>,
         prev_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         self.borrow_mut().execute(instruction, prev_state)
     }
 }

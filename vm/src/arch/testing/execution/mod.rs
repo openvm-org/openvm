@@ -56,7 +56,9 @@ impl<F: PrimeField32> ExecutionTester<F> {
         self.records.push(DummyExecutionInteractionCols {
             count: F::neg_one(), // send
             initial_state,
-            final_state: final_state.map(F::from_canonical_usize),
+            final_state: final_state
+                .expect("Expected the execution not to fail")
+                .map(F::from_canonical_usize),
             instruction: instruction_cols,
         })
     }

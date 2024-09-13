@@ -13,7 +13,7 @@ use crate::{
         instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
-    program::Instruction,
+    program::{ExecutionError, Instruction},
 };
 
 #[cfg(test)]
@@ -99,7 +99,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
         &mut self,
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -167,10 +167,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             buffer: buffer.into_iter().map(T::from_canonical_u32).collect_vec(),
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

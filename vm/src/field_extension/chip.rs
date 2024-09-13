@@ -12,9 +12,9 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
     },
-    program::Instruction,
     field_extension::air::FieldExtensionArithmeticAir,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    program::{ExecutionError, Instruction},
 };
 
 pub const BETA: usize = 11;
@@ -53,7 +53,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a,
@@ -92,10 +92,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
             z_write,
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

@@ -21,10 +21,10 @@ use crate::{
         bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
         instructions::Opcode,
     },
-    program::Instruction,
     memory::{
         offline_checker::MemoryBridge, MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord,
     },
+    program::{ExecutionError, Instruction},
 };
 
 pub mod air;
@@ -214,7 +214,7 @@ impl<T: PrimeField32> InstructionExecutor<T>
         &mut self,
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
             from_state.timestamp,
@@ -281,10 +281,10 @@ impl<T: PrimeField32> InstructionExecutor<T>
         };
         self.data.push(record);
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

@@ -9,8 +9,8 @@ use p3_field::{PrimeField32, PrimeField64};
 use self::air::ModularArithmeticVmAir;
 use crate::{
     arch::{chips::InstructionExecutor, columns::ExecutionState, instructions::Opcode::*},
-    program::Instruction,
     memory::manager::MemoryChipRef,
+    program::{ExecutionError, Instruction},
     vm::ExecutionSegment,
 };
 
@@ -95,7 +95,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let (op_input_2, op_result) = match instruction.opcode {
             SECP256K1_COORD_ADD | SECP256K1_COORD_MUL | SECP256K1_SCALAR_ADD
             | SECP256K1_SCALAR_MUL => (instruction.op_b, instruction.op_c),
@@ -174,10 +174,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for ModularArithmeticChip<F> {
         });
         tracing::trace!("op = {:?}", self.ops.last().unwrap());
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: from_state.timestamp + self.air.time_stamp_delta(),
-        }
+        })
     }
 }
 
