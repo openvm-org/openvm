@@ -141,7 +141,9 @@ fn table_filter(input_table: CryptographicTable, x: Type) -> CryptographicTable 
     for page in filtered_pages.iter().skip(1) {
         let (new_carry_over, full_page) = PAGE_COMPACT_UNIT.execute(carry_over, page);
         carry_over = new_carry_over;
-        output_pages.push(full_page);
+        if !full_page.is_empty() {
+            output_pages.push(full_page);
+        }
     }
     if !carry_over.is_empty() {
         output_pages.push(carry_over);
@@ -172,7 +174,9 @@ fn verify_table_filter(input_page_commits: Vec<PageCommits>, x: Type) -> Vec<Pag
     let mut output_page_commits = Vec::new();
     for filtered_page_commit in filtered_page_commits {
         let (new_carry_over_commit, full_page_commit) = verify_page_op(PAGE_COMPACT_UNIT_VKEY, carry_over_commit, filtered_page_commit);
-        output_page_commits.push(full_page_commit);
+        if full_page_commit != EMPTY_PAGE_COMMIT {
+            output_page_commits.push(full_page_commit);
+        }
     }
     if carry_over_commit != EMPTY_PAGE_COMMIT {
         output_page_commits.push(carry_over_commit);
