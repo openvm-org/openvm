@@ -22,7 +22,9 @@ use crate::{
         instructions::Opcode,
     },
     cpu::trace::Instruction,
-    memory::{offline_checker::MemoryBridge, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    memory::{
+        offline_checker::MemoryBridge, MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord,
+    },
 };
 
 pub mod air;
@@ -59,13 +61,10 @@ pub struct ModularArithmeticRecord<T: PrimeField32> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
-    pub x_address_read: MemoryReadRecord<T, 1>,
-    pub y_address_read: MemoryReadRecord<T, 1>,
-    pub z_address_read: MemoryReadRecord<T, 1>,
     // Each limb is 8 bits (byte), 32 limbs for 256 bits.
-    pub x_read: MemoryReadRecord<T, NUM_LIMBS>,
-    pub y_read: MemoryReadRecord<T, NUM_LIMBS>,
-    pub z_write: MemoryWriteRecord<T, NUM_LIMBS>,
+    pub x_array_read: MemoryHeapReadRecord<T, NUM_LIMBS>,
+    pub y_array_read: MemoryHeapReadRecord<T, NUM_LIMBS>,
+    pub z_array_write: MemoryHeapWriteRecord<T, NUM_LIMBS>,
 }
 
 #[derive(Clone, Debug)]
@@ -233,15 +232,11 @@ impl<T: PrimeField32> InstructionExecutor<T>
         } = instruction.clone();
         assert!(self.air.air.is_expected_opcode(opcode));
 
-        let x_address_read = memory_chip.read_cell(d, x_address_ptr);
-        let y_address_read = memory_chip.read_cell(d, y_address_ptr);
-        let z_address_read = memory_chip.read_cell(d, z_address_ptr);
+        let x_array_read = memory_chip.read_heap::<NUM_LIMBS>(d, e, x_address_ptr);
+        let y_array_read = memory_chip.read_heap::<NUM_LIMBS>(d, e, y_address_ptr);
 
-        let x_read = memory_chip.read::<NUM_LIMBS>(e, x_address_read.value());
-        let y_read = memory_chip.read::<NUM_LIMBS>(e, y_address_read.value());
-
-        let x = x_read.data.map(|x| x.as_canonical_u32());
-        let y = y_read.data.map(|x| x.as_canonical_u32());
+        let x = x_array_read.data_read.data.map(|x| x.as_canonical_u32());
+        let y = y_array_read.data_read.data.map(|x| x.as_canonical_u32());
         let mut x_biguint = limbs_to_biguint(&x);
         let y_biguint = limbs_to_biguint(&y);
 
@@ -270,21 +265,19 @@ impl<T: PrimeField32> InstructionExecutor<T>
         };
         let z_limbs = biguint_to_limbs(z_biguint);
 
-        let z_write = memory_chip.write::<NUM_LIMBS>(
+        let z_array_write = memory_chip.write_heap::<NUM_LIMBS>(
+            d,
             e,
-            z_address_read.value(),
+            z_address_ptr,
             z_limbs.map(|x| T::from_canonical_u32(x)),
         );
 
         let record = ModularArithmeticRecord {
             from_state,
             instruction,
-            x_address_read,
-            y_address_read,
-            z_address_read,
-            x_read,
-            y_read,
-            z_write,
+            x_array_read,
+            y_array_read,
+            z_array_write,
         };
         self.data.push(record);
 

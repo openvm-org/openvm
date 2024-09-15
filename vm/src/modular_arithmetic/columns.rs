@@ -3,7 +3,10 @@ use std::iter;
 use super::{ModularArithmeticAirVariant, ModularArithmeticVmAir, NUM_LIMBS};
 use crate::{
     arch::columns::ExecutionState,
-    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    memory::{
+        offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
+        MemoryHeapDataIoCols,
+    },
 };
 
 pub struct ModularArithmeticCols<T: Clone> {
@@ -33,24 +36,18 @@ impl<T: Clone> ModularArithmeticCols<T> {
 
 pub struct ModularArithmeticIoCols<T: Clone> {
     pub from_state: ExecutionState<T>,
-    pub x: MemoryData<T>,
-    pub y: MemoryData<T>,
-    pub z: MemoryData<T>,
-    pub x_address: MemoryData<T>,
-    pub y_address: MemoryData<T>,
-    pub z_address: MemoryData<T>,
+    pub x: MemoryHeapDataIoCols<T, NUM_LIMBS>,
+    pub y: MemoryHeapDataIoCols<T, NUM_LIMBS>,
+    pub z: MemoryHeapDataIoCols<T, NUM_LIMBS>,
 }
 
 impl<T: Clone> ModularArithmeticIoCols<T> {
     pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
         Self {
             from_state: ExecutionState::from_iter(iter.by_ref()),
-            x: MemoryData::from_iterator(iter.by_ref(), NUM_LIMBS),
-            y: MemoryData::from_iterator(iter.by_ref(), NUM_LIMBS),
-            z: MemoryData::from_iterator(iter.by_ref(), NUM_LIMBS),
-            x_address: MemoryData::from_iterator(iter.by_ref(), 1),
-            y_address: MemoryData::from_iterator(iter.by_ref(), 1),
-            z_address: MemoryData::from_iterator(iter.by_ref(), 1),
+            x: MemoryHeapDataIoCols::from_iterator(iter.by_ref()),
+            y: MemoryHeapDataIoCols::from_iterator(iter.by_ref()),
+            z: MemoryHeapDataIoCols::from_iterator(iter.by_ref()),
         }
     }
 
@@ -60,9 +57,6 @@ impl<T: Clone> ModularArithmeticIoCols<T> {
             .chain(self.x.flatten())
             .chain(self.y.flatten())
             .chain(self.z.flatten())
-            .chain(self.x_address.flatten())
-            .chain(self.y_address.flatten())
-            .chain(self.z_address.flatten())
             .cloned()
             .collect()
     }
@@ -77,12 +71,9 @@ impl<T: Clone> ModularArithmeticIoCols<T> {
 pub struct ModularArithmeticAuxCols<T: Clone> {
     // 0 for padding rows.
     pub is_valid: T,
-    pub read_x_aux_cols: MemoryReadAuxCols<T, NUM_LIMBS>,
-    pub read_y_aux_cols: MemoryReadAuxCols<T, NUM_LIMBS>,
-    pub write_z_aux_cols: MemoryWriteAuxCols<T, NUM_LIMBS>,
-    pub x_address_aux_cols: MemoryReadAuxCols<T, 1>,
-    pub y_address_aux_cols: MemoryReadAuxCols<T, 1>,
-    pub z_address_aux_cols: MemoryReadAuxCols<T, 1>,
+    pub read_x_aux_cols: MemoryHeapReadAuxCols<T, NUM_LIMBS>,
+    pub read_y_aux_cols: MemoryHeapReadAuxCols<T, NUM_LIMBS>,
+    pub write_z_aux_cols: MemoryHeapWriteAuxCols<T, NUM_LIMBS>,
 
     pub carries: Vec<T>,
     pub q: Vec<T>,
@@ -91,13 +82,8 @@ pub struct ModularArithmeticAuxCols<T: Clone> {
 
 impl<T: Clone> ModularArithmeticAuxCols<T> {
     pub fn width(air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>) -> usize {
-        // FIXME: the length of carries and q depend on operation
-        MemoryReadAuxCols::<T, NUM_LIMBS>::width()
-            + MemoryReadAuxCols::<T, NUM_LIMBS>::width()
-            + MemoryWriteAuxCols::<T, NUM_LIMBS>::width()
-            + MemoryReadAuxCols::<T, 1>::width()
-            + MemoryReadAuxCols::<T, 1>::width()
-            + MemoryReadAuxCols::<T, 1>::width()
+        MemoryHeapReadAuxCols::<T, NUM_LIMBS>::width() * 2
+            + MemoryHeapWriteAuxCols::<T, NUM_LIMBS>::width()
             + air.carry_limbs
             + air.q_limbs
             + 2
@@ -108,26 +94,9 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
         air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>,
     ) -> Self {
         let is_valid = iter.next().unwrap();
-        let width = MemoryReadAuxCols::<T, NUM_LIMBS>::width();
-        let read_x_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let read_x_aux_cols = MemoryReadAuxCols::<T, NUM_LIMBS>::from_slice(&read_x_slice);
-
-        let read_y_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let read_y_aux_cols = MemoryReadAuxCols::<T, NUM_LIMBS>::from_slice(&read_y_slice);
-
-        let width = MemoryWriteAuxCols::<T, NUM_LIMBS>::width();
-        let write_z_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let write_z_aux_cols = MemoryWriteAuxCols::<T, NUM_LIMBS>::from_slice(&write_z_slice);
-
-        let width = MemoryReadAuxCols::<T, 1>::width();
-        let x_address_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let x_address_aux_cols = MemoryReadAuxCols::<T, 1>::from_slice(&x_address_slice);
-
-        let y_address_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let y_address_aux_cols = MemoryReadAuxCols::<T, 1>::from_slice(&y_address_slice);
-
-        let z_address_slice = iter.by_ref().take(width).collect::<Vec<_>>();
-        let z_address_aux_cols = MemoryReadAuxCols::<T, 1>::from_slice(&z_address_slice);
+        let read_x_aux_cols = MemoryHeapReadAuxCols::<T, NUM_LIMBS>::from_iterator(&mut iter);
+        let read_y_aux_cols = MemoryHeapReadAuxCols::<T, NUM_LIMBS>::from_iterator(&mut iter);
+        let write_z_aux_cols = MemoryHeapWriteAuxCols::<T, NUM_LIMBS>::from_iterator(&mut iter);
 
         let carries = iter.by_ref().take(air.carry_limbs).collect::<Vec<_>>();
         let q = iter.by_ref().take(air.q_limbs).collect::<Vec<_>>();
@@ -137,9 +106,6 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
             read_x_aux_cols,
             read_y_aux_cols,
             write_z_aux_cols,
-            x_address_aux_cols,
-            y_address_aux_cols,
-            z_address_aux_cols,
             carries,
             q,
             opcode,
@@ -152,9 +118,6 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
             self.read_x_aux_cols.clone().flatten(),
             self.read_y_aux_cols.clone().flatten(),
             self.write_z_aux_cols.clone().flatten(),
-            self.x_address_aux_cols.clone().flatten(),
-            self.y_address_aux_cols.clone().flatten(),
-            self.z_address_aux_cols.clone().flatten(),
         ]
         .concat();
 
