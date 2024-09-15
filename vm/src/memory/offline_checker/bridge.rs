@@ -73,7 +73,7 @@ impl MemoryBridge {
     ) -> MemoryReadOperation<'a, T, V, N> {
         self.read(
             MemoryAddress::new(x.address_space, x.address),
-            x.data.try_into().unwrap_or_else(|_| unreachable!()),
+            x.data,
             timestamp.into(),
             aux,
         )
@@ -124,7 +124,7 @@ impl MemoryBridge {
     ) -> MemoryWriteOperation<'a, T, V, N> {
         self.write(
             MemoryAddress::new(x.address_space, x.address),
-            x.data.try_into().unwrap_or_else(|_| unreachable!()),
+            x.data,
             timestamp.into(),
             aux,
         )
