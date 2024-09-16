@@ -300,9 +300,9 @@ impl<F: PrimeField32> MemoryChip<F> {
         &mut self,
         ptr_address_space: F,
         data_address_space: F,
-        pointer: F,
+        ptr_pointer: F,
     ) -> MemoryHeapReadRecord<F, N> {
-        let address_read = self.read_cell(ptr_address_space, pointer);
+        let address_read = self.read_cell(ptr_address_space, ptr_pointer);
         let data_read = self.read(data_address_space, address_read.value());
 
         MemoryHeapReadRecord {
@@ -376,10 +376,10 @@ impl<F: PrimeField32> MemoryChip<F> {
         &mut self,
         ptr_address_space: F,
         data_address_space: F,
-        pointer: F,
+        ptr_pointer: F,
         data: [F; N],
     ) -> MemoryHeapWriteRecord<F, N> {
-        let address_read = self.read_cell(ptr_address_space, pointer);
+        let address_read = self.read_cell(ptr_address_space, ptr_pointer);
         let data_write = self.write(data_address_space, address_read.value(), data);
 
         MemoryHeapWriteRecord {
