@@ -358,6 +358,12 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
+                DslIr::MulU256(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::MulU256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
                 DslIr::LessThanV(dst, lhs, rhs) => {
                     self.push(
                         AsmInstruction::LessThanF(dst.fp(), lhs.fp(), rhs.fp()),

@@ -92,6 +92,8 @@ pub enum DslIr<C: Config> {
     MulSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Multiplies two modular BigInts over scalar field.
     MulSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Multiply two u256
+    MulU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Divisions.
     /// Divides two variables (var = var / var).
