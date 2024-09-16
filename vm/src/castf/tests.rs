@@ -1,10 +1,8 @@
 use std::{
     array::{self},
     borrow::BorrowMut,
-    sync::Arc,
 };
 
-use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
 use p3_baby_bear::BabyBear;
@@ -18,7 +16,7 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
-    cpu::{trace::Instruction, RANGE_CHECKER_BUS},
+    cpu::trace::Instruction,
 };
 
 type F = BabyBear;
@@ -63,12 +61,9 @@ fn prepare_castf_rand_write_execute(
 fn castf_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = MachineChipTestBuilder::default();
-    let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, LIMB_SIZE);
-    let range_checker_chip = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.memory_chip(),
-        range_checker_chip.clone(),
     );
     let num_tests: usize = 10;
 
@@ -80,32 +75,29 @@ fn castf_rand_test() {
     let tester = tester
         .build()
         .load(chip)
-        .load(range_checker_chip)
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
 #[test]
 fn negative_castf_overflow_test() {
-    let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, LIMB_SIZE);
-    let range_checker_chip = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.memory_chip(),
-        range_checker_chip.clone(),
     );
 
     let mut rng = create_seeded_rng();
     let x = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, x, &mut rng);
 
-    let air = chip.air.clone();
+    let air = chip.air;
+    let range_checker_chip = chip.range_checker_chip.clone();
+    let range_air = range_checker_chip.air;
     let mut trace = chip.generate_trace();
     let cols: &mut CastFCols<F> = trace.values[..].borrow_mut();
     cols.io.x[3] = F::from_canonical_u32(rng.gen_range(1 << FINAL_LIMB_SIZE..1 << LIMB_SIZE));
 
-    let range_air = range_checker_chip.air.clone();
     let range_trace = range_checker_chip.generate_trace();
 
     disable_debug_builder();
@@ -118,13 +110,10 @@ fn negative_castf_overflow_test() {
 
 #[test]
 fn negative_castf_memread_test() {
-    let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, LIMB_SIZE);
-    let range_checker_chip = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.memory_chip(),
-        range_checker_chip.clone(),
     );
 
     let mut rng = create_seeded_rng();
@@ -132,11 +121,12 @@ fn negative_castf_memread_test() {
     prepare_castf_rand_write_execute(&mut tester, &mut chip, x, &mut rng);
 
     let air = chip.air.clone();
+    let range_checker_chip = chip.range_checker_chip.clone();
+    let range_air = range_checker_chip.air;
     let mut trace = chip.generate_trace();
     let cols: &mut CastFCols<F> = trace.values[..].borrow_mut();
     cols.io.op_a = cols.io.op_a + F::one();
 
-    let range_air = range_checker_chip.air.clone();
     let range_trace = range_checker_chip.generate_trace();
 
     disable_debug_builder();
@@ -149,13 +139,10 @@ fn negative_castf_memread_test() {
 
 #[test]
 fn negative_castf_memwrite_test() {
-    let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, LIMB_SIZE);
-    let range_checker_chip = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.memory_chip(),
-        range_checker_chip.clone(),
     );
 
     let mut rng = create_seeded_rng();
@@ -163,11 +150,12 @@ fn negative_castf_memwrite_test() {
     prepare_castf_rand_write_execute(&mut tester, &mut chip, x, &mut rng);
 
     let air = chip.air.clone();
+    let range_checker_chip = chip.range_checker_chip.clone();
+    let range_air = range_checker_chip.air;
     let mut trace = chip.generate_trace();
     let cols: &mut CastFCols<F> = trace.values[..].borrow_mut();
     cols.io.op_b = cols.io.op_b + F::one();
 
-    let range_air = range_checker_chip.air.clone();
     let range_trace = range_checker_chip.generate_trace();
 
     disable_debug_builder();
@@ -180,13 +168,10 @@ fn negative_castf_memwrite_test() {
 
 #[test]
 fn negative_castf_as_test() {
-    let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, LIMB_SIZE);
-    let range_checker_chip = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.memory_chip(),
-        range_checker_chip.clone(),
     );
 
     let mut rng = create_seeded_rng();
@@ -194,11 +179,12 @@ fn negative_castf_as_test() {
     prepare_castf_rand_write_execute(&mut tester, &mut chip, x, &mut rng);
 
     let air = chip.air.clone();
+    let range_checker_chip = chip.range_checker_chip.clone();
+    let range_air = range_checker_chip.air;
     let mut trace = chip.generate_trace();
     let cols: &mut CastFCols<F> = trace.values[..].borrow_mut();
     cols.io.d = cols.io.d + F::one();
 
-    let range_air = range_checker_chip.air.clone();
     let range_trace = range_checker_chip.generate_trace();
 
     disable_debug_builder();

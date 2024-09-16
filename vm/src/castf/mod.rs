@@ -44,10 +44,10 @@ impl<T: PrimeField32> CastFChip<T> {
     pub fn new(
         execution_bus: ExecutionBus,
         memory_chip: MemoryChipRef<T>,
-        range_checker_chip: Arc<VariableRangeCheckerChip>,
     ) -> Self {
-        let bus = range_checker_chip.bus();
+        let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
+        let bus = range_checker_chip.bus();
 
         assert!(
             bus.range_max_bits >= LIMB_SIZE,
