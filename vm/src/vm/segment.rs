@@ -28,6 +28,7 @@ use crate::{
             UINT256_ARITHMETIC_INSTRUCTIONS,
         },
     },
+    castf::CastFChip,
     cpu::{
         trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
     },
@@ -264,6 +265,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             assign!([Opcode::MUL256], u256_mult_chip);
             chips.push(MachineChipVariant::U256Multiplication(u256_mult_chip));
             chips.push(MachineChipVariant::RangeTupleChecker(range_tuple_checker));
+        }
+        if config.castf_enabled {
+            let var_range_checker_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, 8);
+            let var_range_checker_chip =
+                Arc::new(VariableRangeCheckerChip::new(var_range_checker_bus));
+            let castf_chip = Rc::new(RefCell::new(CastFChip::new(
+                execution_bus,
+                memory_chip.clone(),
+                var_range_checker_chip.clone(),
+            )));
+            assign!([Opcode::CASTF], castf_chip);
+            chips.push(MachineChipVariant::CastF(castf_chip));
         }
         // Most chips have a reference to the memory chip, and the memory chip has a reference to
         // the range checker chip.

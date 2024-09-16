@@ -27,6 +27,8 @@ pub enum Opcode {
     FAIL = 20,
     PRINTF = 21,
 
+    CASTF = 28,
+
     FE4ADD = 30,
     FE4SUB = 31,
     BBE4MUL = 32,
