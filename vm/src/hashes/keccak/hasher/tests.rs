@@ -124,7 +124,7 @@ fn negative_test_keccak256() {
     let tester = build_keccak256_test(vec![(input, Some(out))]);
     disable_debug_builder();
     assert_eq!(
-        tester.test(get_engine),
-        Err(VerificationError::OodEvaluationMismatch)
+        tester.test(get_engine).err(),
+        Some(VerificationError::OodEvaluationMismatch)
     );
 }

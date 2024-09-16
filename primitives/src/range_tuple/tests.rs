@@ -2,7 +2,7 @@ use std::iter;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
-    config::baby_bear_blake3::run_simple_test_no_pis,
+    any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -77,7 +77,8 @@ fn test_range_tuple_chip() {
         .chain(iter::once(range_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+        .expect("Verification failed");
 }
 
 #[test]
@@ -111,8 +112,12 @@ fn negative_test_range_tuple_chip() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&range_checker.air], vec![range_trace]),
-        Err(VerificationError::NonZeroCumulativeSum),
+        BabyBearBlake3Engine::run_simple_test_no_pis(
+            &any_rap_vec![&range_checker.air],
+            vec![range_trace]
+        )
+        .err(),
+        Some(VerificationError::NonZeroCumulativeSum),
         "Expected constraint to fail"
     );
 }

@@ -1,6 +1,8 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{
-    config::{baby_bear_poseidon2::run_simple_test_no_pis, setup_tracing},
+    any_rap_vec,
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing},
+    engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -103,8 +105,8 @@ fn field_arithmetic_air_test() {
 
         // Run a test after pranking each row
         assert_eq!(
-            tester.simple_test(),
-            Err(VerificationError::OodEvaluationMismatch),
+            tester.simple_test().err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
 
@@ -135,9 +137,10 @@ fn field_arithmetic_air_zero_div_zero() {
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
+
     assert_eq!(
-        run_simple_test_no_pis(vec![&air], vec![trace]),
-        Err(VerificationError::OodEvaluationMismatch),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace]).err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
 }

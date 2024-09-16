@@ -1,7 +1,7 @@
 use std::{cell::RefCell, ops::Deref, rc::Rc, sync::Arc};
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{rap::AnyRap, verifier::VerificationError};
+use afs_stark_backend::{engine::VerificationData, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
@@ -145,7 +145,9 @@ impl MachineChipTester {
         self
     }
 
-    pub fn simple_test(&self) -> Result<(), VerificationError> {
+    pub fn simple_test(
+        &self,
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
         self.test(baby_bear_poseidon2::default_engine)
     }
 
@@ -161,13 +163,13 @@ impl MachineChipTester {
     pub fn test<E: StarkEngine<BabyBearPoseidon2Config>, P: Fn(usize) -> E>(
         &self, // do no take ownership so it's easier to prank
         engine_provider: P,
-    ) -> Result<(), VerificationError> {
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
-
+        let chips: Vec<_> = self.airs.iter().map(|x| x.deref()).collect();
         engine_provider(self.max_trace_height()).run_simple_test(
-            self.airs.iter().map(|x| x.deref()).collect(),
+            &chips,
             self.traces.clone(),
-            self.public_values.clone(),
+            &self.public_values,
         )
     }
 }

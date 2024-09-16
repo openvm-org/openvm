@@ -3,11 +3,17 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::MultiStarkKeygenBuilder,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    keygen::{types::MultiStarkVerifyingKey, MultiStarkKeygenBuilder},
+    prover::{trace::TraceCommitmentBuilder, types::Proof, MultiTraceStarkProver},
     rap::AnyRap,
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
+
+/// Data for verifying a Stark proof.
+pub struct VerificationData<SC: StarkGenericConfig> {
+    pub vk: MultiStarkVerifyingKey<SC>,
+    pub proof: Proof<SC>,
+}
 
 /// Testing engine
 pub trait StarkEngine<SC: StarkGenericConfig> {
@@ -44,10 +50,10 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
     /// - `chips`, `traces`, `public_values` should be zipped.
     fn run_simple_test(
         &self,
-        chips: Vec<&dyn AnyRap<SC>>,
+        chips: &[&dyn AnyRap<SC>],
         traces: Vec<DenseMatrix<Val<SC>>>,
-        public_values: Vec<Vec<Val<SC>>>,
-    ) -> Result<(), VerificationError>
+        public_values: &[Vec<Val<SC>>],
+    ) -> Result<VerificationData<SC>, VerificationError>
     where
         SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
@@ -62,10 +68,10 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
 
 fn run_simple_test_impl<SC: StarkGenericConfig, E: StarkEngine<SC> + ?Sized>(
     engine: &E,
-    chips: Vec<&dyn AnyRap<SC>>,
+    chips: &[&dyn AnyRap<SC>],
     traces: Vec<DenseMatrix<Val<SC>>>,
-    public_values: Vec<Vec<Val<SC>>>,
-) -> Result<(), VerificationError>
+    public_values: &[Vec<Val<SC>>],
+) -> Result<VerificationData<SC>, VerificationError>
 where
     SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
@@ -99,9 +105,10 @@ where
     );
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &public_values);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, public_values);
 
     let mut challenger = engine.new_challenger();
     let verifier = engine.verifier();
-    verifier.verify(&mut challenger, &vk, &proof, &public_values)
+    verifier.verify(&mut challenger, &vk, &proof, public_values)?;
+    Ok(VerificationData { vk, proof })
 }

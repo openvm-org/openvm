@@ -1,7 +1,7 @@
 use std::{str::FromStr, sync::Arc};
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::config::baby_bear_blake3::run_simple_test_no_pis;
+use ax_sdk::{any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine};
 use lazy_static::lazy_static;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
@@ -109,8 +109,11 @@ fn test_ec_add(p1: (BigUint, BigUint), p2: (BigUint, BigUint), expected_p3: (Big
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -145,8 +148,12 @@ fn test_ec_add_fail() {
 
     disable_debug_builder();
     assert_eq!(
-        run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace]),
-        Err(VerificationError::OodEvaluationMismatch),
+        BabyBearBlake3Engine::run_simple_test_no_pis(
+            &any_rap_vec![&air, &range_checker.air],
+            vec![trace, range_trace]
+        )
+        .err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
 }
@@ -169,8 +176,11 @@ fn test_ec_double() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -188,8 +198,12 @@ fn test_ec_double_wrong_trace() {
 
     disable_debug_builder();
     assert_eq!(
-        run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace]),
-        Err(VerificationError::OodEvaluationMismatch),
+        BabyBearBlake3Engine::run_simple_test_no_pis(
+            &any_rap_vec![&air, &range_checker.air],
+            vec![trace, range_trace]
+        )
+        .err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
 }

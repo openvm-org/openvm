@@ -77,8 +77,8 @@ fn field_extension_air_test() {
         }
 
         assert_eq!(
-            tester.simple_test(),
-            Err(VerificationError::OodEvaluationMismatch),
+            tester.simple_test().err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
         tester.traces[1] = original_trace;

@@ -1,11 +1,13 @@
 use afs_compiler::util::execute_program;
-use afs_recursion::testing_utils::{inner::build_verification_program, VerificationData};
+use afs_recursion::testing_utils::inner::build_verification_program;
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, prover::trace::TraceCommitmentBuilder,
-    verifier::VerificationError,
+    air_builders::PartitionedAirBuilder, engine::VerificationData,
+    prover::trace::TraceCommitmentBuilder, verifier::VerificationError,
 };
 use ax_sdk::{
-    config::baby_bear_poseidon2::default_engine, engine::StarkEngine, utils::generate_random_matrix,
+    config::baby_bear_poseidon2::default_engine,
+    engine::{StarkEngine, VerificationDataWithFriParams},
+    utils::generate_random_matrix,
 };
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
@@ -80,9 +82,8 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let mut challenger = engine.new_challenger();
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
 
-    let vparams = VerificationData {
-        vk,
-        proof,
+    let vparams = VerificationDataWithFriParams {
+        data: VerificationData { vk, proof },
         fri_params: engine.fri_params,
     };
     let (program, input_stream) = build_verification_program(pvs, vparams);

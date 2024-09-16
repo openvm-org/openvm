@@ -9,7 +9,7 @@ use p3_symmetric::{CompressionFunctionFromHasher, CryptographicHasher, Serializi
 use p3_uni_stark::StarkConfig;
 
 use super::{fri_params::default_fri_params, FriParameters};
-use crate::engine::StarkEngine;
+use crate::engine::{StarkEngine, StarkFriEngine};
 
 type Val = BabyBear;
 type Challenge = BinomialExtensionField<Val, 4>;
@@ -96,4 +96,24 @@ where
     };
     let pcs = Pcs::new(pcs_log_degree, dft, val_mmcs, fri_config);
     BabyBearByteHashConfig::new(pcs)
+}
+
+pub trait BabyBearByteHashEngineWithDefaultHash<H>
+where
+    H: CryptographicHasher<u8, [u8; 32]> + Clone,
+{
+    fn default_hash() -> H;
+}
+
+impl<H: CryptographicHasher<u8, [u8; 32]> + Clone + Send + Sync>
+    StarkFriEngine<BabyBearByteHashConfig<H>> for BabyBearByteHashEngine<H>
+where
+    BabyBearByteHashEngine<H>: BabyBearByteHashEngineWithDefaultHash<H>,
+{
+    fn default_engine(max_log_degree: usize) -> Self {
+        default_engine(max_log_degree, Self::default_hash())
+    }
+    fn fri_params(&self) -> FriParameters {
+        self.fri_params
+    }
 }

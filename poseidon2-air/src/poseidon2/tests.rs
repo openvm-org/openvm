@@ -1,6 +1,7 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ark_ff::PrimeField as _;
 use ax_sdk::{
+    any_rap_vec,
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::fri_params_with_80_bits_of_security,
@@ -103,9 +104,9 @@ fn test_poseidon2_default() {
     // positive test
     engine
         .run_simple_test(
-            vec![&poseidon2_air, &page_requester],
+            &any_rap_vec![&poseidon2_air, &page_requester],
             traces,
-            vec![vec![]; 2],
+            &vec![vec![]; 2],
         )
         .expect("Verification failed");
 
@@ -119,12 +120,14 @@ fn test_poseidon2_default() {
         let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
         poseidon2_trace.row_mut(height)[width] += rand;
         assert_eq!(
-            engine.run_simple_test(
-                vec![&poseidon2_air, &page_requester],
-                vec![poseidon2_trace.clone(), dummy_trace.clone()],
-                vec![vec![]; 2],
-            ),
-            Err(VerificationError::OodEvaluationMismatch),
+            engine
+                .run_simple_test(
+                    &any_rap_vec![&poseidon2_air, &page_requester],
+                    vec![poseidon2_trace.clone(), dummy_trace.clone()],
+                    &vec![vec![]; 2],
+                )
+                .err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
         poseidon2_trace.row_mut(height)[width] -= rand;
@@ -218,9 +221,9 @@ fn test_poseidon2() {
     // positive test
     engine
         .run_simple_test(
-            vec![&poseidon2_air, &page_requester],
+            &any_rap_vec![&poseidon2_air, &page_requester],
             traces,
-            vec![vec![]; 2],
+            &vec![vec![]; 2],
         )
         .expect("Verification failed");
 
@@ -234,12 +237,14 @@ fn test_poseidon2() {
         let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
         poseidon2_trace.row_mut(height)[width] += rand;
         assert_eq!(
-            engine.run_simple_test(
-                vec![&poseidon2_air, &page_requester],
-                vec![poseidon2_trace.clone(), dummy_trace.clone()],
-                vec![vec![]; 2],
-            ),
-            Err(VerificationError::OodEvaluationMismatch),
+            engine
+                .run_simple_test(
+                    &any_rap_vec![&poseidon2_air, &page_requester],
+                    vec![poseidon2_trace.clone(), dummy_trace.clone()],
+                    &vec![vec![]; 2],
+                )
+                .err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
         poseidon2_trace.row_mut(height)[width] -= rand;

@@ -1,18 +1,15 @@
 use std::any::type_name;
 
-use afs_stark_backend::{rap::AnyRap, verifier::VerificationError};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::{extension::BinomialExtensionField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_goldilocks::{Goldilocks, MdsMatrixGoldilocks};
-use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon::Poseidon;
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
-use p3_util::log2_strict_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{
@@ -170,31 +167,4 @@ pub fn random_perm() -> Perm {
 pub fn random_instrumented_perm() -> InstrPerm {
     let perm = random_perm();
     Instrumented::new(perm)
-}
-
-/// Runs a single end-to-end test for a given set of chips and traces.
-/// This includes proving/verifying key generation, creating a proof, and verifying the proof.
-/// This function should only be used on chips where the main trace is **not** partitioned.
-///
-/// Do not use this if you want to generate proofs for different traces with the same proving key.
-///
-/// - `chips`, `traces`, `public_values` should be zipped.
-pub fn run_simple_test(
-    chips: Vec<&dyn AnyRap<GoldilocksPoseidonConfig>>,
-    traces: Vec<DenseMatrix<Val>>,
-    public_values: Vec<Vec<Val>>,
-) -> Result<(), VerificationError> {
-    let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
-    let max_log_degree = log2_strict_usize(max_trace_height);
-    let engine = default_engine(max_log_degree);
-    engine.run_simple_test(chips, traces, public_values)
-}
-
-/// [run_simple_test] without public values
-pub fn run_simple_test_no_pis(
-    chips: Vec<&dyn AnyRap<GoldilocksPoseidonConfig>>,
-    traces: Vec<DenseMatrix<Val>>,
-) -> Result<(), VerificationError> {
-    let num_chips = chips.len();
-    run_simple_test(chips, traces, vec![vec![]; num_chips])
 }
