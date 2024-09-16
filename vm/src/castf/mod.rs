@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use afs_primitives::var_range::VariableRangeCheckerChip;
-use air::{CastFAir, FINAL_LIMB_SIZE, LIMB_SIZE};
 use p3_field::PrimeField32;
 
 use crate::{
@@ -16,10 +15,13 @@ use crate::{
 #[cfg(test)]
 pub mod tests;
 
-pub mod air;
-pub mod bridge;
-pub mod columns;
-pub mod trace;
+mod air;
+mod bridge;
+mod columns;
+mod trace;
+
+pub use air::*;
+pub use columns::*;
 
 #[derive(Debug)]
 pub struct CastFRecord<T> {

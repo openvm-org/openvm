@@ -15,35 +15,36 @@ impl CastFAir {
         aux: &CastFAuxCols<AB::Var>,
         expected_opcode: AB::Expr,
     ) {
-        let mut timestamp_delta = AB::Expr::zero();
-
         let timestamp: AB::Var = io.from_state.timestamp;
+        let mut timestamp_delta: usize = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
+        };
 
         self.memory_bridge
             .read(
                 MemoryAddress::new(io.d, io.op_a),
                 io.x,
-                timestamp + timestamp_delta.clone(),
+                timestamp_pp(),
                 &aux.read_x_aux_cols,
             )
             .eval(builder, aux.is_valid);
-        timestamp_delta += AB::Expr::one();
 
         self.memory_bridge
             .write(
                 MemoryAddress::new(io.e, io.op_b),
                 [io.y],
-                timestamp + timestamp_delta.clone(),
+                timestamp_pp(),
                 &aux.write_y_aux_cols,
             )
             .eval(builder, aux.is_valid);
-        timestamp_delta += AB::Expr::one();
 
         self.execution_bus.execute_increment_pc(
             builder,
             aux.is_valid,
             io.from_state.map(Into::into),
-            timestamp_delta,
+            AB::F::from_canonical_usize(timestamp_delta),
             InstructionCols::<AB::Expr>::new(
                 expected_opcode,
                 [
