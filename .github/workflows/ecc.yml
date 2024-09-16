@@ -1,4 +1,4 @@
-name: STARK Recursion Tests
+name: ECC Tests
 
 on:
   push:
@@ -31,8 +31,7 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Run ecc crate tests
-        working-directory: ecc
+      - name: Run ecc-lib crate tests
+        working-directory: ecc/lib
         run: |
           cargo test --profile=fast --features parallel
-
