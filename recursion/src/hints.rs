@@ -1,16 +1,16 @@
 use afs_compiler::ir::{
     Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE,
 };
-use afs_ecc::types::{
-    ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
-    ECPointVariable,
-};
 use afs_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
         types::{Commitments, Proof},
     },
+};
+use ax_ecc_lib::types::{
+    ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
+    ECPointVariable,
 };
 use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use num_bigint_dig::BigUint;

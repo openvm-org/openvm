@@ -8,8 +8,9 @@ afs-stark-backend = { path = "../stark-backend" }
 afs-compiler = { path = "../compiler" }
 ax-sdk = { path = "../sdk" }
 afs-derive = { path = "../derive" }
-afs-ecc = { path = "../ecc" }
 stark-vm = { path = "../vm" }
+ax-ecc-lib = { path = "../ecc/lib" }
+
 p3-air = { workspace = true }
 p3-field = { workspace = true }
 p3-commit = { workspace = true }
