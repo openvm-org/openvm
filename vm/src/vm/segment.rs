@@ -267,13 +267,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips.push(MachineChipVariant::RangeTupleChecker(range_tuple_checker));
         }
         if config.castf_enabled {
-            let var_range_checker_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, 8);
-            let var_range_checker_chip =
-                Arc::new(VariableRangeCheckerChip::new(var_range_checker_bus));
             let castf_chip = Rc::new(RefCell::new(CastFChip::new(
                 execution_bus,
                 memory_chip.clone(),
-                var_range_checker_chip.clone(),
             )));
             assign!([Opcode::CASTF], castf_chip);
             chips.push(MachineChipVariant::CastF(castf_chip));

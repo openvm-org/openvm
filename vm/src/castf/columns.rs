@@ -29,7 +29,6 @@ pub struct CastFIoCols<T> {
     pub d: T,
     pub e: T,
     pub x: [T; 4],
-    pub y: T,
 }
 
 impl<T> CastFIoCols<T> {
@@ -42,8 +41,8 @@ impl<T> CastFIoCols<T> {
 #[derive(AlignedBorrow, Clone, Debug)]
 pub struct CastFAuxCols<T> {
     pub is_valid: T,
-    pub read_x_aux_cols: MemoryReadAuxCols<T, 4>,
-    pub write_y_aux_cols: MemoryWriteAuxCols<T, 1>,
+    pub write_x_aux_cols: MemoryWriteAuxCols<T, 4>,
+    pub read_y_aux_cols: MemoryReadAuxCols<T, 1>,
 }
 
 impl<T> CastFAuxCols<T> {

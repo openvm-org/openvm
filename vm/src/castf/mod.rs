@@ -28,8 +28,8 @@ pub struct CastFRecord<T> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
-    pub x_read: MemoryReadRecord<T, 4>,
-    pub y_write: MemoryWriteRecord<T, 1>,
+    pub x_write: MemoryWriteRecord<T, 4>,
+    pub y_read: MemoryReadRecord<T, 1>,
 }
 
 #[derive(Debug)]
@@ -90,10 +90,11 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
             from_state.timestamp,
             memory_chip.timestamp().as_canonical_u32() as usize
         );
-        let x_read = memory_chip.read::<4>(d, a);
-        let x = x_read.data.map(|x| x.as_canonical_u32());
 
-        let y = Self::solve(&x);
+        let y_read = memory_chip.read_cell(e, b);
+        let y = y_read.data[0].as_canonical_u32();
+
+        let x = Self::solve(y);
         for (i, limb) in x.iter().enumerate() {
             if i == 3 {
                 self.range_checker_chip.add_count(*limb, FINAL_LIMB_SIZE);
@@ -102,13 +103,15 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
             }
         }
 
-        let y_write = memory_chip.write_cell(e, b, T::from_canonical_u32(y));
+        let x = x.map(T::from_canonical_u32);
+        let x_write = 
+        memory_chip.write::<4>(d, a, x);
 
         self.data.push(CastFRecord {
             from_state,
             instruction: instruction.clone(),
-            x_read,
-            y_write,
+            x_write,
+            y_read,
         });
 
         ExecutionState {
@@ -118,11 +121,11 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
     }
 }
 impl<T: PrimeField32> CastFChip<T> {
-    fn solve(x: &[u32; 4]) -> u32 {
-        let mut y = 0;
-        for (i, limb) in x.iter().enumerate() {
-            y += limb << (LIMB_SIZE * i);
+    fn solve(y: u32) -> [u32; 4] {
+        let mut x = [0; 4];
+        for i in 0..4 {
+            x[i] = (y >> (8 * i)) & 0xFF;
         }
-        y
+        x
     }
 }

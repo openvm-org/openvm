@@ -10,59 +10,34 @@ use super::{
     columns::{CastFAuxCols, CastFCols, CastFIoCols},
     CastFChip,
 };
-use crate::{
-    arch::chips::MachineChip,
-    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-};
+use crate::arch::chips::MachineChip;
 
 impl<F: PrimeField32> MachineChip<F> for CastFChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
 
-        let rows = self
-            .data
-            .iter()
-            .map(|record| {
-                let mut row = [F::zero(); CastFCols::<u8>::width()];
-                let cols: &mut CastFCols<F> = row[..].borrow_mut();
-                cols.io = CastFIoCols {
-                    from_state: record.from_state.map(F::from_canonical_usize),
-                    op_a: record.instruction.op_a,
-                    op_b: record.instruction.op_b,
-                    d: record.instruction.d,
-                    e: record.instruction.e,
-                    x: record.x_read.data,
-                    y: record.y_write.data[0],
-                };
-                cols.aux = CastFAuxCols {
-                    is_valid: F::one(),
-                    read_x_aux_cols: aux_cols_factory.make_read_aux_cols(record.x_read.clone()),
-                    write_y_aux_cols: aux_cols_factory.make_write_aux_cols(record.y_write.clone()),
-                };
-                row
-            })
-            .collect::<Vec<_>>();
-
-        let height = rows.len();
+        let height = self.data.len();
         let padded_height = height.next_power_of_two();
-        let mut blank_row = [F::zero(); CastFCols::<u8>::width()];
-
-        let blank_cols: &mut CastFCols<F> = blank_row[..].borrow_mut();
-        *blank_cols = CastFCols::<F> {
-            io: Default::default(),
-            aux: CastFAuxCols {
-                is_valid: Default::default(),
-                read_x_aux_cols: MemoryReadAuxCols::disabled(),
-                write_y_aux_cols: MemoryWriteAuxCols::disabled(),
-            },
-        };
-        let width = blank_row.len();
-
-        let mut padded_rows = rows;
-
-        padded_rows.extend(std::iter::repeat(blank_row).take(padded_height - height));
-
-        RowMajorMatrix::new(padded_rows.concat(), width)
+        let blank_row = [F::zero(); CastFCols::<u8>::width()];
+        let mut rows = vec![blank_row; padded_height];
+        for (i, record) in self.data.iter().enumerate() {
+            let row = &mut rows[i];
+            let cols: &mut CastFCols<F> = row[..].borrow_mut();
+            cols.io = CastFIoCols {
+                from_state: record.from_state.map(F::from_canonical_usize),
+                op_a: record.instruction.op_a,
+                op_b: record.instruction.op_b,
+                d: record.instruction.d,
+                e: record.instruction.e,
+                x: record.x_write.data,
+            };
+            cols.aux = CastFAuxCols {
+                is_valid: F::one(),
+                write_x_aux_cols: aux_cols_factory.make_write_aux_cols(record.x_write.clone()),
+                read_y_aux_cols: aux_cols_factory.make_read_aux_cols(record.y_read.clone()),
+            };
+        }
+        RowMajorMatrix::new(rows.concat(), CastFCols::<F>::width())
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>

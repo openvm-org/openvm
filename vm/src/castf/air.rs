@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use afs_primitives::var_range::bus::VariableRangeCheckerBus;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilder, BaseAir};
+use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
@@ -17,7 +17,7 @@ pub(crate) const LIMB_SIZE: usize = 8;
 // the final limb has only 6 bits
 pub(crate) const FINAL_LIMB_SIZE: usize = 6;
 
-// AIR for casting three u8 and one u6 numbers into a u30 number
+// AIR for casting one u30 number into three u8 and one u6 numbers
 #[derive(Copy, Clone, Debug)]
 pub struct CastFAir {
     pub(super) execution_bus: ExecutionBus,
@@ -38,22 +38,7 @@ impl<AB: InteractionBuilder> Air<AB> for CastFAir {
 
         let local = main.row_slice(0);
         let local_cols: &CastFCols<AB::Var> = (*local).borrow();
-
         builder.assert_bool(local_cols.aux.is_valid);
-
-        let intermed_val = local_cols
-            .io
-            .x
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &limb)| {
-                acc + limb * AB::Expr::from_canonical_u32(1 << (i * LIMB_SIZE))
-            });
-
-        // constrain that y equals to the concatenation of the limbs
-        builder
-            .when(local_cols.aux.is_valid)
-            .assert_eq(intermed_val, local_cols.io.y);
 
         let expected_opcode = AB::Expr::from_canonical_u32(Opcode::CASTF as u32);
 

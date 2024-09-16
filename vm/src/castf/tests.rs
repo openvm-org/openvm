@@ -1,7 +1,4 @@
-use std::{
-    array::{self},
-    borrow::BorrowMut,
-};
+use std::borrow::BorrowMut;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
@@ -21,40 +18,36 @@ use crate::{
 
 type F = BabyBear;
 
-fn generate_uint_number(rng: &mut StdRng) -> [u32; 4] {
-    array::from_fn(|i| match i {
-        0 | 1 | 2 => rng.gen_range(0..1 << LIMB_SIZE),
-        3 => rng.gen_range(0..1 << FINAL_LIMB_SIZE),
-        _ => unreachable!(),
-    })
+fn generate_uint_number(rng: &mut StdRng) -> u32 {
+    rng.gen_range(0..(1 << 30) - 1)
 }
 
 fn prepare_castf_rand_write_execute(
     tester: &mut MachineChipTestBuilder<F>,
     chip: &mut CastFChip<F>,
-    x: [u32; 4],
+    y: u32,
     rng: &mut StdRng,
 ) {
     let address_space_range = || 1usize..=2;
     let address_range = || 0usize..1 << 29;
 
-    let operand1 = x;
+    let operand1 = y;
 
     let as_x = rng.gen_range(address_space_range()); // d
     let as_y = rng.gen_range(address_space_range()); // e
     let address_x = rng.gen_range(address_range()); // op_a
     let address_y = rng.gen_range(address_range()); // op_b
 
-    let operand1_f = x.clone().map(F::from_canonical_u32);
+    let operand1_f = F::from_canonical_u32(y);
 
-    tester.write::<4>(as_x, address_x, operand1_f);
-    let y = CastFChip::<F>::solve(&operand1);
+    tester.write_cell(as_y, address_y, operand1_f);
+    let x = CastFChip::<F>::solve(operand1);
 
     tester.execute(
         chip,
         Instruction::from_usize(Opcode::CASTF, [address_x, address_y, 0, as_x, as_y]),
     );
-    assert_eq!([F::from_canonical_u32(y)], tester.read(as_y, address_y));
+    assert_eq!(x.map(F::from_canonical_u32), tester.read::<4>(as_x, address_x));
 }
 
 #[test]
@@ -68,8 +61,8 @@ fn castf_rand_test() {
     let num_tests: usize = 10;
 
     for _ in 0..num_tests {
-        let x = generate_uint_number(&mut rng);
-        prepare_castf_rand_write_execute(&mut tester, &mut chip, x, &mut rng);
+        let y = generate_uint_number(&mut rng);
+        prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
     }
 
     let tester = tester
@@ -88,8 +81,8 @@ fn negative_castf_overflow_test() {
     );
 
     let mut rng = create_seeded_rng();
-    let x = generate_uint_number(&mut rng);
-    prepare_castf_rand_write_execute(&mut tester, &mut chip, x, &mut rng);
+    let y = generate_uint_number(&mut rng);
+    prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
 
     let air = chip.air;
     let range_checker_chip = chip.range_checker_chip.clone();
@@ -103,7 +96,7 @@ fn negative_castf_overflow_test() {
     disable_debug_builder();
     assert_eq!(
         run_simple_test_no_pis(vec![&air, &range_air], vec![trace, range_trace],),
-        Err(VerificationError::OodEvaluationMismatch),
+        Err(VerificationError::NonZeroCumulativeSum),
         "Expected verification to fail, but it didn't"
     );
 }
@@ -117,15 +110,15 @@ fn negative_castf_memread_test() {
     );
 
     let mut rng = create_seeded_rng();
-    let x = generate_uint_number(&mut rng);
-    prepare_castf_rand_write_execute(&mut tester, &mut chip, x, &mut rng);
+    let y = generate_uint_number(&mut rng);
+    prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
 
     let air = chip.air.clone();
     let range_checker_chip = chip.range_checker_chip.clone();
     let range_air = range_checker_chip.air;
     let mut trace = chip.generate_trace();
     let cols: &mut CastFCols<F> = trace.values[..].borrow_mut();
-    cols.io.op_a = cols.io.op_a + F::one();
+    cols.io.op_b = cols.io.op_b + F::one();
 
     let range_trace = range_checker_chip.generate_trace();
 
@@ -146,15 +139,15 @@ fn negative_castf_memwrite_test() {
     );
 
     let mut rng = create_seeded_rng();
-    let x = generate_uint_number(&mut rng);
-    prepare_castf_rand_write_execute(&mut tester, &mut chip, x, &mut rng);
+    let y = generate_uint_number(&mut rng);
+    prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
 
     let air = chip.air.clone();
     let range_checker_chip = chip.range_checker_chip.clone();
     let range_air = range_checker_chip.air;
     let mut trace = chip.generate_trace();
     let cols: &mut CastFCols<F> = trace.values[..].borrow_mut();
-    cols.io.op_b = cols.io.op_b + F::one();
+    cols.io.op_a = cols.io.op_a + F::one();
 
     let range_trace = range_checker_chip.generate_trace();
 
@@ -175,8 +168,8 @@ fn negative_castf_as_test() {
     );
 
     let mut rng = create_seeded_rng();
-    let x = generate_uint_number(&mut rng);
-    prepare_castf_rand_write_execute(&mut tester, &mut chip, x, &mut rng);
+    let y = generate_uint_number(&mut rng);
+    prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
 
     let air = chip.air.clone();
     let range_checker_chip = chip.range_checker_chip.clone();

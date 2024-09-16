@@ -22,21 +22,29 @@ impl CastFAir {
             timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
         };
 
+        let intermed_val = io
+            .x
+            .iter()
+            .enumerate()
+            .fold(AB::Expr::zero(), |acc, (i, &limb)| {
+                acc + limb * AB::Expr::from_canonical_u32(1 << (i * LIMB_SIZE))
+            });
+        
         self.memory_bridge
             .read(
-                MemoryAddress::new(io.d, io.op_a),
-                io.x,
+                MemoryAddress::new(io.e, io.op_b),
+                [intermed_val],
                 timestamp_pp(),
-                &aux.read_x_aux_cols,
+                &aux.read_y_aux_cols,
             )
             .eval(builder, aux.is_valid);
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(io.e, io.op_b),
-                [io.y],
+                MemoryAddress::new(io.d, io.op_a),
+                io.x,
                 timestamp_pp(),
-                &aux.write_y_aux_cols,
+                &aux.write_x_aux_cols,
             )
             .eval(builder, aux.is_valid);
 
