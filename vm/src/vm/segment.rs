@@ -139,6 +139,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
                 Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
+                config
+                    .poseidon2_max_constraint_degree
+                    .expect("Poseidon2 is enabled but no max_constraint_degree provided"),
                 execution_bus,
                 memory_chip.clone(),
             )));

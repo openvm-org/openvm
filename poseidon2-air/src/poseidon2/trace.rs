@@ -2,7 +2,11 @@ use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{columns::Poseidon2Cols, Poseidon2Air};
+use super::{
+    columns::{Poseidon2AuxCols, Poseidon2Cols, Poseidon2IoCols},
+    Poseidon2Air,
+};
+use crate::poseidon2::columns::{Poseidon2ExternalRoundCols, Poseidon2InternalRoundCols};
 
 impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
     /// Return cached state trace if it exists (input is ignored), otherwise generate trace and return
@@ -13,7 +17,9 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
         RowMajorMatrix::new(
             input_states
                 .into_iter()
-                .flat_map(|input_state| self.generate_local_trace(input_state))
+                .flat_map(|input_state| {
+                    self.generate_local_trace(input_state).flatten().into_iter()
+                })
                 .collect(),
             self.get_width(),
         )
@@ -21,17 +27,10 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
 
     /// Cache the trace as a state variable, return the outputs
     pub fn request_trace(&mut self, states: &[[F; WIDTH]]) -> Vec<Vec<F>> {
-        let index_map = Poseidon2Cols::<WIDTH, F>::index_map(self);
-        let traces: Vec<_> = states
+        states
             .iter()
-            .map(|s| self.generate_local_trace(*s))
-            .collect();
-        let outputs: Vec<Vec<F>> = traces
-            .iter()
-            .map(|t| t[index_map.output.clone()].to_vec())
-            .collect();
-
-        outputs
+            .map(|s| self.generate_local_trace(*s).io.output.to_vec())
+            .collect()
     }
 
     /// Perform entire nonlinear external layer operation on state
@@ -50,18 +49,22 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
     }
 
     /// Generate one row of trace from the input state.
-    pub fn generate_local_trace(&self, input_state: [F; WIDTH]) -> Vec<F> {
-        let mut row = input_state.to_vec();
+    pub fn generate_local_trace(&self, input_state: [F; WIDTH]) -> Poseidon2Cols<WIDTH, F> {
         let mut state = input_state;
 
         // The first half of the external rounds.
         let rounds_f_beginning = self.rounds_f / 2;
+        let mut phase1 = Vec::with_capacity(rounds_f_beginning);
         for r in 0..rounds_f_beginning {
             self.ext_layer(&mut state, &self.external_constants[r]);
-            row.extend(state.iter());
+            phase1.push(Poseidon2ExternalRoundCols {
+                intermediate_sbox_powers: core::array::from_fn(|_| None),
+                round_output: state,
+            });
         }
 
         // The internal rounds.
+        let mut phase2 = Vec::with_capacity(self.rounds_p);
         for r in 0..self.rounds_p {
             if r == 0 {
                 self.ext_lin_layer(&mut state);
@@ -70,10 +73,15 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
             } else {
                 self.int_layer(&mut state, self.internal_constants[r]);
             }
-            row.extend(state.iter());
+
+            phase2.push(Poseidon2InternalRoundCols {
+                intermediate_sbox_power: None,
+                round_output: state,
+            });
         }
 
         // The second half of the external rounds.
+        let mut phase3 = Vec::with_capacity(self.rounds_f - rounds_f_beginning);
         for r in rounds_f_beginning..self.rounds_f {
             if r == rounds_f_beginning {
                 self.int_lin_layer(&mut state);
@@ -86,23 +94,32 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
             } else {
                 Self::ext_layer(self, &mut state, &self.external_constants[r]);
             }
-            row.extend(state.iter());
+
+            phase3.push(Poseidon2ExternalRoundCols {
+                intermediate_sbox_powers: core::array::from_fn(|_| None),
+                round_output: state,
+            });
         }
         self.ext_lin_layer(&mut state);
-        row.extend(state.iter());
+        let output_state = state;
 
-        assert_eq!(row.len(), self.get_width());
-
-        row
+        Poseidon2Cols {
+            io: Poseidon2IoCols {
+                input: input_state,
+                output: output_state,
+            },
+            aux: Poseidon2AuxCols {
+                phase1,
+                phase2,
+                phase3,
+            },
+        }
     }
 }
 
 impl<const WIDTH: usize, F: Field> LocalTraceInstructions<F> for Poseidon2Air<WIDTH, F> {
     type LocalInput = [F; WIDTH];
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-        Poseidon2Cols::from_slice(
-            self.generate_local_trace(local_input).as_slice(),
-            &Poseidon2Cols::<WIDTH, F>::index_map(self),
-        )
+        self.generate_local_trace(local_input)
     }
 }

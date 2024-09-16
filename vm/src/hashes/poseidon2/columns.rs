@@ -56,7 +56,7 @@ impl<T: Clone> Poseidon2VmCols<T> {
         Poseidon2VmIoCols::<T>::get_width() + Poseidon2VmAuxCols::<T>::width(p2_air)
     }
 
-    pub fn flatten(&self) -> Vec<T> {
+    pub fn flatten(self) -> Vec<T> {
         let mut result = self.io.flatten();
         result.extend(self.aux.flatten());
         result
@@ -155,13 +155,13 @@ impl<T: Field> Poseidon2VmIoCols<T> {
 
 impl<T: Clone> Poseidon2VmAuxCols<T> {
     pub fn width(air: &Poseidon2VmAir<T>) -> usize {
-        3 + Poseidon2Cols::<WIDTH, T>::get_width(&air.inner)
+        3 + Poseidon2Cols::<WIDTH, T>::width(&air.inner)
             + 3 * MemoryReadAuxCols::<T, 1>::width()
             + 2 * MemoryReadAuxCols::<T, CHUNK>::width()
             + 2 * MemoryWriteAuxCols::<T, CHUNK>::width()
     }
 
-    pub fn flatten(&self) -> Vec<T> {
+    pub fn flatten(self) -> Vec<T> {
         let mut result = vec![
             self.dst_ptr.clone(),
             self.lhs_ptr.clone(),
@@ -187,15 +187,13 @@ impl<T: Clone> Poseidon2VmAuxCols<T> {
     }
 
     pub fn from_slice<F: Clone>(slc: &[T], air: &Poseidon2VmAir<F>) -> Self {
-        let p2_index_map = Poseidon2Cols::index_map(&air.inner);
-
         let dst = slc[0].clone();
         let lhs = slc[1].clone();
         let rhs = slc[2].clone();
 
         let mut start = 3;
-        let mut end = start + Poseidon2Cols::<WIDTH, T>::get_width(&air.inner);
-        let internal = Poseidon2Cols::from_slice(&slc[start..end], &p2_index_map);
+        let mut end = start + Poseidon2Cols::<WIDTH, T>::width(&air.inner);
+        let internal = Poseidon2Cols::from_slice(&slc[start..end], &air.inner);
 
         let ptr_aux_cols = array::from_fn(|_| {
             start = end;

@@ -37,6 +37,8 @@ pub struct Poseidon2Air<const WIDTH: usize, F> {
     /// The internal linear layers consist of multiplying by matrix of all 1s + diag(int_diag_m1_matrix)
     pub int_diag_m1_matrix: [F; WIDTH],
     pub reduction_factor: F,
+    // Maximum constraint degree for the AIR. Must be 3, 5, or 7.
+    pub max_constraint_degree: usize,
     pub bus_index: usize,
 }
 
@@ -47,8 +49,13 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
         ext_mds_matrix: [[u32; 4]; 4],
         int_diag_m1_matrix: [F; WIDTH],
         reduction_factor: F,
+        max_constraint_degree: usize,
         bus_index: usize,
     ) -> Self {
+        assert!(
+            max_constraint_degree == 3 || max_constraint_degree == 5 || max_constraint_degree == 7
+        );
+
         Self {
             rounds_f: external_constants.len(),
             external_constants,
@@ -57,23 +64,29 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
             ext_mds_matrix: ext_mds_matrix.map(|row| row.map(F::from_canonical_u32)),
             int_diag_m1_matrix,
             reduction_factor,
+            max_constraint_degree,
             bus_index,
         }
     }
 
-    pub fn from_config(config: Poseidon2Config<WIDTH, F>, bus_index: usize) -> Self {
+    pub fn from_config(
+        config: Poseidon2Config<WIDTH, F>,
+        max_constraint_degree: usize,
+        bus_index: usize,
+    ) -> Self {
         Self::new(
             config.external_constants,
             config.internal_constants,
             config.ext_mds_matrix,
             config.int_diag_m1_matrix,
             config.reduction_factor,
+            max_constraint_degree,
             bus_index,
         )
     }
 
     pub fn get_width(&self) -> usize {
-        Poseidon2Cols::<WIDTH, F>::get_width(self)
+        Poseidon2Cols::<WIDTH, F>::width(self)
     }
 
     // The following are generic in T: AbstractField + From<F> because they are used in the AIR constraints:
@@ -172,7 +185,7 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
 
 impl Default for Poseidon2Air<16, BabyBear> {
     fn default() -> Self {
-        Self::from_config(Poseidon2Config::<16, BabyBear>::default(), 0)
+        Self::from_config(Poseidon2Config::<16, BabyBear>::default(), 7, 0)
     }
 }
 
@@ -192,8 +205,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH,
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let index_map = Poseidon2Cols::index_map(self);
-        let poseidon2_cols = Poseidon2Cols::from_slice(local, &index_map);
+        let poseidon2_cols = Poseidon2Cols::from_slice(local, self);
         let Poseidon2Cols { io, aux } = poseidon2_cols;
 
         SubAir::<AB>::eval(self, builder, io, aux);
@@ -223,42 +235,53 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
             let mut state = if phase1_index == 0 {
                 core::array::from_fn(|i| io.input[i].into())
             } else {
-                core::array::from_fn(|i| aux.phase1[phase1_index - 1][i].into())
+                core::array::from_fn(|i| aux.phase1[phase1_index - 1].round_output[i].into())
             };
             self.ext_lin_layer(&mut state);
             state = add_ext_consts::<AB, WIDTH>(state, phase1_index, &self.external_constants);
             state = Self::sbox(state);
             for (state_index, state_elem) in state.iter().enumerate() {
-                builder.assert_eq(state_elem.clone(), aux.phase1[phase1_index][state_index]);
+                builder.assert_eq(
+                    state_elem.clone(),
+                    aux.phase1[phase1_index].round_output[state_index],
+                );
             }
         }
 
         for phase2_index in 0..self.rounds_p {
             // regenerate state as Expr from trace variables on each round
             let mut state = if phase2_index == 0 {
-                let mut state = core::array::from_fn(|i| aux.phase1[half_ext_rounds - 1][i].into());
+                let mut state = core::array::from_fn(|i| {
+                    aux.phase1[half_ext_rounds - 1].round_output[i].into()
+                });
                 self.ext_lin_layer(&mut state);
                 state
             } else {
-                let mut state = core::array::from_fn(|i| aux.phase2[phase2_index - 1][i].into());
+                let mut state =
+                    core::array::from_fn(|i| aux.phase2[phase2_index - 1].round_output[i].into());
                 self.int_lin_layer(&mut state);
                 state
             };
             state[0] += self.internal_constants[phase2_index].into();
             state[0] = Self::sbox_p(state[0].clone());
             for (state_index, state_elem) in state.iter().enumerate() {
-                builder.assert_eq(state_elem.clone(), aux.phase2[phase2_index][state_index]);
+                builder.assert_eq(
+                    state_elem.clone(),
+                    aux.phase2[phase2_index].round_output[state_index],
+                );
             }
         }
 
         for phase3_index in 0..(self.rounds_f - half_ext_rounds) {
             // regenerate state as Expr from trace variables on each round
             let mut state = if phase3_index == 0 {
-                let mut state = core::array::from_fn(|i| aux.phase2[self.rounds_p - 1][i].into());
+                let mut state =
+                    core::array::from_fn(|i| aux.phase2[self.rounds_p - 1].round_output[i].into());
                 self.int_lin_layer(&mut state);
                 state
             } else {
-                let mut state = core::array::from_fn(|i| aux.phase3[phase3_index - 1][i].into());
+                let mut state =
+                    core::array::from_fn(|i| aux.phase3[phase3_index - 1].round_output[i].into());
                 self.ext_lin_layer(&mut state);
                 state
             };
@@ -270,12 +293,16 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
             state = Self::sbox(state);
 
             for (state_index, state_elem) in state.iter().enumerate() {
-                builder.assert_eq(state_elem.clone(), aux.phase3[phase3_index][state_index]);
+                builder.assert_eq(
+                    state_elem.clone(),
+                    aux.phase3[phase3_index].round_output[state_index],
+                );
             }
         }
 
-        let mut state =
-            core::array::from_fn(|i| aux.phase3[self.rounds_f - half_ext_rounds - 1][i].into());
+        let mut state = core::array::from_fn(|i| {
+            aux.phase3[self.rounds_f - half_ext_rounds - 1].round_output[i].into()
+        });
         self.ext_lin_layer(&mut state);
         for (state_index, state_elem) in state.iter().enumerate() {
             builder.assert_eq(state_elem.clone(), io.output[state_index]);
