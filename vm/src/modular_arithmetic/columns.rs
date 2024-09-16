@@ -131,37 +131,3 @@ impl<T: Clone> ModularArithmeticAuxCols<T> {
         .concat()
     }
 }
-
-#[derive(Clone)]
-pub struct MemoryData<T: Clone> {
-    pub data: Vec<T>,
-    pub address_space: T,
-    pub address: T,
-}
-
-impl<T: Clone> MemoryData<T> {
-    pub fn from_iterator(mut iter: impl Iterator<Item = T>, data_len: usize) -> Self {
-        Self {
-            data: iter.by_ref().take(data_len).collect(),
-            address_space: iter.next().unwrap(),
-            address: iter.next().unwrap(),
-        }
-    }
-
-    pub fn flatten(&self) -> impl Iterator<Item = &T> {
-        self.data
-            .iter()
-            .chain(iter::once(&self.address_space))
-            .chain(iter::once(&self.address))
-    }
-}
-
-impl<T: Clone + Default> Default for MemoryData<T> {
-    fn default() -> Self {
-        Self {
-            data: vec![Default::default(); NUM_LIMBS],
-            address_space: Default::default(),
-            address: Default::default(),
-        }
-    }
-}

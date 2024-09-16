@@ -1,6 +1,7 @@
 pub mod arch;
 pub mod castf;
 pub mod cpu;
+pub mod ecc;
 pub mod field_arithmetic;
 pub mod field_extension;
 pub mod hashes;

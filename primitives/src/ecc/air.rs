@@ -6,12 +6,13 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::columns::{EcAddCols, EcDoubleCols};
+use super::{EcAddCols, EcAddIoCols, EcAuxCols, EcDoubleCols};
 use crate::{
     bigint::{check_carry_mod_to_zero::CheckCarryModToZeroSubAir, DefaultLimbConfig, OverflowInt},
-    sub_chip::AirConfig,
+    sub_chip::{AirConfig, SubAir},
 };
 
+#[derive(Clone, Debug)]
 pub struct EcAirConfig {
     // e.g. secp256k1 is 2^256 - 2^32 - 977.
     pub prime: BigUint,
@@ -30,6 +31,7 @@ pub struct EcAirConfig {
     pub decomp: usize,
 }
 
+#[derive(Clone, Debug)]
 pub struct EcAddUnequalAir {
     pub config: EcAirConfig,
 }
@@ -42,6 +44,7 @@ impl Deref for EcAddUnequalAir {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct EccDoubleAir {
     pub config: EcAirConfig,
 }
@@ -111,6 +114,15 @@ impl<AB: InteractionBuilder> Air<AB> for EcAddUnequalAir {
 
         let EcAddCols { io, aux } = local;
 
+        SubAir::eval(self, builder, io, aux);
+    }
+}
+
+impl<AB: InteractionBuilder> SubAir<AB> for EcAddUnequalAir {
+    type IoView = EcAddIoCols<AB::Var, DefaultLimbConfig>;
+    type AuxView = EcAuxCols<AB::Var>;
+
+    fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         // λ = (y2 - y1) / (x2 - x1)
         let lambda =
             OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(aux.lambda, self.limb_bits);

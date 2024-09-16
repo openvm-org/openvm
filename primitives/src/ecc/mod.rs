@@ -2,10 +2,13 @@ use num_bigint_dig::BigUint;
 
 use crate::bigint::{CanonicalUint, LimbConfig};
 
-pub mod air;
-pub mod columns;
+mod air;
+mod columns;
 pub mod trace;
-pub mod utils;
+mod utils;
+
+pub use air::*;
+pub use columns::*;
 
 #[cfg(test)]
 mod tests;
