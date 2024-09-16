@@ -161,7 +161,7 @@ impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<F, N> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryHeapReadAuxCols<T, const N: usize> {
     pub address: MemoryReadAuxCols<T, 1>,
     pub data: MemoryReadAuxCols<T, N>,
@@ -183,7 +183,7 @@ impl<const N: usize, T: Clone> MemoryHeapReadAuxCols<T, N> {
     }
 
     pub const fn width() -> usize {
-        MemoryReadAuxCols::<T, 1>::width() + MemoryReadAuxCols::<T, N>::width()
+        size_of::<MemoryHeapReadAuxCols<u8, N>>()
     }
 }
 

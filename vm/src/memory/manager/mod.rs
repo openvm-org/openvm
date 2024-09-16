@@ -295,6 +295,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         }
     }
 
+    /// First lookup the heap pointer, and then read the data at the pointer.
     pub fn read_heap<const N: usize>(
         &mut self,
         ptr_address_space: F,
@@ -370,6 +371,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         }
     }
 
+    /// First lookup the heap pointer, and then write the data at the pointer.
     pub fn write_heap<const N: usize>(
         &mut self,
         ptr_address_space: F,
