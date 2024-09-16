@@ -1,4 +1,6 @@
-use std::{array, cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc, sync::Arc};
+use std::{
+    array, cell::RefCell, collections::HashMap, iter, marker::PhantomData, rc::Rc, sync::Arc,
+};
 
 use afs_primitives::{
     assert_less_than::{columns::AssertLessThanAuxCols, AssertLessThanAir},
@@ -13,7 +15,10 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use self::interface::MemoryInterface;
-use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
+use super::{
+    audit::{air::MemoryAuditAir, MemoryAuditChip},
+    offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
+};
 use crate::{
     arch::chips::MachineChip,
     cpu::RANGE_CHECKER_BUS,
@@ -60,6 +65,20 @@ impl<T: Copy> MemoryReadRecord<T, 1> {
     }
 }
 
+/// Represents first reads a pointer, and then a batch read at the pointer.
+#[derive(Clone, Debug)]
+pub struct MemoryHeapReadRecord<T, const N: usize> {
+    pub address_read: MemoryReadRecord<T, 1>,
+    pub data_read: MemoryReadRecord<T, N>,
+}
+
+/// Represents first reads a pointer, and then a batch write at the pointer.
+#[derive(Clone, Debug)]
+pub struct MemoryHeapWriteRecord<T, const N: usize> {
+    pub address_read: MemoryReadRecord<T, 1>,
+    pub data_write: MemoryWriteRecord<T, N>,
+}
+
 /// Represents a single or batch memory write operation.
 /// Can be used to generate [MemoryWriteAuxCols].
 #[derive(Clone, Debug)]
@@ -81,6 +100,85 @@ pub struct MemoryWriteRecord<T, const N: usize> {
 impl<T: Copy> MemoryWriteRecord<T, 1> {
     pub fn value(&self) -> T {
         self.data[0]
+    }
+}
+
+/// Holds the data and the information about its address.
+#[derive(Clone, Debug)]
+pub struct MemoryDataIoCols<T, const N: usize> {
+    pub data: [T; N],
+    pub address_space: T,
+    pub address: T,
+}
+
+impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
+    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
+        Self {
+            data: std::array::from_fn(|_| iter.next().unwrap()),
+            address_space: iter.next().unwrap(),
+            address: iter.next().unwrap(),
+        }
+    }
+
+    pub fn flatten(&self) -> impl Iterator<Item = &T> {
+        self.data
+            .iter()
+            .chain(iter::once(&self.address_space))
+            .chain(iter::once(&self.address))
+    }
+}
+
+/// Holds the heap data and the information about its address.
+#[derive(Clone, Debug)]
+pub struct MemoryHeapDataIoCols<T: Clone, const N: usize> {
+    pub address: MemoryDataIoCols<T, 1>,
+    pub data: MemoryDataIoCols<T, N>,
+}
+
+impl<T: Clone, const N: usize> MemoryHeapDataIoCols<T, N> {
+    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
+        Self {
+            address: MemoryDataIoCols::from_iterator(iter.by_ref()),
+            data: MemoryDataIoCols::from_iterator(iter.by_ref()),
+        }
+    }
+
+    pub fn flatten(&self) -> impl Iterator<Item = &T> {
+        self.address.flatten().chain(self.data.flatten())
+    }
+}
+
+impl<T: Clone, const N: usize> From<MemoryHeapReadRecord<T, N>> for MemoryHeapDataIoCols<T, N> {
+    fn from(record: MemoryHeapReadRecord<T, N>) -> Self {
+        Self {
+            address: MemoryDataIoCols {
+                data: record.address_read.data,
+                address_space: record.address_read.address_space,
+                address: record.address_read.pointer,
+            },
+            data: MemoryDataIoCols {
+                data: record.data_read.data,
+                address_space: record.data_read.address_space,
+                address: record.data_read.pointer,
+            },
+        }
+    }
+}
+
+impl<T: Clone, const N: usize> From<MemoryHeapWriteRecord<T, N>> for MemoryHeapDataIoCols<T, N> {
+    fn from(record: MemoryHeapWriteRecord<T, N>) -> Self {
+        Self {
+            address: MemoryDataIoCols {
+                data: record.address_read.data,
+                address_space: record.address_read.address_space,
+                address: record.address_read.pointer,
+            },
+            data: MemoryDataIoCols {
+                data: record.data_write.data,
+                address_space: record.data_write.address_space,
+                address: record.data_write.pointer,
+            },
+        }
     }
 }
 
@@ -197,6 +295,22 @@ impl<F: PrimeField32> MemoryChip<F> {
         }
     }
 
+    /// First lookup the heap pointer, and then read the data at the pointer.
+    pub fn read_heap<const N: usize>(
+        &mut self,
+        ptr_address_space: F,
+        data_address_space: F,
+        ptr_pointer: F,
+    ) -> MemoryHeapReadRecord<F, N> {
+        let address_read = self.read_cell(ptr_address_space, ptr_pointer);
+        let data_read = self.read(data_address_space, address_read.value());
+
+        MemoryHeapReadRecord {
+            address_read,
+            data_read,
+        }
+    }
+
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
@@ -254,6 +368,23 @@ impl<F: PrimeField32> MemoryChip<F> {
             prev_timestamps: prev_entries.map(|entry| entry.timestamp),
             data,
             prev_data: prev_entries.map(|entry| entry.value),
+        }
+    }
+
+    /// First lookup the heap pointer, and then write the data at the pointer.
+    pub fn write_heap<const N: usize>(
+        &mut self,
+        ptr_address_space: F,
+        data_address_space: F,
+        ptr_pointer: F,
+        data: [F; N],
+    ) -> MemoryHeapWriteRecord<F, N> {
+        let address_read = self.read_cell(ptr_address_space, ptr_pointer);
+        let data_write = self.write(data_address_space, address_read.value(), data);
+
+        MemoryHeapWriteRecord {
+            address_read,
+            data_write,
         }
     }
 
@@ -396,6 +527,26 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
             read.prev_timestamps,
             self.generate_timestamp_lt_cols(&read.prev_timestamps, read.timestamp),
         )
+    }
+
+    pub fn make_heap_read_aux_cols<const N: usize>(
+        &self,
+        read: MemoryHeapReadRecord<F, N>,
+    ) -> MemoryHeapReadAuxCols<F, N> {
+        MemoryHeapReadAuxCols {
+            address: self.make_read_aux_cols(read.address_read),
+            data: self.make_read_aux_cols(read.data_read),
+        }
+    }
+
+    pub fn make_heap_write_aux_cols<const N: usize>(
+        &self,
+        write: MemoryHeapWriteRecord<F, N>,
+    ) -> MemoryHeapWriteAuxCols<F, N> {
+        MemoryHeapWriteAuxCols {
+            address: self.make_read_aux_cols(write.address_read),
+            data: self.make_write_aux_cols(write.data_write),
+        }
     }
 
     pub fn make_read_or_immediate_aux_cols(

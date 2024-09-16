@@ -24,9 +24,9 @@ impl<AB: InteractionBuilder> Air<AB> for ModularArithmeticVmAir<ModularArithmeti
             ModularArithmeticCols::<AB::Var>::from_iterator(local.iter().copied(), self);
 
         let cols = PrimitiveArithmeticCols {
-            x: io.x.data.clone(),
-            y: io.y.data.clone(),
-            r: io.z.data.clone(),
+            x: io.x.data.data.to_vec(),
+            y: io.y.data.data.to_vec(),
+            r: io.z.data.data.to_vec(),
             q: aux.q.clone(),
             carries: aux.carries.clone(),
             is_valid: aux.is_valid,

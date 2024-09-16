@@ -21,7 +21,7 @@ use crate::{
         offline_checker::columns::{
             MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
         },
-        MemoryAddress,
+        MemoryAddress, MemoryDataIoCols,
     },
 };
 
@@ -64,6 +64,21 @@ impl MemoryBridge {
         }
     }
 
+    #[must_use]
+    pub fn read_from_cols<'a, T, V, const N: usize>(
+        &self,
+        io: MemoryDataIoCols<impl Into<T>, N>,
+        timestamp: impl Into<T>,
+        aux: &'a MemoryReadAuxCols<V, N>,
+    ) -> MemoryReadOperation<'a, T, V, N> {
+        self.read(
+            MemoryAddress::new(io.address_space, io.address),
+            io.data,
+            timestamp.into(),
+            aux,
+        )
+    }
+
     /// Prepare a logical memory read or immediate operation.
     #[must_use]
     pub fn read_or_immediate<'a, T, V>(
@@ -98,6 +113,21 @@ impl MemoryBridge {
             timestamp: timestamp.into(),
             aux,
         }
+    }
+
+    #[must_use]
+    pub fn write_from_cols<'a, T, V, const N: usize>(
+        &self,
+        io: MemoryDataIoCols<impl Into<T>, N>,
+        timestamp: impl Into<T>,
+        aux: &'a MemoryWriteAuxCols<V, N>,
+    ) -> MemoryWriteOperation<'a, T, V, N> {
+        self.write(
+            MemoryAddress::new(io.address_space, io.address),
+            io.data,
+            timestamp.into(),
+            aux,
+        )
     }
 }
 

@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[test]
-fn test_modular_multiplication() {
+fn test_modular_arithmetic() {
     setup_tracing();
     const NUM_LIMBS: usize = 32;
 

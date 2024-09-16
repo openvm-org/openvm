@@ -5,7 +5,7 @@ use super::{
     columns::{ModularArithmeticAuxCols, ModularArithmeticIoCols},
     ModularArithmeticAirVariant, ModularArithmeticVmAir,
 };
-use crate::{arch::columns::InstructionCols, memory::MemoryAddress};
+use crate::arch::columns::InstructionCols;
 
 impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -18,70 +18,52 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
         let timestamp: AB::Expr = io.from_state.timestamp.into();
 
         self.memory_bridge
-            .read(
-                MemoryAddress::new(io.x_address.address_space, io.x_address.address),
-                io.x_address
-                    .data
-                    .try_into()
-                    .unwrap_or_else(|_| unreachable!()),
+            .read_from_cols(
+                io.x.address.clone(),
                 timestamp.clone() + timestamp_delta.clone(),
-                &aux.x_address_aux_cols,
+                &aux.read_x_aux_cols.address,
+            )
+            .eval(builder, aux.is_valid);
+        timestamp_delta += AB::Expr::one();
+        self.memory_bridge
+            .read_from_cols(
+                io.x.data.clone(),
+                timestamp.clone() + timestamp_delta.clone(),
+                &aux.read_x_aux_cols.data,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
         self.memory_bridge
-            .read(
-                MemoryAddress::new(io.y_address.address_space, io.y_address.address),
-                io.y_address
-                    .data
-                    .try_into()
-                    .unwrap_or_else(|_| unreachable!()),
+            .read_from_cols(
+                io.y.address.clone(),
                 timestamp.clone() + timestamp_delta.clone(),
-                &aux.y_address_aux_cols,
+                &aux.read_y_aux_cols.address,
+            )
+            .eval(builder, aux.is_valid);
+        timestamp_delta += AB::Expr::one();
+        self.memory_bridge
+            .read_from_cols(
+                io.y.data.clone(),
+                timestamp.clone() + timestamp_delta.clone(),
+                &aux.read_y_aux_cols.data,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
         self.memory_bridge
-            .read(
-                MemoryAddress::new(io.z_address.address_space, io.z_address.address),
-                io.z_address
-                    .data
-                    .try_into()
-                    .unwrap_or_else(|_| unreachable!()),
+            .read_from_cols(
+                io.z.address.clone(),
                 timestamp.clone() + timestamp_delta.clone(),
-                &aux.z_address_aux_cols,
+                &aux.write_z_aux_cols.address,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
-
         self.memory_bridge
-            .read(
-                MemoryAddress::new(io.x.address_space, io.x.address),
-                io.x.data.try_into().unwrap_or_else(|_| unreachable!()),
+            .write_from_cols(
+                io.z.data.clone(),
                 timestamp.clone() + timestamp_delta.clone(),
-                &aux.read_x_aux_cols,
-            )
-            .eval(builder, aux.is_valid);
-        timestamp_delta += AB::Expr::one();
-
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(io.y.address_space, io.y.address),
-                io.y.data.try_into().unwrap_or_else(|_| unreachable!()),
-                timestamp.clone() + timestamp_delta.clone(),
-                &aux.read_y_aux_cols,
-            )
-            .eval(builder, aux.is_valid);
-        timestamp_delta += AB::Expr::one();
-
-        self.memory_bridge
-            .write(
-                MemoryAddress::new(io.z.address_space, io.z.address),
-                io.z.data.try_into().unwrap_or_else(|_| unreachable!()),
-                timestamp.clone() + timestamp_delta.clone(),
-                &aux.write_z_aux_cols,
+                &aux.write_z_aux_cols.data,
             )
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
@@ -94,11 +76,11 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
             InstructionCols::new(
                 aux.opcode,
                 [
-                    io.z_address.address,
-                    io.x_address.address,
-                    io.y_address.address,
-                    io.x_address.address_space,
-                    io.x.address_space,
+                    io.z.address.address,
+                    io.x.address.address,
+                    io.y.address.address,
+                    io.x.address.address_space,
+                    io.x.data.address_space,
                 ],
             ),
         );

@@ -2,14 +2,15 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
-    columns::{
-        MemoryData, ModularArithmeticAuxCols, ModularArithmeticCols, ModularArithmeticIoCols,
-    },
+    columns::{ModularArithmeticAuxCols, ModularArithmeticCols, ModularArithmeticIoCols},
     ModularArithmeticAirVariant, ModularArithmeticChip, ModularArithmeticRecord, NUM_LIMBS,
 };
 use crate::{
     arch::{chips::MachineChip, columns::ExecutionState},
-    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    memory::{
+        offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
+        MemoryDataIoCols, MemoryHeapDataIoCols,
+    },
 };
 
 impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, ModularArithmeticAirVariant> {
@@ -40,53 +41,25 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, ModularArithme
                 let ModularArithmeticRecord {
                     from_state,
                     instruction: _instruction, // FIXME: use opcode
-                    x_read,
-                    y_read,
-                    z_write,
-                    x_address_read,
-                    y_address_read,
-                    z_address_read,
+                    x_array_read,
+                    y_array_read,
+                    z_array_write,
                 } = record;
                 let io = ModularArithmeticIoCols {
                     from_state: from_state.map(F::from_canonical_usize),
-                    x: MemoryData {
-                        data: x_read.data.to_vec(),
-                        address_space: x_read.address_space,
-                        address: x_read.pointer,
-                    },
-                    y: MemoryData {
-                        data: y_read.data.to_vec(),
-                        address_space: y_read.address_space,
-                        address: y_read.pointer,
-                    },
-                    z: MemoryData {
-                        data: z_write.data.to_vec(),
-                        address_space: z_write.address_space,
-                        address: z_write.pointer,
-                    },
-                    x_address: MemoryData {
-                        data: x_address_read.data.to_vec(),
-                        address_space: x_address_read.address_space,
-                        address: x_address_read.pointer,
-                    },
-                    y_address: MemoryData {
-                        data: y_address_read.data.to_vec(),
-                        address_space: y_address_read.address_space,
-                        address: y_address_read.pointer,
-                    },
-                    z_address: MemoryData {
-                        data: z_address_read.data.to_vec(),
-                        address_space: z_address_read.address_space,
-                        address: z_address_read.pointer,
-                    },
+                    x: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(x_array_read.clone()),
+                    y: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(y_array_read.clone()),
+                    z: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(z_array_write.clone()),
                 };
-                let x_limbs = x_read
+                let x_limbs = x_array_read
+                    .data_read
                     .data
                     .iter()
                     .map(|x| x.as_canonical_u32())
                     .collect::<Vec<_>>();
                 let x_biguint = super::limbs_to_biguint(&x_limbs);
-                let y_limbs = y_read
+                let y_limbs = y_array_read
+                    .data_read
                     .data
                     .iter()
                     .map(|x| x.as_canonical_u32())
@@ -100,12 +73,10 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, ModularArithme
 
                 let aux = ModularArithmeticAuxCols {
                     is_valid: F::one(),
-                    read_x_aux_cols: aux_cols_factory.make_read_aux_cols(x_read.clone()),
-                    read_y_aux_cols: aux_cols_factory.make_read_aux_cols(y_read.clone()),
-                    write_z_aux_cols: aux_cols_factory.make_write_aux_cols(z_write.clone()),
-                    x_address_aux_cols: aux_cols_factory.make_read_aux_cols(x_address_read.clone()),
-                    y_address_aux_cols: aux_cols_factory.make_read_aux_cols(y_address_read.clone()),
-                    z_address_aux_cols: aux_cols_factory.make_read_aux_cols(z_address_read.clone()),
+                    read_x_aux_cols: aux_cols_factory.make_heap_read_aux_cols(x_array_read.clone()),
+                    read_y_aux_cols: aux_cols_factory.make_heap_read_aux_cols(y_array_read.clone()),
+                    write_z_aux_cols: aux_cols_factory
+                        .make_heap_write_aux_cols(z_array_write.clone()),
                     carries: primitive_row.carries,
                     q: primitive_row.q,
                     opcode: F::from_canonical_u8(record.instruction.opcode as u8),
@@ -117,34 +88,32 @@ impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, ModularArithme
         let height = rows.len();
         let padded_height = height.next_power_of_two();
 
-        let dummy_mem_data = MemoryData {
-            data: vec![F::zero(); NUM_LIMBS],
+        let dummy_mem_data = MemoryDataIoCols {
+            data: [F::zero(); NUM_LIMBS],
             address_space: F::zero(),
             address: F::zero(),
         };
-        let dummy_mem_addr = MemoryData {
-            data: vec![F::zero()],
+        let dummy_mem_addr = MemoryDataIoCols {
+            data: [F::zero()],
             address_space: F::zero(),
             address: F::zero(),
+        };
+        let dummy_mem_heap_data = MemoryHeapDataIoCols {
+            address: dummy_mem_addr.clone(),
+            data: dummy_mem_data.clone(),
         };
         let blank_row = ModularArithmeticCols {
             io: ModularArithmeticIoCols {
                 from_state: ExecutionState::default(),
-                x: dummy_mem_data.clone(),
-                y: dummy_mem_data.clone(),
-                z: dummy_mem_data.clone(),
-                x_address: dummy_mem_addr.clone(),
-                y_address: dummy_mem_addr.clone(),
-                z_address: dummy_mem_addr.clone(),
+                x: dummy_mem_heap_data.clone(),
+                y: dummy_mem_heap_data.clone(),
+                z: dummy_mem_heap_data.clone(),
             },
             aux: ModularArithmeticAuxCols {
                 is_valid: Default::default(),
-                read_x_aux_cols: MemoryReadAuxCols::disabled(),
-                read_y_aux_cols: MemoryReadAuxCols::disabled(),
-                write_z_aux_cols: MemoryWriteAuxCols::disabled(),
-                x_address_aux_cols: MemoryReadAuxCols::disabled(),
-                y_address_aux_cols: MemoryReadAuxCols::disabled(),
-                z_address_aux_cols: MemoryReadAuxCols::disabled(),
+                read_x_aux_cols: MemoryHeapReadAuxCols::disabled(),
+                read_y_aux_cols: MemoryHeapReadAuxCols::disabled(),
+                write_z_aux_cols: MemoryHeapWriteAuxCols::disabled(),
                 carries: vec![F::zero(); self.air.carry_limbs],
                 q: vec![F::zero(); self.air.q_limbs],
                 opcode: F::zero(),
