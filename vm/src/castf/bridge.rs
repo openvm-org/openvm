@@ -22,14 +22,13 @@ impl CastFAir {
             timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
         };
 
-        let intermed_val = io
-            .x
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &limb)| {
-                acc + limb * AB::Expr::from_canonical_u32(1 << (i * LIMB_SIZE))
-            });
-        
+        let intermed_val =
+            io.x.iter()
+                .enumerate()
+                .fold(AB::Expr::zero(), |acc, (i, &limb)| {
+                    acc + limb * AB::Expr::from_canonical_u32(1 << (i * LIMB_SIZE))
+                });
+
         self.memory_bridge
             .read(
                 MemoryAddress::new(io.e, io.op_b),

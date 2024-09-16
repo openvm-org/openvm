@@ -41,10 +41,7 @@ pub struct CastFChip<T: PrimeField32> {
 }
 
 impl<T: PrimeField32> CastFChip<T> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        memory_chip: MemoryChipRef<T>,
-    ) -> Self {
+    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
         let bus = range_checker_chip.bus();
@@ -104,8 +101,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
         }
 
         let x = x.map(T::from_canonical_u32);
-        let x_write = 
-        memory_chip.write::<4>(d, a, x);
+        let x_write = memory_chip.write::<4>(d, a, x);
 
         self.data.push(CastFRecord {
             from_state,
@@ -123,8 +119,8 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
 impl<T: PrimeField32> CastFChip<T> {
     fn solve(y: u32) -> [u32; 4] {
         let mut x = [0; 4];
-        for i in 0..4 {
-            x[i] = (y >> (8 * i)) & 0xFF;
+        for (i, limb) in x.iter_mut().enumerate() {
+            *limb = (y >> (8 * i)) & 0xFF;
         }
         x
     }
