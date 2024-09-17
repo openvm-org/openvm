@@ -3,9 +3,13 @@ use std::rc::Rc;
 use afs_compiler::util::execute_and_prove_program;
 use afs_stark_backend::{engine::VerificationData, rap::AnyRap};
 use p3_baby_bear::BabyBear;
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::StarkGenericConfig;
-use stark_vm::program::Program;
+use p3_uni_stark::{StarkGenericConfig, Val};
+use stark_vm::{
+    program::Program,
+    vm::{config::VmConfig, VirtualMachine},
+};
 
 use crate::{
     hints::InnerVal,
@@ -16,8 +20,8 @@ use crate::{
 /// A struct that contains all the necessary data to build a verifier for a Stark.
 pub struct StarkForTest<SC: StarkGenericConfig> {
     pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
-    pub traces: Vec<RowMajorMatrix<BabyBear>>,
-    pub pvs: Vec<Vec<BabyBear>>,
+    pub traces: Vec<RowMajorMatrix<Val<SC>>>,
+    pub pvs: Vec<Vec<Val<SC>>>,
 }
 
 pub mod inner {
@@ -82,5 +86,31 @@ pub mod inner {
                 ..Default::default()
             },
         );
+    }
+}
+
+pub fn gen_vm_program_stark_for_test<SC: StarkGenericConfig>(
+    program: Program<Val<SC>>,
+    input_stream: Vec<Vec<Val<SC>>>,
+    config: VmConfig,
+) -> StarkForTest<SC>
+where
+    Val<SC>: PrimeField32,
+{
+    let vm = VirtualMachine::new(config, program, input_stream);
+
+    let mut result = vm.execute_and_generate().unwrap();
+    assert_eq!(
+        result.segment_results.len(),
+        1,
+        "only proving one segment for now"
+    );
+
+    let result = result.segment_results.pop().unwrap();
+
+    StarkForTest {
+        any_raps: result.airs.into_iter().map(|x| x.into()).collect(),
+        traces: result.traces,
+        pvs: result.public_values,
     }
 }

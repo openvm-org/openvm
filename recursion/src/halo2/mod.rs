@@ -155,7 +155,16 @@ impl Halo2Prover {
         let builder = Self::populate(builder, operations, witness);
 
         let params = read_params(k as u32);
-        gen_snark_shplonk(&params, pk, builder, None::<&str>)
+
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+
+        let snark = gen_snark_shplonk(&params, pk, builder, None::<&str>);
+
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("halo2_proof_time_ms").set(start.elapsed().as_millis() as f64);
+
+        snark
     }
 
     pub fn full_prove<

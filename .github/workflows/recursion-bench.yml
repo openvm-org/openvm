@@ -36,7 +36,7 @@ jobs:
     with:
       benchmark_name: vm_verify_fibair
     secrets: inherit
-  benchmark_static:
+  benchmark_tiny_e2e:
     uses: ./.github/workflows/benchmark-call.yml
     # run on non-draft pull request with label 'run-benchmark'
     # and always run on push to main
@@ -46,5 +46,5 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'run-benchmark')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
-      benchmark_name: vm_static_verify_fibair
+      benchmark_name: tiny_e2e
     secrets: inherit
