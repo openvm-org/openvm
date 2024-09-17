@@ -293,6 +293,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
                 is_equal_vec_aux,
                 reads_aux_cols,
                 writes_aux_cols,
+                next_pc,
             };
 
             let cols = CpuCols { io, aux };

@@ -20,7 +20,8 @@ use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
 use super::{
-    cycle_tracker::CycleTracker, VirtualMachineState, VmConfig, VmCycleTracker, VmMetrics,
+    connector::VmConnectorChip, cycle_tracker::CycleTracker, VirtualMachineState, VmConfig,
+    VmCycleTracker, VmMetrics,
 };
 use crate::{
     arch::{
@@ -55,6 +56,7 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub cpu_chip: Rc<RefCell<CpuChip<F>>>,
     pub program_chip: Rc<RefCell<ProgramChip<F>>>,
     pub memory_chip: MemoryChipRef<F>,
+    pub connector_chip: VmConnectorChip<F>,
 
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
@@ -285,6 +287,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         chips.push(MachineChipVariant::Memory(memory_chip.clone()));
         chips.push(MachineChipVariant::RangeChecker(range_checker.clone()));
 
+        let connector_chip = VmConnectorChip::new(execution_bus);
+
         Self {
             config,
             executors,
@@ -292,6 +296,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             cpu_chip,
             program_chip,
             memory_chip,
+            connector_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream.clone(),
             collected_metrics: Default::default(),
@@ -314,6 +319,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             cycle_tracker: self.cycle_tracker.clone(),
             collected_metrics: self.collected_metrics.clone(),
         });
+
+        self.connector_chip
+            .begin(ExecutionState::new(pc, F::from_canonical_usize(timestamp)));
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
@@ -417,6 +425,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
         }
 
+        self.connector_chip
+            .end(ExecutionState::new(pc, F::from_canonical_usize(timestamp)));
+
         let streams_and_ct_refs = self
             .cpu_chip
             .borrow_mut()
@@ -461,6 +472,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 result.traces.push(chip.generate_trace());
             }
         }
+        let trace = self.connector_chip.generate_trace();
+        result.airs.push(Box::new(self.connector_chip.air));
+        result.public_values.push(vec![]);
+        result.traces.push(trace);
 
         result
     }
@@ -468,16 +483,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of CPU trace generation.
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
-    ///
-    /// Used by CpuChip::execute, should be private in the future
-    pub fn should_segment(&mut self) -> bool {
+    fn should_segment(&mut self) -> bool {
         self.chips
             .iter()
             .any(|chip| chip.current_trace_height() > self.config.max_segment_len)
     }
 
-    /// Used by CpuChip::execute, should be private in the future
-    pub fn current_trace_cells(&self) -> usize {
+    fn current_trace_cells(&self) -> usize {
         self.chips
             .iter()
             .map(|chip| chip.current_trace_cells())

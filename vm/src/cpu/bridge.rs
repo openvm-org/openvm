@@ -3,22 +3,18 @@ use std::collections::BTreeMap;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{columns::CpuIoCols, CpuAir, READ_INSTRUCTION_BUS};
-use crate::arch::{
-    columns::{ExecutionState, InstructionCols},
-    instructions::Opcode,
-};
+use super::{columns::CpuIoCols, timestamp_delta, CpuAir, READ_INSTRUCTION_BUS};
+use crate::arch::{columns::ExecutionState, instructions::Opcode};
 
 impl CpuAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         io: CpuIoCols<AB::Var>,
-        next_io: CpuIoCols<AB::Var>,
+        next_pc: AB::Var,
         operation_flags: &BTreeMap<Opcode, AB::Var>,
-        not_cpu_opcode: AB::Expr,
     ) {
-        // Interaction with program (bus 0)
+        // Interaction with program
         builder.push_send(
             READ_INSTRUCTION_BUS,
             [
@@ -29,12 +25,17 @@ impl CpuAir {
 
         self.execution_bus.execute(
             builder,
-            -not_cpu_opcode,
+            AB::Expr::one() - operation_flags[&Opcode::NOP],
             ExecutionState::new(io.pc, io.timestamp),
-            ExecutionState::new(next_io.pc, next_io.timestamp),
-            InstructionCols::new(
-                io.opcode,
-                [io.op_a, io.op_b, io.op_c, io.d, io.e, io.op_f, io.op_g],
+            ExecutionState::<AB::Expr>::new(
+                next_pc.into(),
+                io.timestamp
+                    + operation_flags
+                        .iter()
+                        .map(|(op, flag)| {
+                            AB::Expr::from_canonical_usize(timestamp_delta(*op)) * (*flag).into()
+                        })
+                        .fold(AB::Expr::zero(), |x, y| x + y),
             ),
         );
     }

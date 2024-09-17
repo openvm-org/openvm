@@ -5,7 +5,7 @@ use super::{
     columns::{ModularArithmeticAuxCols, ModularArithmeticIoCols},
     ModularArithmeticAirVariant, ModularArithmeticVmAir,
 };
-use crate::arch::columns::InstructionCols;
+use crate::cpu::READ_INSTRUCTION_BUS;
 
 impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -16,6 +16,23 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     ) {
         let mut timestamp_delta = AB::Expr::zero();
         let timestamp: AB::Expr = io.from_state.timestamp.into();
+
+        // Interaction with program
+        builder.push_send(
+            READ_INSTRUCTION_BUS,
+            [
+                io.from_state.pc.into(),
+                aux.opcode.into(),
+                io.z.address.address.into(),
+                io.x.address.address.into(),
+                io.y.address.address.into(),
+                io.x.address.address_space.into(),
+                io.x.data.address_space.into(),
+                AB::Expr::zero(),
+                AB::Expr::zero(),
+            ],
+            aux.is_valid,
+        );
 
         self.memory_bridge
             .read_from_cols(
@@ -73,16 +90,6 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
             aux.is_valid,
             io.from_state.map(Into::into),
             timestamp_delta,
-            InstructionCols::new(
-                aux.opcode,
-                [
-                    io.z.address.address,
-                    io.x.address.address,
-                    io.y.address.address,
-                    io.x.address.address_space,
-                    io.x.data.address_space,
-                ],
-            ),
         );
     }
 }

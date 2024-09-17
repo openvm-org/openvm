@@ -3,14 +3,11 @@ use std::borrow::Borrow;
 use afs_primitives::var_range::bus::VariableRangeCheckerBus;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field};
+use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::columns::CastFCols;
-use crate::{
-    arch::{bus::ExecutionBus, instructions::Opcode},
-    memory::offline_checker::MemoryBridge,
-};
+use crate::{arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge};
 
 // LIMB_SIZE is the size of the limbs in bits.
 pub(crate) const LIMB_SIZE: usize = 8;
@@ -40,8 +37,6 @@ impl<AB: InteractionBuilder> Air<AB> for CastFAir {
         let local_cols: &CastFCols<AB::Var> = (*local).borrow();
         builder.assert_bool(local_cols.aux.is_valid);
 
-        let expected_opcode = AB::Expr::from_canonical_u32(Opcode::CASTF as u32);
-
-        self.eval_interactions(builder, &local_cols.io, &local_cols.aux, expected_opcode);
+        self.eval_interactions(builder, &local_cols.io, &local_cols.aux);
     }
 }

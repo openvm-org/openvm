@@ -14,6 +14,7 @@ use crate::{
 };
 
 pub mod config;
+pub mod connector;
 pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;

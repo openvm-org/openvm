@@ -10,10 +10,8 @@ use super::{
     KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
 };
 use crate::{
-    arch::{
-        columns::{ExecutionState, InstructionCols},
-        instructions::Opcode,
-    },
+    arch::{columns::ExecutionState, instructions::Opcode},
+    cpu::READ_INSTRUCTION_BUS,
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
@@ -129,16 +127,29 @@ impl KeccakVmAir {
         // as `count` in interaction
         let should_receive = local.opcode.is_enabled * local.sponge.is_new_start;
 
+        // Interaction with program
+        builder.push_send(
+            READ_INSTRUCTION_BUS,
+            [
+                opcode.pc.into(),
+                AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
+                opcode.a.into(),
+                opcode.b.into(),
+                opcode.c.into(),
+                opcode.d.into(),
+                opcode.e.into(),
+                opcode.f.into(),
+                AB::Expr::zero(),
+            ],
+            should_receive.clone(),
+        );
+
         let timestamp_change: AB::Expr = Self::timestamp_change(opcode.len);
         self.execution_bus.execute_increment_pc(
             builder,
             should_receive.clone(),
             ExecutionState::new(opcode.pc, opcode.start_timestamp),
             timestamp_change,
-            InstructionCols::new(
-                AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
-                [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
-            ),
         );
 
         let mut timestamp: AB::Expr = opcode.start_timestamp.into();

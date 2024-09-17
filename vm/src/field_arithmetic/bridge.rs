@@ -2,7 +2,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
-use crate::{arch::columns::InstructionCols, field_arithmetic::columns::FieldArithmeticAuxCols};
+use crate::{cpu::READ_INSTRUCTION_BUS, field_arithmetic::columns::FieldArithmeticAuxCols};
 
 /// Receives all IO columns from another chip.
 impl FieldArithmeticAir {
@@ -21,22 +21,28 @@ impl FieldArithmeticAir {
         } = io;
         let is_valid = aux.is_valid;
 
+        // Interaction with program
+        builder.push_send(
+            READ_INSTRUCTION_BUS,
+            [
+                io.from_state.pc.into(),
+                expected_opcode.clone(),
+                result.address.into(),
+                operand1.address.into(),
+                operand2.address.into(),
+                result.address_space.into(),
+                operand1.address_space.into(),
+                operand2.address_space.into(),
+                AB::Expr::zero(),
+            ],
+            is_valid,
+        );
+
         self.execution_bus.execute_increment_pc(
             builder,
             is_valid,
             io.from_state.map(Into::into),
             AB::F::from_canonical_usize(Self::TIMESTAMP_DELTA),
-            InstructionCols::new(
-                expected_opcode,
-                [
-                    result.address,
-                    operand1.address,
-                    operand2.address,
-                    result.address_space,
-                    operand1.address_space,
-                    operand2.address_space,
-                ],
-            ),
         );
 
         let mut timestamp: AB::Expr = from_state.timestamp.into();

@@ -5,7 +5,7 @@ use super::{
     air::{CastFAir, FINAL_LIMB_SIZE, LIMB_SIZE},
     columns::{CastFAuxCols, CastFIoCols},
 };
-use crate::{arch::columns::InstructionCols, memory::MemoryAddress};
+use crate::memory::MemoryAddress;
 
 impl CastFAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -13,7 +13,6 @@ impl CastFAir {
         builder: &mut AB,
         io: &CastFIoCols<AB::Var>,
         aux: &CastFAuxCols<AB::Var>,
-        expected_opcode: AB::Expr,
     ) {
         let timestamp: AB::Var = io.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -52,16 +51,6 @@ impl CastFAir {
             aux.is_valid,
             io.from_state.map(Into::into),
             AB::F::from_canonical_usize(timestamp_delta),
-            InstructionCols::<AB::Expr>::new(
-                expected_opcode,
-                [
-                    io.op_a.into(),
-                    io.op_b.into(),
-                    AB::Expr::zero(),
-                    io.d.into(),
-                    io.e.into(),
-                ],
-            ),
         );
 
         for i in 0..4 {

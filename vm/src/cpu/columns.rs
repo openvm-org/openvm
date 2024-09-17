@@ -165,6 +165,8 @@ pub struct CpuAuxCols<T> {
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
     pub reads_aux_cols: [MemoryReadOrImmediateAuxCols<T>; CPU_MAX_READS_PER_CYCLE],
     pub writes_aux_cols: [MemoryWriteAuxCols<T, 1>; CPU_MAX_WRITES_PER_CYCLE],
+
+    pub next_pc: T,
 }
 
 impl<T: Clone> CpuAuxCols<T> {
@@ -210,6 +212,7 @@ impl<T: Clone> CpuAuxCols<T> {
             end += MemoryWriteAuxCols::<T, WORD_SIZE>::width();
             MemoryWriteAuxCols::from_slice(&slc[start..end])
         });
+        let next_pc = slc[end].clone();
 
         Self {
             operation_flags,
@@ -220,6 +223,7 @@ impl<T: Clone> CpuAuxCols<T> {
             is_equal_vec_aux,
             reads_aux_cols,
             writes_aux_cols,
+            next_pc,
         }
     }
 
@@ -255,6 +259,7 @@ impl<T: Clone> CpuAuxCols<T> {
                 .cloned()
                 .flat_map(MemoryWriteAuxCols::flatten),
         );
+        flattened.push(self.next_pc.clone());
         flattened
     }
 
@@ -267,6 +272,7 @@ impl<T: Clone> CpuAuxCols<T> {
                 * (CpuMemoryAccessCols::<T>::width() + MemoryWriteAuxCols::<T, WORD_SIZE>::width())
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
+            + 1
     }
 }
 
@@ -290,6 +296,7 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             is_equal_vec_aux: is_equal_vec_cols.aux,
             reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
+            next_pc: F::from_canonical_usize(chip.state.pc),
         }
     }
 }

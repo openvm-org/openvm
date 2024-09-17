@@ -37,12 +37,7 @@ impl<AB: InteractionBuilder> Air<AB> for ExecutionDummyAir {
         let main = builder.main();
         let local = main.row_slice(0);
         let local: &DummyExecutionInteractionCols<AB::Var> = (*local).borrow();
-        self.bus.execute(
-            builder,
-            local.count,
-            local.initial_state,
-            local.final_state,
-            local.instruction.map(Into::into),
-        );
+        self.bus
+            .execute(builder, local.count, local.initial_state, local.final_state);
     }
 }
