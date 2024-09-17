@@ -152,10 +152,27 @@ impl Halo2Prover {
         let builder = Self::builder(CircuitBuilderStage::Prover, k)
             .use_params(config_params)
             .use_break_points(break_points);
+        #[cfg(feature = "bench-metrics")]
+        {
+            let stats = builder.statistics();
+            let total_advices: usize = stats.gate.total_advice_per_phase.into_iter().sum();
+            let total_lookups: usize = stats.total_lookup_advice_per_phase.into_iter().sum();
+            let total_cell = total_advices + total_lookups + stats.gate.total_fixed;
+            metrics::gauge!("halo2_total_cells").set(total_cell as f64);
+        }
         let builder = Self::populate(builder, operations, witness);
 
         let params = read_params(k as u32);
-        gen_snark_shplonk(&params, pk, builder, None::<&str>)
+
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+
+        let snark = gen_snark_shplonk(&params, pk, builder, None::<&str>);
+
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("halo2_proof_time_ms").set(start.elapsed().as_millis() as f64);
+
+        snark
     }
 
     pub fn full_prove<

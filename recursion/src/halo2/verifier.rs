@@ -120,10 +120,15 @@ pub fn gen_wrapper_circuit_evm_proof(
         .use_params(pinning.config_params.clone().try_into().unwrap())
         .use_break_points(pinning.break_points.clone());
     let pvs = prover_circuit.instances();
-    (
-        gen_evm_proof_shplonk(&params, &pinning.pk, prover_circuit, pvs.clone()),
-        pvs,
-    )
+    #[cfg(feature = "bench-metrics")]
+    let start = std::time::Instant::now();
+
+    let proof = gen_evm_proof_shplonk(&params, &pinning.pk, prover_circuit, pvs.clone());
+
+    #[cfg(feature = "bench-metrics")]
+    metrics::gauge!("evm_proof_time_ms").set(start.elapsed().as_millis() as f64);
+
+    (proof, pvs)
 }
 
 pub fn gen_wrapper_circuit_snark(
