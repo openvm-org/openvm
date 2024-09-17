@@ -34,7 +34,7 @@ use crate::{
         },
     },
     castf::CastFChip,
-    cpu::{CpuChip, StreamsAndMetrics, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS},
+    core::{CoreChip, StreamsAndMetrics, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -53,7 +53,7 @@ pub struct ExecutionSegment<F: PrimeField32> {
 
     pub executors: BTreeMap<Opcode, InstructionExecutorVariant<F>>,
     pub chips: Vec<MachineChipVariant<F>>,
-    pub cpu_chip: Rc<RefCell<CpuChip<F>>>,
+    pub core_chip: Rc<RefCell<CoreChip<F>>>,
     pub program_chip: Rc<RefCell<ProgramChip<F>>>,
     pub memory_chip: MemoryChipRef<F>,
     pub connector_chip: VmConnectorChip<F>,
@@ -100,8 +100,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             config.memory_config,
             range_checker.clone(),
         )));
-        let cpu_chip = Rc::new(RefCell::new(CpuChip::from_state(
-            config.cpu_options(),
+        let core_chip = Rc::new(RefCell::new(CoreChip::from_state(
+            config.core_options(),
             execution_bus,
             memory_chip.clone(),
             state.state,
@@ -121,12 +121,12 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         // That is, if chip A holds a strong reference to chip B, then A must precede B in `chips`.
 
         let mut chips = vec![
-            MachineChipVariant::Cpu(cpu_chip.clone()),
+            MachineChipVariant::Core(core_chip.clone()),
             MachineChipVariant::Program(program_chip.clone()),
         ];
 
         for opcode in CORE_INSTRUCTIONS {
-            executors.insert(opcode, cpu_chip.clone().into());
+            executors.insert(opcode, core_chip.clone().into());
         }
 
         if config.field_arithmetic_enabled {
@@ -293,7 +293,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             config,
             executors,
             chips,
-            cpu_chip,
+            core_chip,
             program_chip,
             memory_chip,
             connector_chip,
@@ -306,14 +306,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
     /// Stopping is triggered by should_segment()
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        let mut timestamp: usize = self.cpu_chip.borrow().state.timestamp;
-        let mut pc = F::from_canonical_usize(self.cpu_chip.borrow().state.pc);
+        let mut timestamp: usize = self.core_chip.borrow().state.timestamp;
+        let mut pc = F::from_canonical_usize(self.core_chip.borrow().state.pc);
 
         let mut collect_metrics = self.config.collect_metrics;
         // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
 
-        self.cpu_chip.borrow_mut().streams_and_metrics = Some(StreamsAndMetrics {
+        self.core_chip.borrow_mut().streams_and_metrics = Some(StreamsAndMetrics {
             input_stream: self.input_stream.clone(),
             hint_stream: self.hint_stream.clone(),
             cycle_tracker: self.cycle_tracker.clone(),
@@ -372,8 +372,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let added_trace_cells = now_trace_cells - prev_trace_cells;
 
             if collect_metrics {
-                let mut cpu_chip = self.cpu_chip.borrow_mut();
-                let collected_metrics = &mut cpu_chip
+                let mut core_chip = self.core_chip.borrow_mut();
+                let collected_metrics = &mut core_chip
                     .streams_and_metrics
                     .as_mut()
                     .unwrap()
@@ -409,19 +409,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
                 collect_metrics = false;
             }
-            if opcode == Opcode::TERMINATE
-            // && vm
-            //     .cpu_chip
-            //     .borrow()
-            //     .current_trace_height()
-            //     .is_power_of_two()
-            {
-                // is_done = true;
+            if opcode == Opcode::TERMINATE {
                 break;
             }
             if self.should_segment() {
                 panic!("continuations not supported");
-                // break
             }
         }
 
@@ -429,7 +421,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             .end(ExecutionState::new(pc, F::from_canonical_usize(timestamp)));
 
         let streams_and_ct_refs = self
-            .cpu_chip
+            .core_chip
             .borrow_mut()
             .streams_and_metrics
             .take()
@@ -461,7 +453,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         // Drop all strong references to chips other than self.chips, which will be consumed next.
         drop(self.executors);
-        drop(self.cpu_chip);
+        drop(self.core_chip);
         drop(self.program_chip);
         drop(self.memory_chip);
 
@@ -480,7 +472,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         result
     }
 
-    /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of CPU trace generation.
+    /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {

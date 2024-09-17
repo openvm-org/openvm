@@ -67,7 +67,7 @@ pub fn execute_program_with_public_values(
         input_stream,
     );
     for &(index, value) in public_values {
-        vm.segments[0].cpu_chip.borrow_mut().public_values[index] = Some(value);
+        vm.segments[0].core_chip.borrow_mut().public_values[index] = Some(value);
     }
     vm.execute().unwrap()
 }

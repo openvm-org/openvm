@@ -22,7 +22,7 @@ use crate::{
         instructions::Opcode,
         testing::{MachineChipTestBuilder, MachineChipTester},
     },
-    cpu::BYTE_XOR_BUS,
+    core::BYTE_XOR_BUS,
     program::Instruction,
 };
 

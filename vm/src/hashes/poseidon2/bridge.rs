@@ -5,11 +5,11 @@ use poseidon2_air::poseidon2::columns::Poseidon2IoCols;
 use super::{air::Poseidon2VmAir, columns::Poseidon2VmIoCols, WIDTH};
 use crate::{
     arch::{columns::ExecutionState, instructions::Opcode::PERM_POS2},
-    cpu::{POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS},
+    core::{POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS},
 };
 
 impl<F: Field> Poseidon2VmAir<F> {
-    /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
+    /// Receives instructions from the Core on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
     ///
     /// Receives (clk, a, b, c, d, e, cmp) for opcodes, width exposed in `opcode_interaction_width()`
     ///

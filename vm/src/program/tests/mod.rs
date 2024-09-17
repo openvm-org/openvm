@@ -12,7 +12,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use super::Program;
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode::*},
-    cpu::READ_INSTRUCTION_BUS,
+    core::READ_INSTRUCTION_BUS,
     program::{columns::ProgramPreprocessedCols, Instruction, ProgramChip},
 };
 
@@ -80,7 +80,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
 fn test_program_1() {
     let n = 2;
 
-    // see cpu/tests/mod.rs
+    // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[n]_0
         Instruction::large_from_isize(STOREW, n, 0, 0, 0, 1, 0, 1),
@@ -106,7 +106,7 @@ fn test_program_1() {
 
 #[test]
 fn test_program_without_field_arithmetic() {
-    // see cpu/tests/mod.rs
+    // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[5]_0
         Instruction::large_from_isize(STOREW, 5, 0, 0, 0, 1, 0, 1),

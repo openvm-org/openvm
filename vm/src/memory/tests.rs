@@ -12,7 +12,7 @@
 
 // use super::{offline_checker::MemoryChip, MemoryAccess, OpType};
 // use crate::{
-//     cpu::{MEMORY_BUS, RANGE_CHECKER_BUS},
+//     core::{MEMORY_BUS, RANGE_CHECKER_BUS},
 //     vm::config::MemoryConfig,
 // };
 

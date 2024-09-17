@@ -13,7 +13,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     arch::chips::MachineChip,
-    cpu::RANGE_CHECKER_BUS,
+    core::RANGE_CHECKER_BUS,
     memory::{offline_checker::MemoryBus, MemoryChip},
     program::Instruction,
     vm::config::MemoryConfig,

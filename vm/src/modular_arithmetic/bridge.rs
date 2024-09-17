@@ -5,7 +5,7 @@ use super::{
     columns::{ModularArithmeticAuxCols, ModularArithmeticIoCols},
     ModularArithmeticAirVariant, ModularArithmeticVmAir,
 };
-use crate::cpu::READ_INSTRUCTION_BUS;
+use crate::core::READ_INSTRUCTION_BUS;
 
 impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     pub fn eval_interactions<AB: InteractionBuilder>(

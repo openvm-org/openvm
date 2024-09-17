@@ -119,7 +119,7 @@ pub struct FieldExtensionArithmetic;
 impl FieldExtensionArithmetic {
     /// Evaluates given opcode using given operands.
     ///
-    /// Returns None for opcodes not in cpu::FIELD_EXTENSION_INSTRUCTIONS.
+    /// Returns None for opcodes not in core::FIELD_EXTENSION_INSTRUCTIONS.
     pub(crate) fn solve<T: Field>(
         op: Opcode,
         x: [T; EXT_DEG],

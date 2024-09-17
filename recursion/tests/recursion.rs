@@ -56,7 +56,7 @@ where
     };
 
     let vm = VirtualMachine::new(vm_config, fib_program, vec![]);
-    vm.segments[0].cpu_chip.borrow_mut().public_values = vec![
+    vm.segments[0].core_chip.borrow_mut().public_values = vec![
         Some(BabyBear::zero()),
         Some(BabyBear::one()),
         Some(BabyBear::from_canonical_u32(1346269)),

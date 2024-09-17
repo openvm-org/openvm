@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     arch::{columns::ExecutionState, instructions::Opcode},
-    cpu::READ_INSTRUCTION_BUS,
+    core::READ_INSTRUCTION_BUS,
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,

@@ -3,14 +3,14 @@ use std::collections::BTreeMap;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{columns::CpuIoCols, timestamp_delta, CpuAir, READ_INSTRUCTION_BUS};
+use super::{columns::CoreIoCols, timestamp_delta, CoreAir, READ_INSTRUCTION_BUS};
 use crate::arch::{columns::ExecutionState, instructions::Opcode};
 
-impl CpuAir {
+impl CoreAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        io: CpuIoCols<AB::Var>,
+        io: CoreIoCols<AB::Var>,
         next_pc: AB::Var,
         operation_flags: &BTreeMap<Opcode, AB::Var>,
     ) {

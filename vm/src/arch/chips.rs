@@ -16,7 +16,7 @@ use strum_macros::IntoStaticStr;
 use crate::{
     arch::columns::ExecutionState,
     castf::CastFChip,
-    cpu::CpuChip,
+    core::CoreChip,
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -93,7 +93,7 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
 #[derive(Debug)]
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum InstructionExecutorVariant<F: PrimeField32> {
-    Cpu(Rc<RefCell<CpuChip<F>>>),
+    Core(Rc<RefCell<CoreChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
@@ -107,7 +107,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
 #[derive(Debug, IntoStaticStr)]
 #[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
-    Cpu(Rc<RefCell<CpuChip<F>>>),
+    Core(Rc<RefCell<CoreChip<F>>>),
     Program(Rc<RefCell<ProgramChip<F>>>),
     Memory(MemoryChipRef<F>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),

@@ -9,8 +9,8 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    timestamp_delta, CpuChip, CpuState, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE,
+    columns::{CoreAuxCols, CoreCols, CoreIoCols},
+    timestamp_delta, CoreChip, CoreState, CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE,
     INST_WIDTH,
 };
 use crate::{
@@ -19,12 +19,12 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode::*, CORE_INSTRUCTIONS},
     },
-    cpu::{columns::CpuMemoryAccessCols, WORD_SIZE},
+    core::{columns::CoreMemoryAccessCols, WORD_SIZE},
     memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
     program::{ExecutionError, Instruction},
 };
 
-impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
+impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
@@ -33,8 +33,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
         let mut timestamp = from_state.timestamp;
         let pc = F::from_canonical_usize(from_state.pc);
 
-        let cpu_options = self.air.options;
-        let num_public_values = cpu_options.num_public_values;
+        let core_options = self.air.options;
+        let num_public_values = core_options.num_public_values;
 
         let pc_usize = pc.as_canonical_u64() as usize;
 
@@ -48,7 +48,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
         let g = instruction.op_g;
         let debug = instruction.debug.clone();
 
-        let io = CpuIoCols {
+        let io = CoreIoCols {
             timestamp: F::from_canonical_usize(timestamp),
             pc,
             opcode: F::from_canonical_usize(opcode as usize),
@@ -68,7 +68,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
 
         macro_rules! read {
             ($addr_space: expr, $pointer: expr) => {{
-                assert!(read_records.len() < CPU_MAX_READS_PER_CYCLE);
+                assert!(read_records.len() < CORE_MAX_READS_PER_CYCLE);
                 read_records.push(
                     self.memory_chip
                         .borrow_mut()
@@ -80,7 +80,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
 
         macro_rules! write {
             ($addr_space: expr, $pointer: expr, $data: expr) => {{
-                assert!(write_records.len() < CPU_MAX_WRITES_PER_CYCLE);
+                assert!(write_records.len() < CORE_MAX_WRITES_PER_CYCLE);
                 write_records.push(self.memory_chip.borrow_mut().write_cell(
                     $addr_space,
                     $pointer,
@@ -244,8 +244,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
             let read_cols = array::from_fn(|i| {
                 read_records
                     .get(i)
-                    .map_or_else(CpuMemoryAccessCols::disabled, |read| {
-                        CpuMemoryAccessCols::from_read_record(read.clone())
+                    .map_or_else(CoreMemoryAccessCols::disabled, |read| {
+                        CoreMemoryAccessCols::from_read_record(read.clone())
                     })
             });
             let reads_aux_cols = array::from_fn(|i| {
@@ -259,8 +259,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
             let write_cols = array::from_fn(|i| {
                 write_records
                     .get(i)
-                    .map_or_else(CpuMemoryAccessCols::disabled, |write| {
-                        CpuMemoryAccessCols::from_write_record(write.clone())
+                    .map_or_else(CoreMemoryAccessCols::disabled, |write| {
+                        CoreMemoryAccessCols::from_write_record(write.clone())
                     })
             });
             let writes_aux_cols = array::from_fn(|i| {
@@ -284,7 +284,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
             let read0_equals_read1 = is_equal_vec_cols.io.is_equal;
             let is_equal_vec_aux = is_equal_vec_cols.aux;
 
-            let aux = CpuAuxCols {
+            let aux = CoreAuxCols {
                 operation_flags,
                 public_value_flags,
                 reads: read_cols,
@@ -296,12 +296,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
                 next_pc,
             };
 
-            let cols = CpuCols { io, aux };
+            let cols = CoreCols { io, aux };
             self.rows.push(cols.flatten());
         }
 
-        // Update CPU chip state with all changes from this segment.
-        self.set_state(CpuState {
+        // Update Core chip state with all changes from this segment.
+        self.set_state(CoreState {
             clock_cycle: self.state.clock_cycle + 1,
             timestamp,
             pc: next_pc.as_canonical_u64() as usize,
@@ -315,7 +315,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CpuChip<F> {
     }
 }
 
-impl<F: PrimeField32> CpuChip<F> {
+impl<F: PrimeField32> CoreChip<F> {
     /// Pad with NOP rows.
     pub fn pad_rows(&mut self) {
         let curr_height = self.rows.len();
@@ -325,19 +325,19 @@ impl<F: PrimeField32> CpuChip<F> {
         }
     }
 
-    /// This must be called for each blank row and results should never be cloned; see [CpuCols::nop_row].
-    fn make_blank_row(&self) -> CpuCols<F> {
+    /// This must be called for each blank row and results should never be cloned; see [CoreCols::nop_row].
+    fn make_blank_row(&self) -> CoreCols<F> {
         let pc = F::from_canonical_usize(self.state.pc);
         let timestamp = F::from_canonical_usize(self.state.timestamp);
-        CpuCols::nop_row(self, pc, timestamp)
+        CoreCols::nop_row(self, pc, timestamp)
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for CpuChip<F> {
+impl<F: PrimeField32> MachineChip<F> for CoreChip<F> {
     fn generate_trace(mut self) -> RowMajorMatrix<F> {
         self.pad_rows();
 
-        RowMajorMatrix::new(self.rows.concat(), CpuCols::<F>::get_width(&self.air))
+        RowMajorMatrix::new(self.rows.concat(), CoreCols::<F>::get_width(&self.air))
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>

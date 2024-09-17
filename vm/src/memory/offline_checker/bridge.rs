@@ -16,7 +16,7 @@ use p3_field::AbstractField;
 
 use super::bus::MemoryBus;
 use crate::{
-    cpu::RANGE_CHECKER_BUS,
+    core::RANGE_CHECKER_BUS,
     memory::{
         offline_checker::columns::{
             MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,

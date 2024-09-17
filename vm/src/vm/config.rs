@@ -1,7 +1,7 @@
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 
-use crate::cpu::CpuOptions;
+use crate::core::CoreOptions;
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
 
@@ -21,7 +21,7 @@ impl Default for MemoryConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
-    // TODO: VmConfig should just contain CpuOptions to reduce redundancy
+    // TODO: VmConfig should just contain CoreOptions to reduce redundancy
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
@@ -64,8 +64,8 @@ impl Default for VmConfig {
 }
 
 impl VmConfig {
-    pub fn cpu_options(&self) -> CpuOptions {
-        CpuOptions {
+    pub fn core_options(&self) -> CoreOptions {
+        CoreOptions {
             num_public_values: self.num_public_values,
         }
     }

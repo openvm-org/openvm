@@ -6,7 +6,7 @@ use super::{
     air::UintArithmeticAir,
     columns::{UintArithmeticAuxCols, UintArithmeticIoCols},
 };
-use crate::{cpu::READ_INSTRUCTION_BUS, memory::MemoryAddress};
+use crate::{core::READ_INSTRUCTION_BUS, memory::MemoryAddress};
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, LIMB_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -29,10 +29,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
                 io.z.address.into(),
                 io.x.address.into(),
                 io.y.address.into(),
+                io.d.into(),
+                io.z.address_space.into(),
                 io.x.address_space.into(),
                 io.y.address_space.into(),
-                AB::Expr::zero(),
-                AB::Expr::zero(),
             ],
             aux.is_valid,
         );

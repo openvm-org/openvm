@@ -10,31 +10,31 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    CpuOptions, INST_WIDTH, WORD_SIZE,
+    columns::{CoreAuxCols, CoreCols, CoreIoCols},
+    CoreOptions, INST_WIDTH, WORD_SIZE,
 };
 use crate::{
     arch::{bus::ExecutionBus, instructions::Opcode::*},
     memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
-/// Air for the CPU. Carries no state and does not own execution.
+/// Air for the Core. Carries no state and does not own execution.
 #[derive(Clone, Debug)]
-pub struct CpuAir {
-    pub options: CpuOptions,
+pub struct CoreAir {
+    pub options: CoreOptions,
     pub execution_bus: ExecutionBus,
     pub memory_bridge: MemoryBridge,
 }
 
-impl<F: Field> BaseAir<F> for CpuAir {
+impl<F: Field> BaseAir<F> for CoreAir {
     fn width(&self) -> usize {
-        CpuCols::<F>::get_width(self)
+        CoreCols::<F>::get_width(self)
     }
 }
 
 // TODO[osama]: here, there should be some relation enforced between the timestamp for the cpu and the memory timestamp
 // TODO[osama]: also, rename to clk
-impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
+impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
     // TODO: continuation verification checks program counters match up [INT-1732]
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -44,11 +44,11 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
-        let local_cols = CpuCols::from_slice(local, self);
+        let local_cols = CoreCols::from_slice(local, self);
 
-        let CpuCols { io, aux } = local_cols;
+        let CoreCols { io, aux } = local_cols;
 
-        let CpuIoCols {
+        let CoreIoCols {
             timestamp: _timestamp,
             pc,
             opcode,
@@ -61,7 +61,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
             op_g: g,
         } = io;
 
-        let CpuAuxCols {
+        let CoreAuxCols {
             operation_flags,
             public_value_flags,
             reads,
@@ -81,15 +81,15 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
             builder.assert_bool(flag);
         }
 
-        let mut is_cpu_opcode = AB::Expr::zero();
+        let mut is_core_opcode = AB::Expr::zero();
         let mut match_opcode = AB::Expr::zero();
         for (&opcode, &flag) in operation_flags.iter() {
-            is_cpu_opcode += flag.into();
+            is_core_opcode += flag.into();
             match_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
         }
-        builder.assert_bool(is_cpu_opcode.clone());
+        builder.assert_bool(is_core_opcode.clone());
         builder
-            .when(is_cpu_opcode.clone())
+            .when(is_core_opcode.clone())
             .assert_eq(opcode, match_opcode);
 
         // keep track of when memory accesses should be enabled
