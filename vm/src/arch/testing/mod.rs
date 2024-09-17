@@ -92,7 +92,7 @@ impl MachineChipTestBuilder<BabyBear> {
 
 impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
     fn default() -> Self {
-        let mem_config = MemoryConfig::new(2, 29, 29, 16); // smaller testing config with smaller decomp_bits
+        let mem_config = MemoryConfig::new(2, 29, 29, 17); // smaller testing config with smaller decomp_bits
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,

@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::utils::big_uint_mod_inverse,
-    ecc::{EcAddUnequalAir, EcAirConfig},
+    ecc::{EcAddUnequalAir, EcAirConfig, EcDoubleAir},
     var_range::VariableRangeCheckerChip,
 };
 use num_bigint_dig::BigUint;
@@ -35,6 +35,38 @@ pub use columns::*;
 #[cfg(test)]
 mod test;
 
+fn read_ec_points<T: PrimeField32>(
+    memory_chip: MemoryChipRef<T>,
+    ptr_as: T,
+    data_as: T,
+    ptr_pointer: T,
+) -> (BigUint, BigUint, MemoryHeapReadRecord<T, TWO_NUM_LIMBS>) {
+    let mut memory_chip = memory_chip.borrow_mut();
+    let array_read = memory_chip.read_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer);
+    let u32_array = array_read.data_read.data.map(|x| x.as_canonical_u32());
+    let x = limbs_to_biguint(&u32_array[..NUM_LIMBS]);
+    let y = limbs_to_biguint(&u32_array[NUM_LIMBS..]);
+    (x, y, array_read)
+}
+
+fn write_ec_points<T: PrimeField32>(
+    memory_chip: MemoryChipRef<T>,
+    x: BigUint,
+    y: BigUint,
+    ptr_as: T,
+    data_as: T,
+    ptr_pointer: T,
+) -> MemoryHeapWriteRecord<T, TWO_NUM_LIMBS> {
+    let mut memory_chip = memory_chip.borrow_mut();
+    let x_limbs = biguint_to_limbs(x);
+    let y_limbs = biguint_to_limbs(y);
+    let mut array = [0; 64];
+    array[..NUM_LIMBS].copy_from_slice(&x_limbs);
+    array[NUM_LIMBS..].copy_from_slice(&y_limbs);
+    let array: [T; 64] = array.map(|x| T::from_canonical_u32(x));
+    memory_chip.write_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer, array)
+}
+
 #[derive(Clone, Debug)]
 pub struct EcAddUnequalRecord<T: PrimeField32> {
     pub from_state: ExecutionState<usize>,
@@ -46,40 +78,57 @@ pub struct EcAddUnequalRecord<T: PrimeField32> {
     pub p3_array_write: MemoryHeapWriteRecord<T, TWO_NUM_LIMBS>,
 }
 
-pub struct EcAddUnequalChip<T: PrimeField32> {
-    pub air: EcAddUnequalVmAir,
-    pub data: Vec<EcAddUnequalRecord<T>>,
+pub struct EcChipConfig<T: PrimeField32> {
     memory_chip: MemoryChipRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     prime: BigUint,
 }
 
+pub struct EcAddUnequalChip<T: PrimeField32> {
+    pub air: EcAddUnequalVmAir,
+    pub data: Vec<EcAddUnequalRecord<T>>,
+    pub config: EcChipConfig<T>,
+}
+
+fn make_ec_config<T: PrimeField32>(memory_chip: &MemoryChipRef<T>) -> EcAirConfig {
+    let range_checker_chip = memory_chip.borrow().range_checker.clone();
+    let prime = SECP256K1_COORD_PRIME.clone();
+    EcAirConfig::new(
+        prime.clone(),
+        BigUint::from_u32(7).unwrap(),
+        range_checker_chip.bus().index,
+        range_checker_chip.range_max_bits(),
+        LIMB_SIZE,
+        FIELD_ELEMENT_BITS,
+    )
+}
+
+fn make_ec_chip_config<T: PrimeField32>(memory_chip: MemoryChipRef<T>) -> EcChipConfig<T> {
+    let range_checker_chip = memory_chip.borrow().range_checker.clone();
+    let prime = SECP256K1_COORD_PRIME.clone();
+    EcChipConfig {
+        memory_chip,
+        range_checker_chip,
+        prime,
+    }
+}
+
 impl<T: PrimeField32> EcAddUnequalChip<T> {
     pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
-        let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
-        let prime = SECP256K1_COORD_PRIME.clone();
 
-        let ec_config = EcAirConfig::new(
-            prime.clone(),
-            BigUint::from_u32(7).unwrap(),
-            range_checker_chip.bus().index,
-            range_checker_chip.range_max_bits(),
-            LIMB_SIZE,
-            FIELD_ELEMENT_BITS,
-        );
+        let ec_config = make_ec_config(&memory_chip);
         let air = EcAddUnequalVmAir {
             air: EcAddUnequalAir { config: ec_config },
             execution_bus,
             memory_bridge,
         };
+        let config = make_ec_chip_config(memory_chip);
 
         Self {
             air,
-            data: Vec::new(),
-            memory_chip,
-            range_checker_chip,
-            prime,
+            config,
+            data: vec![],
         }
     }
 }
@@ -90,12 +139,6 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
-        let mut memory_chip = self.memory_chip.borrow_mut();
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory_chip.timestamp().as_canonical_u32() as usize
-        );
-
         let Instruction {
             opcode: _,
             op_a: p3_address_ptr,
@@ -106,34 +149,27 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
             ..
         } = instruction.clone();
 
-        // TODO: check opcode
+        let (p1_x, p1_y, p1_array_read) =
+            read_ec_points(Rc::clone(&self.config.memory_chip), d, e, p1_address_ptr);
+        let (p2_x, p2_y, p2_array_read) =
+            read_ec_points(Rc::clone(&self.config.memory_chip), d, e, p2_address_ptr);
 
-        let p1_array_read = memory_chip.read_heap::<TWO_NUM_LIMBS>(d, e, p1_address_ptr);
-        let p2_array_read = memory_chip.read_heap::<TWO_NUM_LIMBS>(d, e, p2_address_ptr);
-        let p1_array = p1_array_read.data_read.data.map(|x| x.as_canonical_u32());
-        let p1_x = limbs_to_biguint(&p1_array[..NUM_LIMBS]);
-        let p1_y = limbs_to_biguint(&p1_array[NUM_LIMBS..]);
-        let p2_array = p2_array_read.data_read.data.map(|x| x.as_canonical_u32());
-        let p2_x = limbs_to_biguint(&p2_array[..NUM_LIMBS]);
-        let p2_y = limbs_to_biguint(&p2_array[NUM_LIMBS..]);
+        let prime = self.config.prime.clone();
+        let dx = &prime + &p1_x - &p2_x;
+        let dy = &prime + &p1_y - &p2_y;
+        let dx_inv = big_uint_mod_inverse(&dx, &prime);
+        let lambda: BigUint = (dy * dx_inv) % &prime;
+        let p3_x: BigUint = (&lambda * &lambda + &prime + &prime - &p1_x - &p2_x) % &prime;
+        let p3_y: BigUint = (&lambda * (&prime + &p1_x - &p3_x) + &prime - &p1_y) % &prime;
 
-        let dx = &self.prime + &p1_x - &p2_x;
-        let dy = &self.prime + &p1_y - &p2_y;
-        let dx_inv = big_uint_mod_inverse(&dx, &self.prime);
-        let lambda: BigUint = (dy * dx_inv) % &self.prime;
-        let p3_x: BigUint =
-            (&lambda * &lambda + &self.prime + &self.prime - &p1_x - &p2_x) % &self.prime;
-        let p3_y: BigUint =
-            (&lambda * (&self.prime + &p1_x - &p3_x) + &self.prime - &p1_y) % &self.prime;
-
-        let p3_x_limbs = biguint_to_limbs(p3_x);
-        let p3_y_limbs = biguint_to_limbs(p3_y);
-        let mut p3_array = [0; 64];
-        p3_array[..NUM_LIMBS].copy_from_slice(&p3_x_limbs);
-        p3_array[NUM_LIMBS..].copy_from_slice(&p3_y_limbs);
-        let p3_array: [T; 64] = p3_array.map(|x| T::from_canonical_u32(x));
-        let p3_array_write =
-            memory_chip.write_heap::<TWO_NUM_LIMBS>(d, e, p3_address_ptr, p3_array);
+        let p3_array_write = write_ec_points(
+            Rc::clone(&self.config.memory_chip),
+            p3_x,
+            p3_y,
+            d,
+            e,
+            p3_address_ptr,
+        );
 
         let record = EcAddUnequalRecord {
             from_state,
@@ -144,6 +180,94 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
         };
         self.data.push(record);
 
+        let memory_chip = self.config.memory_chip.borrow();
+        ExecutionState {
+            pc: from_state.pc + 1,
+            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct EcDoubleRecord<T: PrimeField32> {
+    pub from_state: ExecutionState<usize>,
+    pub instruction: Instruction<T>,
+
+    // Each limb is 8 bits (byte), 32 limbs for 256 bits, 2 coordinates for each point..
+    pub p1_array_read: MemoryHeapReadRecord<T, TWO_NUM_LIMBS>,
+    pub p2_array_write: MemoryHeapWriteRecord<T, TWO_NUM_LIMBS>,
+}
+
+pub struct EcDoubleChip<T: PrimeField32> {
+    pub air: EcDoubleVmAir,
+    pub data: Vec<EcDoubleRecord<T>>,
+    pub config: EcChipConfig<T>,
+}
+
+impl<T: PrimeField32> EcDoubleChip<T> {
+    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
+        let memory_bridge = memory_chip.borrow().memory_bridge();
+
+        let ec_config = make_ec_config(&memory_chip);
+        let air = EcDoubleVmAir {
+            air: EcDoubleAir { config: ec_config },
+            execution_bus,
+            memory_bridge,
+        };
+        let config = make_ec_chip_config(memory_chip);
+
+        Self {
+            air,
+            config,
+            data: vec![],
+        }
+    }
+}
+
+impl<T: PrimeField32> InstructionExecutor<T> for EcDoubleChip<T> {
+    fn execute(
+        &mut self,
+        instruction: Instruction<T>,
+        from_state: ExecutionState<usize>,
+    ) -> ExecutionState<usize> {
+        let Instruction {
+            opcode: _,
+            op_a: p2_address_ptr,
+            op_b: p1_address_ptr,
+            d,
+            e,
+            ..
+        } = instruction.clone();
+
+        let (p1_x, p1_y, p1_array_read) =
+            read_ec_points(Rc::clone(&self.config.memory_chip), d, e, p1_address_ptr);
+
+        let prime = self.config.prime.clone();
+        let two_y = &p1_y + &p1_y;
+        let two_y_inv = big_uint_mod_inverse(&two_y, &prime);
+        let three = BigUint::from_u32(3).unwrap();
+        let lambda: BigUint = three * &p1_x * &p1_x * two_y_inv;
+        let p3_x: BigUint = (&lambda * &lambda + &prime + &prime - &p1_x - &p1_x) % &prime;
+        let p3_y: BigUint = (&lambda * (&prime + &p1_x - &p3_x) + &prime - &p1_y) % &prime;
+
+        let p2_array_write = write_ec_points(
+            Rc::clone(&self.config.memory_chip),
+            p3_x,
+            p3_y,
+            d,
+            e,
+            p2_address_ptr,
+        );
+
+        let record = EcDoubleRecord {
+            from_state,
+            instruction,
+            p1_array_read,
+            p2_array_write,
+        };
+        self.data.push(record);
+
+        let memory_chip = self.config.memory_chip.borrow();
         ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,

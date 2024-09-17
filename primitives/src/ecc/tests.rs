@@ -10,7 +10,7 @@ use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
-    air::{EcAddUnequalAir, EcAirConfig, EccDoubleAir},
+    air::{EcAddUnequalAir, EcAirConfig, EcDoubleAir},
     columns::EcDoubleCols,
     SampleEcPoints,
 };
@@ -122,7 +122,7 @@ fn test_ec_double() {
     let p1 = SampleEcPoints[1].clone();
     let expected_double = SampleEcPoints[3].clone();
     let (config, range_checker) = get_air_config_and_range_checker();
-    let air = EccDoubleAir { config };
+    let air = EcDoubleAir { config };
     let input = (p1, range_checker.clone());
     let cols = air.generate_trace_row(input);
 
@@ -146,7 +146,7 @@ fn test_ec_double() {
 fn test_ec_double_wrong_trace() {
     let p1 = SampleEcPoints[3].clone();
     let (config, range_checker) = get_air_config_and_range_checker();
-    let air = EccDoubleAir { config };
+    let air = EcDoubleAir { config };
     let input = (p1, range_checker.clone());
     let cols = air.generate_trace_row(input);
 
