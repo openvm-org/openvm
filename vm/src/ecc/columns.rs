@@ -1,4 +1,4 @@
-use std::iter;
+use std::{iter, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::ecc::{EcAirConfig, EcAuxCols as EcPrimitivesAuxCols};
@@ -44,7 +44,7 @@ pub struct EcAddUnequalIoCols<T: Clone> {
 
 impl<T: Clone> EcAddUnequalIoCols<T> {
     pub const fn width() -> usize {
-        2 + 3 * (TWO_NUM_LIMBS + 5)
+        size_of::<EcAddUnequalIoCols<u8>>()
     }
 
     pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
