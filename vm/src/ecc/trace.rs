@@ -6,10 +6,10 @@ use super::{
     EcAddUnequalAuxCols, EcAddUnequalChip, EcAddUnequalCols, EcAddUnequalIoCols, EcAddUnequalRecord,
 };
 use crate::{
-    arch::chips::MachineChip,
+    arch::{chips::MachineChip, instructions::Opcode},
     memory::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
-        MemoryDataIoCols, MemoryHeapDataIoCols,
+        MemoryHeapDataIoCols,
     },
     modular_arithmetic::{limbs_to_biguint, NUM_LIMBS, TWO_NUM_LIMBS},
 };
@@ -46,6 +46,7 @@ impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
                     p2_array_read,
                     p3_array_write,
                 } = record;
+                assert_eq!(instruction.opcode, Opcode::SECP256K1_EC_ADD_NE);
 
                 let io = EcAddUnequalIoCols {
                     from_state: from_state.map(F::from_canonical_usize),

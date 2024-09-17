@@ -15,15 +15,7 @@ use p3_matrix::Matrix;
 
 use super::columns::*;
 use crate::{
-    arch::{
-        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
-        instructions::Opcode,
-    },
-    cpu::trace::Instruction,
-    memory::{
-        offline_checker::MemoryBridge, MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord,
-    },
-    modular_arithmetic::NUM_LIMBS,
+    arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge, modular_arithmetic::NUM_LIMBS,
 };
 
 #[derive(Clone, Debug)]
@@ -73,6 +65,6 @@ impl<AB: InteractionBuilder> Air<AB> for EcAddUnequalVmAir {
 
         SubAir::eval(&self.air, builder, io, aux);
 
-        // TODO: interactions.
+        self.eval_interactions(builder, cols.io, cols.aux);
     }
 }

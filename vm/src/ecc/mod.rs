@@ -25,6 +25,7 @@ use crate::{
 };
 
 mod air;
+mod bridge;
 mod columns;
 mod trace;
 

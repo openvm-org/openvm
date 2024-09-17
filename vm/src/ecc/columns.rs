@@ -9,7 +9,7 @@ use crate::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols,
     },
-    modular_arithmetic::{NUM_LIMBS, TWO_NUM_LIMBS},
+    modular_arithmetic::TWO_NUM_LIMBS,
 };
 
 pub struct EcAddUnequalCols<T: Clone> {
