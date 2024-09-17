@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, iter, mem::size_of};
+use std::iter;
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::ecc::{EcAirConfig, EcAuxCols as EcPrimitivesAuxCols};
@@ -23,8 +23,7 @@ impl<T: Clone> EcAddUnequalCols<T> {
     }
 
     pub fn from_iterator(mut iter: impl Iterator<Item = T>, config: &EcAirConfig) -> Self {
-        let io_width = EcAddUnequalIoCols::<T>::width();
-        let io = EcAddUnequalIoCols::from_slice(&iter.by_ref().take(io_width).collect::<Vec<_>>());
+        let io = EcAddUnequalIoCols::from_iterator(iter.by_ref());
         let aux = EcAddUnequalAuxCols::from_iterator(iter.by_ref(), config);
 
         Self { io, aux }
@@ -48,9 +47,17 @@ impl<T: Clone> EcAddUnequalIoCols<T> {
         2 + 3 * (TWO_NUM_LIMBS + 5)
     }
 
-    pub fn from_slice(slc: &[T]) -> Self {
-        let x: &EcAddUnequalIoCols<T> = slc.borrow();
-        x.clone()
+    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
+        let from_state = ExecutionState::from_iter(iter.by_ref());
+        let p1 = MemoryHeapDataIoCols::from_iterator(iter.by_ref());
+        let p2 = MemoryHeapDataIoCols::from_iterator(iter.by_ref());
+        let p3 = MemoryHeapDataIoCols::from_iterator(iter.by_ref());
+        Self {
+            from_state,
+            p1,
+            p2,
+            p3,
+        }
     }
 
     pub fn flatten(&self) -> Vec<T> {

@@ -69,6 +69,9 @@ pub enum Opcode {
     EQ256 = 84,
 
     NOP = 100,
+
+    SECP256K1_EC_ADD_NE = 101,
+    SECP256K1_EC_DOUBLE = 102,
 }
 
 impl fmt::Display for Opcode {
