@@ -3,14 +3,14 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use crate::byte_op_lookup::bus::ByteOperationLookupBus;
+use crate::bitwise_op_lookup::bus::BitwiseOperationLookupBus;
 
 pub struct DummyAir {
-    bus: ByteOperationLookupBus,
+    bus: BitwiseOperationLookupBus,
 }
 
 impl DummyAir {
-    pub fn new(bus: ByteOperationLookupBus) -> Self {
+    pub fn new(bus: BitwiseOperationLookupBus) -> Self {
         Self { bus }
     }
 }

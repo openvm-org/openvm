@@ -1,37 +1,32 @@
 use std::borrow::Borrow;
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilder, BaseAir, PairBuilder};
+use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::{
-    bus::ByteOperationLookupBus,
+    bus::BitwiseOperationLookupBus,
     columns::{
-        ByteOperationLookupCols, ByteOperationLookupPreprocessedCols, NUM_BYTE_OP_LOOKUP_COLS,
-        NUM_BYTE_OP_LOOKUP_PREPROCESSED_COLS,
+        BitwiseOperationLookupCols, BitwiseOperationLookupPreprocessedCols,
+        NUM_BITWISE_OP_LOOKUP_COLS, NUM_BITWISE_OP_LOOKUP_PREPROCESSED_COLS,
     },
 };
 
 #[derive(Copy, Clone, PartialEq)]
-pub enum ByteOperationLookupOpcode {
+pub enum BitwiseOperationLookupOpcode {
     ADD = 0,
     XOR = 1,
 }
 
-#[inline]
-pub fn enum_to_expression<AB: AirBuilder>(op: ByteOperationLookupOpcode) -> AB::Expr {
-    AB::Expr::from_canonical_u32(op as u32)
-}
-
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct ByteOperationLookupAir<const NUM_BITS: usize> {
-    pub bus: ByteOperationLookupBus,
+pub struct BitwiseOperationLookupAir<const NUM_BITS: usize> {
+    pub bus: BitwiseOperationLookupBus,
 }
 
-impl<F: Field, const NUM_BITS: usize> BaseAir<F> for ByteOperationLookupAir<NUM_BITS> {
+impl<F: Field, const NUM_BITS: usize> BaseAir<F> for BitwiseOperationLookupAir<NUM_BITS> {
     fn width(&self) -> usize {
-        NUM_BYTE_OP_LOOKUP_COLS
+        NUM_BITWISE_OP_LOOKUP_COLS
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
@@ -49,29 +44,29 @@ impl<F: Field, const NUM_BITS: usize> BaseAir<F> for ByteOperationLookupAir<NUM_
             .collect();
         Some(RowMajorMatrix::new(
             rows,
-            NUM_BYTE_OP_LOOKUP_PREPROCESSED_COLS,
+            NUM_BITWISE_OP_LOOKUP_PREPROCESSED_COLS,
         ))
     }
 }
 
 impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
-    for ByteOperationLookupAir<NUM_BITS>
+    for BitwiseOperationLookupAir<NUM_BITS>
 {
     fn eval(&self, builder: &mut AB) {
         let preprocessed = builder.preprocessed();
         let prep_local = preprocessed.row_slice(0);
-        let prep_local: &ByteOperationLookupPreprocessedCols<AB::Var> = (*prep_local).borrow();
+        let prep_local: &BitwiseOperationLookupPreprocessedCols<AB::Var> = (*prep_local).borrow();
 
         let main = builder.main();
         let local = main.row_slice(0);
-        let local: &ByteOperationLookupCols<AB::Var> = (*local).borrow();
+        let local: &BitwiseOperationLookupCols<AB::Var> = (*local).borrow();
 
         self.bus
             .receive(
                 prep_local.x,
                 prep_local.y,
                 prep_local.z_add,
-                enum_to_expression::<AB>(ByteOperationLookupOpcode::ADD),
+                AB::Expr::from_canonical_u8(BitwiseOperationLookupOpcode::ADD as u8),
             )
             .eval(builder, local.mult_add);
         self.bus
@@ -79,7 +74,7 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
                 prep_local.x,
                 prep_local.y,
                 prep_local.z_xor,
-                enum_to_expression::<AB>(ByteOperationLookupOpcode::XOR),
+                AB::Expr::from_canonical_u8(BitwiseOperationLookupOpcode::XOR as u8),
             )
             .eval(builder, local.mult_xor);
     }

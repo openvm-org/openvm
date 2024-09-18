@@ -2,11 +2,11 @@ use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
 use p3_field::AbstractField;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ByteOperationLookupBus {
+pub struct BitwiseOperationLookupBus {
     pub index: usize,
 }
 
-impl ByteOperationLookupBus {
+impl BitwiseOperationLookupBus {
     pub const fn new(index: usize) -> Self {
         Self { index }
     }
@@ -18,7 +18,7 @@ impl ByteOperationLookupBus {
         y: impl Into<T>,
         z: impl Into<T>,
         op: impl Into<T>,
-    ) -> ByteOperationLookupBusInteraction<T> {
+    ) -> BitwiseOperationLookupBusInteraction<T> {
         self.push(x, y, z, op, InteractionType::Send)
     }
 
@@ -29,7 +29,7 @@ impl ByteOperationLookupBus {
         y: impl Into<T>,
         z: impl Into<T>,
         op: impl Into<T>,
-    ) -> ByteOperationLookupBusInteraction<T> {
+    ) -> BitwiseOperationLookupBusInteraction<T> {
         self.push(x, y, z, op, InteractionType::Receive)
     }
 
@@ -40,8 +40,8 @@ impl ByteOperationLookupBus {
         z: impl Into<T>,
         op: impl Into<T>,
         interaction_type: InteractionType,
-    ) -> ByteOperationLookupBusInteraction<T> {
-        ByteOperationLookupBusInteraction {
+    ) -> BitwiseOperationLookupBusInteraction<T> {
+        BitwiseOperationLookupBusInteraction {
             x: x.into(),
             y: y.into(),
             z: z.into(),
@@ -53,7 +53,7 @@ impl ByteOperationLookupBus {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ByteOperationLookupBusInteraction<T> {
+pub struct BitwiseOperationLookupBusInteraction<T> {
     pub x: T,
     pub y: T,
     pub z: T,
@@ -62,7 +62,7 @@ pub struct ByteOperationLookupBusInteraction<T> {
     pub interaction_type: InteractionType,
 }
 
-impl<T: AbstractField> ByteOperationLookupBusInteraction<T> {
+impl<T: AbstractField> BitwiseOperationLookupBusInteraction<T> {
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
         AB: InteractionBuilder<Expr = T>,
