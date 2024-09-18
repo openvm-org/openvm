@@ -13,8 +13,8 @@ pub use bus::*;
 pub use columns::*;
 
 // Lookup chip for operations on size NUM_BITS integers. Currently has pre-processed columns
-// for (x + y) % 256 and x ^ y. Interactions are of form [x, y, z, op], where x and y are
-// integers, op is an opcode (see ByteOperationLookupOpcode in air.rs), and z is x op y.
+// for (x + y) % 2^NUM_BITS and x ^ y. Interactions are of form [x, y, z, op], where x and y
+// are integers, op is an opcode (see ByteOperationLookupOpcode in air.rs), and z is x op y.
 
 #[derive(Debug)]
 pub struct ByteOperationLookupChip<const NUM_BITS: usize> {
