@@ -171,38 +171,6 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
             horizen_int_diag,
         )
     }
-
-    /// Returns value^SBOX_DEGREE
-    fn sbox_p_air<T: AbstractField>(&self, value: T, intermediate_power: Option<T>) -> T {
-        // When SBOX_DEGREE <= self.max_constraint_degree, we simply compute the SBOX power
-        // by repeated multiplication.
-        // Otherwise, we make use of the intermediate_power (which is value^self.max_constraint_degree
-        // in that case) to reduce the degree used for computing value^SBOX_DEGREE.
-
-        let mut ret = T::one();
-        for _ in 0..(SBOX_DEGREE - 1) / self.max_constraint_degree {
-            ret *= intermediate_power.clone().unwrap();
-        }
-        for _ in 0..(SBOX_DEGREE - 1) % self.max_constraint_degree + 1 {
-            ret *= value.clone();
-        }
-        ret
-    }
-
-    /// Returns elementwise 7th power of vector field element input
-    fn sbox_air<T: AbstractField>(
-        &self,
-        state: [T; WIDTH],
-        intermediate_powers: [Option<T>; WIDTH],
-    ) -> [T; WIDTH] {
-        state
-            .into_iter()
-            .zip(intermediate_powers)
-            .map(|(state_elem, intermediate_power)| self.sbox_p_air(state_elem, intermediate_power))
-            .collect::<Vec<T>>()
-            .try_into()
-            .unwrap()
-    }
 }
 
 impl Default for Poseidon2Air<16, BabyBear> {
@@ -262,6 +230,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
             self.ext_lin_layer(&mut state);
             state = add_ext_consts::<AB, WIDTH>(state, phase1_index, &self.external_constants);
             state = self.sbox_air(
+                builder,
                 state,
                 aux.phase1[phase1_index].intermediate_sbox_powers.clone(),
             );
@@ -289,6 +258,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
             };
             state[0] += self.internal_constants[phase2_index].into();
             state[0] = self.sbox_p_air(
+                builder,
                 state[0].clone(),
                 aux.phase2[phase2_index].intermediate_sbox_power.clone(),
             );
@@ -319,6 +289,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
                 &self.external_constants,
             );
             state = self.sbox_air(
+                builder,
                 state,
                 aux.phase3[phase3_index].intermediate_sbox_powers.clone(),
             );
@@ -338,6 +309,55 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
         for (state_index, state_elem) in state.iter().enumerate() {
             builder.assert_eq(state_elem.clone(), io.output[state_index]);
         }
+    }
+
+    /// Returns value^SBOX_DEGREE
+    fn sbox_p_air<AB: AirBuilder<F = F>>(
+        &self,
+        builder: &mut AB,
+        value: AB::Expr,
+        intermediate_power: Option<AB::Expr>,
+    ) -> AB::Expr {
+        // When SBOX_DEGREE <= self.max_constraint_degree, we simply compute the SBOX power
+        // by repeated multiplication.
+        // Otherwise, we make use of the intermediate_power (which is value^self.max_constraint_degree
+        // in that case) to reduce the degree used for computing value^SBOX_DEGREE.
+
+        if intermediate_power.is_some() {
+            // Ensuring that intermediate_power is value^self.max_constraint_degree
+            let mut val_p = AB::Expr::one();
+            for _ in 0..self.max_constraint_degree {
+                val_p *= value.clone();
+            }
+            builder.assert_eq(val_p, intermediate_power.clone().unwrap());
+        }
+
+        let mut ret = AB::Expr::one();
+        for _ in 0..(SBOX_DEGREE - 1) / self.max_constraint_degree {
+            ret *= intermediate_power.clone().unwrap();
+        }
+        for _ in 0..(SBOX_DEGREE - 1) % self.max_constraint_degree + 1 {
+            ret *= value.clone();
+        }
+        ret
+    }
+
+    /// Returns elementwise 7th power of vector field element input
+    fn sbox_air<AB: AirBuilder<F = F>>(
+        &self,
+        builder: &mut AB,
+        state: [AB::Expr; WIDTH],
+        intermediate_powers: [Option<AB::Expr>; WIDTH],
+    ) -> [AB::Expr; WIDTH] {
+        state
+            .into_iter()
+            .zip(intermediate_powers)
+            .map(|(state_elem, intermediate_power)| {
+                self.sbox_p_air(builder, state_elem, intermediate_power)
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap()
     }
 }
 
