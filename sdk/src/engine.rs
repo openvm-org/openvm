@@ -10,7 +10,9 @@ use afs_stark_backend::{
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
-use crate::config::{instrument::StarkHashStatistics, FriParameters};
+use crate::config::{
+    fri_params::default_fri_params, instrument::StarkHashStatistics, FriParameters,
+};
 
 pub trait StarkEngineWithHashInstrumentation<SC: StarkGenericConfig>: StarkEngine<SC> {
     fn clear_instruments(&mut self);
@@ -40,24 +42,36 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    fn default_engine(max_log_degree: usize) -> Self;
+    fn new(fri_parameters: FriParameters) -> Self;
     fn fri_params(&self) -> FriParameters;
     fn run_simple_test(
+        &self,
         chips: &[&dyn AnyRap<SC>],
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: &[Vec<Val<SC>>],
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        let engine = Self::default_engine(27);
-        let data = engine.run_simple_test(chips, traces, public_values)?;
+        let data = <Self as StarkEngine<_>>::run_simple_test(self, chips, traces, public_values)?;
         Ok(VerificationDataWithFriParams {
             data,
-            fri_params: engine.fri_params(),
+            fri_params: self.fri_params(),
         })
     }
-    fn run_simple_test_no_pis(
+    fn run_simple_test_with_default_engine(
+        chips: &[&dyn AnyRap<SC>],
+        traces: Vec<DenseMatrix<Val<SC>>>,
+        public_values: &[Vec<Val<SC>>],
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
+        let engine = Self::new(default_fri_params());
+        StarkFriEngine::<_>::run_simple_test(&engine, chips, traces, public_values)
+    }
+    fn run_simple_test_no_pis_with_default_engine(
         chips: &[&dyn AnyRap<SC>],
         traces: Vec<DenseMatrix<Val<SC>>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        <Self as StarkFriEngine<SC>>::run_simple_test(chips, traces, &vec![vec![]; chips.len()])
+        <Self as StarkFriEngine<SC>>::run_simple_test_with_default_engine(
+            chips,
+            traces,
+            &vec![vec![]; chips.len()],
+        )
     }
 }

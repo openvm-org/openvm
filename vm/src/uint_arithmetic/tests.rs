@@ -197,7 +197,7 @@ fn run_bad_uint_arithmetic_test(
         "Expected verification to fail with {:?}, but it didn't",
         &expected_error
     );
-    let result = BabyBearPoseidon2Engine::run_simple_test_no_pis(
+    let result = BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
         &any_rap_vec![&air, &range_air],
         vec![trace, range_trace],
     );

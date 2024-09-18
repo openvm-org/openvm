@@ -181,7 +181,7 @@ fn test_x_square_minus_y(x: BigUint, y: BigUint) {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&test_air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(
+    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
         &any_rap_vec![&test_air, &range_checker.air],
         vec![trace, range_trace],
     )

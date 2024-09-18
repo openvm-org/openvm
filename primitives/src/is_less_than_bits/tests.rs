@@ -32,8 +32,11 @@ fn test_is_less_than_bits_chip_lt() {
     let trace = air.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     //let trace = chip.generate_trace(vec![(0, 1)]);
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace])
-        .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+        &any_rap_vec![&air],
+        vec![trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -49,7 +52,11 @@ fn test_is_less_than_negative_1() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace],).err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+            &any_rap_vec![&air],
+            vec![trace],
+        )
+        .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
@@ -71,7 +78,11 @@ fn test_is_less_than_negative_2() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace],).err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+            &any_rap_vec![&air],
+            vec![trace],
+        )
+        .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
@@ -92,7 +103,11 @@ fn test_is_less_than_negative_3() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace],).err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+            &any_rap_vec![&air],
+            vec![trace],
+        )
+        .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );

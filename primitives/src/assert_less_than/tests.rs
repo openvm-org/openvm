@@ -44,7 +44,7 @@ fn test_assert_less_than_chip_lt() {
     let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
         &any_rap_vec![&chip.air, &chip.range_checker.air],
         vec![trace, range_trace],
     )
@@ -64,7 +64,7 @@ fn test_lt_chip_decomp_does_not_divide() {
     let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
         &any_rap_vec![&chip.air, &chip.range_checker.air],
         vec![trace, range_trace],
     )
@@ -91,7 +91,7 @@ fn test_assert_less_than_negative_1() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
             &any_rap_vec![&chip.air, &chip.range_checker.air],
             vec![trace, range_trace],
         )
@@ -120,7 +120,7 @@ fn test_assert_less_than_negative_2() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
             &any_rap_vec![&chip.air, &chip.range_checker.air],
             vec![trace, range_trace],
         )

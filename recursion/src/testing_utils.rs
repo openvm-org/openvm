@@ -72,7 +72,7 @@ pub mod inner {
         let (any_raps, traces, pvs) = sort_chips(any_raps, traces, pvs);
 
         let vparams =
-            <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_simple_test(
+            <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_simple_test_with_default_engine(
                 &any_raps, traces, &pvs,
             )
             .unwrap();

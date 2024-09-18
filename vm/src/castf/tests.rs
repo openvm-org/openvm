@@ -92,7 +92,7 @@ fn negative_castf_overflow_test() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
             &any_rap_vec![&air, &range_air],
             vec![trace, range_trace],
         )
@@ -122,7 +122,7 @@ fn negative_castf_memread_test() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
             &any_rap_vec![&air, &range_air],
             vec![trace, range_trace],
         )
@@ -152,7 +152,7 @@ fn negative_castf_memwrite_test() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
             &any_rap_vec![&air, &range_air],
             vec![trace, range_trace],
         )
@@ -182,7 +182,7 @@ fn negative_castf_as_test() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
             &any_rap_vec![&air, &range_air],
             vec![trace, range_trace],
         )

@@ -7,7 +7,13 @@ use afs_recursion::{
         gen_vm_program_stark_for_test, inner::build_verification_program, StarkForTest,
     },
 };
-use ax_sdk::{config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine};
+use ax_sdk::{
+    config::{
+        baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        fri_params::fri_params_with_80_bits_of_security,
+    },
+    engine::StarkFriEngine,
+};
 use itertools::{izip, multiunzip, Itertools};
 use metrics::gauge;
 use metrics_tracing_context::{MetricsLayer, TracingContextLayer};
@@ -135,7 +141,9 @@ fn main() {
         pvs,
     } = fib_program_stark;
     let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-    let vdata = BabyBearPoseidon2Engine::run_simple_test(&any_raps, traces, &pvs).unwrap();
+    let vdata =
+        BabyBearPoseidon2Engine::run_simple_test_with_default_engine(&any_raps, traces, &pvs)
+            .unwrap();
     span.exit();
 
     let span = info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").entered();
@@ -148,7 +156,11 @@ fn main() {
             ..Default::default()
         },
     );
-    run_evm_verifier_e2e_test(&inner_verifier_sft);
+    run_evm_verifier_e2e_test(
+        &inner_verifier_sft,
+        // log_blowup = 3 because of poseidon2 chip.
+        Some(fri_params_with_80_bits_of_security()[1]),
+    );
     span.exit();
 
     let snapshot = snapshotter.snapshot();

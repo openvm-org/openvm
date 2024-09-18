@@ -1,6 +1,8 @@
 use ax_sdk::{
-    config::baby_bear_poseidon2_outer::{
-        BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine,
+    config::{
+        baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
+        fri_params::default_fri_params,
+        FriParameters,
     },
     engine::StarkFriEngine,
 };
@@ -18,6 +20,7 @@ use crate::{
 
 pub fn run_static_verifier_test(
     stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>,
+    fri_params: FriParameters,
 ) -> (Halo2VerifierCircuit, Snark) {
     let StarkForTest {
         any_raps,
@@ -28,8 +31,9 @@ pub fn run_static_verifier_test(
     let (any_raps, traces, pvs) = sort_chips(any_raps, traces.clone(), pvs.clone());
     let info_span =
         tracing::info_span!("prove outer stark to verify", step = "outer_stark_prove").entered();
-    let vparams =
-        <BabyBearPoseidon2OuterEngine as StarkFriEngine<BabyBearPoseidon2OuterConfig>>::run_simple_test(&any_raps, traces.clone(), &pvs).unwrap();
+    let vparams = BabyBearPoseidon2OuterEngine::new(fri_params)
+        .run_simple_test(&any_raps, traces.clone(), &pvs)
+        .unwrap();
     info_span.exit();
 
     // Build verification program in eDSL.
@@ -60,8 +64,12 @@ pub fn run_static_verifier_test(
     (stark_verifier_circuit, static_verifier_snark)
 }
 
-pub fn run_evm_verifier_e2e_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>) {
-    let (stark_verifier_circuit, static_verifier_snark) = run_static_verifier_test(stark_for_test);
+pub fn run_evm_verifier_e2e_test(
+    stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>,
+    fri_params: Option<FriParameters>,
+) {
+    let (stark_verifier_circuit, static_verifier_snark) =
+        run_static_verifier_test(stark_for_test, fri_params.unwrap_or(default_fri_params()));
 
     let info_span = tracing::info_span!(
         "keygen halo2 wrapper circuit",
@@ -95,6 +103,6 @@ pub fn run_evm_verifier_e2e_test(stark_for_test: &StarkForTest<BabyBearPoseidon2
         let evm_verifier = super::verifier::gen_wrapper_circuit_evm_verifier(&keygen_circuit);
         info_span.exit();
 
-        snark_verifier_sdk::evm_verify(evm_verifier, pvs, wrapper_evm_proof);
+        snark_verifier_sdk::evm::evm_verify(evm_verifier, pvs, wrapper_evm_proof);
     }
 }

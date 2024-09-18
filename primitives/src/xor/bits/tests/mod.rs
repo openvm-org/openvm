@@ -61,7 +61,7 @@ fn test_xor_bits_chip() {
         .chain(iter::once(xor_chip_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(&all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -105,7 +105,7 @@ fn negative_test_xor_bits_chip() {
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
-    let result = BabyBearBlake3Engine::run_simple_test_no_pis(
+    let result = BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
         &any_rap_vec![&dummy_requester, &xor_chip.air],
         vec![dummy_trace, xor_chip_trace],
     );

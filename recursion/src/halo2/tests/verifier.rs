@@ -6,7 +6,8 @@ use crate::{halo2::testing_utils::run_evm_verifier_e2e_test, tests::fibonacci_st
 #[test]
 fn fibonacci_evm_verifier_e2e() {
     setup_tracing();
-    run_evm_verifier_e2e_test(&fibonacci_stark_for_test::<BabyBearPoseidon2OuterConfig>(
-        16,
-    ))
+    run_evm_verifier_e2e_test(
+        &fibonacci_stark_for_test::<BabyBearPoseidon2OuterConfig>(16),
+        None,
+    )
 }

@@ -56,7 +56,7 @@ fn test_is_less_than_tuple_chip() {
         (vec![26678, 233], vec![14321, 244]),
     ]);
     let range_checker_trace = range_checker.generate_trace();
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
         &any_rap_vec![&chip.air, &range_checker.air],
         vec![trace, range_checker_trace],
     )
@@ -77,7 +77,7 @@ fn test_is_less_than_tuple_chip_negative() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
             &any_rap_vec![&chip.air, &range_checker.air],
             vec![trace, range_checker_trace]
         )

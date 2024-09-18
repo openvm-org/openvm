@@ -77,7 +77,7 @@ fn test_range_tuple_chip() {
         .chain(iter::once(range_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(&all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -112,7 +112,7 @@ fn negative_test_range_tuple_chip() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis(
+        BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
             &any_rap_vec![&range_checker.air],
             vec![range_trace]
         )

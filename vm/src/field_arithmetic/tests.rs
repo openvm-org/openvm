@@ -139,7 +139,11 @@ fn field_arithmetic_air_zero_div_zero() {
     });
 
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace]).err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+            &any_rap_vec![&air],
+            vec![trace]
+        )
+        .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
