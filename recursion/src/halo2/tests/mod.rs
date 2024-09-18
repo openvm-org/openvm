@@ -1,7 +1,6 @@
 mod multi_field32;
 mod outer_poseidon2;
 mod stark;
-mod verifier;
 
 use afs_compiler::ir::{Builder, Witness};
 use p3_baby_bear::BabyBear;
