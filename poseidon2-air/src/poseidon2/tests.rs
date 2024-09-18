@@ -167,7 +167,7 @@ fn test_poseidon2() {
         MDS_MAT_4,
         POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
         BabyBear::from_wrapped_u64(1u64 << 32).inverse(), // 943718400
-        7,
+        3,
         0,
     );
     let mut poseidon2_trace = poseidon2_air.generate_trace(states.clone());
@@ -259,7 +259,7 @@ fn test_horizen_poseidon2() {
         HL_MDS_MAT_4,
         horizen_int_diag,
         BabyBear::one(),
-        7,
+        3,
         0,
     );
     let u32state = (0..16)
@@ -303,7 +303,7 @@ where
         MDS_MAT_4,
         POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
         BabyBear::from_wrapped_u64(1u64 << 32).inverse(), // 943718400
-        7,
+        3,
         0,
     );
     let input: [BabyBear; 16] = [

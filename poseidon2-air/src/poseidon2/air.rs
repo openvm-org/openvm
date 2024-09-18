@@ -17,6 +17,8 @@ use super::{
     Poseidon2Config,
 };
 
+pub const SBOX_DEGREE: usize = 7;
+
 /// Air for Poseidon2. Performs a single permutation of the state.
 /// Permutation consists of external rounds (linear map combined with nonlinearity),
 /// internal rounds, and then the remainder of external rounds.
@@ -126,18 +128,6 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
         input.clone_from_slice(&new_state);
     }
 
-    pub(crate) fn sbox_p<T: AbstractField>(value: T) -> T {
-        let x2 = value.square();
-        let x3 = x2.clone() * value;
-        let x4 = x2.clone().square();
-        x3 * x4
-    }
-
-    /// Returns elementwise 7th power of vector field element input
-    fn sbox<T: AbstractField>(state: [T; WIDTH]) -> [T; WIDTH] {
-        core::array::from_fn(|i| Self::sbox_p::<T>(state[i].clone()))
-    }
-
     pub(crate) fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
         BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
     }
@@ -181,6 +171,32 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
             horizen_int_diag,
         )
     }
+
+    fn sbox_p_air<T: AbstractField>(&self, value: T, intermediate_power: Option<T>) -> T {
+        let mut ret = T::one();
+        for _ in 0..(SBOX_DEGREE - 1) / self.max_constraint_degree {
+            ret *= intermediate_power.clone().unwrap();
+        }
+        for _ in 0..(SBOX_DEGREE - 1) % self.max_constraint_degree + 1 {
+            ret *= value.clone();
+        }
+        ret
+    }
+
+    /// Returns elementwise 7th power of vector field element input
+    fn sbox_air<T: AbstractField>(
+        &self,
+        state: [T; WIDTH],
+        intermediate_powers: [Option<T>; WIDTH],
+    ) -> [T; WIDTH] {
+        state
+            .into_iter()
+            .zip(intermediate_powers)
+            .map(|(state_elem, intermediate_power)| self.sbox_p_air(state_elem, intermediate_power))
+            .collect::<Vec<T>>()
+            .try_into()
+            .unwrap()
+    }
 }
 
 impl Default for Poseidon2Air<16, BabyBear> {
@@ -218,7 +234,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize> SubAir<AB> for Poseidon2Air<WID
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         self.eval_interactions(builder, io);
-        self.eval_without_interactions(builder, io, aux);
+        self.eval_without_interactions(builder, io, aux.into_expr::<AB>());
     }
 }
 
@@ -227,7 +243,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
         &self,
         builder: &mut AB,
         io: Poseidon2IoCols<WIDTH, AB::Var>,
-        aux: Poseidon2AuxCols<WIDTH, AB::Var>,
+        aux: Poseidon2AuxCols<WIDTH, AB::Expr>,
     ) {
         let half_ext_rounds = self.rounds_f / 2;
         for phase1_index in 0..half_ext_rounds {
@@ -235,15 +251,18 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
             let mut state = if phase1_index == 0 {
                 core::array::from_fn(|i| io.input[i].into())
             } else {
-                core::array::from_fn(|i| aux.phase1[phase1_index - 1].round_output[i].into())
+                core::array::from_fn(|i| aux.phase1[phase1_index - 1].round_output[i].clone())
             };
             self.ext_lin_layer(&mut state);
             state = add_ext_consts::<AB, WIDTH>(state, phase1_index, &self.external_constants);
-            state = Self::sbox(state);
+            state = self.sbox_air(
+                state,
+                aux.phase1[phase1_index].intermediate_sbox_powers.clone(),
+            );
             for (state_index, state_elem) in state.iter().enumerate() {
                 builder.assert_eq(
                     state_elem.clone(),
-                    aux.phase1[phase1_index].round_output[state_index],
+                    aux.phase1[phase1_index].round_output[state_index].clone(),
                 );
             }
         }
@@ -251,23 +270,26 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
         for phase2_index in 0..self.rounds_p {
             // regenerate state as Expr from trace variables on each round
             let mut state = if phase2_index == 0 {
-                let mut state = core::array::from_fn(|i| {
-                    aux.phase1[half_ext_rounds - 1].round_output[i].into()
+                let mut state: [AB::Expr; WIDTH] = core::array::from_fn(|i| {
+                    aux.phase1[half_ext_rounds - 1].round_output[i].clone()
                 });
                 self.ext_lin_layer(&mut state);
                 state
             } else {
                 let mut state =
-                    core::array::from_fn(|i| aux.phase2[phase2_index - 1].round_output[i].into());
+                    core::array::from_fn(|i| aux.phase2[phase2_index - 1].round_output[i].clone());
                 self.int_lin_layer(&mut state);
                 state
             };
             state[0] += self.internal_constants[phase2_index].into();
-            state[0] = Self::sbox_p(state[0].clone());
+            state[0] = self.sbox_p_air(
+                state[0].clone(),
+                aux.phase2[phase2_index].intermediate_sbox_power.clone(),
+            );
             for (state_index, state_elem) in state.iter().enumerate() {
                 builder.assert_eq(
                     state_elem.clone(),
-                    aux.phase2[phase2_index].round_output[state_index],
+                    aux.phase2[phase2_index].round_output[state_index].clone(),
                 );
             }
         }
@@ -276,12 +298,12 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
             // regenerate state as Expr from trace variables on each round
             let mut state = if phase3_index == 0 {
                 let mut state =
-                    core::array::from_fn(|i| aux.phase2[self.rounds_p - 1].round_output[i].into());
+                    core::array::from_fn(|i| aux.phase2[self.rounds_p - 1].round_output[i].clone());
                 self.int_lin_layer(&mut state);
                 state
             } else {
                 let mut state =
-                    core::array::from_fn(|i| aux.phase3[phase3_index - 1].round_output[i].into());
+                    core::array::from_fn(|i| aux.phase3[phase3_index - 1].round_output[i].clone());
                 self.ext_lin_layer(&mut state);
                 state
             };
@@ -290,18 +312,21 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
                 phase3_index + half_ext_rounds,
                 &self.external_constants,
             );
-            state = Self::sbox(state);
+            state = self.sbox_air(
+                state,
+                aux.phase3[phase3_index].intermediate_sbox_powers.clone(),
+            );
 
             for (state_index, state_elem) in state.iter().enumerate() {
                 builder.assert_eq(
                     state_elem.clone(),
-                    aux.phase3[phase3_index].round_output[state_index],
+                    aux.phase3[phase3_index].round_output[state_index].clone(),
                 );
             }
         }
 
-        let mut state = core::array::from_fn(|i| {
-            aux.phase3[self.rounds_f - half_ext_rounds - 1].round_output[i].into()
+        let mut state: [AB::Expr; WIDTH] = core::array::from_fn(|i| {
+            aux.phase3[self.rounds_f - half_ext_rounds - 1].round_output[i].clone()
         });
         self.ext_lin_layer(&mut state);
         for (state_index, state_elem) in state.iter().enumerate() {

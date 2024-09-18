@@ -1,3 +1,4 @@
+use p3_air::AirBuilder;
 use p3_field::Field;
 
 use crate::poseidon2::Poseidon2Air;
@@ -50,10 +51,12 @@ fn need_intermediate_sbox_powers<const WIDTH: usize, T>(p2_air: &Poseidon2Air<WI
     p2_air.max_constraint_degree < 7
 }
 
-// Straightforward implementation for the functions from_slice, flatten, and width below
+// Straightforward implementation for the functions from_slice, flatten, and width, into_expr below
 
 impl<const WIDTH: usize, T: Clone> Poseidon2ExternalRoundCols<WIDTH, T> {
     fn from_slice<F>(slice: &[T], p2_air: &Poseidon2Air<WIDTH, F>) -> Self {
+        assert!(slice.len() == Poseidon2ExternalRoundCols::<WIDTH, T>::width(p2_air));
+
         if need_intermediate_sbox_powers(p2_air) {
             Self {
                 intermediate_sbox_powers: core::array::from_fn(|i| Some(slice[i].clone())),
@@ -66,7 +69,9 @@ impl<const WIDTH: usize, T: Clone> Poseidon2ExternalRoundCols<WIDTH, T> {
             }
         }
     }
+}
 
+impl<const WIDTH: usize, T> Poseidon2ExternalRoundCols<WIDTH, T> {
     fn flatten(self) -> Vec<T> {
         self.intermediate_sbox_powers
             .into_iter()
@@ -117,9 +122,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2InternalRoundCols<WIDTH, T> {
 
 impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
     pub fn width<F: Clone>(poseidon2_air: &Poseidon2Air<WIDTH, F>) -> usize {
-        let io_width = Poseidon2IoCols::<WIDTH, T>::width();
-        let aux_width = Poseidon2AuxCols::<WIDTH, T>::width(poseidon2_air);
-        io_width + aux_width
+        Poseidon2IoCols::<WIDTH, T>::width() + Poseidon2AuxCols::<WIDTH, T>::width(poseidon2_air)
     }
 
     pub fn from_slice<F>(slice: &[T], p2_air: &Poseidon2Air<WIDTH, F>) -> Self {
@@ -205,8 +208,9 @@ impl<const WIDTH: usize, T: Clone> Poseidon2IoCols<WIDTH, T> {
 }
 
 impl<const WIDTH: usize, T: Clone> Poseidon2AuxCols<WIDTH, T> {
-    pub fn width<F: Clone>(poseidon2_air: &Poseidon2Air<WIDTH, F>) -> usize {
-        (poseidon2_air.rounds_f + poseidon2_air.rounds_p) * WIDTH
+    pub fn width<F>(p2_air: &Poseidon2Air<WIDTH, F>) -> usize {
+        p2_air.rounds_f * Poseidon2ExternalRoundCols::<WIDTH, T>::width(p2_air)
+            + p2_air.rounds_p * Poseidon2InternalRoundCols::<WIDTH, T>::width(p2_air)
     }
 
     pub fn flatten(self) -> Vec<T> {
@@ -215,5 +219,54 @@ impl<const WIDTH: usize, T: Clone> Poseidon2AuxCols<WIDTH, T> {
         flattened.extend(self.phase2.into_iter().flat_map(|s| s.flatten()));
         flattened.extend(self.phase3.into_iter().flat_map(|s| s.flatten()));
         flattened
+    }
+}
+
+impl<const WIDTH: usize, T> Poseidon2InternalRoundCols<WIDTH, T> {
+    pub fn into_expr<AB: AirBuilder>(self) -> Poseidon2InternalRoundCols<WIDTH, AB::Expr>
+    where
+        T: Into<AB::Expr>,
+    {
+        Poseidon2InternalRoundCols {
+            intermediate_sbox_power: self.intermediate_sbox_power.map(Into::into),
+            round_output: self.round_output.map(Into::into),
+        }
+    }
+}
+
+impl<const WIDTH: usize, T> Poseidon2ExternalRoundCols<WIDTH, T> {
+    pub fn into_expr<AB: AirBuilder>(self) -> Poseidon2ExternalRoundCols<WIDTH, AB::Expr>
+    where
+        T: Into<AB::Expr>,
+    {
+        Poseidon2ExternalRoundCols {
+            intermediate_sbox_powers: self.intermediate_sbox_powers.map(|op| op.map(Into::into)),
+            round_output: self.round_output.map(Into::into),
+        }
+    }
+}
+
+impl<const WIDTH: usize, T> Poseidon2AuxCols<WIDTH, T> {
+    pub fn into_expr<AB: AirBuilder>(self) -> Poseidon2AuxCols<WIDTH, AB::Expr>
+    where
+        T: Into<AB::Expr>,
+    {
+        Poseidon2AuxCols {
+            phase1: self
+                .phase1
+                .into_iter()
+                .map(|p| p.into_expr::<AB>())
+                .collect(),
+            phase2: self
+                .phase2
+                .into_iter()
+                .map(|p| p.into_expr::<AB>())
+                .collect(),
+            phase3: self
+                .phase3
+                .into_iter()
+                .map(|p| p.into_expr::<AB>())
+                .collect(),
+        }
     }
 }
