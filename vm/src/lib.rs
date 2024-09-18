@@ -9,6 +9,7 @@ pub mod hashes;
 pub mod memory;
 pub mod modular_arithmetic;
 pub mod program;
+pub mod shift;
 pub mod uint_arithmetic;
 pub mod uint_multiplication;
 pub mod vm;

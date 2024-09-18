@@ -25,7 +25,7 @@ use crate::{
         chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
         instructions::{
             Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
-            UINT256_ARITHMETIC_INSTRUCTIONS,
+            SHIFT_256_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS,
         },
     },
     castf::CastFChip,
@@ -40,6 +40,7 @@ use crate::{
         ModularArithmeticChip, ModularArithmeticOp, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
     },
     program::{Program, ProgramChip},
+    shift::ShiftChip,
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
     vm::cycle_tracker::CycleTracker,
@@ -265,6 +266,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             assign!([Opcode::MUL256], u256_mult_chip);
             chips.push(MachineChipVariant::U256Multiplication(u256_mult_chip));
             chips.push(MachineChipVariant::RangeTupleChecker(range_tuple_checker));
+        }
+        if config.shift_256_enabled {
+            let shift_chip = Rc::new(RefCell::new(ShiftChip::new(
+                execution_bus,
+                memory_chip.clone(),
+            )));
+            assign!(SHIFT_256_INSTRUCTIONS, shift_chip);
+            chips.push(MachineChipVariant::Shift256(shift_chip));
         }
         if config.castf_enabled {
             let castf_chip = Rc::new(RefCell::new(CastFChip::new(
