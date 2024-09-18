@@ -70,6 +70,7 @@ fn air_test_with_poseidon2(
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
     compress_poseidon2_enabled: bool,
+    poseidon2_max_constraint_degree: usize,
     program: Program<BabyBear>,
 ) {
     let vm = VirtualMachine::new(
@@ -80,6 +81,7 @@ fn air_test_with_poseidon2(
             perm_poseidon2_enabled: false,
             memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
+            poseidon2_max_constraint_degree: Some(poseidon2_max_constraint_degree),
             ..Default::default()
         },
         program,
@@ -355,7 +357,8 @@ fn test_vm_compress_poseidon2_as2() {
         debug_infos: vec![None; program_len],
     };
 
-    air_test_with_poseidon2(false, false, true, program);
+    air_test_with_poseidon2(false, false, true, 7, program.clone());
+    air_test_with_poseidon2(false, false, true, 3, program);
 }
 
 /// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output

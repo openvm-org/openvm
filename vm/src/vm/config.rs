@@ -49,7 +49,7 @@ impl Default for VmConfig {
             field_extension_enabled: true,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
-            poseidon2_max_constraint_degree: Some(7),
+            poseidon2_max_constraint_degree: Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
             keccak_enabled: false,
             modular_multiplication_enabled: false,
             is_less_than_enabled: false,

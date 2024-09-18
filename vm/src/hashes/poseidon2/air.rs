@@ -47,8 +47,11 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
         let cols = Poseidon2VmCols::<AB::Var>::from_slice(local, self);
         let internal_io = cols.aux.internal.io;
 
-        self.inner
-            .eval_without_interactions(builder, cols.aux.internal.io, cols.aux.internal.aux);
+        self.inner.eval_without_interactions(
+            builder,
+            cols.aux.internal.io,
+            cols.aux.internal.aux.into_expr::<AB>(),
+        );
 
         // boolean constraints for alloc/cmp markers
         // these constraints hold for current trace generation mechanism but are in actuality not necessary
