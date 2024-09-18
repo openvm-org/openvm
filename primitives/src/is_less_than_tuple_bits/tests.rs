@@ -1,5 +1,7 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+};
 use p3_field::AbstractField;
 
 use super::{columns::IsLessThanTupleBitsCols, IsLessThanTupleBitsAir};
@@ -36,8 +38,8 @@ fn test_is_less_than_tuple_chip() {
         (vec![14321, 244], vec![14321, 244]),
         (vec![26678, 233], vec![14321, 244]),
     ]);
-
-    run_simple_test_no_pis(vec![&air], vec![trace]).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test]
@@ -52,8 +54,8 @@ fn test_is_less_than_tuple_chip_negative() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&air], vec![trace]),
-        Err(VerificationError::OodEvaluationMismatch),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace]).err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
 }

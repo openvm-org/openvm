@@ -138,10 +138,10 @@ pub fn execute_and_prove_program(
     };
     let engine = engine_from_perm(perm, result.max_log_degree(), fri_params);
 
-    let airs = result.airs.iter().map(|air| air.deref()).collect();
+    let airs: Vec<_> = result.airs.iter().map(|air| air.deref()).collect();
 
     setup_tracing();
     engine
-        .run_simple_test(airs, result.traces.clone(), result.public_values.clone())
+        .run_simple_test(&airs, result.traces.clone(), &result.public_values)
         .expect("Verification failed");
 }

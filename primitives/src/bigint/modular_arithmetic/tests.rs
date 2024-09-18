@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use ax_sdk::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    utils::create_seeded_rng,
+};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, One, Zero};
 use p3_air::BaseAir;
@@ -92,8 +95,11 @@ fn test_x_mul_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -111,8 +117,11 @@ fn test_x_mul_zero() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -130,8 +139,11 @@ fn test_x_mul_one() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -150,8 +162,11 @@ fn test_x_mul_y_wrong_trace() {
     trace.row_mut(0)[0] += BabyBear::one();
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -177,8 +192,11 @@ fn test_x_div_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -196,8 +214,11 @@ fn test_x_div_zero() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -214,8 +235,11 @@ fn test_x_div_one() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -233,8 +257,11 @@ fn test_x_div_y_wrong_trace() {
     trace.row_mut(0)[0] += BabyBear::one();
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -258,8 +285,11 @@ fn test_x_add_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -278,8 +308,11 @@ fn test_x_add_y_wrong_trace() {
     trace.row_mut(0)[0] += BabyBear::one();
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -307,8 +340,11 @@ fn test_x_sub_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -326,8 +362,11 @@ fn test_x_sub_bigger_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -346,6 +385,9 @@ fn test_x_sub_y_wrong_trace() {
     trace.row_mut(0)[0] += BabyBear::one();
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(vec![&air, &range_checker.air], vec![trace, range_trace])
-        .expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
 }

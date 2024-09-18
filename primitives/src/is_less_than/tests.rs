@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::DenseMatrix;
@@ -45,8 +47,8 @@ fn test_is_less_than_chip_lt() {
     let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![&chip.air, &chip.range_checker.air],
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![&chip.air, &chip.range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -58,8 +60,8 @@ fn test_lt_chip_decomp_does_not_divide() {
     let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![&chip.air, &chip.range_checker.air],
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![&chip.air, &chip.range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -75,11 +77,12 @@ fn test_is_less_than_negative() {
 
     disable_debug_builder();
     assert_eq!(
-        run_simple_test_no_pis(
-            vec![&chip.air, &chip.range_checker.air],
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&chip.air, &chip.range_checker.air],
             vec![trace, range_trace],
-        ),
-        Err(VerificationError::OodEvaluationMismatch),
+        )
+        .err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
 }

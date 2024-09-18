@@ -25,6 +25,7 @@ use p3_matrix::{
     stack::VerticalPair,
     Matrix,
 };
+use p3_uni_stark::{StarkGenericConfig, Val};
 use stark_vm::program::Program;
 
 use crate::{
@@ -839,14 +840,14 @@ where
 }
 
 #[allow(clippy::type_complexity)]
-pub fn sort_chips(
-    chips: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    traces: Vec<RowMajorMatrix<BabyBear>>,
-    pvs: Vec<Vec<BabyBear>>,
+pub fn sort_chips<SC: StarkGenericConfig>(
+    chips: Vec<&dyn AnyRap<SC>>,
+    traces: Vec<RowMajorMatrix<Val<SC>>>,
+    pvs: Vec<Vec<Val<SC>>>,
 ) -> (
-    Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    Vec<RowMajorMatrix<BabyBear>>,
-    Vec<Vec<BabyBear>>,
+    Vec<&dyn AnyRap<SC>>,
+    Vec<RowMajorMatrix<Val<SC>>>,
+    Vec<Vec<Val<SC>>>,
 ) {
     let mut groups = izip!(chips, traces, pvs).collect_vec();
     groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));

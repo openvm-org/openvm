@@ -168,8 +168,8 @@ fn poseidon2_negative_test() {
         let test_result = tester.test(get_engine);
 
         assert_eq!(
-            test_result,
-            Err(VerificationError::OodEvaluationMismatch),
+            test_result.err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
         tester.traces[1] = original_trace;

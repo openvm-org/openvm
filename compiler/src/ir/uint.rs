@@ -22,6 +22,13 @@ where
         dst
     }
 
+    pub fn u256_mul(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+        let dst = self.dyn_array(NUM_LIMBS);
+        self.operations
+            .push(DslIr::MulU256(dst.clone(), left.clone(), right.clone()));
+        dst
+    }
+
     pub fn u256_lt(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> Var<C::N> {
         let dst = self.array(1);
         self.operations

@@ -71,3 +71,15 @@ pub fn generate_random_matrix<F: AbstractField>(
 pub fn to_field_vec<F: AbstractField>(v: Vec<u32>) -> Vec<F> {
     v.into_iter().map(F::from_canonical_u32).collect()
 }
+
+/// A macro to create a `Vec<&dyn AnyRap<_>>` from a list of chips because Rust cannot infer the
+/// type correctly when using `vec!`.
+#[macro_export]
+macro_rules! any_rap_vec {
+    [$($e:expr),*] => {
+        {
+            let chips: Vec<&dyn afs_stark_backend::rap::AnyRap<_>> = vec![$($e),*];
+            chips
+        }
+    };
+}

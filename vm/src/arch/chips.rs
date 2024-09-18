@@ -15,6 +15,7 @@ use strum_macros::IntoStaticStr;
 
 use crate::{
     arch::columns::ExecutionState,
+    castf::CastFChip,
     cpu::{trace::Instruction, CpuChip},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
@@ -99,6 +100,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     ModularArithmetic(Rc<RefCell<ModularArithmeticChip<F, ModularArithmeticAirVariant>>>),
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    CastF(Rc<RefCell<CastFChip<F>>>),
 }
 
 #[derive(Debug, IntoStaticStr)]
@@ -116,6 +118,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     ByteXor(Arc<XorLookupChip<8>>),
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    CastF(Rc<RefCell<CastFChip<F>>>),
 }
 
 impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {

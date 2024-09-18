@@ -1,5 +1,7 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+};
 use p3_field::AbstractField;
 
 use super::{columns::IsLessThanBitsCols, IsLessThanBitsAir};
@@ -30,7 +32,8 @@ fn test_is_less_than_bits_chip_lt() {
     let trace = air.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     //let trace = chip.generate_trace(vec![(0, 1)]);
 
-    run_simple_test_no_pis(vec![&air], vec![trace]).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test]
@@ -46,8 +49,8 @@ fn test_is_less_than_negative_1() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&air], vec![trace],),
-        Err(VerificationError::OodEvaluationMismatch),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace],).err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
 }
@@ -68,8 +71,8 @@ fn test_is_less_than_negative_2() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&air], vec![trace],),
-        Err(VerificationError::OodEvaluationMismatch),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace],).err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
 }
@@ -89,8 +92,8 @@ fn test_is_less_than_negative_3() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&air], vec![trace],),
-        Err(VerificationError::OodEvaluationMismatch),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace],).err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
 }
@@ -111,7 +114,7 @@ fn test_is_less_than_negative_2() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&air], vec![trace],),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace],),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
@@ -136,7 +139,7 @@ fn test_is_less_than_negative_3() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&air], vec![trace],),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace],),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
@@ -157,7 +160,7 @@ fn test_is_less_than_negative_4() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&air], vec![trace],),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace],),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );

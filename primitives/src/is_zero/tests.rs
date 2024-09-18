@@ -1,5 +1,7 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
@@ -21,7 +23,8 @@ fn test_single_is_zero(x: u32) {
         AbstractField::from_bool(x == AbstractField::zero())
     );
 
-    run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test_case([0, 1, 2, 7], [1, 0, 0, 0] ; "0, 1, 2, 7 => 1, 0, 0, 0")]
@@ -43,7 +46,8 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
         );
     }
 
-    run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test_case(97 ; "97 => 0")]
@@ -60,8 +64,8 @@ fn test_single_is_zero_fail(x: u32) {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&chip], vec![trace]),
-        Err(VerificationError::OodEvaluationMismatch),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace]).err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
 }
@@ -84,8 +88,12 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
             *debug.lock().unwrap() = false;
         });
         assert_eq!(
-            run_simple_test_no_pis(vec![&chip], vec![trace.clone()]),
-            Err(VerificationError::OodEvaluationMismatch),
+            BabyBearPoseidon2Engine::run_simple_test_no_pis(
+                &any_rap_vec![&chip],
+                vec![trace.clone()]
+            )
+            .err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
         trace.row_mut(i)[1] = BabyBear::one() - trace.row_mut(i)[1];

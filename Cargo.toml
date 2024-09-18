@@ -13,7 +13,7 @@ members = [
     "logical-interface",
     "poseidon2-air",
     "recursion",
-    "ecc",
+    "ecc/lib",
     "stark-backend",
     "sdk",
     "vm",

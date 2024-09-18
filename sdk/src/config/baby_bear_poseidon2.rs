@@ -1,18 +1,15 @@
 use std::any::type_name;
 
-use afs_stark_backend::{rap::AnyRap, verifier::VerificationError};
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::{extension::BinomialExtensionField, AbstractField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
-use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
-use p3_util::log2_strict_usize;
 use rand::{rngs::StdRng, SeedableRng};
 use zkhash::{
     ark_ff::PrimeField as _, fields::babybear::FpBabyBear as HorizenBabyBear,
@@ -24,7 +21,7 @@ use super::{
     instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
     FriParameters,
 };
-use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
+use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation, StarkFriEngine};
 
 const RATE: usize = 8;
 // permutation width
@@ -228,33 +225,6 @@ fn horizen_round_consts_16() -> (Vec<[BabyBear; 16]>, Vec<BabyBear>) {
     (external_round_constants, internal_round_constants)
 }
 
-/// Runs a single end-to-end test for a given set of chips and traces.
-/// This includes proving/verifying key generation, creating a proof, and verifying the proof.
-/// This function should only be used on chips where the main trace is **not** partitioned.
-///
-/// Do not use this if you want to generate proofs for different traces with the same proving key.
-///
-/// - `chips`, `traces`, `public_values` should be zipped.
-pub fn run_simple_test(
-    chips: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    traces: Vec<DenseMatrix<BabyBear>>,
-    public_values: Vec<Vec<BabyBear>>,
-) -> Result<(), VerificationError> {
-    let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
-    let max_log_degree = log2_strict_usize(max_trace_height);
-    let engine = default_engine(max_log_degree);
-    engine.run_simple_test(chips, traces, public_values)
-}
-
-/// [run_simple_test] without public values
-pub fn run_simple_test_no_pis(
-    chips: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    traces: Vec<DenseMatrix<BabyBear>>,
-) -> Result<(), VerificationError> {
-    let num_chips = chips.len();
-    run_simple_test(chips, traces, vec![vec![]; num_chips])
-}
-
 /// Logs hash count statistics to stdout and returns as struct.
 /// Count of 1 corresponds to a Poseidon2 permutation with rate RATE that outputs OUT field elements
 #[allow(dead_code)]
@@ -289,4 +259,13 @@ pub fn print_hash_counts(hash_counter: &InstrumentCounter, compress_counter: &In
     });
     let total_count = hash_count + compress_count;
     println!("Total Count: {total_count}");
+}
+
+impl StarkFriEngine<BabyBearPoseidon2Config> for BabyBearPoseidon2Engine {
+    fn default_engine(max_log_degree: usize) -> Self {
+        default_engine(max_log_degree)
+    }
+    fn fri_params(&self) -> FriParameters {
+        self.fri_params
+    }
 }

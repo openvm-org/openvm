@@ -2,7 +2,10 @@ use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
 use afs_primitives::range_tuple::{bus::RangeTupleCheckerBus, RangeTupleCheckerChip};
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    utils::create_seeded_rng,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -120,8 +123,12 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
         &expected_error
     );
     assert_eq!(
-        run_simple_test_no_pis(vec![&mult_air, &range_air], vec![mult_trace, range_trace],),
-        Err(expected_error),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&mult_air, &range_air],
+            vec![mult_trace, range_trace],
+        )
+        .err(),
+        Some(expected_error),
         "{}",
         msg
     );

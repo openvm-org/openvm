@@ -108,6 +108,9 @@ pub enum AsmInstruction<F, EF> {
     /// uint subtract, dst = lhs - rhs.
     SubU256(i32, i32, i32),
 
+    /// uint multiply, dst = lhs * rhs.
+    MulU256(i32, i32, i32),
+
     /// uint less than, dst = lhs < rhs.
     LessThanU256(i32, i32, i32),
 
@@ -473,6 +476,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::SubU256(dst, src1, src2) => {
                 write!(f, "sub_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::MulU256(dst, src1, src2) => {
+                write!(f, "mul_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
             }
             AsmInstruction::LessThanU256(dst, src1, src2) => {
                 write!(f, "lt_u256 ({})fp ({})fp ({})fp", dst, src1, src2)

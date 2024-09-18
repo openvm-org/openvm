@@ -61,9 +61,9 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
 
     for segment_result in result.segment_results {
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        let airs = segment_result.airs.iter().map(Box::deref).collect();
+        let airs: Vec<_> = segment_result.airs.iter().map(Box::deref).collect();
         engine
-            .run_simple_test(airs, segment_result.traces, segment_result.public_values)
+            .run_simple_test(&airs, segment_result.traces, &segment_result.public_values)
             .expect("Verification failed");
     }
 }
@@ -105,11 +105,7 @@ fn air_test_with_compress_poseidon2(
             .collect::<Vec<_>>();
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
         engine
-            .run_simple_test(
-                airs.clone(),
-                segment_result.traces,
-                segment_result.public_values.clone(),
-            )
+            .run_simple_test(&airs, segment_result.traces, &segment_result.public_values)
             .expect("Verification failed");
 
         // Checking maximum constraint degree across all AIRs

@@ -1,7 +1,10 @@
 use std::{borrow::Borrow, sync::Arc};
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use ax_sdk::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    utils::create_seeded_rng,
+};
 use num_bigint_dig::BigUint;
 use num_traits::FromPrimitive;
 use p3_air::{Air, BaseAir};
@@ -207,8 +210,8 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&test_air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![&test_air, &range_checker.air],
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&test_air, &range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");

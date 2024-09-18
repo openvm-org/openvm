@@ -161,6 +161,78 @@ impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<F, N> {
     }
 }
 
+#[derive(Clone, Debug, AlignedBorrow)]
+pub struct MemoryHeapReadAuxCols<T, const N: usize> {
+    pub address: MemoryReadAuxCols<T, 1>,
+    pub data: MemoryReadAuxCols<T, N>,
+}
+
+impl<const N: usize, T: Clone> MemoryHeapReadAuxCols<T, N> {
+    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I) -> Self {
+        Self {
+            address: MemoryReadAuxCols::from_iterator(iter),
+            data: MemoryReadAuxCols::from_iterator(iter),
+        }
+    }
+
+    pub fn flatten(self) -> Vec<T> {
+        iter::empty()
+            .chain(self.address.flatten())
+            .chain(self.data.flatten())
+            .collect()
+    }
+
+    pub const fn width() -> usize {
+        size_of::<MemoryHeapReadAuxCols<u8, N>>()
+    }
+}
+
+impl<const N: usize, F: AbstractField + Copy> MemoryHeapReadAuxCols<F, N> {
+    pub fn disabled() -> Self {
+        let width = MemoryReadAuxCols::<F, 1>::width();
+        let address = MemoryReadAuxCols::from_slice(&vec![F::zero(); width]);
+        let width = MemoryReadAuxCols::<F, N>::width();
+        let data = MemoryReadAuxCols::from_slice(&vec![F::zero(); width]);
+        MemoryHeapReadAuxCols { address, data }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MemoryHeapWriteAuxCols<T, const N: usize> {
+    pub address: MemoryReadAuxCols<T, 1>,
+    pub data: MemoryWriteAuxCols<T, N>,
+}
+
+impl<const N: usize, T: Clone> MemoryHeapWriteAuxCols<T, N> {
+    pub fn from_iterator<I: Iterator<Item = T>>(iter: &mut I) -> Self {
+        Self {
+            address: MemoryReadAuxCols::from_iterator(iter),
+            data: MemoryWriteAuxCols::from_iterator(iter),
+        }
+    }
+
+    pub fn flatten(self) -> Vec<T> {
+        iter::empty()
+            .chain(self.address.flatten())
+            .chain(self.data.flatten())
+            .collect()
+    }
+
+    pub const fn width() -> usize {
+        MemoryReadAuxCols::<T, 1>::width() + MemoryWriteAuxCols::<T, N>::width()
+    }
+}
+
+impl<const N: usize, F: AbstractField + Copy> MemoryHeapWriteAuxCols<F, N> {
+    pub fn disabled() -> Self {
+        let width = MemoryReadAuxCols::<F, 1>::width();
+        let address = MemoryReadAuxCols::from_slice(&vec![F::zero(); width]);
+        let width = MemoryWriteAuxCols::<F, N>::width();
+        let data = MemoryWriteAuxCols::from_slice(&vec![F::zero(); width]);
+        MemoryHeapWriteAuxCols { address, data }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, Eq, AlignedBorrow)]
 pub struct MemoryReadOrImmediateAuxCols<T> {

@@ -1,7 +1,7 @@
 use std::iter;
 
 use ax_sdk::{
-    config::baby_bear_poseidon2::run_simple_test_no_pis,
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
 use p3_air::BaseAir;
@@ -69,8 +69,11 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     println!("trace height = {}", trace.height());
     println!("counter trace height = {}", counter_trace.height());
 
-    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
-        .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &counter_air],
+        vec![trace, counter_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -163,6 +166,9 @@ fn test_program_negative() {
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
-    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
-        .expect("Incorrect failure mode");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![&air, &counter_air],
+        vec![trace, counter_trace],
+    )
+    .expect("Incorrect failure mode");
 }

@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+};
 use p3_field::AbstractField;
 
 use super::super::is_less_than_tuple::IsLessThanTupleChip;
@@ -54,8 +56,8 @@ fn test_is_less_than_tuple_chip() {
         (vec![26678, 233], vec![14321, 244]),
     ]);
     let range_checker_trace = range_checker.generate_trace();
-    run_simple_test_no_pis(
-        vec![&chip.air, &range_checker.air],
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![&chip.air, &range_checker.air],
         vec![trace, range_checker_trace],
     )
     .expect("Verification failed");
@@ -75,11 +77,12 @@ fn test_is_less_than_tuple_chip_negative() {
 
     disable_debug_builder();
     assert_eq!(
-        run_simple_test_no_pis(
-            vec![&chip.air, &range_checker.air],
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&chip.air, &range_checker.air],
             vec![trace, range_checker_trace]
-        ),
-        Err(VerificationError::OodEvaluationMismatch),
+        )
+        .err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
 }

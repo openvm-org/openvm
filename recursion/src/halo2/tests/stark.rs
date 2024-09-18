@@ -1,14 +1,17 @@
 use afs_compiler::ir::Witness;
-use ax_sdk::config::{
-    baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, fri_params::default_fri_params,
-    setup_tracing,
+use ax_sdk::{
+    config::{
+        baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
+        setup_tracing,
+    },
+    engine::StarkFriEngine,
 };
 
 use crate::{
     config::outer::new_from_outer_multi_vk,
     halo2::Halo2Prover,
     stark::outer::build_circuit_verify_operations,
-    testing_utils::{outer::make_verification_data, StarkForTest},
+    testing_utils::StarkForTest,
     tests::{fibonacci_stark_for_test, interaction_stark_for_test},
     types::VerifierInput,
     witness::Witnessable,
@@ -37,20 +40,20 @@ fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig
     } = stark_for_test;
     let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
 
-    let fri_params = default_fri_params();
-    let vparams = make_verification_data(&any_raps, traces.clone(), pvs, fri_params);
+    let vparams =
+        BabyBearPoseidon2OuterEngine::run_simple_test(&any_raps, traces.clone(), pvs).unwrap();
 
-    let advice = new_from_outer_multi_vk(&vparams.vk);
-    let log_degree_per_air = vparams.proof.log_degrees();
+    let advice = new_from_outer_multi_vk(&vparams.data.vk);
+    let log_degree_per_air = vparams.data.proof.log_degrees();
 
     let input = VerifierInput {
-        proof: vparams.proof,
+        proof: vparams.data.proof,
         log_degree_per_air,
         public_values: pvs.clone(),
     };
 
     let mut witness = Witness::default();
     input.write(&mut witness);
-    let operations = build_circuit_verify_operations(advice, &fri_params, &input);
+    let operations = build_circuit_verify_operations(advice, &vparams.fri_params, &input);
     Halo2Prover::mock(20, operations, witness);
 }

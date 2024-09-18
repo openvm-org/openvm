@@ -1,8 +1,5 @@
 /// Run with RANDOM_SRS=1 if you don't want to download the SRS.
-use ax_sdk::config::{
-    baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, fri_params::default_fri_params,
-    setup_tracing,
-};
+use ax_sdk::config::{baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, setup_tracing};
 use snark_verifier_sdk::evm::evm_verify;
 
 use crate::{
@@ -23,8 +20,7 @@ fn fibonacci_evm_verifier_e2e() {
 }
 
 fn run_evm_verifier_e2e_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>) {
-    let (stark_verifier_circuit, static_verifier_snark) =
-        run_static_verifier_test(stark_for_test, default_fri_params());
+    let (stark_verifier_circuit, static_verifier_snark) = run_static_verifier_test(stark_for_test);
 
     let info_span = tracing::info_span!("keygen halo2 wrapper circuit").entered();
     let keygen_circuit =

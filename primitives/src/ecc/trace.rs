@@ -5,7 +5,7 @@ use num_traits::FromPrimitive;
 use p3_field::PrimeField64;
 
 use super::{
-    air::{EcAddUnequalAir, EccDoubleAir},
+    air::{EcAddUnequalAir, EcDoubleAir},
     columns::{EcAddCols, EcAddIoCols, EcAuxCols, EcDoubleCols, EcDoubleIoCols},
     utils::*,
     EcModularConfig, EcPoint,
@@ -106,7 +106,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EcAddUnequalAir {
     }
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for EccDoubleAir {
+impl<F: PrimeField64> LocalTraceInstructions<F> for EcDoubleAir {
     type LocalInput = ((BigUint, BigUint), Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {

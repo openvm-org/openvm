@@ -22,7 +22,8 @@ pub enum Opcode {
     FMUL = 12,
     FDIV = 13,
 
-    F_LESS_THAN = 14,
+    CASTF = 14,
+    F_LESS_THAN = 15,
 
     FAIL = 20,
     PRINTF = 21,
@@ -68,6 +69,9 @@ pub enum Opcode {
     EQ256 = 84,
 
     NOP = 100,
+
+    SECP256K1_EC_ADD_NE = 101,
+    SECP256K1_EC_DOUBLE = 102,
 }
 
 impl fmt::Display for Opcode {
