@@ -18,36 +18,43 @@ use crate::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookup
 mod dummy;
 
 const NUM_BITS: usize = 4;
-const NUM_LISTS: usize = 10;
 const LIST_LEN: usize = 1 << 8;
 
-fn generate_rng_values(len: usize) -> Vec<(u32, u32, u32, BitwiseOperationLookupOpcode)> {
+fn generate_rng_values(
+    num_lists: usize,
+    list_len: usize,
+) -> Vec<Vec<(u32, u32, u32, BitwiseOperationLookupOpcode)>> {
     let mut rng = create_seeded_rng();
-    (0..len)
+    (0..num_lists)
         .map(|_| {
-            let op = match rng.gen_range(0..2) {
-                0 => BitwiseOperationLookupOpcode::ADD,
-                _ => BitwiseOperationLookupOpcode::XOR,
-            };
-            let x = rng.gen_range(0..(1 << NUM_BITS));
-            let y = rng.gen_range(0..(1 << NUM_BITS));
-            let z = match op {
-                BitwiseOperationLookupOpcode::ADD => (x + y) % (1 << NUM_BITS),
-                BitwiseOperationLookupOpcode::XOR => x ^ y,
-            };
-            (x, y, z, op)
+            (0..list_len)
+                .map(|_| {
+                    let op = match rng.gen_range(0..2) {
+                        0 => BitwiseOperationLookupOpcode::ADD,
+                        _ => BitwiseOperationLookupOpcode::XOR,
+                    };
+                    let x = rng.gen_range(0..(1 << NUM_BITS));
+                    let y = rng.gen_range(0..(1 << NUM_BITS));
+                    let z = match op {
+                        BitwiseOperationLookupOpcode::ADD => (x + y) % (1 << NUM_BITS),
+                        BitwiseOperationLookupOpcode::XOR => x ^ y,
+                    };
+                    (x, y, z, op)
+                })
+                .collect::<Vec<(u32, u32, u32, BitwiseOperationLookupOpcode)>>()
         })
-        .collect::<Vec<(u32, u32, u32, BitwiseOperationLookupOpcode)>>()
+        .collect::<Vec<Vec<(u32, u32, u32, BitwiseOperationLookupOpcode)>>>()
 }
 
 #[test]
 fn test_bitwise_operation_lookup() {
+    const NUM_LISTS: usize = 10;
+
     let bus = BitwiseOperationLookupBus::new(0);
     let lookup = BitwiseOperationLookupChip::<NUM_BITS>::new(bus);
 
-    let lists: Vec<Vec<(u32, u32, u32, BitwiseOperationLookupOpcode)>> = (0..NUM_LISTS)
-        .map(|_| generate_rng_values(LIST_LEN))
-        .collect();
+    let lists: Vec<Vec<(u32, u32, u32, BitwiseOperationLookupOpcode)>> =
+        generate_rng_values(NUM_LISTS, LIST_LEN);
 
     let dummies = (0..NUM_LISTS)
         .map(|_| DummyAir::new(bus))
@@ -83,7 +90,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperationLookupOpcode)) {
     let bus = BitwiseOperationLookupBus::new(0);
     let lookup = BitwiseOperationLookupChip::<NUM_BITS>::new(bus);
 
-    let mut list = generate_rng_values(LIST_LEN - 1);
+    let mut list = generate_rng_values(1, LIST_LEN - 1)[0].clone();
     list.push(bad_row);
 
     let dummy = DummyAir::new(bus);
