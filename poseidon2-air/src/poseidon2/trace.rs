@@ -146,7 +146,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
 
     fn sbox_p_gen<T: AbstractField>(&self, value: T, intermediate_power: &mut Option<T>) -> T {
         if self.max_constraint_degree < SBOX_DEGREE {
-            // in this case, we compute and store value^max_constraint_degree
+            // In this case, we compute and set intermediate_power to value^max_constraint_degree
             let mut val_p = T::one();
             for _ in 0..self.max_constraint_degree {
                 val_p *= value.clone();

@@ -1,6 +1,7 @@
 use p3_air::AirBuilder;
 use p3_field::Field;
 
+use super::air::SBOX_DEGREE;
 use crate::poseidon2::Poseidon2Air;
 
 /// Composed of IO and Aux columns, which are disjoint
@@ -30,13 +31,21 @@ pub struct Poseidon2AuxCols<const WIDTH: usize, T> {
 
 #[derive(Clone, Debug)]
 pub struct Poseidon2ExternalRoundCols<const WIDTH: usize, T> {
+    // Those are helper columns to store intermediate powers to reduce the degree
+    // for the SBOX constraints. When max_constraint_degree (in the AIR) is less than SBOX_DEGREE,
+    // those columns are set to the value^max_constraint_degree. Otherwise, they are set to None.
     pub intermediate_sbox_powers: [Option<T>; WIDTH],
+    // The output of the round
     pub round_output: [T; WIDTH],
 }
 
 #[derive(Clone, Debug)]
 pub struct Poseidon2InternalRoundCols<const WIDTH: usize, T> {
+    // This is a helper column to store the intermediate sbox power to reduce the degree
+    // for the SBOX constraints. When max_constraint_degree (in the AIR) is less than SBOX_DEGREE,
+    // this columns is set to the value^max_constraint_degree. Otherwise, it is set to None.
     pub intermediate_sbox_power: Option<T>,
+    // The output of the round
     pub round_output: [T; WIDTH],
 }
 
@@ -47,8 +56,9 @@ impl<const WIDTH: usize, T: Field> Poseidon2Cols<WIDTH, T> {
     }
 }
 
+/// Returns true iff we need to store intermediate powers for the SBOX constraints
 fn need_intermediate_sbox_powers<const WIDTH: usize, T>(p2_air: &Poseidon2Air<WIDTH, T>) -> bool {
-    p2_air.max_constraint_degree < 7
+    p2_air.max_constraint_degree < SBOX_DEGREE
 }
 
 // Straightforward implementation for the functions from_slice, flatten, and width, into_expr below

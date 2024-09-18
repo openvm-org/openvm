@@ -172,7 +172,13 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
         )
     }
 
+    /// Returns value^SBOX_DEGREE
     fn sbox_p_air<T: AbstractField>(&self, value: T, intermediate_power: Option<T>) -> T {
+        // When SBOX_DEGREE <= self.max_constraint_degree, we simply compute the SBOX power
+        // by repeated multiplication.
+        // Otherwise, we make use of the intermediate_power (which is value^self.max_constraint_degree
+        // in that case) to reduce the degree used for computing value^SBOX_DEGREE.
+
         let mut ret = T::one();
         for _ in 0..(SBOX_DEGREE - 1) / self.max_constraint_degree {
             ret *= intermediate_power.clone().unwrap();

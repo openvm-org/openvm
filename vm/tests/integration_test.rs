@@ -1,8 +1,11 @@
 use std::ops::Deref;
 
+use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
     config::{
-        baby_bear_poseidon2::{default_perm, engine_from_perm, random_perm},
+        baby_bear_poseidon2::{
+            default_perm, engine_from_perm, random_perm, BabyBearPoseidon2Config,
+        },
         fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
         setup_tracing_with_log_level,
     },
@@ -66,18 +69,15 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
 }
 
 // log_blowup = 3 for poseidon2 chip
-fn air_test_with_poseidon2(
-    field_arithmetic_enabled: bool,
-    field_extension_enabled: bool,
-    compress_poseidon2_enabled: bool,
+fn air_test_with_compress_poseidon2(
     poseidon2_max_constraint_degree: usize,
     program: Program<BabyBear>,
 ) {
     let vm = VirtualMachine::new(
         VmConfig {
-            field_arithmetic_enabled,
-            field_extension_enabled,
-            compress_poseidon2_enabled,
+            field_arithmetic_enabled: false,
+            field_extension_enabled: false,
+            compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: false,
             memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
@@ -98,11 +98,27 @@ fn air_test_with_poseidon2(
     };
 
     for segment_result in result.segment_results {
-        let airs = segment_result.airs.iter().map(Box::deref).collect();
+        let airs = segment_result
+            .airs
+            .iter()
+            .map(Box::deref)
+            .collect::<Vec<_>>();
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
         engine
-            .run_simple_test(airs, segment_result.traces, segment_result.public_values)
+            .run_simple_test(
+                airs.clone(),
+                segment_result.traces,
+                segment_result.public_values.clone(),
+            )
             .expect("Verification failed");
+
+        // Checking maximum constraint degree across all AIRs
+        let mut keygen_builder = engine.keygen_builder();
+        for (air, pvs) in airs.into_iter().zip(segment_result.public_values) {
+            keygen_builder.add_air(air as &dyn AnyRap<BabyBearPoseidon2Config>, pvs.len());
+        }
+        let pk = keygen_builder.generate_pk();
+        assert!(pk.max_constraint_degree == poseidon2_max_constraint_degree);
     }
 }
 
@@ -357,8 +373,8 @@ fn test_vm_compress_poseidon2_as2() {
         debug_infos: vec![None; program_len],
     };
 
-    air_test_with_poseidon2(false, false, true, 7, program.clone());
-    air_test_with_poseidon2(false, false, true, 3, program);
+    air_test_with_compress_poseidon2(7, program.clone());
+    air_test_with_compress_poseidon2(3, program);
 }
 
 /// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output

@@ -4,7 +4,6 @@ use ax_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
         fri_params::fri_params_with_80_bits_of_security,
-        setup_tracing,
     },
     utils::create_seeded_rng,
 };
@@ -136,7 +135,6 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
 /// Checking that 50 random instructions pass.
 #[test]
 fn poseidon2_chip_random_50_test_new() {
-    setup_tracing();
     let tester = tester_with_random_poseidon2_ops(50);
     tester.test(get_engine).expect("Verification failed");
 }
