@@ -33,6 +33,11 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for UiAir {
         let local = main.row_slice(0);
         let local_cols: &UiCols<AB::Var> = (*local).borrow();
         builder.assert_bool(local_cols.aux.is_valid);
+        builder.assert_eq(
+            local_cols.io.x[2],
+            local_cols.aux.imm_lo_hex * AB::Expr::from_canonical_u32(16),
+        );
+        builder.assert_zero(local_cols.io.x[3]);
 
         let expected_opcode = AB::Expr::from_canonical_u32(Opcode::LUI as u32);
 
