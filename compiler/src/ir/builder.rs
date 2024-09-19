@@ -113,7 +113,7 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
-    pub(crate) bigint_repr_size: u32,
+    pub bigint_repr_size: u32,
     pub flags: BuilderFlags,
     pub is_sub_builder: bool,
 }

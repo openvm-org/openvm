@@ -854,6 +854,23 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             //     AS::Immediate,
             // )
         }
+        AsmInstruction::Secp256k1AddUnequal(dst_ptr_ptr, p_ptr_ptr, q_ptr_ptr) => vec![inst_med(
+            SECP256K1_EC_ADD_NE,
+            i32_f(dst_ptr_ptr),
+            i32_f(p_ptr_ptr),
+            i32_f(q_ptr_ptr),
+            AS::Memory,
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::Secp256k1Double(dst_ptr_ptr, p_ptr_ptr) => vec![inst(
+            SECP256K1_EC_DOUBLE,
+            i32_f(dst_ptr_ptr),
+            i32_f(p_ptr_ptr),
+            F::zero(),
+            AS::Memory,
+            AS::Memory,
+        )],
         AsmInstruction::CycleTrackerStart(name) => {
             if options.enable_cycle_tracker {
                 vec![dbg(CT_START, name)]
