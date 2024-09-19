@@ -152,6 +152,7 @@ impl Halo2Prover {
         let builder = Self::builder(CircuitBuilderStage::Prover, k)
             .use_params(config_params)
             .use_break_points(break_points);
+        let builder = Self::populate(builder, operations, witness);
         #[cfg(feature = "bench-metrics")]
         {
             let stats = builder.statistics();
@@ -160,7 +161,6 @@ impl Halo2Prover {
             let total_cell = total_advices + total_lookups + stats.gate.total_fixed;
             metrics::gauge!("halo2_total_cells").set(total_cell as f64);
         }
-        let builder = Self::populate(builder, operations, witness);
 
         let params = read_params(k as u32);
 

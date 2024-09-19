@@ -1,9 +1,23 @@
 #!/bin/bash
-mkdir -p params
 
-for k in {5..23} # 25}
+if [[ -z $1 ]]; then
+    maxk=23
+else
+    maxk=$1
+fi
+echo "maxk=$maxk"
+
+bash scripts/install_s5cmd.sh
+mkdir -p params/
+cd params
+for k in $(seq 10 $maxk)
 do
-    wget -q "https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_${k}.srs"
+    pkey_file="kzg_bn254_${k}.srs"
+    if test -f $pkey_file; then
+        echo "$pkey_file already exists"
+    else
+        echo "downloading $pkey_file"
+        s5cmd cp --concurrency 10 "s3://axiom-crypto/challenge_0085/${pkey_file}" .
+    fi
 done
-
-mv *.srs params/
+cd ..

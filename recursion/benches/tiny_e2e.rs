@@ -1,4 +1,9 @@
-use std::{cmp::Reverse, time::Instant};
+use std::{
+    cmp::Reverse,
+    collections::{HashMap, HashSet},
+    io::Write,
+    time::Instant,
+};
 
 use afs_compiler::{asm::AsmBuilder, ir::Felt};
 use afs_recursion::{
@@ -15,9 +20,14 @@ use ax_sdk::{
     engine::StarkFriEngine,
 };
 use itertools::{izip, multiunzip, Itertools};
-use metrics::gauge;
+use metrics::{gauge, key_var, KeyName, Label};
 use metrics_tracing_context::{MetricsLayer, TracingContextLayer};
-use metrics_util::{debugging::DebuggingRecorder, layers::Layer};
+use metrics_util::{
+    debugging::{DebugValue, DebuggingRecorder, Snapshot},
+    layers::Layer,
+    CompositeKey, MetricKind,
+    MetricKind::Gauge,
+};
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -100,8 +110,7 @@ where
         public_values,
         ..
     } = result.segment_results.into_iter().next().unwrap();
-    gauge!("trace_generation_time_ms", "program" => "fibonacci_program")
-        .set(start.elapsed().as_millis() as f64);
+    gauge!("trace_gen_time_ms", "stark" => "vm").set(start.elapsed().as_millis() as f64);
 
     let mut groups = izip!(airs, traces, public_values).collect_vec();
     groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
@@ -114,7 +123,83 @@ where
     }
 }
 
+struct MetricDb {
+    #[allow(clippy::type_complexity)]
+    metrics: HashMap<MetricKind, HashMap<KeyName, Vec<(Vec<Label>, DebugValue)>>>,
+}
+
+impl From<Snapshot> for MetricDb {
+    fn from(value: Snapshot) -> Self {
+        let mut metrics = HashMap::new();
+        for (ckey, _, _, value) in value.into_vec() {
+            let (kind, key) = ckey.into_parts();
+            let (key_name, labels) = key.into_parts();
+            let name_to_values = metrics.entry(kind).or_insert(HashMap::new());
+            let values = name_to_values.entry(key_name).or_insert(Vec::new());
+            values.push((labels, value));
+        }
+        Self { metrics }
+    }
+}
+
+impl MetricDb {
+    pub fn get_metric(&self, ckey: CompositeKey) -> Option<f64> {
+        let labels_to_match: HashSet<_> = ckey.key().labels().collect();
+        self.metrics.get(&ckey.kind()).and_then(|m| {
+            m.get(ckey.key().name()).and_then(|v| {
+                v.iter()
+                    .find(|(labels, _)| {
+                        let match_tot: usize = labels
+                            .iter()
+                            .map(|label| {
+                                if labels_to_match.contains(label) {
+                                    1
+                                } else {
+                                    0
+                                }
+                            })
+                            .sum();
+                        match_tot == labels_to_match.len()
+                    })
+                    .and_then(|(_, v)| match v {
+                        DebugValue::Gauge(v) => Some(v.into_inner()),
+                        _ => unreachable!(),
+                    })
+            })
+        })
+    }
+}
+
+macro_rules! gauge_composite_key {
+    ($name:literal, $($label_key:literal => $label_value:literal),*) => {
+        CompositeKey::new(
+            Gauge,
+            key_var!($name, $($label_key => $label_value),*).clone()
+        )
+    };
+}
+
+fn generate_markdown_table(map: &[(&str, f64)]) -> String {
+    // Create a String to store the table
+    let mut table = String::new();
+
+    // Append table headers
+    table.push_str("| Key   | Value |\n");
+    table.push_str("|-------|-------|\n");
+
+    // Append each key-value pair
+    for (key, value) in map {
+        table.push_str(&format!("| {} | {:.2} |\n", key, value));
+    }
+
+    // Return the resulting markdown table as a string
+    table
+}
+
 fn main() {
+    let path = std::env::var("OUTPUT_PATH").unwrap();
+    let mut file = std::fs::File::create(path).unwrap();
+
     // Set up tracing:
     let env_filter = EnvFilter::builder()
         .with_default_directive(Level::INFO.into())
@@ -164,5 +249,67 @@ fn main() {
     span.exit();
 
     let snapshot = snapshotter.snapshot();
-    println!("{:?}", snapshot.into_hashmap())
+    let metric_db = MetricDb::from(snapshot);
+
+    let inner_trace_gen_time = metric_db
+        .get_metric(gauge_composite_key!("trace_gen_time_ms", "group" => "fibonacci_program_inner"))
+        .unwrap();
+    let inner_proof_time_ms = metric_db
+        .get_metric(
+            gauge_composite_key!("stark_proof_time_ms", "group" => "fibonacci_program_inner"),
+        )
+        .unwrap();
+    let inner_total_proof_time_ms = inner_trace_gen_time + inner_proof_time_ms;
+    let inner_vm_total_cell = metric_db
+        .get_metric(gauge_composite_key!("vm_total_cells", "group" => "fibonacci_program_inner"))
+        .unwrap();
+
+    let outer_trace_gen_time_ms = metric_db
+        .get_metric(
+            gauge_composite_key!("trace_gen_time_ms", "group" => "recursive_verify_e2e", "step"=> "outer_stark_prove")
+        )
+        .unwrap();
+    let outer_proof_time_ms = metric_db
+        .get_metric(
+            gauge_composite_key!("stark_proof_time_ms", "group" => "recursive_verify_e2e", "step"=> "outer_stark_prove")
+        )
+        .unwrap();
+    let outer_total_proof_time_ms = outer_trace_gen_time_ms + outer_proof_time_ms;
+    let outer_vm_total_cell = metric_db
+        .get_metric(gauge_composite_key!("vm_total_cells", "group" => "recursive_verify_e2e", "step"=> "outer_stark_prove"))
+        .unwrap();
+
+    let static_proof_time_ms = metric_db
+        .get_metric(
+            gauge_composite_key!("halo2_proof_time_ms", "group" => "recursive_verify_e2e", "step"=> "static_verifier_prove")
+        )
+        .unwrap();
+    let static_halo2_total_cell = metric_db
+        .get_metric(
+            gauge_composite_key!("halo2_total_cells", "group" => "recursive_verify_e2e", "step"=> "static_verifier_prove")
+        )
+        .unwrap();
+
+    let static_wrapper_proof_time_ms = metric_db
+        .get_metric(
+            gauge_composite_key!("halo2_proof_time_ms", "group" => "recursive_verify_e2e", "step"=> "static_verifier_wrapper_prove")
+        )
+        .unwrap();
+    let static_wrapper_halo2_total_cell = metric_db
+        .get_metric(
+            gauge_composite_key!("halo2_total_cells", "group" => "recursive_verify_e2e", "step"=> "static_verifier_wrapper_prove")
+        )
+        .unwrap();
+
+    let result = generate_markdown_table(&[
+        ("inner_proof_time_ms", inner_total_proof_time_ms),
+        ("inner_total_cell", inner_vm_total_cell),
+        ("outer_proof_time_ms", outer_total_proof_time_ms),
+        ("outer_total_cell", outer_vm_total_cell),
+        ("static_proof_time_ms", static_proof_time_ms),
+        ("static_total_cell", static_halo2_total_cell),
+        ("wrapper_proof_time_ms", static_wrapper_proof_time_ms),
+        ("wrapper_total_cell", static_wrapper_halo2_total_cell),
+    ]);
+    file.write_all(result.as_bytes()).unwrap();
 }

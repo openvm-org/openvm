@@ -95,7 +95,7 @@ jobs:
           mkdir -p ../benchmark
           mkdir -p ../benchmark/tmp
           bash trusted_setup_s3.sh
-          RUST_LOG=debug RUST_BACKTRACE=FULL RUSTFLAGS="-Ctarget-cpu=native" cargo bench --profile fast --features static-verifier,bench-metrics,parallel -- tiny_e2e
+          OUTPUT_PATH="../benchmark/tmp/_result.md" RUSTFLAGS="-Ctarget-cpu=native" cargo bench --profile fast --features static-verifier,bench-metrics,parallel -- tiny_e2e
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'single_rw'

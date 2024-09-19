@@ -97,6 +97,9 @@ pub fn gen_vm_program_stark_for_test<SC: StarkGenericConfig>(
 where
     Val<SC>: PrimeField32,
 {
+    #[cfg(feature = "bench-metrics")]
+    let start = std::time::Instant::now();
+
     let vm = VirtualMachine::new(config, program, input_stream);
 
     let mut result = vm.execute_and_generate().unwrap();
@@ -111,6 +114,8 @@ where
     {
         let total_cell = result.metrics.chip_metrics.into_values().sum::<usize>();
         metrics::gauge!("vm_total_cells").set(total_cell as f64);
+        metrics::gauge!("trace_gen_time_ms", "stark" => "vm")
+            .set(start.elapsed().as_millis() as f64);
     }
 
     StarkForTest {
