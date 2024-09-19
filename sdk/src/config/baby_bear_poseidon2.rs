@@ -107,8 +107,15 @@ where
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_engine(pcs_log_degree: usize) -> BabyBearPoseidon2Engine {
+    default_engine_impl(pcs_log_degree, default_fri_params())
+}
+
+/// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
+fn default_engine_impl(
+    pcs_log_degree: usize,
+    fri_params: FriParameters,
+) -> BabyBearPoseidon2Engine {
     let perm = default_perm();
-    let fri_params = default_fri_params();
     engine_from_perm(perm, pcs_log_degree, fri_params)
 }
 
@@ -262,8 +269,8 @@ pub fn print_hash_counts(hash_counter: &InstrumentCounter, compress_counter: &In
 }
 
 impl StarkFriEngine<BabyBearPoseidon2Config> for BabyBearPoseidon2Engine {
-    fn default_engine(max_log_degree: usize) -> Self {
-        default_engine(max_log_degree)
+    fn new(fri_params: FriParameters) -> Self {
+        default_engine_impl(27, fri_params)
     }
     fn fri_params(&self) -> FriParameters {
         self.fri_params

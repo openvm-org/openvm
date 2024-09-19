@@ -1,11 +1,16 @@
-use std::rc::Rc;
+use std::{cmp::Reverse, rc::Rc};
 
 use afs_compiler::util::execute_and_prove_program;
 use afs_stark_backend::{engine::VerificationData, rap::AnyRap};
+use itertools::{izip, multiunzip, Itertools};
 use p3_baby_bear::BabyBear;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::StarkGenericConfig;
-use stark_vm::program::Program;
+use p3_field::PrimeField32;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_uni_stark::{StarkGenericConfig, Val};
+use stark_vm::{
+    program::Program,
+    vm::{config::VmConfig, VirtualMachine},
+};
 
 use crate::{
     hints::InnerVal,
@@ -16,8 +21,8 @@ use crate::{
 /// A struct that contains all the necessary data to build a verifier for a Stark.
 pub struct StarkForTest<SC: StarkGenericConfig> {
     pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
-    pub traces: Vec<RowMajorMatrix<BabyBear>>,
-    pub pvs: Vec<Vec<BabyBear>>,
+    pub traces: Vec<RowMajorMatrix<Val<SC>>>,
+    pub pvs: Vec<Vec<Val<SC>>>,
 }
 
 pub mod inner {
@@ -82,5 +87,50 @@ pub mod inner {
                 ..Default::default()
             },
         );
+    }
+}
+
+pub fn gen_vm_program_stark_for_test<SC: StarkGenericConfig>(
+    program: Program<Val<SC>>,
+    input_stream: Vec<Vec<Val<SC>>>,
+    config: VmConfig,
+) -> StarkForTest<SC>
+where
+    Val<SC>: PrimeField32,
+{
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "bench-metrics")] {
+            let start = std::time::Instant::now();
+            let mut config= config;
+            config.collect_metrics = true;
+        }
+    }
+
+    let vm = VirtualMachine::new(config, program, input_stream);
+
+    let mut result = vm.execute_and_generate().unwrap();
+    assert_eq!(
+        result.segment_results.len(),
+        1,
+        "only proving one segment for now"
+    );
+
+    let result = result.segment_results.pop().unwrap();
+    #[cfg(feature = "bench-metrics")]
+    {
+        let total_cell = result.metrics.chip_metrics.into_values().sum::<usize>();
+        metrics::gauge!("vm_total_cells").set(total_cell as f64);
+        metrics::gauge!("trace_gen_time_ms", "stark" => "vm")
+            .set(start.elapsed().as_millis() as f64);
+    }
+
+    let mut groups = izip!(result.airs, result.traces, result.public_values).collect_vec();
+    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
+    let (airs, traces, pvs): (Vec<_>, _, _) = multiunzip(groups);
+
+    StarkForTest {
+        any_raps: airs.into_iter().map(|x| x.into()).collect(),
+        traces,
+        pvs,
     }
 }

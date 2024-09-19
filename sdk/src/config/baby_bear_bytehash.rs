@@ -110,8 +110,8 @@ impl<H: CryptographicHasher<u8, [u8; 32]> + Clone + Send + Sync>
 where
     BabyBearByteHashEngine<H>: BabyBearByteHashEngineWithDefaultHash<H>,
 {
-    fn default_engine(max_log_degree: usize) -> Self {
-        default_engine(max_log_degree, Self::default_hash())
+    fn new(fri_params: FriParameters) -> Self {
+        engine_from_byte_hash(Self::default_hash(), 27, fri_params)
     }
     fn fri_params(&self) -> FriParameters {
         self.fri_params
