@@ -15,10 +15,7 @@ use afs_recursion::{
 };
 use ax_sdk::{
     bench::run_with_metric_collection,
-    config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::fri_params_with_80_bits_of_security,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::{StarkForTest, StarkFriEngine},
 };
 use p3_baby_bear::BabyBear;
@@ -80,14 +77,15 @@ fn main() {
         let span = info_span!("Bench Program Inner", group = "bench_program_inner").entered();
         let (vdata, pvs) = {
             let program_stark = bench_program_stark_for_test();
-            let StarkForTest {
-                any_raps,
-                traces,
-                pvs,
-            } = program_stark;
-            let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
+            let pvs = program_stark.pvs.clone();
             (
-                BabyBearPoseidon2Engine::run_simple_test(&any_raps, traces, &pvs).unwrap(),
+                program_stark
+                    .run_simple_test(&BabyBearPoseidon2Engine::new(FriParameters {
+                        log_blowup: 4,
+                        num_queries: 24,
+                        proof_of_work_bits: 16,
+                    }))
+                    .unwrap(),
                 pvs,
             )
         };
@@ -109,7 +107,11 @@ fn main() {
                 inner_verifier_stf
                     .run_simple_test(&BabyBearPoseidon2Engine::new(
                         // log_blowup = 3 because of poseidon2 chip.
-                        fri_params_with_80_bits_of_security()[1],
+                        FriParameters {
+                            log_blowup: 3,
+                            num_queries: 33,
+                            proof_of_work_bits: 16,
+                        },
                     ))
                     .unwrap(),
                 pvs,
@@ -130,7 +132,11 @@ fn main() {
         run_evm_verifier_e2e_test(
             &outer_verifier_sft,
             // log_blowup = 3 because of poseidon2 chip.
-            Some(fri_params_with_80_bits_of_security()[1]),
+            Some(FriParameters {
+                log_blowup: 3,
+                num_queries: 33,
+                proof_of_work_bits: 16,
+            }),
         );
         span.exit();
     });

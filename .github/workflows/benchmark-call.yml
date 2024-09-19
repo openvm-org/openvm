@@ -97,7 +97,7 @@ jobs:
           mkdir -p ../benchmark
           mkdir -p ../benchmark/tmp
           bash trusted_setup_s3.sh
-          OUTPUT_PATH="../benchmark/tmp/_result.md" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin tiny_e2e --profile release --features static-verifier,bench-metrics,parallel
+          OUTPUT_PATH="../benchmark/tmp/_result.md" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin tiny_e2e --profile fast --features static-verifier,bench-metrics,parallel
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'small_e2e'
@@ -106,7 +106,7 @@ jobs:
           mkdir -p ../benchmark
           mkdir -p ../benchmark/tmp
           bash trusted_setup_s3.sh
-          OUTPUT_PATH="../benchmark/tmp/_result.md" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin small_e2e --profile release --features static-verifier,bench-metrics,parallel
+          OUTPUT_PATH="../benchmark/tmp/_result.md" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin small_e2e --profile fast --features static-verifier,bench-metrics,parallel
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'single_rw'
