@@ -14,8 +14,12 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularArithmeticAir<NUM_LI
         aux: &ModularArithmeticAuxCols<AB::Var, NUM_LIMBS>,
         expected_opcode: AB::Expr,
     ) {
-        let mut timestamp_delta = AB::Expr::zero();
-        let timestamp: AB::Expr = io.from_state.timestamp.into();
+        let timestamp: AB::Var = io.from_state.timestamp;
+        let mut timestamp_delta: usize = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
+        };
 
         // Interaction with program
         self.program_bus.send_instruction(

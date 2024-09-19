@@ -44,9 +44,8 @@ use crate::{
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
-    modular_arithmetic::{
-        ModularArithmeticChip, ModularArithmeticOp, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
-    },
+    modular_arithmetic::{ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    modular_multdiv::ModularMultDivChip,
     program::{bridge::ProgramBus, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
@@ -187,53 +186,37 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
         if config.modular_arithmetic_enabled {
             let mod_arith_coord: ModularArithmeticChip<F, 32, 8> = ModularArithmeticChip::new(
+        if config.modular_arithmetic_enabled {
+            let mod_arith_coord: ModularArithmeticChip<F, 32, 8> = ModularArithmeticChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
             );
             let mod_arith_scalar: ModularArithmeticChip<F, 32, 8> = ModularArithmeticChip::new(
+            let mod_arith_scalar: ModularArithmeticChip<F, 32, 8> = ModularArithmeticChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
-                ModularArithmeticOp::Add,
             );
-            let sub_coord = ModularArithmeticChip::new(
-                execution_bus,
-                program_bus,
-                memory_chip.clone(),
-                SECP256K1_COORD_PRIME.clone(),
-                ModularArithmeticOp::Sub,
+            assign!(
+                [Opcode::SECP256K1_COORD_ADD, Opcode::SECP256K1_COORD_SUB],
+                Rc::new(RefCell::new(mod_arith_coord.clone()))
             );
-            let sub_scalar = ModularArithmeticChip::new(
-                execution_bus,
-                program_bus,
-                memory_chip.clone(),
-                SECP256K1_SCALAR_PRIME.clone(),
-                ModularArithmeticOp::Sub,
+            assign!(
+                [Opcode::SECP256K1_COORD_SUB, Opcode::SECP256K1_SCALAR_SUB],
+                Rc::new(RefCell::new(mod_arith_scalar.clone()))
             );
-            let mul_coord = ModularArithmeticChip::new(
+        }
+        if config.modular_multdiv_enabled {
+            let mod_multdiv_coord: ModularMultDivChip<F, 63, 32, 8> = ModularMultDivChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
             );
-            let mul_scalar = ModularArithmeticChip::new(
-                execution_bus,
-                program_bus,
-                memory_chip.clone(),
-                SECP256K1_SCALAR_PRIME.clone(),
-                ModularArithmeticOp::Mul,
-            );
-            let div_coord = ModularArithmeticChip::new(
-                execution_bus,
-                program_bus,
-                memory_chip.clone(),
-                SECP256K1_COORD_PRIME.clone(),
-                ModularArithmeticOp::Div,
-            );
-            let div_scalar = ModularArithmeticChip::new(
+            let mod_multdiv_scalar: ModularMultDivChip<F, 63, 32, 8> = ModularMultDivChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
@@ -242,13 +225,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             assign!(
                 [Opcode::SECP256K1_COORD_MUL, Opcode::SECP256K1_COORD_DIV],
                 Rc::new(RefCell::new(mod_multdiv_coord.clone()))
+                [Opcode::SECP256K1_COORD_MUL, Opcode::SECP256K1_COORD_DIV],
+                Rc::new(RefCell::new(mod_multdiv_coord.clone()))
             );
             assign!(
+                [Opcode::SECP256K1_SCALAR_MUL, Opcode::SECP256K1_SCALAR_DIV],
+                Rc::new(RefCell::new(mod_multdiv_scalar.clone()))
                 [Opcode::SECP256K1_SCALAR_MUL, Opcode::SECP256K1_SCALAR_DIV],
                 Rc::new(RefCell::new(mod_multdiv_scalar.clone()))
             );
         }
         // Modular multiplication also depends on U256 arithmetic.
+        if config.modular_multdiv_enabled || config.u256_arithmetic_enabled {
         if config.modular_multdiv_enabled || config.u256_arithmetic_enabled {
             let u256_chip = Rc::new(RefCell::new(UintArithmeticChip::new(
                 execution_bus,

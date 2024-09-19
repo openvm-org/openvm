@@ -17,10 +17,7 @@ use crate::{
         // instructions::Opcode,
     },
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
-    modular_arithmetic::{
-        biguint_to_limbs, limbs_to_biguint, FIELD_ELEMENT_BITS, LIMB_SIZE, NUM_LIMBS,
-        SECP256K1_COORD_PRIME, TWO_NUM_LIMBS,
-    },
+    modular_arithmetic::{ModularArithmeticChip, FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 

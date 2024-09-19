@@ -6,8 +6,7 @@ use p3_field::AbstractField;
 use super::{EcAddUnequalChip, EcDoubleChip, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS};
 use crate::{
     arch::{instructions, testing::MachineChipTestBuilder},
-    ecc::EcDoubleChip,
-    modular_arithmetic::{biguint_to_limbs, NUM_LIMBS, TWO_NUM_LIMBS},
+    modular_arithmetic::ModularArithmeticChip,
     program::Instruction,
 };
 
