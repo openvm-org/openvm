@@ -30,7 +30,7 @@ use crate::{
         columns::ExecutionState,
         instructions::{
             Opcode, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
-            UINT256_ARITHMETIC_INSTRUCTIONS,
+            SHIFT_256_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS,
         },
     },
     castf::CastFChip,
@@ -46,6 +46,7 @@ use crate::{
         ModularArithmeticChip, ModularArithmeticOp, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
     },
     program::{bridge::ProgramBus, ExecutionError, Program, ProgramChip},
+    shift::ShiftChip,
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
@@ -154,6 +155,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
                 Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
+                config
+                    .poseidon2_max_constraint_degree
+                    .expect("Poseidon2 is enabled but no max_constraint_degree provided"),
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
@@ -291,6 +295,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             assign!([Opcode::MUL256], u256_mult_chip);
             chips.push(MachineChipVariant::U256Multiplication(u256_mult_chip));
             chips.push(MachineChipVariant::RangeTupleChecker(range_tuple_checker));
+        }
+        if config.shift_256_enabled {
+            let shift_chip = Rc::new(RefCell::new(ShiftChip::new(
+                execution_bus,
+                memory_chip.clone(),
+            )));
+            assign!(SHIFT_256_INSTRUCTIONS, shift_chip);
+            chips.push(MachineChipVariant::Shift256(shift_chip));
         }
         if config.castf_enabled {
             let castf_chip = Rc::new(RefCell::new(CastFChip::new(

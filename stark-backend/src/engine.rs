@@ -105,7 +105,14 @@ where
     );
 
     let mut challenger = engine.new_challenger();
+
+    #[cfg(feature = "bench-metrics")]
+    let prove_start = std::time::Instant::now();
+
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, public_values);
+
+    #[cfg(feature = "bench-metrics")]
+    metrics::gauge!("stark_proof_time_ms").set(prove_start.elapsed().as_millis() as f64);
 
     let mut challenger = engine.new_challenger();
     let verifier = engine.verifier();

@@ -66,6 +66,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = Poseidon2Chip::from_poseidon2_config(
         Poseidon2Config::<16, _>::new_p3_baby_bear_16(),
+        7,
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),

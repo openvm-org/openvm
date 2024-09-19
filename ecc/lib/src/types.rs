@@ -132,7 +132,7 @@ where
     pub fn is_valid(&self, builder: &mut Builder<C>) -> Var<C::N> {
         let sig_is_valid = self.sig.is_valid(builder);
         let ret = builder.uninit();
-        builder.if_eq(sig_is_valid, C::N::zero()).then_or_else(
+        builder.if_eq(sig_is_valid, C::N::one()).then_or_else(
             |builder| {
                 let pk_is_valid = self.pubkey.is_valid(builder);
                 builder.assign(&ret, pk_is_valid);

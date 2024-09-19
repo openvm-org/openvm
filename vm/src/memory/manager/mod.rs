@@ -2,6 +2,7 @@ use std::{
     array, cell::RefCell, collections::HashMap, iter, marker::PhantomData, rc::Rc, sync::Arc,
 };
 
+use afs_derive::AlignedBorrow;
 use afs_primitives::{
     assert_less_than::{columns::AssertLessThanAuxCols, AssertLessThanAir},
     is_zero::IsZeroAir,
@@ -104,7 +105,7 @@ impl<T: Copy> MemoryWriteRecord<T, 1> {
 }
 
 /// Holds the data and the information about its address.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryDataIoCols<T, const N: usize> {
     pub data: [T; N],
     pub address_space: T,
@@ -129,7 +130,7 @@ impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
 }
 
 /// Holds the heap data and the information about its address.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryHeapDataIoCols<T: Clone, const N: usize> {
     pub address: MemoryDataIoCols<T, 1>,
     pub data: MemoryDataIoCols<T, N>,

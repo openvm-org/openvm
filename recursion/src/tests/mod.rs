@@ -10,21 +10,23 @@ use ax_sdk::{
     interaction::dummy_interaction_air::DummyInteractionAir,
     utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::StarkGenericConfig;
+use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::testing_utils::{inner::run_recursive_test, StarkForTest};
 
-pub fn fibonacci_stark_for_test<SC: StarkGenericConfig>(n: usize) -> StarkForTest<SC> {
+pub fn fibonacci_stark_for_test<SC: StarkGenericConfig>(n: usize) -> StarkForTest<SC>
+where
+    Val<SC>: PrimeField32,
+{
     setup_tracing();
 
     let fib_air = Rc::new(FibonacciAir {});
-    let trace = generate_fib_trace_rows::<BabyBear>(n);
+    let trace = generate_fib_trace_rows::<Val<SC>>(n);
     let pvs = vec![vec![
-        BabyBear::from_canonical_u32(0),
-        BabyBear::from_canonical_u32(1),
+        Val::<SC>::from_canonical_u32(0),
+        Val::<SC>::from_canonical_u32(1),
         trace.get(n - 1, 1),
     ]];
     StarkForTest {
@@ -34,7 +36,10 @@ pub fn fibonacci_stark_for_test<SC: StarkGenericConfig>(n: usize) -> StarkForTes
     }
 }
 
-pub fn interaction_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC> {
+pub fn interaction_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC>
+where
+    Val<SC>: PrimeField32,
+{
     const INPUT_BUS: usize = 0;
     const OUTPUT_BUS: usize = 1;
     const RANGE_BUS: usize = 2;

@@ -1,3 +1,5 @@
+use p3_field::AbstractField;
+
 use super::{air::EcAirConfig, EcPoint};
 use crate::bigint::{check_carry_mod_to_zero::CheckCarryModToZeroCols, CanonicalUint, LimbConfig};
 
@@ -216,5 +218,26 @@ impl<T: Clone> EcAuxCols<T> {
         // + 2* (3num_limbs - 1)     // x and y check
         // + 3num_limbs + 1          // lambda_check
         10 * config.num_limbs
+    }
+}
+
+impl<F: AbstractField> EcAuxCols<F> {
+    pub fn disabled(num_limbs: usize) -> Self {
+        EcAuxCols {
+            is_valid: F::zero(),
+            lambda: vec![F::zero(); num_limbs],
+            lambda_check: CheckCarryModToZeroCols {
+                quotient: vec![F::zero(); num_limbs + 1],
+                carries: vec![F::zero(); 2 * num_limbs],
+            },
+            x3_check: CheckCarryModToZeroCols {
+                quotient: vec![F::zero(); num_limbs],
+                carries: vec![F::zero(); 2 * num_limbs - 1],
+            },
+            y3_check: CheckCarryModToZeroCols {
+                quotient: vec![F::zero(); num_limbs],
+                carries: vec![F::zero(); 2 * num_limbs - 1],
+            },
+        }
     }
 }

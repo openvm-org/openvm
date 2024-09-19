@@ -40,6 +40,7 @@ mod tests;
 // TODO: maybe use const generic.
 pub const LIMB_SIZE: usize = 8;
 pub const NUM_LIMBS: usize = 32;
+pub const TWO_NUM_LIMBS: usize = 2 * NUM_LIMBS;
 
 // Max bits that can fit into our field element.
 pub const FIELD_ELEMENT_BITS: usize = 30;

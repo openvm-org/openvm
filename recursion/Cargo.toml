@@ -39,9 +39,20 @@ tracing.workspace = true
 lazy_static.workspace = true
 once_cell = { workspace = true, optional = true }
 num-bigint-dig = { workspace = true }
+metrics = { workspace = true, optional = true }
+cfg-if = { workspace = true }
 
 [dev-dependencies]
 afs-primitives = { path = "../primitives" }
+metrics-tracing-context = "0.16.0"
+tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
+tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
+metrics-util = "0.17.0"
+
+[[bench]]
+name = "tiny_e2e"
+harness = false
+required-features = ["static-verifier", "bench-metrics"]
 
 [features]
 default = []
@@ -51,3 +62,4 @@ static-verifier = [
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]
+bench-metrics = ["dep:metrics", "afs-stark-backend/bench-metrics"]

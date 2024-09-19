@@ -23,6 +23,7 @@ use crate::{
     memory::MemoryChipRef,
     modular_arithmetic::{ModularArithmeticAirVariant, ModularArithmeticChip},
     program::{ExecutionError, Instruction, ProgramChip},
+    shift::ShiftChip,
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
@@ -101,6 +102,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     ModularArithmetic(Rc<RefCell<ModularArithmeticChip<F, ModularArithmeticAirVariant>>>),
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
 }
 
@@ -119,6 +121,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     ByteXor(Arc<XorLookupChip<8>>),
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
 }
 

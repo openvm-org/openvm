@@ -307,7 +307,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn prove(
         &mut self,
-        engine: &dyn StarkEngine<SC>,
+        engine: &impl StarkEngine<SC>,
         pk: &MultiStarkProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
         input_prover_data: Arc<ProverTraceData<SC>>,
@@ -384,7 +384,7 @@ where
     /// This function takes a proof (returned by the prove function) and verifies it
     pub fn verify(
         &self,
-        engine: &dyn StarkEngine<SC>,
+        engine: &impl StarkEngine<SC>,
         vk: MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
         x: Vec<u32>,
