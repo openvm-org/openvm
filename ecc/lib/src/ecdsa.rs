@@ -29,7 +29,10 @@ where
     let generator = load_generator_secp256k1(builder);
     let u1_g = scalar_multiply_secp256k1(builder, &generator, u1, window_bits);
     let u2_qa = scalar_multiply_secp256k1(builder, &input.pubkey, u2, window_bits);
-    let (x1, y1) = builder.ec_add(&(u1_g.x, u1_g.y), &(u2_qa.x, u2_qa.y));
+    let sum_affine = builder.secp256k1_add(u1_g.affine, u2_qa.affine);
+    let sum = ECPointVariable { affine: sum_affine };
+    let x1 = sum.x(builder, 256);
+    let y1 = sum.y(builder, 256);
 
     let ret = builder.uninit();
 
@@ -54,8 +57,6 @@ where
     let g = k256::AffinePoint::GENERATOR.to_encoded_point(false);
     let g: ECPoint = g.into();
     // Gx = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798
-    let x = builder.eval_biguint(g.x);
     // Gy = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8
-    let y = builder.eval_biguint(g.y);
-    ECPointVariable { x, y }
+    g.load_const(builder, 256)
 }

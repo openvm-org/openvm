@@ -235,6 +235,24 @@ pub enum DslIr<C: Config> {
     /// **little-endian**. The `output` is exactly 16 limbs (32 bytes).
     Keccak256(Array<C, Var<C::N>>, Array<C, Var<C::N>>),
 
+    /// ```ignore
+    /// Secp256k1AddUnequal(dst, p, q)
+    /// ```
+    /// Reads `p,q` from heap and writes `dst = p + q` to heap. A point is represented on the heap
+    /// as two affine coordinates concatenated together into a byte array.
+    /// Assumes that `p.x != q.x` which is equivalent to `p != +-q`.
+    Secp256k1AddUnequal(
+        Array<C, Var<C::N>>,
+        Array<C, Var<C::N>>,
+        Array<C, Var<C::N>>,
+    ),
+    /// ```ignore
+    /// Secp256k1Double(dst, p)
+    /// ```
+    /// Reads `p` from heap and writes `dst = p + p` to heap. A point is represented on the heap
+    /// as two affine coordinates concatenated together into a byte array.
+    Secp256k1Double(Array<C, Var<C::N>>, Array<C, Var<C::N>>),
+
     // Miscellaneous instructions.
     /// Prints a variable.
     PrintV(Var<C::N>),

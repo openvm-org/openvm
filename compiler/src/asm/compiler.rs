@@ -621,6 +621,18 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     },
                     _ => unimplemented!(),
                 },
+                DslIr::Secp256k1AddUnequal(dst, p, q) => {
+                    self.push(
+                        AsmInstruction::Secp256k1AddUnequal(dst.ptr_fp(), p.ptr_fp(), q.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::Secp256k1Double(dst, p) => {
+                    self.push(
+                        AsmInstruction::Secp256k1Double(dst.ptr_fp(), p.ptr_fp()),
+                        debug_info,
+                    );
+                }
                 DslIr::Error() => self.push(AsmInstruction::j(self.trap_label), debug_info),
                 DslIr::PrintF(dst) => {
                     self.push(AsmInstruction::PrintF(dst.fp()), debug_info);

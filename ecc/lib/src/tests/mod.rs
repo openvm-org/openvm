@@ -5,42 +5,38 @@ use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 
-use crate::{ec_mul::scalar_multiply_secp256k1, types::ECPointVariable};
+use crate::{ec_mul::scalar_multiply_secp256k1, types::ECPoint};
 
 mod ecdsa;
+
+const SECP256K1_COORD_BITS: usize = 256;
 
 // Please note that these tests are for y^2 = x^3 - 7, which is easier. It has the same scalar field.
 
 fn test_ec_mul(
-    point_1: (BigUint, BigUint),
+    base: (BigUint, BigUint),
     scalar: BigUint,
-    point_2: (BigUint, BigUint),
+    expected: (BigUint, BigUint),
     window_bits: usize,
 ) {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::bigint_builder();
 
-    let x1_var = builder.eval_biguint(point_1.0);
-    let y1_var = builder.eval_biguint(point_1.1);
-    let x2_var = builder.eval_biguint(point_2.0);
-    let y2_var = builder.eval_biguint(point_2.1);
+    let base = ECPoint {
+        x: base.0,
+        y: base.1,
+    }
+    .load_const(&mut builder, SECP256K1_COORD_BITS);
+    let expected = ECPoint {
+        x: expected.0,
+        y: expected.1,
+    }
+    .load_const(&mut builder, SECP256K1_COORD_BITS);
     let s = builder.eval_biguint(scalar);
 
-    let ECPointVariable {
-        x: x3_var,
-        y: y3_var,
-    } = scalar_multiply_secp256k1(
-        &mut builder,
-        &ECPointVariable {
-            x: x1_var,
-            y: y1_var,
-        },
-        s,
-        window_bits,
-    );
-    builder.assert_secp256k1_coord_eq(&x2_var, &x3_var);
-    builder.assert_secp256k1_coord_eq(&y2_var, &y3_var);
+    let res = scalar_multiply_secp256k1(&mut builder, &base, s, window_bits);
+    builder.assert_var_array_eq(&res.affine, &expected.affine);
     builder.halt();
 
     let program = builder.clone().compile_isa();
