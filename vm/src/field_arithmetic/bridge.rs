@@ -2,7 +2,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
-use crate::{core::READ_INSTRUCTION_BUS, field_arithmetic::columns::FieldArithmeticAuxCols};
+use crate::field_arithmetic::columns::FieldArithmeticAuxCols;
 
 /// Receives all IO columns from another chip.
 impl FieldArithmeticAir {
@@ -21,9 +21,8 @@ impl FieldArithmeticAir {
         } = io;
         let is_valid = aux.is_valid;
 
-        // Interaction with program
-        builder.push_send(
-            READ_INSTRUCTION_BUS,
+        self.program_bus.send_instruction(
+            builder,
             [
                 io.from_state.pc.into(),
                 expected_opcode.clone(),
@@ -34,7 +33,8 @@ impl FieldArithmeticAir {
                 operand1.address_space.into(),
                 operand2.address_space.into(),
                 AB::Expr::zero(),
-            ],
+            ]
+            .into_iter(),
             is_valid,
         );
 

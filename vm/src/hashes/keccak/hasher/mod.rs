@@ -22,7 +22,7 @@ use crate::{
         instructions::Opcode,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
-    program::{ExecutionError, Instruction},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 /// Memory reads to get dst, src, len
@@ -86,12 +86,18 @@ pub struct KeccakInputBlock<F> {
 impl<F: PrimeField32> KeccakVmChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
         byte_xor_chip: Arc<XorLookupChip<8>>,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            air: KeccakVmAir::new(execution_bus, memory_bridge, byte_xor_chip.bus()),
+            air: KeccakVmAir::new(
+                execution_bus,
+                program_bus,
+                memory_bridge,
+                byte_xor_chip.bus(),
+            ),
             memory_chip,
             byte_xor_chip,
             records: Vec::new(),

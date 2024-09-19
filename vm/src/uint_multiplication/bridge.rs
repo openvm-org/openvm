@@ -6,7 +6,7 @@ use super::{
     air::UintMultiplicationAir,
     columns::{UintMultiplicationAuxCols, UintMultiplicationIoCols},
 };
-use crate::memory::MemoryAddress;
+use crate::{arch::instructions::Opcode, memory::MemoryAddress};
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_LIMBS, LIMB_BITS> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -22,6 +22,20 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
+        self.program_bus.send_instruction(
+            builder,
+            [
+                io.from_state.pc.into(),
+                AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
+                io.z.ptr_to_address.into(),
+                io.x.ptr_to_address.into(),
+                io.y.ptr_to_address.into(),
+                io.ptr_as.into(),
+                io.address_as.into(),
+            ]
+            .into_iter(),
+            aux.is_valid,
+        );
         for (ptr, value, mem_aux) in izip!(
             [
                 io.z.ptr_to_address,

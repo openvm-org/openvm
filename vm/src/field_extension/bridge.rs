@@ -6,8 +6,8 @@ use super::{
     columns::{FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols},
 };
 use crate::{
-    arch::columns::ExecutionState, core::READ_INSTRUCTION_BUS,
-    field_extension::columns::FieldExtensionArithmeticAuxCols, memory::MemoryAddress,
+    arch::columns::ExecutionState, field_extension::columns::FieldExtensionArithmeticAuxCols,
+    memory::MemoryAddress,
 };
 
 impl FieldExtensionArithmeticAir {
@@ -42,8 +42,8 @@ impl FieldExtensionArithmeticAir {
         } = aux;
 
         // Interaction with program
-        builder.push_send(
-            READ_INSTRUCTION_BUS,
+        self.program_bus.send_instruction(
+            builder,
             [
                 pc.into(),
                 expected_opcode.clone(),
@@ -54,7 +54,8 @@ impl FieldExtensionArithmeticAir {
                 e.into(),
                 AB::Expr::zero(),
                 AB::Expr::zero(),
-            ],
+            ]
+            .into_iter(),
             is_valid,
         );
 

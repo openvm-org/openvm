@@ -19,8 +19,8 @@ use crate::{
         instructions::Opcode::*,
         testing::{MachineChipTestBuilder, MachineChipTester},
     },
-    program::Instruction,
     hashes::poseidon2::Poseidon2VmIoCols,
+    program::Instruction,
 };
 
 const ADDRESS_BITS: usize = 29;
@@ -67,6 +67,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
     let mut chip = Poseidon2Chip::from_poseidon2_config(
         Poseidon2Config::<16, _>::new_p3_baby_bear_16(),
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
     );
 
@@ -152,7 +153,7 @@ fn poseidon2_negative_test() {
     });
     for _ in 0..10 {
         // TODO: better way to modify existing traces in tester
-        let trace = &mut tester.traces[1];
+        let trace = &mut tester.traces[2];
         let original_trace = trace.clone();
 
         // avoid pranking IO cols or dst,lhs,rhs

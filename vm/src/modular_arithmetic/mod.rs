@@ -24,7 +24,7 @@ use crate::{
     memory::{
         offline_checker::MemoryBridge, MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord,
     },
-    program::{ExecutionError, Instruction},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 pub mod air;
@@ -133,6 +133,7 @@ pub enum ModularArithmeticOp {
 pub struct ModularArithmeticVmAir<A> {
     pub air: A,
     pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
     pub memory_bridge: MemoryBridge,
 
     pub carry_limbs: usize,
@@ -153,6 +154,7 @@ pub struct ModularArithmeticChip<T: PrimeField32, A> {
 impl<T: PrimeField32> ModularArithmeticChip<T, ModularArithmeticAirVariant> {
     pub fn new(
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         modulus: BigUint,
         op: ModularArithmeticOp,
@@ -195,6 +197,7 @@ impl<T: PrimeField32> ModularArithmeticChip<T, ModularArithmeticAirVariant> {
             air: ModularArithmeticVmAir {
                 air: subair,
                 execution_bus,
+                program_bus,
                 memory_bridge,
                 carry_limbs,
                 q_limbs,

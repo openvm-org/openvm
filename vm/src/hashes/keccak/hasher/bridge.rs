@@ -11,7 +11,6 @@ use super::{
 };
 use crate::{
     arch::{columns::ExecutionState, instructions::Opcode},
-    core::READ_INSTRUCTION_BUS,
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
@@ -127,9 +126,8 @@ impl KeccakVmAir {
         // as `count` in interaction
         let should_receive = local.opcode.is_enabled * local.sponge.is_new_start;
 
-        // Interaction with program
-        builder.push_send(
-            READ_INSTRUCTION_BUS,
+        self.program_bus.send_instruction(
+            builder,
             [
                 opcode.pc.into(),
                 AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
@@ -140,7 +138,8 @@ impl KeccakVmAir {
                 opcode.e.into(),
                 opcode.f.into(),
                 AB::Expr::zero(),
-            ],
+            ]
+            .into_iter(),
             should_receive.clone(),
         );
 

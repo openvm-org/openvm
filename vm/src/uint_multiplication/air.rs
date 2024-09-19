@@ -7,13 +7,14 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::{
-    arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge,
+    arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge, program::bridge::ProgramBus,
     uint_multiplication::columns::UintMultiplicationCols,
 };
 
 #[derive(Clone, Debug)]
 pub struct UintMultiplicationAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub(super) execution_bus: ExecutionBus,
+    pub(super) program_bus: ProgramBus,
     pub(super) memory_bridge: MemoryBridge,
     pub bus: RangeTupleCheckerBus,
 }

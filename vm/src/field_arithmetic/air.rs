@@ -12,11 +12,13 @@ use crate::{
         instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
     },
     memory::offline_checker::MemoryBridge,
+    program::bridge::ProgramBus,
 };
 
 #[derive(Clone, Copy, Debug)]
 pub struct FieldArithmeticAir {
     pub(super) execution_bus: ExecutionBus,
+    pub(super) program_bus: ProgramBus,
     pub(super) memory_bridge: MemoryBridge,
 }
 

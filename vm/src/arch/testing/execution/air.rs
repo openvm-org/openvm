@@ -6,10 +6,7 @@ use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::arch::{
-    bus::ExecutionBus,
-    columns::{ExecutionState, InstructionCols},
-};
+use crate::arch::{bus::ExecutionBus, columns::ExecutionState};
 
 #[derive(Clone, Copy, Debug, AlignedBorrow, derive_new::new)]
 #[repr(C)]
@@ -18,7 +15,6 @@ pub struct DummyExecutionInteractionCols<T> {
     pub count: T,
     pub initial_state: ExecutionState<T>,
     pub final_state: ExecutionState<T>,
-    pub instruction: InstructionCols<T>,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]

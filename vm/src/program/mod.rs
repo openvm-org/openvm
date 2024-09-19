@@ -1,15 +1,16 @@
 use std::{error::Error, fmt::Display};
 
 use backtrace::Backtrace;
+use bridge::ProgramBus;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 
-use crate::arch::{
-    columns::NUM_OPERANDS,
-    instructions::{
-        Opcode,
-        Opcode::{FAIL, NOP},
+use crate::{
+    arch::{
+        columns::NUM_OPERANDS,
+        instructions::Opcode::{self, FAIL, NOP},
     },
+    core::READ_INSTRUCTION_BUS,
 };
 
 #[cfg(test)]
@@ -225,6 +226,7 @@ impl<F> Program<F> {
 #[derive(Clone, Debug)]
 pub struct ProgramAir<F> {
     pub program: Program<F>,
+    bus: ProgramBus,
 }
 
 #[derive(Debug)]
@@ -246,7 +248,10 @@ impl<F: PrimeField64> ProgramChip<F> {
         Self {
             execution_frequencies: vec![0; program.len()],
             true_program_length,
-            air: ProgramAir { program },
+            air: ProgramAir {
+                program,
+                bus: ProgramBus(READ_INSTRUCTION_BUS),
+            },
         }
     }
 

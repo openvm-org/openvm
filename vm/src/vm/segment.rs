@@ -34,7 +34,10 @@ use crate::{
         },
     },
     castf::CastFChip,
-    core::{CoreChip, StreamsAndMetrics, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS},
+    core::{
+        CoreChip, StreamsAndMetrics, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
+        READ_INSTRUCTION_BUS,
+    },
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -42,7 +45,7 @@ use crate::{
     modular_arithmetic::{
         ModularArithmeticChip, ModularArithmeticOp, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
     },
-    program::{ExecutionError, Program, ProgramChip},
+    program::{bridge::ProgramBus, ExecutionError, Program, ProgramChip},
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
@@ -90,6 +93,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
         let execution_bus = ExecutionBus(0);
+        let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
         let memory_bus = MemoryBus(1);
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
@@ -132,6 +136,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.field_arithmetic_enabled {
             let field_arithmetic_chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             assign!(FIELD_ARITHMETIC_INSTRUCTIONS, field_arithmetic_chip);
@@ -140,6 +145,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.field_extension_enabled {
             let field_extension_chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
@@ -149,6 +155,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
                 Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             if config.perm_poseidon2_enabled {
@@ -163,6 +170,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
             let keccak_chip = Rc::new(RefCell::new(KeccakVmChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 byte_xor_chip.clone(),
             )));
@@ -173,48 +181,56 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.modular_multiplication_enabled {
             let add_coord = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
                 ModularArithmeticOp::Add,
             );
             let add_scalar = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
                 ModularArithmeticOp::Add,
             );
             let sub_coord = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
                 ModularArithmeticOp::Sub,
             );
             let sub_scalar = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
                 ModularArithmeticOp::Sub,
             );
             let mul_coord = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
                 ModularArithmeticOp::Mul,
             );
             let mul_scalar = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
                 ModularArithmeticOp::Mul,
             );
             let div_coord = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
                 ModularArithmeticOp::Div,
             );
             let div_scalar = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
                 ModularArithmeticOp::Div,
@@ -256,6 +272,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.modular_multiplication_enabled || config.u256_arithmetic_enabled {
             let u256_chip = Rc::new(RefCell::new(UintArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             chips.push(MachineChipVariant::U256Arithmetic(u256_chip.clone()));
@@ -267,6 +284,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
             let u256_mult_chip = Rc::new(RefCell::new(UintMultiplicationChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 range_tuple_checker.clone(),
             )));
@@ -277,6 +295,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.castf_enabled {
             let castf_chip = Rc::new(RefCell::new(CastFChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             assign!([Opcode::CASTF], castf_chip);

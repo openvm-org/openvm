@@ -14,7 +14,7 @@ use crate::{
     },
     field_extension::air::FieldExtensionArithmeticAir,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
-    program::{ExecutionError, Instruction},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 pub const BETA: usize = 11;
@@ -100,8 +100,16 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
 }
 
 impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
-    pub fn new(execution_bus: ExecutionBus, memory: MemoryChipRef<F>) -> Self {
-        let air = FieldExtensionArithmeticAir::new(execution_bus, memory.borrow().memory_bridge());
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory: MemoryChipRef<F>,
+    ) -> Self {
+        let air = FieldExtensionArithmeticAir::new(
+            execution_bus,
+            program_bus,
+            memory.borrow().memory_bridge(),
+        );
         Self {
             air,
             records: vec![],

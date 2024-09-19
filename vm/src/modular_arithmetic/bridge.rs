@@ -5,7 +5,6 @@ use super::{
     columns::{ModularArithmeticAuxCols, ModularArithmeticIoCols},
     ModularArithmeticAirVariant, ModularArithmeticVmAir,
 };
-use crate::core::READ_INSTRUCTION_BUS;
 
 impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -18,19 +17,19 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
         let timestamp: AB::Expr = io.from_state.timestamp.into();
 
         // Interaction with program
-        builder.push_send(
-            READ_INSTRUCTION_BUS,
+        self.program_bus.send_instruction(
+            builder,
             [
-                io.from_state.pc.into(),
-                aux.opcode.into(),
-                io.z.address.address.into(),
-                io.x.address.address.into(),
-                io.y.address.address.into(),
-                io.x.address.address_space.into(),
-                io.x.data.address_space.into(),
-                AB::Expr::zero(),
-                AB::Expr::zero(),
-            ],
+                io.from_state.pc,
+                aux.opcode,
+                io.z.address.address,
+                io.x.address.address,
+                io.y.address.address,
+                io.x.address.address_space,
+                io.x.data.address_space,
+            ]
+            .into_iter()
+            .map(|x| x.into()),
             aux.is_valid,
         );
 

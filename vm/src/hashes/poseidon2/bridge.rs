@@ -5,7 +5,7 @@ use poseidon2_air::poseidon2::columns::Poseidon2IoCols;
 use super::{air::Poseidon2VmAir, columns::Poseidon2VmIoCols, WIDTH};
 use crate::{
     arch::{columns::ExecutionState, instructions::Opcode::PERM_POS2},
-    core::{POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS},
+    core::POSEIDON2_DIRECT_BUS,
 };
 
 impl<F: Field> Poseidon2VmAir<F> {
@@ -23,9 +23,8 @@ impl<F: Field> Poseidon2VmAir<F> {
     ) {
         let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
 
-        // Interaction with program
-        builder.push_send(
-            READ_INSTRUCTION_BUS,
+        self.program_bus.send_instruction(
+            builder,
             [
                 io.pc.into(),
                 opcode.clone(),
@@ -36,7 +35,8 @@ impl<F: Field> Poseidon2VmAir<F> {
                 io.e.into(),
                 AB::Expr::zero(),
                 AB::Expr::zero(),
-            ],
+            ]
+            .into_iter(),
             io.is_opcode,
         );
 

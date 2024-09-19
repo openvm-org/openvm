@@ -16,7 +16,7 @@ use crate::{
         tree::Hasher,
         MemoryAuxColsFactory, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
     },
-    program::{ExecutionError, Instruction},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 #[cfg(test)]
@@ -46,12 +46,14 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
     pub fn from_poseidon2_config(
         config: Poseidon2Config<WIDTH, F>,
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
     ) -> Self {
         let inner = Poseidon2Air::<WIDTH, F>::from_config(config, 0);
         Self {
             inner,
             execution_bus,
+            program_bus,
             memory_bridge,
             direct: true,
         }
@@ -83,11 +85,13 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
     pub fn from_poseidon2_config(
         p2_config: Poseidon2Config<WIDTH, F>,
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
     ) -> Self {
         let air = Poseidon2VmAir::<F>::from_poseidon2_config(
             p2_config,
             execution_bus,
+            program_bus,
             memory_chip.borrow().memory_bridge(),
         );
         Self {

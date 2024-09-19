@@ -95,6 +95,7 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
         range_tuple_chip.clone(),
     );
@@ -150,6 +151,7 @@ fn uint_multiplication_rand_air_test() {
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
         range_tuple_chip.clone(),
     );

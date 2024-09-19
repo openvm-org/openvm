@@ -8,7 +8,7 @@ use crate::{
         instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
     },
     field_arithmetic::columns::Operand,
-    program::{ExecutionError, Instruction},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 #[cfg(test)]
@@ -42,11 +42,16 @@ pub struct FieldArithmeticChip<F: PrimeField32> {
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     #[allow(clippy::new_without_default)]
-    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<F>) -> Self {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory_chip: MemoryChipRef<F>,
+    ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: FieldArithmeticAir {
                 execution_bus,
+                program_bus,
                 memory_bridge,
             },
             records: vec![],
