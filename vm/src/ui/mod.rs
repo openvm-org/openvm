@@ -22,6 +22,7 @@ mod trace;
 
 #[cfg(test)]
 mod tests;
+
 pub use air::*;
 pub use columns::*;
 
@@ -86,17 +87,13 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
             _ => unreachable!(),
         };
 
-        match opcode {
-            Opcode::LUI => {
-                self.range_checker_chip.add_count(x[0], 8);
-                self.range_checker_chip.add_count(x[1], 8);
-                self.range_checker_chip.add_count(x[2] >> 4, 4);
-            }
-            Opcode::AUIPC => {
-                unimplemented!()
-            }
-            _ => unreachable!(),
-        };
+        if (opcode == Opcode::LUI) {
+            self.range_checker_chip.add_count(x[0], 8);
+            self.range_checker_chip.add_count(x[1], 8);
+            self.range_checker_chip.add_count(x[2] >> 4, 4);
+        } else if (opcode == Opcode::AUIPC) {
+            unimplemented!();
+        }
 
         let x = x.map(T::from_canonical_u32);
         let x_write = memory_chip.write::<4>(T::one(), a, x);
@@ -120,7 +117,7 @@ impl<T: PrimeField32> UiChip<T> {
         [b >> 12, (b >> 4) % 256, (b % 16) << 4, 0]
     }
 
-    fn solve_auipc(b: u32) -> [u32; 4] {
+    fn solve_auipc(_b: u32) -> [u32; 4] {
         unimplemented!()
     }
 }
