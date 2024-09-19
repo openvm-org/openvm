@@ -165,6 +165,7 @@ fn solve_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 }
 
 fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u32]) -> (bool, usize, usize) {
+    // We assume `NUM_LIMBS < 2^(2*LIMB_BITS)` so if there are any higher limbs, the shifted value is zero.
     if y[2..].iter().any(|&val| val != 0) {
         return (true, 0, 0);
     }
