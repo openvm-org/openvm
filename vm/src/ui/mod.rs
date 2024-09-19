@@ -23,7 +23,6 @@ mod trace;
 #[cfg(test)]
 mod tests;
 
-pub use air::*;
 pub use columns::*;
 
 #[derive(Debug)]
