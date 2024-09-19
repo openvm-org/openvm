@@ -37,6 +37,12 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for UiAir {
             local_cols.io.x[2],
             local_cols.aux.imm_lo_hex * AB::Expr::from_canonical_u32(16),
         );
+        builder.assert_eq(
+            local_cols.io.op_b,
+            local_cols.io.x[0] * AB::Expr::from_canonical_u32(1 << 12)
+                + local_cols.io.x[1] * AB::Expr::from_canonical_u32(1 << 4)
+                + local_cols.aux.imm_lo_hex,
+        );
         builder.assert_zero(local_cols.io.x[3]);
 
         let expected_opcode = AB::Expr::from_canonical_u32(Opcode::LUI as u32);
