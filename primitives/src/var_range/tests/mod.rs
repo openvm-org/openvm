@@ -79,7 +79,7 @@ fn test_variable_range_checker_chip_send() {
         .chain(iter::once(var_range_checker_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -128,8 +128,7 @@ fn negative_test_variable_range_checker_chip_send() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(&all_chips, all_traces)
-            .err(),
+        BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces).err(),
         Some(VerificationError::NonZeroCumulativeSum),
         "Expected constraint to fail"
     );
@@ -193,7 +192,7 @@ fn test_variable_range_checker_chip_range_check() {
         .chain(iter::once(var_range_checker_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -240,8 +239,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(&all_chips, all_traces)
-            .err(),
+        BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces).err(),
         Some(VerificationError::NonZeroCumulativeSum),
         "Expected constraint to fail"
     );

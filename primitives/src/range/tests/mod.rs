@@ -65,6 +65,6 @@ fn test_list_range_checker() {
         .chain(iter::once(range_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
         .expect("Verification failed");
 }

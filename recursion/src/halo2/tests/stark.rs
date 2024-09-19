@@ -40,12 +40,8 @@ fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig
     } = stark_for_test;
     let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
 
-    let vparams = BabyBearPoseidon2OuterEngine::run_simple_test_with_default_engine(
-        &any_raps,
-        traces.clone(),
-        pvs,
-    )
-    .unwrap();
+    let vparams =
+        BabyBearPoseidon2OuterEngine::run_simple_test(&any_raps, traces.clone(), pvs).unwrap();
 
     let advice = new_from_outer_multi_vk(&vparams.data.vk);
     let log_degree_per_air = vparams.data.proof.log_degrees();

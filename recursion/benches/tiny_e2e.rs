@@ -1,9 +1,4 @@
-use std::{
-    cmp::Reverse,
-    collections::{HashMap, HashSet},
-    io::Write,
-    time::Instant,
-};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use afs_compiler::{asm::AsmBuilder, ir::Felt};
 use afs_recursion::{
@@ -19,8 +14,7 @@ use ax_sdk::{
     },
     engine::StarkFriEngine,
 };
-use itertools::{izip, multiunzip, Itertools};
-use metrics::{gauge, key_var, KeyName, Label};
+use metrics::{key_var, KeyName, Label};
 use metrics_tracing_context::{MetricsLayer, TracingContextLayer};
 use metrics_util::{
     debugging::{DebugValue, DebuggingRecorder, Snapshot},
@@ -31,28 +25,11 @@ use metrics_util::{
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use p3_matrix::Matrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::{
-    program::Program,
-    vm::{config::VmConfig, segment::SegmentResult, VirtualMachine},
-};
-use tracing::{info_span, Level};
+use stark_vm::{program::Program, vm::config::VmConfig};
+use tracing::{info, info_span, Level};
 use tracing_forest::ForestLayer;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
-
-fn calc_fibonacci(a: u32, b: u32, n: u32) -> u32 {
-    let mut prev = a;
-    let mut next = b;
-
-    for _ in 2..n {
-        let tmp = next;
-        next += prev;
-        prev = tmp;
-    }
-
-    next
-}
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
@@ -63,17 +40,12 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     let prev: Felt<_> = builder.constant(F::from_canonical_u32(a));
     let next: Felt<_> = builder.constant(F::from_canonical_u32(b));
 
-    builder.commit_public_value(prev);
-    builder.commit_public_value(next);
-
     for _ in 2..n {
         let tmp: Felt<_> = builder.uninit();
         builder.assign(&tmp, next);
         builder.assign(&next, prev + next);
         builder.assign(&prev, tmp);
     }
-
-    builder.commit_public_value(next);
 
     builder.halt();
 
@@ -90,39 +62,12 @@ where
 {
     let fib_program = fibonacci_program(a, b, n);
 
-    let start = Instant::now();
     let mut vm_config = VmConfig::core();
     vm_config.field_arithmetic_enabled = true;
-    vm_config.num_public_values = 3;
-
-    let vm = VirtualMachine::new(vm_config, fib_program, vec![]);
-    vm.segments[0].cpu_chip.borrow_mut().public_values = vec![
-        Some(BabyBear::zero()),
-        Some(BabyBear::one()),
-        Some(BabyBear::from_canonical_u32(calc_fibonacci(a, b, n))),
-    ];
-
-    let result = vm.execute_and_generate().unwrap();
-    assert_eq!(result.segment_results.len(), 1, "unexpected continuation");
-    let SegmentResult {
-        airs,
-        traces,
-        public_values,
-        ..
-    } = result.segment_results.into_iter().next().unwrap();
-    gauge!("trace_gen_time_ms", "stark" => "vm").set(start.elapsed().as_millis() as f64);
-
-    let mut groups = izip!(airs, traces, public_values).collect_vec();
-    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
-    let (airs, traces, pvs): (Vec<_>, _, _) = multiunzip(groups);
-    let airs = airs.into_iter().map(|x| x.into()).collect_vec();
-    StarkForTest {
-        any_raps: airs,
-        traces,
-        pvs,
-    }
+    gen_vm_program_stark_for_test(fib_program, vec![], vm_config)
 }
 
+#[derive(Debug)]
 struct MetricDb {
     #[allow(clippy::type_complexity)]
     metrics: HashMap<MetricKind, HashMap<KeyName, Vec<(Vec<Label>, DebugValue)>>>,
@@ -179,26 +124,9 @@ macro_rules! gauge_composite_key {
     };
 }
 
-fn generate_markdown_table(map: &[(&str, f64)]) -> String {
-    // Create a String to store the table
-    let mut table = String::new();
-
-    // Append table headers
-    table.push_str("| Key   | Value |\n");
-    table.push_str("|-------|-------|\n");
-
-    // Append each key-value pair
-    for (key, value) in map {
-        table.push_str(&format!("| {} | {:.2} |\n", key, value));
-    }
-
-    // Return the resulting markdown table as a string
-    table
-}
-
 fn main() {
     let path = std::env::var("OUTPUT_PATH").unwrap();
-    let mut file = std::fs::File::create(path).unwrap();
+    let file = std::fs::File::create(path).unwrap();
 
     // Set up tracing:
     let env_filter = EnvFilter::builder()
@@ -226,9 +154,7 @@ fn main() {
         pvs,
     } = fib_program_stark;
     let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-    let vdata =
-        BabyBearPoseidon2Engine::run_simple_test_with_default_engine(&any_raps, traces, &pvs)
-            .unwrap();
+    let vdata = BabyBearPoseidon2Engine::run_simple_test(&any_raps, traces, &pvs).unwrap();
     span.exit();
 
     let span = info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").entered();
@@ -248,8 +174,8 @@ fn main() {
     );
     span.exit();
 
-    let snapshot = snapshotter.snapshot();
-    let metric_db = MetricDb::from(snapshot);
+    info!("Snapshot: {:?}", snapshotter.snapshot().into_vec());
+    let metric_db = MetricDb::from(snapshotter.snapshot());
 
     let inner_trace_gen_time = metric_db
         .get_metric(gauge_composite_key!("trace_gen_time_ms", "group" => "fibonacci_program_inner"))
@@ -265,9 +191,7 @@ fn main() {
         .unwrap();
 
     let outer_trace_gen_time_ms = metric_db
-        .get_metric(
-            gauge_composite_key!("trace_gen_time_ms", "group" => "recursive_verify_e2e", "step"=> "outer_stark_prove")
-        )
+        .get_metric(gauge_composite_key!("trace_gen_time_ms", "group" => "recursive_verify_e2e"))
         .unwrap();
     let outer_proof_time_ms = metric_db
         .get_metric(
@@ -276,7 +200,7 @@ fn main() {
         .unwrap();
     let outer_total_proof_time_ms = outer_trace_gen_time_ms + outer_proof_time_ms;
     let outer_vm_total_cell = metric_db
-        .get_metric(gauge_composite_key!("vm_total_cells", "group" => "recursive_verify_e2e", "step"=> "outer_stark_prove"))
+        .get_metric(gauge_composite_key!("vm_total_cells", "group" => "recursive_verify_e2e"))
         .unwrap();
 
     let static_proof_time_ms = metric_db
@@ -292,7 +216,7 @@ fn main() {
 
     let static_wrapper_proof_time_ms = metric_db
         .get_metric(
-            gauge_composite_key!("halo2_proof_time_ms", "group" => "recursive_verify_e2e", "step"=> "static_verifier_wrapper_prove")
+            gauge_composite_key!("evm_proof_time_ms", "group" => "recursive_verify_e2e", "step"=> "static_verifier_wrapper_prove")
         )
         .unwrap();
     let static_wrapper_halo2_total_cell = metric_db
@@ -301,7 +225,7 @@ fn main() {
         )
         .unwrap();
 
-    let result = generate_markdown_table(&[
+    let result = BTreeMap::from([
         ("inner_proof_time_ms", inner_total_proof_time_ms),
         ("inner_total_cell", inner_vm_total_cell),
         ("outer_proof_time_ms", outer_total_proof_time_ms),
@@ -311,5 +235,5 @@ fn main() {
         ("wrapper_proof_time_ms", static_wrapper_proof_time_ms),
         ("wrapper_total_cell", static_wrapper_halo2_total_cell),
     ]);
-    file.write_all(result.as_bytes()).unwrap();
+    serde_json::to_writer_pretty(&file, &result).unwrap();
 }

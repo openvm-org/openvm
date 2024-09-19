@@ -56,7 +56,7 @@ fn test_assert_sorted_chip_small_positive() {
         assert_sorted_chip.generate_trace(requests.clone());
     let range_checker_trace = assert_sorted_chip.range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
         &any_rap_vec![&assert_sorted_chip.air, &range_checker_chip.air],
         vec![assert_sorted_chip_trace, range_checker_trace],
     )
@@ -83,7 +83,7 @@ fn test_assert_sorted_chip_large_positive() {
         assert_sorted_chip.generate_trace(requests.clone());
     let range_checker_trace = assert_sorted_chip.range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
         &any_rap_vec![&assert_sorted_chip.air, &range_checker_chip.air],
         vec![assert_sorted_chip_trace, range_checker_trace],
     )
@@ -114,7 +114,7 @@ fn test_assert_sorted_chip_unsorted_negative() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
             &any_rap_vec![&assert_sorted_chip.air, &range_checker_chip.air],
             vec![assert_sorted_chip_trace, range_checker_trace],
         )

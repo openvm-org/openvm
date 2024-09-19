@@ -44,7 +44,7 @@ where
 {
     fn new(fri_parameters: FriParameters) -> Self;
     fn fri_params(&self) -> FriParameters;
-    fn run_simple_test(
+    fn run_simple_test_impl(
         &self,
         chips: &[&dyn AnyRap<SC>],
         traces: Vec<DenseMatrix<Val<SC>>>,
@@ -56,22 +56,18 @@ where
             fri_params: self.fri_params(),
         })
     }
-    fn run_simple_test_with_default_engine(
+    fn run_simple_test(
         chips: &[&dyn AnyRap<SC>],
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: &[Vec<Val<SC>>],
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         let engine = Self::new(default_fri_params());
-        StarkFriEngine::<_>::run_simple_test(&engine, chips, traces, public_values)
+        StarkFriEngine::<_>::run_simple_test_impl(&engine, chips, traces, public_values)
     }
-    fn run_simple_test_no_pis_with_default_engine(
+    fn run_simple_test_no_pis(
         chips: &[&dyn AnyRap<SC>],
         traces: Vec<DenseMatrix<Val<SC>>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        <Self as StarkFriEngine<SC>>::run_simple_test_with_default_engine(
-            chips,
-            traces,
-            &vec![vec![]; chips.len()],
-        )
+        <Self as StarkFriEngine<SC>>::run_simple_test(chips, traces, &vec![vec![]; chips.len()])
     }
 }

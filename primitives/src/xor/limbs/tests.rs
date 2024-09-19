@@ -82,7 +82,7 @@ fn test_xor_limbs_chip() {
         .chain(iter::once(xor_lookup_chip_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -140,7 +140,7 @@ fn negative_test_xor_limbs_chip() {
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
-    let result = BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    let result = BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&requester, &xor_chip.air, &xor_chip.xor_lookup_chip.air],
         vec![requester_trace, xor_limbs_chip_trace, xor_lookup_chip_trace],
     );

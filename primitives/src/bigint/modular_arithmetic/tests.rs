@@ -95,7 +95,7 @@ fn test_x_mul_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -117,7 +117,7 @@ fn test_x_mul_zero() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -139,7 +139,7 @@ fn test_x_mul_one() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -162,7 +162,7 @@ fn test_x_mul_y_wrong_trace() {
     trace.row_mut(0)[0] += BabyBear::one();
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -192,7 +192,7 @@ fn test_x_div_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -214,7 +214,7 @@ fn test_x_div_zero() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -235,7 +235,7 @@ fn test_x_div_one() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -257,7 +257,7 @@ fn test_x_div_y_wrong_trace() {
     trace.row_mut(0)[0] += BabyBear::one();
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -285,7 +285,7 @@ fn test_x_add_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -308,7 +308,7 @@ fn test_x_add_y_wrong_trace() {
     trace.row_mut(0)[0] += BabyBear::one();
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -340,7 +340,7 @@ fn test_x_sub_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -362,7 +362,7 @@ fn test_x_sub_bigger_y() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -385,7 +385,7 @@ fn test_x_sub_y_wrong_trace() {
     trace.row_mut(0)[0] += BabyBear::one();
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )

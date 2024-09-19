@@ -41,11 +41,8 @@ fn test_vec_is_equal_vec(x: [u32; 3], y: [u32; 3], is_equal: u32, expected_prods
         );
     }
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
-        &any_rap_vec![&chip],
-        vec![trace],
-    )
-    .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test]
@@ -80,11 +77,8 @@ fn test_all_is_equal_vec() {
             .collect(),
     );
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
-        &any_rap_vec![&chip],
-        vec![trace],
-    )
-    .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test_case([1, 2, 3], [1, 2, 3], [1, 1, 1] ; "1, 2, 3 == 1, 2, 3")]
@@ -113,7 +107,7 @@ fn test_single_is_equal_vec_fail(x: [u32; 3], y: [u32; 3], expected: [u32; 3]) {
             *debug.lock().unwrap() = false;
         });
         assert_eq!(
-            BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+            BabyBearPoseidon2Engine::run_simple_test_no_pis(
                 &any_rap_vec![&chip],
                 vec![trace.clone()]
             )
@@ -148,7 +142,7 @@ fn test_vec_is_equal_vec_fail() {
                 *debug.lock().unwrap() = false;
             });
             assert_eq!(
-                BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+                BabyBearPoseidon2Engine::run_simple_test_no_pis(
                     &any_rap_vec![&chip],
                     vec![trace.clone()]
                 )
@@ -161,7 +155,7 @@ fn test_vec_is_equal_vec_fail() {
                 *debug.lock().unwrap() = false;
             });
             assert_eq!(
-                BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+                BabyBearPoseidon2Engine::run_simple_test_no_pis(
                     &any_rap_vec![&chip],
                     vec![trace.clone()]
                 )

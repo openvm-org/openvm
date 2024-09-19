@@ -123,7 +123,7 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
         &expected_error
     );
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
             &any_rap_vec![&mult_air, &range_air],
             vec![mult_trace, range_trace],
         )

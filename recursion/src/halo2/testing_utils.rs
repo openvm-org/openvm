@@ -32,7 +32,7 @@ pub fn run_static_verifier_test(
     let info_span =
         tracing::info_span!("prove outer stark to verify", step = "outer_stark_prove").entered();
     let vparams = BabyBearPoseidon2OuterEngine::new(fri_params)
-        .run_simple_test(&any_raps, traces.clone(), &pvs)
+        .run_simple_test_impl(&any_raps, traces.clone(), &pvs)
         .unwrap();
     info_span.exit();
 

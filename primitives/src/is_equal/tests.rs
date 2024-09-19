@@ -20,11 +20,8 @@ fn test_single_is_equal(x: u32, y: u32) {
 
     let trace = chip.generate_trace(vec![x], vec![y]);
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
-        &any_rap_vec![&chip],
-        vec![trace],
-    )
-    .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test_matrix(
@@ -48,11 +45,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
-            &any_rap_vec![&chip],
-            vec![trace]
-        )
-        .err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace]).err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );

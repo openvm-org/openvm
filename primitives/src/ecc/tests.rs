@@ -68,7 +68,7 @@ fn test_ec_add(p1: (BigUint, BigUint), p2: (BigUint, BigUint), expected_p3: (Big
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -107,7 +107,7 @@ fn test_ec_add_fail() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+        BabyBearBlake3Engine::run_simple_test_no_pis(
             &any_rap_vec![&air, &range_checker.air],
             vec![trace, range_trace]
         )
@@ -135,7 +135,7 @@ fn test_ec_double() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&air));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearBlake3Engine::run_simple_test_no_pis(
         &any_rap_vec![&air, &range_checker.air],
         vec![trace, range_trace],
     )
@@ -157,7 +157,7 @@ fn test_ec_double_wrong_trace() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_with_default_engine(
+        BabyBearBlake3Engine::run_simple_test_no_pis(
             &any_rap_vec![&air, &range_checker.air],
             vec![trace, range_trace]
         )

@@ -103,7 +103,7 @@ fn audit_air_test() {
     let audit_trace = audit_chip.generate_trace(&final_memory);
     let range_checker_trace = range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
         &any_rap_vec![
             &audit_chip.air,
             &range_checker.air,

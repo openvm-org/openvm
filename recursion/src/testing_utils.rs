@@ -1,10 +1,11 @@
-use std::rc::Rc;
+use std::{cmp::Reverse, rc::Rc};
 
 use afs_compiler::util::execute_and_prove_program;
 use afs_stark_backend::{engine::VerificationData, rap::AnyRap};
+use itertools::{izip, multiunzip, Itertools};
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use stark_vm::{
     program::Program,
@@ -72,7 +73,7 @@ pub mod inner {
         let (any_raps, traces, pvs) = sort_chips(any_raps, traces, pvs);
 
         let vparams =
-            <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_simple_test_with_default_engine(
+            <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_simple_test(
                 &any_raps, traces, &pvs,
             )
             .unwrap();
@@ -118,9 +119,13 @@ where
             .set(start.elapsed().as_millis() as f64);
     }
 
+    let mut groups = izip!(result.airs, result.traces, result.public_values).collect_vec();
+    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
+    let (airs, traces, pvs): (Vec<_>, _, _) = multiunzip(groups);
+
     StarkForTest {
-        any_raps: result.airs.into_iter().map(|x| x.into()).collect(),
-        traces: result.traces,
-        pvs: result.public_values,
+        any_raps: airs.into_iter().map(|x| x.into()).collect(),
+        traces,
+        pvs,
     }
 }

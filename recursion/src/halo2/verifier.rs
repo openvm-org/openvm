@@ -118,6 +118,14 @@ pub fn gen_wrapper_circuit_evm_proof(
     let pvs = prover_circuit.instances();
     #[cfg(feature = "bench-metrics")]
     let start = std::time::Instant::now();
+    #[cfg(feature = "bench-metrics")]
+    {
+        let stats = prover_circuit.builder.statistics();
+        let total_advices: usize = stats.gate.total_advice_per_phase.into_iter().sum();
+        let total_lookups: usize = stats.total_lookup_advice_per_phase.into_iter().sum();
+        let total_cell = total_advices + total_lookups + stats.gate.total_fixed;
+        metrics::gauge!("halo2_total_cells").set(total_cell as f64);
+    }
 
     let proof = gen_evm_proof_shplonk(&params, &pinning.pk, prover_circuit, pvs.clone());
 
