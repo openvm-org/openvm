@@ -83,7 +83,8 @@ fn test_bitwise_operation_lookup() {
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
     traces.push(lookup.generate_trace());
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(&chips, traces).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(&chips, traces)
+        .expect("Verification failed");
 }
 
 fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperationLookupOpcode)) {
@@ -114,7 +115,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperationLookupOpcode)) {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(&chips, traces).err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_with_default_engine(&chips, traces).err(),
         Some(VerificationError::NonZeroCumulativeSum),
         "Expected constraint to fail"
     );

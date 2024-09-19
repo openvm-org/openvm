@@ -12,10 +12,7 @@ use snark_verifier_sdk::{
             CircuitBuilderStage,
             CircuitBuilderStage::{Keygen, Prover},
         },
-        halo2_proofs::{
-            halo2curves::bn256::Fr,
-            plonk::{keygen_pk, keygen_vk},
-        },
+        halo2_proofs::{halo2curves::bn256::Fr, plonk::keygen_pk2},
     },
     CircuitExt, Snark, SHPLONK,
 };
@@ -76,8 +73,7 @@ impl Halo2VerifierCircuit {
             "Wrapper circuit num advice: {:?}",
             config_params.num_advice_per_phase
         );
-        let vk = keygen_vk(params.as_ref(), &circuit).unwrap();
-        let pk = keygen_pk(params.as_ref(), vk, &circuit).unwrap();
+        let pk = keygen_pk2(params.as_ref(), &circuit, false).unwrap();
         let num_pvs = circuit.instances().iter().map(|x| x.len()).collect_vec();
         Halo2ProvingPinning {
             pk,

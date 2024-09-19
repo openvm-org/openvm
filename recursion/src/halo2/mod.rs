@@ -16,7 +16,6 @@ use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_field::extension::BinomialExtensionField;
 use snark_verifier_sdk::{
-    gen_pk,
     halo2::gen_snark_shplonk,
     snark_verifier::halo2_base::{
         gates::{
@@ -26,7 +25,7 @@ use snark_verifier_sdk::{
         halo2_proofs::{
             dev::MockProver,
             halo2curves::bn256::{Fr, G1Affine},
-            plonk::ProvingKey,
+            plonk::{keygen_pk2, ProvingKey},
         },
     },
     CircuitExt, Snark,
@@ -119,7 +118,7 @@ impl Halo2Prover {
         //
         //     pk
         // };
-        let pk = gen_pk(&params, &builder, None::<_>);
+        let pk = keygen_pk2(params.as_ref(), &builder, false).unwrap();
         let break_points = builder.break_points();
 
         let config_params = builder.config_params.clone();
