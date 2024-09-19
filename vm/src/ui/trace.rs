@@ -31,6 +31,9 @@ impl<F: PrimeField32> MachineChip<F> for UiChip<F> {
             };
             cols.aux = UiAuxCols {
                 is_valid: F::one(),
+                imm_lo_hex: F::from_canonical_u32(
+                    F::as_canonical_u32(&record.x_write.data[2]) >> 4,
+                ),
                 write_x_aux_cols: aux_cols_factory.make_write_aux_cols(record.x_write.clone()),
             };
         }

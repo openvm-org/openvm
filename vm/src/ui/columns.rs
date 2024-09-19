@@ -36,6 +36,7 @@ impl<T> UiIoCols<T> {
 #[derive(AlignedBorrow, Clone, Debug)]
 pub struct UiAuxCols<T> {
     pub is_valid: T,
+    pub imm_lo_hex: T, // represents the lowest hex of the immediate value
     pub write_x_aux_cols: MemoryWriteAuxCols<T, 4>,
 }
 
