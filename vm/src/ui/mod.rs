@@ -88,9 +88,9 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
 
         match opcode {
             Opcode::LUI => {
-                self.range_checker_chip.add_count(x[0], 8);
-                self.range_checker_chip.add_count(x[1], 8);
-                self.range_checker_chip.add_count(x[2] >> 4, 4);
+                self.range_checker_chip.add_count(x[1] >> 4, 4);
+                self.range_checker_chip.add_count(x[2], 8);
+                self.range_checker_chip.add_count(x[3], 8);
             }
             Opcode::AUIPC => unimplemented!(),
             _ => unimplemented!(),
@@ -115,7 +115,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
 impl<T: PrimeField32> UiChip<T> {
     // `b` is known to be 20 bits
     fn solve_lui(b: u32) -> [u32; 4] {
-        [b >> 12, (b >> 4) % 256, (b % 16) << 4, 0]
+        [0, (b % 16) << 4, (b >> 4) % 256, b >> 12]
     }
 
     fn solve_auipc(_b: u32) -> [u32; 4] {

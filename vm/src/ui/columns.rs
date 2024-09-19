@@ -23,7 +23,7 @@ pub struct UiIoCols<T> {
     pub from_state: ExecutionState<T>,
     pub op_a: T,
     pub op_b: T,
-    pub x: [T; 4],
+    pub x_cols: [T; 2],
 }
 
 impl<T> UiIoCols<T> {

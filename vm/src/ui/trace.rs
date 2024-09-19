@@ -27,12 +27,12 @@ impl<F: PrimeField32> MachineChip<F> for UiChip<F> {
                 from_state: record.from_state.map(F::from_canonical_usize),
                 op_a: record.instruction.op_a,
                 op_b: record.instruction.op_b,
-                x: record.x_write.data,
+                x_cols: [record.x_write.data[2], record.x_write.data[3]],
             };
             cols.aux = UiAuxCols {
                 is_valid: F::one(),
                 imm_lo_hex: F::from_canonical_u32(
-                    F::as_canonical_u32(&record.x_write.data[2]) >> 4,
+                    F::as_canonical_u32(&record.x_write.data[1]) >> 4,
                 ),
                 write_x_aux_cols: aux_cols_factory.make_write_aux_cols(record.x_write.clone()),
             };

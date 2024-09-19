@@ -21,7 +21,7 @@ type F = BabyBear;
 fn solve_lui_sanity_test() {
     let b = 4097;
     let x = UiChip::<BabyBear>::solve_lui(b);
-    assert_eq!(x, [1, 0, 16, 0]);
+    assert_eq!(x, [0, 16, 0, 1]);
 }
 
 fn prepare_lui_write_execute(
@@ -69,8 +69,8 @@ fn negative_lui_invalid_imm_test() {
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UiChip::<F>::new(tester.execution_bus(), tester.memory_chip());
 
-    // (1 << 21) exceeds the 20-bit bound
-    prepare_lui_write_execute(&mut tester, &mut chip, 3, 1 << 21);
+    // (1 << 20) + 1 exceeds the 20-bit bound
+    prepare_lui_write_execute(&mut tester, &mut chip, 3, 1 << 20 + 1);
 
     let tester = tester.build().load(chip).finalize();
     disable_debug_builder();

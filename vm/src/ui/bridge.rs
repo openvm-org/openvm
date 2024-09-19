@@ -25,7 +25,12 @@ impl UiAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::Expr::one(), io.op_a),
-                io.x,
+                [
+                    AB::Expr::zero(),
+                    aux.imm_lo_hex * AB::Expr::from_canonical_u32(16),
+                    io.x_cols[0].into(),
+                    io.x_cols[1].into(),
+                ],
                 timestamp_pp(),
                 &aux.write_x_aux_cols,
             )
@@ -39,8 +44,12 @@ impl UiAir {
             InstructionCols::<AB::Expr>::new(expected_opcode, [io.op_a.into(), io.op_b.into()]),
         );
 
-        self.bus.range_check(io.x[0], 8).eval(builder, aux.is_valid);
-        self.bus.range_check(io.x[1], 8).eval(builder, aux.is_valid);
+        self.bus
+            .range_check(io.x_cols[0], 8)
+            .eval(builder, aux.is_valid);
+        self.bus
+            .range_check(io.x_cols[1], 8)
+            .eval(builder, aux.is_valid);
         self.bus
             .range_check(aux.imm_lo_hex, 4)
             .eval(builder, aux.is_valid);
