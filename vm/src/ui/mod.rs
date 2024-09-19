@@ -44,10 +44,12 @@ impl<T: PrimeField32> UiChip<T> {
     pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
+        let bus = range_checker_chip.bus();
         Self {
             air: UiAir {
                 execution_bus,
                 memory_bridge,
+                bus,
             },
             data: vec![],
             memory_chip,
