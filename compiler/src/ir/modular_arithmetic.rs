@@ -2,9 +2,11 @@ use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_field::{AbstractField, PrimeField64};
 use stark_vm::modular_arithmetic::{
-    big_uint_to_num_limbs, LIMB_SIZE, NUM_LIMBS, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+    big_uint_to_num_limbs, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
 };
 
+const NUM_LIMBS: usize = 32;
+const LIMB_SIZE: usize = 8;
 use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
 
 pub type BigUintVar<C> = Array<C, Var<<C as Config>::N>>;

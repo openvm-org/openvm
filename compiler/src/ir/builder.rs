@@ -3,7 +3,7 @@ use std::{iter::Zip, vec::IntoIter};
 use backtrace::Backtrace;
 use p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
-use stark_vm::modular_arithmetic::LIMB_SIZE;
+const LIMB_SIZE: usize = 8;
 
 use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,

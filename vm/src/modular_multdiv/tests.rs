@@ -7,28 +7,30 @@ use rand::Rng;
 
 use crate::{
     arch::{
-        instructions::{Opcode::*, MODULAR_ARITHMETIC_INSTRUCTIONS},
+        instructions::{Opcode::*, MODULAR_MULTDIV_INSTRUCTIONS},
         testing::MachineChipTestBuilder,
     },
     cpu::trace::Instruction,
-    modular_arithmetic::{ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    modular_multdiv::{ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
 };
 const NUM_LIMBS: usize = 32;
 const LIMB_SIZE: usize = 8;
+const CARRY_LIMBS: usize = 2 * NUM_LIMBS - 1;
 type F = BabyBear;
 
 #[test]
-fn test_modular_arithmetic() {
+fn test_modular_multdiv() {
     setup_tracing();
 
     let mut tester: MachineChipTestBuilder<F> = MachineChipTestBuilder::default();
-    let mut coord_chip: ModularArithmeticChip<F, NUM_LIMBS, LIMB_SIZE> = ModularArithmeticChip::new(
-        tester.execution_bus(),
-        tester.memory_chip(),
-        secp256k1_coord_prime(),
-    );
-    let mut scalar_chip: ModularArithmeticChip<F, NUM_LIMBS, LIMB_SIZE> =
-        ModularArithmeticChip::new(
+    let mut coord_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
+        ModularMultDivChip::new(
+            tester.execution_bus(),
+            tester.memory_chip(),
+            secp256k1_coord_prime(),
+        );
+    let mut scalar_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
+        ModularMultDivChip::new(
             tester.execution_bus(),
             tester.memory_chip(),
             secp256k1_scalar_prime(),
@@ -46,11 +48,11 @@ fn test_modular_arithmetic() {
             .collect();
         let mut b = BigUint::new(b_digits);
 
-        let opcode = MODULAR_ARITHMETIC_INSTRUCTIONS[rng.gen_range(0..4)];
+        let opcode = MODULAR_MULTDIV_INSTRUCTIONS[rng.gen_range(0..4)];
 
         let (is_scalar, modulus) = match opcode {
-            SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB => (true, SECP256K1_SCALAR_PRIME.clone()),
-            SECP256K1_COORD_ADD | SECP256K1_COORD_SUB => (false, SECP256K1_COORD_PRIME.clone()),
+            SECP256K1_SCALAR_MUL | SECP256K1_SCALAR_DIV => (true, SECP256K1_SCALAR_PRIME.clone()),
+            SECP256K1_COORD_MUL | SECP256K1_COORD_DIV => (false, SECP256K1_COORD_PRIME.clone()),
             _ => unreachable!(),
         };
 
@@ -59,9 +61,14 @@ fn test_modular_arithmetic() {
         assert!(a < modulus);
         assert!(b < modulus);
 
-        let r =
-            ModularArithmeticChip::<F, NUM_LIMBS, LIMB_SIZE>::solve(opcode, a.clone(), b.clone());
-
+        let r = ModularMultDivChip::<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>::solve(
+            opcode,
+            a.clone(),
+            b.clone(),
+        );
+        println!("a: {:?}", a);
+        println!("b: {:?}", b);
+        println!("r: {:?}", r);
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:
         // 1. address_ptr which stores the actual address
@@ -74,19 +81,19 @@ fn test_modular_arithmetic() {
 
         let data_as = 2;
         let address1 = 0;
-        let address2 = 100;
-        let address3 = 200;
+        let address2 = 1000;
+        let address3 = 2000;
 
         tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
         tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
         tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
 
         let a_limbs: [BabyBear; NUM_LIMBS] =
-            ModularArithmeticChip::<F, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(a.clone())
+            ModularMultDivChip::<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(a.clone())
                 .map(BabyBear::from_canonical_u32);
         tester.write(data_as, address1, a_limbs);
         let b_limbs: [BabyBear; NUM_LIMBS] =
-            ModularArithmeticChip::<F, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(b.clone())
+            ModularMultDivChip::<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(b.clone())
                 .map(BabyBear::from_canonical_u32);
         tester.write(data_as, address2, b_limbs);
 
@@ -105,7 +112,8 @@ fn test_modular_arithmetic() {
             &mut coord_chip
         };
         tester.execute(chip, instruction);
-        let r_limbs = ModularArithmeticChip::<F, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(r.clone());
+        let r_limbs =
+            ModularMultDivChip::<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(r.clone());
 
         for (i, &elem) in r_limbs.iter().enumerate() {
             let address = address3 + i;

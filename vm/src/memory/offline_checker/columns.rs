@@ -161,6 +161,7 @@ impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<F, N> {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryHeapReadAuxCols<T, const N: usize> {
     pub address: MemoryReadAuxCols<T, 1>,
@@ -197,6 +198,7 @@ impl<const N: usize, F: AbstractField + Copy> MemoryHeapReadAuxCols<F, N> {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug)]
 pub struct MemoryHeapWriteAuxCols<T, const N: usize> {
     pub address: MemoryReadAuxCols<T, 1>,

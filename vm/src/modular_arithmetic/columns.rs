@@ -1,6 +1,8 @@
-use std::iter;
+use std::mem::size_of;
 
-use super::{ModularArithmeticAirVariant, ModularArithmeticVmAir, NUM_LIMBS};
+use afs_derive::AlignedBorrow;
+use derive_new::new;
+
 use crate::{
     arch::columns::ExecutionState,
     memory::{
@@ -9,125 +11,54 @@ use crate::{
     },
 };
 
-pub struct ModularArithmeticCols<T: Clone> {
-    pub io: ModularArithmeticIoCols<T>,
-    pub aux: ModularArithmeticAuxCols<T>,
+// Note: repr(C) is needed as we assume the memory layout when using aligned_borrow.
+#[repr(C)]
+#[derive(Clone, Debug, AlignedBorrow)]
+pub struct ModularArithmeticCols<T: Clone, const NUM_LIMBS: usize> {
+    pub io: ModularArithmeticIoCols<T, NUM_LIMBS>,
+    pub aux: ModularArithmeticAuxCols<T, NUM_LIMBS>,
 }
 
-impl<T: Clone> ModularArithmeticCols<T> {
-    pub fn width(air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>) -> usize {
-        ModularArithmeticIoCols::<T>::width() + ModularArithmeticAuxCols::<T>::width(air)
-    }
-
-    pub fn from_iterator(
-        mut iter: impl Iterator<Item = T>,
-        air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>,
-    ) -> Self {
-        Self {
-            io: ModularArithmeticIoCols::from_iterator(iter.by_ref()),
-            aux: ModularArithmeticAuxCols::from_iterator(iter.by_ref(), air),
-        }
-    }
-
-    pub fn flatten(&self) -> Vec<T> {
-        [self.io.flatten(), self.aux.flatten()].concat()
+impl<T: Clone, const NUM_LIMBS: usize> ModularArithmeticCols<T, NUM_LIMBS> {
+    pub const fn width() -> usize {
+        ModularArithmeticIoCols::<T, NUM_LIMBS>::width()
+            + ModularArithmeticAuxCols::<T, NUM_LIMBS>::width()
     }
 }
 
-pub struct ModularArithmeticIoCols<T: Clone> {
+#[repr(C)]
+#[derive(AlignedBorrow, Clone, Debug)]
+pub struct ModularArithmeticIoCols<T: Clone, const NUM_LIMBS: usize> {
     pub from_state: ExecutionState<T>,
     pub x: MemoryHeapDataIoCols<T, NUM_LIMBS>,
     pub y: MemoryHeapDataIoCols<T, NUM_LIMBS>,
     pub z: MemoryHeapDataIoCols<T, NUM_LIMBS>,
 }
 
-impl<T: Clone> ModularArithmeticIoCols<T> {
-    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
-        Self {
-            from_state: ExecutionState::from_iter(iter.by_ref()),
-            x: MemoryHeapDataIoCols::from_iterator(iter.by_ref()),
-            y: MemoryHeapDataIoCols::from_iterator(iter.by_ref()),
-            z: MemoryHeapDataIoCols::from_iterator(iter.by_ref()),
-        }
-    }
-
-    pub fn flatten(&self) -> Vec<T> {
-        iter::once(&self.from_state.pc)
-            .chain(iter::once(&self.from_state.timestamp))
-            .chain(self.x.flatten())
-            .chain(self.y.flatten())
-            .chain(self.z.flatten())
-            .cloned()
-            .collect()
-    }
-
-    pub fn width() -> usize {
-        // from_state = 2, memory_data = 2 + len,
-        // 2 + 3 * (len + 2) + 3 * 3
-        NUM_LIMBS * 3 + 17
+impl<T: Clone, const NUM_LIMBS: usize> ModularArithmeticIoCols<T, NUM_LIMBS> {
+    pub const fn width() -> usize {
+        size_of::<ModularArithmeticIoCols<u8, NUM_LIMBS>>()
     }
 }
 
-pub struct ModularArithmeticAuxCols<T: Clone> {
+// Note: to save a column we assume that is_sub is represented as is_valid - is_add
+//       it is checked in the air
+#[repr(C)]
+#[derive(AlignedBorrow, Clone, Debug, new)]
+pub struct ModularArithmeticAuxCols<T: Clone, const NUM_LIMBS: usize> {
     // 0 for padding rows.
     pub is_valid: T,
     pub read_x_aux_cols: MemoryHeapReadAuxCols<T, NUM_LIMBS>,
     pub read_y_aux_cols: MemoryHeapReadAuxCols<T, NUM_LIMBS>,
     pub write_z_aux_cols: MemoryHeapWriteAuxCols<T, NUM_LIMBS>,
 
-    pub carries: Vec<T>,
-    pub q: Vec<T>,
-    pub opcode: T,
+    pub carries: [T; NUM_LIMBS],
+    pub q: T,
+    pub is_add: T,
 }
 
-impl<T: Clone> ModularArithmeticAuxCols<T> {
-    pub fn width(air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>) -> usize {
-        MemoryHeapReadAuxCols::<T, NUM_LIMBS>::width() * 2
-            + MemoryHeapWriteAuxCols::<T, NUM_LIMBS>::width()
-            + air.carry_limbs
-            + air.q_limbs
-            + 2
-    }
-
-    pub fn from_iterator(
-        mut iter: impl Iterator<Item = T>,
-        air: &ModularArithmeticVmAir<ModularArithmeticAirVariant>,
-    ) -> Self {
-        let is_valid = iter.next().unwrap();
-        let read_x_aux_cols = MemoryHeapReadAuxCols::<T, NUM_LIMBS>::from_iterator(&mut iter);
-        let read_y_aux_cols = MemoryHeapReadAuxCols::<T, NUM_LIMBS>::from_iterator(&mut iter);
-        let write_z_aux_cols = MemoryHeapWriteAuxCols::<T, NUM_LIMBS>::from_iterator(&mut iter);
-
-        let carries = iter.by_ref().take(air.carry_limbs).collect::<Vec<_>>();
-        let q = iter.by_ref().take(air.q_limbs).collect::<Vec<_>>();
-        let opcode = iter.next().unwrap();
-        Self {
-            is_valid,
-            read_x_aux_cols,
-            read_y_aux_cols,
-            write_z_aux_cols,
-            carries,
-            q,
-            opcode,
-        }
-    }
-
-    pub fn flatten(&self) -> Vec<T> {
-        let valid = iter::once(&self.is_valid).cloned().collect::<Vec<_>>();
-        let mem = [
-            self.read_x_aux_cols.clone().flatten(),
-            self.read_y_aux_cols.clone().flatten(),
-            self.write_z_aux_cols.clone().flatten(),
-        ]
-        .concat();
-
-        [
-            valid,
-            mem,
-            self.carries.clone(),
-            self.q.clone(),
-            vec![self.opcode.clone()],
-        ]
-        .concat()
+impl<T: Clone, const NUM_LIMBS: usize> ModularArithmeticAuxCols<T, NUM_LIMBS> {
+    pub const fn width() -> usize {
+        size_of::<ModularArithmeticAuxCols<u8, NUM_LIMBS>>()
     }
 }

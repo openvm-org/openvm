@@ -18,10 +18,7 @@ use crate::{
     },
     cpu::trace::Instruction,
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
-    modular_arithmetic::{
-        biguint_to_limbs, limbs_to_biguint, FIELD_ELEMENT_BITS, LIMB_SIZE, NUM_LIMBS,
-        SECP256K1_COORD_PRIME, TWO_NUM_LIMBS,
-    },
+    modular_arithmetic::{ModularArithmeticChip, FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
 };
 
 mod air;
@@ -35,6 +32,10 @@ pub use columns::*;
 #[cfg(test)]
 mod test;
 
+const NUM_LIMBS: usize = 32;
+const LIMB_SIZE: usize = 8;
+const TWO_NUM_LIMBS: usize = NUM_LIMBS * 2;
+
 fn read_ec_points<T: PrimeField32>(
     memory_chip: MemoryChipRef<T>,
     ptr_as: T,
@@ -44,8 +45,10 @@ fn read_ec_points<T: PrimeField32>(
     let mut memory_chip = memory_chip.borrow_mut();
     let array_read = memory_chip.read_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer);
     let u32_array = array_read.data_read.data.map(|x| x.as_canonical_u32());
-    let x = limbs_to_biguint(&u32_array[..NUM_LIMBS]);
-    let y = limbs_to_biguint(&u32_array[NUM_LIMBS..]);
+    let x =
+        ModularArithmeticChip::<T, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&u32_array[..NUM_LIMBS]);
+    let y =
+        ModularArithmeticChip::<T, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&u32_array[NUM_LIMBS..]);
     (x, y, array_read)
 }
 
@@ -58,8 +61,8 @@ fn write_ec_points<T: PrimeField32>(
     ptr_pointer: T,
 ) -> MemoryHeapWriteRecord<T, TWO_NUM_LIMBS> {
     let mut memory_chip = memory_chip.borrow_mut();
-    let x_limbs = biguint_to_limbs(x);
-    let y_limbs = biguint_to_limbs(y);
+    let x_limbs = ModularArithmeticChip::<T, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(x);
+    let y_limbs = ModularArithmeticChip::<T, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(y);
     let mut array = [0; 64];
     array[..NUM_LIMBS].copy_from_slice(&x_limbs);
     array[NUM_LIMBS..].copy_from_slice(&y_limbs);

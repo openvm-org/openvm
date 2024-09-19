@@ -105,6 +105,7 @@ impl<T: Copy> MemoryWriteRecord<T, 1> {
 }
 
 /// Holds the data and the information about its address.
+#[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryDataIoCols<T, const N: usize> {
     pub data: [T; N],
@@ -130,6 +131,7 @@ impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
 }
 
 /// Holds the heap data and the information about its address.
+#[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryHeapDataIoCols<T: Clone, const N: usize> {
     pub address: MemoryDataIoCols<T, 1>,

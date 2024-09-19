@@ -44,7 +44,8 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            modular_multiplication_enabled: true,
+            modular_arithmetic_enabled: true,
+            modular_multdiv_enabled: true,
             bigint_limb_size: 8,
             ..Default::default()
         },

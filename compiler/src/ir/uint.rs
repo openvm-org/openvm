@@ -1,5 +1,5 @@
 use p3_field::PrimeField64;
-use stark_vm::modular_arithmetic::NUM_LIMBS;
+const NUM_LIMBS: usize = 32;
 
 use super::{modular_arithmetic::BigUintVar, Var};
 use crate::ir::{Builder, Config, DslIr};
