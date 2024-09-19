@@ -27,11 +27,11 @@ impl<AB: InteractionBuilder + PairBuilder> Air<AB> for VmConnectorAir {
         let preprocessed = builder.preprocessed();
         let prep_local = preprocessed.row_slice(0);
         let (begin, end) = (main.row_slice(0), main.row_slice(1));
-        self.execution_bus.initial_final(
+        self.execution_bus.execute(
             builder,
             AB::Expr::one() - prep_local[0], // 1 only if these are [0th, 1st] and not [1st, 0th]
-            ExecutionState::new(begin[0], begin[1]),
             ExecutionState::new(end[0], end[1]),
+            ExecutionState::new(begin[0], begin[1]),
         );
     }
 }

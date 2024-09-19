@@ -52,8 +52,6 @@ impl FieldExtensionArithmeticAir {
                 op_c.into(),
                 d.into(),
                 e.into(),
-                AB::Expr::zero(),
-                AB::Expr::zero(),
             ]
             .into_iter(),
             is_valid,

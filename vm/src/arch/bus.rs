@@ -39,13 +39,4 @@ impl ExecutionBus {
             multiplicity,
         );
     }
-    pub fn initial_final<AB: InteractionBuilder>(
-        &self,
-        builder: &mut AB,
-        multiplicity: impl Into<AB::Expr>,
-        prev_state: ExecutionState<AB::Expr>,
-        next_state: ExecutionState<AB::Expr>,
-    ) {
-        self.execute(builder, multiplicity, next_state, prev_state);
-    }
 }
