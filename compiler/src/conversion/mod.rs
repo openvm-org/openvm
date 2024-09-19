@@ -864,7 +864,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::Secp256k1Double(dst_ptr_ptr, p_ptr_ptr) => vec![inst(
-            SECP256K1_EC_ADD_NE,
+            SECP256K1_EC_DOUBLE,
             i32_f(dst_ptr_ptr),
             i32_f(p_ptr_ptr),
             F::zero(),
