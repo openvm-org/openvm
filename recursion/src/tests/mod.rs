@@ -7,6 +7,7 @@ use afs_primitives::{
 use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing},
+    engine::StarkForTest,
     interaction::dummy_interaction_air::DummyInteractionAir,
     utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
 };
@@ -14,7 +15,7 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::testing_utils::{inner::run_recursive_test, StarkForTest};
+use crate::testing_utils::inner::run_recursive_test;
 
 pub fn fibonacci_stark_for_test<SC: StarkGenericConfig>(n: usize) -> StarkForTest<SC>
 where

@@ -1,11 +1,8 @@
-use std::{cmp::Reverse, rc::Rc};
-
 use afs_compiler::util::execute_and_prove_program;
-use afs_stark_backend::{engine::VerificationData, rap::AnyRap};
-use itertools::{izip, multiunzip, Itertools};
+use afs_stark_backend::engine::VerificationData;
+use ax_sdk::engine::StarkForTest;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use stark_vm::{
     program::Program,
@@ -17,13 +14,6 @@ use crate::{
     stark::{sort_chips, VerifierProgram},
     types::{new_from_inner_multi_vk, VerifierInput},
 };
-
-/// A struct that contains all the necessary data to build a verifier for a Stark.
-pub struct StarkForTest<SC: StarkGenericConfig> {
-    pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
-    pub traces: Vec<RowMajorMatrix<Val<SC>>>,
-    pub pvs: Vec<Vec<Val<SC>>>,
-}
 
 pub mod inner {
     use ax_sdk::{
@@ -124,13 +114,10 @@ where
             .set(start.elapsed().as_millis() as f64);
     }
 
-    let mut groups = izip!(result.airs, result.traces, result.public_values).collect_vec();
-    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
-    let (airs, traces, pvs): (Vec<_>, _, _) = multiunzip(groups);
-
     StarkForTest {
-        any_raps: airs.into_iter().map(|x| x.into()).collect(),
-        traces,
-        pvs,
+        any_raps: result.airs.into_iter().map(|x| x.into()).collect(),
+        traces: result.traces,
+        pvs: result.public_values,
     }
+    .sort_by_height_desc()
 }

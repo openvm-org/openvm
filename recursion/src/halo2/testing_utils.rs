@@ -4,7 +4,7 @@ use ax_sdk::{
         fri_params::default_fri_params,
         FriParameters,
     },
-    engine::StarkFriEngine,
+    engine::{StarkForTest, StarkFriEngine},
 };
 use snark_verifier_sdk::Snark;
 
@@ -14,7 +14,6 @@ use crate::{
         gen_wrapper_circuit_evm_proof, generate_halo2_verifier_circuit, Halo2VerifierCircuit,
     },
     stark::sort_chips,
-    testing_utils::StarkForTest,
     types::VerifierInput,
 };
 

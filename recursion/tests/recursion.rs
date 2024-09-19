@@ -1,8 +1,8 @@
 use std::cmp::Reverse;
 
 use afs_compiler::{asm::AsmBuilder, ir::Felt};
-use afs_recursion::testing_utils::{inner::run_recursive_test, StarkForTest};
-use ax_sdk::config::setup_tracing;
+use afs_recursion::testing_utils::inner::run_recursive_test;
+use ax_sdk::{config::setup_tracing, engine::StarkForTest};
 use itertools::{izip, multiunzip, Itertools};
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
