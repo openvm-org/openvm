@@ -98,8 +98,13 @@ pub fn gen_vm_program_stark_for_test<SC: StarkGenericConfig>(
 where
     Val<SC>: PrimeField32,
 {
-    #[cfg(feature = "bench-metrics")]
-    let start = std::time::Instant::now();
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "bench-metrics")] {
+            let start = std::time::Instant::now();
+            let mut config= config;
+            config.collect_metrics = true;
+        }
+    }
 
     let vm = VirtualMachine::new(config, program, input_stream);
 

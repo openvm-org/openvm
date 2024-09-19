@@ -40,6 +40,7 @@ lazy_static.workspace = true
 once_cell = { workspace = true, optional = true }
 num-bigint-dig = { workspace = true }
 metrics = { workspace = true, optional = true }
+cfg-if = { workspace = true }
 
 [dev-dependencies]
 afs-primitives = { path = "../primitives" }

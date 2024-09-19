@@ -203,6 +203,7 @@ dependencies = [
  "afs-stark-backend",
  "ax-ecc-lib",
  "ax-sdk",
+ "cfg-if",
  "ff 0.13.0",
  "itertools 0.13.0",
  "lazy_static",
