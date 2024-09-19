@@ -29,7 +29,7 @@ pub use columns::*;
 pub struct UiRecord<T> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
-    pub x_write: MemoryWriteRecord<T, 1>,
+    pub x_write: MemoryWriteRecord<T, 4>,
 }
 
 #[derive(Debug)]
@@ -85,7 +85,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
             _ => unreachable!(),
         };
         let x = x.map(T::from_canonical_u32);
-        let x_write = memory_chip.write::<1>(T::one(), a, x);
+        let x_write = memory_chip.write::<4>(T::one(), a, x);
 
         self.data.push(UiRecord {
             from_state,
@@ -101,11 +101,12 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
 }
 
 impl<T: PrimeField32> UiChip<T> {
-    fn solve_lui(b: u32) -> [u32; 1] {
-        [b << 12]
+    // `b` is known to be 20 bits
+    fn solve_lui(b: u32) -> [u32; 4] {
+        [b >> 12, (b >> 4) % 256, (b % 16) << 4, 0]
     }
 
-    fn solve_auipc(b: u32) -> [u32; 1] {
+    fn solve_auipc(b: u32) -> [u32; 4] {
         unimplemented!()
     }
 }
