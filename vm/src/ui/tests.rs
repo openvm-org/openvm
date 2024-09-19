@@ -19,9 +19,9 @@ type F = BabyBear;
 
 #[test]
 fn solve_lui_sanity_test() {
-    let b = 10;
+    let b = 4097;
     let x = UiChip::<BabyBear>::solve_lui(b);
-    assert_eq!(x, [0, 0, 160, 0]);
+    assert_eq!(x, [1, 0, 16, 0]);
 }
 
 fn prepare_lui_write_execute(
@@ -32,7 +32,7 @@ fn prepare_lui_write_execute(
     let address_range = || 0usize..1 << 29;
 
     let address_a = rng.gen_range(address_range()); // op_a
-    let imm = rng.gen_range(address_range()); // op_b
+    let imm = rng.gen_range(0usize..1 << 20); // op_b
 
     let x = UiChip::<F>::solve_lui(imm as u32);
 

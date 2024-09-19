@@ -87,13 +87,15 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
             _ => unreachable!(),
         };
 
-        if (opcode == Opcode::LUI) {
-            self.range_checker_chip.add_count(x[0], 8);
-            self.range_checker_chip.add_count(x[1], 8);
-            self.range_checker_chip.add_count(x[2] >> 4, 4);
-        } else if (opcode == Opcode::AUIPC) {
-            unimplemented!();
-        }
+        match opcode {
+            Opcode::LUI => {
+                self.range_checker_chip.add_count(x[0], 8);
+                self.range_checker_chip.add_count(x[1], 8);
+                self.range_checker_chip.add_count(x[2] >> 4, 4);
+            }
+            Opcode::AUIPC => unimplemented!(),
+            _ => unimplemented!(),
+        };
 
         let x = x.map(T::from_canonical_u32);
         let x_write = memory_chip.write::<4>(T::one(), a, x);
