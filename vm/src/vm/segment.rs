@@ -32,6 +32,7 @@ use crate::{
     cpu::{
         trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
     },
+    ecc::{EcAddUnequalChip, EcDoubleChip},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -285,6 +286,22 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             )));
             assign!([Opcode::CASTF], castf_chip);
             chips.push(MachineChipVariant::CastF(castf_chip));
+        }
+        if config.secp256k1_enabled {
+            let secp256k1_add_unequal_chip = Rc::new(RefCell::new(EcAddUnequalChip::new(
+                execution_bus,
+                memory_chip.clone(),
+            )));
+            let secp256k1_double_chip = Rc::new(RefCell::new(EcDoubleChip::new(
+                execution_bus,
+                memory_chip.clone(),
+            )));
+            assign!([Opcode::SECP256K1_EC_ADD_NE], secp256k1_add_unequal_chip);
+            assign!([Opcode::SECP256K1_EC_DOUBLE], secp256k1_double_chip);
+            chips.push(MachineChipVariant::Secp256k1AddUnequal(
+                secp256k1_add_unequal_chip,
+            ));
+            chips.push(MachineChipVariant::Secp256k1Double(secp256k1_double_chip));
         }
         // Most chips have a reference to the memory chip, and the memory chip has a reference to
         // the range checker chip.

@@ -438,17 +438,22 @@ impl Hintable<InnerConfig> for BigUint {
 impl Hintable<InnerConfig> for ECPoint {
     type HintVariable = ECPointVariable<InnerConfig>;
 
+    // FIXME: should depend on curve for coordinate bits
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let x = BigUint::read(builder);
-        let y = BigUint::read(builder);
+        let ret = builder.array(2 * NUM_LIMBS);
+        for i in 0..2 * NUM_LIMBS {
+            // FIXME: range check for each element.
+            let v = builder.hint_var();
+            builder.set_value(&ret, i, v);
+        }
         // ECPointVariable::`new` checks if the point is on the curve.
-        ECPointVariable { x, y }
+        ECPointVariable { affine: ret }
     }
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        let mut ret: Vec<Vec<<InnerConfig as Config>::N>> = self.x.write();
-        ret.extend(self.y.write());
-        ret
+        let x = self.x.write().pop().unwrap();
+        let y = self.y.write().pop().unwrap();
+        vec![[x, y].concat()]
     }
 }
 

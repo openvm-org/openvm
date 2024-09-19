@@ -1,5 +1,5 @@
 use afs_compiler::{
-    ir::{BigUintVar, Builder, Config, MemIndex, MemVariable, Ptr, RVar, Var, Variable},
+    ir::{Array, BigUintVar, Builder, Config, MemIndex, MemVariable, Ptr, RVar, Var, Variable},
     prelude::DslVariable,
 };
 use k256::{
@@ -9,6 +9,7 @@ use k256::{
 };
 use num_bigint_dig::BigUint;
 use p3_field::{AbstractField, PrimeField64};
+use stark_vm::modular_arithmetic::big_uint_to_num_limbs;
 use zkhash::ark_ff::Zero;
 
 /// EC point in Rust. **Unsafe** to assume (x, y) is a point on the curve.
@@ -18,11 +19,49 @@ pub struct ECPoint {
     pub y: BigUint,
 }
 
+impl ECPoint {
+    // FIXME: coord_bits is the number of bits of the coordinate field. This should be in a config somewhere
+    pub fn load_const<C: Config>(
+        &self,
+        builder: &mut Builder<C>,
+        coord_bits: usize,
+    ) -> ECPointVariable<C> {
+        let limb_bits = builder.bigint_repr_size as usize;
+        let num_limbs = (coord_bits + limb_bits - 1) / limb_bits;
+        let array = builder.array(2 * num_limbs);
+
+        let [x, y] = [&self.x, &self.y].map(|x| -> Vec<_> {
+            big_uint_to_num_limbs(x, limb_bits, num_limbs)
+                .into_iter()
+                .map(C::N::from_canonical_usize)
+                .collect()
+        });
+        for (i, &elem) in x.iter().chain(y.iter()).enumerate() {
+            builder.set(&array, i, elem);
+        }
+        ECPointVariable { affine: array }
+    }
+}
+
 /// EC point in eDSL. **Unsafe** to assume (x, y) is a point on the curve.
 #[derive(DslVariable, Clone, Debug)]
 pub struct ECPointVariable<C: Config> {
-    pub x: BigUintVar<C>,
-    pub y: BigUintVar<C>,
+    /// Affine (x,y) as an array
+    pub affine: Array<C, Var<C::N>>,
+}
+
+impl<C: Config> ECPointVariable<C> {
+    // FIXME: coord_bits is the number of bits of the coordinate field. This should be in a config somewhere
+    pub fn x(&self, builder: &mut Builder<C>, coord_bits: usize) -> BigUintVar<C> {
+        let num_limbs = ((coord_bits as u32 + builder.bigint_repr_size - 1)
+            / builder.bigint_repr_size) as usize;
+        self.affine.slice(builder, 0, num_limbs)
+    }
+    pub fn y(&self, builder: &mut Builder<C>, coord_bits: usize) -> BigUintVar<C> {
+        let num_limbs = ((coord_bits as u32 + builder.bigint_repr_size - 1)
+            / builder.bigint_repr_size) as usize;
+        self.affine.slice(builder, num_limbs, 2 * num_limbs)
+    }
 }
 
 /// ECDSA signature in Rust. **Unsafe** to assume r, s is valid(in [1, n-1]).
@@ -87,22 +126,24 @@ impl<C: Config> ECPointVariable<C>
 where
     C::N: PrimeField64,
 {
+    // FIXME: only works for secp256k1 right now
     /// Return 1 if the point is valid. Otherwise, return 0.
     pub fn is_valid(&self, builder: &mut Builder<C>) -> Var<C::N> {
-        let Self { x, y } = self;
-        let x_is_0 = builder.secp256k1_coord_is_zero(x);
-        let y_is_0 = builder.secp256k1_coord_is_zero(x);
+        let x = self.x(builder, 256);
+        let y = self.y(builder, 256);
+        let x_is_0 = builder.secp256k1_coord_is_zero(&x);
+        let y_is_0 = builder.secp256k1_coord_is_zero(&y);
         let ret: Var<_> = builder.uninit();
         builder.if_eq(x_is_0 * y_is_0, RVar::one()).then_or_else(
             |builder| {
                 builder.assign(&ret, RVar::one());
             },
             |builder| {
-                let x2 = builder.secp256k1_coord_mul(x, x);
-                let x3 = builder.secp256k1_coord_mul(&x2, x);
+                let x2 = builder.secp256k1_coord_mul(&x, &x);
+                let x3 = builder.secp256k1_coord_mul(&x2, &x);
                 let c7 = builder.eval_biguint(7u64.into());
                 let x3_plus_7 = builder.secp256k1_coord_add(&x3, &c7);
-                let y2 = builder.secp256k1_coord_mul(y, y);
+                let y2 = builder.secp256k1_coord_mul(&y, &y);
                 let on_curve = builder.secp256k1_coord_eq(&y2, &x3_plus_7);
                 builder.assign(&ret, on_curve);
             },

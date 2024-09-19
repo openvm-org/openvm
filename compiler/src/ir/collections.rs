@@ -122,7 +122,7 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                     panic!("Cannot slice a fixed array with a variable start or end");
                 }
             }
-            Self::Dyn(_, len) => {
+            Self::Dyn(ptr, len) => {
                 if builder.flags.debug {
                     let valid = builder.lt(start, end);
                     builder.assert_var_eq(valid, C::N::one());
@@ -132,15 +132,10 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                     builder.assert_var_eq(valid, C::N::one());
                 }
 
-                let slice_len = builder.eval_expr(end - start);
-                let slice = builder.dyn_array(slice_len);
-                builder.range(0, slice_len).for_each(|i, builder| {
-                    let idx = builder.eval_expr(start + i);
-                    let value = builder.get(self, idx);
-                    builder.set(&slice, i, value);
-                });
-
-                slice
+                let slice_len = builder.eval(end - start);
+                let address = builder.eval(ptr.address + start);
+                let ptr = Ptr { address };
+                Array::Dyn(ptr, Usize::Var(slice_len))
             }
         }
     }

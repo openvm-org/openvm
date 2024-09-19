@@ -17,6 +17,7 @@ use crate::{
     arch::columns::ExecutionState,
     castf::CastFChip,
     cpu::{trace::Instruction, CpuChip},
+    ecc::{EcAddUnequalChip, EcDoubleChip},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -103,6 +104,8 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
+    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
+    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
 #[derive(Debug, IntoStaticStr)]
@@ -122,6 +125,8 @@ pub enum MachineChipVariant<F: PrimeField32> {
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
+    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
+    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
 impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {

@@ -168,6 +168,14 @@ pub enum AsmInstruction<F, EF> {
     /// Same as `Keccak256`, but with fixed length input (hence length is an immediate value).
     Keccak256FixLen(i32, i32, F),
 
+    /// (dst_ptr_ptr, p_ptr_ptr, q_ptr_ptr) are pointers to pointers to (dst, p, q).
+    /// Reads p,q from memory and writes p+q to dst.
+    /// Assumes p != +-q as secp256k1 points.
+    Secp256k1AddUnequal(i32, i32, i32),
+    /// (dst_ptr_ptr, p_ptr_ptr) are pointers to pointers to (dst, p).
+    /// Reads p,q from memory and writes 2*p to dst.
+    Secp256k1Double(i32, i32),
+
     /// Print a variable.
     PrintV(i32),
 
@@ -392,6 +400,12 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::Keccak256FixLen(dst, src, len) => {
                 write!(f, "keccak256 ({dst})fp, ({src})fp, {len}",)
+            }
+            AsmInstruction::Secp256k1AddUnequal(dst, p, q) => {
+                write!(f, "secp256k1_add_unequal ({})fp, ({})fp, ({})fp", dst, p, q)
+            }
+            AsmInstruction::Secp256k1Double(dst, p) => {
+                write!(f, "secp256k1_double ({})fp, ({})fp", dst, p)
             }
             AsmInstruction::PrintF(dst) => {
                 write!(f, "print_f ({})fp", dst)

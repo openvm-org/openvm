@@ -78,12 +78,14 @@ pub struct EcAddUnequalRecord<T: PrimeField32> {
     pub p3_array_write: MemoryHeapWriteRecord<T, TWO_NUM_LIMBS>,
 }
 
+#[derive(Clone, Debug)]
 pub struct EcChipConfig<T: PrimeField32> {
     memory_chip: MemoryChipRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     prime: BigUint,
 }
 
+#[derive(Clone, Debug)]
 pub struct EcAddUnequalChip<T: PrimeField32> {
     pub air: EcAddUnequalVmAir,
     pub data: Vec<EcAddUnequalRecord<T>>,
@@ -198,6 +200,7 @@ pub struct EcDoubleRecord<T: PrimeField32> {
     pub p2_array_write: MemoryHeapWriteRecord<T, TWO_NUM_LIMBS>,
 }
 
+#[derive(Clone, Debug)]
 pub struct EcDoubleChip<T: PrimeField32> {
     pub air: EcDoubleVmAir,
     pub data: Vec<EcDoubleRecord<T>>,

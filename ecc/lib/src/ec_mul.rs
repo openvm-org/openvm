@@ -1,5 +1,6 @@
 use afs_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var};
 use p3_field::{AbstractField, PrimeField64};
+use stark_vm::modular_arithmetic::NUM_LIMBS;
 
 use crate::types::ECPointVariable;
 
@@ -16,17 +17,19 @@ where
     C::N: PrimeField64,
 {
     assert_eq!(BIGINT_MAX_BITS % window_bits, 0);
-    let ECPointVariable { x, y } = point;
     let num_windows = BIGINT_MAX_BITS / window_bits;
     let window_len = (1usize << window_bits) - 1;
 
-    let x_zero = builder.secp256k1_coord_is_zero(x);
-    let y_zero = builder.secp256k1_coord_is_zero(y);
-    let result_x: BigUintVar<C> = builder.uninit_biguint();
-    let result_y: BigUintVar<C> = builder.uninit_biguint();
+    let x = point.x(builder, BIGINT_MAX_BITS);
+    let y = point.y(builder, BIGINT_MAX_BITS);
+    let x_zero = builder.secp256k1_coord_is_zero(&x);
+    let y_zero = builder.secp256k1_coord_is_zero(&y);
 
-    builder.secp256k1_coord_set_to_zero(&result_x);
-    builder.secp256k1_coord_set_to_zero(&result_y);
+    // FIXME: configurable num limbs
+    let result = builder.array(NUM_LIMBS * 2);
+    for i in 0..2 * NUM_LIMBS {
+        builder.set(&result, i, C::N::zero());
+    }
 
     builder.if_eq(x_zero * y_zero, C::N::one()).then_or_else(
         |_builder| {},
@@ -39,13 +42,10 @@ where
                     let cache_vec: Array<C, ECPointVariable<C>> = builder.dyn_array(window_len);
                     for j in 0..window_len {
                         let prev = curr.clone();
-                        let (curr_x, curr_y) = builder.ec_add(
-                            &(curr.x, curr.y),
-                            &(increment.x.clone(), increment.y.clone()),
-                        );
+                        let curr_affine =
+                            builder.secp256k1_add(curr.affine, increment.affine.clone());
                         curr = ECPointVariable {
-                            x: curr_x,
-                            y: curr_y,
+                            affine: curr_affine,
                         };
                         builder.set(&cache_vec, j, prev.clone());
                     }
@@ -64,16 +64,11 @@ where
                 builder.if_ne(window_sum, C::N::zero()).then(|builder| {
                     builder.assign(&window_sum, window_sum - RVar::one());
                     let point = builder.get(cache_vec, window_sum);
-                    let (x, y) =
-                        builder.ec_add(&(result_x.clone(), result_y.clone()), &(point.x, point.y));
-                    builder.assign(&result_x, x);
-                    builder.assign(&result_y, y);
+                    let new_res = builder.secp256k1_add(result.clone(), point.affine);
+                    builder.assign(&result, new_res);
                 });
             }
         },
     );
-    ECPointVariable {
-        x: result_x,
-        y: result_y,
-    }
+    ECPointVariable { affine: result }
 }
