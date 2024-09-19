@@ -27,7 +27,7 @@ pub mod inner {
     use ax_sdk::{
         config::{
             baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-            fri_params::fri_params_with_80_bits_of_security,
+            FriParameters,
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
@@ -74,8 +74,10 @@ pub mod inner {
     /// 3. Execute the verifier program and generate a proof.
     ///
     /// This is a convenience function with default configs for testing purposes only.
-    // TODO: clarify the two sets of FRI params used
-    pub fn run_recursive_test(stark_for_test: StarkForTest<BabyBearPoseidon2Config>) {
+    pub fn run_recursive_test(
+        stark_for_test: StarkForTest<BabyBearPoseidon2Config>,
+        fri_params: FriParameters,
+    ) {
         let StarkForTest {
             any_raps,
             traces,
@@ -95,7 +97,7 @@ pub mod inner {
             pvs,
             CompilerOptions::default(),
             VmConfig::aggregation(7),
-            BabyBearPoseidon2Engine::new(fri_params_with_80_bits_of_security()[1]),
+            BabyBearPoseidon2Engine::new(fri_params),
         )
         .unwrap();
     }
