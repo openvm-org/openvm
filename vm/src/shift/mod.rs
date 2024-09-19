@@ -9,7 +9,7 @@ use crate::{
         instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
     cpu::trace::Instruction,
-    memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    memory::MemoryChipRef,
 };
 
 mod air;
@@ -84,7 +84,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         // TODO: range check add count
 
-        let z_write = memory_chip.write::<NUM_LIMBS>(
+        let _z_write = memory_chip.write::<NUM_LIMBS>(
             e,
             z_ptr_read.value(),
             z.into_iter()
