@@ -25,7 +25,7 @@ use crate::{
         chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
         instructions::{
             Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
-            SHIFT_256_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS,
+            SHIFT_256_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS, UI_32_INSTRUCTIONS,
         },
     },
     castf::CastFChip,
