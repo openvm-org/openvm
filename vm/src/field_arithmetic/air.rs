@@ -8,17 +8,15 @@ use p3_matrix::Matrix;
 use super::columns::FieldArithmeticCols;
 use crate::{
     arch::{
-        bus::ExecutionBus,
+        bridge::ExecutionBridge,
         instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
     },
     memory::offline_checker::MemoryBridge,
-    program::bridge::ProgramBus,
 };
 
 #[derive(Clone, Copy, Debug)]
 pub struct FieldArithmeticAir {
-    pub(super) execution_bus: ExecutionBus,
-    pub(super) program_bus: ProgramBus,
+    pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 }
 

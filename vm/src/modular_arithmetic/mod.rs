@@ -18,8 +18,8 @@ use p3_field::{PrimeField32, PrimeField64};
 
 use crate::{
     arch::{
-        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
-        instructions::Opcode,
+        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
+        columns::ExecutionState, instructions::Opcode,
     },
     memory::{
         offline_checker::MemoryBridge, MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord,
@@ -133,8 +133,7 @@ pub enum ModularArithmeticOp {
 #[derive(Clone, Debug)]
 pub struct ModularArithmeticVmAir<A> {
     pub air: A,
-    pub execution_bus: ExecutionBus,
-    pub program_bus: ProgramBus,
+    pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
 
     pub carry_limbs: usize,
@@ -197,8 +196,7 @@ impl<T: PrimeField32> ModularArithmeticChip<T, ModularArithmeticAirVariant> {
         Self {
             air: ModularArithmeticVmAir {
                 air: subair,
-                execution_bus,
-                program_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 carry_limbs,
                 q_limbs,

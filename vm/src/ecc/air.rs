@@ -15,15 +15,14 @@ use p3_matrix::Matrix;
 
 use super::columns::*;
 use crate::{
-    arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge, modular_arithmetic::NUM_LIMBS,
-    program::bridge::ProgramBus,
+    arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge,
+    modular_arithmetic::NUM_LIMBS,
 };
 
 #[derive(Clone, Debug)]
 pub struct EcAddUnequalVmAir {
     pub air: EcAddUnequalAir,
-    pub execution_bus: ExecutionBus,
-    pub program_bus: ProgramBus,
+    pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
 }
 
@@ -74,8 +73,7 @@ impl<AB: InteractionBuilder> Air<AB> for EcAddUnequalVmAir {
 #[derive(Clone, Debug)]
 pub struct EcDoubleVmAir {
     pub air: EcDoubleAir,
-    pub execution_bus: ExecutionBus,
-    pub program_bus: ProgramBus,
+    pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
 }
 

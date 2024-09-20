@@ -16,21 +16,6 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
         let mut timestamp_delta = AB::Expr::zero();
         let timestamp: AB::Expr = io.from_state.timestamp.into();
 
-        // Interaction with program
-        self.program_bus.send_instruction(
-            builder,
-            io.from_state.pc,
-            aux.opcode,
-            [
-                io.z.address.address,
-                io.x.address.address,
-                io.y.address.address,
-                io.x.address.address_space,
-                io.x.data.address_space,
-            ],
-            aux.is_valid,
-        );
-
         self.memory_bridge
             .read_from_cols(
                 io.x.address.clone(),
@@ -82,11 +67,19 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        self.execution_bus.execute_increment_pc(
+        self.execution_bridge.execute_increment_pc(
             builder,
-            aux.is_valid,
-            io.from_state.map(Into::into),
+            aux.opcode,
+            [
+                io.z.address.address,
+                io.x.address.address,
+                io.y.address.address,
+                io.x.address.address_space,
+                io.x.data.address_space,
+            ],
+            io.from_state,
             timestamp_delta,
+            aux.is_valid,
         );
     }
 }

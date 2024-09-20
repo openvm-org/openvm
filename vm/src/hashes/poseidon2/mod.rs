@@ -8,8 +8,8 @@ use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
 use self::air::Poseidon2VmAir;
 use crate::{
     arch::{
-        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
-        instructions::Opcode::*,
+        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
+        columns::ExecutionState, instructions::Opcode::*,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -53,8 +53,7 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
         let inner = Poseidon2Air::<WIDTH, F>::from_config(config, max_constraint_degree, 0);
         Self {
             inner,
-            execution_bus,
-            program_bus,
+            execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             direct: true,
         }

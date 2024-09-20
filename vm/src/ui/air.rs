@@ -8,15 +8,13 @@ use p3_matrix::Matrix;
 
 use super::columns::UiCols;
 use crate::{
-    arch::{bus::ExecutionBus, instructions::Opcode},
+    arch::{bridge::ExecutionBridge, instructions::Opcode},
     memory::offline_checker::MemoryBridge,
-    program::bridge::ProgramBus,
 };
 
 #[derive(Copy, Clone, Debug)]
 pub struct UiAir {
-    pub(super) execution_bus: ExecutionBus,
-    pub(super) program_bus: ProgramBus,
+    pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 
     pub bus: VariableRangeCheckerBus,

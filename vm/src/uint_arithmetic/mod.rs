@@ -7,6 +7,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
+        bridge::ExecutionBridge,
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
@@ -84,8 +85,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
         );
         Self {
             air: UintArithmeticAir {
-                execution_bus,
-                program_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus,
                 base_op: Opcode::ADD256,

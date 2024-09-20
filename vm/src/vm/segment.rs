@@ -111,6 +111,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let core_chip = Rc::new(RefCell::new(CoreChip::from_state(
             config.core_options(),
             execution_bus,
+            program_bus,
             memory_chip.clone(),
             state.state,
         )));
