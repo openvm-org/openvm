@@ -88,7 +88,7 @@ fn field_arithmetic_air_test() {
     }
 
     // positive test
-    let mut tester = tester.build().load(field_arithmetic_chip).finalize();
+    let mut tester = tester.build().load_single(field_arithmetic_chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 

@@ -26,7 +26,7 @@ pub mod program;
 
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
-
+use crate::arch::chips::{MachineChip, SingleAirChipAdapter};
 use super::{bus::ExecutionBus, chips::InstructionExecutor};
 use crate::memory::MemoryChipRef;
 
@@ -120,8 +120,8 @@ impl MachineChipTestBuilder<BabyBear> {
             memory: Some(self.memory),
             ..Default::default()
         };
-        let tester = tester.load(self.execution);
-        tester.load(self.program)
+        let tester = tester.load_single(self.execution);
+        tester.load_single(self.program)
     }
 }
 
@@ -152,10 +152,14 @@ pub struct MachineChipTester {
 }
 
 impl MachineChipTester {
-    pub fn load<C: SingleAirMachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
-        self.public_values.push(chip.generate_public_values());
-        self.airs.push(chip.air());
-        self.traces.push(chip.generate_trace());
+    pub fn load_single<C: SingleAirMachineChip<BabyBear>>(self, chip: C) -> Self {
+        self.load(SingleAirChipAdapter::new(chip))
+    }
+
+    pub fn load<C: MachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
+        self.public_values.extend(chip.generate_public_values());
+        self.airs.extend(chip.airs());
+        self.traces.extend(chip.generate_traces());
 
         self
     }
@@ -164,8 +168,8 @@ impl MachineChipTester {
         if let Some(memory_tester) = self.memory.take() {
             let manager = memory_tester.chip.clone();
             let range_checker = manager.borrow().range_checker.clone();
-            self = self.load(memory_tester); // dummy memory interactions
-            self = self.load(manager); // memory initial and final state
+            self = self.load_single(memory_tester); // dummy memory interactions
+            self = self.load_single(manager); // memory initial and final state
             self = self.load(range_checker); // this must be last because other trace generation mutates its state
         }
         self

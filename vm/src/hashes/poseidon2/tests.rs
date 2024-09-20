@@ -130,7 +130,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
             _ => panic!(),
         }
     }
-    tester.build().load(chip).finalize()
+    tester.build().load_single(chip).finalize()
 }
 
 /// Checking that 50 random instructions pass.

@@ -58,7 +58,7 @@ fn lui_test() {
         prepare_lui_write_execute(&mut tester, &mut chip, a, b);
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load_single(chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -74,7 +74,7 @@ fn negative_lui_invalid_imm_test() {
     // (1 << 20) + 1 exceeds the 20-bit bound
     prepare_lui_write_execute(&mut tester, &mut chip, 3, (1 << 20) + 1);
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load_single(chip).finalize();
     disable_debug_builder();
     assert_eq!(
         tester.simple_test().err(),

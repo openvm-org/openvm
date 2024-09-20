@@ -72,7 +72,7 @@ fn castf_rand_test() {
         prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load_single(chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 

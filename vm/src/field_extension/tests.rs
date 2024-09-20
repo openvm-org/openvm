@@ -63,7 +63,7 @@ fn field_extension_air_test() {
     }
 
     // positive test
-    let mut tester = tester.build().load(chip).finalize();
+    let mut tester = tester.build().load_single(chip).finalize();
     tester.simple_test().expect("Verification failed");
 
     USE_DEBUG_BUILDER.with(|debug| {

@@ -112,7 +112,7 @@ fn uint_arithmetic_rand_air_test() {
         }
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load_single(chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }
@@ -454,7 +454,7 @@ fn uint_lt_rand_air_test() {
         }
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load_single(chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }
@@ -542,7 +542,7 @@ fn uint_eq_rand_air_test() {
         }
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load_single(chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }

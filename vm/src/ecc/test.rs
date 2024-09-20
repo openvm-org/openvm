@@ -76,7 +76,7 @@ fn test_ec_add() {
     let read_p3 = tester.read::<TWO_NUM_LIMBS>(data_as, address3);
     assert_eq!(p3_limbs, read_p3);
 
-    let tester = tester.build().load(ec_chip).finalize();
+    let tester = tester.build().load_single(ec_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -135,6 +135,6 @@ fn test_ec_double() {
     let read_p2 = tester.read::<TWO_NUM_LIMBS>(data_as, address2);
     assert_eq!(p2_limbs, read_p2);
 
-    let tester = tester.build().load(ec_chip).finalize();
+    let tester = tester.build().load_single(ec_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }

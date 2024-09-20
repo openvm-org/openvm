@@ -194,14 +194,14 @@ fn test_modular_arithmetic() {
     }
     let tester = tester
         .build()
-        .load(coord_add_chip)
-        .load(coord_sub_chip)
-        .load(coord_mul_chip)
-        .load(coord_div_chip)
-        .load(scalar_add_chip)
-        .load(scalar_sub_chip)
-        .load(scalar_mul_chip)
-        .load(scalar_div_chip)
+        .load_single(coord_add_chip)
+        .load_single(coord_sub_chip)
+        .load_single(coord_mul_chip)
+        .load_single(coord_div_chip)
+        .load_single(scalar_add_chip)
+        .load_single(scalar_sub_chip)
+        .load_single(scalar_mul_chip)
+        .load_single(scalar_div_chip)
         .finalize();
 
     tester.simple_test().expect("Verification failed");

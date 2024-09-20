@@ -83,7 +83,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
         // shift dst to not deal with timestamps for pranking
         dst += 16;
     }
-    let mut tester = tester.build().load(chip).load(xor_chip).finalize();
+    let mut tester = tester.build().load_single(chip).load(xor_chip).finalize();
 
     let keccak_trace = &mut tester.traces[2];
     let mut row = 0;
