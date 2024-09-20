@@ -6,6 +6,7 @@ use afs_primitives::{
 };
 use afs_stark_backend::rap::AnyRap;
 use enum_dispatch::enum_dispatch;
+use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -40,7 +41,7 @@ pub trait InstructionExecutor<F> {
 }
 
 #[enum_dispatch]
-pub trait MachineChip<F> {
+pub trait MachineChip<F>: Sized {
     fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
@@ -50,8 +51,32 @@ pub trait MachineChip<F> {
     }
     fn current_trace_height(&self) -> usize;
     fn trace_width(&self) -> usize;
-    fn current_trace_cells(&self) -> usize {
-        self.current_trace_height() * self.trace_width()
+
+    fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
+        vec![self.generate_trace()]
+    }
+    fn airs<SC: StarkGenericConfig>(&self) -> Vec<Box<dyn AnyRap<SC>>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        vec![self.air()]
+    }
+    fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
+        vec![self.generate_public_values()]
+    }
+    fn current_trace_heights(&self) -> Vec<usize> {
+        vec![self.current_trace_height()]
+    }
+    fn trace_widths(&self) -> Vec<usize> {
+        vec![self.trace_width()]
+    }
+
+    fn current_trace_cells(&self) -> Vec<usize> {
+        self.trace_widths()
+            .iter()
+            .zip_eq(self.current_trace_heights().iter())
+            .map(|(width, height)| width * height)
+            .collect()
     }
 }
 

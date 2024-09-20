@@ -13,6 +13,7 @@ use afs_primitives::{
 };
 use afs_stark_backend::rap::AnyRap;
 use backtrace::Backtrace;
+use itertools::izip;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -515,10 +516,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         drop(self.memory_chip);
 
         for mut chip in self.chips {
-            if chip.current_trace_height() != 0 {
-                result.airs.push(chip.air());
-                result.public_values.push(chip.generate_public_values());
-                result.traces.push(chip.generate_trace());
+            let heights = chip.current_trace_heights();
+            let airs = chip.airs();
+            let public_values = chip.generate_public_values_per_air();
+            let traces = chip.generate_traces();
+
+            for (height, air, public_values, trace) in izip!(heights, airs, public_values, traces) {
+                if height != 0 {
+                    result.airs.push(air);
+                    result.public_values.push(public_values);
+                    result.traces.push(trace);
+                }
             }
         }
         let trace = self.connector_chip.generate_trace();
@@ -533,15 +541,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {
-        self.chips
-            .iter()
-            .any(|chip| chip.current_trace_height() > self.config.max_segment_len)
+        self.chips.iter().any(|chip| {
+            chip.current_trace_heights()
+                .iter()
+                .any(|height| *height > self.config.max_segment_len)
+        })
     }
 
     fn current_trace_cells(&self) -> usize {
         self.chips
             .iter()
-            .map(|chip| chip.current_trace_cells())
+            .map(|chip| chip.current_trace_cells().into_iter().sum::<usize>())
             .sum()
     }
 
@@ -553,7 +563,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let mut metrics = BTreeMap::new();
         for chip in self.chips.iter() {
             let chip_name: &'static str = chip.into();
-            metrics.insert(chip_name.into(), chip.current_trace_height());
+            for (i, height) in chip.current_trace_heights().iter().enumerate() {
+                if i == 0 {
+                    metrics.insert(chip_name.into(), *height);
+                } else {
+                    metrics.insert(format!("{} {}", chip_name, i + 1), *height);
+                }
+            }
         }
         metrics
     }

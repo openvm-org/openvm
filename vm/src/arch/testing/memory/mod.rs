@@ -113,15 +113,11 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.current_trace_cells() / self.trace_width()
+        self.records.len() / self.trace_width()
     }
 
     fn trace_width(&self) -> usize {
         size_of::<DummyMemoryInteractionCols<u8, WORD_SIZE>>()
-    }
-
-    fn current_trace_cells(&self) -> usize {
-        self.records.len()
     }
 }
 
