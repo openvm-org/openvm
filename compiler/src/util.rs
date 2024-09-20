@@ -11,8 +11,7 @@ use ax_sdk::{
 use p3_baby_bear::BabyBear;
 use p3_field::{PrimeField, PrimeField32};
 use stark_vm::{
-    cpu::trace::Instruction,
-    program::Program,
+    program::{Instruction, Program},
     vm::{config::VmConfig, VirtualMachine},
 };
 
@@ -69,7 +68,7 @@ pub fn execute_program_with_public_values(
         input_stream,
     );
     for &(index, value) in public_values {
-        vm.segments[0].cpu_chip.borrow_mut().public_values[index] = Some(value);
+        vm.segments[0].core_chip.borrow_mut().public_values[index] = Some(value);
     }
     vm.execute().unwrap()
 }

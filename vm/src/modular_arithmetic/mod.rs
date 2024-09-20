@@ -18,8 +18,10 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, MODULAR_ARITHMETIC_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
-    memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
+    memory::{
+        offline_checker::MemoryBridge, MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord,
+    },
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 mod air;
@@ -57,13 +59,84 @@ pub struct ModularArithmeticRecord<T, const NUM_LIMBS: usize> {
     pub z_array_write: MemoryHeapWriteRecord<T, NUM_LIMBS>,
 }
 
-// This chip is for modular addition and subtraction of usually 256 bit numbers
-// represented as 32 8 bit limbs in little endian format.
-// Warning: The chip can break if NUM_LIMBS * LIMB_SIZE is not equal to the number of bits in the modulus.
-#[derive(Debug, Clone)]
-pub struct ModularArithmeticChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
-    pub air: ModularArithmeticAir<NUM_LIMBS, LIMB_SIZE>,
-    data: Vec<ModularArithmeticRecord<T, NUM_LIMBS>>,
+#[derive(Clone, Debug)]
+pub enum ModularArithmeticAirVariant {
+    Add(ModularAdditionAir),
+    Sub(ModularSubtractionAir),
+    Mul(ModularMultiplicationAir),
+    Div(ModularDivisionAir),
+}
+
+type TraceInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
+impl ModularArithmeticAirVariant {
+    pub fn generate_trace_row<F: PrimeField64>(
+        &self,
+        input: TraceInput,
+    ) -> ModularArithmeticCols<F> {
+        match self {
+            Self::Add(air) => LocalTraceInstructions::generate_trace_row(air, input),
+            Self::Sub(air) => LocalTraceInstructions::generate_trace_row(air, input),
+            Self::Mul(air) => LocalTraceInstructions::generate_trace_row(air, input),
+            Self::Div(air) => LocalTraceInstructions::generate_trace_row(air, input),
+        }
+    }
+
+    pub fn eval<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        io: ModularArithmeticCols<AB::Var>,
+        aux: (),
+    ) {
+        match self {
+            Self::Add(air) => SubAir::eval(air, builder, io, aux),
+            Self::Sub(air) => SubAir::eval(air, builder, io, aux),
+            Self::Mul(air) => SubAir::eval(air, builder, io, aux),
+            Self::Div(air) => SubAir::eval(air, builder, io, aux),
+        }
+    }
+
+    pub fn is_expected_opcode(&self, opcode: Opcode) -> bool {
+        match self {
+            Self::Add(_) => {
+                [Opcode::SECP256K1_COORD_ADD, Opcode::SECP256K1_SCALAR_ADD].contains(&opcode)
+            }
+            Self::Sub(_) => {
+                [Opcode::SECP256K1_COORD_SUB, Opcode::SECP256K1_SCALAR_SUB].contains(&opcode)
+            }
+            Self::Mul(_) => {
+                [Opcode::SECP256K1_COORD_MUL, Opcode::SECP256K1_SCALAR_MUL].contains(&opcode)
+            }
+            Self::Div(_) => {
+                [Opcode::SECP256K1_COORD_DIV, Opcode::SECP256K1_SCALAR_DIV].contains(&opcode)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ModularArithmeticOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModularArithmeticVmAir<A> {
+    pub air: A,
+    pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
+    pub memory_bridge: MemoryBridge,
+
+    pub carry_limbs: usize,
+    pub q_limbs: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModularArithmeticChip<T: PrimeField32, A> {
+    pub air: ModularArithmeticVmAir<A>,
+    data: Vec<ModularArithmeticRecord<T>>,
+
     memory_chip: MemoryChipRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     modulus: BigUint,
@@ -74,6 +147,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
 {
     pub fn new(
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         modulus: BigUint,
     ) -> Self {
@@ -96,6 +170,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         Self {
             air: ModularArithmeticAir {
                 execution_bus,
+                program_bus,
                 memory_bridge,
                 subair,
             },
@@ -114,7 +189,13 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
         &mut self,
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        let mut memory_chip = self.memory_chip.borrow_mut();
+        debug_assert_eq!(
+            from_state.timestamp,
+            memory_chip.timestamp().as_canonical_u32() as usize
+        );
+
         let Instruction {
             opcode,
             op_a: z_address_ptr,
@@ -169,37 +250,12 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
             z_array_write,
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
-
-impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    ModularArithmeticChip<T, NUM_LIMBS, LIMB_SIZE>
-{
-    pub fn solve(opcode: Opcode, mut x: BigUint, y: BigUint) -> BigUint {
-        match opcode {
-            Opcode::SECP256K1_COORD_ADD => (x + y) % SECP256K1_COORD_PRIME.clone(),
-            Opcode::SECP256K1_SCALAR_ADD => (x + y) % SECP256K1_SCALAR_PRIME.clone(),
-            Opcode::SECP256K1_COORD_SUB => {
-                let tmp = SECP256K1_COORD_PRIME.clone();
-                while x < y {
-                    x += &tmp;
-                }
-                (x - y) % &tmp
-            }
-            Opcode::SECP256K1_SCALAR_SUB => {
-                let tmp = SECP256K1_SCALAR_PRIME.clone();
-                while x < y {
-                    x += &tmp;
-                }
-                (x - y) % &tmp
-            }
-            _ => unreachable!(),
-        }
-    }
 
     // little endian.
     pub fn limbs_to_biguint(x: &[u32]) -> BigUint {

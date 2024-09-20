@@ -15,7 +15,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
 use crate::{
-    cpu::RANGE_CHECKER_BUS,
+    core::RANGE_CHECKER_BUS,
     memory::{audit::MemoryAuditChip, manager::TimestampedValue, offline_checker::MemoryBus},
 };
 

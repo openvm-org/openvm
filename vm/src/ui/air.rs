@@ -10,11 +10,13 @@ use super::columns::UiCols;
 use crate::{
     arch::{bus::ExecutionBus, instructions::Opcode},
     memory::offline_checker::MemoryBridge,
+    program::bridge::ProgramBus,
 };
 
 #[derive(Copy, Clone, Debug)]
 pub struct UiAir {
     pub(super) execution_bus: ExecutionBus,
+    pub(super) program_bus: ProgramBus,
     pub(super) memory_bridge: MemoryBridge,
 
     pub bus: VariableRangeCheckerBus,

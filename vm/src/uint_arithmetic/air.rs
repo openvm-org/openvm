@@ -13,12 +13,14 @@ use crate::{
         instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
     memory::offline_checker::MemoryBridge,
+    program::bridge::ProgramBus,
 };
 
 /// AIR for the uint addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.
 #[derive(Copy, Clone, Debug)]
 pub struct UintArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bus: ExecutionBus,
+    pub(super) program_bus: ProgramBus,
     pub(super) memory_bridge: MemoryBridge,
 
     pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE

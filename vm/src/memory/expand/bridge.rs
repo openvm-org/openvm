@@ -4,7 +4,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use crate::{
-    cpu::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS},
+    core::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS},
     memory::expand::{air::ExpandAir, columns::ExpandCols},
 };
 

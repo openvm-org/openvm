@@ -1,9 +1,16 @@
+use std::{error::Error, fmt::Display};
+
 use backtrace::Backtrace;
-use p3_field::PrimeField64;
+use bridge::ProgramBus;
+use itertools::Itertools;
+use p3_field::{Field, PrimeField64};
 
 use crate::{
-    arch::instructions::Opcode::FAIL,
-    cpu::trace::{ExecutionError, ExecutionError::PcOutOfBounds, Instruction},
+    arch::{
+        columns::NUM_OPERANDS,
+        instructions::Opcode::{self, FAIL, NOP},
+    },
+    core::READ_INSTRUCTION_BUS,
 };
 
 #[cfg(test)]
@@ -13,6 +20,177 @@ pub mod air;
 pub mod bridge;
 pub mod columns;
 pub mod trace;
+
+#[allow(clippy::too_many_arguments)]
+#[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
+pub struct Instruction<F> {
+    pub opcode: Opcode,
+    pub op_a: F,
+    pub op_b: F,
+    pub op_c: F,
+    pub d: F,
+    pub e: F,
+    pub op_f: F,
+    pub op_g: F,
+    pub debug: String,
+}
+
+fn isize_to_field<F: Field>(value: isize) -> F {
+    if value < 0 {
+        return F::neg_one() * F::from_canonical_usize(value.unsigned_abs());
+    }
+    F::from_canonical_usize(value as usize)
+}
+
+impl<F: Field> Instruction<F> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_isize(
+        opcode: Opcode,
+        op_a: isize,
+        op_b: isize,
+        op_c: isize,
+        d: isize,
+        e: isize,
+    ) -> Self {
+        Self {
+            opcode,
+            op_a: isize_to_field::<F>(op_a),
+            op_b: isize_to_field::<F>(op_b),
+            op_c: isize_to_field::<F>(op_c),
+            d: isize_to_field::<F>(d),
+            e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(0),
+            op_g: isize_to_field::<F>(0),
+            debug: String::new(),
+        }
+    }
+
+    pub fn from_usize<const N: usize>(opcode: Opcode, operands: [usize; N]) -> Self {
+        let mut operands = operands.to_vec();
+        while operands.len() < NUM_OPERANDS {
+            operands.push(0);
+        }
+        let operands = operands
+            .into_iter()
+            .map(F::from_canonical_usize)
+            .collect_vec();
+        Self {
+            opcode,
+            op_a: operands[0],
+            op_b: operands[1],
+            op_c: operands[2],
+            d: operands[3],
+            e: operands[4],
+            op_f: operands[5],
+            op_g: operands[6],
+            debug: String::new(),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn large_from_isize(
+        opcode: Opcode,
+        op_a: isize,
+        op_b: isize,
+        op_c: isize,
+        d: isize,
+        e: isize,
+        op_f: isize,
+        op_g: isize,
+    ) -> Self {
+        Self {
+            opcode,
+            op_a: isize_to_field::<F>(op_a),
+            op_b: isize_to_field::<F>(op_b),
+            op_c: isize_to_field::<F>(op_c),
+            d: isize_to_field::<F>(d),
+            e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(op_f),
+            op_g: isize_to_field::<F>(op_g),
+            debug: String::new(),
+        }
+    }
+
+    pub fn debug(opcode: Opcode, debug: &str) -> Self {
+        Self {
+            opcode,
+            op_a: F::zero(),
+            op_b: F::zero(),
+            op_c: F::zero(),
+            d: F::zero(),
+            e: F::zero(),
+            op_f: F::zero(),
+            op_g: F::zero(),
+            debug: String::from(debug),
+        }
+    }
+}
+
+impl<T: Default> Default for Instruction<T> {
+    fn default() -> Self {
+        Self {
+            opcode: NOP,
+            op_a: T::default(),
+            op_b: T::default(),
+            op_c: T::default(),
+            d: T::default(),
+            e: T::default(),
+            op_f: T::default(),
+            op_g: T::default(),
+            debug: String::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ExecutionError {
+    Fail(usize),
+    PcOutOfBounds(usize, usize),
+    DisabledOperation(usize, Opcode),
+    HintOutOfBounds(usize),
+    EndOfInputStream(usize),
+    PublicValueIndexOutOfBounds(usize, usize, usize),
+    PublicValueNotEqual(usize, usize, usize, usize),
+}
+
+impl Display for ExecutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExecutionError::Fail(pc) => write!(f, "execution failed at pc = {}", pc),
+            ExecutionError::PcOutOfBounds(pc, program_len) => write!(
+                f,
+                "pc = {} out of bounds for program of length {}",
+                pc, program_len
+            ),
+            ExecutionError::DisabledOperation(pc, op) => {
+                write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
+            }
+            ExecutionError::HintOutOfBounds(pc) => write!(f, "at pc = {}", pc),
+            ExecutionError::EndOfInputStream(pc) => write!(f, "at pc = {}", pc),
+            ExecutionError::PublicValueIndexOutOfBounds(
+                pc,
+                num_public_values,
+                public_value_index,
+            ) => write!(
+                f,
+                "at pc = {}, tried to publish into index {} when num_public_values = {}",
+                pc, public_value_index, num_public_values
+            ),
+            ExecutionError::PublicValueNotEqual(
+                pc,
+                public_value_index,
+                existing_value,
+                new_value,
+            ) => write!(
+                f,
+                "at pc = {}, tried to publish value {} into index {}, but already had {}",
+                pc, new_value, public_value_index, existing_value
+            ),
+        }
+    }
+}
+
+impl Error for ExecutionError {}
 
 #[derive(Debug, Clone, Default)]
 pub struct DebugInfo {
@@ -48,6 +226,7 @@ impl<F> Program<F> {
 #[derive(Clone, Debug)]
 pub struct ProgramAir<F> {
     pub program: Program<F>,
+    bus: ProgramBus,
 }
 
 #[derive(Debug)]
@@ -69,7 +248,10 @@ impl<F: PrimeField64> ProgramChip<F> {
         Self {
             execution_frequencies: vec![0; program.len()],
             true_program_length,
-            air: ProgramAir { program },
+            air: ProgramAir {
+                program,
+                bus: ProgramBus(READ_INSTRUCTION_BUS),
+            },
         }
     }
 
@@ -78,7 +260,7 @@ impl<F: PrimeField64> ProgramChip<F> {
         pc: usize,
     ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
         if !(0..self.true_program_length).contains(&pc) {
-            return Err(PcOutOfBounds(pc, self.true_program_length));
+            return Err(ExecutionError::PcOutOfBounds(pc, self.true_program_length));
         }
         self.execution_frequencies[pc] += 1;
         Ok((

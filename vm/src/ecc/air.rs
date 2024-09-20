@@ -13,13 +13,17 @@ use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use super::{columns::*, NUM_LIMBS};
-use crate::{arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge};
+use super::columns::*;
+use crate::{
+    arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge, modular_arithmetic::NUM_LIMBS,
+    program::bridge::ProgramBus,
+};
 
 #[derive(Clone, Debug)]
 pub struct EcAddUnequalVmAir {
     pub air: EcAddUnequalAir,
     pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
     pub memory_bridge: MemoryBridge,
 }
 
@@ -71,6 +75,7 @@ impl<AB: InteractionBuilder> Air<AB> for EcAddUnequalVmAir {
 pub struct EcDoubleVmAir {
     pub air: EcDoubleAir,
     pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
     pub memory_bridge: MemoryBridge,
 }
 

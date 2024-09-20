@@ -1,18 +1,13 @@
-use std::borrow::BorrowMut;
-
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::{
-    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    utils::create_seeded_rng,
-};
+use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
-use super::{columns::UiCols, UiChip};
+use super::UiChip;
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
-    cpu::trace::Instruction,
+    arch::{instructions::Opcode, testing::MachineChipTestBuilder},
+    program::Instruction,
 };
 
 type F = BabyBear;
@@ -51,7 +46,11 @@ fn lui_test() {
     let mut rng = create_seeded_rng();
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UiChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = UiChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
     let num_tests: usize = 10;
 
     for _ in 0..num_tests {
@@ -65,12 +64,15 @@ fn lui_test() {
 
 #[test]
 fn negative_lui_invalid_imm_test() {
-    let mut rng = create_seeded_rng();
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UiChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = UiChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     // (1 << 20) + 1 exceeds the 20-bit bound
-    prepare_lui_write_execute(&mut tester, &mut chip, 3, 1 << 20 + 1);
+    prepare_lui_write_execute(&mut tester, &mut chip, 3, (1 << 20) + 1);
 
     let tester = tester.build().load(chip).finalize();
     disable_debug_builder();

@@ -12,9 +12,9 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
     field_extension::air::FieldExtensionArithmeticAir,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 pub const BETA: usize = 11;
@@ -53,7 +53,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a,
@@ -92,16 +92,24 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
             z_write,
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 
 impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
-    pub fn new(execution_bus: ExecutionBus, memory: MemoryChipRef<F>) -> Self {
-        let air = FieldExtensionArithmeticAir::new(execution_bus, memory.borrow().memory_bridge());
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory: MemoryChipRef<F>,
+    ) -> Self {
+        let air = FieldExtensionArithmeticAir::new(
+            execution_bus,
+            program_bus,
+            memory.borrow().memory_bridge(),
+        );
         Self {
             air,
             records: vec![],
@@ -119,7 +127,7 @@ pub struct FieldExtensionArithmetic;
 impl FieldExtensionArithmetic {
     /// Evaluates given opcode using given operands.
     ///
-    /// Returns None for opcodes not in cpu::FIELD_EXTENSION_INSTRUCTIONS.
+    /// Returns None for opcodes not in core::FIELD_EXTENSION_INSTRUCTIONS.
     pub(crate) fn solve<T: Field>(
         op: Opcode,
         x: [T; EXT_DEG],

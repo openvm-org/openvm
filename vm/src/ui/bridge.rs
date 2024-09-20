@@ -5,7 +5,7 @@ use super::{
     air::UiAir,
     columns::{UiAuxCols, UiIoCols},
 };
-use crate::{arch::columns::InstructionCols, memory::MemoryAddress};
+use crate::memory::MemoryAddress;
 
 impl UiAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -36,12 +36,18 @@ impl UiAir {
             )
             .eval(builder, aux.is_valid);
 
+        self.program_bus.send_instruction(
+            builder,
+            io.from_state.pc,
+            expected_opcode,
+            [io.op_a, io.op_b],
+            aux.is_valid,
+        );
         self.execution_bus.execute_increment_pc(
             builder,
             aux.is_valid,
             io.from_state.map(Into::into),
             AB::F::from_canonical_usize(timestamp_delta),
-            InstructionCols::<AB::Expr>::new(expected_opcode, [io.op_a.into(), io.op_b.into()]),
         );
 
         self.bus

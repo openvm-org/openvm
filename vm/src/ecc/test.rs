@@ -6,8 +6,9 @@ use p3_field::AbstractField;
 use super::{EcAddUnequalChip, EcDoubleChip, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS};
 use crate::{
     arch::{instructions, testing::MachineChipTestBuilder},
-    cpu::trace::Instruction,
-    modular_arithmetic::ModularArithmeticChip,
+    ecc::EcDoubleChip,
+    modular_arithmetic::{biguint_to_limbs, NUM_LIMBS, TWO_NUM_LIMBS},
+    program::Instruction,
 };
 
 #[test]
@@ -16,7 +17,11 @@ fn test_ec_add() {
 
     let mut tester: MachineChipTestBuilder<BabyBear> = MachineChipTestBuilder::default();
 
-    let mut ec_chip = EcAddUnequalChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut ec_chip = EcAddUnequalChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
@@ -93,7 +98,11 @@ fn test_ec_double() {
 
     let mut tester: MachineChipTestBuilder<BabyBear> = MachineChipTestBuilder::default();
 
-    let mut ec_chip = EcDoubleChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut ec_chip = EcDoubleChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let (p1_x, p1_y) = SampleEcPoints[1].clone();
 

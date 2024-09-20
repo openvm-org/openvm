@@ -21,8 +21,8 @@ use crate::{
         bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
         instructions::Opcode,
     },
-    cpu::trace::Instruction,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 /// Memory reads to get dst, src, len
@@ -86,12 +86,18 @@ pub struct KeccakInputBlock<F> {
 impl<F: PrimeField32> KeccakVmChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
         byte_xor_chip: Arc<XorLookupChip<8>>,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            air: KeccakVmAir::new(execution_bus, memory_bridge, byte_xor_chip.bus()),
+            air: KeccakVmAir::new(
+                execution_bus,
+                program_bus,
+                memory_bridge,
+                byte_xor_chip.bus(),
+            ),
             memory_chip,
             byte_xor_chip,
             records: Vec::new(),
@@ -104,7 +110,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -208,10 +214,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let to_timestamp = from_state.timestamp + timestamp_change;
         memory.jump_timestamp(F::from_canonical_usize(to_timestamp));
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: to_timestamp,
-        }
+        })
     }
 }
 

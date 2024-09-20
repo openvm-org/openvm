@@ -5,7 +5,7 @@ use super::{
     EcAddUnequalAuxCols, EcAddUnequalIoCols, EcAddUnequalVmAir, EcDoubleAuxCols, EcDoubleIoCols,
     EcDoubleVmAir,
 };
-use crate::arch::{columns::InstructionCols, instructions::Opcode};
+use crate::arch::instructions::Opcode;
 
 impl EcAddUnequalVmAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -16,6 +16,20 @@ impl EcAddUnequalVmAir {
     ) {
         let mut timestamp_delta = AB::Expr::zero();
         let timestamp: AB::Expr = io.from_state.timestamp.into();
+
+        self.program_bus.send_instruction(
+            builder,
+            io.from_state.pc,
+            AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
+            [
+                io.p3.address.address,
+                io.p1.address.address,
+                io.p2.address.address,
+                io.p1.address.address_space,
+                io.p1.data.address_space,
+            ],
+            aux.aux.is_valid,
+        );
 
         self.memory_bridge
             .read_from_cols(
@@ -73,16 +87,6 @@ impl EcAddUnequalVmAir {
             aux.aux.is_valid,
             io.from_state.map(Into::into),
             timestamp_delta,
-            InstructionCols::new(
-                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
-                [
-                    io.p3.address.address,
-                    io.p1.address.address,
-                    io.p2.address.address,
-                    io.p1.address.address_space,
-                    io.p1.data.address_space,
-                ],
-            ),
         );
     }
 }
@@ -96,6 +100,20 @@ impl EcDoubleVmAir {
     ) {
         let mut timestamp_delta = AB::Expr::zero();
         let timestamp: AB::Expr = io.from_state.timestamp.into();
+
+        self.program_bus.send_instruction(
+            builder,
+            io.from_state.pc,
+            AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
+            [
+                io.p2.address.address.into(),
+                io.p1.address.address.into(),
+                AB::Expr::zero(),
+                io.p1.address.address_space.into(),
+                io.p1.data.address_space.into(),
+            ],
+            aux.aux.is_valid,
+        );
 
         self.memory_bridge
             .read_from_cols(
@@ -136,16 +154,6 @@ impl EcDoubleVmAir {
             aux.aux.is_valid,
             io.from_state.map(Into::into),
             timestamp_delta,
-            InstructionCols::new(
-                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
-                [
-                    io.p2.address.address,
-                    io.p1.address.address,
-                    io.p1.address.address, // this one is unused
-                    io.p1.address.address_space,
-                    io.p1.data.address_space,
-                ],
-            ),
         );
     }
 }

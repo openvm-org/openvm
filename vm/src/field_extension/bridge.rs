@@ -6,8 +6,7 @@ use super::{
     columns::{FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols},
 };
 use crate::{
-    arch::columns::{ExecutionState, InstructionCols},
-    field_extension::columns::FieldExtensionArithmeticAuxCols,
+    arch::columns::ExecutionState, field_extension::columns::FieldExtensionArithmeticAuxCols,
     memory::MemoryAddress,
 };
 
@@ -41,6 +40,15 @@ impl FieldExtensionArithmeticAir {
             is_valid,
             ..
         } = aux;
+
+        // Interaction with program
+        self.program_bus.send_instruction(
+            builder,
+            pc,
+            expected_opcode.clone(),
+            [op_a, op_b, op_c, d, e],
+            is_valid,
+        );
 
         let mut timestamp_delta = 0;
         let mut timestamp_pp = || {
@@ -83,7 +91,6 @@ impl FieldExtensionArithmeticAir {
             aux.is_valid,
             ExecutionState::new(pc, timestamp),
             AB::F::from_canonical_usize(timestamp_delta),
-            InstructionCols::new(expected_opcode, [op_a, op_b, op_c, d, e]),
         );
     }
 }

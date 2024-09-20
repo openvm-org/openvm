@@ -22,7 +22,8 @@ use crate::{
         instructions::Opcode,
         testing::{MachineChipTestBuilder, MachineChipTester},
     },
-    cpu::{trace::Instruction, BYTE_XOR_BUS},
+    core::BYTE_XOR_BUS,
+    program::Instruction,
 };
 
 fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
@@ -39,6 +40,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
     let xor_chip = Arc::new(XorLookupChip::<8>::new(BYTE_XOR_BUS));
     let mut chip = KeccakVmChip::new(
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
         xor_chip.clone(),
     );
@@ -83,7 +85,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
     }
     let mut tester = tester.build().load(chip).load(xor_chip).finalize();
 
-    let keccak_trace = &mut tester.traces[1];
+    let keccak_trace = &mut tester.traces[2];
     let mut row = 0;
     for (input, output) in io {
         let num_blocks = num_keccak_f(input.len());

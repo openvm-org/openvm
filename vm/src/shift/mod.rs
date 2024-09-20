@@ -8,8 +8,8 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
     memory::MemoryChipRef,
+    program::{ExecutionError, Instruction},
 };
 
 mod air;
@@ -55,7 +55,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         &mut self,
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -96,10 +96,10 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         // TODO: push information to data for trace generation
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

@@ -4,15 +4,12 @@ use poseidon2_air::poseidon2::columns::Poseidon2IoCols;
 
 use super::{air::Poseidon2VmAir, columns::Poseidon2VmIoCols, WIDTH};
 use crate::{
-    arch::{
-        columns::{ExecutionState, InstructionCols},
-        instructions::Opcode::PERM_POS2,
-    },
-    cpu::POSEIDON2_DIRECT_BUS,
+    arch::{columns::ExecutionState, instructions::Opcode::PERM_POS2},
+    core::POSEIDON2_DIRECT_BUS,
 };
 
 impl<F: Field> Poseidon2VmAir<F> {
-    /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
+    /// Receives instructions from the Core on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
     ///
     /// Receives (clk, a, b, c, d, e, cmp) for opcodes, width exposed in `opcode_interaction_width()`
     ///
@@ -25,12 +22,20 @@ impl<F: Field> Poseidon2VmAir<F> {
         timestamp_delta: AB::Expr,
     ) {
         let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
+
+        self.program_bus.send_instruction(
+            builder,
+            io.pc,
+            opcode.clone(),
+            [io.a, io.b, io.c, io.d, io.e],
+            io.is_opcode,
+        );
+
         self.execution_bus.execute_increment_pc(
             builder,
             io.is_opcode,
             ExecutionState::new(io.pc, io.timestamp),
             timestamp_delta,
-            InstructionCols::new(opcode, [io.a, io.b, io.c, io.d, io.e]),
         );
 
         // DIRECT

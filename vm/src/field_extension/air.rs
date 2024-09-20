@@ -13,6 +13,7 @@ use crate::{
     },
     field_extension::chip::FieldExtensionArithmetic,
     memory::offline_checker::MemoryBridge,
+    program::bridge::ProgramBus,
 };
 
 /// Field extension arithmetic chip.
@@ -21,6 +22,7 @@ use crate::{
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct FieldExtensionArithmeticAir {
     pub(super) execution_bus: ExecutionBus,
+    pub(super) program_bus: ProgramBus,
     pub(super) memory_bridge: MemoryBridge,
 }
 

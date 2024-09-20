@@ -6,7 +6,7 @@ use super::{
     air::UintArithmeticAir,
     columns::{UintArithmeticAuxCols, UintArithmeticIoCols},
 };
-use crate::{arch::columns::InstructionCols, memory::MemoryAddress};
+use crate::memory::MemoryAddress;
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, LIMB_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -19,6 +19,23 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
         let mut timestamp_delta = AB::Expr::zero();
 
         let timestamp: AB::Var = io.from_state.timestamp;
+
+        // Interaction with program
+        self.program_bus.send_instruction(
+            builder,
+            io.from_state.pc,
+            expected_opcode.clone(),
+            [
+                io.z.ptr,
+                io.x.ptr,
+                io.y.ptr,
+                io.d,
+                io.z.address_space,
+                io.x.address_space,
+                io.y.address_space,
+            ],
+            aux.is_valid,
+        );
 
         // Read the operand pointer's values, which are themselves pointers
         // for the actual IO data.
@@ -92,18 +109,6 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
             aux.is_valid,
             io.from_state.map(Into::into),
             timestamp_delta,
-            InstructionCols::new(
-                expected_opcode,
-                [
-                    io.z.ptr,
-                    io.x.ptr,
-                    io.y.ptr,
-                    io.d,
-                    io.z.address_space,
-                    io.x.address_space,
-                    io.y.address_space,
-                ],
-            ),
         );
 
         // Chip-specific interactions

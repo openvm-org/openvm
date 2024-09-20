@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
-    cpu::trace::Instruction,
+    program::Instruction,
 };
 
 type F = BabyBear;
@@ -41,6 +41,7 @@ fn uint_arithmetic_rand_air_test() {
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
     );
 
@@ -131,8 +132,11 @@ fn run_bad_uint_arithmetic_test(
     expected_error: VerificationError,
 ) {
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip =
-        UintArithmeticChip::<256, 8, F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = UintArithmeticChip::<256, 8, F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let x_f = x
         .iter()
@@ -382,6 +386,7 @@ fn uint_lt_rand_air_test() {
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
     );
 
@@ -465,6 +470,7 @@ fn uint_eq_rand_air_test() {
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintArithmeticChip::<ARG_SIZE, LIMB_SIZE, F>::new(
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
     );
 

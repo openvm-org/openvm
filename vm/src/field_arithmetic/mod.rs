@@ -7,8 +7,8 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
     field_arithmetic::columns::Operand,
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 #[cfg(test)]
@@ -42,11 +42,16 @@ pub struct FieldArithmeticChip<F: PrimeField32> {
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     #[allow(clippy::new_without_default)]
-    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<F>) -> Self {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory_chip: MemoryChipRef<F>,
+    ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: FieldArithmeticAir {
                 execution_bus,
+                program_bus,
                 memory_bridge,
             },
             records: vec![],
@@ -60,7 +65,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: z_address,
@@ -98,10 +103,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
         });
         tracing::trace!("op = {:?}", self.records.last().unwrap());
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: from_state.timestamp + FieldArithmeticAir::TIMESTAMP_DELTA,
-        }
+        })
     }
 }
 

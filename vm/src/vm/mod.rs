@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, mem::take};
+use std::{cell::RefCell, collections::VecDeque, mem::take, rc::Rc};
 
 use cycle_tracker::CycleTracker;
 use metrics::VmMetrics;
@@ -8,12 +8,13 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 pub use segment::ExecutionSegment;
 
 use crate::{
-    cpu::{trace::ExecutionError, CpuOptions, CpuState},
-    program::Program,
+    core::{CoreOptions, CoreState},
+    program::{ExecutionError, Program},
     vm::{config::VmConfig, cycle_tracker::CanPrint, segment::SegmentResult},
 };
 
 pub mod config;
+pub mod connector;
 pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
@@ -32,11 +33,11 @@ pub struct VirtualMachine<F: PrimeField32> {
 /// Hint stream cannot be added to during execution, but must be copied because it is popped from.
 #[derive(Clone, Debug)]
 pub struct VirtualMachineState<F: PrimeField32> {
-    /// Current state of the CPU
-    pub state: CpuState,
-    /// Input stream of the CPU
+    /// Current state of the Core
+    pub state: CoreState,
+    /// Input stream of the Core
     pub input_stream: VecDeque<Vec<F>>,
-    /// Hint stream of the CPU
+    /// Hint stream of the Core
     pub hint_stream: VecDeque<F>,
 }
 
@@ -48,7 +49,7 @@ pub struct VirtualMachineResult<SC: StarkGenericConfig> {
 impl<F: PrimeField32> VirtualMachine<F> {
     /// Create a new VM with a given config, program, and input stream.
     ///
-    /// The VM will start with a single segment, which is created from the initial state of the CPU.
+    /// The VM will start with a single segment, which is created from the initial state of the Core.
     pub fn new(config: VmConfig, program: Program<F>, input_stream: Vec<Vec<F>>) -> Self {
         let mut vm = Self {
             config,
@@ -57,7 +58,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
         };
         vm.segment(
             VirtualMachineState {
-                state: CpuState::initial(),
+                state: CoreState::initial(),
                 input_stream: VecDeque::from(input_stream),
                 hint_stream: VecDeque::new(),
             },
@@ -75,25 +76,26 @@ impl<F: PrimeField32> VirtualMachine<F> {
             self.segments.len() + 1
         );
         let program = self.program.clone();
-        let mut segment = ExecutionSegment::new(self.config, program, state);
-
-        segment.cycle_tracker = cycle_tracker;
-        self.segments.push(segment);
+        let segment = ExecutionSegment::new(self.config, program, state);
+        let segment_rc = Rc::new(RefCell::new(segment));
+        segment_rc.borrow_mut().cycle_tracker = cycle_tracker;
+        self.segments
+            .push(Rc::try_unwrap(segment_rc).unwrap().into_inner());
     }
 
     /// Retrieves the current state of the VM by querying the last segment.
     pub fn current_state(&self) -> VirtualMachineState<F> {
         let last_seg = self.segments.last().unwrap();
         VirtualMachineState {
-            state: last_seg.cpu_chip.borrow().state,
+            state: last_seg.core_chip.borrow().state,
             input_stream: last_seg.input_stream.clone(),
             hint_stream: last_seg.hint_stream.clone(),
         }
     }
 
-    /// Retrieves the CPU options from the VM's config.
-    pub fn options(&self) -> CpuOptions {
-        self.config.cpu_options()
+    /// Retrieves the Core options from the VM's config.
+    pub fn options(&self) -> CoreOptions {
+        self.config.core_options()
     }
 
     /// Enable metrics collection on all segments
@@ -112,14 +114,14 @@ impl<F: PrimeField32> VirtualMachine<F> {
         }
     }
 
-    /// Executes the VM by calling `ExecutionSegment::execute()` until the CPU hits `TERMINATE`
-    /// and `cpu_chip.is_done`. Between every segment, the VM will call `next_segment()`.
+    /// Executes the VM by calling `ExecutionSegment::execute()` until the Core hits `TERMINATE`
+    /// and `core_chip.is_done`. Between every segment, the VM will call `next_segment()`.
     pub fn execute(mut self) -> Result<(), ExecutionError> {
         loop {
             let last_seg = self.segments.last_mut().unwrap();
             last_seg.cycle_tracker.print();
             last_seg.execute()?;
-            if last_seg.cpu_chip.borrow().state.is_done {
+            if last_seg.core_chip.borrow().state.is_done {
                 break;
             }
             let cycle_tracker = take(&mut last_seg.cycle_tracker);
@@ -142,7 +144,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
             let last_seg = self.segments.last_mut().unwrap();
             last_seg.cycle_tracker.print();
             last_seg.execute()?;
-            if last_seg.cpu_chip.borrow().state.is_done {
+            if last_seg.core_chip.borrow().state.is_done {
                 break;
             }
             let cycle_tracker = take(&mut last_seg.cycle_tracker);

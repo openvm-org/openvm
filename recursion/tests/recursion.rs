@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 
 use afs_compiler::{asm::AsmBuilder, ir::Felt};
 use afs_recursion::testing_utils::{inner::run_recursive_test, StarkForTest};
-use ax_sdk::config::{fri_params::default_fri_params, setup_tracing};
+use ax_sdk::config::setup_tracing;
 use itertools::{izip, multiunzip, Itertools};
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
@@ -56,7 +56,7 @@ where
     };
 
     let vm = VirtualMachine::new(vm_config, fib_program, vec![]);
-    vm.segments[0].cpu_chip.borrow_mut().public_values = vec![
+    vm.segments[0].core_chip.borrow_mut().public_values = vec![
         Some(BabyBear::zero()),
         Some(BabyBear::one()),
         Some(BabyBear::from_canonical_u32(1346269)),
@@ -94,6 +94,7 @@ fn test_fibonacci_program_verify() {
 #[test]
 fn test_fibonacci_program_halo2_verify() {
     use afs_recursion::halo2::testing_utils::run_static_verifier_test;
+    use ax_sdk::config::fri_params::default_fri_params;
     setup_tracing();
 
     let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);

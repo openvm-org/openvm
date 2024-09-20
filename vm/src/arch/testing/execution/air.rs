@@ -6,10 +6,7 @@ use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::arch::{
-    bus::ExecutionBus,
-    columns::{ExecutionState, InstructionCols},
-};
+use crate::arch::{bus::ExecutionBus, columns::ExecutionState};
 
 #[derive(Clone, Copy, Debug, AlignedBorrow, derive_new::new)]
 #[repr(C)]
@@ -18,7 +15,6 @@ pub struct DummyExecutionInteractionCols<T> {
     pub count: T,
     pub initial_state: ExecutionState<T>,
     pub final_state: ExecutionState<T>,
-    pub instruction: InstructionCols<T>,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -37,12 +33,7 @@ impl<AB: InteractionBuilder> Air<AB> for ExecutionDummyAir {
         let main = builder.main();
         let local = main.row_slice(0);
         let local: &DummyExecutionInteractionCols<AB::Var> = (*local).borrow();
-        self.bus.execute(
-            builder,
-            local.count,
-            local.initial_state,
-            local.final_state,
-            local.instruction.map(Into::into),
-        );
+        self.bus
+            .execute(builder, local.count, local.initial_state, local.final_state);
     }
 }

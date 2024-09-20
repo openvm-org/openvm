@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
+    mem,
     rc::Rc,
     sync::Arc,
 };
@@ -11,6 +12,7 @@ use afs_primitives::{
     xor::lookup::XorLookupChip,
 };
 use afs_stark_backend::rap::AnyRap;
+use backtrace::Backtrace;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -18,43 +20,50 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
-use super::{VirtualMachineState, VmConfig, VmCycleTracker, VmMetrics};
+use super::{
+    connector::VmConnectorChip, cycle_tracker::CycleTracker, VirtualMachineState, VmConfig,
+    VmCycleTracker, VmMetrics,
+};
 use crate::{
     arch::{
         bus::ExecutionBus,
-        chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
+        chips::{InstructionExecutor, InstructionExecutorVariant, MachineChip, MachineChipVariant},
+        columns::ExecutionState,
         instructions::{
-            Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
+            Opcode, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
             SHIFT_256_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS, UI_32_INSTRUCTIONS,
         },
     },
     castf::CastFChip,
-    cpu::{
-        trace::ExecutionError, CpuChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
+    core::{
+        CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
+        READ_INSTRUCTION_BUS,
     },
     ecc::{EcAddUnequalChip, EcDoubleChip},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
-    modular_arithmetic::{ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
-    modular_multdiv::ModularMultDivChip,
-    program::{Program, ProgramChip},
+    modular_arithmetic::{
+        ModularArithmeticChip, ModularArithmeticOp, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+    },
+    program::{bridge::ProgramBus, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
-    vm::cycle_tracker::CycleTracker,
 };
 
+#[derive(Debug)]
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
 
     pub executors: BTreeMap<Opcode, InstructionExecutorVariant<F>>,
     pub chips: Vec<MachineChipVariant<F>>,
-    pub cpu_chip: Rc<RefCell<CpuChip<F>>>,
+    pub core_chip: Rc<RefCell<CoreChip<F>>>,
     pub program_chip: Rc<RefCell<ProgramChip<F>>>,
     pub memory_chip: MemoryChipRef<F>,
+    pub connector_chip: VmConnectorChip<F>,
 
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
@@ -88,6 +97,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
         let execution_bus = ExecutionBus(0);
+        let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
         let memory_bus = MemoryBus(1);
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
@@ -98,15 +108,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             config.memory_config,
             range_checker.clone(),
         )));
-        let cpu_chip = Rc::new(RefCell::new(CpuChip::from_state(
-            config.cpu_options(),
+        let core_chip = Rc::new(RefCell::new(CoreChip::from_state(
+            config.core_options(),
             execution_bus,
             memory_chip.clone(),
             state.state,
         )));
         let program_chip = Rc::new(RefCell::new(ProgramChip::new(program)));
 
-        let mut executors = BTreeMap::new();
+        let mut executors: BTreeMap<Opcode, InstructionExecutorVariant<F>> = BTreeMap::new();
         macro_rules! assign {
             ($opcodes: expr, $executor: expr) => {
                 for opcode in $opcodes {
@@ -119,13 +129,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         // That is, if chip A holds a strong reference to chip B, then A must precede B in `chips`.
 
         let mut chips = vec![
-            MachineChipVariant::Cpu(cpu_chip.clone()),
+            MachineChipVariant::Core(core_chip.clone()),
             MachineChipVariant::Program(program_chip.clone()),
         ];
+
+        for opcode in CORE_INSTRUCTIONS {
+            executors.insert(opcode, core_chip.clone().into());
+        }
 
         if config.field_arithmetic_enabled {
             let field_arithmetic_chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             assign!(FIELD_ARITHMETIC_INSTRUCTIONS, field_arithmetic_chip);
@@ -134,6 +149,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.field_extension_enabled {
             let field_extension_chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
@@ -146,6 +162,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     .poseidon2_max_constraint_degree
                     .expect("Poseidon2 is enabled but no max_constraint_degree provided"),
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             if config.perm_poseidon2_enabled {
@@ -160,6 +177,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
             let keccak_chip = Rc::new(RefCell::new(KeccakVmChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 byte_xor_chip.clone(),
             )));
@@ -170,31 +188,54 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.modular_arithmetic_enabled {
             let mod_arith_coord: ModularArithmeticChip<F, 32, 8> = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
             );
             let mod_arith_scalar: ModularArithmeticChip<F, 32, 8> = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
+                ModularArithmeticOp::Add,
             );
-            assign!(
-                [Opcode::SECP256K1_COORD_ADD, Opcode::SECP256K1_COORD_SUB],
-                Rc::new(RefCell::new(mod_arith_coord.clone()))
-            );
-            assign!(
-                [Opcode::SECP256K1_COORD_SUB, Opcode::SECP256K1_SCALAR_SUB],
-                Rc::new(RefCell::new(mod_arith_scalar.clone()))
-            );
-        }
-        if config.modular_multdiv_enabled {
-            let mod_multdiv_coord: ModularMultDivChip<F, 63, 32, 8> = ModularMultDivChip::new(
+            let sub_coord = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
+                memory_chip.clone(),
+                SECP256K1_COORD_PRIME.clone(),
+                ModularArithmeticOp::Sub,
+            );
+            let sub_scalar = ModularArithmeticChip::new(
+                execution_bus,
+                program_bus,
+                memory_chip.clone(),
+                SECP256K1_SCALAR_PRIME.clone(),
+                ModularArithmeticOp::Sub,
+            );
+            let mul_coord = ModularArithmeticChip::new(
+                execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
             );
-            let mod_multdiv_scalar: ModularMultDivChip<F, 63, 32, 8> = ModularMultDivChip::new(
+            let mul_scalar = ModularArithmeticChip::new(
                 execution_bus,
+                program_bus,
+                memory_chip.clone(),
+                SECP256K1_SCALAR_PRIME.clone(),
+                ModularArithmeticOp::Mul,
+            );
+            let div_coord = ModularArithmeticChip::new(
+                execution_bus,
+                program_bus,
+                memory_chip.clone(),
+                SECP256K1_COORD_PRIME.clone(),
+                ModularArithmeticOp::Div,
+            );
+            let div_scalar = ModularArithmeticChip::new(
+                execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
             );
@@ -211,6 +252,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.modular_multdiv_enabled || config.u256_arithmetic_enabled {
             let u256_chip = Rc::new(RefCell::new(UintArithmeticChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             chips.push(MachineChipVariant::U256Arithmetic(u256_chip.clone()));
@@ -222,6 +264,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
             let u256_mult_chip = Rc::new(RefCell::new(UintMultiplicationChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
                 range_tuple_checker.clone(),
             )));
@@ -240,6 +283,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.ui_32_enabled {
             let ui_chip = Rc::new(RefCell::new(UiChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             assign!(UI_32_INSTRUCTIONS, ui_chip);
@@ -248,6 +292,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.castf_enabled {
             let castf_chip = Rc::new(RefCell::new(CastFChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             assign!([Opcode::CASTF], castf_chip);
@@ -256,10 +301,12 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.secp256k1_enabled {
             let secp256k1_add_unequal_chip = Rc::new(RefCell::new(EcAddUnequalChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             let secp256k1_double_chip = Rc::new(RefCell::new(EcDoubleChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
             )));
             assign!([Opcode::SECP256K1_EC_ADD_NE], secp256k1_add_unequal_chip);
@@ -274,15 +321,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         chips.push(MachineChipVariant::Memory(memory_chip.clone()));
         chips.push(MachineChipVariant::RangeChecker(range_checker.clone()));
 
+        let connector_chip = VmConnectorChip::new(execution_bus);
+
         Self {
             config,
             executors,
             chips,
-            cpu_chip,
+            core_chip,
             program_chip,
             memory_chip,
+            connector_chip,
             input_stream: state.input_stream,
-            hint_stream: state.hint_stream,
+            hint_stream: state.hint_stream.clone(),
             collected_metrics: Default::default(),
             cycle_tracker: CycleTracker::new(),
         }
@@ -290,7 +340,132 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
     /// Stopping is triggered by should_segment()
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        CpuChip::execute(self)
+        let mut timestamp: usize = self.core_chip.borrow().state.timestamp;
+        let mut pc = F::from_canonical_usize(self.core_chip.borrow().state.pc);
+
+        let mut collect_metrics = self.config.collect_metrics;
+        // The backtrace for the previous instruction, if any.
+        let mut prev_backtrace: Option<Backtrace> = None;
+
+        self.core_chip.borrow_mut().streams = Streams {
+            input_stream: self.input_stream.clone(),
+            hint_stream: self.hint_stream.clone(),
+        };
+
+        self.connector_chip
+            .begin(ExecutionState::new(pc, F::from_canonical_usize(timestamp)));
+
+        loop {
+            let pc_usize = pc.as_canonical_u64() as usize;
+
+            let (instruction, debug_info) =
+                RefCell::borrow_mut(&self.program_chip).get_instruction(pc_usize)?;
+            tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
+
+            let dsl_instr = match &debug_info {
+                Some(debug_info) => debug_info.dsl_instruction.to_string(),
+                None => String::new(),
+            };
+
+            let opcode = instruction.opcode;
+
+            let next_pc;
+
+            let prev_trace_cells = self.current_trace_cells();
+
+            if opcode == Opcode::FAIL {
+                if let Some(mut backtrace) = prev_backtrace {
+                    backtrace.resolve();
+                    eprintln!("eDSL program failure; backtrace:\n{:?}", backtrace);
+                } else {
+                    eprintln!("eDSL program failure; no backtrace");
+                }
+                return Err(ExecutionError::Fail(pc_usize));
+            }
+
+            // runtime only instruction handling
+            match opcode {
+                Opcode::CT_START => self
+                    .cycle_tracker
+                    .start(instruction.debug.clone(), self.collected_metrics.clone()),
+                Opcode::CT_END => self
+                    .cycle_tracker
+                    .end(instruction.debug.clone(), self.collected_metrics.clone()),
+                _ => {}
+            }
+
+            if self.executors.contains_key(&opcode) {
+                let executor = self.executors.get_mut(&opcode).unwrap();
+                match InstructionExecutor::execute(
+                    executor,
+                    instruction,
+                    ExecutionState::new(pc_usize, timestamp),
+                ) {
+                    Ok(next_state) => {
+                        next_pc = F::from_canonical_usize(next_state.pc);
+                        timestamp = next_state.timestamp;
+                    }
+                    Err(e) => return Err(e),
+                }
+            } else {
+                return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
+            }
+
+            let now_trace_cells = self.current_trace_cells();
+            let added_trace_cells = now_trace_cells - prev_trace_cells;
+
+            if collect_metrics {
+                self.collected_metrics
+                    .opcode_counts
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+
+                if !dsl_instr.is_empty() {
+                    self.collected_metrics
+                        .dsl_counts
+                        .entry(dsl_instr)
+                        .and_modify(|count| *count += 1)
+                        .or_insert(1);
+                }
+
+                self.collected_metrics
+                    .opcode_trace_cells
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += added_trace_cells)
+                    .or_insert(added_trace_cells);
+            }
+
+            prev_backtrace = debug_info.and_then(|debug_info| debug_info.trace);
+
+            pc = next_pc;
+
+            // clock_cycle += 1;
+            if opcode == Opcode::TERMINATE && collect_metrics {
+                self.update_chip_metrics();
+                // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
+                collect_metrics = false;
+            }
+            if opcode == Opcode::TERMINATE {
+                break;
+            }
+            if self.should_segment() {
+                panic!("continuations not supported");
+            }
+        }
+
+        self.connector_chip
+            .end(ExecutionState::new(pc, F::from_canonical_usize(timestamp)));
+
+        let streams = mem::take(&mut self.core_chip.borrow_mut().streams);
+        self.hint_stream = streams.hint_stream;
+        self.input_stream = streams.input_stream;
+
+        if collect_metrics {
+            self.update_chip_metrics();
+        }
+
+        Ok(())
     }
 
     /// Compile the AIRs and trace generation outputs for the chips used in this segment
@@ -308,7 +483,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         // Drop all strong references to chips other than self.chips, which will be consumed next.
         drop(self.executors);
-        drop(self.cpu_chip);
+        drop(self.core_chip);
         drop(self.program_chip);
         drop(self.memory_chip);
 
@@ -319,23 +494,24 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 result.traces.push(chip.generate_trace());
             }
         }
+        let trace = self.connector_chip.generate_trace();
+        result.airs.push(Box::new(self.connector_chip.air));
+        result.public_values.push(vec![]);
+        result.traces.push(trace);
 
         result
     }
 
-    /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of CPU trace generation.
+    /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
-    ///
-    /// Used by CpuChip::execute, should be private in the future
-    pub fn should_segment(&mut self) -> bool {
+    fn should_segment(&mut self) -> bool {
         self.chips
             .iter()
             .any(|chip| chip.current_trace_height() > self.config.max_segment_len)
     }
 
-    /// Used by CpuChip::execute, should be private in the future
-    pub fn current_trace_cells(&self) -> usize {
+    fn current_trace_cells(&self) -> usize {
         self.chips
             .iter()
             .map(|chip| chip.current_trace_cells())

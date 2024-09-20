@@ -1,13 +1,14 @@
 use core::panic;
+use std::collections::VecDeque;
 
 use afs_primitives::xor::bus::XorBus;
-pub use air::CpuAir;
+pub use air::CoreAir;
 use p3_field::PrimeField32;
 
 use crate::{
     arch::{
         bus::ExecutionBus,
-        instructions::{Opcode, Opcode::*},
+        instructions::Opcode::{self, *},
     },
     memory::MemoryChipRef,
 };
@@ -18,6 +19,7 @@ use crate::{
 pub mod air;
 pub mod bridge;
 pub mod columns;
+pub mod execute;
 pub mod trace;
 
 pub const INST_WIDTH: usize = 1;
@@ -27,9 +29,9 @@ pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const BYTE_XOR_BUS: XorBus = XorBus(8);
 pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
-pub const CPU_MAX_READS_PER_CYCLE: usize = 3;
-pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
-pub const CPU_MAX_ACCESSES_PER_CYCLE: usize = CPU_MAX_READS_PER_CYCLE + CPU_MAX_WRITES_PER_CYCLE;
+pub const CORE_MAX_READS_PER_CYCLE: usize = 3;
+pub const CORE_MAX_WRITES_PER_CYCLE: usize = 1;
+pub const CORE_MAX_ACCESSES_PER_CYCLE: usize = CORE_MAX_READS_PER_CYCLE + CORE_MAX_WRITES_PER_CYCLE;
 
 // [jpw] Temporary, we are going to remove cpu anyways
 const WORD_SIZE: usize = 1;
@@ -48,26 +50,26 @@ fn timestamp_delta(opcode: Opcode) -> usize {
         HINT_INPUT | HINT_BITS | HINT_BYTES => 0,
         CT_START | CT_END => 0,
         NOP => 0,
-        _ => panic!("Non-CPU opcode: {:?}", opcode),
+        _ => panic!("Non-Core opcode: {:?}", opcode),
     }
 }
 
 #[derive(Default, Clone, Copy, Debug)]
-pub struct CpuOptions {
+pub struct CoreOptions {
     pub num_public_values: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct CpuState {
+pub struct CoreState {
     pub clock_cycle: usize,
     pub timestamp: usize,
     pub pc: usize,
     pub is_done: bool,
 }
 
-impl CpuState {
+impl CoreState {
     pub fn initial() -> Self {
-        CpuState {
+        CoreState {
             clock_cycle: 0,
             timestamp: 1,
             pc: 0,
@@ -76,42 +78,51 @@ impl CpuState {
     }
 }
 
-/// Chip for the CPU. Carries all state and owns execution.
-#[derive(Debug)]
-pub struct CpuChip<F: PrimeField32> {
-    pub air: CpuAir,
-    pub rows: Vec<Vec<F>>,
-    pub state: CpuState,
-    /// Program counter at the start of the current segment.
-    pub start_state: CpuState,
-    pub public_values: Vec<Option<F>>,
-    pub memory_chip: MemoryChipRef<F>,
+#[derive(Clone, Default, Debug)]
+pub struct Streams<F> {
+    pub input_stream: VecDeque<Vec<F>>,
+    pub hint_stream: VecDeque<F>,
 }
 
-impl<F: PrimeField32> CpuChip<F> {
+/// Chip for the Core. Carries all state and owns execution.
+#[derive(Debug)]
+pub struct CoreChip<F: PrimeField32> {
+    pub air: CoreAir,
+    pub rows: Vec<Vec<F>>,
+    pub state: CoreState,
+    /// Program counter at the start of the current segment.
+    pub start_state: CoreState,
+    pub public_values: Vec<Option<F>>,
+    pub memory_chip: MemoryChipRef<F>,
+
+    // TODO[jpw] Unclear Core should own this
+    pub streams: Streams<F>,
+}
+
+impl<F: PrimeField32> CoreChip<F> {
     pub fn new(
-        options: CpuOptions,
+        options: CoreOptions,
         execution_bus: ExecutionBus,
         memory_chip: MemoryChipRef<F>,
     ) -> Self {
-        Self::from_state(options, execution_bus, memory_chip, CpuState::initial())
+        Self::from_state(options, execution_bus, memory_chip, CoreState::initial())
     }
 
-    /// Sets the current state of the CPU.
-    pub fn set_state(&mut self, state: CpuState) {
+    /// Sets the current state of the Core.
+    pub fn set_state(&mut self, state: CoreState) {
         self.state = state;
     }
 
-    /// Sets the current state of the CPU.
+    /// Sets the current state of the Core.
     pub fn from_state(
-        options: CpuOptions,
+        options: CoreOptions,
         execution_bus: ExecutionBus,
         memory_chip: MemoryChipRef<F>,
-        state: CpuState,
+        state: CoreState,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            air: CpuAir {
+            air: CoreAir {
                 options,
                 execution_bus,
                 memory_bridge,
@@ -121,6 +132,7 @@ impl<F: PrimeField32> CpuChip<F> {
             start_state: state,
             public_values: vec![None; options.num_public_values],
             memory_chip,
+            streams: Default::default(),
         }
     }
 }

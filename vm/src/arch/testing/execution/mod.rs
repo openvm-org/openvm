@@ -6,63 +6,31 @@ use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use rand::{rngs::StdRng, RngCore};
 
-use super::MemoryTester;
-use crate::{
-    arch::{
-        bus::ExecutionBus,
-        chips::{InstructionExecutor, MachineChip},
-        columns::{ExecutionState, InstructionCols},
-    },
-    cpu::trace::Instruction,
-};
+use crate::arch::{bus::ExecutionBus, chips::MachineChip, columns::ExecutionState};
 
 pub mod air;
 
 #[derive(Clone, Debug)]
 pub struct ExecutionTester<F: Field> {
     pub bus: ExecutionBus,
-    pub rng: StdRng,
     pub records: Vec<DummyExecutionInteractionCols<F>>,
 }
 
 impl<F: PrimeField32> ExecutionTester<F> {
-    pub fn new(bus: ExecutionBus, rng: StdRng) -> Self {
+    pub fn new(bus: ExecutionBus) -> Self {
         Self {
             bus,
-            rng,
             records: vec![],
         }
     }
 
-    pub fn execute<E: InstructionExecutor<F>>(
-        &mut self,
-        memory_tester: &mut MemoryTester<F>, // should merge MemoryTester and ExecutionTester into one struct (MachineChipTestBuilder?)
-        executor: &mut E,
-        instruction: Instruction<F>,
-    ) {
-        let initial_state = ExecutionState {
-            pc: self.next_elem_size_usize(),
-            timestamp: memory_tester.chip.borrow().timestamp(),
-        };
-        tracing::debug!(?initial_state.timestamp);
-
-        let instruction_cols = InstructionCols::from_instruction(&instruction);
-        let final_state = executor.execute(
-            instruction,
-            initial_state.map(|x| x.as_canonical_u32() as usize),
-        );
+    pub fn execute(&mut self, initial_state: ExecutionState<F>, final_state: ExecutionState<F>) {
         self.records.push(DummyExecutionInteractionCols {
             count: F::neg_one(), // send
             initial_state,
-            final_state: final_state.map(F::from_canonical_usize),
-            instruction: instruction_cols,
+            final_state,
         })
-    }
-
-    fn next_elem_size_usize(&mut self) -> F {
-        F::from_canonical_u32(self.rng.next_u32() % (1 << (F::bits() - 2)))
     }
 
     // for use by CoreChip, needs to be modified to setup memorytester (or just merge them before writing CoreChip)

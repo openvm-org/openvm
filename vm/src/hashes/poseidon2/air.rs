@@ -13,6 +13,7 @@ use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{
     arch::bus::ExecutionBus,
     memory::{offline_checker::MemoryBridge, MemoryAddress},
+    program::bridge::ProgramBus,
 };
 
 /// Poseidon2 Air, VM version.
@@ -23,6 +24,7 @@ use crate::{
 pub struct Poseidon2VmAir<T> {
     pub inner: Poseidon2Air<WIDTH, T>,
     pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
     pub memory_bridge: MemoryBridge,
     pub direct: bool, // Whether direct interactions are enabled.
 }

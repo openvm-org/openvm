@@ -11,8 +11,8 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, UI_32_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
     memory::{MemoryChipRef, MemoryWriteRecord},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 mod air;
@@ -41,13 +41,18 @@ pub struct UiChip<T: PrimeField32> {
 }
 
 impl<T: PrimeField32> UiChip<T> {
-    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory_chip: MemoryChipRef<T>,
+    ) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
         let bus = range_checker_chip.bus();
         Self {
             air: UiAir {
                 execution_bus,
+                program_bus,
                 memory_bridge,
                 bus,
             },
@@ -63,7 +68,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
         &mut self,
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -105,10 +110,10 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
             x_write,
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

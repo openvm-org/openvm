@@ -18,8 +18,8 @@ use crate::{
             MachineChipTestBuilder,
         },
     },
-    cpu::trace::Instruction,
     field_extension::chip::{FieldExtensionArithmetic, FieldExtensionArithmeticChip},
+    program::Instruction,
 };
 
 #[test]
@@ -27,7 +27,11 @@ fn field_extension_air_test() {
     type F = BabyBear;
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = FieldExtensionArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = FieldExtensionArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let num_ops: usize = 7; // test padding with dummy row
@@ -69,7 +73,7 @@ fn field_extension_air_test() {
     // negative test pranking each IO value
     for height in 0..num_ops {
         // TODO: better way to modify existing traces in tester
-        let extension_trace = &mut tester.traces[1];
+        let extension_trace = &mut tester.traces[2];
         let original_trace = extension_trace.clone();
         for width in 0..FieldExtensionArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));

@@ -8,7 +8,7 @@ use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 
 use super::{
-    CpuAir, CpuChip, Opcode, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, WORD_SIZE,
+    CoreAir, CoreChip, Opcode, CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE, WORD_SIZE,
 };
 use crate::{
     arch::instructions::CORE_INSTRUCTIONS,
@@ -19,7 +19,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CpuIoCols<T> {
+pub struct CoreIoCols<T> {
     pub timestamp: T,
     pub pc: T,
 
@@ -33,7 +33,7 @@ pub struct CpuIoCols<T> {
     pub op_g: T,
 }
 
-impl<T: Clone> CpuIoCols<T> {
+impl<T: Clone> CoreIoCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             timestamp: slc[0].clone(),
@@ -69,7 +69,7 @@ impl<T: Clone> CpuIoCols<T> {
     }
 }
 
-impl<T: Field> CpuIoCols<T> {
+impl<T: Field> CoreIoCols<T> {
     pub fn nop_row(pc: T, timestamp: T) -> Self {
         Self {
             timestamp,
@@ -87,7 +87,7 @@ impl<T: Field> CpuIoCols<T> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CpuMemoryAccessCols<T> {
+pub struct CoreMemoryAccessCols<T> {
     pub address_space: T,
     pub pointer: T,
     pub timestamp: T,
@@ -95,9 +95,9 @@ pub struct CpuMemoryAccessCols<T> {
     pub value: T,
 }
 
-impl<F: Field> CpuMemoryAccessCols<F> {
+impl<F: Field> CoreMemoryAccessCols<F> {
     pub fn disabled() -> Self {
-        CpuMemoryAccessCols {
+        CoreMemoryAccessCols {
             address_space: F::one(),
             pointer: F::zero(),
             timestamp: F::zero(),
@@ -107,7 +107,7 @@ impl<F: Field> CpuMemoryAccessCols<F> {
     }
 
     pub fn from_read_record(read: MemoryReadRecord<F, 1>) -> Self {
-        CpuMemoryAccessCols {
+        CoreMemoryAccessCols {
             address_space: read.address_space,
             pointer: read.pointer,
             timestamp: read.timestamp,
@@ -117,7 +117,7 @@ impl<F: Field> CpuMemoryAccessCols<F> {
     }
 
     pub fn from_write_record(write: MemoryWriteRecord<F, 1>) -> Self {
-        CpuMemoryAccessCols {
+        CoreMemoryAccessCols {
             address_space: write.address_space,
             pointer: write.pointer,
             timestamp: write.timestamp,
@@ -127,7 +127,7 @@ impl<F: Field> CpuMemoryAccessCols<F> {
     }
 }
 
-impl<T: Clone> CpuMemoryAccessCols<T> {
+impl<T: Clone> CoreMemoryAccessCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             address_space: slc[0].clone(),
@@ -139,7 +139,7 @@ impl<T: Clone> CpuMemoryAccessCols<T> {
     }
 }
 
-impl<T> CpuMemoryAccessCols<T> {
+impl<T> CoreMemoryAccessCols<T> {
     pub fn flatten(self) -> Vec<T> {
         vec![
             self.address_space,
@@ -156,19 +156,21 @@ impl<T> CpuMemoryAccessCols<T> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CpuAuxCols<T> {
+pub struct CoreAuxCols<T> {
     pub operation_flags: BTreeMap<Opcode, T>,
     pub public_value_flags: Vec<T>,
-    pub reads: [CpuMemoryAccessCols<T>; CPU_MAX_READS_PER_CYCLE],
-    pub writes: [CpuMemoryAccessCols<T>; CPU_MAX_WRITES_PER_CYCLE],
+    pub reads: [CoreMemoryAccessCols<T>; CORE_MAX_READS_PER_CYCLE],
+    pub writes: [CoreMemoryAccessCols<T>; CORE_MAX_WRITES_PER_CYCLE],
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
-    pub reads_aux_cols: [MemoryReadOrImmediateAuxCols<T>; CPU_MAX_READS_PER_CYCLE],
-    pub writes_aux_cols: [MemoryWriteAuxCols<T, 1>; CPU_MAX_WRITES_PER_CYCLE],
+    pub reads_aux_cols: [MemoryReadOrImmediateAuxCols<T>; CORE_MAX_READS_PER_CYCLE],
+    pub writes_aux_cols: [MemoryWriteAuxCols<T, 1>; CORE_MAX_WRITES_PER_CYCLE],
+
+    pub next_pc: T,
 }
 
-impl<T: Clone> CpuAuxCols<T> {
-    pub fn from_slice(slc: &[T], cpu_air: &CpuAir) -> Self {
+impl<T: Clone> CoreAuxCols<T> {
+    pub fn from_slice(slc: &[T], core_air: &CoreAir) -> Self {
         let mut start = 0;
         let mut end = CORE_INSTRUCTIONS.len();
         let operation_flags_vec = slc[start..end].to_vec();
@@ -178,18 +180,18 @@ impl<T: Clone> CpuAuxCols<T> {
         }
 
         start = end;
-        end += cpu_air.options.num_public_values;
+        end += core_air.options.num_public_values;
         let public_value_flags = slc[start..end].to_vec();
 
         let reads = array::from_fn(|_| {
             start = end;
-            end += CpuMemoryAccessCols::<T>::width();
-            CpuMemoryAccessCols::<T>::from_slice(&slc[start..end])
+            end += CoreMemoryAccessCols::<T>::width();
+            CoreMemoryAccessCols::<T>::from_slice(&slc[start..end])
         });
         let writes = array::from_fn(|_| {
             start = end;
-            end += CpuMemoryAccessCols::<T>::width();
-            CpuMemoryAccessCols::<T>::from_slice(&slc[start..end])
+            end += CoreMemoryAccessCols::<T>::width();
+            CoreMemoryAccessCols::<T>::from_slice(&slc[start..end])
         });
 
         start = end;
@@ -210,6 +212,7 @@ impl<T: Clone> CpuAuxCols<T> {
             end += MemoryWriteAuxCols::<T, WORD_SIZE>::width();
             MemoryWriteAuxCols::from_slice(&slc[start..end])
         });
+        let next_pc = slc[end].clone();
 
         Self {
             operation_flags,
@@ -220,6 +223,7 @@ impl<T: Clone> CpuAuxCols<T> {
             is_equal_vec_aux,
             reads_aux_cols,
             writes_aux_cols,
+            next_pc,
         }
     }
 
@@ -233,13 +237,13 @@ impl<T: Clone> CpuAuxCols<T> {
             self.reads
                 .iter()
                 .cloned()
-                .flat_map(CpuMemoryAccessCols::<T>::flatten),
+                .flat_map(CoreMemoryAccessCols::<T>::flatten),
         );
         flattened.extend(
             self.writes
                 .iter()
                 .cloned()
-                .flat_map(CpuMemoryAccessCols::<T>::flatten),
+                .flat_map(CoreMemoryAccessCols::<T>::flatten),
         );
         flattened.push(self.read0_equals_read1.clone());
         flattened.extend(self.is_equal_vec_aux.flatten());
@@ -255,23 +259,25 @@ impl<T: Clone> CpuAuxCols<T> {
                 .cloned()
                 .flat_map(MemoryWriteAuxCols::flatten),
         );
+        flattened.push(self.next_pc.clone());
         flattened
     }
 
-    pub fn get_width(cpu_air: &CpuAir) -> usize {
+    pub fn get_width(core_air: &CoreAir) -> usize {
         CORE_INSTRUCTIONS.len()
-            + cpu_air.options.num_public_values
-            + CPU_MAX_READS_PER_CYCLE
-                * (CpuMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width())
-            + CPU_MAX_WRITES_PER_CYCLE
-                * (CpuMemoryAccessCols::<T>::width() + MemoryWriteAuxCols::<T, WORD_SIZE>::width())
+            + core_air.options.num_public_values
+            + CORE_MAX_READS_PER_CYCLE
+                * (CoreMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width())
+            + CORE_MAX_WRITES_PER_CYCLE
+                * (CoreMemoryAccessCols::<T>::width() + MemoryWriteAuxCols::<T, WORD_SIZE>::width())
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
+            + 1
     }
 }
 
-impl<F: PrimeField32> CpuAuxCols<F> {
-    pub fn nop_row(chip: &CpuChip<F>) -> Self {
+impl<F: PrimeField32> CoreAuxCols<F> {
+    pub fn nop_row(chip: &CoreChip<F>) -> Self {
         let mut operation_flags = BTreeMap::new();
         for opcode in CORE_INSTRUCTIONS {
             operation_flags.insert(opcode, F::from_bool(opcode == Opcode::NOP));
@@ -284,26 +290,27 @@ impl<F: PrimeField32> CpuAuxCols<F> {
         Self {
             operation_flags,
             public_value_flags: vec![F::zero(); chip.air.options.num_public_values],
-            reads: array::from_fn(|_| CpuMemoryAccessCols::disabled()),
-            writes: array::from_fn(|_| CpuMemoryAccessCols::disabled()),
+            reads: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
+            writes: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
             read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
             reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
+            next_pc: F::from_canonical_usize(chip.state.pc),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CpuCols<T> {
-    pub io: CpuIoCols<T>,
-    pub aux: CpuAuxCols<T>,
+pub struct CoreCols<T> {
+    pub io: CoreIoCols<T>,
+    pub aux: CoreAuxCols<T>,
 }
 
-impl<T: Clone> CpuCols<T> {
-    pub fn from_slice(slc: &[T], cpu_air: &CpuAir) -> Self {
-        let io = CpuIoCols::<T>::from_slice(&slc[..CpuIoCols::<T>::get_width()]);
-        let aux = CpuAuxCols::<T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], cpu_air);
+impl<T: Clone> CoreCols<T> {
+    pub fn from_slice(slc: &[T], core_air: &CoreAir) -> Self {
+        let io = CoreIoCols::<T>::from_slice(&slc[..CoreIoCols::<T>::get_width()]);
+        let aux = CoreAuxCols::<T>::from_slice(&slc[CoreIoCols::<T>::get_width()..], core_air);
 
         Self { io, aux }
     }
@@ -314,19 +321,19 @@ impl<T: Clone> CpuCols<T> {
         flattened
     }
 
-    pub fn get_width(cpu_air: &CpuAir) -> usize {
-        CpuIoCols::<T>::get_width() + CpuAuxCols::<T>::get_width(cpu_air)
+    pub fn get_width(core_air: &CoreAir) -> usize {
+        CoreIoCols::<T>::get_width() + CoreAuxCols::<T>::get_width(core_air)
     }
 }
 
-impl<F: PrimeField32> CpuCols<F> {
+impl<F: PrimeField32> CoreCols<F> {
     /// This function mutates internal state of some chips. It should be called once for every
     /// NOP row---results should not be cloned.
     /// TODO[zach]: Make this less surprising, probably by not doing less-than checks on dummy rows.
-    pub fn nop_row(chip: &CpuChip<F>, pc: F, timestamp: F) -> Self {
+    pub fn nop_row(chip: &CoreChip<F>, pc: F, timestamp: F) -> Self {
         Self {
-            io: CpuIoCols::<F>::nop_row(pc, timestamp),
-            aux: CpuAuxCols::<F>::nop_row(chip),
+            io: CoreIoCols::<F>::nop_row(pc, timestamp),
+            aux: CoreAuxCols::<F>::nop_row(chip),
         }
     }
 }

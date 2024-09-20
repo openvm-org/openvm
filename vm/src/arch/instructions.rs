@@ -90,9 +90,9 @@ impl fmt::Display for Opcode {
     }
 }
 
-pub const CORE_INSTRUCTIONS: [Opcode; 16] = [
-    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS, HINT_BYTES, PUBLISH,
-    CT_START, CT_END, NOP, LOADW2, STOREW2,
+pub const CORE_INSTRUCTIONS: [Opcode; 17] = [
+    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, PRINTF, SHINTW, HINT_INPUT, HINT_BITS, HINT_BYTES,
+    PUBLISH, CT_START, CT_END, NOP, LOADW2, STOREW2,
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [Opcode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4DIV];
@@ -119,7 +119,7 @@ impl Opcode {
         all_opcodes.extend(CORE_INSTRUCTIONS);
         all_opcodes.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
         all_opcodes.extend(FIELD_EXTENSION_INSTRUCTIONS);
-        all_opcodes.extend([FAIL, PRINTF]);
+        all_opcodes.extend([FAIL]);
         all_opcodes.extend([PERM_POS2, COMP_POS2]);
         all_opcodes
     }

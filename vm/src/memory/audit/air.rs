@@ -12,7 +12,7 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::columns::AuditCols;
-use crate::{cpu::RANGE_CHECKER_BUS, memory::offline_checker::MemoryBus};
+use crate::{core::RANGE_CHECKER_BUS, memory::offline_checker::MemoryBus};
 
 #[derive(Clone, Debug)]
 pub struct MemoryAuditAir {

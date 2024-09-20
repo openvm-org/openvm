@@ -9,17 +9,20 @@ use ax_sdk::{
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use rand::{rngs::StdRng, SeedableRng};
+use program::ProgramTester;
+use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use crate::{
-    arch::chips::MachineChip,
-    cpu::{trace::Instruction, RANGE_CHECKER_BUS},
+    arch::{chips::MachineChip, columns::ExecutionState},
+    core::RANGE_CHECKER_BUS,
     memory::{offline_checker::MemoryBus, MemoryChip},
+    program::{bridge::ProgramBus, Instruction},
     vm::config::MemoryConfig,
 };
 
 pub mod execution;
 pub mod memory;
+pub mod program;
 
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
@@ -31,13 +34,22 @@ use crate::memory::MemoryChipRef;
 pub struct MachineChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
     pub execution: ExecutionTester<F>,
+    pub program: ProgramTester<F>,
+    rng: StdRng,
 }
 
 impl<F: PrimeField32> MachineChipTestBuilder<F> {
-    pub fn new(memory_chip: MemoryChipRef<F>, execution_bus: ExecutionBus, rng: StdRng) -> Self {
+    pub fn new(
+        memory_chip: MemoryChipRef<F>,
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        rng: StdRng,
+    ) -> Self {
         Self {
             memory: MemoryTester::new(memory_chip),
-            execution: ExecutionTester::new(execution_bus, rng),
+            execution: ExecutionTester::new(execution_bus),
+            program: ProgramTester::new(program_bus),
+            rng,
         }
     }
 
@@ -47,8 +59,26 @@ impl<F: PrimeField32> MachineChipTestBuilder<F> {
         executor: &mut E,
         instruction: Instruction<F>,
     ) {
-        self.execution
-            .execute(&mut self.memory, executor, instruction);
+        let initial_state = ExecutionState {
+            pc: self.next_elem_size_usize(),
+            timestamp: self.memory.chip.borrow().timestamp(),
+        };
+        tracing::debug!(?initial_state.timestamp);
+
+        let final_state = executor
+            .execute(
+                instruction.clone(),
+                initial_state.map(|x| x.as_canonical_u32() as usize),
+            )
+            .expect("Expected the execution not to fail")
+            .map(F::from_canonical_usize);
+
+        self.program.execute(instruction, &initial_state);
+        self.execution.execute(initial_state, final_state);
+    }
+
+    fn next_elem_size_usize(&mut self) -> F {
+        F::from_canonical_u32(self.rng.next_u32() % (1 << (F::bits() - 2)))
     }
 
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
@@ -71,6 +101,10 @@ impl<F: PrimeField32> MachineChipTestBuilder<F> {
         self.execution.bus
     }
 
+    pub fn program_bus(&self) -> ProgramBus {
+        self.program.bus
+    }
+
     pub fn memory_bus(&self) -> MemoryBus {
         self.memory.bus
     }
@@ -86,7 +120,8 @@ impl MachineChipTestBuilder<BabyBear> {
             memory: Some(self.memory),
             ..Default::default()
         };
-        tester.load(self.execution)
+        let tester = tester.load(self.execution);
+        tester.load(self.program)
     }
 }
 
@@ -100,7 +135,9 @@ impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
         let memory_chip = MemoryChip::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
         Self {
             memory: MemoryTester::new(Rc::new(RefCell::new(memory_chip))),
-            execution: ExecutionTester::new(ExecutionBus(0), StdRng::seed_from_u64(0)),
+            execution: ExecutionTester::new(ExecutionBus(0)),
+            program: ProgramTester::new(ProgramBus(2)),
+            rng: StdRng::seed_from_u64(0),
         }
     }
 }

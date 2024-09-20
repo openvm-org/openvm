@@ -5,7 +5,6 @@ use super::{
     air::ModularArithmeticAir,
     columns::{ModularArithmeticAuxCols, ModularArithmeticIoCols},
 };
-use crate::arch::columns::InstructionCols;
 
 impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularArithmeticAir<NUM_LIMBS, LIMB_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -15,12 +14,23 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularArithmeticAir<NUM_LI
         aux: &ModularArithmeticAuxCols<AB::Var, NUM_LIMBS>,
         expected_opcode: AB::Expr,
     ) {
-        let timestamp: AB::Var = io.from_state.timestamp;
-        let mut timestamp_delta: usize = 0;
-        let mut timestamp_pp = || {
-            timestamp_delta += 1;
-            timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
-        };
+        let mut timestamp_delta = AB::Expr::zero();
+        let timestamp: AB::Expr = io.from_state.timestamp.into();
+
+        // Interaction with program
+        self.program_bus.send_instruction(
+            builder,
+            io.from_state.pc,
+            aux.opcode,
+            [
+                io.z.address.address,
+                io.x.address.address,
+                io.y.address.address,
+                io.x.address.address_space,
+                io.x.data.address_space,
+            ],
+            aux.is_valid,
+        );
 
         self.memory_bridge
             .read_from_cols(
@@ -66,17 +76,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularArithmeticAir<NUM_LI
             builder,
             aux.is_valid,
             io.from_state.map(Into::into),
-            AB::F::from_canonical_usize(timestamp_delta),
-            InstructionCols::new(
-                expected_opcode,
-                [
-                    io.z.address.address,
-                    io.x.address.address,
-                    io.y.address.address,
-                    io.x.address.address_space,
-                    io.x.data.address_space,
-                ],
-            ),
+            timestamp_delta,
         );
     }
 }

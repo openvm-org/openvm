@@ -17,9 +17,8 @@ use p3_field::AbstractField;
 use rand::Rng;
 use stark_vm::{
     arch::instructions::Opcode::*,
-    cpu::trace::Instruction,
     hashes::keccak::hasher::utils::keccak256,
-    program::Program,
+    program::{Instruction, Program},
     vm::{
         config::{MemoryConfig, VmConfig},
         VirtualMachine,

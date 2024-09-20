@@ -10,8 +10,8 @@ use crate::{
         instructions::{Opcode::*, MODULAR_ARITHMETIC_INSTRUCTIONS},
         testing::MachineChipTestBuilder,
     },
-    cpu::trace::Instruction,
-    modular_arithmetic::{ModularArithmeticChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    modular_arithmetic::ModularArithmeticChip,
+    program::Instruction,
 };
 const NUM_LIMBS: usize = 32;
 const LIMB_SIZE: usize = 8;
@@ -24,15 +24,59 @@ fn test_modular_arithmetic() {
     let mut tester: MachineChipTestBuilder<F> = MachineChipTestBuilder::default();
     let mut coord_chip: ModularArithmeticChip<F, NUM_LIMBS, LIMB_SIZE> = ModularArithmeticChip::new(
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
         secp256k1_coord_prime(),
     );
-    let mut scalar_chip: ModularArithmeticChip<F, NUM_LIMBS, LIMB_SIZE> =
-        ModularArithmeticChip::new(
-            tester.execution_bus(),
-            tester.memory_chip(),
-            secp256k1_scalar_prime(),
-        );
+    let mut coord_sub_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        secp256k1_coord_prime(),
+        super::ModularArithmeticOp::Sub,
+    );
+    let mut coord_mul_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        secp256k1_coord_prime(),
+        super::ModularArithmeticOp::Mul,
+    );
+    let mut coord_div_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        secp256k1_coord_prime(),
+        super::ModularArithmeticOp::Div,
+    );
+    let mut scalar_add_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        secp256k1_scalar_prime(),
+        super::ModularArithmeticOp::Add,
+    );
+    let mut scalar_sub_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        secp256k1_scalar_prime(),
+        super::ModularArithmeticOp::Sub,
+    );
+    let mut scalar_mul_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        secp256k1_scalar_prime(),
+        super::ModularArithmeticOp::Mul,
+    );
+    let mut scalar_div_chip = ModularArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        secp256k1_scalar_prime(),
+        super::ModularArithmeticOp::Div,
+    );
     let mut rng = create_seeded_rng();
     let num_tests = 100;
 

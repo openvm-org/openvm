@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
-    cpu::trace::Instruction,
+    program::Instruction,
 };
 
 type F = BabyBear;
@@ -60,7 +60,11 @@ fn prepare_castf_rand_write_execute(
 fn castf_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
     let num_tests: usize = 10;
 
     for _ in 0..num_tests {
@@ -75,7 +79,11 @@ fn castf_rand_test() {
 #[test]
 fn negative_castf_overflow_test() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
@@ -105,7 +113,11 @@ fn negative_castf_overflow_test() {
 #[test]
 fn negative_castf_memread_test() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
@@ -135,7 +147,11 @@ fn negative_castf_memread_test() {
 #[test]
 fn negative_castf_memwrite_test() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
@@ -165,7 +181,11 @@ fn negative_castf_memwrite_test() {
 #[test]
 fn negative_castf_as_test() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);

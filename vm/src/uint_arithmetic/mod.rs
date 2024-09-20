@@ -12,8 +12,8 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 #[cfg(test)]
@@ -68,7 +68,11 @@ pub struct UintArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
     UintArithmeticChip<ARG_SIZE, LIMB_SIZE, T>
 {
-    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory_chip: MemoryChipRef<T>,
+    ) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
         let bus = range_checker_chip.bus();
@@ -81,6 +85,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
         Self {
             air: UintArithmeticAir {
                 execution_bus,
+                program_bus,
                 memory_bridge,
                 bus,
                 base_op: Opcode::ADD256,
@@ -99,7 +104,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
         &mut self,
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -166,10 +171,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             buffer: buffer.into_iter().map(T::from_canonical_u32).collect_vec(),
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

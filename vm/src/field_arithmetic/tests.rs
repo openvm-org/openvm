@@ -17,8 +17,8 @@ use crate::{
         instructions::{Opcode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
         testing::MachineChipTestBuilder,
     },
-    cpu::trace::Instruction,
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
+    program::Instruction,
 };
 
 #[test]
@@ -31,8 +31,11 @@ fn field_arithmetic_air_test() {
     let address_range = || 0usize..1 << 29;
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut field_arithmetic_chip =
-        FieldArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut field_arithmetic_chip = FieldArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
 
@@ -96,7 +99,7 @@ fn field_arithmetic_air_test() {
     // negative test pranking each IO value
     for height in 0..num_ops {
         // TODO: better way to modify existing traces in tester
-        let arith_trace = &mut tester.traces[1];
+        let arith_trace = &mut tester.traces[2];
         let old_trace = arith_trace.clone();
         for width in 0..FieldArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
@@ -117,8 +120,11 @@ fn field_arithmetic_air_test() {
 #[test]
 fn field_arithmetic_air_zero_div_zero() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut field_arithmetic_chip =
-        FieldArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut field_arithmetic_chip = FieldArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
     tester.write_cell(1, 0, BabyBear::zero());
     tester.write_cell(1, 1, BabyBear::one());
 
@@ -149,8 +155,11 @@ fn field_arithmetic_air_zero_div_zero() {
 #[test]
 fn field_arithmetic_air_test_panic() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut field_arithmetic_chip =
-        FieldArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut field_arithmetic_chip = FieldArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
     tester.write_cell(1, 0, BabyBear::zero());
     // should panic
     tester.execute(
