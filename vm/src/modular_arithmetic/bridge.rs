@@ -67,19 +67,19 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
             .eval(builder, aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        self.execution_bridge.execute_increment_pc(
-            builder,
-            aux.opcode,
-            [
-                io.z.address.address,
-                io.x.address.address,
-                io.y.address.address,
-                io.x.address.address_space,
-                io.x.data.address_space,
-            ],
-            io.from_state,
-            timestamp_delta,
-            aux.is_valid,
-        );
+        self.execution_bridge
+            .execute_increment_pc(
+                aux.opcode,
+                [
+                    io.z.address.address,
+                    io.x.address.address,
+                    io.y.address.address,
+                    io.x.address.address_space,
+                    io.x.data.address_space,
+                ],
+                io.from_state,
+                timestamp_delta,
+            )
+            .eval(builder, aux.is_valid);
     }
 }

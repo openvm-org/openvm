@@ -68,20 +68,20 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
             )
             .eval(builder, aux.is_valid);
 
-        self.execution_bridge.execute_increment_pc(
-            builder,
-            AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
-            [
-                io.z.ptr_to_address,
-                io.x.ptr_to_address,
-                io.y.ptr_to_address,
-                io.ptr_as,
-                io.address_as,
-            ],
-            io.from_state,
-            AB::F::from_canonical_usize(timestamp_delta),
-            aux.is_valid,
-        );
+        self.execution_bridge
+            .execute_increment_pc(
+                AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
+                [
+                    io.z.ptr_to_address,
+                    io.x.ptr_to_address,
+                    io.y.ptr_to_address,
+                    io.ptr_as,
+                    io.address_as,
+                ],
+                io.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, aux.is_valid);
 
         for (z, carry) in io.z.data.iter().zip(aux.carry.iter()) {
             self.bus.send(vec![*z, *carry]).eval(builder, aux.is_valid);

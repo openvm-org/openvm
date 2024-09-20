@@ -59,19 +59,19 @@ impl CastFAir {
                 .eval(builder, aux.is_valid);
         }
 
-        self.execution_bridge.execute_increment_pc(
-            builder,
-            AB::Expr::from_canonical_u8(Opcode::CASTF as u8),
-            [
-                io.op_a.into(),
-                io.op_b.into(),
-                AB::Expr::zero(),
-                io.d.into(),
-                io.e.into(),
-            ],
-            io.from_state,
-            AB::F::from_canonical_usize(timestamp_delta),
-            aux.is_valid,
-        );
+        self.execution_bridge
+            .execute_increment_pc(
+                AB::Expr::from_canonical_u8(Opcode::CASTF as u8),
+                [
+                    io.op_a.into(),
+                    io.op_b.into(),
+                    AB::Expr::zero(),
+                    io.d.into(),
+                    io.e.into(),
+                ],
+                io.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, aux.is_valid);
     }
 }

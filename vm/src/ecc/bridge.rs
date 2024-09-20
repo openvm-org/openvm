@@ -68,20 +68,20 @@ impl EcAddUnequalVmAir {
             .eval(builder, aux.aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        self.execution_bridge.execute_increment_pc(
-            builder,
-            AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
-            [
-                io.p3.address.address,
-                io.p1.address.address,
-                io.p2.address.address,
-                io.p1.address.address_space,
-                io.p1.data.address_space,
-            ],
-            io.from_state,
-            timestamp_delta,
-            aux.aux.is_valid,
-        );
+        self.execution_bridge
+            .execute_increment_pc(
+                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
+                [
+                    io.p3.address.address,
+                    io.p1.address.address,
+                    io.p2.address.address,
+                    io.p1.address.address_space,
+                    io.p1.data.address_space,
+                ],
+                io.from_state,
+                timestamp_delta,
+            )
+            .eval(builder, aux.aux.is_valid);
     }
 }
 
@@ -129,19 +129,19 @@ impl EcDoubleVmAir {
             .eval(builder, aux.aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        self.execution_bridge.execute_increment_pc(
-            builder,
-            AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
-            [
-                io.p2.address.address.into(),
-                io.p1.address.address.into(),
-                AB::Expr::zero(),
-                io.p1.address.address_space.into(),
-                io.p1.data.address_space.into(),
-            ],
-            io.from_state,
-            timestamp_delta,
-            aux.aux.is_valid,
-        );
+        self.execution_bridge
+            .execute_increment_pc(
+                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
+                [
+                    io.p2.address.address.into(),
+                    io.p1.address.address.into(),
+                    AB::Expr::zero(),
+                    io.p1.address.address_space.into(),
+                    io.p1.data.address_space.into(),
+                ],
+                io.from_state,
+                timestamp_delta,
+            )
+            .eval(builder, aux.aux.is_valid);
     }
 }

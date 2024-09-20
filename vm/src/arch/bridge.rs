@@ -12,6 +12,33 @@ pub struct ExecutionBridge {
     program_bus: ProgramBus,
 }
 
+pub struct ExecutionBridgeInteractor<AB: InteractionBuilder> {
+    execution_bus: ExecutionBus,
+    program_bus: ProgramBus,
+    opcode: AB::Expr,
+    instruction: Vec<AB::Expr>,
+    from_state: ExecutionState<AB::Expr>,
+    to_state: ExecutionState<AB::Expr>,
+}
+
+impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
+    pub fn eval(self, builder: &mut AB, multiplicity: impl Into<AB::Expr>) {
+        let multiplicity = multiplicity.into();
+
+        // Interaction with program
+        self.program_bus.send_instruction(
+            builder,
+            self.from_state.pc.clone(),
+            self.opcode,
+            self.instruction,
+            multiplicity.clone(),
+        );
+
+        self.execution_bus
+            .execute(builder, multiplicity, self.from_state, self.to_state);
+    }
+}
+
 impl ExecutionBridge {
     pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus) -> Self {
         Self {
@@ -22,46 +49,32 @@ impl ExecutionBridge {
 
     pub fn execute_increment_pc<AB: InteractionBuilder>(
         &self,
-        builder: &mut AB,
         opcode: impl Into<AB::Expr>,
         instruction: impl IntoIterator<Item = impl Into<AB::Expr>>,
         from_state: ExecutionState<impl Into<AB::Expr> + Clone>,
         timestamp_change: impl Into<AB::Expr>,
-        multiplicity: impl Into<AB::Expr> + Clone,
-    ) {
+    ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
             pc: from_state.pc.clone().into() + AB::Expr::one(),
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
-        self.execute(
-            builder,
-            opcode,
-            instruction,
-            from_state,
-            to_state,
-            multiplicity,
-        );
+        self.execute(opcode, instruction, from_state, to_state)
     }
 
     pub fn execute<AB: InteractionBuilder>(
         &self,
-        builder: &mut AB,
         opcode: impl Into<AB::Expr>,
         instruction: impl IntoIterator<Item = impl Into<AB::Expr>>,
         from_state: ExecutionState<impl Into<AB::Expr> + Clone>,
         to_state: ExecutionState<impl Into<AB::Expr>>,
-        multiplicity: impl Into<AB::Expr> + Clone,
-    ) {
-        // Interaction with program
-        self.program_bus.send_instruction(
-            builder,
-            from_state.pc.clone().into(),
-            opcode,
-            instruction,
-            multiplicity.clone().into(),
-        );
-
-        self.execution_bus
-            .execute(builder, multiplicity, from_state, to_state);
+    ) -> ExecutionBridgeInteractor<AB> {
+        ExecutionBridgeInteractor {
+            execution_bus: self.execution_bus,
+            program_bus: self.program_bus,
+            opcode: opcode.into(),
+            instruction: instruction.into_iter().map(Into::into).collect(),
+            from_state: from_state.map(Into::into),
+            to_state: to_state.map(Into::into),
+        }
     }
 }

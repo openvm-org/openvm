@@ -127,14 +127,14 @@ impl KeccakVmAir {
         let should_receive = local.opcode.is_enabled * local.sponge.is_new_start;
 
         let timestamp_change: AB::Expr = Self::timestamp_change(opcode.len);
-        self.execution_bridge.execute_increment_pc(
-            builder,
-            AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
-            [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
-            ExecutionState::new(opcode.pc, opcode.start_timestamp),
-            timestamp_change,
-            should_receive.clone(),
-        );
+        self.execution_bridge
+            .execute_increment_pc(
+                AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
+                [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
+                ExecutionState::new(opcode.pc, opcode.start_timestamp),
+                timestamp_change,
+            )
+            .eval(builder, should_receive.clone());
 
         let mut timestamp: AB::Expr = opcode.start_timestamp.into();
         // Only when it is an input do we want to do memory read for

@@ -87,22 +87,22 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
             .eval(builder, enabled.clone());
         timestamp_delta += enabled;
 
-        self.execution_bridge.execute_increment_pc(
-            builder,
-            expected_opcode,
-            [
-                io.z.ptr,
-                io.x.ptr,
-                io.y.ptr,
-                io.d,
-                io.z.address_space,
-                io.x.address_space,
-                io.y.address_space,
-            ],
-            io.from_state,
-            timestamp_delta,
-            aux.is_valid,
-        );
+        self.execution_bridge
+            .execute_increment_pc(
+                expected_opcode,
+                [
+                    io.z.ptr,
+                    io.x.ptr,
+                    io.y.ptr,
+                    io.d,
+                    io.z.address_space,
+                    io.x.address_space,
+                    io.y.address_space,
+                ],
+                io.from_state,
+                timestamp_delta,
+            )
+            .eval(builder, aux.is_valid);
 
         // Chip-specific interactions
         for z in io.z.data.iter() {

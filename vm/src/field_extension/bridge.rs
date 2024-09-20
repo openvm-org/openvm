@@ -77,13 +77,13 @@ impl FieldExtensionArithmeticAir {
             )
             .eval(builder, is_valid);
 
-        self.execution_bridge.execute_increment_pc(
-            builder,
-            expected_opcode,
-            [op_a, op_b, op_c, d, e],
-            ExecutionState::new(pc, timestamp),
-            AB::F::from_canonical_usize(timestamp_delta),
-            is_valid,
-        );
+        self.execution_bridge
+            .execute_increment_pc(
+                expected_opcode,
+                [op_a, op_b, op_c, d, e],
+                ExecutionState::new(pc, timestamp),
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, is_valid);
     }
 }
