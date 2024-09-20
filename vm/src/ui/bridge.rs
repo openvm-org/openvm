@@ -37,7 +37,7 @@ impl UiAir {
             .eval(builder, aux.is_valid);
 
         self.execution_bridge
-            .execute_increment_pc(
+            .execute_and_increment_pc(
                 expected_opcode,
                 [io.op_a, io.op_b],
                 io.from_state,

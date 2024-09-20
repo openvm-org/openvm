@@ -22,7 +22,7 @@ impl FieldArithmeticAir {
         let is_valid = aux.is_valid;
 
         self.execution_bridge
-            .execute_increment_pc(
+            .execute_and_increment_pc(
                 expected_opcode,
                 [
                     result.address,

@@ -68,7 +68,7 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
         timestamp_delta += AB::Expr::one();
 
         self.execution_bridge
-            .execute_increment_pc(
+            .execute_and_increment_pc(
                 aux.opcode,
                 [
                     io.z.address.address,

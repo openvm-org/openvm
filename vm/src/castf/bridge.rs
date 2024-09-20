@@ -60,7 +60,7 @@ impl CastFAir {
         }
 
         self.execution_bridge
-            .execute_increment_pc(
+            .execute_and_increment_pc(
                 AB::Expr::from_canonical_u8(Opcode::CASTF as u8),
                 [
                     io.op_a.into(),

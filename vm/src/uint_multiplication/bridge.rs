@@ -69,7 +69,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
             .eval(builder, aux.is_valid);
 
         self.execution_bridge
-            .execute_increment_pc(
+            .execute_and_increment_pc(
                 AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
                 [
                     io.z.ptr_to_address,

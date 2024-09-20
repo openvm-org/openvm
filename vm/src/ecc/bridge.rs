@@ -69,7 +69,7 @@ impl EcAddUnequalVmAir {
         timestamp_delta += AB::Expr::one();
 
         self.execution_bridge
-            .execute_increment_pc(
+            .execute_and_increment_pc(
                 AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
                 [
                     io.p3.address.address,
@@ -130,7 +130,7 @@ impl EcDoubleVmAir {
         timestamp_delta += AB::Expr::one();
 
         self.execution_bridge
-            .execute_increment_pc(
+            .execute_and_increment_pc(
                 AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
                 [
                     io.p2.address.address.into(),

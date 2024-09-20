@@ -88,7 +88,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
         timestamp_delta += enabled;
 
         self.execution_bridge
-            .execute_increment_pc(
+            .execute_and_increment_pc(
                 expected_opcode,
                 [
                     io.z.ptr,

@@ -128,7 +128,7 @@ impl KeccakVmAir {
 
         let timestamp_change: AB::Expr = Self::timestamp_change(opcode.len);
         self.execution_bridge
-            .execute_increment_pc(
+            .execute_and_increment_pc(
                 AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
                 [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
                 ExecutionState::new(opcode.pc, opcode.start_timestamp),
