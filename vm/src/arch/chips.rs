@@ -26,6 +26,7 @@ use crate::{
     modular_multdiv::ModularMultDivChip,
     program::ProgramChip,
     shift::ShiftChip,
+    ui::UiChip,
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
@@ -105,6 +106,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
+    Ui(Rc<RefCell<UiChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
@@ -126,6 +128,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
+    Ui(Rc<RefCell<UiChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
