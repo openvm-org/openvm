@@ -22,12 +22,12 @@ verifier_outer:
         labels:
           - key: "group"
             value: "recursive_verify_e2e"
+          - key: "step"
+            value: "outer_stark_prove"
       - metric: "trace_gen_time_ms"
         labels:
           - key: "group"
             value: "recursive_verify_e2e"
-          - key: "step"
-            value: "outer_stark_prove"
   - metric: "total_cells"
     sum:
       - metric: "vm_total_cells"
