@@ -260,7 +260,6 @@ fn test_ext_immediate() {
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
-        field_less_than_enabled: false,
     });
     execute_program(program, vec![]);
 }
@@ -319,7 +318,6 @@ fn test_ext_felt_arithmetic() {
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
-        field_less_than_enabled: false,
     });
     execute_program(program, vec![]);
 }

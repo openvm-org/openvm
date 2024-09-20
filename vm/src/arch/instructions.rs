@@ -23,7 +23,6 @@ pub enum Opcode {
     FDIV = 13,
 
     CASTF = 14,
-    F_LESS_THAN = 15,
 
     FAIL = 20,
     PRINTF = 21,

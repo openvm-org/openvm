@@ -12,7 +12,6 @@ pub struct CompilerOptions {
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
-    pub field_less_than_enabled: bool,
 }
 
 impl Default for CompilerOptions {
@@ -22,7 +21,6 @@ impl Default for CompilerOptions {
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
-            field_less_than_enabled: false,
         }
     }
 }
@@ -142,22 +140,6 @@ fn convert_comparison_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
 ) -> Vec<Instruction<F>> {
     match instruction {
-        AsmInstruction::LessThanF(dst, lhs, rhs) => vec![inst(
-            F_LESS_THAN,
-            i32_f(dst),
-            i32_f(lhs),
-            i32_f(rhs),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::LessThanFI(dst, lhs, rhs) => vec![inst(
-            F_LESS_THAN,
-            i32_f(dst),
-            i32_f(lhs),
-            rhs,
-            AS::Memory,
-            AS::Immediate,
-        )],
         AsmInstruction::EqU256(a, b, c) => vec![inst_large(
             EQ256,
             i32_f(a),
@@ -676,16 +658,6 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             } else {
                 panic!(
                     "Unsupported instruction {:?}, field arithmetic is disabled",
-                    instruction
-                )
-            }
-        }
-        AsmInstruction::LessThanF(..) | AsmInstruction::LessThanFI(..) => {
-            if options.field_less_than_enabled {
-                convert_comparison_instruction(instruction)
-            } else {
-                panic!(
-                    "Unsupported instruction {:?}, field less than is disabled",
                     instruction
                 )
             }
