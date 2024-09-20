@@ -1,0 +1,26 @@
+[package]
+name = "axvm"
+description = "Axiom zkVM"
+version = { workspace = true }
+edition = { workspace = true }
+# license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+anyhow = { version = "1.0", default-features = false }
+borsh = { version = "1.5", default-features = false, features = ["derive"] }
+bytemuck = { version = "1.13", features = ["extern_crate_alloc"] }
+getrandom = { version = "0.2", features = ["custom"] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+axvm-platform = { workspace = true, features = [
+    "rust-runtime",
+    "export-getrandom",
+] }
+serde = { workspace = true, features = ["alloc", "derive"] }
+
+[dev-dependencies]
+chrono = { version = "0.4", default-features = false, features = ["serde"] }
+
+[features]
+default = []
