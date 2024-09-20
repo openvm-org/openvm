@@ -94,11 +94,14 @@ dependencies = [
 name = "afs-compiler"
 version = "0.1.0"
 dependencies = [
+ "afs-compiler",
  "afs-derive",
  "ax-sdk",
  "backtrace",
+ "cfg-if",
  "hex",
  "itertools 0.13.0",
+ "metrics",
  "num-bigint 0.4.6",
  "num-bigint-dig",
  "num-integer",
