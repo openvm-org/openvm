@@ -94,6 +94,7 @@ fn test_fibonacci_program_verify() {
 #[test]
 fn test_fibonacci_program_halo2_verify() {
     use afs_recursion::halo2::testing_utils::run_static_verifier_test;
+    use ax_sdk::config::fri_params::default_fri_params;
     setup_tracing();
 
     let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
