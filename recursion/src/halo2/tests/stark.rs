@@ -4,14 +4,13 @@ use ax_sdk::{
         baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
         setup_tracing,
     },
-    engine::StarkFriEngine,
+    engine::{StarkForTest, StarkFriEngine},
 };
 
 use crate::{
     config::outer::new_from_outer_multi_vk,
     halo2::Halo2Prover,
     stark::outer::build_circuit_verify_operations,
-    testing_utils::StarkForTest,
     tests::{fibonacci_stark_for_test, interaction_stark_for_test},
     types::VerifierInput,
     witness::Witnessable,

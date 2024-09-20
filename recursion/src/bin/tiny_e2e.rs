@@ -1,0 +1,94 @@
+/// A E2E benchmark to aggregate a program with minimal number of VM chips.
+/// Proofs:
+/// 1. Prove a program to compute fibonacci numbers.
+/// 2. Verify the proof of 1. in the outer config.
+/// 3. Verify the proof of 2. using a Halo2 static verifier.
+/// 4. Wrapper Halo2 circuit to reduce the size of 3.
+use afs_compiler::{asm::AsmBuilder, ir::Felt};
+use afs_recursion::{
+    halo2::testing_utils::run_evm_verifier_e2e_test,
+    testing_utils::{gen_vm_program_stark_for_test, inner::build_verification_program},
+};
+use ax_sdk::{
+    bench::run_with_metric_collection,
+    config::{
+        baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        fri_params::fri_params_with_80_bits_of_security,
+    },
+    engine::{StarkForTest, StarkFriEngine},
+};
+use p3_baby_bear::BabyBear;
+use p3_commit::PolynomialSpace;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
+use p3_uni_stark::{Domain, StarkGenericConfig};
+use stark_vm::{program::Program, vm::config::VmConfig};
+use tracing::info_span;
+
+fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let prev: Felt<_> = builder.constant(F::from_canonical_u32(a));
+    let next: Felt<_> = builder.constant(F::from_canonical_u32(b));
+
+    for _ in 2..n {
+        let tmp: Felt<_> = builder.uninit();
+        builder.assign(&tmp, next);
+        builder.assign(&next, prev + next);
+        builder.assign(&prev, tmp);
+    }
+
+    builder.halt();
+
+    builder.compile_isa()
+}
+
+pub(crate) fn fibonacci_program_stark_for_test<SC: StarkGenericConfig>(
+    a: u32,
+    b: u32,
+    n: u32,
+) -> StarkForTest<SC>
+where
+    Domain<SC>: PolynomialSpace<Val = BabyBear>,
+{
+    let fib_program = fibonacci_program(a, b, n);
+
+    let mut vm_config = VmConfig::core();
+    vm_config.field_arithmetic_enabled = true;
+    gen_vm_program_stark_for_test(fib_program, vec![], vm_config)
+}
+
+fn main() {
+    run_with_metric_collection("OUTPUT_PATH", || {
+        let span =
+            info_span!("Fibonacci Program Inner", group = "fibonacci_program_inner").entered();
+        let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
+        let StarkForTest {
+            any_raps,
+            traces,
+            pvs,
+        } = fib_program_stark;
+        let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
+        let vdata = BabyBearPoseidon2Engine::run_simple_test(&any_raps, traces, &pvs).unwrap();
+        span.exit();
+
+        let span = info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").entered();
+        let (program, witness_stream) = build_verification_program(pvs, vdata);
+        let inner_verifier_sft = gen_vm_program_stark_for_test(
+            program,
+            witness_stream,
+            VmConfig {
+                num_public_values: 4,
+                ..Default::default()
+            },
+        );
+        run_evm_verifier_e2e_test(
+            &inner_verifier_sft,
+            // log_blowup = 3 because of poseidon2 chip.
+            Some(fri_params_with_80_bits_of_security()[1]),
+        );
+        span.exit();
+    });
+}

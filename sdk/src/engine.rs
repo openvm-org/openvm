@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cmp::Reverse, rc::Rc};
 
 pub use afs_stark_backend::engine::StarkEngine;
 use afs_stark_backend::{
@@ -7,7 +7,11 @@ use afs_stark_backend::{
     rap::AnyRap,
     verifier::VerificationError,
 };
-use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
+use itertools::{izip, multiunzip, Itertools};
+use p3_matrix::{
+    dense::{DenseMatrix, RowMajorMatrix},
+    Matrix,
+};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::config::{
@@ -30,6 +34,39 @@ pub struct StarkForTest<SC: StarkGenericConfig> {
     pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
     pub traces: Vec<RowMajorMatrix<Val<SC>>>,
     pub pvs: Vec<Vec<Val<SC>>>,
+}
+
+impl<SC: StarkGenericConfig> StarkForTest<SC> {
+    pub fn sort_by_height_desc(self) -> Self {
+        let mut groups = izip!(self.any_raps, self.traces, self.pvs).collect_vec();
+        groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
+        let (any_raps, traces, pvs): (Vec<_>, _, _) = multiunzip(groups);
+        Self {
+            any_raps,
+            traces,
+            pvs,
+        }
+    }
+    pub fn run_simple_test(
+        self,
+        engine: &impl StarkFriEngine<SC>,
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError>
+    where
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        let StarkForTest {
+            any_raps,
+            traces,
+            pvs,
+        } = self;
+        let chips: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
+        engine.run_simple_test_impl(&chips, traces, &pvs)
+    }
 }
 
 /// Stark engine using Fri.

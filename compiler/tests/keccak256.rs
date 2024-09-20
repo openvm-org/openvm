@@ -48,7 +48,6 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: false,
-        ..Default::default()
     });
     execute_and_prove_program(
         program,

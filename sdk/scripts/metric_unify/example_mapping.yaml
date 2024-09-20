@@ -1,0 +1,13 @@
+fibonacci_program_inner:
+  - metric: "proof_time_ms"
+    sum:
+      - metric: "proof_time_ms"
+        labels:
+          - key: "program"
+            value: "fibonacci"
+          - key: "group"
+            value: "1"
+      - metric: "trace_gen_time_ms"
+        labels:
+          - key: "program"
+            value: "fibonacci"

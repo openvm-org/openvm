@@ -47,7 +47,6 @@ fn test_cycle_tracker() {
         enable_cycle_tracker: true,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
-        field_less_than_enabled: false,
     });
 
     for (i, debug_info) in program.debug_infos.iter().enumerate() {

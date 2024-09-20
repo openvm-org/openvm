@@ -10,6 +10,8 @@ on:
         options:
           - vm_verify_fibair
           - vm_static_verify_fibair
+          - tiny_e2e
+          - small_e2e
           - single_rw
           - single_filter
       aws_instance_type:
@@ -95,7 +97,18 @@ jobs:
           mkdir -p ../benchmark
           mkdir -p ../benchmark/tmp
           bash trusted_setup_s3.sh
-          OUTPUT_PATH="../benchmark/tmp/_result.md" RUSTFLAGS="-Ctarget-cpu=native" cargo bench --profile fast --features static-verifier,bench-metrics,parallel -- tiny_e2e
+          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin tiny_e2e --profile fast --features static-verifier,bench-metrics,parallel
+          python3 ../sdk/scripts/metric_unify/main.py ../sdk/scripts/metric_unify/mappings/tiny_e2e.yaml ../benchmark/tmp/_metrics.json > ../benchmark/tmp/_result.md
+
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'small_e2e'
+        working-directory: recursion
+        run: |
+          mkdir -p ../benchmark
+          mkdir -p ../benchmark/tmp
+          bash trusted_setup_s3.sh
+          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin small_e2e --profile fast --features static-verifier,bench-metrics,parallel
+          python3 ../sdk/scripts/metric_unify/main.py ../sdk/scripts/metric_unify/mappings/small_e2e.yaml ../benchmark/tmp/_metrics.json > ../benchmark/tmp/_result.md
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'single_rw'

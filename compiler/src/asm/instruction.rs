@@ -55,12 +55,6 @@ pub enum AsmInstruction<F, EF> {
     /// Divide value from immediate, dst = lhs / rhs.
     DivFIN(i32, F, i32),
 
-    /// Less than, dst = lhs < rhs.
-    LessThanF(i32, i32, i32),
-
-    /// Less than immediate, dst = lhs < rhs.
-    LessThanFI(i32, i32, F),
-
     /// U256 equal, dst = lhs == rhs.
     /// (a, b, c) are memory pointers to (*z, *x, *y), which are
     /// themselves memory pointers to (z, x, y) where z = (x == y ? 1 : 0)
@@ -279,12 +273,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::DivFIN(dst, lhs, rhs) => {
                 write!(f, "divi  ({})fp, {}, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::LessThanF(dst, lhs, rhs) => {
-                write!(f, "lt  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::LessThanFI(dst, lhs, rhs) => {
-                write!(f, "lti  ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
             AsmInstruction::EqU256(dst, lhs, rhs) => {
                 write!(f, "eq  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
