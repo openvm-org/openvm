@@ -14,7 +14,8 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::{columns::*, NUM_LIMBS};
-use crate::{arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge    program::bridge::ProgramBus,
+use crate::{
+    arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge, program::bridge::ProgramBus,
 };
 
 #[derive(Clone, Debug)]

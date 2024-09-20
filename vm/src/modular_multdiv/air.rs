@@ -14,6 +14,7 @@ use super::columns::ModularMultDivCols;
 use crate::{
     arch::{bus::ExecutionBus, instructions::Opcode},
     memory::offline_checker::MemoryBridge,
+    program::bridge::ProgramBus,
 };
 
 #[derive(Debug, Clone)]
@@ -23,6 +24,7 @@ pub struct ModularMultDivAir<
     const LIMB_SIZE: usize,
 > {
     pub(super) execution_bus: ExecutionBus,
+    pub(super) program_bus: ProgramBus,
     pub(super) memory_bridge: MemoryBridge,
     pub(super) subair: CheckCarryModToZeroSubAir,
 }

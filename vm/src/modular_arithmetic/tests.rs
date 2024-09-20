@@ -39,6 +39,7 @@ fn test_modular_arithmetic() {
     let mut scalar_chip: ModularArithmeticChip<F, NUM_LIMBS, LIMB_SIZE> =
         ModularArithmeticChip::new(
             tester.execution_bus(),
+            tester.program_bus(),
             tester.memory_chip(),
             secp256k1_scalar_prime(),
         );

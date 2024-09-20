@@ -14,11 +14,13 @@ use super::columns::ModularArithmeticCols;
 use crate::{
     arch::{bus::ExecutionBus, instructions::Opcode},
     memory::offline_checker::MemoryBridge,
+    program::bridge::ProgramBus,
 };
 
 #[derive(Debug, Clone)]
 pub struct ModularArithmeticAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bus: ExecutionBus,
+    pub(super) program_bus: ProgramBus,
     pub(super) memory_bridge: MemoryBridge,
     pub(super) subair: CheckCarryModToZeroSubAir,
 }

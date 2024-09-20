@@ -18,8 +18,8 @@ use crate::{
         columns::ExecutionState,
         instructions::{Opcode, MODULAR_MULTDIV_INSTRUCTIONS},
     },
-    cpu::trace::Instruction,
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 mod air;
@@ -80,6 +80,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
 {
     pub fn new(
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         modulus: BigUint,
     ) -> Self {
@@ -102,6 +103,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         Self {
             air: ModularMultDivAir {
                 execution_bus,
+                program_bus,
                 memory_bridge,
                 subair,
             },
@@ -120,7 +122,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         &mut self,
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: z_address_ptr,
@@ -176,10 +178,10 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
             z_array_write,
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

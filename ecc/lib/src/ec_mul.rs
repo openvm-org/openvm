@@ -1,10 +1,10 @@
 use afs_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var};
 use p3_field::{AbstractField, PrimeField64};
-use stark_vm::modular_arithmetic::NUM_LIMBS;
 
 use crate::types::ECPointVariable;
 
 pub const BIGINT_MAX_BITS: usize = 256;
+pub const NUM_LIMBS: usize = 32;
 
 pub fn scalar_multiply_secp256k1<C>(
     builder: &mut Builder<C>,

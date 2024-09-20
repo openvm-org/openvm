@@ -25,7 +25,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularArithmeticAir<NUM_LI
         self.program_bus.send_instruction(
             builder,
             io.from_state.pc,
-            aux.opcode,
+            expected_opcode,
             [
                 io.z.address.address,
                 io.x.address.address,
@@ -80,7 +80,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularArithmeticAir<NUM_LI
             builder,
             aux.is_valid,
             io.from_state.map(Into::into),
-            timestamp_delta,
+            AB::F::from_canonical_usize(timestamp_delta),
         );
     }
 }

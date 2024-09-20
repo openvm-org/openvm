@@ -10,8 +10,8 @@ use crate::{
         instructions::{Opcode::*, MODULAR_MULTDIV_INSTRUCTIONS},
         testing::MachineChipTestBuilder,
     },
-    cpu::trace::Instruction,
     modular_multdiv::{ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    program::Instruction,
 };
 const NUM_LIMBS: usize = 32;
 const LIMB_SIZE: usize = 8;
@@ -26,12 +26,14 @@ fn test_modular_multdiv() {
     let mut coord_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
         ModularMultDivChip::new(
             tester.execution_bus(),
+            tester.program_bus(),
             tester.memory_chip(),
             secp256k1_coord_prime(),
         );
     let mut scalar_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
         ModularMultDivChip::new(
             tester.execution_bus(),
+            tester.program_bus(),
             tester.memory_chip(),
             secp256k1_scalar_prime(),
         );

@@ -2,7 +2,6 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{air::ModularMultDivAir, ModularMultDivAuxCols, ModularMultDivIoCols};
-use crate::arch::columns::InstructionCols;
 
 impl<const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
@@ -20,6 +19,21 @@ impl<const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
             timestamp_delta += 1;
             timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
         };
+
+        // Interaction with program
+        self.program_bus.send_instruction(
+            builder,
+            io.from_state.pc,
+            expected_opcode,
+            [
+                io.z.address.address,
+                io.x.address.address,
+                io.y.address.address,
+                io.x.address.address_space,
+                io.x.data.address_space,
+            ],
+            aux.is_valid,
+        );
 
         self.memory_bridge
             .read_from_cols(
@@ -66,16 +80,6 @@ impl<const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
             aux.is_valid,
             io.from_state.map(Into::into),
             AB::F::from_canonical_usize(timestamp_delta),
-            InstructionCols::new(
-                expected_opcode,
-                [
-                    io.z.address.address,
-                    io.x.address.address,
-                    io.y.address.address,
-                    io.x.address.address_space,
-                    io.x.data.address_space,
-                ],
-            ),
         );
     }
 }
