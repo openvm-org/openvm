@@ -11,7 +11,6 @@ use crate::{
         instructions::Opcode::{self, *},
     },
     memory::MemoryChipRef,
-    vm::{metrics::VmMetrics, VmCycleTracker},
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
@@ -79,13 +78,10 @@ impl CoreState {
     }
 }
 
-#[derive(Debug)]
-pub struct StreamsAndMetrics<F> {
+#[derive(Clone, Default, Debug)]
+pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
-
-    pub cycle_tracker: VmCycleTracker,
-    pub collected_metrics: VmMetrics,
 }
 
 /// Chip for the Core. Carries all state and owns execution.
@@ -99,7 +95,8 @@ pub struct CoreChip<F: PrimeField32> {
     pub public_values: Vec<Option<F>>,
     pub memory_chip: MemoryChipRef<F>,
 
-    pub streams_and_metrics: Option<StreamsAndMetrics<F>>,
+    // TODO[jpw] Unclear Core should own this
+    pub streams: Streams<F>,
 }
 
 impl<F: PrimeField32> CoreChip<F> {
@@ -135,7 +132,7 @@ impl<F: PrimeField32> CoreChip<F> {
             start_state: state,
             public_values: vec![None; options.num_public_values],
             memory_chip,
-            streams_and_metrics: None,
+            streams: Default::default(),
         }
     }
 }

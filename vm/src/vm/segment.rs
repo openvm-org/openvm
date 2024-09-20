@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
+    mem,
     rc::Rc,
     sync::Arc,
 };
@@ -35,7 +36,7 @@ use crate::{
     },
     castf::CastFChip,
     core::{
-        CoreChip, StreamsAndMetrics, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
+        CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
         READ_INSTRUCTION_BUS,
     },
     ecc::{EcAddUnequalChip, EcDoubleChip},
@@ -363,12 +364,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
 
-        self.core_chip.borrow_mut().streams_and_metrics = Some(StreamsAndMetrics {
+        self.core_chip.borrow_mut().streams = Streams {
             input_stream: self.input_stream.clone(),
             hint_stream: self.hint_stream.clone(),
-            cycle_tracker: self.cycle_tracker.clone(),
-            collected_metrics: self.collected_metrics.clone(),
-        });
+        };
 
         self.connector_chip
             .begin(ExecutionState::new(pc, F::from_canonical_usize(timestamp)));
@@ -401,6 +400,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 return Err(ExecutionError::Fail(pc_usize));
             }
 
+            // runtime only instruction handling
+            match opcode {
+                Opcode::CT_START => self
+                    .cycle_tracker
+                    .start(instruction.debug.clone(), self.collected_metrics.clone()),
+                Opcode::CT_END => self
+                    .cycle_tracker
+                    .end(instruction.debug.clone(), self.collected_metrics.clone()),
+                _ => {}
+            }
+
             if self.executors.contains_key(&opcode) {
                 let executor = self.executors.get_mut(&opcode).unwrap();
                 match InstructionExecutor::execute(
@@ -422,27 +432,21 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let added_trace_cells = now_trace_cells - prev_trace_cells;
 
             if collect_metrics {
-                let mut core_chip = self.core_chip.borrow_mut();
-                let collected_metrics = &mut core_chip
-                    .streams_and_metrics
-                    .as_mut()
-                    .unwrap()
-                    .collected_metrics;
-                collected_metrics
+                self.collected_metrics
                     .opcode_counts
                     .entry(opcode.to_string())
                     .and_modify(|count| *count += 1)
                     .or_insert(1);
 
                 if !dsl_instr.is_empty() {
-                    collected_metrics
+                    self.collected_metrics
                         .dsl_counts
                         .entry(dsl_instr)
                         .and_modify(|count| *count += 1)
                         .or_insert(1);
                 }
 
-                collected_metrics
+                self.collected_metrics
                     .opcode_trace_cells
                     .entry(opcode.to_string())
                     .and_modify(|count| *count += added_trace_cells)
@@ -470,16 +474,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         self.connector_chip
             .end(ExecutionState::new(pc, F::from_canonical_usize(timestamp)));
 
-        let streams_and_ct_refs = self
-            .core_chip
-            .borrow_mut()
-            .streams_and_metrics
-            .take()
-            .unwrap();
-        self.hint_stream = streams_and_ct_refs.hint_stream;
-        self.input_stream = streams_and_ct_refs.input_stream;
-        self.collected_metrics = streams_and_ct_refs.collected_metrics;
-        self.cycle_tracker = streams_and_ct_refs.cycle_tracker;
+        let streams = mem::take(&mut self.core_chip.borrow_mut().streams);
+        self.hint_stream = streams.hint_stream;
+        self.input_stream = streams.input_stream;
 
         if collect_metrics {
             self.update_chip_metrics();

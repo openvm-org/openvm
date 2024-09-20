@@ -40,7 +40,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         let e = instruction.e;
         let f = instruction.op_f;
         let g = instruction.op_g;
-        let debug = instruction.debug.clone();
 
         let io = CoreIoCols {
             timestamp: F::from_canonical_usize(timestamp),
@@ -85,8 +84,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let mut public_value_flags = vec![F::zero(); num_public_values];
 
-        let streams_and_metrics = self.streams_and_metrics.as_mut().unwrap();
-        let hint_stream = &mut streams_and_metrics.hint_stream;
+        let hint_stream = &mut self.streams.hint_stream;
 
         match opcode {
             // d[a] <- e[d[c] + b]
@@ -171,7 +169,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 println!("{}", value);
             }
             HINT_INPUT => {
-                let hint = match streams_and_metrics.input_stream.pop_front() {
+                let hint = match self.streams.input_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
                         return Err(ExecutionError::EndOfInputStream(pc_usize));
@@ -214,17 +212,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let base_pointer = read!(d, a);
                 write!(e, base_pointer + b, hint);
             }
-            CT_START => {
-                let collected_metrics = streams_and_metrics.collected_metrics.clone();
-                streams_and_metrics
-                    .cycle_tracker
-                    .start(debug, collected_metrics);
-            }
-            CT_END => {
-                let collected_metrics = streams_and_metrics.collected_metrics.clone();
-                streams_and_metrics
-                    .cycle_tracker
-                    .end(debug, collected_metrics);
+            CT_START | CT_END => {
+                // Advance program counter, but don't do anything else
+                // TODO: move handling of these instructions outside CoreChip
             }
             _ => unreachable!(),
         };
