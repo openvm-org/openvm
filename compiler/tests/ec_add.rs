@@ -11,9 +11,12 @@ use num_traits::{abs, signum, FromPrimitive};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
-    modular_arithmetic::{big_uint_to_num_limbs, secp256k1_coord_prime, LIMB_SIZE, NUM_LIMBS},
+    modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
     vm::config::VmConfig,
 };
+
+const NUM_LIMBS: usize = 32;
+const LIMB_SIZE: usize = 8;
 
 struct Fraction {
     num: isize,
@@ -100,7 +103,8 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
         VmConfig {
             secp256k1_enabled: true,
             u256_arithmetic_enabled: true,
-            modular_multiplication_enabled: true,
+            modular_addsub_enabled: true,
+            modular_multdiv_enabled: true,
             ..Default::default()
         },
         program,
