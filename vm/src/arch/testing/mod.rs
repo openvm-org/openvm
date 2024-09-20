@@ -26,9 +26,12 @@ pub mod program;
 
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
-use crate::arch::chips::{MachineChip, SingleAirChipAdapter};
+
 use super::{bus::ExecutionBus, chips::InstructionExecutor};
-use crate::memory::MemoryChipRef;
+use crate::{
+    arch::chips::{MachineChip, SingleAirChipAdapter},
+    memory::MemoryChipRef,
+};
 
 #[derive(Clone, Debug)]
 pub struct MachineChipTestBuilder<F: PrimeField32> {

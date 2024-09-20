@@ -241,7 +241,7 @@ impl<F: PrimeField32, const M: usize> MachineChip<F> for Arc<XorLookupChip<M>> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        vec![Box::new(self.air.clone())]
+        vec![Box::new(self.air)]
     }
 
     fn current_trace_heights(&self) -> Vec<usize> {

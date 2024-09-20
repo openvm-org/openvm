@@ -164,7 +164,11 @@ fn uint_multiplication_rand_air_test() {
         run_uint_multiplication_rand_write_execute(&mut tester, &mut chip, x, y, &mut rng);
     }
 
-    let tester = tester.build().load_single(chip).load(range_tuple_chip).finalize();
+    let tester = tester
+        .build()
+        .load_single(chip)
+        .load(range_tuple_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
