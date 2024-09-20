@@ -1,0 +1,46 @@
+{
+  "gauge": [
+    {
+      "metric": "proof_time_ms",
+      "labels": [
+        [
+          "program",
+          "verifier"
+        ],
+        [
+          "group",
+          "2"
+        ]
+      ],
+      "value": 50.0
+    },
+    {
+      "metric": "proof_time_ms",
+      "labels": [
+        [
+          "program",
+          "fibonacci"
+        ],
+        [
+          "group",
+          "1"
+        ]
+      ],
+      "value": 100.0
+    },
+    {
+      "metric": "trace_gen_time_ms",
+      "labels": [
+        [
+          "program",
+          "fibonacci"
+        ],
+        [
+          "group",
+          "1"
+        ]
+      ],
+      "value": 50.0
+    }
+  ]
+}
