@@ -14,7 +14,7 @@ use crate::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols, MemoryHeapReadRecord,
     },
-    modular_arithmetic::ModularArithmeticChip,
+    modular_addsub::ModularAddSubChip,
 };
 
 fn load_ec_point<F: PrimeField32>(
@@ -24,12 +24,12 @@ fn load_ec_point<F: PrimeField32>(
         .iter()
         .map(|x| x.as_canonical_u32())
         .collect::<Vec<_>>();
-    let x = ModularArithmeticChip::<F, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&x_limbs);
+    let x = ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&x_limbs);
     let y_limbs = array_read.data_read.data[NUM_LIMBS..]
         .iter()
         .map(|x| x.as_canonical_u32())
         .collect::<Vec<_>>();
-    let y = ModularArithmeticChip::<F, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&y_limbs);
+    let y = ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&y_limbs);
     (x, y)
 }
 

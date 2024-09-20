@@ -21,7 +21,7 @@ use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFr
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use stark_vm::modular_arithmetic::big_uint_to_num_limbs;
+use stark_vm::modular_addsub::big_uint_to_num_limbs;
 const NUM_LIMBS: usize = 32;
 const LIMB_SIZE: usize = 8;
 

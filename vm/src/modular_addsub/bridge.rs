@@ -2,16 +2,16 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{
-    air::ModularArithmeticAir,
-    columns::{ModularArithmeticAuxCols, ModularArithmeticIoCols},
+    air::ModularAddSubAir,
+    columns::{ModularAddSubAuxCols, ModularAddSubIoCols},
 };
 
-impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularArithmeticAir<NUM_LIMBS, LIMB_SIZE> {
+impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubAir<NUM_LIMBS, LIMB_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        io: &ModularArithmeticIoCols<AB::Var, NUM_LIMBS>,
-        aux: &ModularArithmeticAuxCols<AB::Var, NUM_LIMBS>,
+        io: &ModularAddSubIoCols<AB::Var, NUM_LIMBS>,
+        aux: &ModularAddSubAuxCols<AB::Var, NUM_LIMBS>,
         expected_opcode: AB::Expr,
     ) {
         let timestamp: AB::Var = io.from_state.timestamp;

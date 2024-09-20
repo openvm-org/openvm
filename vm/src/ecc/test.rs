@@ -6,7 +6,7 @@ use p3_field::AbstractField;
 use super::{EcAddUnequalChip, EcDoubleChip, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS};
 use crate::{
     arch::{instructions, testing::MachineChipTestBuilder},
-    modular_arithmetic::ModularArithmeticChip,
+    modular_addsub::ModularAddSubChip,
     program::Instruction,
 };
 
@@ -40,21 +40,21 @@ fn test_ec_add() {
     tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
     let mut p1_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p1_limbs[..NUM_LIMBS].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_x)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_x)
             .map(BabyBear::from_canonical_u32),
     );
     p1_limbs[NUM_LIMBS..].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_y)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_y)
             .map(BabyBear::from_canonical_u32),
     );
     tester.write(data_as, address1, p1_limbs);
     let mut p2_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p2_limbs[..NUM_LIMBS].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_x)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_x)
             .map(BabyBear::from_canonical_u32),
     );
     p2_limbs[NUM_LIMBS..].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_y)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_y)
             .map(BabyBear::from_canonical_u32),
     );
     tester.write(data_as, address2, p2_limbs);
@@ -77,11 +77,11 @@ fn test_ec_add() {
     let (p3_x, p3_y) = SampleEcPoints[2].clone();
     let mut p3_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p3_limbs[..NUM_LIMBS].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p3_x)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p3_x)
             .map(BabyBear::from_canonical_u32),
     );
     p3_limbs[NUM_LIMBS..].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p3_y)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p3_y)
             .map(BabyBear::from_canonical_u32),
     );
     let read_p3 = tester.read::<TWO_NUM_LIMBS>(data_as, address3);
@@ -117,11 +117,11 @@ fn test_ec_double() {
     tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
     let mut p1_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p1_limbs[..NUM_LIMBS].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_x)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_x)
             .map(BabyBear::from_canonical_u32),
     );
     p1_limbs[NUM_LIMBS..].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_y)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_y)
             .map(BabyBear::from_canonical_u32),
     );
     tester.write(data_as, address1, p1_limbs);
@@ -144,11 +144,11 @@ fn test_ec_double() {
     let (p2_x, p2_y) = SampleEcPoints[3].clone();
     let mut p2_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p2_limbs[..NUM_LIMBS].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_x)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_x)
             .map(BabyBear::from_canonical_u32),
     );
     p2_limbs[NUM_LIMBS..].copy_from_slice(
-        &ModularArithmeticChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_y)
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_y)
             .map(BabyBear::from_canonical_u32),
     );
     let read_p2 = tester.read::<TWO_NUM_LIMBS>(data_as, address2);

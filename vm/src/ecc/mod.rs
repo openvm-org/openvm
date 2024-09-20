@@ -17,7 +17,7 @@ use crate::{
         // instructions::Opcode,
     },
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
-    modular_arithmetic::{ModularArithmeticChip, FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
+    modular_addsub::{ModularAddSubChip, FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
@@ -45,10 +45,8 @@ fn read_ec_points<T: PrimeField32>(
     let mut memory_chip = memory_chip.borrow_mut();
     let array_read = memory_chip.read_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer);
     let u32_array = array_read.data_read.data.map(|x| x.as_canonical_u32());
-    let x =
-        ModularArithmeticChip::<T, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&u32_array[..NUM_LIMBS]);
-    let y =
-        ModularArithmeticChip::<T, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&u32_array[NUM_LIMBS..]);
+    let x = ModularAddSubChip::<T, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&u32_array[..NUM_LIMBS]);
+    let y = ModularAddSubChip::<T, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&u32_array[NUM_LIMBS..]);
     (x, y, array_read)
 }
 
@@ -61,8 +59,8 @@ fn write_ec_points<T: PrimeField32>(
     ptr_pointer: T,
 ) -> MemoryHeapWriteRecord<T, TWO_NUM_LIMBS> {
     let mut memory_chip = memory_chip.borrow_mut();
-    let x_limbs = ModularArithmeticChip::<T, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(x);
-    let y_limbs = ModularArithmeticChip::<T, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(y);
+    let x_limbs = ModularAddSubChip::<T, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(x);
+    let y_limbs = ModularAddSubChip::<T, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(y);
     let mut array = [0; 64];
     array[..NUM_LIMBS].copy_from_slice(&x_limbs);
     array[NUM_LIMBS..].copy_from_slice(&y_limbs);

@@ -13,8 +13,8 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{
-    columns::{ModularArithmeticAuxCols, ModularArithmeticCols, ModularArithmeticIoCols},
-    ModularArithmeticChip,
+    columns::{ModularAddSubAuxCols, ModularAddSubCols, ModularAddSubIoCols},
+    ModularAddSubChip,
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
@@ -22,7 +22,7 @@ use crate::{
 };
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChip<F>
-    for ModularArithmeticChip<F, NUM_LIMBS, LIMB_SIZE>
+    for ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
@@ -30,13 +30,13 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChi
         let height = self.data.len();
         let height = height.next_power_of_two();
 
-        let blank_row = vec![F::zero(); ModularArithmeticCols::<F, NUM_LIMBS>::width()];
+        let blank_row = vec![F::zero(); ModularAddSubCols::<F, NUM_LIMBS>::width()];
         let mut rows = vec![blank_row; height];
 
         for (i, record) in self.data.iter().enumerate() {
             let row = &mut rows[i];
-            let cols: &mut ModularArithmeticCols<F, NUM_LIMBS> = row[..].borrow_mut();
-            cols.io = ModularArithmeticIoCols {
+            let cols: &mut ModularAddSubCols<F, NUM_LIMBS> = row[..].borrow_mut();
+            cols.io = ModularAddSubIoCols {
                 from_state: record.from_state.map(F::from_canonical_usize),
                 x: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.x_array_read.clone()),
                 y: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.y_array_read.clone()),
@@ -85,10 +85,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChi
             cols.aux.is_add = F::from_bool(is_add);
         }
 
-        RowMajorMatrix::new(
-            rows.concat(),
-            ModularArithmeticCols::<F, NUM_LIMBS>::width(),
-        )
+        RowMajorMatrix::new(rows.concat(), ModularAddSubCols::<F, NUM_LIMBS>::width())
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
@@ -103,16 +100,16 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChi
     }
 
     fn trace_width(&self) -> usize {
-        ModularArithmeticCols::<F, NUM_LIMBS>::width()
+        ModularAddSubCols::<F, NUM_LIMBS>::width()
     }
 }
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    ModularArithmeticChip<F, NUM_LIMBS, LIMB_SIZE>
+    ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE>
 {
     fn generate_aux_cols_add(
         &self,
-        aux: &mut ModularArithmeticAuxCols<F, NUM_LIMBS>,
+        aux: &mut ModularAddSubAuxCols<F, NUM_LIMBS>,
         x: BigUint,
         y: BigUint,
         r: BigUint,
@@ -130,7 +127,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     }
     fn generate_aux_cols_sub(
         &self,
-        aux: &mut ModularArithmeticAuxCols<F, NUM_LIMBS>,
+        aux: &mut ModularAddSubAuxCols<F, NUM_LIMBS>,
         x: BigUint,
         y: BigUint,
         r: BigUint,
@@ -141,7 +138,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     }
     fn generate_aux_cols(
         &self,
-        aux: &mut ModularArithmeticAuxCols<F, NUM_LIMBS>,
+        aux: &mut ModularAddSubAuxCols<F, NUM_LIMBS>,
         x: BigUint,
         y: BigUint,
         r: BigUint,

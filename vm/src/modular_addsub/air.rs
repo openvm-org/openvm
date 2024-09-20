@@ -10,7 +10,7 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::columns::ModularArithmeticCols;
+use super::columns::ModularAddSubCols;
 use crate::{
     arch::{bus::ExecutionBus, instructions::Opcode},
     memory::offline_checker::MemoryBridge,
@@ -18,7 +18,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct ModularArithmeticAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+pub struct ModularAddSubAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bus: ExecutionBus,
     pub(super) program_bus: ProgramBus,
     pub(super) memory_bridge: MemoryBridge,
@@ -26,21 +26,21 @@ pub struct ModularArithmeticAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> 
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>
-    for ModularArithmeticAir<NUM_LIMBS, LIMB_SIZE>
+    for ModularAddSubAir<NUM_LIMBS, LIMB_SIZE>
 {
     fn width(&self) -> usize {
-        ModularArithmeticCols::<F, NUM_LIMBS>::width()
+        ModularAddSubCols::<F, NUM_LIMBS>::width()
     }
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air<AB>
-    for ModularArithmeticAir<NUM_LIMBS, LIMB_SIZE>
+    for ModularAddSubAir<NUM_LIMBS, LIMB_SIZE>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
-        let ModularArithmeticCols::<AB::Var, NUM_LIMBS> { io, aux } = (*local).borrow();
+        let ModularAddSubCols::<AB::Var, NUM_LIMBS> { io, aux } = (*local).borrow();
 
         // we assume aux.is_sub is represented aaux.is_valid - aux.is_add
         builder.assert_bool(aux.is_add);

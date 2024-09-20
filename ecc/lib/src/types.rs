@@ -9,7 +9,7 @@ use k256::{
 };
 use num_bigint_dig::BigUint;
 use p3_field::{AbstractField, PrimeField64};
-use stark_vm::modular_arithmetic::big_uint_to_num_limbs;
+use stark_vm::modular_addsub::big_uint_to_num_limbs;
 use zkhash::ark_ff::Zero;
 
 /// EC point in Rust. **Unsafe** to assume (x, y) is a point on the curve.
