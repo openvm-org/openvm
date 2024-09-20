@@ -22,7 +22,7 @@ use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::{program::Program, vm::config::VmConfig};
+use stark_vm::{program::Program, sdk::gen_vm_program_stark_for_test, vm::config::VmConfig};
 use tracing::info_span;
 
 /// A simple benchmark program to run most operations: keccak256, field arithmetic, field extension,

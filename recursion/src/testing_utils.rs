@@ -2,12 +2,7 @@ use afs_compiler::util::execute_and_prove_program;
 use afs_stark_backend::engine::VerificationData;
 use ax_sdk::engine::StarkForTest;
 use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
-use p3_uni_stark::{StarkGenericConfig, Val};
-use stark_vm::{
-    program::Program,
-    vm::{config::VmConfig, VirtualMachine},
-};
+use stark_vm::program::Program;
 
 use crate::{
     hints::InnerVal,
@@ -78,48 +73,4 @@ pub mod inner {
             },
         );
     }
-}
-
-/// Generates the VM STARK circuit, in the form of AIRs and traces, but does not
-/// do any proving. Output is the payload of everything the prover needs.
-pub fn gen_vm_program_stark_for_test<SC: StarkGenericConfig>(
-    program: Program<Val<SC>>,
-    input_stream: Vec<Vec<Val<SC>>>,
-    config: VmConfig,
-) -> StarkForTest<SC>
-where
-    Val<SC>: PrimeField32,
-{
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "bench-metrics")] {
-            let start = std::time::Instant::now();
-            let mut config= config;
-            config.collect_metrics = true;
-        }
-    }
-
-    let vm = VirtualMachine::new(config, program, input_stream);
-
-    let mut result = vm.execute_and_generate().unwrap();
-    assert_eq!(
-        result.segment_results.len(),
-        1,
-        "only proving one segment for now"
-    );
-
-    let result = result.segment_results.pop().unwrap();
-    #[cfg(feature = "bench-metrics")]
-    {
-        let total_cell = result.metrics.chip_metrics.into_values().sum::<usize>();
-        metrics::gauge!("vm_total_cells").set(total_cell as f64);
-        metrics::gauge!("trace_gen_time_ms", "stark" => "vm")
-            .set(start.elapsed().as_millis() as f64);
-    }
-
-    StarkForTest {
-        any_raps: result.airs.into_iter().map(|x| x.into()).collect(),
-        traces: result.traces,
-        pvs: result.public_values,
-    }
-    .sort_by_height_desc()
 }

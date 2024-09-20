@@ -6,9 +6,9 @@ edition = "2021"
 [dependencies]
 afs-stark-backend = { path = "../stark-backend" }
 afs-compiler = { path = "../compiler" }
-ax-sdk = { path = "../sdk" }
+ax-sdk = { path = "../sdk" }                      # TODO: feature-gate sdk
 afs-derive = { path = "../derive" }
-stark-vm = { path = "../vm" }
+stark-vm = { path = "../vm", features = ["sdk"] }
 ax-ecc-lib = { path = "../ecc/lib" }
 
 p3-air = { workspace = true }
@@ -62,4 +62,4 @@ static-verifier = [
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]
-bench-metrics = ["dep:metrics", "afs-stark-backend/bench-metrics"]
+bench-metrics = ["dep:metrics", "stark-vm/bench-metrics"]
