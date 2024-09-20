@@ -6,9 +6,9 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::ProgramChip;
-use crate::arch::chips::MachineChip;
+use crate::arch::chips::SingleAirMachineChip;
 
-impl<F: PrimeField64> MachineChip<F> for ProgramChip<F> {
+impl<F: PrimeField64> SingleAirMachineChip<F> for ProgramChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         RowMajorMatrix::new_col(
             self.execution_frequencies

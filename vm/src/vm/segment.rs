@@ -13,6 +13,7 @@ use afs_primitives::{
 };
 use afs_stark_backend::rap::AnyRap;
 use backtrace::Backtrace;
+use itertools::izip;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -27,7 +28,10 @@ use super::{
 use crate::{
     arch::{
         bus::ExecutionBus,
-        chips::{InstructionExecutor, InstructionExecutorVariant, MachineChip, MachineChipVariant},
+        chips::{
+            InstructionExecutor, InstructionExecutorVariant, MachineChip, MachineChipVariant,
+            SingleAirChipAdapter,
+        },
         columns::ExecutionState,
         instructions::{
             Opcode, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
@@ -54,7 +58,6 @@ use crate::{
     uint_multiplication::UintMultiplicationChip,
 };
 
-#[derive(Debug)]
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
 
@@ -129,8 +132,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         // That is, if chip A holds a strong reference to chip B, then A must precede B in `chips`.
 
         let mut chips = vec![
-            MachineChipVariant::Core(core_chip.clone()),
-            MachineChipVariant::Program(program_chip.clone()),
+            MachineChipVariant::Core(SingleAirChipAdapter::new(core_chip.clone())),
+            MachineChipVariant::Program(SingleAirChipAdapter::new(program_chip.clone())),
         ];
 
         for opcode in CORE_INSTRUCTIONS {
@@ -144,7 +147,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 memory_chip.clone(),
             )));
             assign!(FIELD_ARITHMETIC_INSTRUCTIONS, field_arithmetic_chip);
-            chips.push(MachineChipVariant::FieldArithmetic(field_arithmetic_chip));
+            chips.push(MachineChipVariant::FieldArithmetic(
+                SingleAirChipAdapter::new(field_arithmetic_chip),
+            ));
         }
         if config.field_extension_enabled {
             let field_extension_chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
@@ -153,7 +158,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 memory_chip.clone(),
             )));
             assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
-            chips.push(MachineChipVariant::FieldExtension(field_extension_chip))
+            chips.push(MachineChipVariant::FieldExtension(
+                SingleAirChipAdapter::new(field_extension_chip),
+            ))
         }
         if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
@@ -171,7 +178,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             if config.compress_poseidon2_enabled {
                 assign!([Opcode::COMP_POS2], poseidon2_chip);
             }
-            chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
+            chips.push(MachineChipVariant::Poseidon2(SingleAirChipAdapter::new(
+                poseidon2_chip.clone(),
+            )));
         }
         if config.keccak_enabled {
             let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
@@ -182,7 +191,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 byte_xor_chip.clone(),
             )));
             assign!([Opcode::KECCAK256], keccak_chip);
-            chips.push(MachineChipVariant::Keccak256(keccak_chip));
+            chips.push(MachineChipVariant::Keccak256(SingleAirChipAdapter::new(
+                keccak_chip,
+            )));
             chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         }
         if config.modular_multiplication_enabled {
@@ -282,7 +293,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 program_bus,
                 memory_chip.clone(),
             )));
-            chips.push(MachineChipVariant::U256Arithmetic(u256_chip.clone()));
+            chips.push(MachineChipVariant::U256Arithmetic(
+                SingleAirChipAdapter::new(u256_chip.clone()),
+            ));
             assign!(UINT256_ARITHMETIC_INSTRUCTIONS, u256_chip);
         }
         if config.u256_multiplication_enabled {
@@ -296,7 +309,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 range_tuple_checker.clone(),
             )));
             assign!([Opcode::MUL256], u256_mult_chip);
-            chips.push(MachineChipVariant::U256Multiplication(u256_mult_chip));
+            chips.push(MachineChipVariant::U256Multiplication(
+                SingleAirChipAdapter::new(u256_mult_chip),
+            ));
             chips.push(MachineChipVariant::RangeTupleChecker(range_tuple_checker));
         }
         if config.shift_256_enabled {
@@ -305,7 +320,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 memory_chip.clone(),
             )));
             assign!(SHIFT_256_INSTRUCTIONS, shift_chip);
-            chips.push(MachineChipVariant::Shift256(shift_chip));
+            chips.push(MachineChipVariant::Shift256(SingleAirChipAdapter::new(
+                shift_chip,
+            )));
         }
         if config.ui_32_enabled {
             let ui_chip = Rc::new(RefCell::new(UiChip::new(
@@ -314,7 +331,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 memory_chip.clone(),
             )));
             assign!(UI_32_INSTRUCTIONS, ui_chip);
-            chips.push(MachineChipVariant::Ui(ui_chip));
+            chips.push(MachineChipVariant::Ui(SingleAirChipAdapter::new(ui_chip)));
         }
         if config.castf_enabled {
             let castf_chip = Rc::new(RefCell::new(CastFChip::new(
@@ -323,7 +340,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 memory_chip.clone(),
             )));
             assign!([Opcode::CASTF], castf_chip);
-            chips.push(MachineChipVariant::CastF(castf_chip));
+            chips.push(MachineChipVariant::CastF(SingleAirChipAdapter::new(
+                castf_chip,
+            )));
         }
         if config.secp256k1_enabled {
             let secp256k1_add_unequal_chip = Rc::new(RefCell::new(EcAddUnequalChip::new(
@@ -339,13 +358,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             assign!([Opcode::SECP256K1_EC_ADD_NE], secp256k1_add_unequal_chip);
             assign!([Opcode::SECP256K1_EC_DOUBLE], secp256k1_double_chip);
             chips.push(MachineChipVariant::Secp256k1AddUnequal(
-                secp256k1_add_unequal_chip,
+                SingleAirChipAdapter::new(secp256k1_add_unequal_chip),
             ));
-            chips.push(MachineChipVariant::Secp256k1Double(secp256k1_double_chip));
+            chips.push(MachineChipVariant::Secp256k1Double(
+                SingleAirChipAdapter::new(secp256k1_double_chip),
+            ));
         }
         // Most chips have a reference to the memory chip, and the memory chip has a reference to
         // the range checker chip.
-        chips.push(MachineChipVariant::Memory(memory_chip.clone()));
+        chips.push(MachineChipVariant::Memory(SingleAirChipAdapter::new(
+            memory_chip.clone(),
+        )));
         chips.push(MachineChipVariant::RangeChecker(range_checker.clone()));
 
         let connector_chip = VmConnectorChip::new(execution_bus);
@@ -515,10 +538,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         drop(self.memory_chip);
 
         for mut chip in self.chips {
-            if chip.current_trace_height() != 0 {
-                result.airs.push(chip.air());
-                result.public_values.push(chip.generate_public_values());
-                result.traces.push(chip.generate_trace());
+            let heights = chip.current_trace_heights();
+            let airs = chip.airs();
+            let public_values = chip.generate_public_values();
+            let traces = chip.generate_traces();
+
+            for (height, air, public_values, trace) in izip!(heights, airs, public_values, traces) {
+                if height != 0 {
+                    result.airs.push(air);
+                    result.public_values.push(public_values);
+                    result.traces.push(trace);
+                }
             }
         }
         let trace = self.connector_chip.generate_trace();
@@ -533,15 +563,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {
-        self.chips
-            .iter()
-            .any(|chip| chip.current_trace_height() > self.config.max_segment_len)
+        self.chips.iter().any(|chip| {
+            chip.current_trace_heights()
+                .iter()
+                .any(|height| *height > self.config.max_segment_len)
+        })
     }
 
     fn current_trace_cells(&self) -> usize {
         self.chips
             .iter()
-            .map(|chip| chip.current_trace_cells())
+            .map(|chip| chip.current_trace_cells().iter().sum::<usize>())
             .sum()
     }
 
@@ -553,7 +585,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let mut metrics = BTreeMap::new();
         for chip in self.chips.iter() {
             let chip_name: &'static str = chip.into();
-            metrics.insert(chip_name.into(), chip.current_trace_height());
+            for (i, height) in chip.current_trace_heights().iter().enumerate() {
+                if i == 0 {
+                    metrics.insert(chip_name.into(), *height);
+                } else {
+                    metrics.insert(format!("{} {}", chip_name, i + 1), *height);
+                }
+            }
         }
         metrics
     }

@@ -7,7 +7,7 @@ use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use crate::arch::{bus::ExecutionBus, chips::MachineChip, columns::ExecutionState};
+use crate::arch::{bus::ExecutionBus, chips::SingleAirMachineChip, columns::ExecutionState};
 
 pub mod air;
 
@@ -59,7 +59,7 @@ impl<F: PrimeField32> ExecutionTester<F> {
     }*/
 }
 
-impl<F: Field> MachineChip<F> for ExecutionTester<F> {
+impl<F: Field> SingleAirMachineChip<F> for ExecutionTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();

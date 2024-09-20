@@ -9,7 +9,7 @@ use super::{
     FieldArithmeticChip, FieldArithmeticRecord, Operand,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{chips::SingleAirMachineChip, instructions::Opcode},
     memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
 };
 
@@ -78,7 +78,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
+impl<F: PrimeField32> SingleAirMachineChip<F> for FieldArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self

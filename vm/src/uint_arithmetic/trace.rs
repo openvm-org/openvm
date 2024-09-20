@@ -11,11 +11,11 @@ use super::{
     num_limbs, UintArithmeticChip, WriteRecord,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{chips::SingleAirMachineChip, instructions::Opcode},
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
-impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> MachineChip<F>
+impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> SingleAirMachineChip<F>
     for UintArithmeticChip<ARG_SIZE, LIMB_SIZE, F>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {

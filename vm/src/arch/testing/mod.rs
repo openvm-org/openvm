@@ -13,7 +13,7 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use crate::{
-    arch::{chips::MachineChip, columns::ExecutionState},
+    arch::{chips::SingleAirMachineChip, columns::ExecutionState},
     core::RANGE_CHECKER_BUS,
     memory::{offline_checker::MemoryBus, MemoryChip},
     program::{bridge::ProgramBus, Instruction},
@@ -152,7 +152,7 @@ pub struct MachineChipTester {
 }
 
 impl MachineChipTester {
-    pub fn load<C: MachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
+    pub fn load<C: SingleAirMachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
         self.public_values.push(chip.generate_public_values());
         self.airs.push(chip.air());
         self.traces.push(chip.generate_trace());
@@ -171,7 +171,7 @@ impl MachineChipTester {
         self
     }
 
-    pub fn load_with_custom_trace<C: MachineChip<BabyBear>>(
+    pub fn load_with_custom_trace<C: SingleAirMachineChip<BabyBear>>(
         mut self,
         mut chip: C,
         trace: RowMajorMatrix<BabyBear>,

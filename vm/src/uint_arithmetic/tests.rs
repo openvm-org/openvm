@@ -12,7 +12,7 @@ use super::{
     columns::UintArithmeticCols, CalculationResult, UintArithmetic, UintArithmeticChip, NUM_LIMBS,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
+    arch::{chips::SingleAirMachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
     program::Instruction,
 };
 

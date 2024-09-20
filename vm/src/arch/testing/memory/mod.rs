@@ -9,7 +9,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
-    arch::chips::MachineChip,
+    arch::chips::SingleAirMachineChip,
     memory::{
         offline_checker::{MemoryBus, MemoryBusInteraction},
         MemoryAddress, MemoryChipRef, OpType,
@@ -84,7 +84,7 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
+impl<F: PrimeField32> SingleAirMachineChip<F> for MemoryTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();

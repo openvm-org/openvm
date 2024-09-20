@@ -9,7 +9,7 @@ use super::{
     EcDoubleRecord,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{chips::SingleAirMachineChip, instructions::Opcode},
     memory::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols, MemoryHeapReadRecord,
@@ -33,7 +33,7 @@ fn load_ec_point<F: PrimeField32>(
     (x, y)
 }
 
-impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
+impl<F: PrimeField32> SingleAirMachineChip<F> for EcAddUnequalChip<F> {
     fn air<SC: p3_uni_stark::StarkGenericConfig>(
         &self,
     ) -> Box<dyn afs_stark_backend::rap::AnyRap<SC>>
@@ -121,7 +121,7 @@ impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
+impl<F: PrimeField32> SingleAirMachineChip<F> for EcDoubleChip<F> {
     fn air<SC: p3_uni_stark::StarkGenericConfig>(
         &self,
     ) -> Box<dyn afs_stark_backend::rap::AnyRap<SC>>

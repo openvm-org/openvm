@@ -21,7 +21,7 @@ use super::{
     offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
 };
 use crate::{
-    arch::chips::MachineChip,
+    arch::chips::SingleAirMachineChip,
     core::RANGE_CHECKER_BUS,
     memory::offline_checker::{
         MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
@@ -487,7 +487,7 @@ impl<F: PrimeField32> MemoryChip<F> {
 
 // TODO[jpw]: MemoryManager is taking the role of MemoryInterface here, which is weird.
 // Necessary right now because MemoryInterface doesn't own the final memory state.
-impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
+impl<F: PrimeField32> SingleAirMachineChip<F> for MemoryChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         self.generate_memory_interface_trace()
     }

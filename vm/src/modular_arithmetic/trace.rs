@@ -6,14 +6,16 @@ use super::{
     ModularArithmeticAirVariant, ModularArithmeticChip, ModularArithmeticRecord, NUM_LIMBS,
 };
 use crate::{
-    arch::{chips::MachineChip, columns::ExecutionState},
+    arch::{chips::SingleAirMachineChip, columns::ExecutionState},
     memory::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryDataIoCols, MemoryHeapDataIoCols,
     },
 };
 
-impl<F: PrimeField32> MachineChip<F> for ModularArithmeticChip<F, ModularArithmeticAirVariant> {
+impl<F: PrimeField32> SingleAirMachineChip<F>
+    for ModularArithmeticChip<F, ModularArithmeticAirVariant>
+{
     fn air<SC: p3_uni_stark::StarkGenericConfig>(
         &self,
     ) -> Box<dyn afs_stark_backend::rap::AnyRap<SC>>

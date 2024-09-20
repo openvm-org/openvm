@@ -15,7 +15,7 @@ use super::{
     CastFChip,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
+    arch::{chips::SingleAirMachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
     program::Instruction,
 };
 

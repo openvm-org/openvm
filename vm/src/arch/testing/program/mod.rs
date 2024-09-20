@@ -8,7 +8,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use crate::{
-    arch::{chips::MachineChip, columns::ExecutionState},
+    arch::{chips::SingleAirMachineChip, columns::ExecutionState},
     program::{bridge::ProgramBus, columns::ProgramPreprocessedCols, Instruction},
 };
 
@@ -49,7 +49,7 @@ impl<F: Field> ProgramTester<F> {
     }
 }
 
-impl<F: Field> MachineChip<F> for ProgramTester<F> {
+impl<F: Field> SingleAirMachineChip<F> for ProgramTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();

@@ -10,9 +10,9 @@ use super::{
     columns::{CastFAuxCols, CastFCols, CastFIoCols},
     CastFChip,
 };
-use crate::arch::chips::MachineChip;
+use crate::arch::chips::SingleAirMachineChip;
 
-impl<F: PrimeField32> MachineChip<F> for CastFChip<F> {
+impl<F: PrimeField32> SingleAirMachineChip<F> for CastFChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
 

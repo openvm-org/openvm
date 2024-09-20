@@ -13,7 +13,7 @@ use rand::Rng;
 use super::{FieldArithmetic, FieldArithmeticChip};
 use crate::{
     arch::{
-        chips::MachineChip,
+        chips::SingleAirMachineChip,
         instructions::{Opcode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
         testing::MachineChipTestBuilder,
     },
