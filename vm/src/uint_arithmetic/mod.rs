@@ -1,8 +1,7 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
-use afs_primitives::var_range::VariableRangeCheckerChip;
+use afs_primitives::xor::lookup::XorLookupChip;
 use air::UintArithmeticAir;
-use itertools::Itertools;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -17,29 +16,29 @@ use crate::{
     program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
+mod air;
+mod bridge;
+mod columns;
+mod trace;
+
+// pub use air::*;
+pub use columns::*;
+
 #[cfg(test)]
-pub mod tests;
+mod tests;
 
-pub mod air;
-pub mod bridge;
-pub mod columns;
-pub mod trace;
-
-pub const NUM_LIMBS: usize = 32; // This is used in some places where const generics are hard to use.
-                                 // Of course, TODO make it something normal
-
-pub const fn num_limbs<const ARG_SIZE: usize, const LIMB_SIZE: usize>() -> usize {
-    (ARG_SIZE + LIMB_SIZE - 1) / LIMB_SIZE
-}
+pub const ALU_CMP_INSTRUCTIONS: [Opcode; 3] = [Opcode::LT256, Opcode::EQ256, Opcode::SLT256];
+pub const ALU_ARITHMETIC_INSTRUCTIONS: [Opcode; 2] = [Opcode::ADD256, Opcode::SUB256];
+pub const ALU_BITWISE_INSTRUCTIONS: [Opcode; 3] = [Opcode::XOR256, Opcode::AND256, Opcode::OR256];
 
 #[derive(Debug)]
-pub enum WriteRecord<T> {
+pub enum WriteRecord<T, const NUM_LIMBS: usize> {
     Uint(MemoryWriteRecord<T, NUM_LIMBS>),
     Short(MemoryWriteRecord<T, 1>),
 }
 
 #[derive(Debug)]
-pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
+pub struct UintArithmeticRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
@@ -49,56 +48,45 @@ pub struct UintArithmeticRecord<const ARG_SIZE: usize, const LIMB_SIZE: usize, T
 
     pub x_read: MemoryReadRecord<T, NUM_LIMBS>,
     pub y_read: MemoryReadRecord<T, NUM_LIMBS>,
-    pub z_write: WriteRecord<T>,
+    pub z_write: WriteRecord<T, NUM_LIMBS>,
 
-    // this may be redundant because we can extract it from z_write,
-    // but it's not always the case
-    pub result: Vec<T>,
-
-    pub buffer: Vec<T>,
+    // empty if not bool instruction, else contents of this vector will be stored in z
+    pub cmp_buffer: Vec<T>,
 }
 
 #[derive(Debug)]
-pub struct UintArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> {
-    pub air: UintArithmeticAir<ARG_SIZE, LIMB_SIZE>,
-    data: Vec<UintArithmeticRecord<ARG_SIZE, LIMB_SIZE, T>>,
+pub struct UintArithmeticChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: UintArithmeticAir<NUM_LIMBS, LIMB_BITS>,
+    data: Vec<UintArithmeticRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
 }
 
-impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32>
-    UintArithmeticChip<ARG_SIZE, LIMB_SIZE, T>
+impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    UintArithmeticChip<T, NUM_LIMBS, LIMB_BITS>
 {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
+        xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     ) -> Self {
-        let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
-        let bus = range_checker_chip.bus();
-        assert!(
-            bus.range_max_bits >= LIMB_SIZE,
-            "range_max_bits {} < LIMB_SIZE {}",
-            bus.range_max_bits,
-            LIMB_SIZE
-        );
         Self {
             air: UintArithmeticAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
-                bus,
-                base_op: Opcode::ADD256,
+                bus: xor_lookup_chip.bus(),
             },
             data: vec![],
             memory_chip,
-            range_checker_chip,
+            xor_lookup_chip,
         }
     }
 }
 
-impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> InstructionExecutor<T>
-    for UintArithmeticChip<ARG_SIZE, LIMB_SIZE, T>
+impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<T>
+    for UintArithmeticChip<T, NUM_LIMBS, LIMB_BITS>
 {
     fn execute(
         &mut self,
@@ -112,14 +100,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
             op_c: c,
             d,
             e,
-            op_f: f,
-            op_g: g,
             ..
         } = instruction.clone();
         assert!(UINT256_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
-
         debug_assert_eq!(
             from_state.timestamp,
             memory_chip.timestamp().as_canonical_u32() as usize
@@ -127,49 +112,54 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
 
         let [z_ptr_read, x_ptr_read, y_ptr_read] =
             [a, b, c].map(|ptr_of_ptr| memory_chip.read_cell(d, ptr_of_ptr));
-
-        let x_read = memory_chip.read::<NUM_LIMBS>(f, x_ptr_read.value());
-        let y_read = memory_chip.read::<NUM_LIMBS>(g, y_ptr_read.value());
+        let x_read = memory_chip.read::<NUM_LIMBS>(e, x_ptr_read.value());
+        let y_read = memory_chip.read::<NUM_LIMBS>(e, y_ptr_read.value());
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
-        let (z, residue) = UintArithmetic::<ARG_SIZE, LIMB_SIZE, T>::solve(opcode, (&x, &y));
-        let CalculationResidue { result, buffer } = residue;
+        let (z, cmp) = solve_alu::<T, NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
 
-        let z_address_space = e;
-        let z_write: WriteRecord<T> = match z {
-            CalculationResult::Uint(limbs) => {
-                let to_write = limbs
-                    .iter()
-                    .map(|x| T::from_canonical_u32(*x))
-                    .collect::<Vec<_>>();
-                WriteRecord::Uint(memory_chip.write::<NUM_LIMBS>(
-                    z_address_space,
+        let z_write = if ALU_CMP_INSTRUCTIONS.contains(&opcode) {
+            WriteRecord::Short(memory_chip.write_cell(e, z_ptr_read.value(), T::from_bool(cmp)))
+        } else {
+            WriteRecord::Uint(
+                memory_chip.write::<NUM_LIMBS>(
+                    e,
                     z_ptr_read.value(),
-                    to_write.try_into().unwrap(),
-                ))
-            }
-            CalculationResult::Short(res) => {
-                WriteRecord::Short(memory_chip.write_cell(e, z_ptr_read.value(), T::from_bool(res)))
-            }
+                    z.clone()
+                        .into_iter()
+                        .map(T::from_canonical_u32)
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .unwrap(),
+                ),
+            )
         };
 
-        for elem in result.iter() {
-            self.range_checker_chip.add_count(*elem, LIMB_SIZE);
+        for i in 0..NUM_LIMBS {
+            match opcode {
+                Opcode::XOR256 => self.xor_lookup_chip.request(x[i], y[i]),
+                Opcode::EQ256 => 0,
+                _ => self.xor_lookup_chip.request(z[i], z[i]),
+            };
         }
 
-        self.data.push(UintArithmeticRecord {
-            from_state,
-            instruction: instruction.clone(),
-            x_ptr_read,
-            y_ptr_read,
-            z_ptr_read,
-            x_read,
-            y_read,
-            z_write,
-            result: result.into_iter().map(T::from_canonical_u32).collect_vec(),
-            buffer: buffer.into_iter().map(T::from_canonical_u32).collect_vec(),
-        });
+        self.data
+            .push(UintArithmeticRecord::<T, NUM_LIMBS, LIMB_BITS> {
+                from_state,
+                instruction: instruction.clone(),
+                x_ptr_read,
+                y_ptr_read,
+                z_ptr_read,
+                x_read,
+                y_read,
+                z_write,
+                cmp_buffer: if ALU_CMP_INSTRUCTIONS.contains(&opcode) {
+                    z.into_iter().map(T::from_canonical_u32).collect()
+                } else {
+                    vec![]
+                },
+            });
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
@@ -178,107 +168,65 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: PrimeField32> Instruction
     }
 }
 
-pub enum CalculationResult<T> {
-    Uint(Vec<T>),
-    Short(bool),
+fn solve_alu<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    opcode: Opcode,
+    x: &[u32],
+    y: &[u32],
+) -> (Vec<u32>, bool) {
+    match opcode {
+        Opcode::ADD256 => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
+        Opcode::SUB256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        Opcode::LT256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        Opcode::EQ256 => solve_eq::<T, NUM_LIMBS, LIMB_BITS>(x, y),
+        _ => unreachable!(),
+    }
 }
 
-pub struct CalculationResidue<T> {
-    pub result: Vec<T>,
-    pub buffer: Vec<T>,
+fn solve_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    x: &[u32],
+    y: &[u32],
+) -> (Vec<u32>, bool) {
+    let mut z = vec![0u32; NUM_LIMBS];
+    let mut carry = vec![0u32; NUM_LIMBS];
+    for i in 0..NUM_LIMBS {
+        z[i] = x[i] + y[i] + if i > 0 { carry[i - 1] } else { 0 };
+        carry[i] = z[i] >> LIMB_BITS;
+        z[i] &= (1 << LIMB_BITS) - 1;
+    }
+    (z, false)
 }
 
-pub struct UintArithmetic<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32> {
-    _marker: PhantomData<F>,
+fn solve_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    x: &[u32],
+    y: &[u32],
+) -> (Vec<u32>, bool) {
+    let mut z = vec![0u32; NUM_LIMBS];
+    let mut carry = vec![0u32; NUM_LIMBS];
+    for i in 0..NUM_LIMBS {
+        let rhs = y[i] + if i > 0 { carry[i - 1] } else { 0 };
+        if x[i] >= rhs {
+            z[i] = x[i] - rhs;
+            carry[i] = 0;
+        } else {
+            z[i] = x[i] + (1 << LIMB_BITS) - rhs;
+            carry[i] = 1;
+        }
+    }
+    (z, carry[NUM_LIMBS - 1] != 0)
 }
-impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, F: PrimeField32>
-    UintArithmetic<ARG_SIZE, LIMB_SIZE, F>
-{
-    pub fn solve(
-        opcode: Opcode,
-        (x, y): (&[u32], &[u32]),
-    ) -> (CalculationResult<u32>, CalculationResidue<u32>) {
-        match opcode {
-            Opcode::ADD256 => {
-                let (result, carry) = Self::add(x, y);
-                (
-                    CalculationResult::Uint(result.clone()),
-                    CalculationResidue {
-                        result,
-                        buffer: carry,
-                    },
-                )
-            }
-            Opcode::SUB256 => {
-                let (result, carry) = Self::subtract(x, y);
-                (
-                    CalculationResult::Uint(result.clone()),
-                    CalculationResidue {
-                        result,
-                        buffer: carry,
-                    },
-                )
-            }
-            Opcode::LT256 => {
-                let (diff, carry) = Self::subtract(x, y);
-                let cmp_result = *carry.last().unwrap() == 1;
-                (
-                    CalculationResult::Short(cmp_result),
-                    CalculationResidue {
-                        result: diff,
-                        buffer: carry,
-                    },
-                )
-            }
-            Opcode::EQ256 => {
-                let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-                let mut inverse = vec![0u32; num_limbs];
-                for i in 0..num_limbs {
-                    if x[i] != y[i] {
-                        inverse[i] = (F::from_canonical_u32(x[i]) - F::from_canonical_u32(y[i]))
-                            .inverse()
-                            .as_canonical_u32();
-                        break;
-                    }
-                }
-                (
-                    CalculationResult::Short(x == y),
-                    CalculationResidue {
-                        result: Default::default(),
-                        buffer: inverse,
-                    },
-                )
-            }
-            _ => unreachable!(),
-        }
-    }
 
-    fn add(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
-        let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-        let mut result = vec![0u32; num_limbs];
-        let mut carry = vec![0u32; num_limbs];
-        for i in 0..num_limbs {
-            result[i] = x[i] + y[i] + if i > 0 { carry[i - 1] } else { 0 };
-            carry[i] = result[i] >> LIMB_SIZE;
-            result[i] &= (1 << LIMB_SIZE) - 1;
+fn solve_eq<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    x: &[u32],
+    y: &[u32],
+) -> (Vec<u32>, bool) {
+    let mut z = vec![0u32; NUM_LIMBS];
+    for i in 0..NUM_LIMBS {
+        if x[i] != y[i] {
+            z[i] = (F::from_canonical_u32(x[i]) - F::from_canonical_u32(y[i]))
+                .inverse()
+                .as_canonical_u32();
+            return (z, false);
         }
-        (result, carry)
     }
-
-    fn subtract(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
-        let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
-        let mut result = vec![0u32; num_limbs];
-        let mut carry = vec![0u32; num_limbs];
-        for i in 0..num_limbs {
-            let rhs = y[i] + if i > 0 { carry[i - 1] } else { 0 };
-            if x[i] >= rhs {
-                result[i] = x[i] - rhs;
-                carry[i] = 0;
-            } else {
-                result[i] = x[i] + (1 << LIMB_SIZE) - rhs;
-                carry[i] = 1;
-            }
-        }
-        (result, carry)
-    }
+    (z, true)
 }

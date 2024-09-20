@@ -1,65 +1,56 @@
-use std::borrow::Borrow;
+use std::{array, borrow::Borrow};
 
-use afs_primitives::{utils, var_range::bus::VariableRangeCheckerBus};
+use afs_primitives::xor::bus::XorBus;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::UintArithmeticCols, num_limbs};
+use super::columns::UintArithmeticCols;
 use crate::{
-    arch::{
-        bridge::ExecutionBridge,
-        instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
-    },
+    arch::{bridge::ExecutionBridge, instructions::UINT256_ARITHMETIC_INSTRUCTIONS},
     memory::offline_checker::MemoryBridge,
 };
 
-/// AIR for the uint addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.
 #[derive(Copy, Clone, Debug)]
 pub struct UintArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
-
-    pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
-    pub base_op: Opcode,
+    pub bus: XorBus,
 }
 
-impl<F: Field, const ARG_SIZE: usize, const LIMB_SIZE: usize> BaseAir<F>
-    for UintArithmeticAir<ARG_SIZE, LIMB_SIZE>
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
+    for UintArithmeticAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
-        UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, F>::width()
+        UintArithmeticCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 
-impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<AB>
-    for UintArithmeticAir<ARG_SIZE, LIMB_SIZE>
+impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
+    for UintArithmeticAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-
         let local = main.row_slice(0);
-        let local: &[AB::Var] = (*local).borrow();
 
-        let UintArithmeticCols { io, aux } =
-            UintArithmeticCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_iterator(
-                local.iter().copied(),
-            );
-
-        let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
+        let UintArithmeticCols::<_, NUM_LIMBS, LIMB_BITS> { io, aux } = (*local).borrow();
+        builder.assert_bool(aux.is_valid);
 
         let flags = [
             aux.opcode_add_flag,
             aux.opcode_sub_flag,
             aux.opcode_lt_flag,
             aux.opcode_eq_flag,
+            aux.opcode_xor_flag,
+            aux.opcode_and_flag,
+            aux.opcode_or_flag,
+            aux.opcode_slt_flag,
         ];
         for flag in flags {
             builder.assert_bool(flag);
         }
 
-        builder.assert_bool(aux.is_valid);
         builder.assert_eq(
             aux.is_valid,
             flags
@@ -71,57 +62,39 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
         let y_limbs = &io.y.data;
         let z_limbs = &io.z.data;
 
-        for i in 0..num_limbs {
-            // If we need to perform an arithmetic operation, we will use "buffer"
-            // as a "carry/borrow" vector. We refer to it as "carry" in this section.
+        // For ADD, define carry[i] = (x[i] + y[i] + carry[i - 1] - z[i]) / 2^LIMB_BITS. If
+        // each carry[i] is boolean and 0 <= z[i] < 2^NUM_LIMBS, it can be proven that
+        // z[i] = (x[i] + y[i]) % 256 as necessary. The same holds for SUB when carry[i] is
+        // (z[i] + y[i] - x[i] + carry[i - 1]) / 2^LIMB_BITS.
+        let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let divide = AB::F::from_canonical_usize(1 << LIMB_BITS).inverse();
 
-            // For addition, we have the following:
-            // z[i] + carry[i] * 2^LIMB_SIZE = x[i] + y[i] + carry[i - 1]
-            // For subtraction, we have the following:
-            // z[i] = x[i] - y[i] - carry[i - 1] + carry[i] * 2^LIMB_SIZE
-            // Separating the summands with the same sign from the others, we get:
-            // z[i] - x[i] = \pm (y[i] + carry[i - 1] - carry[i] * 2^LIMB_SIZE)
-
-            // Or another way to think about it: we essentially either check that
-            // z = x + y, or that x = z + y; and "carry" is always the carry of
-            // the addition. So it is natural that x and z are separated from
-            // everything else.
-
-            // lhs = +rhs if opcode_add_flag = 1,
-            // lhs = -rhs if opcode_sub_flag = 1 or opcode_lt_flag = 1.
-            let lhs = y_limbs[i]
+        for i in 0..NUM_LIMBS {
+            let y_and_carry = y_limbs[i]
                 + if i > 0 {
-                    aux.buffer[i - 1].into()
+                    carry[i - 1].clone()
                 } else {
                     AB::Expr::zero()
-                }
-                - aux.buffer[i] * AB::Expr::from_canonical_u32(1 << LIMB_SIZE);
-            let rhs = z_limbs[i] - x_limbs[i];
+                };
+            let x_and_z = x_limbs[i] - z_limbs[i];
+            carry[i] = AB::Expr::from(divide)
+                * (y_and_carry
+                    + x_and_z * (aux.opcode_add_flag - aux.opcode_sub_flag - aux.opcode_lt_flag));
             builder
-                .when(aux.opcode_add_flag)
-                .assert_eq(lhs.clone(), rhs.clone());
-            builder
-                .when(aux.opcode_sub_flag + aux.opcode_lt_flag)
-                .assert_eq(lhs.clone(), -rhs.clone());
-
-            builder
-                .when(utils::not(aux.opcode_eq_flag))
-                .assert_bool(aux.buffer[i]);
+                .when(aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag)
+                .assert_bool(carry[i].clone());
         }
 
-        // If we wanted LT, then cmp_result must equal the last carry.
+        // For LT, cmp_result must be equal to the last carry.
         builder
             .when(aux.opcode_lt_flag)
-            .assert_zero(io.cmp_result - aux.buffer[num_limbs - 1]);
-        // If we wanted EQ, we will do as we would do for checking a single number,
-        // but we will use "buffer" vector for inverses.
-        // Namely, we check that:
-        // - cmp_result * (x[i] - y[i]) = 0,
-        // - cmp_result + sum_{i < num_limbs} (x[i] - y[i]) * buffer[i] = 1.
-        let mut sum_eq: AB::Expr = io.cmp_result.into();
-        for i in 0..num_limbs {
-            sum_eq += (x_limbs[i] - y_limbs[i]) * aux.buffer[i];
+            .assert_zero(io.cmp_result - carry[NUM_LIMBS - 1].clone());
 
+        // For EQ, z is filled with 0 except at the lowest index i such that x[i] != y[i]. If
+        // such an i exists z[i] is the inverse of x[i] - y[i], meaning sum_eq should be 1.
+        let mut sum_eq: AB::Expr = io.cmp_result.into();
+        for i in 0..NUM_LIMBS {
+            sum_eq += (x_limbs[i] - y_limbs[i]) * z_limbs[i];
             builder
                 .when(aux.opcode_eq_flag)
                 .assert_zero(io.cmp_result * (x_limbs[i] - y_limbs[i]));

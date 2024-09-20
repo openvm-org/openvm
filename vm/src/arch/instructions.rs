@@ -66,10 +66,10 @@ pub enum Opcode {
     MUL256 = 82,
     LT256 = 83,
     EQ256 = 84,
-    // XOR256 = 85,
-    // AND256 = 86,
-    // OR256 = 87,
-    // SLT256 = 88,
+    XOR256 = 85,
+    AND256 = 86,
+    OR256 = 87,
+    SLT256 = 88,
     SLL256 = 89,
     SRL256 = 90,
     SRA256 = 91,
@@ -95,7 +95,8 @@ pub const CORE_INSTRUCTIONS: [Opcode; 17] = [
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [Opcode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4DIV];
-pub const UINT256_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [ADD256, SUB256, LT256, EQ256];
+pub const UINT256_ARITHMETIC_INSTRUCTIONS: [Opcode; 8] =
+    [ADD256, SUB256, LT256, EQ256, XOR256, AND256, OR256, SLT256];
 pub const SHIFT_256_INSTRUCTIONS: [Opcode; 3] = [SLL256, SRL256, SRA256];
 pub const UI_32_INSTRUCTIONS: [Opcode; 2] = [LUI, AUIPC];
 

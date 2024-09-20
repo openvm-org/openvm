@@ -8,105 +8,103 @@ use super::{
 };
 use crate::memory::MemoryAddress;
 
-impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, LIMB_SIZE> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintArithmeticAir<NUM_LIMBS, LIMB_BITS> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        io: UintArithmeticIoCols<ARG_SIZE, LIMB_SIZE, AB::Var>,
-        aux: UintArithmeticAuxCols<ARG_SIZE, LIMB_SIZE, AB::Var>,
+        io: &UintArithmeticIoCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
+        aux: &UintArithmeticAuxCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
         expected_opcode: AB::Expr,
     ) {
-        let mut timestamp_delta = AB::Expr::zero();
-
         let timestamp: AB::Var = io.from_state.timestamp;
+        let mut timestamp_delta: usize = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+        };
 
         // Read the operand pointer's values, which are themselves pointers
         // for the actual IO data.
         for (ptr, value, mem_aux) in izip!(
-            [io.z.ptr, io.x.ptr, io.y.ptr],
+            [
+                io.z.ptr_to_address,
+                io.x.ptr_to_address,
+                io.y.ptr_to_address
+            ],
             [io.z.address, io.x.address, io.y.address],
             &aux.read_ptr_aux_cols
         ) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(io.d, ptr), // all use addr space d
+                    MemoryAddress::new(io.ptr_as, ptr),
                     [value],
-                    timestamp + timestamp_delta.clone(),
+                    timestamp_pp(),
                     mem_aux,
                 )
                 .eval(builder, aux.is_valid);
-
-            timestamp_delta += AB::Expr::one();
         }
 
-        // Memory read for x data
         self.memory_bridge
             .read(
-                MemoryAddress::new(io.x.address_space, io.x.address),
-                io.x.data.try_into().unwrap_or_else(|_| unreachable!()),
-                timestamp + timestamp_delta.clone(),
+                MemoryAddress::new(io.address_as, io.x.address),
+                io.x.data,
+                timestamp_pp(),
                 &aux.read_x_aux_cols,
             )
             .eval(builder, aux.is_valid);
-        timestamp_delta += AB::Expr::one();
 
-        // Memory read for y data
         self.memory_bridge
             .read(
-                MemoryAddress::new(io.y.address_space, io.y.address),
-                io.y.data.try_into().unwrap_or_else(|_| unreachable!()),
-                timestamp + timestamp_delta.clone(),
+                MemoryAddress::new(io.address_as, io.y.address),
+                io.y.data,
+                timestamp_pp(),
                 &aux.read_y_aux_cols,
             )
             .eval(builder, aux.is_valid);
-        timestamp_delta += AB::Expr::one();
 
         // Special handling for writing output z data:
         let enabled = aux.opcode_add_flag + aux.opcode_sub_flag;
         self.memory_bridge
             .write(
-                MemoryAddress::new(io.z.address_space, io.z.address),
-                io.z.data
-                    .clone()
-                    .try_into()
-                    .unwrap_or_else(|_| unreachable!()),
-                timestamp + timestamp_delta.clone(),
+                MemoryAddress::new(io.address_as, io.z.address),
+                io.z.data,
+                timestamp + AB::F::from_canonical_usize(timestamp_delta),
                 &aux.write_z_aux_cols,
             )
-            .eval(builder, enabled.clone());
-        timestamp_delta += enabled;
+            .eval(builder, enabled);
 
         let enabled = aux.opcode_lt_flag + aux.opcode_eq_flag;
         self.memory_bridge
             .write(
-                MemoryAddress::new(io.z.address_space, io.z.address),
+                MemoryAddress::new(io.address_as, io.z.address),
                 [io.cmp_result],
-                timestamp + timestamp_delta.clone(),
+                timestamp + AB::F::from_canonical_usize(timestamp_delta),
                 &aux.write_cmp_aux_cols,
             )
             .eval(builder, enabled.clone());
-        timestamp_delta += enabled;
+        timestamp_delta += 1;
 
         self.execution_bridge
             .execute_and_increment_pc(
                 expected_opcode,
                 [
-                    io.z.ptr,
-                    io.x.ptr,
-                    io.y.ptr,
-                    io.d,
-                    io.z.address_space,
-                    io.x.address_space,
-                    io.y.address_space,
+                    io.z.ptr_to_address,
+                    io.x.ptr_to_address,
+                    io.y.ptr_to_address,
+                    io.ptr_as,
+                    io.address_as,
                 ],
                 io.from_state,
-                timestamp_delta,
+                AB::F::from_canonical_usize(timestamp_delta),
             )
             .eval(builder, aux.is_valid);
 
         // Chip-specific interactions
         for z in io.z.data.iter() {
-            self.bus.range_check(*z, LIMB_SIZE).eval(
+            let x = (aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag) * (*z);
+            let y = (aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag) * (*z);
+            let x_or_y = AB::F::zero();
+            self.bus.send(x, y, x_or_y).eval(
                 builder,
                 aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag,
             );

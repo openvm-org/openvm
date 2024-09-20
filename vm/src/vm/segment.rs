@@ -102,6 +102,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
 
         let memory_chip = Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
             memory_bus,
@@ -175,7 +176,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
         }
         if config.keccak_enabled {
-            let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
             let keccak_chip = Rc::new(RefCell::new(KeccakVmChip::new(
                 execution_bus,
                 program_bus,
@@ -184,7 +184,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             )));
             assign!([Opcode::KECCAK256], keccak_chip);
             chips.push(MachineChipVariant::Keccak256(keccak_chip));
-            chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         }
         if config.modular_addsub_enabled {
             let mod_addsub_coord: ModularAddSubChip<F, 32, 8> = ModularAddSubChip::new(
@@ -236,6 +235,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
+                byte_xor_chip.clone(),
             )));
             chips.push(MachineChipVariant::U256Arithmetic(u256_chip.clone()));
             assign!(UINT256_ARITHMETIC_INSTRUCTIONS, u256_chip);
@@ -298,6 +298,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             ));
             chips.push(MachineChipVariant::Secp256k1Double(secp256k1_double_chip));
         }
+        chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         // Most chips have a reference to the memory chip, and the memory chip has a reference to
         // the range checker chip.
         chips.push(MachineChipVariant::Memory(memory_chip.clone()));
