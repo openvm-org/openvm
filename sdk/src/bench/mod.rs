@@ -14,8 +14,7 @@ use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 /// Run a function with metric collection enabled. The metrics will be written to a file specified
 /// by an environment variable which name is `output_path_envar`.
 pub fn run_with_metric_collection(output_path_envar: impl AsRef<OsStr>, f: impl FnOnce()) {
-    let path = std::env::var(output_path_envar).unwrap();
-    let file = std::fs::File::create(path).unwrap();
+    let file = std::env::var(output_path_envar).map(|path| std::fs::File::create(path).unwrap());
     // Set up tracing:
     let env_filter = EnvFilter::builder()
         .with_default_directive(Level::INFO.into())
@@ -34,8 +33,11 @@ pub fn run_with_metric_collection(output_path_envar: impl AsRef<OsStr>, f: impl 
     // Install the registry as the global recorder
     metrics::set_global_recorder(recorder).unwrap();
     f();
-    serde_json::to_writer_pretty(&file, &serialize_metric_snapshot(snapshotter.snapshot()))
-        .unwrap();
+
+    if let Ok(file) = file {
+        serde_json::to_writer_pretty(&file, &serialize_metric_snapshot(snapshotter.snapshot()))
+            .unwrap();
+    }
 }
 
 /// Serialize a gauge metric into a JSON object. The object has the following structure:

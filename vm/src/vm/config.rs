@@ -88,6 +88,14 @@ impl VmConfig {
             ..Default::default()
         }
     }
+
+    pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
+        VmConfig {
+            poseidon2_max_constraint_degree: Some(poseidon2_max_constraint_degree),
+            num_public_values: 4,
+            ..VmConfig::default()
+        }
+    }
 }
 
 impl VmConfig {

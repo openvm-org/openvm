@@ -65,9 +65,9 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
             keccak_enabled: true,
             ..Default::default()
         },
-        &BabyBearPoseidon2Engine::new(fri_params_with_80_bits_of_security()[1]),
+        BabyBearPoseidon2Engine::new(fri_params_with_80_bits_of_security()[1]),
     )
-    .expect("Proof verification failed");
+    .unwrap();
 }
 
 // Keccak Known Answer Test (KAT) vectors from https://keccak.team/obsolete/KeccakKAT-3.zip.

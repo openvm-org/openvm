@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 afs-stark-backend = { path = "../stark-backend" }
-afs-compiler = { path = "../compiler" }
-ax-sdk = { path = "../sdk" }                      # TODO: feature-gate sdk
+afs-compiler = { path = "../compiler", features = ["sdk"] }
+ax-sdk = { path = "../sdk" }                                # TODO: feature-gate sdk
 afs-derive = { path = "../derive" }
 stark-vm = { path = "../vm", features = ["sdk"] }
 ax-ecc-lib = { path = "../ecc/lib" }
@@ -46,16 +46,20 @@ cfg-if = { workspace = true }
 afs-primitives = { path = "../primitives" }
 
 [[bin]]
+name = "verify_fibair"
+required-features = ["bench-metrics"]
+
+[[bin]]
 name = "tiny_e2e"
 harness = false
-required-features = ["static-verifier", "bench-metrics"]
+required-features = ["bench-metrics"]
 
 [[bin]]
 name = "small_e2e"
-required-features = ["static-verifier", "bench-metrics"]
+required-features = ["bench-metrics"]
 
 [features]
-default = []
+default = ["static-verifier"]
 parallel = ["afs-stark-backend/parallel"]
 static-verifier = [
     "afs-compiler/halo2-compiler",
