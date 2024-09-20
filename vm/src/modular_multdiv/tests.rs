@@ -68,7 +68,7 @@ fn test_modular_multdiv() {
             a.clone(),
             b.clone(),
         );
-        
+
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:
         // 1. address_ptr which stores the actual address
