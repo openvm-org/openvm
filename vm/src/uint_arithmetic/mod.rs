@@ -50,6 +50,11 @@ pub struct UintArithmeticRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usiz
     pub y_read: MemoryReadRecord<T, NUM_LIMBS>,
     pub z_write: WriteRecord<T, NUM_LIMBS>,
 
+    // least significant LIMB_BITS - 1 digits of the most significant limbs of x and y
+    // if SLT, else should be equal to the most significant limb of x and y
+    pub x_msb_masked: T,
+    pub y_msb_masked: T,
+
     // empty if not bool instruction, else contents of this vector will be stored in z
     pub cmp_buffer: Vec<T>,
 }
@@ -136,12 +141,22 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             )
         };
 
-        for i in 0..NUM_LIMBS {
-            match opcode {
-                Opcode::XOR256 => self.xor_lookup_chip.request(x[i], y[i]),
-                Opcode::EQ256 => 0,
-                _ => self.xor_lookup_chip.request(z[i], z[i]),
-            };
+        let slt_mask = if opcode == Opcode::SLT256 {
+            (1 << (LIMB_BITS - 1)) - 1
+        } else {
+            (1 << LIMB_BITS) - 1
+        };
+        let x_msb_masked = T::from_canonical_u32(x[NUM_LIMBS - 1] & slt_mask);
+        let y_msb_masked = T::from_canonical_u32(y[NUM_LIMBS - 1] & slt_mask);
+
+        if ALU_BITWISE_INSTRUCTIONS.contains(&opcode) {
+            for i in 0..NUM_LIMBS {
+                self.xor_lookup_chip.request(x[i], y[i]);
+            }
+        } else if opcode != Opcode::EQ256 {
+            for z_val in &z {
+                self.xor_lookup_chip.request(*z_val, *z_val);
+            }
         }
 
         self.data
@@ -154,6 +169,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
                 x_read,
                 y_read,
                 z_write,
+                x_msb_masked,
+                y_msb_masked,
                 cmp_buffer: if ALU_CMP_INSTRUCTIONS.contains(&opcode) {
                     z.into_iter().map(T::from_canonical_u32).collect()
                 } else {
@@ -178,6 +195,17 @@ fn solve_alu<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         Opcode::SUB256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
         Opcode::LT256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
         Opcode::EQ256 => solve_eq::<T, NUM_LIMBS, LIMB_BITS>(x, y),
+        Opcode::XOR256 => solve_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
+        Opcode::AND256 => solve_and::<NUM_LIMBS, LIMB_BITS>(x, y),
+        Opcode::OR256 => solve_or::<NUM_LIMBS, LIMB_BITS>(x, y),
+        Opcode::SLT256 => {
+            let (z, cmp) = solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y);
+            (
+                z,
+                cmp ^ (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) != 0)
+                    ^ (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) != 0),
+            )
+        }
         _ => unreachable!(),
     }
 }
@@ -229,4 +257,28 @@ fn solve_eq<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         }
     }
     (z, true)
+}
+
+fn solve_xor<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    x: &[u32],
+    y: &[u32],
+) -> (Vec<u32>, bool) {
+    let z = (0..NUM_LIMBS).map(|i| x[i] ^ y[i]).collect();
+    (z, false)
+}
+
+fn solve_and<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    x: &[u32],
+    y: &[u32],
+) -> (Vec<u32>, bool) {
+    let z = (0..NUM_LIMBS).map(|i| x[i] & y[i]).collect();
+    (z, false)
+}
+
+fn solve_or<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    x: &[u32],
+    y: &[u32],
+) -> (Vec<u32>, bool) {
+    let z = (0..NUM_LIMBS).map(|i| x[i] | y[i]).collect();
+    (z, false)
 }

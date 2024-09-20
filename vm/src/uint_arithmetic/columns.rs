@@ -48,8 +48,8 @@ impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 #[derive(AlignedBorrow)]
 pub struct UintArithmeticAuxCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub is_valid: T,
-    pub is_x_neg: T,
-    pub is_y_neg: T,
+    pub x_msb_masked: T,
+    pub y_msb_masked: T,
 
     // Opcode flags for different operations
     pub opcode_add_flag: T,

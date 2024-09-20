@@ -37,6 +37,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 x_read,
                 y_read,
                 z_write,
+                x_msb_masked,
+                y_msb_masked,
                 cmp_buffer,
             } = operation;
 
@@ -76,8 +78,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
 
             row.aux = UintArithmeticAuxCols {
                 is_valid: F::one(),
-                is_x_neg: F::zero(), // TODO: SLT impl
-                is_y_neg: F::zero(),
+                x_msb_masked,
+                y_msb_masked,
                 opcode_add_flag: F::from_bool(instruction.opcode == Opcode::ADD256),
                 opcode_sub_flag: F::from_bool(instruction.opcode == Opcode::SUB256),
                 opcode_lt_flag: F::from_bool(instruction.opcode == Opcode::LT256),

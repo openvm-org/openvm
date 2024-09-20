@@ -23,6 +23,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintArithmeticAir<NUM_LIMBS
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
+        let range_check =
+            aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag + aux.opcode_slt_flag;
+        let bitwise = aux.opcode_xor_flag + aux.opcode_and_flag + aux.opcode_or_flag;
+
         // Read the operand pointer's values, which are themselves pointers
         // for the actual IO data.
         for (ptr, value, mem_aux) in izip!(
@@ -63,7 +67,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintArithmeticAir<NUM_LIMBS
             .eval(builder, aux.is_valid);
 
         // Special handling for writing output z data:
-        let enabled = aux.opcode_add_flag + aux.opcode_sub_flag;
+        let enabled = aux.opcode_add_flag + aux.opcode_sub_flag + bitwise.clone();
         self.memory_bridge
             .write(
                 MemoryAddress::new(io.address_as, io.z.address),
@@ -73,7 +77,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintArithmeticAir<NUM_LIMBS
             )
             .eval(builder, enabled);
 
-        let enabled = aux.opcode_lt_flag + aux.opcode_eq_flag;
+        let enabled = aux.opcode_lt_flag + aux.opcode_eq_flag + aux.opcode_slt_flag;
         self.memory_bridge
             .write(
                 MemoryAddress::new(io.address_as, io.z.address),
@@ -100,14 +104,20 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintArithmeticAir<NUM_LIMBS
             .eval(builder, aux.is_valid);
 
         // Chip-specific interactions
-        for z in io.z.data.iter() {
-            let x = (aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag) * (*z);
-            let y = (aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag) * (*z);
-            let x_or_y = AB::F::zero();
-            self.bus.send(x, y, x_or_y).eval(
-                builder,
-                aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag,
-            );
+        for i in 0..NUM_LIMBS {
+            let x = range_check.clone() * io.z.data[i] + bitwise.clone() * io.x.data[i];
+            let y = range_check.clone() * io.z.data[i] + bitwise.clone() * io.y.data[i];
+            let x_or_y = aux.opcode_xor_flag * io.z.data[i]
+                + aux.opcode_and_flag
+                    * (io.x.data[i] + io.y.data[i]
+                        - (AB::Expr::from_canonical_u32(2) * io.z.data[i]))
+                + aux.opcode_or_flag
+                    * ((AB::Expr::from_canonical_u32(2) * io.z.data[i])
+                        - io.x.data[i]
+                        - io.y.data[i]);
+            self.bus
+                .send(x, y, x_or_y)
+                .eval(builder, range_check.clone() + bitwise.clone());
         }
     }
 }

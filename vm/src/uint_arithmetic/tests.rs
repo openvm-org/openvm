@@ -100,7 +100,6 @@ fn run_alu_negative_test(
     y: Vec<u32>,
     z: Vec<u32>,
     cmp_result: bool,
-    replace_interactions: bool,
     expected_error: VerificationError,
 ) {
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
@@ -121,16 +120,6 @@ fn run_alu_negative_test(
         y.clone(),
         &mut rng,
     );
-
-    if replace_interactions {
-        chip.xor_lookup_chip.clear();
-        for i in 0..NUM_LIMBS {
-            match opcode {
-                Opcode::XOR256 => chip.xor_lookup_chip.request(x[i], y[i]),
-                _ => chip.xor_lookup_chip.request(z[i], z[i]),
-            };
-        }
-    }
 
     let alu_air = chip.air;
     let alu_trace = chip.generate_trace();
@@ -197,7 +186,6 @@ fn alu_add_out_of_range_negative_test() {
             .chain(iter::repeat(0).take(NUM_LIMBS - 1))
             .collect(),
         false,
-        false,
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -215,7 +203,6 @@ fn alu_add_wrong_negative_test() {
         iter::once(500 - (1 << 8))
             .chain(iter::repeat(0).take(NUM_LIMBS - 1))
             .collect(),
-        false,
         false,
         VerificationError::OodEvaluationMismatch,
     );
@@ -259,7 +246,6 @@ fn alu_sub_out_of_range_negative_test() {
             .chain(iter::repeat(0).take(NUM_LIMBS - 1))
             .collect(),
         false,
-        false,
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -277,7 +263,6 @@ fn alu_sub_wrong_negative_test() {
         iter::once((1 << 8) - 1)
             .chain(iter::repeat(0).take(NUM_LIMBS - 1))
             .collect(),
-        false,
         false,
         VerificationError::OodEvaluationMismatch,
     );
@@ -315,7 +300,6 @@ fn uint_lt_wrong_subtraction_test() {
         iter::once(65_000).chain(iter::repeat(0).take(31)).collect(),
         std::iter::once(1).chain(iter::repeat(0).take(31)).collect(),
         false,
-        false,
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -328,7 +312,6 @@ fn alu_lt_wrong_negative_test() {
         iter::once(1).chain(iter::repeat(0).take(31)).collect(),
         iter::once(0).chain(iter::repeat(0).take(31)).collect(),
         true,
-        false,
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -365,7 +348,195 @@ fn alu_eq_wrong_negative_test() {
         vec![0; 31].into_iter().chain(iter::once(456)).collect(),
         vec![0; 31].into_iter().chain(iter::once(0)).collect(),
         true,
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn alu_xor_rand_test() {
+    let num_ops: usize = 10;
+    let mut rng = create_seeded_rng();
+
+    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        xor_lookup_chip.clone(),
+    );
+
+    for _ in 0..num_ops {
+        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::XOR256, x, y, &mut rng);
+    }
+
+    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn alu_xor_wrong_negative_test() {
+    run_alu_negative_test(
+        Opcode::XOR256,
+        vec![0; 31].into_iter().chain(iter::once(1)).collect(),
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        true,
+        VerificationError::NonZeroCumulativeSum,
+    );
+}
+
+#[test]
+fn alu_and_rand_test() {
+    let num_ops: usize = 10;
+    let mut rng = create_seeded_rng();
+
+    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        xor_lookup_chip.clone(),
+    );
+
+    for _ in 0..num_ops {
+        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::AND256, x, y, &mut rng);
+    }
+
+    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn alu_and_wrong_negative_test() {
+    run_alu_negative_test(
+        Opcode::AND256,
+        vec![0; 31].into_iter().chain(iter::once(1)).collect(),
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        vec![0; NUM_LIMBS],
+        true,
+        VerificationError::NonZeroCumulativeSum,
+    );
+}
+
+#[test]
+fn alu_or_rand_test() {
+    let num_ops: usize = 10;
+    let mut rng = create_seeded_rng();
+
+    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        xor_lookup_chip.clone(),
+    );
+
+    for _ in 0..num_ops {
+        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::OR256, x, y, &mut rng);
+    }
+
+    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn alu_or_wrong_negative_test() {
+    run_alu_negative_test(
+        Opcode::OR256,
+        vec![0; NUM_LIMBS],
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS - 1]
+            .into_iter()
+            .chain(iter::once((1 << LIMB_BITS) - 2))
+            .collect(),
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        true,
+        VerificationError::NonZeroCumulativeSum,
+    );
+}
+
+#[test]
+fn alu_slt_rand_test() {
+    let num_ops: usize = 10;
+    let mut rng = create_seeded_rng();
+
+    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        xor_lookup_chip.clone(),
+    );
+
+    for _ in 0..num_ops {
+        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::SLT256, x, y, &mut rng);
+    }
+
+    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn alu_slt_pos_neg_sign_negative_test() {
+    run_alu_negative_test(
+        Opcode::SLT256,
+        vec![0; NUM_LIMBS],
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        true,
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn alu_slt_neg_pos_sign_negative_test() {
+    run_alu_negative_test(
+        Opcode::SLT256,
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        vec![0; NUM_LIMBS],
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
         false,
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn alu_slt_both_pos_sign_negative_test() {
+    run_alu_negative_test(
+        Opcode::SLT256,
+        vec![0; NUM_LIMBS],
+        vec![0; NUM_LIMBS - 1]
+            .into_iter()
+            .chain(iter::once(1))
+            .collect(),
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        false,
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn alu_slt_both_neg_sign_negative_test() {
+    run_alu_negative_test(
+        Opcode::SLT256,
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS - 1]
+            .into_iter()
+            .chain(iter::once(1))
+            .collect(),
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        true,
         VerificationError::OodEvaluationMismatch,
     );
 }
