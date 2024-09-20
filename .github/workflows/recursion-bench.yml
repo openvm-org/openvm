@@ -53,7 +53,7 @@ jobs:
     # and always run on push to main
     if: |
       (github.event_name == 'pull_request' &&
-      contains(github.event.pull_request.labels.*.name, 'run-benchmark')) ||
+      contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
       aws_instance_type: r7g.16xlarge
@@ -67,7 +67,7 @@ jobs:
     if: |
       (github.event_name == 'pull_request' &&
       github.event.pull_request.draft == false &&
-      contains(github.event.pull_request.labels.*.name, 'run-benchmark')) ||
+      contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
       aws_instance_type: r7g.16xlarge
