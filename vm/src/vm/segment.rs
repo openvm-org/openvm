@@ -185,13 +185,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         }
         if config.modular_addsub_enabled {
-            let mod_arith_coord: ModularAddSubChip<F, 32, 8> = ModularAddSubChip::new(
+            let mod_addsub_coord: ModularAddSubChip<F, 32, 8> = ModularAddSubChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
             );
-            let mod_arith_scalar: ModularAddSubChip<F, 32, 8> = ModularAddSubChip::new(
+            let mod_addsub_scalar: ModularAddSubChip<F, 32, 8> = ModularAddSubChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
@@ -199,11 +199,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             );
             assign!(
                 [Opcode::SECP256K1_COORD_ADD, Opcode::SECP256K1_COORD_SUB],
-                Rc::new(RefCell::new(mod_arith_coord.clone()))
+                Rc::new(RefCell::new(mod_addsub_coord.clone()))
             );
             assign!(
-                [Opcode::SECP256K1_COORD_SUB, Opcode::SECP256K1_SCALAR_SUB],
-                Rc::new(RefCell::new(mod_arith_scalar.clone()))
+                [Opcode::SECP256K1_SCALAR_ADD, Opcode::SECP256K1_SCALAR_SUB],
+                Rc::new(RefCell::new(mod_addsub_scalar.clone()))
             );
         }
         if config.modular_multdiv_enabled {
