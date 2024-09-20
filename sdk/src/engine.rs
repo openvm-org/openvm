@@ -29,7 +29,9 @@ pub struct VerificationDataWithFriParams<SC: StarkGenericConfig> {
     pub fri_params: FriParameters,
 }
 
-/// A struct that contains all the necessary data to build a verifier for a Stark.
+/// A struct that contains all the necessary data to:
+/// - generate proving and verifying keys for AIRs,
+/// - commit to trace matrices and generate STARK proofs
 pub struct StarkForTest<SC: StarkGenericConfig> {
     pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
     pub traces: Vec<RowMajorMatrix<Val<SC>>>,

@@ -80,6 +80,8 @@ pub mod inner {
     }
 }
 
+/// Generates the VM STARK circuit, in the form of AIRs and traces, but does not
+/// do any proving. Output is the payload of everything the prover needs.
 pub fn gen_vm_program_stark_for_test<SC: StarkGenericConfig>(
     program: Program<Val<SC>>,
     input_stream: Vec<Vec<Val<SC>>>,
