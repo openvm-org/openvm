@@ -23,18 +23,16 @@ impl FieldArithmeticAir {
 
         self.program_bus.send_instruction(
             builder,
+            io.from_state.pc,
+            expected_opcode.clone(),
             [
-                io.from_state.pc.into(),
-                expected_opcode.clone(),
-                result.address.into(),
-                operand1.address.into(),
-                operand2.address.into(),
-                result.address_space.into(),
-                operand1.address_space.into(),
-                operand2.address_space.into(),
-                AB::Expr::zero(),
-            ]
-            .into_iter(),
+                result.address,
+                operand1.address,
+                operand2.address,
+                result.address_space,
+                operand1.address_space,
+                operand2.address_space,
+            ],
             is_valid,
         );
 

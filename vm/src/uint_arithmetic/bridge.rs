@@ -23,18 +23,17 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
         // Interaction with program
         self.program_bus.send_instruction(
             builder,
+            io.from_state.pc,
+            expected_opcode.clone(),
             [
-                io.from_state.pc.into(),
-                expected_opcode.clone(),
-                io.z.ptr.into(),
-                io.x.ptr.into(),
-                io.y.ptr.into(),
-                io.d.into(),
-                io.z.address_space.into(),
-                io.x.address_space.into(),
-                io.y.address_space.into(),
-            ]
-            .into_iter(),
+                io.z.ptr,
+                io.x.ptr,
+                io.y.ptr,
+                io.d,
+                io.z.address_space,
+                io.x.address_space,
+                io.y.address_space,
+            ],
             aux.is_valid,
         );
 

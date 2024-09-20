@@ -16,16 +16,15 @@ impl CastFAir {
     ) {
         self.program_bus.send_instruction(
             builder,
+            io.from_state.pc,
+            AB::Expr::from_canonical_u8(Opcode::CASTF as u8),
             [
-                io.from_state.pc.into(),
-                AB::Expr::from_canonical_u8(Opcode::CASTF as u8),
                 io.op_a.into(),
                 io.op_b.into(),
                 AB::Expr::zero(),
                 io.d.into(),
                 io.e.into(),
-            ]
-            .into_iter(),
+            ],
             aux.is_valid,
         );
 

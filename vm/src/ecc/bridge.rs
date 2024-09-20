@@ -19,16 +19,15 @@ impl EcAddUnequalVmAir {
 
         self.program_bus.send_instruction(
             builder,
+            io.from_state.pc,
+            AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
             [
-                io.from_state.pc.into(),
-                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
-                io.p3.address.address.into(),
-                io.p1.address.address.into(),
-                io.p2.address.address.into(),
-                io.p1.address.address_space.into(),
-                io.p1.data.address_space.into(),
-            ]
-            .into_iter(),
+                io.p3.address.address,
+                io.p1.address.address,
+                io.p2.address.address,
+                io.p1.address.address_space,
+                io.p1.data.address_space,
+            ],
             aux.aux.is_valid,
         );
 
@@ -104,16 +103,15 @@ impl EcDoubleVmAir {
 
         self.program_bus.send_instruction(
             builder,
+            io.from_state.pc,
+            AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
             [
-                io.from_state.pc.into(),
-                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
                 io.p2.address.address.into(),
                 io.p1.address.address.into(),
                 AB::Expr::zero(),
                 io.p1.address.address_space.into(),
                 io.p1.data.address_space.into(),
-            ]
-            .into_iter(),
+            ],
             aux.aux.is_valid,
         );
 

@@ -25,18 +25,9 @@ impl<F: Field> Poseidon2VmAir<F> {
 
         self.program_bus.send_instruction(
             builder,
-            [
-                io.pc.into(),
-                opcode.clone(),
-                io.a.into(),
-                io.b.into(),
-                io.c.into(),
-                io.d.into(),
-                io.e.into(),
-                AB::Expr::zero(),
-                AB::Expr::zero(),
-            ]
-            .into_iter(),
+            io.pc,
+            opcode.clone(),
+            [io.a, io.b, io.c, io.d, io.e],
             io.is_opcode,
         );
 

@@ -31,7 +31,7 @@ use crate::{
         columns::ExecutionState,
         instructions::{
             Opcode, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
-            SHIFT_256_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS,
+            SHIFT_256_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS, UI_32_INSTRUCTIONS,
         },
     },
     castf::CastFChip,
@@ -49,6 +49,7 @@ use crate::{
     },
     program::{bridge::ProgramBus, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
+    ui::UiChip,
     uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
@@ -305,6 +306,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             )));
             assign!(SHIFT_256_INSTRUCTIONS, shift_chip);
             chips.push(MachineChipVariant::Shift256(shift_chip));
+        }
+        if config.ui_32_enabled {
+            let ui_chip = Rc::new(RefCell::new(UiChip::new(
+                execution_bus,
+                program_bus,
+                memory_chip.clone(),
+            )));
+            assign!(UI_32_INSTRUCTIONS, ui_chip);
+            chips.push(MachineChipVariant::Ui(ui_chip));
         }
         if config.castf_enabled {
             let castf_chip = Rc::new(RefCell::new(CastFChip::new(

@@ -128,18 +128,9 @@ impl KeccakVmAir {
 
         self.program_bus.send_instruction(
             builder,
-            [
-                opcode.pc.into(),
-                AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
-                opcode.a.into(),
-                opcode.b.into(),
-                opcode.c.into(),
-                opcode.d.into(),
-                opcode.e.into(),
-                opcode.f.into(),
-                AB::Expr::zero(),
-            ]
-            .into_iter(),
+            opcode.pc,
+            AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
+            [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
             should_receive.clone(),
         );
 

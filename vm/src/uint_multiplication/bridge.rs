@@ -24,16 +24,15 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
 
         self.program_bus.send_instruction(
             builder,
+            io.from_state.pc,
+            AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
             [
-                io.from_state.pc.into(),
-                AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
-                io.z.ptr_to_address.into(),
-                io.x.ptr_to_address.into(),
-                io.y.ptr_to_address.into(),
-                io.ptr_as.into(),
-                io.address_as.into(),
-            ]
-            .into_iter(),
+                io.z.ptr_to_address,
+                io.x.ptr_to_address,
+                io.y.ptr_to_address,
+                io.ptr_as,
+                io.address_as,
+            ],
             aux.is_valid,
         );
         for (ptr, value, mem_aux) in izip!(

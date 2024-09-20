@@ -19,17 +19,15 @@ impl ModularArithmeticVmAir<ModularArithmeticAirVariant> {
         // Interaction with program
         self.program_bus.send_instruction(
             builder,
+            io.from_state.pc,
+            aux.opcode,
             [
-                io.from_state.pc,
-                aux.opcode,
                 io.z.address.address,
                 io.x.address.address,
                 io.y.address.address,
                 io.x.address.address_space,
                 io.x.data.address_space,
-            ]
-            .into_iter()
-            .map(|x| x.into()),
+            ],
             aux.is_valid,
         );
 

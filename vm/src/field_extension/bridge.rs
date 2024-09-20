@@ -44,16 +44,9 @@ impl FieldExtensionArithmeticAir {
         // Interaction with program
         self.program_bus.send_instruction(
             builder,
-            [
-                pc.into(),
-                expected_opcode.clone(),
-                op_a.into(),
-                op_b.into(),
-                op_c.into(),
-                d.into(),
-                e.into(),
-            ]
-            .into_iter(),
+            pc,
+            expected_opcode.clone(),
+            [op_a, op_b, op_c, d, e],
             is_valid,
         );
 
