@@ -58,7 +58,7 @@ ark-ff = { version = "^0.4.0", default-features = false }
 ax-sdk = { path = "../sdk" }
 
 [features]
-default = []
+default = ["bench-metrics"]
 parallel = ["afs-stark-backend/parallel"]
 sdk = ["dep:ax-sdk"]
 bench-metrics = ["sdk", "dep:metrics", "afs-stark-backend/bench-metrics"]

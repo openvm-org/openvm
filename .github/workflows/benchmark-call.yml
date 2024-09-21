@@ -98,7 +98,7 @@ jobs:
         working-directory: recursion
         run: |
           mkdir -p ../benchmark/tmp
-          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]
+          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]; then
             echo "Adding static-verifier feature flag"
             FEATURE_FLAGS="$FEATURE_FLAGS,static-verifier"
             bash trusted_setup_s3.sh
@@ -110,7 +110,7 @@ jobs:
         working-directory: recursion
         run: |
           mkdir -p ../benchmark/tmp
-          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]
+          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]; then
             echo "Adding static-verifier feature flag"
             FEATURE_FLAGS="$FEATURE_FLAGS,static-verifier"
             bash trusted_setup_s3.sh
