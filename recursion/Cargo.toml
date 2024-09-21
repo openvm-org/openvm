@@ -59,7 +59,7 @@ name = "small_e2e"
 required-features = ["bench-metrics"]
 
 [features]
-default = ["static-verifier"]
+default = []
 parallel = ["afs-stark-backend/parallel"]
 static-verifier = [
     "afs-compiler/halo2-compiler",
@@ -67,3 +67,5 @@ static-verifier = [
     "dep:once_cell",
 ]
 bench-metrics = ["dep:metrics", "stark-vm/bench-metrics"]
+mimalloc = ["afs-stark-backend/mimalloc"]
+jemalloc = ["afs-stark-backend/jemalloc"]

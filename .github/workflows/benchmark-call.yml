@@ -79,7 +79,7 @@ jobs:
         if: inputs.benchmark_name == 'vm_verify_fibair'
         working-directory: recursion
         run: |
-          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin verify_fibair --features bench-metrics,parallel -- --nocapture
+          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin verify_fibair --features bench-metrics,parallel,mimalloc -- --nocapture
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'vm_static_verify_fibair'
