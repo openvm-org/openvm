@@ -9,7 +9,7 @@ on:
         description: The name of the benchmark to run
         options:
           - vm_verify_fibair
-          - vm_static_verify_fibair
+          - halo2_static_verify_fibair
           - tiny_e2e
           - small_e2e
           - single_rw
@@ -33,6 +33,7 @@ on:
 
 env:
   S3_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmark/github/results
+  FEATURE_FLAGS: "bench-metrics,parallel,mimalloc"
 
 jobs:
   start-runner:
@@ -79,36 +80,43 @@ jobs:
         if: inputs.benchmark_name == 'vm_verify_fibair'
         working-directory: recursion
         run: |
-          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin verify_fibair --features bench-metrics,parallel,mimalloc -- --nocapture
+          mkdir -p ../benchmark/tmp
+          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin verify_fibair --features $FEATURE_FLAGS
 
       - name: Run benchmark
-        if: inputs.benchmark_name == 'vm_static_verify_fibair'
+        if: inputs.benchmark_name == 'halo2_static_verify_fibair'
         working-directory: recursion
         run: |
-          mkdir -p ../benchmark
-          mkdir -p ../benchmark/tmp
+          FEATURE_FLAGS="$FEATURE_FLAGS,static-verifier"
           bash trusted_setup_s3.sh
-          RUSTFLAGS="-Ctarget-cpu=native" cargo test --profile=fast -p afs-recursion --test recursion --features parallel,static-verifier -- test_fibonacci_program_halo2_verify > ../benchmark/tmp/_result.middle.md
+          mkdir -p ../benchmark/tmp
+          RUSTFLAGS="-Ctarget-cpu=native" cargo test --release -p afs-recursion --test recursion --features $FEATURE_FLAGS -- test_fibonacci_program_halo2_verify > ../benchmark/tmp/_result.middle.md
           sed -n "/prove halo2 verifier circuit/,\$p" ../benchmark/tmp/_result.middle.md > ../benchmark/tmp/_result.md
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'tiny_e2e'
         working-directory: recursion
         run: |
-          mkdir -p ../benchmark
           mkdir -p ../benchmark/tmp
-          bash trusted_setup_s3.sh
-          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin tiny_e2e --profile fast --features static-verifier,bench-metrics,parallel
+          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]
+            echo "Adding static-verifier feature flag"
+            FEATURE_FLAGS="$FEATURE_FLAGS,static-verifier"
+            bash trusted_setup_s3.sh
+          fi
+          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin tiny_e2e --release --features $FEATURE_FLAGS
           python3 ../sdk/scripts/metric_unify/main.py ../sdk/scripts/metric_unify/mappings/tiny_e2e.yaml ../benchmark/tmp/_metrics.json > ../benchmark/tmp/_result.md
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'small_e2e'
         working-directory: recursion
         run: |
-          mkdir -p ../benchmark
           mkdir -p ../benchmark/tmp
-          bash trusted_setup_s3.sh
-          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin small_e2e --profile fast --features static-verifier,bench-metrics,parallel
+          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]
+            echo "Adding static-verifier feature flag"
+            FEATURE_FLAGS="$FEATURE_FLAGS,static-verifier"
+            bash trusted_setup_s3.sh
+          fi
+          OUTPUT_PATH="../benchmark/tmp/_metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin small_e2e --release --features $FEATURE_FLAGS
           python3 ../sdk/scripts/metric_unify/main.py ../sdk/scripts/metric_unify/mappings/small_e2e.yaml ../benchmark/tmp/_metrics.json > ../benchmark/tmp/_result.md
 
       - name: Run benchmark
