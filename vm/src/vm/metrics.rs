@@ -15,6 +15,49 @@ pub struct VmMetrics {
     pub opcode_trace_cells: BTreeMap<String, usize>,
 }
 
+#[cfg(feature = "bench-metrics")]
+mod emit {
+    use itertools::Itertools;
+    use metrics::counter;
+
+    use super::VmMetrics;
+
+    impl VmMetrics {
+        pub fn emit(&self) {
+            for (name, value) in self.chip_metrics.iter() {
+                let labels = [("chip_name", name.clone())];
+                counter!("rows_used", &labels).absolute(*value as u64);
+            }
+
+            let opcode_counts: Vec<(String, usize)> = self
+                .opcode_counts
+                .clone()
+                .into_iter()
+                .sorted_by(|a, b| b.1.cmp(&a.1))
+                .collect();
+
+            let dsl_counts: Vec<(String, usize)> = self
+                .dsl_counts
+                .clone()
+                .into_iter()
+                .sorted_by(|a, b| b.1.cmp(&a.1))
+                .collect();
+
+            for (name, value) in opcode_counts.iter() {
+                let cell_count = *self.opcode_trace_cells.get(name).unwrap_or(&0);
+                let labels = [("opcode", name.clone())];
+                counter!("frequency", &labels).absolute(*value as u64);
+                counter!("cells_used", &labels).absolute(cell_count as u64);
+            }
+
+            for (name, value) in dsl_counts.iter() {
+                let labels = [("dsl_ir", name.clone())];
+                counter!("frequency", &labels).absolute(*value as u64);
+            }
+        }
+    }
+}
+
 impl Display for VmMetrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let opcode_counts: Vec<(String, usize)> = self

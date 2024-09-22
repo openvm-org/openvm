@@ -39,8 +39,7 @@ where
     let result = result.segment_results.pop().unwrap();
     #[cfg(feature = "bench-metrics")]
     {
-        let total_cell = result.metrics.chip_metrics.into_values().sum::<usize>();
-        metrics::gauge!("vm_total_cells").set(total_cell as f64);
+        result.metrics.emit();
         metrics::gauge!("trace_gen_time_ms", "stark" => "vm")
             .set(start.elapsed().as_millis() as f64);
     }
