@@ -5,8 +5,7 @@ use stark_vm::modular_addsub::{
     big_uint_to_num_limbs, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
 };
 
-const NUM_LIMBS: usize = 32;
-const LIMB_SIZE: usize = 8;
+use super::{LIMB_SIZE, NUM_LIMBS};
 use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
 
 pub type BigUintVar<C> = Array<C, Var<<C as Config>::N>>;

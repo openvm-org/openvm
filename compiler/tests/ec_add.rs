@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use afs_compiler::{
     asm::AsmBuilder,
     ir::{Array, Builder, Config, Var},
-    util::execute_program_with_config,
+    util::{execute_program_with_config, LIMB_SIZE, NUM_LIMBS},
 };
 use itertools::Itertools;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
@@ -14,9 +14,6 @@ use stark_vm::{
     modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
     vm::config::VmConfig,
 };
-
-const NUM_LIMBS: usize = 32;
-const LIMB_SIZE: usize = 8;
 
 struct Fraction {
     num: isize,

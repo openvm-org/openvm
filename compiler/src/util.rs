@@ -2,6 +2,11 @@ use p3_baby_bear::BabyBear;
 use p3_field::{PrimeField, PrimeField32};
 #[cfg(feature = "sdk")]
 pub use sdk::*;
+
+pub const NUM_LIMBS: usize = 32;
+pub const LIMB_SIZE: usize = 8;
+pub const TWO_NUM_LIMBS: usize = 2 * NUM_LIMBS;
+
 use stark_vm::{
     program::{Instruction, Program},
     vm::{config::VmConfig, VirtualMachine},
