@@ -28,7 +28,7 @@ We follow the Harvard architecture where the program code (ROM) is stored separa
 
 A cached trace is used so that the commitment to the program code is the proof system trace commitment. This commitment could be changed to a flat hash, likely with worse performance.
 
-### Communication between program/execution bus and the chips. Core chip
+### Our no-CPU design
 
 The main motivation is that the existence of a CPU forces the existence of a trace matrix with rows growing with the total number of clock cycles of the program execution. We claim that the no-CPU design gives the minimum lower bound on the number of required trace cells added per opcode execution.
 
@@ -49,7 +49,7 @@ The chip must constrain that `opcode` is one of the opcodes the chip itself owns
 
 There is also another very simple "connector" chip with a 2 row trace that sends out `(1, 0)` on EXECUTION_BUS and receives `(final_timestamp, final_pc)` on EXECUTION_BUS. These four values are public values of the program. With continuations, the start and end timestamp/pc will need to be constrained with respect to the pre/post-states.
 
-The vm design is so that the core chip is just one of such chips. The instructions directed at managing the execution flow are passed to the core chip. Such design is modular enough in the sense that it allows us to treat the control flow instructions similarly to most of the other opcodes. Also, instead of having the execution protocol in a single matrix and duplicate the instructions with the chips that actually execute them, we have each step of execution only generating one new line in the machine chip (and maybe more lines in other primitive chips that it uses for execution).
+The vm design is so that the core chip is just one of such chips. The instructions directed at managing the execution flow are passed to the core chip. Such design is modular enough in the sense that it allows us to treat the control flow instructions similarly to most of the other opcodes. Also, instead of having the execution protocol in a single matrix and duplicate the instructions with the chips that actually execute them, we have each step of execution only generating one new row in the machine chip (and maybe more lines in other primitive chips that it uses for execution).
 
 See [internal doc](https://docs.google.com/document/d/1-UkvxiW5tvYH5qw7O4t2WjMIY8v2Gso9kt_MrWW5hPg/edit?usp=sharing) for discussion of alternatives and the trace cell cost analysis.
 
