@@ -14,7 +14,7 @@ use super::{
     CoreOptions, INST_WIDTH, WORD_SIZE,
 };
 use crate::{
-    arch::{bus::ExecutionBus, instructions::Opcode::*},
+    arch::{bridge::ExecutionBridge, instructions::Opcode::*},
     memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
@@ -22,7 +22,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct CoreAir {
     pub options: CoreOptions,
-    pub execution_bus: ExecutionBus,
+    pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
 }
 

@@ -21,27 +21,21 @@ impl FieldArithmeticAir {
         } = io;
         let is_valid = aux.is_valid;
 
-        self.program_bus.send_instruction(
-            builder,
-            io.from_state.pc,
-            expected_opcode.clone(),
-            [
-                result.address,
-                operand1.address,
-                operand2.address,
-                result.address_space,
-                operand1.address_space,
-                operand2.address_space,
-            ],
-            is_valid,
-        );
-
-        self.execution_bus.execute_increment_pc(
-            builder,
-            is_valid,
-            io.from_state.map(Into::into),
-            AB::F::from_canonical_usize(Self::TIMESTAMP_DELTA),
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                expected_opcode,
+                [
+                    result.address,
+                    operand1.address,
+                    operand2.address,
+                    result.address_space,
+                    operand1.address_space,
+                    operand2.address_space,
+                ],
+                from_state,
+                AB::F::from_canonical_usize(Self::TIMESTAMP_DELTA),
+            )
+            .eval(builder, is_valid);
 
         let mut timestamp: AB::Expr = from_state.timestamp.into();
         self.memory_bridge

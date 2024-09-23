@@ -22,19 +22,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
-        self.program_bus.send_instruction(
-            builder,
-            io.from_state.pc,
-            AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
-            [
-                io.z.ptr_to_address,
-                io.x.ptr_to_address,
-                io.y.ptr_to_address,
-                io.ptr_as,
-                io.address_as,
-            ],
-            aux.is_valid,
-        );
         for (ptr, value, mem_aux) in izip!(
             [
                 io.z.ptr_to_address,
@@ -81,12 +68,20 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
             )
             .eval(builder, aux.is_valid);
 
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.is_valid,
-            io.from_state.map(Into::into),
-            AB::F::from_canonical_usize(timestamp_delta),
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
+                [
+                    io.z.ptr_to_address,
+                    io.x.ptr_to_address,
+                    io.y.ptr_to_address,
+                    io.ptr_as,
+                    io.address_as,
+                ],
+                io.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, aux.is_valid);
 
         for (z, carry) in io.z.data.iter().zip(aux.carry.iter()) {
             self.bus.send(vec![*z, *carry]).eval(builder, aux.is_valid);

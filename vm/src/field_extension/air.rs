@@ -8,12 +8,11 @@ use p3_matrix::Matrix;
 use super::columns::FieldExtensionArithmeticCols;
 use crate::{
     arch::{
-        bus::ExecutionBus,
+        bridge::ExecutionBridge,
         instructions::Opcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
     },
     field_extension::chip::FieldExtensionArithmetic,
     memory::offline_checker::MemoryBridge,
-    program::bridge::ProgramBus,
 };
 
 /// Field extension arithmetic chip.
@@ -21,8 +20,7 @@ use crate::{
 /// Handles arithmetic opcodes over the extension field defined by the irreducible polynomial x^4 - 11.
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct FieldExtensionArithmeticAir {
-    pub(super) execution_bus: ExecutionBus,
-    pub(super) program_bus: ProgramBus,
+    pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 }
 

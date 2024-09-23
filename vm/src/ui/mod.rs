@@ -6,6 +6,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
+        bridge::ExecutionBridge,
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
@@ -51,8 +52,7 @@ impl<T: PrimeField32> UiChip<T> {
         let bus = range_checker_chip.bus();
         Self {
             air: UiAir {
-                execution_bus,
-                program_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus,
             },

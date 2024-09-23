@@ -11,10 +11,10 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
+        bridge::ExecutionBridge,
         bus::ExecutionBus,
         chips::InstructionExecutor,
-        columns::ExecutionState,
-        // instructions::Opcode,
+        columns::ExecutionState, // instructions::Opcode,
     },
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
     modular_addsub::{ModularAddSubChip, FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
@@ -127,8 +127,7 @@ impl<T: PrimeField32> EcAddUnequalChip<T> {
         let ec_config = make_ec_config(&memory_chip);
         let air = EcAddUnequalVmAir {
             air: EcAddUnequalAir { config: ec_config },
-            execution_bus,
-            program_bus,
+            execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
         };
         let config = make_ec_chip_config(memory_chip);
@@ -224,8 +223,7 @@ impl<T: PrimeField32> EcDoubleChip<T> {
         let ec_config = make_ec_config(&memory_chip);
         let air = EcDoubleVmAir {
             air: EcDoubleAir { config: ec_config },
-            execution_bus,
-            program_bus,
+            execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
         };
         let config = make_ec_chip_config(memory_chip);

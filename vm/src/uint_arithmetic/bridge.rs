@@ -20,23 +20,6 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
 
         let timestamp: AB::Var = io.from_state.timestamp;
 
-        // Interaction with program
-        self.program_bus.send_instruction(
-            builder,
-            io.from_state.pc,
-            expected_opcode.clone(),
-            [
-                io.z.ptr,
-                io.x.ptr,
-                io.y.ptr,
-                io.d,
-                io.z.address_space,
-                io.x.address_space,
-                io.y.address_space,
-            ],
-            aux.is_valid,
-        );
-
         // Read the operand pointer's values, which are themselves pointers
         // for the actual IO data.
         for (ptr, value, mem_aux) in izip!(
@@ -104,12 +87,22 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> UintArithmeticAir<ARG_SIZE, 
             .eval(builder, enabled.clone());
         timestamp_delta += enabled;
 
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.is_valid,
-            io.from_state.map(Into::into),
-            timestamp_delta,
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                expected_opcode,
+                [
+                    io.z.ptr,
+                    io.x.ptr,
+                    io.y.ptr,
+                    io.d,
+                    io.z.address_space,
+                    io.x.address_space,
+                    io.y.address_space,
+                ],
+                io.from_state,
+                timestamp_delta,
+            )
+            .eval(builder, aux.is_valid);
 
         // Chip-specific interactions
         for z in io.z.data.iter() {

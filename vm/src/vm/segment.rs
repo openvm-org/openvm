@@ -111,6 +111,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let core_chip = Rc::new(RefCell::new(CoreChip::from_state(
             config.core_options(),
             execution_bus,
+            program_bus,
             memory_chip.clone(),
             state.state,
         )));
@@ -426,6 +427,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 self.update_chip_metrics();
                 // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
                 collect_metrics = false;
+                #[cfg(feature = "bench-metrics")]
+                metrics::counter!("total_cells_used").absolute(self.current_trace_cells() as u64);
             }
             if opcode == Opcode::TERMINATE {
                 break;

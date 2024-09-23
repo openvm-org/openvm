@@ -7,6 +7,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     arch::{
+        bridge::ExecutionBridge,
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
@@ -106,8 +107,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         memory: MemoryChipRef<F>,
     ) -> Self {
         let air = FieldExtensionArithmeticAir::new(
-            execution_bus,
-            program_bus,
+            ExecutionBridge::new(execution_bus, program_bus),
             memory.borrow().memory_bridge(),
         );
         Self {

@@ -1,15 +1,7 @@
-use std::ops::Deref;
-
-use ax_sdk::{
-    config::{
-        baby_bear_poseidon2::{engine_from_perm, random_perm},
-        fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
-        setup_tracing,
-    },
-    engine::StarkEngine,
-};
 use p3_baby_bear::BabyBear;
 use p3_field::{PrimeField, PrimeField32};
+#[cfg(feature = "sdk")]
+pub use sdk::*;
 use stark_vm::{
     program::{Instruction, Program},
     vm::{config::VmConfig, VirtualMachine},
@@ -114,35 +106,36 @@ pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
     }
 }
 
-pub fn execute_and_prove_program(
-    program: Program<BabyBear>,
-    input_stream: Vec<Vec<BabyBear>>,
-    config: VmConfig,
-) {
-    let vm = VirtualMachine::new(config, program, input_stream);
-
-    let result = vm.execute_and_generate().unwrap();
-    assert_eq!(
-        result.segment_results.len(),
-        1,
-        "only proving one segment for now"
-    );
-
-    let result = &result.segment_results[0];
-
-    let perm = random_perm();
-    // blowup factor 8 for poseidon2 chip
-    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-        fri_params_fast_testing()[1]
-    } else {
-        fri_params_with_80_bits_of_security()[1]
+#[cfg(feature = "sdk")]
+mod sdk {
+    use ax_sdk::{
+        afs_stark_backend::{
+            config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+            verifier::VerificationError,
+        },
+        engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
-    let engine = engine_from_perm(perm, result.max_log_degree(), fri_params);
+    use p3_field::PrimeField32;
+    use stark_vm::{program::Program, sdk::gen_vm_program_stark_for_test, vm::config::VmConfig};
 
-    let airs: Vec<_> = result.airs.iter().map(|air| air.deref()).collect();
-
-    setup_tracing();
-    engine
-        .run_simple_test(&airs, result.traces.clone(), &result.public_values)
-        .expect("Verification failed");
+    pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>>(
+        program: Program<Val<SC>>,
+        input_stream: Vec<Vec<Val<SC>>>,
+        config: VmConfig,
+        engine: E,
+    ) -> Result<(VerificationDataWithFriParams<SC>, Vec<Vec<Val<SC>>>), VerificationError>
+    where
+        Val<SC>: PrimeField32,
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        let stark_for_test = gen_vm_program_stark_for_test(program, input_stream, config);
+        let pvs = stark_for_test.pvs.clone();
+        let vparams = stark_for_test.run_simple_test(&engine)?;
+        Ok((vparams, pvs))
+    }
 }

@@ -36,19 +36,14 @@ impl UiAir {
             )
             .eval(builder, aux.is_valid);
 
-        self.program_bus.send_instruction(
-            builder,
-            io.from_state.pc,
-            expected_opcode,
-            [io.op_a, io.op_b],
-            aux.is_valid,
-        );
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.is_valid,
-            io.from_state.map(Into::into),
-            AB::F::from_canonical_usize(timestamp_delta),
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                expected_opcode,
+                [io.op_a, io.op_b],
+                io.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, aux.is_valid);
 
         self.bus
             .range_check(io.x_cols[0], 8)

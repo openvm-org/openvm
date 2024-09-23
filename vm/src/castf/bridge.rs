@@ -14,20 +14,6 @@ impl CastFAir {
         io: &CastFIoCols<AB::Var>,
         aux: &CastFAuxCols<AB::Var>,
     ) {
-        self.program_bus.send_instruction(
-            builder,
-            io.from_state.pc,
-            AB::Expr::from_canonical_u8(Opcode::CASTF as u8),
-            [
-                io.op_a.into(),
-                io.op_b.into(),
-                AB::Expr::zero(),
-                io.d.into(),
-                io.e.into(),
-            ],
-            aux.is_valid,
-        );
-
         let timestamp: AB::Var = io.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -60,13 +46,6 @@ impl CastFAir {
             )
             .eval(builder, aux.is_valid);
 
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.is_valid,
-            io.from_state.map(Into::into),
-            AB::F::from_canonical_usize(timestamp_delta),
-        );
-
         for i in 0..4 {
             self.bus
                 .range_check(
@@ -79,5 +58,20 @@ impl CastFAir {
                 )
                 .eval(builder, aux.is_valid);
         }
+
+        self.execution_bridge
+            .execute_and_increment_pc(
+                AB::Expr::from_canonical_u8(Opcode::CASTF as u8),
+                [
+                    io.op_a.into(),
+                    io.op_b.into(),
+                    AB::Expr::zero(),
+                    io.d.into(),
+                    io.e.into(),
+                ],
+                io.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, aux.is_valid);
     }
 }

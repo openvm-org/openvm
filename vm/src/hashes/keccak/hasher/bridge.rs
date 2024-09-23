@@ -126,21 +126,15 @@ impl KeccakVmAir {
         // as `count` in interaction
         let should_receive = local.opcode.is_enabled * local.sponge.is_new_start;
 
-        self.program_bus.send_instruction(
-            builder,
-            opcode.pc,
-            AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
-            [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
-            should_receive.clone(),
-        );
-
         let timestamp_change: AB::Expr = Self::timestamp_change(opcode.len);
-        self.execution_bus.execute_increment_pc(
-            builder,
-            should_receive.clone(),
-            ExecutionState::new(opcode.pc, opcode.start_timestamp),
-            timestamp_change,
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
+                [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
+                ExecutionState::new(opcode.pc, opcode.start_timestamp),
+                timestamp_change,
+            )
+            .eval(builder, should_receive.clone());
 
         let mut timestamp: AB::Expr = opcode.start_timestamp.into();
         // Only when it is an input do we want to do memory read for

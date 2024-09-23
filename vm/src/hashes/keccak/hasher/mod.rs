@@ -18,8 +18,8 @@ pub use air::KeccakVmAir;
 
 use crate::{
     arch::{
-        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
-        instructions::Opcode,
+        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
+        columns::ExecutionState, instructions::Opcode,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -93,8 +93,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: KeccakVmAir::new(
-                execution_bus,
-                program_bus,
+                ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 byte_xor_chip.bus(),
             ),

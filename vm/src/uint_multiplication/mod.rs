@@ -7,8 +7,8 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
-        instructions::Opcode,
+        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
+        columns::ExecutionState, instructions::Opcode,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -76,8 +76,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: UintMultiplicationAir {
-                execution_bus,
-                program_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus: bus.clone(),
             },

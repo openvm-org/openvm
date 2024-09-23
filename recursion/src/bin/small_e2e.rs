@@ -7,12 +7,10 @@
 /// 4. Wrapper Halo2 circuit to reduce the size of 4.
 use afs_compiler::{
     asm::AsmBuilder,
+    conversion::CompilerOptions,
     ir::{Ext, Felt, RVar, Var},
 };
-use afs_recursion::{
-    halo2::testing_utils::run_evm_verifier_e2e_test,
-    testing_utils::{gen_vm_program_stark_for_test, inner::build_verification_program},
-};
+use afs_recursion::testing_utils::inner::build_verification_program;
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -22,7 +20,7 @@ use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::{program::Program, vm::config::VmConfig};
+use stark_vm::{program::Program, sdk::gen_vm_program_stark_for_test, vm::config::VmConfig};
 use tracing::info_span;
 
 /// A simple benchmark program to run most operations: keccak256, field arithmetic, field extension,
@@ -74,26 +72,29 @@ where
 
 fn main() {
     run_with_metric_collection("OUTPUT_PATH", || {
-        let span = info_span!("Bench Program Inner", group = "bench_program_inner").entered();
-        let (vdata, pvs) = {
-            let program_stark = bench_program_stark_for_test();
-            let pvs = program_stark.pvs.clone();
-            (
-                program_stark
-                    .run_simple_test(&BabyBearPoseidon2Engine::new(FriParameters {
-                        log_blowup: 4,
-                        num_queries: 24,
-                        proof_of_work_bits: 16,
-                    }))
-                    .unwrap(),
-                pvs,
-            )
-        };
-        span.exit();
+        let (vdata, pvs) = info_span!("Bench Program Inner", group = "bench_program_inner")
+            .in_scope(|| {
+                let program_stark = bench_program_stark_for_test();
+                let pvs = program_stark.pvs.clone();
+                (
+                    program_stark
+                        .run_simple_test(&BabyBearPoseidon2Engine::new(FriParameters {
+                            log_blowup: 4,
+                            num_queries: 24,
+                            proof_of_work_bits: 16,
+                        }))
+                        .unwrap(),
+                    pvs,
+                )
+            });
 
-        let span = info_span!("Inner Verifier", group = "inner_verifier").entered();
-        let (vdata, pvs) = {
-            let (program, witness_stream) = build_verification_program(pvs, vdata);
+        let compiler_options = CompilerOptions {
+            enable_cycle_tracker: true,
+            ..Default::default()
+        };
+        let (vdata, pvs) = info_span!("Inner Verifier", group = "inner_verifier").in_scope(|| {
+            let (program, witness_stream) =
+                build_verification_program(pvs, vdata, compiler_options);
             let inner_verifier_stf = gen_vm_program_stark_for_test(
                 program,
                 witness_stream,
@@ -116,28 +117,29 @@ fn main() {
                     .unwrap(),
                 pvs,
             )
-        };
-        span.exit();
+        });
 
-        let span = info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").entered();
-        let (program, witness_stream) = build_verification_program(pvs, vdata);
-        let outer_verifier_sft = gen_vm_program_stark_for_test(
-            program,
-            witness_stream,
-            VmConfig {
-                num_public_values: 4,
-                ..Default::default()
-            },
-        );
-        run_evm_verifier_e2e_test(
-            &outer_verifier_sft,
-            // log_blowup = 3 because of poseidon2 chip.
-            Some(FriParameters {
-                log_blowup: 3,
-                num_queries: 33,
-                proof_of_work_bits: 16,
-            }),
-        );
-        span.exit();
+        #[cfg(feature = "static-verifier")]
+        info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
+            let (program, witness_stream) =
+                build_verification_program(pvs, vdata, compiler_options);
+            let outer_verifier_sft = gen_vm_program_stark_for_test(
+                program,
+                witness_stream,
+                VmConfig {
+                    num_public_values: 4,
+                    ..Default::default()
+                },
+            );
+            afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
+                &outer_verifier_sft,
+                // log_blowup = 3 because of poseidon2 chip.
+                Some(FriParameters {
+                    log_blowup: 3,
+                    num_queries: 33,
+                    proof_of_work_bits: 16,
+                }),
+            );
+        });
     });
 }

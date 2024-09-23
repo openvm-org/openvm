@@ -15,20 +15,13 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
-itertools.workspace = true
-tracing.workspace = true
-strum_macros = { workspace = true }
 
 poseidon2-air = { path = "../poseidon2-air", default-features = false }
 afs-primitives = { path = "../primitives", default-features = false }
 afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }
-parking_lot = "0.12.2"
-getset = "0.1.2"
-derive-new = "0.5.1"
-backtrace = "0.3.71"
-rand = "0.8"
-serde = "1.0.203"
+ax-sdk = { path = "../sdk", default-features = false, optional = true }
+
 toml = "0.8.14"
 enum-utils = "0.1.1"
 strum = { version = "0.26.3", features = ["derive"] }
@@ -36,8 +29,17 @@ tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 num-bigint-dig = "0.8.4"
 num-traits = "0.2.19"
 enum_dispatch = "0.3.13"
-hex-literal = { workspace = true }
-once_cell = { workspace = true }
+itertools.workspace = true
+tracing.workspace = true
+strum_macros.workspace = true
+derive-new.workspace = true
+backtrace.workspace = true
+rand.workspace = true
+serde.workspace = true
+hex-literal.workspace = true
+once_cell.workspace = true
+cfg-if.workspace = true
+metrics = { workspace = true, optional = true }
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }
@@ -56,5 +58,7 @@ ark-ff = { version = "^0.4.0", default-features = false }
 ax-sdk = { path = "../sdk" }
 
 [features]
-default = []
+default = ["bench-metrics"]
 parallel = ["afs-stark-backend/parallel"]
+sdk = ["dep:ax-sdk"]
+bench-metrics = ["sdk", "dep:metrics", "afs-stark-backend/bench-metrics"]

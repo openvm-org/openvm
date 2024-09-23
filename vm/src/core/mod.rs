@@ -7,10 +7,12 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
+        bridge::ExecutionBridge,
         bus::ExecutionBus,
         instructions::Opcode::{self, *},
     },
     memory::MemoryChipRef,
+    program::bridge::ProgramBus,
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
@@ -103,9 +105,16 @@ impl<F: PrimeField32> CoreChip<F> {
     pub fn new(
         options: CoreOptions,
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
     ) -> Self {
-        Self::from_state(options, execution_bus, memory_chip, CoreState::initial())
+        Self::from_state(
+            options,
+            execution_bus,
+            program_bus,
+            memory_chip,
+            CoreState::initial(),
+        )
     }
 
     /// Sets the current state of the Core.
@@ -117,6 +126,7 @@ impl<F: PrimeField32> CoreChip<F> {
     pub fn from_state(
         options: CoreOptions,
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
         state: CoreState,
     ) -> Self {
@@ -124,7 +134,7 @@ impl<F: PrimeField32> CoreChip<F> {
         Self {
             air: CoreAir {
                 options,
-                execution_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
             rows: vec![],

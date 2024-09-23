@@ -1,4 +1,6 @@
 use itertools::Itertools;
+#[cfg(feature = "bench-metrics")]
+use metrics::counter;
 use p3_air::BaseAir;
 use p3_field::AbstractExtensionField;
 use p3_matrix::Matrix;
@@ -163,6 +165,16 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
                     .map(|i| i.bus_index)
                     .collect_vec()
             );
+            #[cfg(feature = "bench-metrics")]
+            {
+                let labels = [("air_name", pk.air_name.clone())];
+                counter!("quotient_deg", &labels).absolute(pk.vk.quotient_degree as u64);
+                // column info will be logged by prover later
+                counter!("constraints", &labels)
+                    .absolute(pk.vk.symbolic_constraints.constraints.len() as u64);
+                counter!("interactions", &labels)
+                    .absolute(pk.vk.symbolic_constraints.interactions.len() as u64);
+            }
         }
 
         multi_pk

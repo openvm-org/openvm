@@ -5,10 +5,10 @@ edition = "2021"
 
 [dependencies]
 afs-stark-backend = { path = "../stark-backend" }
-afs-compiler = { path = "../compiler" }
-ax-sdk = { path = "../sdk" }
+afs-compiler = { path = "../compiler", features = ["sdk"] }
+ax-sdk = { path = "../sdk" }                                # TODO: feature-gate sdk
 afs-derive = { path = "../derive" }
-stark-vm = { path = "../vm" }
+stark-vm = { path = "../vm", features = ["sdk"] }
 ax-ecc-lib = { path = "../ecc/lib" }
 
 p3-air = { workspace = true }
@@ -46,13 +46,17 @@ cfg-if = { workspace = true }
 afs-primitives = { path = "../primitives" }
 
 [[bin]]
+name = "verify_fibair"
+required-features = ["bench-metrics"]
+
+[[bin]]
 name = "tiny_e2e"
 harness = false
-required-features = ["static-verifier", "bench-metrics"]
+required-features = ["bench-metrics"]
 
 [[bin]]
 name = "small_e2e"
-required-features = ["static-verifier", "bench-metrics"]
+required-features = ["bench-metrics"]
 
 [features]
 default = []
@@ -62,4 +66,6 @@ static-verifier = [
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]
-bench-metrics = ["dep:metrics", "afs-stark-backend/bench-metrics"]
+bench-metrics = ["dep:metrics", "stark-vm/bench-metrics"]
+mimalloc = ["afs-stark-backend/mimalloc"]
+jemalloc = ["afs-stark-backend/jemalloc"]

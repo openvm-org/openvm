@@ -2,13 +2,10 @@
 /// Proofs:
 /// 1. Prove a program to compute fibonacci numbers.
 /// 2. Verify the proof of 1. in the outer config.
-/// 3. Verify the proof of 2. using a Halo2 static verifier.
+/// 3. Verify the proof of 2. using a Halo2 static verifier. (Outer Recursion)
 /// 4. Wrapper Halo2 circuit to reduce the size of 3.
-use afs_compiler::{asm::AsmBuilder, ir::Felt};
-use afs_recursion::{
-    halo2::testing_utils::run_evm_verifier_e2e_test,
-    testing_utils::{gen_vm_program_stark_for_test, inner::build_verification_program},
-};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Felt};
+use afs_recursion::testing_utils::inner::build_verification_program;
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
@@ -21,7 +18,7 @@ use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::{program::Program, vm::config::VmConfig};
+use stark_vm::{program::Program, sdk::gen_vm_program_stark_for_test, vm::config::VmConfig};
 use tracing::info_span;
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
@@ -74,21 +71,27 @@ fn main() {
         let vdata = BabyBearPoseidon2Engine::run_simple_test(&any_raps, traces, &pvs).unwrap();
         span.exit();
 
-        let span = info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").entered();
-        let (program, witness_stream) = build_verification_program(pvs, vdata);
-        let inner_verifier_sft = gen_vm_program_stark_for_test(
-            program,
-            witness_stream,
-            VmConfig {
-                num_public_values: 4,
-                ..Default::default()
-            },
-        );
-        run_evm_verifier_e2e_test(
-            &inner_verifier_sft,
-            // log_blowup = 3 because of poseidon2 chip.
-            Some(fri_params_with_80_bits_of_security()[1]),
-        );
-        span.exit();
+        let compiler_options = CompilerOptions {
+            enable_cycle_tracker: true,
+            ..Default::default()
+        };
+        #[cfg(feature = "static-verifier")]
+        info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
+            let (program, witness_stream) =
+                build_verification_program(pvs, vdata, compiler_options);
+            let inner_verifier_sft = gen_vm_program_stark_for_test(
+                program,
+                witness_stream,
+                VmConfig {
+                    num_public_values: 4,
+                    ..Default::default()
+                },
+            );
+            afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
+                &inner_verifier_sft,
+                // log_blowup = 3 because of poseidon2 chip.
+                Some(fri_params_with_80_bits_of_security()[1]),
+            );
+        });
     });
 }
