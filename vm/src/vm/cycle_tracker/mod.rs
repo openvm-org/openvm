@@ -87,6 +87,84 @@ where
     }
 }
 
+#[cfg(feature = "bench-metrics")]
+mod emit {
+    use std::collections::HashMap;
+
+    use itertools::Itertools;
+    use metrics::counter;
+
+    use super::CycleTracker;
+    use crate::vm::metrics::VmMetrics;
+
+    impl CycleTracker<VmMetrics> {
+        pub fn emit(&self) {
+            if self.instances.is_empty() {
+                return;
+            }
+            for name in &self.order {
+                let spans = self.instances.get(name).unwrap();
+                let num_spans = spans.len();
+
+                if num_spans == 0 {
+                    continue;
+                }
+
+                let mut total_vm_metrics = HashMap::new();
+                let mut total_opcode_counts = HashMap::new();
+                let mut total_dsl_counts = HashMap::new();
+                let mut total_opcode_trace_cells = HashMap::new();
+
+                for span in spans {
+                    for (key, value) in &span.metrics.chip_metrics {
+                        *total_vm_metrics.entry(key.clone()).or_insert(0) += value;
+                    }
+                    for (key, value) in &span.metrics.opcode_counts {
+                        *total_opcode_counts.entry(key.clone()).or_insert(0) += value;
+                    }
+                    for (key, value) in &span.metrics.dsl_counts {
+                        *total_dsl_counts.entry(key.clone()).or_insert(0) += value;
+                    }
+                    for (key, value) in &span.metrics.opcode_trace_cells {
+                        *total_opcode_trace_cells.entry(key.clone()).or_insert(0) += value;
+                    }
+                }
+                let sort_and_collect = |map: HashMap<String, usize>| -> Vec<(String, usize)> {
+                    map.into_iter().sorted_by(|a, b| a.1.cmp(&b.1)).collect()
+                };
+                let sorted_opcode_counts = sort_and_collect(total_opcode_counts);
+                let sorted_dsl_counts = sort_and_collect(total_dsl_counts);
+                let sorted_opcode_trace_cells = sort_and_collect(total_opcode_trace_cells);
+
+                counter!("num_spans", &[("cycle_tracker_span", name.clone())])
+                    .absolute(num_spans as u64);
+                for (key, value) in total_vm_metrics {
+                    let labels = [("chip_name", key), ("cycle_tracker_span", name.clone())];
+                    counter!("rows_used", &labels).absolute(value as u64);
+                }
+                for (key, value) in sorted_opcode_counts {
+                    if value > 0 {
+                        let labels = [("opcode", key), ("cycle_tracker_span", name.clone())];
+                        counter!("frequency", &labels).absolute(value as u64);
+                    }
+                }
+                for (key, value) in sorted_opcode_trace_cells {
+                    if value > 0 {
+                        let labels = [("opcode", key), ("cycle_tracker_span", name.clone())];
+                        counter!("cells_used", &labels).absolute(value as u64);
+                    }
+                }
+                for (key, value) in sorted_dsl_counts {
+                    if value > 0 {
+                        let labels = [("dsl_ir", key), ("cycle_tracker_span", name.clone())];
+                        counter!("frequency", &labels).absolute(value as u64);
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl Display for CycleTracker<VmMetrics> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.instances.is_empty() {
@@ -119,6 +197,14 @@ impl Display for CycleTracker<VmMetrics> {
                     *total_opcode_trace_cells.entry(key.clone()).or_insert(0) += value;
                 }
             }
+            let mut sorted_opcode_counts: Vec<(&String, &usize)> =
+                total_opcode_counts.iter().collect();
+            sorted_opcode_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+            let mut sorted_dsl_counts: Vec<(&String, &usize)> = total_dsl_counts.iter().collect();
+            sorted_dsl_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+            let mut sorted_opcode_trace_cells: Vec<(&String, &usize)> =
+                total_opcode_trace_cells.iter().collect();
+            sorted_opcode_trace_cells.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
 
             writeln!(
                 f,
@@ -146,28 +232,17 @@ impl Display for CycleTracker<VmMetrics> {
                 }
             }
 
-            let mut sorted_opcode_counts: Vec<(&String, &usize)> =
-                total_opcode_counts.iter().collect();
-            sorted_opcode_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
-
             for (key, value) in sorted_opcode_counts {
                 if *value > 0 {
                     writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
                 }
             }
 
-            let mut sorted_dsl_counts: Vec<(&String, &usize)> = total_dsl_counts.iter().collect();
-            sorted_dsl_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
-
             for (key, value) in sorted_dsl_counts {
                 if *value > 0 {
                     writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
                 }
             }
-
-            let mut sorted_opcode_trace_cells: Vec<(&String, &usize)> =
-                total_opcode_trace_cells.iter().collect();
-            sorted_opcode_trace_cells.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
 
             for (key, value) in sorted_opcode_trace_cells {
                 if *value > 0 {

@@ -21,9 +21,20 @@ where
 {
     cfg_if::cfg_if! {
         if #[cfg(feature = "bench-metrics")] {
-            let start = std::time::Instant::now();
-            let mut config= config;
+            // Run once with metrics collection enabled, which can improve runtime performance
+            let mut config = config;
             config.collect_metrics = true;
+
+            let vm = VirtualMachine::new(config, program.clone(), input_stream.clone());
+
+            let mut result = vm.execute_and_generate::<SC>().unwrap();
+            result.cycle_tracker.emit();
+            let result = result.segment_results.pop().unwrap();
+            result.metrics.emit();
+
+            // Run again with metrics collection disabled and measure trace generation time
+            config.collect_metrics = false;
+            let start = std::time::Instant::now();
         }
     }
 
@@ -39,7 +50,6 @@ where
     let result = result.segment_results.pop().unwrap();
     #[cfg(feature = "bench-metrics")]
     {
-        result.metrics.emit();
         metrics::gauge!("trace_gen_time_ms", "stark" => "vm")
             .set(start.elapsed().as_millis() as f64);
     }
