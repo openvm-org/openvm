@@ -34,7 +34,7 @@ pub const ALU_BITWISE_INSTRUCTIONS: [Opcode; 3] = [Opcode::XOR256, Opcode::AND25
 #[derive(Debug)]
 pub enum WriteRecord<T, const NUM_LIMBS: usize> {
     Uint(MemoryWriteRecord<T, NUM_LIMBS>),
-    Short(MemoryWriteRecord<T, 1>),
+    Bool(MemoryWriteRecord<T, 1>),
 }
 
 #[derive(Debug)]
@@ -50,10 +50,9 @@ pub struct UintArithmeticRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usiz
     pub y_read: MemoryReadRecord<T, NUM_LIMBS>,
     pub z_write: WriteRecord<T, NUM_LIMBS>,
 
-    // least significant LIMB_BITS - 1 digits of the most significant limbs of x and y
-    // if SLT, else should be equal to the most significant limb of x and y
-    pub x_msb_masked: T,
-    pub y_msb_masked: T,
+    // sign of x and y if SLT, else should be 0
+    pub x_sign: T,
+    pub y_sign: T,
 
     // empty if not bool instruction, else contents of this vector will be stored in z
     pub cmp_buffer: Vec<T>,
@@ -125,7 +124,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         let (z, cmp) = solve_alu::<T, NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
 
         let z_write = if ALU_CMP_INSTRUCTIONS.contains(&opcode) {
-            WriteRecord::Short(memory_chip.write_cell(e, z_ptr_read.value(), T::from_bool(cmp)))
+            WriteRecord::Bool(memory_chip.write_cell(e, z_ptr_read.value(), T::from_bool(cmp)))
         } else {
             WriteRecord::Uint(
                 memory_chip.write::<NUM_LIMBS>(
@@ -141,13 +140,17 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             )
         };
 
-        let slt_mask = if opcode == Opcode::SLT256 {
-            (1 << (LIMB_BITS - 1)) - 1
-        } else {
-            (1 << LIMB_BITS) - 1
-        };
-        let x_msb_masked = T::from_canonical_u32(x[NUM_LIMBS - 1] & slt_mask);
-        let y_msb_masked = T::from_canonical_u32(y[NUM_LIMBS - 1] & slt_mask);
+        let mut x_sign = 0;
+        let mut y_sign = 0;
+
+        if opcode == Opcode::SLT256 {
+            x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
+            y_sign = y[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
+            self.xor_lookup_chip
+                .request(x_sign * (1 << (LIMB_BITS - 1)), x[NUM_LIMBS - 1]);
+            self.xor_lookup_chip
+                .request(y_sign * (1 << (LIMB_BITS - 1)), y[NUM_LIMBS - 1]);
+        }
 
         if ALU_BITWISE_INSTRUCTIONS.contains(&opcode) {
             for i in 0..NUM_LIMBS {
@@ -169,8 +172,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
                 x_read,
                 y_read,
                 z_write,
-                x_msb_masked,
-                y_msb_masked,
+                x_sign: T::from_canonical_u32(x_sign),
+                y_sign: T::from_canonical_u32(y_sign),
                 cmp_buffer: if ALU_CMP_INSTRUCTIONS.contains(&opcode) {
                     z.into_iter().map(T::from_canonical_u32).collect()
                 } else {
@@ -192,8 +195,7 @@ fn solve_alu<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 ) -> (Vec<u32>, bool) {
     match opcode {
         Opcode::ADD256 => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::SUB256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::LT256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        Opcode::SUB256 | Opcode::LT256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
         Opcode::EQ256 => solve_eq::<T, NUM_LIMBS, LIMB_BITS>(x, y),
         Opcode::XOR256 => solve_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
         Opcode::AND256 => solve_and::<NUM_LIMBS, LIMB_BITS>(x, y),

@@ -11,7 +11,9 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
-use super::{columns::UintArithmeticCols, UintArithmeticChip, ALU_CMP_INSTRUCTIONS};
+use super::{
+    columns::UintArithmeticCols, solve_subtract, UintArithmeticChip, ALU_CMP_INSTRUCTIONS,
+};
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
     core::BYTE_XOR_BUS,
@@ -100,6 +102,8 @@ fn run_alu_negative_test(
     y: Vec<u32>,
     z: Vec<u32>,
     cmp_result: bool,
+    x_sign: u32,
+    y_sign: u32,
     expected_error: VerificationError,
 ) {
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
@@ -128,6 +132,8 @@ fn run_alu_negative_test(
     let alu_trace_cols: &mut UintArithmeticCols<F, 32, 8> = (*alu_trace_row).borrow_mut();
     alu_trace_cols.io.z.data = array::from_fn(|i| F::from_canonical_u32(z[i]));
     alu_trace_cols.io.cmp_result = F::from_bool(cmp_result);
+    alu_trace_cols.aux.x_sign = F::from_canonical_u32(x_sign);
+    alu_trace_cols.aux.y_sign = F::from_canonical_u32(y_sign);
     let alu_trace: p3_matrix::dense::DenseMatrix<_> = RowMajorMatrix::new(
         alu_trace_row,
         UintArithmeticCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
@@ -186,6 +192,8 @@ fn alu_add_out_of_range_negative_test() {
             .chain(iter::repeat(0).take(NUM_LIMBS - 1))
             .collect(),
         false,
+        0,
+        0,
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -204,6 +212,8 @@ fn alu_add_wrong_negative_test() {
             .chain(iter::repeat(0).take(NUM_LIMBS - 1))
             .collect(),
         false,
+        0,
+        0,
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -246,6 +256,8 @@ fn alu_sub_out_of_range_negative_test() {
             .chain(iter::repeat(0).take(NUM_LIMBS - 1))
             .collect(),
         false,
+        0,
+        0,
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -264,6 +276,8 @@ fn alu_sub_wrong_negative_test() {
             .chain(iter::repeat(0).take(NUM_LIMBS - 1))
             .collect(),
         false,
+        0,
+        0,
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -300,6 +314,8 @@ fn uint_lt_wrong_subtraction_test() {
         iter::once(65_000).chain(iter::repeat(0).take(31)).collect(),
         std::iter::once(1).chain(iter::repeat(0).take(31)).collect(),
         false,
+        0,
+        0,
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -312,6 +328,22 @@ fn alu_lt_wrong_negative_test() {
         iter::once(1).chain(iter::repeat(0).take(31)).collect(),
         iter::once(0).chain(iter::repeat(0).take(31)).collect(),
         true,
+        0,
+        0,
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn alu_lt_non_zero_sign_negative_test() {
+    run_alu_negative_test(
+        Opcode::LT256,
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        vec![0; NUM_LIMBS],
+        false,
+        1,
+        1,
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -348,6 +380,8 @@ fn alu_eq_wrong_negative_test() {
         vec![0; 31].into_iter().chain(iter::once(456)).collect(),
         vec![0; 31].into_iter().chain(iter::once(0)).collect(),
         true,
+        0,
+        0,
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -384,6 +418,8 @@ fn alu_xor_wrong_negative_test() {
         vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
         vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
         true,
+        0,
+        0,
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -420,6 +456,8 @@ fn alu_and_wrong_negative_test() {
         vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
         vec![0; NUM_LIMBS],
         true,
+        0,
+        0,
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -459,6 +497,8 @@ fn alu_or_wrong_negative_test() {
             .collect(),
         vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
         true,
+        0,
+        0,
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -489,54 +529,100 @@ fn alu_slt_rand_test() {
 
 #[test]
 fn alu_slt_pos_neg_sign_negative_test() {
+    let x = [0; NUM_LIMBS];
+    let y = [(1 << LIMB_BITS) - 1; NUM_LIMBS];
     run_alu_negative_test(
         Opcode::SLT256,
-        vec![0; NUM_LIMBS],
-        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
-        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        x.to_vec(),
+        y.to_vec(),
+        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         true,
+        0,
+        1,
         VerificationError::OodEvaluationMismatch,
     );
 }
 
 #[test]
 fn alu_slt_neg_pos_sign_negative_test() {
+    let x = [(1 << LIMB_BITS) - 1; NUM_LIMBS];
+    let y = [0; NUM_LIMBS];
     run_alu_negative_test(
         Opcode::SLT256,
-        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
-        vec![0; NUM_LIMBS],
-        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        x.to_vec(),
+        y.to_vec(),
+        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         false,
+        1,
+        0,
         VerificationError::OodEvaluationMismatch,
     );
 }
 
 #[test]
 fn alu_slt_both_pos_sign_negative_test() {
+    let x = [0; NUM_LIMBS];
+    let mut y = [0; NUM_LIMBS];
+    y[0] = 1;
     run_alu_negative_test(
         Opcode::SLT256,
-        vec![0; NUM_LIMBS],
-        vec![0; NUM_LIMBS - 1]
-            .into_iter()
-            .chain(iter::once(1))
-            .collect(),
-        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        x.to_vec(),
+        y.to_vec(),
+        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         false,
+        0,
+        0,
         VerificationError::OodEvaluationMismatch,
     );
 }
 
 #[test]
 fn alu_slt_both_neg_sign_negative_test() {
+    let x = [(1 << LIMB_BITS) - 1; NUM_LIMBS];
+    let mut y = [(1 << LIMB_BITS) - 1; NUM_LIMBS];
+    y[0] = 1;
     run_alu_negative_test(
         Opcode::SLT256,
-        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
-        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS - 1]
-            .into_iter()
-            .chain(iter::once(1))
-            .collect(),
-        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        x.to_vec(),
+        y.to_vec(),
+        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         true,
+        1,
+        1,
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn alu_slt_wrong_sign_negative_test() {
+    let x = [(1 << LIMB_BITS) - 1; NUM_LIMBS];
+    let mut y = [(1 << LIMB_BITS) - 1; NUM_LIMBS];
+    y[0] = 1;
+    run_alu_negative_test(
+        Opcode::SLT256,
+        x.to_vec(),
+        y.to_vec(),
+        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        true,
+        0,
+        1,
+        VerificationError::NonZeroCumulativeSum,
+    );
+}
+
+#[test]
+fn alu_slt_non_boolean_sign_negative_test() {
+    let x = [(1 << LIMB_BITS) - 1; NUM_LIMBS];
+    let mut y = [(1 << LIMB_BITS) - 1; NUM_LIMBS];
+    y[0] = 1;
+    run_alu_negative_test(
+        Opcode::SLT256,
+        x.to_vec(),
+        y.to_vec(),
+        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        false,
+        2,
+        1,
         VerificationError::OodEvaluationMismatch,
     );
 }

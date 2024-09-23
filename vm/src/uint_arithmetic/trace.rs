@@ -37,8 +37,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 x_read,
                 y_read,
                 z_write,
-                x_msb_masked,
-                y_msb_masked,
+                x_sign,
+                y_sign,
                 cmp_buffer,
             } = operation;
 
@@ -62,7 +62,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                         address: z.pointer,
                         ptr_to_address: z_ptr_read.pointer,
                     },
-                    WriteRecord::Short(z) => MemoryData {
+                    WriteRecord::Bool(z) => MemoryData {
                         data: array::from_fn(|i| cmp_buffer[i]),
                         address: z.pointer,
                         ptr_to_address: z_ptr_read.pointer,
@@ -70,7 +70,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 },
                 cmp_result: match &z_write {
                     WriteRecord::Uint(_) => F::zero(),
-                    WriteRecord::Short(z) => z.data[0],
+                    WriteRecord::Bool(z) => z.data[0],
                 },
                 ptr_as: instruction.d,
                 address_as: instruction.e,
@@ -78,8 +78,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
 
             row.aux = UintArithmeticAuxCols {
                 is_valid: F::one(),
-                x_msb_masked,
-                y_msb_masked,
+                x_sign,
+                y_sign,
                 opcode_add_flag: F::from_bool(instruction.opcode == Opcode::ADD256),
                 opcode_sub_flag: F::from_bool(instruction.opcode == Opcode::SUB256),
                 opcode_lt_flag: F::from_bool(instruction.opcode == Opcode::LT256),
@@ -94,11 +94,11 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 read_y_aux_cols: aux_cols_factory.make_read_aux_cols(y_read.clone()),
                 write_z_aux_cols: match &z_write {
                     WriteRecord::Uint(z) => aux_cols_factory.make_write_aux_cols(z.clone()),
-                    WriteRecord::Short(_) => MemoryWriteAuxCols::disabled(),
+                    WriteRecord::Bool(_) => MemoryWriteAuxCols::disabled(),
                 },
                 write_cmp_aux_cols: match &z_write {
                     WriteRecord::Uint(_) => MemoryWriteAuxCols::disabled(),
-                    WriteRecord::Short(z) => aux_cols_factory.make_write_aux_cols(z.clone()),
+                    WriteRecord::Bool(z) => aux_cols_factory.make_write_aux_cols(z.clone()),
                 },
             };
         }

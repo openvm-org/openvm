@@ -72,8 +72,8 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 
         for i in 0..NUM_LIMBS {
             // We explicitly separate the constraints for ADD and SUB in order to keep degree
-            // cubic. Because we constrain that the carry is bool, if carry has degree larger
-            // than 1 the max-degree constrain is automatically at least 4.
+            // cubic. Because we constrain that the carry (which is arbitrary) is bool, if
+            // carry has degree larger than 1 the max-degree constrain could be at least 4.
             carry_add[i] = AB::Expr::from(carry_divide)
                 * (x_limbs[i] + y_limbs[i] - z_limbs[i]
                     + if i > 0 {
@@ -97,31 +97,27 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
         }
 
         // For LT, cmp_result must be equal to the last carry. For SLT, cmp_result ^ x_sign ^ y_sign must
-        // be equal to the last carry. To ensure maximum cubic degree constraints, we set aux.x_msb_masked
-        // and aux.y_msb_masked such that x_sign and y_sign are 0 when not computing an SLT.
-        let sign_divide = AB::F::from_canonical_usize(1 << (LIMB_BITS - 1)).inverse();
-        let x_sign = AB::Expr::from(sign_divide) * (x_limbs[NUM_LIMBS - 1] - aux.x_msb_masked);
-        let y_sign = AB::Expr::from(sign_divide) * (y_limbs[NUM_LIMBS - 1] - aux.y_msb_masked);
-
-        builder.assert_bool(x_sign.clone());
-        builder.assert_bool(y_sign.clone());
+        // be equal to the last carry. To ensure maximum cubic degree constraints, we set aux.x_sign and
+        // aux.y_sign are 0 when not computing an SLT.
+        builder.assert_bool(aux.x_sign);
+        builder.assert_bool(aux.y_sign);
         builder
             .when(utils::not(aux.opcode_slt_flag))
-            .assert_zero(x_sign.clone());
+            .assert_zero(aux.x_sign);
         builder
             .when(utils::not(aux.opcode_slt_flag))
-            .assert_zero(y_sign.clone());
+            .assert_zero(aux.y_sign);
 
-        let slt_xor = (aux.opcode_lt_flag + aux.opcode_slt_flag) * io.cmp_result
-            + x_sign.clone()
-            + y_sign.clone()
-            - AB::Expr::from_canonical_u32(2)
-                * (io.cmp_result * x_sign.clone()
-                    + io.cmp_result * y_sign.clone()
-                    + x_sign.clone() * y_sign.clone())
-            + AB::Expr::from_canonical_u32(4) * (io.cmp_result * x_sign.clone() * y_sign.clone());
-        builder.assert_zero(
-            slt_xor - (aux.opcode_lt_flag + aux.opcode_slt_flag) * carry_sub[NUM_LIMBS - 1].clone(),
+        let slt_xor =
+            (aux.opcode_lt_flag + aux.opcode_slt_flag) * io.cmp_result + aux.x_sign + aux.y_sign
+                - AB::Expr::from_canonical_u32(2)
+                    * (io.cmp_result * aux.x_sign
+                        + io.cmp_result * aux.y_sign
+                        + aux.x_sign * aux.y_sign)
+                + AB::Expr::from_canonical_u32(4) * (io.cmp_result * aux.x_sign * aux.y_sign);
+        builder.assert_eq(
+            slt_xor,
+            (aux.opcode_lt_flag + aux.opcode_slt_flag) * carry_sub[NUM_LIMBS - 1].clone(),
         );
 
         // For EQ, z is filled with 0 except at the lowest index i such that x[i] != y[i]. If
