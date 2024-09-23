@@ -1209,7 +1209,8 @@ impl<C: Config> Variable<C> for Ext<C::F, C::EF> {
     type Expression = SymbolicExt<C::F, C::EF>;
 
     fn uninit(builder: &mut Builder<C>) -> Self {
-        builder.stack_ptr += <Self as MemVariable<C>>::size_of() as u32;
+        builder.stack_ptr += 4 - builder.stack_ptr % 4;
+        builder.stack_ptr += 4;
         Ext(builder.stack_ptr, PhantomData)
     }
 

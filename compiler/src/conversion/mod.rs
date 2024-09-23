@@ -8,6 +8,7 @@ use crate::asm::{AsmInstruction, AssemblyCode};
 
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
+    pub word_size: usize,
     pub compile_prints: bool,
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
@@ -17,6 +18,7 @@ pub struct CompilerOptions {
 impl Default for CompilerOptions {
     fn default() -> Self {
         CompilerOptions {
+            word_size: 64,
             compile_prints: true,
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,

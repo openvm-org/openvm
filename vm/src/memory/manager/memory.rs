@@ -90,8 +90,14 @@ pub struct Memory<T> {
 }
 
 impl<F: PrimeField32> Memory<F> {
+    /// The timestamp corresponding to initial memory.
     const INITIAL_TIMESTAMP: u32 = 0;
 
+    /// Creates a new `Memory` instance with the given `memory_size` and `initial_block_len`.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if `memory_size` is not a power of two.
     pub fn new(memory_size: usize, initial_block_len: usize) -> Self {
         assert!(memory_size.is_power_of_two());
         Self {
@@ -102,20 +108,24 @@ impl<F: PrimeField32> Memory<F> {
         }
     }
 
+    /// Returns the current timestamp.
     pub fn timestamp(&self) -> u32 {
         self.timestamp
     }
 
+    /// Increments the current timestamp by one and returns the new value.
     pub fn increment_timestamp(&mut self) -> u32 {
         self.timestamp += 1;
         self.timestamp
     }
 
+    /// Increments the current timestamp by a specified delta and returns the new value.
     pub fn increment_timestamp_by(&mut self, delta: u32) -> u32 {
         self.timestamp += delta;
         self.timestamp
     }
 
+    /// Writes an array of values to the memory at the specified address space and start index.
     pub fn write<const N: usize>(
         &mut self,
         address_space: AddressSpace,
@@ -123,71 +133,73 @@ impl<F: PrimeField32> Memory<F> {
         values: [F; N],
     ) -> (MemoryWriteRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
         let active_block_records = self.access(address_space, start_index, values.len());
-
         let block_id = self.block_id(start_index, values.len());
-        let block = self.blocks.get_mut(&(address_space, block_id)).unwrap();
-        match block {
-            Block::Active { data, timestamp: t } => {
-                let prev_data = mem::take(data);
-                *data = values.to_vec();
 
-                let prev_timestamp = *t;
-                debug_assert!(
-                    prev_timestamp < self.timestamp,
-                    "previous timestamp ({prev_timestamp}) not less than timestamp ({})",
-                    self.timestamp
-                );
+        if let Some(Block::Active { data, timestamp }) =
+            self.blocks.get_mut(&(address_space, block_id))
+        {
+            let prev_data = mem::replace(data, values.to_vec());
+            let prev_timestamp = *timestamp;
 
-                *t = self.timestamp;
-                let record = MemoryWriteRecord {
-                    address_space: F::from_canonical_u32(address_space.0),
-                    pointer: F::from_canonical_usize(start_index),
-                    timestamp: F::from_canonical_u32(self.timestamp),
-                    prev_timestamp: F::from_canonical_u32(prev_timestamp),
-                    data: values,
-                    prev_data: prev_data.try_into().unwrap(),
-                };
+            debug_assert!(
+                prev_timestamp < self.timestamp,
+                "previous timestamp ({prev_timestamp}) not less than timestamp ({})",
+                self.timestamp
+            );
 
-                self.timestamp += 1;
+            *timestamp = self.timestamp;
+            let record = MemoryWriteRecord {
+                address_space: F::from_canonical_u32(address_space.0),
+                pointer: F::from_canonical_usize(start_index),
+                timestamp: F::from_canonical_u32(self.timestamp),
+                prev_timestamp: F::from_canonical_u32(prev_timestamp),
+                data: values,
+                prev_data: prev_data.try_into().unwrap(),
+            };
 
-                (record, active_block_records)
-            }
-            _ => unreachable!(),
+            self.timestamp += 1;
+
+            (record, active_block_records)
+        } else {
+            unreachable!()
         }
     }
 
+    /// Reads an array of values from the memory at the specified address space and start index.
     pub fn read<const N: usize>(
         &mut self,
         address_space: AddressSpace,
         start_index: usize,
     ) -> (MemoryReadRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
         let new_active_block_records = self.access(address_space, start_index, N);
-
         let block_id = self.block_id(start_index, N);
-        let block = self.blocks.get_mut(&(address_space, block_id)).unwrap();
-        match block {
-            Block::Active { data, timestamp: t } => {
-                let prev_timestamp = *t;
-                debug_assert!(
-                    prev_timestamp < self.timestamp,
-                    "previous timestamp ({prev_timestamp}) not less than timestamp ({})",
-                    self.timestamp
-                );
 
-                *t = self.timestamp;
-                let record = MemoryReadRecord {
-                    address_space: F::from_canonical_u32(address_space.0),
-                    pointer: F::from_canonical_usize(start_index),
-                    timestamp: F::from_canonical_u32(self.timestamp),
-                    prev_timestamp: F::from_canonical_u32(prev_timestamp),
-                    data: data.clone().try_into().unwrap(),
-                };
+        if let Some(Block::Active { data, timestamp }) =
+            self.blocks.get_mut(&(address_space, block_id))
+        {
+            let prev_timestamp = *timestamp;
 
-                self.timestamp += 1;
+            debug_assert!(
+                prev_timestamp < self.timestamp,
+                "previous timestamp ({}) not less than timestamp ({})",
+                prev_timestamp,
+                self.timestamp
+            );
 
-                (record, new_active_block_records)
-            }
-            _ => unreachable!(),
+            *timestamp = self.timestamp;
+            let record = MemoryReadRecord {
+                address_space: F::from_canonical_u32(address_space.0),
+                pointer: F::from_canonical_usize(start_index),
+                timestamp: F::from_canonical_u32(self.timestamp),
+                prev_timestamp: F::from_canonical_u32(prev_timestamp),
+                data: data.clone().try_into().unwrap(),
+            };
+
+            self.timestamp += 1;
+
+            (record, new_active_block_records)
+        } else {
+            unreachable!()
         }
     }
 
@@ -205,6 +217,7 @@ impl<F: PrimeField32> Memory<F> {
 
         let block_id = self.block_id(start_index, len);
         let mut records = vec![];
+
         self.node_access(address_space, block_id, start_index, len, &mut records);
         records
     }
@@ -259,6 +272,7 @@ impl<F: PrimeField32> Memory<F> {
                 // Recursively access left and right.
                 let left_id = 2 * block_id;
                 let right_id = 2 * block_id + 1;
+
                 let (left_timestamp, left_data) =
                     self.node_access(address_space, left_id, start, len / 2, records);
                 let (right_timestamp, right_data) =
@@ -275,7 +289,7 @@ impl<F: PrimeField32> Memory<F> {
                 self.blocks.insert(
                     (address_space, block_id),
                     Block::Active {
-                        timestamp: max(left_timestamp, right_timestamp),
+                        timestamp,
                         data: data.clone(),
                     },
                 );
@@ -296,6 +310,7 @@ impl<F: PrimeField32> Memory<F> {
                 // Recursively access parent.
                 let parent_id = block_id >> 1;
                 let parent_start = start - (block_id & 1) * len;
+
                 let (parent_timestamp, parent_data) =
                     self.node_access(address_space, parent_id, parent_start, len * 2, records);
 
@@ -342,6 +357,7 @@ impl<F: PrimeField32> Memory<F> {
         }
     }
 
+    /// Retrieves the value and timestamp at a specific memory index within an address space.
     pub fn get(&self, address_space: AddressSpace, index: usize) -> Option<(u32, &F)> {
         let mut block_id = self.block_id(index, 1);
 

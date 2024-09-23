@@ -135,5 +135,5 @@ where
     R: Rng + ?Sized,
 {
     const MAX_MEMORY: usize = 1 << 29;
-    rng.gen_range(0..MAX_MEMORY - len)
+    rng.gen_range(0..MAX_MEMORY - len) / len * len
 }

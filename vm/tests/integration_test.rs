@@ -17,7 +17,7 @@ use p3_field::AbstractField;
 use rand::Rng;
 use stark_vm::{
     arch::instructions::Opcode::*,
-    hashes::keccak::hasher::utils::keccak256,
+    hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     program::{Instruction, Program},
     vm::{
         config::{MemoryConfig, VmConfig},
@@ -27,6 +27,14 @@ use stark_vm::{
 use tracing::Level;
 
 const LIMB_BITS: usize = 29;
+
+pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
+where
+    R: Rng + ?Sized,
+{
+    const MAX_MEMORY: usize = 1 << 29;
+    rng.gen_range(0..MAX_MEMORY - len) / len * len
+}
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig {
@@ -38,11 +46,7 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
 
 // log_blowup = 2 by default
 fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Vec<BabyBear>>) {
-    let vm = VirtualMachine::new(
-        config,
-        program,
-        witness_stream,
-    );
+    let vm = VirtualMachine::new(config, program, witness_stream);
 
     // TODO: using log_blowup = 3 because keccak interaction chunking is not optimal right now
     let perm = default_perm();
@@ -324,8 +328,8 @@ fn test_vm_compress_poseidon2_as2() {
 
     let mut instructions = vec![];
 
-    let lhs_ptr = rng.gen_range(1..1 << 20) / 8 * 8;
-    for i in 0..8 {
+    let lhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
+    for i in 0..CHUNK as isize {
         // [lhs_ptr + i]_2 <- rnd()
         instructions.push(Instruction::from_isize(
             STOREW,
@@ -336,8 +340,8 @@ fn test_vm_compress_poseidon2_as2() {
             2,
         ));
     }
-    let rhs_ptr = rng.gen_range(1..1 << 20) / 8 * 8;
-    for i in 0..8 {
+    let rhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
+    for i in 0..CHUNK as isize {
         // [rhs_ptr + i]_2 <- rnd()
         instructions.push(Instruction::from_isize(
             STOREW,
@@ -348,7 +352,7 @@ fn test_vm_compress_poseidon2_as2() {
             2,
         ));
     }
-    let dst_ptr = rng.gen_range(1..1 << 20) / 8 * 8;
+    let dst_ptr = gen_pointer(&mut rng, CHUNK) as isize;
 
     // [11]_1 <- lhs_ptr
     instructions.push(Instruction::from_isize(STOREW, lhs_ptr, 0, 11, 0, 1));

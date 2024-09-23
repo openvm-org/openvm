@@ -1,11 +1,12 @@
 use std::{cell::RefCell, ops::Deref, rc::Rc, sync::Arc};
-use itertools::izip;
+
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{engine::VerificationData, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
 };
+use itertools::izip;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};

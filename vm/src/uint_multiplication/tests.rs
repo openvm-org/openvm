@@ -13,7 +13,11 @@ use rand::{rngs::StdRng, Rng};
 
 use super::{columns::UintMultiplicationCols, solve_uint_multiplication, UintMultiplicationChip};
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
+    arch::{
+        chips::MachineChip,
+        instructions::Opcode,
+        testing::{memory::gen_pointer, MachineChipTestBuilder},
+    },
     core::RANGE_TUPLE_CHECKER_BUS,
     program::Instruction,
 };
@@ -36,17 +40,16 @@ fn run_uint_multiplication_rand_write_execute<const NUM_LIMBS: usize, const LIMB
     rng: &mut StdRng,
 ) {
     let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 29;
 
     let d = rng.gen_range(address_space_range());
     let e = rng.gen_range(address_space_range());
 
-    let x_address = rng.gen_range(address_range());
-    let y_address = rng.gen_range(address_range());
-    let z_address = rng.gen_range(address_range());
-    let x_ptr_to_address = rng.gen_range(address_range());
-    let y_ptr_to_address = rng.gen_range(address_range());
-    let z_ptr_to_address = rng.gen_range(address_range());
+    let x_address = gen_pointer(rng, 64);
+    let y_address = gen_pointer(rng, 64);
+    let z_address = gen_pointer(rng, 64);
+    let x_ptr_to_address = gen_pointer(rng, 1);
+    let y_ptr_to_address = gen_pointer(rng, 1);
+    let z_ptr_to_address = gen_pointer(rng, 1);
 
     let x_f = x
         .clone()

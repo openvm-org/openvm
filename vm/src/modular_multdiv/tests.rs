@@ -81,8 +81,8 @@ fn test_modular_multdiv() {
 
         let data_as = 2;
         let address1 = 0;
-        let address2 = 1000;
-        let address3 = 2000;
+        let address2 = 1024;
+        let address3 = 2048;
 
         tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
         tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));

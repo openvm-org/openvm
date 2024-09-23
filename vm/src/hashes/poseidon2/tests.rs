@@ -11,19 +11,17 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
-use rand::{Rng, RngCore};
+use rand::Rng;
 
 use super::{Poseidon2Chip, CHUNK, WIDTH};
 use crate::{
     arch::{
         instructions::Opcode::*,
-        testing::{MachineChipTestBuilder, MachineChipTester},
+        testing::{memory::gen_pointer, MachineChipTestBuilder, MachineChipTester},
     },
     hashes::poseidon2::Poseidon2VmIoCols,
     program::Instruction,
 };
-
-const ADDRESS_BITS: usize = 29;
 
 fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
     let max_log_degree = log2_strict_usize(max_trace_height);
@@ -37,9 +35,8 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
     let mut rng = create_seeded_rng();
     (0..num_ops)
         .map(|_| {
-            let [a, b, c] = std::array::from_fn(|_| {
-                BabyBear::from_wrapped_u32(rng.next_u32() % (1 << ADDRESS_BITS))
-            });
+            let [a, b, c] =
+                std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
             Instruction {
                 opcode: if rng.gen_bool(0.5) {
                     PERM_POS2
@@ -61,7 +58,6 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
 
 fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
     let elem_range = || 1..=100;
-    let address_range = || 0usize..1 << ADDRESS_BITS;
 
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = Poseidon2Chip::from_poseidon2_config(
@@ -85,9 +81,9 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
         ]
         .map(|elem| elem.as_canonical_u64() as usize);
 
-        let dst = rng.gen_range(address_range());
-        let lhs = rng.gen_range(address_range());
-        let rhs = rng.gen_range(address_range());
+        let dst = gen_pointer(&mut rng, CHUNK);
+        let lhs = gen_pointer(&mut rng, CHUNK);
+        let rhs = gen_pointer(&mut rng, CHUNK);
 
         let data: [_; WIDTH] =
             std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
