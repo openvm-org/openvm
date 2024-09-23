@@ -14,9 +14,7 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::{columns::*, NUM_LIMBS};
-use crate::{
-    arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge,
-};
+use crate::{arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge};
 
 #[derive(Clone, Debug)]
 pub struct EcAddUnequalVmAir {
