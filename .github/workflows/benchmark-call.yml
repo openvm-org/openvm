@@ -82,7 +82,7 @@ jobs:
         run: |
           mkdir -p ../benchmark/tmp
           OUTPUT_PATH="metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin verify_fibair --features $FEATURE_FLAGS
-          python ../sdk/scripts/metric_unify/main.py metrics.json > ../benchmark/tmp/_result.md
+          python3 ../sdk/scripts/metric_unify/main.py metrics.json > ../benchmark/tmp/_result.md
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'halo2_static_verify_fibair'
@@ -105,7 +105,7 @@ jobs:
             bash trusted_setup_s3.sh
           fi
           OUTPUT_PATH="metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin tiny_e2e --release --features $FEATURE_FLAGS
-          python ../sdk/scripts/metric_unify/main.py metrics.json > ../benchmark/tmp/_result.md
+          python3 ../sdk/scripts/metric_unify/main.py metrics.json > ../benchmark/tmp/_result.md
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'small_e2e'
@@ -117,8 +117,8 @@ jobs:
             FEATURE_FLAGS="$FEATURE_FLAGS,static-verifier"
             bash trusted_setup_s3.sh
           fi
-          OUTPUT_PATH="metrics.json"" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin small_e2e --release --features $FEATURE_FLAGS
-          python ../sdk/scripts/metric_unify/main.py metrics.json > ../benchmark/tmp/_result.md
+          OUTPUT_PATH="metrics.json" RUSTFLAGS="-Ctarget-cpu=native" cargo run --bin small_e2e --release --features $FEATURE_FLAGS
+          python3 ../sdk/scripts/metric_unify/main.py metrics.json > ../benchmark/tmp/_result.md
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'single_rw'

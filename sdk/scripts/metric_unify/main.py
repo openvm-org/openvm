@@ -1,8 +1,7 @@
 import json
-
-import yaml
-import sys
 import argparse
+# import yaml
+# import sys
 
 # labels is a list of (key, value) strings
 def labels_to_tuple(labels):
