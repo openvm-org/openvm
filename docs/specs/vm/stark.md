@@ -20,7 +20,7 @@ The following must exist in any VM circuit:
 - An execution bus
 - A memory bus
 
-Notably, there is no CPU chip where the full transcript of executed instructions is materialized in a single trace matrix (the execution flow is managed by the core chip instead). The transcript of memory accesses is also not materialized in a single trace matrix. We discuss reasons for these choices below.
+Notably, there is no CPU chip where the full transcript of executed instructions is materialized in a single trace matrix. The transcript of memory accesses is also not materialized in a single trace matrix. We discuss reasons for these choices below.
 
 ### Program Chip
 
@@ -39,7 +39,7 @@ The chip receives `(pc, instruction)` on the PROGRAM_BUS to ensure it is reading
 There is a maximum length to `operands` defined by the PROGRAM_BUS, but each chip can receive only a subset of the operands (setting the rest to zero) without paying the cost for the unused operands.
 
 Each chip receives `(timestamp, pc)` on EXECUTION_BUS and "after"
-executing an instruction, sends `(new_timestamp, new_pc)` on the same bus.
+executing an instruction, sends `(new_timestamp, new_pc)` on the same bus (here `new_pc` is `pc + 1` most of the time, but not always).
 The chip is in charge of constraining that `new_timestamp` is consistent with `timestamp`. In particular, `new_timestamp` must be (almost always strictly) greater than `timestamp`, but not by a lot (so that the timestamps do not overflow the field characteristic).
 The bus enforces that each timestamp transition corresponds to a particular instruction being executed.
 
@@ -47,9 +47,9 @@ There is an `ExecutionBridge` for more convenient communicating with these two b
 
 The chip must constrain that `opcode` is one of the opcodes the chip itself owns. The chip then constrains the rest of the validity of the opcode execution, according to the opcode spec.
 
-There is also another very simple "connector" chip with a 2 row trace that sends out (1, 0) on EXECUTION_BUS and receives `(final_timestamp, final_pc)` on EXECUTION_BUS. With continuations, the start and end timestamp/pc will need to be constrained with respect to the pre/post-states.
+There is also another very simple "connector" chip with a 2 row trace that sends out `(1, 0)` on EXECUTION_BUS and receives `(final_timestamp, final_pc)` on EXECUTION_BUS. These four values are public values of the program. With continuations, the start and end timestamp/pc will need to be constrained with respect to the pre/post-states.
 
-The vm design is so that the core chip is just one of such chips. Unlike others, it can set `new_pc` to something except `pc + 1`. The instructions directed at managing the execution flow are passed to the core chip. Such design is modular enough in the sense that it allows us to treat the control flow instructions similarly to most of the other opcodes. Also, instead of having the execution protocol in a single matrix and duplicate the instructions with the chips that actually execute them, we have each step of execution only generating one new line in the machine chip (and maybe more lines in other primitive chips that it uses for execution).
+The vm design is so that the core chip is just one of such chips. The instructions directed at managing the execution flow are passed to the core chip. Such design is modular enough in the sense that it allows us to treat the control flow instructions similarly to most of the other opcodes. Also, instead of having the execution protocol in a single matrix and duplicate the instructions with the chips that actually execute them, we have each step of execution only generating one new line in the machine chip (and maybe more lines in other primitive chips that it uses for execution).
 
 See [internal doc](https://docs.google.com/document/d/1-UkvxiW5tvYH5qw7O4t2WjMIY8v2Gso9kt_MrWW5hPg/edit?usp=sharing) for discussion of alternatives and the trace cell cost analysis.
 
