@@ -72,7 +72,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubAir<NUM_LIMBS,
                     io.x.data.address_space,
                 ],
                 io.from_state,
-                timestamp_delta,
+                AB::F::from_canonical_usize(timestamp_delta),
             )
             .eval(builder, aux.is_valid);
     }

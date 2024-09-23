@@ -13,6 +13,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
+        bridge::ExecutionBridge,
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
@@ -96,8 +97,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         );
         Self {
             air: ModularAddSubAir {
-                execution_bus,
-                program_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 subair,
             },

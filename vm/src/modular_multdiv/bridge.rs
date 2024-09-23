@@ -20,21 +20,6 @@ impl<const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
             timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
         };
 
-        // Interaction with program
-        self.program_bus.send_instruction(
-            builder,
-            io.from_state.pc,
-            expected_opcode,
-            [
-                io.z.address.address,
-                io.x.address.address,
-                io.y.address.address,
-                io.x.address.address_space,
-                io.x.data.address_space,
-            ],
-            aux.is_valid,
-        );
-
         self.memory_bridge
             .read_from_cols(
                 io.x.address.clone(),
@@ -75,11 +60,19 @@ impl<const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
             )
             .eval(builder, aux.is_valid);
 
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.is_valid,
-            io.from_state.map(Into::into),
-            AB::F::from_canonical_usize(timestamp_delta),
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                expected_opcode,
+                [
+                    io.z.address.address,
+                    io.x.address.address,
+                    io.y.address.address,
+                    io.x.address.address_space,
+                    io.x.data.address_space,
+                ],
+                io.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, aux.is_valid);
     }
 }

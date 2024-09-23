@@ -12,15 +12,13 @@ use p3_matrix::Matrix;
 
 use super::columns::ModularAddSubCols;
 use crate::{
-    arch::{bus::ExecutionBus, instructions::Opcode},
+    arch::{bridge::ExecutionBridge, instructions::Opcode},
     memory::offline_checker::MemoryBridge,
-    program::bridge::ProgramBus,
 };
 
 #[derive(Debug, Clone)]
 pub struct ModularAddSubAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
-    pub(super) execution_bus: ExecutionBus,
-    pub(super) program_bus: ProgramBus,
+    pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub(super) subair: CheckCarryModToZeroSubAir,
 }
@@ -42,7 +40,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air
         let local = main.row_slice(0);
         let ModularAddSubCols::<AB::Var, NUM_LIMBS> { io, aux } = (*local).borrow();
 
-        // we assume aux.is_sub is represented aaux.is_valid - aux.is_add
+        // we assume aux.is_sub is represented aux.is_valid - aux.is_add
         builder.assert_bool(aux.is_add);
         builder.assert_bool(aux.is_valid - aux.is_add);
         let expected_opcode = if self.subair.modulus_limbs
@@ -67,7 +65,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air
             io.y.data.data.to_vec(),
             LIMB_SIZE,
         );
-        let r_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
+        let z_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
             io.z.data.data.to_vec(),
             LIMB_SIZE,
         );
@@ -83,7 +81,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air
         // for addition we get y_overflow = y_cond_overflow - y_overflow
         // for subtraction we get -y_overflow = y_cond_overflow - y_overflow
         // Thus, the value of expr will be correct
-        let expr = x_overflow - y_overflow + y_cond_overflow - r_overflow;
+        let expr = x_overflow - y_overflow + y_cond_overflow - z_overflow;
 
         self.subair.constrain_carry_mod_to_zero(
             builder,

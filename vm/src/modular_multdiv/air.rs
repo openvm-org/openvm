@@ -12,9 +12,8 @@ use p3_matrix::Matrix;
 
 use super::columns::ModularMultDivCols;
 use crate::{
-    arch::{bus::ExecutionBus, instructions::Opcode},
+    arch::{bridge::ExecutionBridge, instructions::Opcode},
     memory::offline_checker::MemoryBridge,
-    program::bridge::ProgramBus,
 };
 
 #[derive(Debug, Clone)]
@@ -23,8 +22,7 @@ pub struct ModularMultDivAir<
     const NUM_LIMBS: usize,
     const LIMB_SIZE: usize,
 > {
-    pub(super) execution_bus: ExecutionBus,
-    pub(super) program_bus: ProgramBus,
+    pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub(super) subair: CheckCarryModToZeroSubAir,
 }
@@ -67,26 +65,26 @@ impl<
                         - AB::Expr::from_canonical_u8(Opcode::SECP256K1_SCALAR_DIV as u8))
         };
 
-        // We want expr = x * y - r if the operation is mult,
-        //     and expr = y * r - x if the operation is div
+        // We want expr = x * y - z if the operation is mult,
+        //     and expr = y * z - x if the operation is div
         let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
             io.y.data.data.to_vec(),
             LIMB_SIZE,
         );
-        let conditional_1 = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(
+        let x_or_z = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(
             zip(io.x.data.data, io.z.data.data)
                 .map(|(x, z)| x * aux.is_mult + z * (aux.is_valid - aux.is_mult))
                 .collect(),
             LIMB_SIZE,
         );
-        let conditional_2 = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(
+        let z_or_x = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(
             zip(io.x.data.data, io.z.data.data)
                 .map(|(x, z)| z * aux.is_mult + x * (aux.is_valid - aux.is_mult))
                 .collect(),
             LIMB_SIZE,
         );
 
-        let expr = conditional_1 * y_overflow - conditional_2;
+        let expr = x_or_z * y_overflow - z_or_x;
 
         self.subair.constrain_carry_mod_to_zero(
             builder,
