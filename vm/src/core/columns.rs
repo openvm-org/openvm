@@ -90,7 +90,6 @@ impl<T: Field> CoreIoCols<T> {
 pub struct CoreMemoryAccessCols<T> {
     pub address_space: T,
     pub pointer: T,
-    pub timestamp: T,
     pub enabled: T,
     pub value: T,
 }
@@ -100,7 +99,6 @@ impl<F: Field> CoreMemoryAccessCols<F> {
         CoreMemoryAccessCols {
             address_space: F::one(),
             pointer: F::zero(),
-            timestamp: F::zero(),
             enabled: F::zero(),
             value: F::zero(),
         }
@@ -110,7 +108,6 @@ impl<F: Field> CoreMemoryAccessCols<F> {
         CoreMemoryAccessCols {
             address_space: read.address_space,
             pointer: read.pointer,
-            timestamp: read.timestamp,
             enabled: F::one(),
             value: read.value(),
         }
@@ -120,7 +117,6 @@ impl<F: Field> CoreMemoryAccessCols<F> {
         CoreMemoryAccessCols {
             address_space: write.address_space,
             pointer: write.pointer,
-            timestamp: write.timestamp,
             enabled: F::one(),
             value: write.value(),
         }
@@ -132,26 +128,19 @@ impl<T: Clone> CoreMemoryAccessCols<T> {
         Self {
             address_space: slc[0].clone(),
             pointer: slc[1].clone(),
-            timestamp: slc[2].clone(),
-            enabled: slc[3].clone(),
-            value: slc[4].clone(),
+            enabled: slc[2].clone(),
+            value: slc[3].clone(),
         }
     }
 }
 
 impl<T> CoreMemoryAccessCols<T> {
     pub fn flatten(self) -> Vec<T> {
-        vec![
-            self.address_space,
-            self.pointer,
-            self.timestamp,
-            self.enabled,
-            self.value,
-        ]
+        vec![self.address_space, self.pointer, self.enabled, self.value]
     }
 
     pub fn width() -> usize {
-        5
+        4
     }
 }
 

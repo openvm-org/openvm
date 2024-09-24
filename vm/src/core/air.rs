@@ -49,7 +49,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let CoreCols { io, aux } = local_cols;
 
         let CoreIoCols {
-            timestamp: _timestamp,
+            timestamp,
             pc,
             opcode,
             op_a: a,
@@ -304,9 +304,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         when_publish.assert_eq(read2.address_space, e);
         when_publish.assert_eq(read2.pointer, b);
 
-        // FIXME[zach]: Properly constrain op.enabled based on opcode.
-
-        let mut op_timestamp: AB::Expr = io.timestamp.into();
+        let mut op_timestamp: AB::Expr = timestamp.into();
         for (read, read_aux_cols) in zip(&reads, reads_aux_cols) {
             self.memory_bridge
                 .read_or_immediate(
