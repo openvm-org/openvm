@@ -93,6 +93,7 @@ jobs:
         run: |
           BIN_NAME="verify_fibair"
           python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'halo2_static_verify_fibair'
@@ -110,6 +111,7 @@ jobs:
         run: |
           BIN_NAME="tiny_e2e"
           python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'small_e2e'
@@ -117,6 +119,7 @@ jobs:
         run: |
           BIN_NAME="small_e2e"
           python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'single_rw'
@@ -131,11 +134,11 @@ jobs:
       - name: Store metric json and compute diff with previous
         run: |
           METRIC_PATH=".bench_metrics/${BIN_NAME}.json"
+          echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
 
           current_sha=$(git rev-parse HEAD)
           echo "Current SHA: $current_sha"
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
-          commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
 
           if [[ -f $METRIC_PATH ]]; then
             s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.json
@@ -158,6 +161,7 @@ jobs:
 
       - name: Add benchmark metadata
         run: |
+          commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
           echo "Commit: ${commit_url}" >> $RESULT_PATH
