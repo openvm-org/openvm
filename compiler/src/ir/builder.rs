@@ -106,7 +106,9 @@ pub struct BuilderFlags {
 /// Can compile to both assembly and a set of constraints.
 #[derive(Debug, Clone, Default)]
 pub struct Builder<C: Config> {
-    pub(crate) stack_ptr: u32,
+    pub(crate) var_count: u32,
+    pub(crate) felt_count: u32,
+    pub(crate) ext_count: u32,
     pub operations: TracedVec<DslIr<C>>,
     pub(crate) nb_public_values: Option<Var<C::N>>,
     pub(crate) witness_var_count: u32,
@@ -120,13 +122,17 @@ pub struct Builder<C: Config> {
 impl<C: Config> Builder<C> {
     /// Creates a new builder with a given number of counts for each type.
     pub fn new_sub_builder(
-        stack_ptr: u32,
+        var_count: u32,
+        felt_count: u32,
+        ext_count: u32,
         nb_public_values: Option<Var<C::N>>,
         flags: BuilderFlags,
         bigint_repr_size: u32,
     ) -> Self {
         Self {
-            stack_ptr,
+            var_count,
+            felt_count,
+            ext_count,
             // Witness counts are only used when the target is a gnark circuit.  And sub-builders are
             // not used when the target is a gnark circuit, so it's fine to set the witness counts to 0.
             witness_var_count: 0,
@@ -346,7 +352,9 @@ impl<C: Config> Builder<C> {
     /// Evaluate a block of operations repeatedly (until a break).
     pub fn do_loop(&mut self, mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>) {
         let mut loop_body_builder = Builder::<C>::new_sub_builder(
-            self.stack_ptr,
+            self.var_count,
+            self.felt_count,
+            self.ext_count,
             self.nb_public_values,
             self.flags,
             self.bigint_repr_size,
@@ -637,7 +645,9 @@ impl<'a, C: Config> IfBuilder<'a, C> {
 
         // Execute the `then` block and collect the instructions.
         let mut f_builder = Builder::<C>::new_sub_builder(
-            self.builder.stack_ptr,
+            self.builder.var_count,
+            self.builder.felt_count,
+            self.builder.ext_count,
             self.builder.nb_public_values,
             self.builder.flags,
             self.builder.bigint_repr_size,
@@ -714,7 +724,9 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             "Cannot use dynamic branch in static mode"
         );
         let mut then_builder = Builder::<C>::new_sub_builder(
-            self.builder.stack_ptr,
+            self.builder.var_count,
+            self.builder.felt_count,
+            self.builder.ext_count,
             self.builder.nb_public_values,
             self.builder.flags,
             self.builder.bigint_repr_size,
@@ -725,7 +737,9 @@ impl<'a, C: Config> IfBuilder<'a, C> {
         let then_instructions = then_builder.operations;
 
         let mut else_builder = Builder::<C>::new_sub_builder(
-            self.builder.stack_ptr,
+            self.builder.var_count,
+            self.builder.felt_count,
+            self.builder.ext_count,
             self.builder.nb_public_values,
             self.builder.flags,
             self.builder.bigint_repr_size,
@@ -897,7 +911,9 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
         let step_size = C::N::from_canonical_usize(self.step_size);
         let loop_variable: Var<C::N> = self.builder.uninit();
         let mut loop_body_builder = Builder::<C>::new_sub_builder(
-            self.builder.stack_ptr,
+            self.builder.var_count,
+            self.builder.felt_count,
+            self.builder.ext_count,
             self.builder.nb_public_values,
             self.builder.flags,
             self.builder.bigint_repr_size,
