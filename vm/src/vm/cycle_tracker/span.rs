@@ -8,6 +8,8 @@ use crate::vm::metrics::VmMetrics;
 pub struct CycleTrackerSpan<M: CanDiff> {
     pub is_active: bool,
     pub metrics: M,
+    /// The name of the parent span, if any
+    pub parent: Option<String>,
 }
 
 pub trait CanDiff {
@@ -15,10 +17,11 @@ pub trait CanDiff {
 }
 
 impl<M: CanDiff> CycleTrackerSpan<M> {
-    pub fn start(metrics: M) -> Self {
+    pub fn start(metrics: M, parent: Option<String>) -> Self {
         Self {
             is_active: true,
             metrics,
+            parent,
         }
     }
 

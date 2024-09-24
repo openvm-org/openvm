@@ -16,6 +16,8 @@ pub struct CycleTracker<M: CanDiff> {
     pub instances: BTreeMap<String, Vec<CycleTrackerSpan<M>>>,
     pub order: Vec<String>,
     pub num_active_instances: usize,
+    /// Stack of span names, with most recent at the end
+    pub stack: Vec<String>,
 }
 
 impl<M: CanDiff> CycleTracker<M> {
@@ -24,13 +26,15 @@ impl<M: CanDiff> CycleTracker<M> {
             instances: BTreeMap::new(),
             order: vec![],
             num_active_instances: 0,
+            stack: vec![],
         }
     }
 
     /// Starts a new cycle tracker span for the given name.
     /// If a span already exists for the given name, it ends the existing span and pushes a new one to the vec.
     pub fn start(&mut self, name: String, metrics: M) {
-        let cycle_tracker_span = CycleTrackerSpan::start(metrics);
+        let parent = self.stack.last().cloned();
+        let cycle_tracker_span = CycleTrackerSpan::start(metrics, parent);
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
@@ -43,16 +47,23 @@ impl<M: CanDiff> CycleTracker<M> {
             Entry::Vacant(_) => {
                 self.instances
                     .insert(name.clone(), vec![cycle_tracker_span]);
-                self.order.push(name);
+                self.order.push(name.clone());
             }
         }
 
         self.num_active_instances += 1;
+        self.stack.push(name);
     }
 
     /// Ends the cycle tracker span for the given name.
     /// If no span exists for the given name, it panics.
     pub fn end(&mut self, name: String, metrics: M) {
+        let stack_top = self.stack.pop();
+        assert_eq!(
+            stack_top.as_ref(),
+            Some(&name),
+            "Stack top does not match name"
+        );
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
