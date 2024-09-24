@@ -6,7 +6,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
+        instructions::{Opcode, OpcodeEncoder, FIELD_ARITHMETIC_INSTRUCTIONS},
     },
     field_arithmetic::columns::Operand,
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -53,6 +53,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             air: FieldArithmeticAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                opcode_encoder: OpcodeEncoder::new(FIELD_ARITHMETIC_INSTRUCTIONS),
             },
             records: vec![],
             memory_chip,

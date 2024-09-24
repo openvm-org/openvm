@@ -19,10 +19,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             io: Default::default(),
             aux: FieldArithmeticAuxCols {
                 is_valid: F::zero(),
-                is_add: F::zero(),
-                is_sub: F::zero(),
-                is_mul: F::zero(),
-                is_div: F::zero(),
+                flags: [F::zero(); 2],
                 divisor_inv: F::zero(),
                 read_x_aux_cols: MemoryReadOrImmediateAuxCols::disabled(),
                 read_y_aux_cols: MemoryReadOrImmediateAuxCols::disabled(),
@@ -44,10 +41,16 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
         let y = y_read.value();
         let z = z_write.value();
 
-        let is_add = F::from_bool(opcode == Opcode::FADD);
-        let is_sub = F::from_bool(opcode == Opcode::FSUB);
-        let is_div = F::from_bool(opcode == Opcode::FDIV);
-        let is_mul = F::from_bool(opcode == Opcode::FMUL);
+        let flags: [F; 2] = self
+            .air
+            .clone()
+            .opcode_encoder
+            .encode(opcode)
+            .iter()
+            .map(|&x| F::from_canonical_usize(x))
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
         let divisor_inv = if opcode == Opcode::FDIV {
             y.inverse()
         } else {
@@ -65,10 +68,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             },
             aux: FieldArithmeticAuxCols {
                 is_valid: F::one(),
-                is_add,
-                is_sub,
-                is_mul,
-                is_div,
+                flags,
                 divisor_inv,
                 read_x_aux_cols: aux_cols_factory.make_read_or_immediate_aux_cols(x_read),
                 read_y_aux_cols: aux_cols_factory.make_read_or_immediate_aux_cols(y_read),
@@ -103,7 +103,7 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air)
+        Box::new(self.air.clone())
     }
 
     fn current_trace_height(&self) -> usize {

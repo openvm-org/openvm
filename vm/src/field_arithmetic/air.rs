@@ -9,15 +9,16 @@ use super::columns::FieldArithmeticCols;
 use crate::{
     arch::{
         bridge::ExecutionBridge,
-        instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
+        instructions::{Opcode, OpcodeEncoder, FIELD_ARITHMETIC_INSTRUCTIONS},
     },
     memory::offline_checker::MemoryBridge,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct FieldArithmeticAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
+    pub(super) opcode_encoder: OpcodeEncoder<2>,
 }
 
 impl FieldArithmeticAir {
@@ -46,9 +47,10 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         let y = io.y.value;
         let z = io.z.value;
 
-        let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_div];
-        let opcodes = [FADD, FSUB, FMUL, FDIV];
+        let flags = aux.flags;
         let results = [x + y, x - y, x * y, x * aux.divisor_inv];
+
+        self.opcode_encoder.initialize(builder, flags);
 
         // Imposing the following constraints:
         // - Each flag in `flags` is a boolean.
@@ -57,21 +59,22 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         // - The inner product of the `flags` and `results` equals `io.z`.
         // - If `is_div` is true, then `aux.divisor_inv` correctly represents the multiplicative inverse of `io.y`.
 
-        let mut flag_sum = AB::Expr::zero();
         let mut expected_opcode = AB::Expr::zero();
         let mut expected_result = AB::Expr::zero();
-        for (flag, opcode, result) in izip!(flags, opcodes, results) {
-            builder.assert_bool(flag);
+        for (opcode, result) in izip!(FIELD_ARITHMETIC_INSTRUCTIONS, results) {
+            let flag = self.opcode_encoder.expression_for::<AB>(opcode, flags);
 
-            flag_sum += flag.into();
-            expected_opcode += flag * AB::Expr::from_canonical_u32(opcode as u32);
+            expected_opcode += flag.clone() * AB::Expr::from_canonical_u32(opcode as u32);
             expected_result += flag * result;
         }
-        builder.assert_eq(flag_sum, aux.is_valid);
         builder.assert_eq(z, expected_result);
         builder.assert_bool(aux.is_valid);
 
-        builder.assert_eq(aux.is_div, y * aux.divisor_inv);
+        builder.assert_eq(
+            self.opcode_encoder
+                .expression_for::<AB>(Opcode::FDIV, flags),
+            y * aux.divisor_inv,
+        );
 
         self.eval_interactions(builder, io, aux, expected_opcode);
     }

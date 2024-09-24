@@ -133,7 +133,7 @@ fn field_arithmetic_air_zero_div_zero() {
         Instruction::from_usize(FDIV, [0, 0, 1, 1, 1, 1]),
     );
 
-    let air = field_arithmetic_chip.air;
+    let air = field_arithmetic_chip.air.clone();
     let trace = field_arithmetic_chip.generate_trace();
     let row = trace.row_slice(0).to_vec();
     let mut cols = FieldArithmeticCols::from_iter(&mut row.into_iter());

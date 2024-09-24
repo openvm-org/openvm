@@ -1,4 +1,4 @@
-use std::{iter, mem::size_of};
+use std::{array, iter, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use derive_new::new;
@@ -36,10 +36,7 @@ pub struct FieldArithmeticIoCols<T> {
 pub struct FieldArithmeticAuxCols<T> {
     pub is_valid: T,
 
-    pub is_add: T,
-    pub is_sub: T,
-    pub is_mul: T,
-    pub is_div: T,
+    pub flags: [T; 2],
     /// `divisor_inv` is y.inverse() when opcode is FDIV and zero otherwise.
     pub divisor_inv: T,
 
@@ -95,7 +92,7 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
 
 impl<T: Clone> FieldArithmeticAuxCols<T> {
     pub const fn get_width() -> usize {
-        6 + (2 * MemoryReadOrImmediateAuxCols::<T>::width() + MemoryWriteAuxCols::<T, 1>::width())
+        4 + (2 * MemoryReadOrImmediateAuxCols::<T>::width() + MemoryWriteAuxCols::<T, 1>::width())
     }
 
     #[allow(clippy::should_implement_trait)]
@@ -103,10 +100,7 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
         let mut next = || iter.next().unwrap();
         Self {
             is_valid: next(),
-            is_add: next(),
-            is_sub: next(),
-            is_mul: next(),
-            is_div: next(),
+            flags: array::from_fn(|_| next()),
             divisor_inv: next(),
             read_x_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter),
             read_y_aux_cols: MemoryReadOrImmediateAuxCols::from_iterator(iter),
@@ -115,14 +109,12 @@ impl<T: Clone> FieldArithmeticAuxCols<T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut result = vec![
-            self.is_valid.clone(),
-            self.is_add.clone(),
-            self.is_sub.clone(),
-            self.is_mul.clone(),
-            self.is_div.clone(),
-            self.divisor_inv.clone(),
-        ];
+        let mut result = [
+            vec![self.is_valid.clone()],
+            self.flags.to_vec(),
+            vec![self.divisor_inv.clone()],
+        ]
+        .concat();
         result.extend(self.read_x_aux_cols.clone().flatten());
         result.extend(self.read_y_aux_cols.clone().flatten());
         result.extend(self.write_z_aux_cols.clone().flatten());
