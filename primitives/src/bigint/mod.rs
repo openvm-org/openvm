@@ -95,6 +95,14 @@ impl<T> OverflowInt<T> {
             limb_max_abs: (1 << limb_bits) - 1,
         }
     }
+
+    pub fn from_vec(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
+        OverflowInt {
+            limbs: x,
+            max_overflow_bits: limb_bits,
+            limb_max_abs: (1 << limb_bits) - 1,
+        }
+    }
 }
 
 impl OverflowInt<isize> {
