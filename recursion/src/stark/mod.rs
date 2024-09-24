@@ -157,6 +157,13 @@ where
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
 
+        let air_perm_by_height = if builder.flags.static_only {
+            let perm = (0..num_airs).map(|i| builder.eval(RVar::from(i))).collect();
+            &builder.vec(perm)
+        } else {
+            air_perm_by_height
+        };
+
         for k in 0..num_airs {
             let pvs = builder.get(public_values, k);
             for j in 0..vk.per_air[k].num_public_values {
