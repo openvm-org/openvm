@@ -130,7 +130,7 @@ jobs:
       ######################################################
       - name: Store metric json and compute diff with previous
         run: |
-          METRIC_PATH=".bench-metrics/${BIN_NAME}.json"
+          METRIC_PATH=".bench_metrics/${BIN_NAME}.json"
 
           current_sha=$(git rev-parse HEAD)
           echo "Current SHA: $current_sha"
@@ -151,7 +151,7 @@ jobs:
               python3 sdk/scripts/metric_unify/main.py $METRIC_PATH > results.md
             fi
           else
-            echo "No benchmark metrics found"
+            echo "No benchmark metrics found at ${METRIC_PATH}"
             # Old fallback until we switch all benchmarks to new metrics format:
             cp benchmark/tmp/_result.md results.md
           fi
