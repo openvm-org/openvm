@@ -437,11 +437,8 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         Val<SC>: PrimeField,
     {
         let verifier = engine.verifier();
-
-        let pis = vec![vec![]; vk.per_air.len()];
-
         let mut challenger = engine.new_challenger();
-        verifier.verify(&mut challenger, &vk, &proof, &pis)
+        verifier.verify(&mut challenger, &vk, &proof)
     }
 
     pub fn traces(&self) -> Option<&IJTraces<Val<SC>>> {

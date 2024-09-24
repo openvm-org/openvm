@@ -409,11 +409,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         Val<SC>: PrimeField,
     {
         let verifier = engine.verifier();
-
-        let pis = vec![vec![]; vk.per_air.len()];
-
         let mut challenger = engine.new_challenger();
-        verifier.verify(&mut challenger, &vk, &proof, &pis)
+        verifier.verify(&mut challenger, &vk, &proof)
     }
 
     fn gen_page_trace(&self, page: &Page) -> DenseMatrix<Val<SC>>

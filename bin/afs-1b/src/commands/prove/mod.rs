@@ -295,7 +295,7 @@ impl ProveCommand {
             read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
         let pk: MultiStarkProvingKey<SC> = bincode::deserialize(&encoded_pk).unwrap();
         let ops_sender_trace = ops_sender.generate_trace(&zk_ops, config.page.max_rw_ops);
-        let (proof, pis) = page_controller.prove(
+        let proof = page_controller.prove(
             engine,
             &pk,
             &mut trace_builder,
@@ -305,10 +305,7 @@ impl ProveCommand {
         );
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
         let proof_path = db_folder.clone() + "/" + &table_id + ".prove.bin";
-        let encoded_pis: Vec<u8> = bincode::serialize(&pis).unwrap();
-        let pis_path = db_folder.clone() + "/" + &table_id + ".pi.bin";
-        write_bytes(&encoded_proof, proof_path).unwrap();
-        write_bytes(&encoded_pis, pis_path).unwrap();
+        write_bytes(&encoded_proof, proof_path)?;
         Ok(())
     }
 }

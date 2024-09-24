@@ -37,7 +37,6 @@ pub mod inner {
     use crate::hints::Hintable;
 
     pub fn build_verification_program(
-        pvs: Vec<Vec<InnerVal>>,
         vparams: VerificationDataWithFriParams<InnerSC>,
         compiler_options: CompilerOptions,
     ) -> (Program<BabyBear>, Vec<Vec<InnerVal>>) {
@@ -59,7 +58,6 @@ pub mod inner {
         let input = VerifierInput {
             proof,
             log_degree_per_air,
-            public_values: pvs.clone(),
         };
 
         let mut input_stream = Vec::new();
@@ -93,7 +91,6 @@ pub mod inner {
 
         recursive_stark_test(
             vparams,
-            pvs,
             CompilerOptions::default(),
             VmConfig::aggregation(7),
             BabyBearPoseidon2Engine::new(fri_params),
@@ -110,7 +107,6 @@ pub mod inner {
 #[allow(clippy::type_complexity)]
 pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>(
     vparams: VerificationDataWithFriParams<InnerSC>,
-    pvs: Vec<Vec<Val<InnerSC>>>,
     compiler_options: CompilerOptions,
     vm_config: VmConfig,
     engine: E,
@@ -124,7 +120,7 @@ where
     AggSC::Challenge: Send + Sync,
     PcsProof<AggSC>: Send + Sync,
 {
-    let (program, witness_stream) = build_verification_program(pvs, vparams, compiler_options);
+    let (program, witness_stream) = build_verification_program(vparams, compiler_options);
 
     execute_and_prove_program(program, witness_stream, vm_config, engine)
 }

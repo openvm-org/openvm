@@ -387,23 +387,13 @@ where
         engine: &impl StarkEngine<SC>,
         vk: MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
-        x: Vec<u32>,
     ) -> Result<(), VerificationError>
     where
         Val<SC>: PrimeField,
     {
         let verifier = engine.verifier();
-
-        let pis = vec![
-            x.iter()
-                .map(|x| Val::<SC>::from_canonical_u32(*x))
-                .collect(),
-            vec![],
-            vec![],
-        ];
-
         let mut challenger = engine.new_challenger();
-        verifier.verify(&mut challenger, &vk, proof, &pis)
+        verifier.verify(&mut challenger, &vk, proof)
     }
 
     #[allow(clippy::too_many_arguments)]

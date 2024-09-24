@@ -420,6 +420,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             commitments,
             opening,
             exposed_values_after_challenge,
+            public_values: public_values.to_vec(),
         }
     }
 }

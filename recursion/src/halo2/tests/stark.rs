@@ -48,7 +48,6 @@ fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig
     let input = VerifierInput {
         proof: vparams.data.proof,
         log_degree_per_air,
-        public_values: pvs.clone(),
     };
 
     let mut witness = Witness::default();

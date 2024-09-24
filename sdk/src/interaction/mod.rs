@@ -46,5 +46,5 @@ pub fn verify_interactions(
     // Start from clean challenger
     let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let verifier = MultiTraceStarkVerifier::new(prover.config);
-    verifier.verify(&mut challenger, &vk, &proof, &pis)
+    verifier.verify(&mut challenger, &vk, &proof)
 }

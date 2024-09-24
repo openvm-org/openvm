@@ -59,7 +59,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     // Start from clean challenger
     let mut challenger = engine.new_challenger();
     let verifier = MultiTraceStarkVerifier::new(prover.config);
-    verifier.verify(&mut challenger, &vk, &proof, &pis)
+    verifier.verify(&mut challenger, &vk, &proof)
 }
 
 #[test]

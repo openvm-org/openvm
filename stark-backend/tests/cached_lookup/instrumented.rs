@@ -9,7 +9,7 @@ use ax_sdk::{
     engine::StarkEngineWithHashInstrumentation,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,6 @@ fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumenta
     vk: MultiStarkVerifyingKey<SC>,
     air: DummyInteractionAir,
     proof: Proof<SC>,
-    pis: Vec<Vec<Val<SC>>>,
 ) -> StarkHashStatistics<BenchParams> {
     let degree = proof.degrees[0];
     let log_degree = log2_ceil_usize(degree);
@@ -37,9 +36,7 @@ fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumenta
     let mut challenger = engine.new_challenger();
     let verifier = engine.verifier();
     // Do not check cumulative sum
-    verifier
-        .verify_raps(&mut challenger, &vk, &proof, &pis)
-        .unwrap();
+    verifier.verify_raps(&mut challenger, &vk, &proof).unwrap();
 
     let bench_params = BenchParams {
         field_width: air.field_width(),
@@ -69,9 +66,9 @@ fn instrumented_prove_and_verify(
     let mut engine = engine_from_perm(instr_perm, pcs_log_degree, fri_params);
     engine.perm.is_on = false;
 
-    let (vk, air, proof, pis, _) = prove(&engine, trace, partition);
+    let (vk, air, proof, _) = prove(&engine, trace, partition);
     engine.perm.is_on = true;
-    instrumented_verify(&mut engine, vk, air, proof, pis)
+    instrumented_verify(&mut engine, vk, air, proof)
 }
 
 fn instrumented_verifier_comparison(

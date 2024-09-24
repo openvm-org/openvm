@@ -115,14 +115,11 @@ impl VerifyCommand {
         let vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
 
         let encoded_proof = read_from_path(proof_path).unwrap();
-        let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
-        let pis_path = db_folder.clone() + "/" + &table_id + ".pi.bin";
-        let encoded_pis = read_from_path(pis_path).unwrap();
-        let pis: Vec<Vec<Val<SC>>> = bincode::deserialize(&encoded_pis).unwrap();
+        let proof: Proof<SC> = bincode::deserialize(&encoded_proof)?;
 
         let page_controller: PageController<SC, BABYBEAR_COMMITMENT_LEN> =
             get_page_controller(config, idx_len, data_len);
-        let result = page_controller.verify(engine, &vk, &proof, &pis);
+        let result = page_controller.verify(engine, &vk, &proof);
         if result.is_err() {
             println!("Verification Unsuccessful");
         } else {

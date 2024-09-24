@@ -63,12 +63,12 @@ fn index_scan_test(
         trace_builder,
         input_prover_data,
         output_prover_data,
-        x.clone(),
+        x,
         idx_decomp,
     );
     let vk = pk.vk();
 
-    page_controller.verify(engine, vk, &proof, x.clone())
+    page_controller.verify(engine, vk, &proof)
 }
 
 #[test]

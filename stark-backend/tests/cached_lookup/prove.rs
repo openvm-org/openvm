@@ -34,7 +34,6 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     MultiStarkVerifyingKey<SC>,
     DummyInteractionAir,
     Proof<SC>,
-    Vec<Vec<Val<SC>>>,
     ProverBenchmarks,
 )
 where
@@ -124,7 +123,7 @@ where
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
     benchmarks.prove_time = start.elapsed().as_micros();
 
-    (vk, air, proof, pis, benchmarks)
+    (vk, air, proof, benchmarks)
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
@@ -191,9 +190,9 @@ fn compare_provers(
     let rng = StdRng::seed_from_u64(0);
     let trace = generate_random_trace(rng, field_width, 1 << log_degree);
     let engine = engine_from_perm(random_perm(), log_degree, fri_params);
-    let (_, _, _, _, without_ct) = prove(&engine, trace.clone(), false);
+    let (_, _, _, without_ct) = prove(&engine, trace.clone(), false);
 
-    let (_, _, _, _, with_ct) = prove(&engine, trace, true);
+    let (_, _, _, with_ct) = prove(&engine, trace, true);
 
     ProverStatistics {
         name: "Poseidon2Perm16".to_string(),

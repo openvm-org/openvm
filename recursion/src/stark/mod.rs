@@ -148,7 +148,6 @@ where
             // Extra checking for air_perm_by_height is unnecessary because only a valid permutation
             // can pass the FRI verification.
             air_perm_by_height,
-            public_values,
         } = input;
 
         let num_airs = vk.per_air.len();
@@ -165,7 +164,7 @@ where
         };
 
         for k in 0..num_airs {
-            let pvs = builder.get(public_values, k);
+            let pvs = builder.get(&proof.public_values, k);
             for j in 0..vk.per_air[k].num_public_values {
                 let element = builder.get(&pvs, j);
                 challenger.observe(builder, element);
@@ -186,6 +185,7 @@ where
             after_challenge: after_challenge_commits,
             quotient: quotient_commit,
         } = &proof.commitments;
+        let public_values = &proof.public_values;
 
         // Observe main trace commitments
         for i in 0..vk.num_main_trace_commitments {
@@ -823,13 +823,12 @@ where
         let VerifierInputVariable::<C> {
             proof,
             log_degree_per_air,
-            public_values,
             ..
         } = input;
 
         builder.assert_eq::<Usize<_>>(log_degree_per_air.len(), RVar::from(num_airs));
         // Challenger must observe public values
-        builder.assert_eq::<Usize<_>>(public_values.len(), RVar::from(num_airs));
+        builder.assert_eq::<Usize<_>>(proof.public_values.len(), RVar::from(num_airs));
 
         builder.assert_eq::<Usize<_>>(
             proof.commitments.main_trace.len(),
@@ -856,7 +855,7 @@ where
         builder.assert_eq::<Usize<_>>(proof.opening.values.quotient.len(), RVar::from(num_airs));
         let mut num_preprocessed = 0;
         vk.per_air.iter().enumerate().for_each(|(i, air_const)| {
-            let pvs = builder.get(public_values, i);
+            let pvs = builder.get(&proof.public_values, i);
             builder.assert_eq::<Usize<_>>(pvs.len(), RVar::from(air_const.num_public_values));
 
             if air_const.preprocessed_data.is_some() {

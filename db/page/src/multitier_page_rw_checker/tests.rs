@@ -241,7 +241,7 @@ fn load_page_test(
     page_controller.set_up_keygen_builder(&mut keygen_builder, ops_sender);
 
     let pk = keygen_builder.generate_pk();
-    let (proof, pis) = page_controller.prove(
+    let proof = page_controller.prove(
         engine,
         &pk,
         trace_builder,
@@ -249,7 +249,7 @@ fn load_page_test(
         ops_sender,
         ops_sender_trace,
     );
-    page_controller.verify(engine, &pk.vk(), &proof, &pis)
+    page_controller.verify(engine, &pk.vk(), &proof)
 }
 
 fn generate_no_new_keys(

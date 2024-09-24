@@ -43,7 +43,6 @@ pub fn run_static_verifier_test(
     let input = VerifierInput {
         proof: vparams.data.proof,
         log_degree_per_air,
-        public_values: pvs.clone(),
     };
 
     let info_span = tracing::info_span!(

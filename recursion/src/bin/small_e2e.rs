@@ -72,29 +72,24 @@ where
 
 fn main() {
     run_with_metric_collection("OUTPUT_PATH", || {
-        let (vdata, pvs) = info_span!("Bench Program Inner", group = "bench_program_inner")
-            .in_scope(|| {
+        let vdata =
+            info_span!("Bench Program Inner", group = "bench_program_inner").in_scope(|| {
                 let program_stark = bench_program_stark_for_test();
-                let pvs = program_stark.pvs.clone();
-                (
-                    program_stark
-                        .run_simple_test(&BabyBearPoseidon2Engine::new(FriParameters {
-                            log_blowup: 4,
-                            num_queries: 24,
-                            proof_of_work_bits: 16,
-                        }))
-                        .unwrap(),
-                    pvs,
-                )
+                program_stark
+                    .run_simple_test(&BabyBearPoseidon2Engine::new(FriParameters {
+                        log_blowup: 4,
+                        num_queries: 24,
+                        proof_of_work_bits: 16,
+                    }))
+                    .unwrap()
             });
 
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
         };
-        let (vdata, pvs) = info_span!("Inner Verifier", group = "inner_verifier").in_scope(|| {
-            let (program, witness_stream) =
-                build_verification_program(pvs, vdata, compiler_options);
+        let vdata = info_span!("Inner Verifier", group = "inner_verifier").in_scope(|| {
+            let (program, witness_stream) = build_verification_program(vdata, compiler_options);
             let inner_verifier_stf = gen_vm_program_stark_for_test(
                 program,
                 witness_stream,
@@ -103,26 +98,21 @@ fn main() {
                     ..Default::default()
                 },
             );
-            let pvs = inner_verifier_stf.pvs.clone();
-            (
-                inner_verifier_stf
-                    .run_simple_test(&BabyBearPoseidon2Engine::new(
-                        // log_blowup = 3 because of poseidon2 chip.
-                        FriParameters {
-                            log_blowup: 3,
-                            num_queries: 33,
-                            proof_of_work_bits: 16,
-                        },
-                    ))
-                    .unwrap(),
-                pvs,
-            )
+            inner_verifier_stf
+                .run_simple_test(&BabyBearPoseidon2Engine::new(
+                    // log_blowup = 3 because of poseidon2 chip.
+                    FriParameters {
+                        log_blowup: 3,
+                        num_queries: 33,
+                        proof_of_work_bits: 16,
+                    },
+                ))
+                .unwrap()
         });
 
         #[cfg(feature = "static-verifier")]
         info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
-            let (program, witness_stream) =
-                build_verification_program(pvs, vdata, compiler_options);
+            let (program, witness_stream) = build_verification_program(vdata, compiler_options);
             let outer_verifier_sft = gen_vm_program_stark_for_test(
                 program,
                 witness_stream,

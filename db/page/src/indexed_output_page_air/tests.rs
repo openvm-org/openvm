@@ -54,7 +54,7 @@ fn test_single_page(
     let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
-    verifier.verify(&mut challenger, &vk, &proof, &pis)
+    verifier.verify(&mut challenger, &vk, &proof)
 }
 
 #[test]

@@ -541,7 +541,7 @@ where
         prover_data: PageControllerProverData<SC>,
         ops_sender: &dyn AnyRap<SC>,
         ops_sender_trace: DenseMatrix<Val<SC>>,
-    ) -> (Proof<SC>, Vec<Vec<Val<SC>>>)
+    ) -> Proof<SC>
     where
         Val<SC>: PrimeField,
         Domain<SC>: Send + Sync,
@@ -664,10 +664,7 @@ where
         pis.push(vec![]);
         let prover = engine.prover();
         let mut challenger = engine.new_challenger();
-        (
-            prover.prove(&mut challenger, pk, main_trace_data, &pis),
-            pis,
-        )
+        prover.prove(&mut challenger, pk, main_trace_data, &pis)
     }
 
     /// This function takes a proof (returned by the prove function) and verifies it
@@ -676,7 +673,6 @@ where
         engine: &impl StarkEngine<SC>,
         vk: &MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
-        pis: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError>
     where
         Val<SC>: PrimeField,
@@ -684,7 +680,7 @@ where
         let verifier = engine.verifier();
 
         let mut challenger = engine.new_challenger();
-        verifier.verify(&mut challenger, vk, proof, pis)
+        verifier.verify(&mut challenger, vk, proof)
     }
 
     pub fn airs<'a>(&'a self, ops_sender: &'a dyn AnyRap<SC>) -> Vec<&'a dyn AnyRap<SC>> {

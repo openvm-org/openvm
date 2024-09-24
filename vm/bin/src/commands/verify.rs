@@ -88,7 +88,7 @@ impl VerifyCommand {
 
         let mut challenger = engine.new_challenger();
         let verifier = engine.verifier();
-        let result = verifier.verify(&mut challenger, &vk, &proof, &result.public_values);
+        let result = verifier.verify(&mut challenger, &vk, &proof);
 
         if result.is_err() {
             println!("Verification Unsuccessful");

@@ -134,16 +134,10 @@ where
         idx_len: usize,
         data_len: usize,
     ) -> Result<()> {
-        let (_, comp, right_value) = filter.decompose_binary_expr();
-        let right_value = match right_value {
-            AxdbExpr::Literal(lit) => lit,
-            _ => panic!("Only literal values are currently supported for filter"),
-        };
+        let (_, comp, _) = filter.decompose_binary_expr();
         let pk = PkUtil::<SC, E>::find_proving_key(node_name, idx_len, data_len);
         let page_controller = Self::page_controller(idx_len, data_len, comp);
-        page_controller
-            .verify(engine, pk.vk(), proof, vec![right_value])
-            .unwrap();
+        page_controller.verify(engine, pk.vk(), proof).unwrap();
         Ok(())
     }
 }

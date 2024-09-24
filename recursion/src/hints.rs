@@ -172,13 +172,10 @@ impl Hintable<InnerConfig> for VerifierInput<BabyBearPoseidon2Config> {
             unreachable!();
         };
 
-        let public_values = Vec::<Vec<InnerVal>>::read(builder);
-
         VerifierInputVariable {
             proof,
             log_degree_per_air,
             air_perm_by_height,
-            public_values,
         }
     }
 
@@ -192,7 +189,6 @@ impl Hintable<InnerConfig> for VerifierInput<BabyBearPoseidon2Config> {
         stream.extend(self.proof.write());
         stream.extend(self.log_degree_per_air.write());
         stream.extend(air_perm_by_height.write());
-        stream.extend(self.public_values.write());
 
         stream
     }
@@ -318,11 +314,13 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
         let commitments = Commitments::<BabyBearPoseidon2Config>::read(builder);
         let opening = OpeningProof::<BabyBearPoseidon2Config>::read(builder);
         let exposed_values_after_challenge = Vec::<Vec<Vec<InnerChallenge>>>::read(builder);
+        let public_values = Vec::<Vec<InnerVal>>::read(builder);
 
         StarkProofVariable {
             commitments,
             opening,
             exposed_values_after_challenge,
+            public_values,
         }
     }
 
@@ -332,6 +330,7 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
         stream.extend(self.commitments.write());
         stream.extend(self.opening.write());
         stream.extend(self.exposed_values_after_challenge.write());
+        stream.extend(self.public_values.write());
 
         stream
     }
