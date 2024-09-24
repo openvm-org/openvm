@@ -58,5 +58,4 @@ where
         traces: result.traces,
         pvs: result.public_values,
     }
-    .sort_by_height_desc()
 }

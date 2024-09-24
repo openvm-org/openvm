@@ -16,7 +16,7 @@ use stark_vm::{program::Program, vm::config::VmConfig};
 
 use crate::{
     hints::InnerVal,
-    stark::{sort_chips, VerifierProgram},
+    stark::VerifierProgram,
     types::{new_from_inner_multi_vk, VerifierInput},
 };
 
@@ -84,7 +84,6 @@ pub mod inner {
             pvs,
         } = stark_for_test;
         let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-        let (any_raps, traces, pvs) = sort_chips(any_raps, traces, pvs);
 
         let vparams =
             <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_simple_test(

@@ -16,6 +16,10 @@ pub fn build_circuit_verify_operations(
     fri_params: &FriParameters,
     input: &VerifierInput<BabyBearPoseidon2OuterConfig>,
 ) -> TracedVec<DslIr<OuterConfig>> {
+    assert!(
+        input.log_degree_per_air.windows(2).all(|w| w[0] >= w[1]),
+        "Static verifier requires log_degree_per_air to be sorted in descending order"
+    );
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;
 

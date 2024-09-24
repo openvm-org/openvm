@@ -144,11 +144,14 @@ impl Witnessable<OuterConfig> for VerifierInput<BabyBearPoseidon2OuterConfig> {
         let proof = self.proof.read(builder);
         // This reads nothing because it's a constant.
         let log_degree_per_air = self.log_degree_per_air.read(builder);
+        // This also reads nothing because log_degree_per_air is a constant.
+        let air_perm_by_height = builder.array(0);
         let public_values = self.public_values.read(builder);
 
         VerifierInputVariable {
             proof,
             log_degree_per_air,
+            air_perm_by_height,
             public_values,
         }
     }

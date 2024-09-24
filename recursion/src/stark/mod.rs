@@ -1,6 +1,6 @@
 pub mod outer;
 
-use std::{cmp::Reverse, marker::PhantomData};
+use std::marker::PhantomData;
 
 use afs_compiler::{
     conversion::CompilerOptions,
@@ -13,19 +13,13 @@ use afs_stark_backend::{
         verifier::GenericVerifierConstraintFolder,
     },
     prover::opener::AdjacentOpenedValues,
-    rap::AnyRap,
 };
 use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
-use itertools::{izip, multiunzip, Itertools};
+use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
-use p3_matrix::{
-    dense::{RowMajorMatrix, RowMajorMatrixView},
-    stack::VerticalPair,
-    Matrix,
-};
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
 use stark_vm::program::Program;
 
 use crate::{
@@ -151,6 +145,9 @@ where
         let VerifierInputVariable::<C> {
             proof,
             log_degree_per_air,
+            // Extra checking for air_perm_by_height is unnecessary because only a valid permutation
+            // can pass the FRI verification.
+            air_perm_by_height,
             public_values,
         } = input;
 
@@ -280,6 +277,9 @@ where
         let rounds = builder.array::<TwoAdicPcsRoundVariable<_>>(total_rounds);
         let mut round_idx = 0;
 
+        // For rounds which don't need permutation
+        let null_perm = builder.array(0);
+
         // 1. First the preprocessed trace openings: one round per AIR with preprocessing.
         let prep_idx: Usize<_> = builder.eval(C::N::zero());
         for i in 0..num_airs {
@@ -307,7 +307,11 @@ where
                 builder.set_value(
                     &rounds,
                     round_idx,
-                    TwoAdicPcsRoundVariable { batch_commit, mats },
+                    TwoAdicPcsRoundVariable {
+                        batch_commit,
+                        mats,
+                        permutation: null_perm.clone(),
+                    },
                 );
                 round_idx += 1;
             }
@@ -349,7 +353,11 @@ where
                 builder.set_value(
                     &rounds,
                     round_idx,
-                    TwoAdicPcsRoundVariable { batch_commit, mats },
+                    TwoAdicPcsRoundVariable {
+                        batch_commit,
+                        mats,
+                        permutation: air_perm_by_height.clone(),
+                    },
                 );
                 round_idx += 1;
             });
@@ -382,7 +390,11 @@ where
             builder.set_value(
                 &rounds,
                 round_idx,
-                TwoAdicPcsRoundVariable { batch_commit, mats },
+                TwoAdicPcsRoundVariable {
+                    batch_commit,
+                    mats,
+                    permutation: air_perm_by_height.clone(),
+                },
             );
             round_idx += 1;
         }
@@ -421,6 +433,7 @@ where
         let quotient_round = TwoAdicPcsRoundVariable {
             batch_commit: quotient_commit.clone(),
             mats: quotient_mats,
+            permutation: air_perm_by_height.clone(),
         };
         builder.set_value(&rounds, round_idx, quotient_round);
         round_idx += 1;
@@ -761,6 +774,7 @@ where
             proof,
             log_degree_per_air,
             public_values,
+            ..
         } = input;
 
         builder.assert_eq::<Usize<_>>(log_degree_per_air.len(), RVar::from(num_airs));
@@ -837,19 +851,4 @@ where
         );
         // FIXME: check if all necessary validation is covered.
     }
-}
-
-#[allow(clippy::type_complexity)]
-pub fn sort_chips<SC: StarkGenericConfig>(
-    chips: Vec<&dyn AnyRap<SC>>,
-    traces: Vec<RowMajorMatrix<Val<SC>>>,
-    pvs: Vec<Vec<Val<SC>>>,
-) -> (
-    Vec<&dyn AnyRap<SC>>,
-    Vec<RowMajorMatrix<Val<SC>>>,
-    Vec<Vec<Val<SC>>>,
-) {
-    let mut groups = izip!(chips, traces, pvs).collect_vec();
-    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
-    multiunzip(groups)
 }

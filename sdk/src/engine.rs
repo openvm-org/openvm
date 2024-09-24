@@ -1,4 +1,4 @@
-use std::{cmp::Reverse, rc::Rc};
+use std::rc::Rc;
 
 pub use afs_stark_backend::engine::StarkEngine;
 use afs_stark_backend::{
@@ -7,11 +7,7 @@ use afs_stark_backend::{
     rap::AnyRap,
     verifier::VerificationError,
 };
-use itertools::{izip, multiunzip, Itertools};
-use p3_matrix::{
-    dense::{DenseMatrix, RowMajorMatrix},
-    Matrix,
-};
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::config::{
@@ -39,16 +35,6 @@ pub struct StarkForTest<SC: StarkGenericConfig> {
 }
 
 impl<SC: StarkGenericConfig> StarkForTest<SC> {
-    pub fn sort_by_height_desc(self) -> Self {
-        let mut groups = izip!(self.any_raps, self.traces, self.pvs).collect_vec();
-        groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
-        let (any_raps, traces, pvs): (Vec<_>, _, _) = multiunzip(groups);
-        Self {
-            any_raps,
-            traces,
-            pvs,
-        }
-    }
     pub fn run_simple_test(
         self,
         engine: &impl StarkFriEngine<SC>,

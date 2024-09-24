@@ -10,10 +10,12 @@ use snark_verifier_sdk::Snark;
 
 use crate::{
     config::outer::new_from_outer_multi_vk,
-    halo2::verifier::{
-        gen_wrapper_circuit_evm_proof, generate_halo2_verifier_circuit, Halo2VerifierCircuit,
+    halo2::{
+        utils::sort_chips,
+        verifier::{
+            gen_wrapper_circuit_evm_proof, generate_halo2_verifier_circuit, Halo2VerifierCircuit,
+        },
     },
-    stark::sort_chips,
     types::VerifierInput,
 };
 

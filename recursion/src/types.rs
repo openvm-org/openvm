@@ -39,6 +39,8 @@ pub struct VerifierInput<SC: StarkGenericConfig> {
 pub struct VerifierInputVariable<C: Config> {
     pub proof: StarkProofVariable<C>,
     pub log_degree_per_air: Array<C, Usize<C::N>>,
+    /// A permutation of AIR indexes which are sorted by log_degree in descending order.
+    pub air_perm_by_height: Array<C, Usize<C::N>>,
     pub public_values: Array<C, Array<C, Felt<C::F>>>,
 }
 

@@ -1,3 +1,5 @@
+use std::cmp::Reverse;
+
 use afs_compiler::ir::{
     Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE, LIMB_SIZE,
     NUM_LIMBS,
@@ -14,6 +16,7 @@ use ax_ecc_lib::types::{
     ECPointVariable,
 };
 use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
@@ -152,6 +155,7 @@ impl Hintable<InnerConfig> for VerifierInput<BabyBearPoseidon2Config> {
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let proof = Proof::<BabyBearPoseidon2Config>::read(builder);
+
         let raw_log_degree_per_air = Vec::<usize>::read(builder);
         // A hacky way to cast ptr.
         let log_degree_per_air = if let Array::Dyn(ptr, len) = raw_log_degree_per_air {
@@ -159,20 +163,35 @@ impl Hintable<InnerConfig> for VerifierInput<BabyBearPoseidon2Config> {
         } else {
             unreachable!();
         };
+
+        let raw_air_perm_by_height = Vec::<usize>::read(builder);
+        // A hacky way to cast ptr.
+        let air_perm_by_height = if let Array::Dyn(ptr, len) = raw_air_perm_by_height {
+            Array::Dyn(ptr, len)
+        } else {
+            unreachable!();
+        };
+
         let public_values = Vec::<Vec<InnerVal>>::read(builder);
 
         VerifierInputVariable {
             proof,
             log_degree_per_air,
+            air_perm_by_height,
             public_values,
         }
     }
 
     fn write(&self) -> Vec<Vec<InnerVal>> {
         let mut stream = Vec::new();
+        // Explict enforce consistency when matrixs have the same height.
+        let air_perm_by_height: Vec<_> = (0..self.log_degree_per_air.len())
+            .sorted_by_key(|i| Reverse(self.log_degree_per_air[*i]))
+            .collect();
 
         stream.extend(self.proof.write());
         stream.extend(self.log_degree_per_air.write());
+        stream.extend(air_perm_by_height.write());
         stream.extend(self.public_values.write());
 
         stream

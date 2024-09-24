@@ -102,6 +102,37 @@ where
     }
 }
 
+pub fn unordered_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC>
+where
+    Val<SC>: PrimeField32,
+{
+    const BUS: usize = 0;
+    const SENDER_HEIGHT: usize = 2;
+    const RECEIVER_HEIGHT: usize = 4;
+    let sender_air = DummyInteractionAir::new(1, true, BUS);
+    let sender_trace = RowMajorMatrix::new(
+        to_field_vec([[2, 1]; SENDER_HEIGHT].into_iter().flatten().collect()),
+        sender_air.field_width() + 1,
+    );
+    let receiver_air = DummyInteractionAir::new(1, false, BUS);
+    let receiver_trace = RowMajorMatrix::new(
+        to_field_vec([[1, 1]; RECEIVER_HEIGHT].into_iter().flatten().collect()),
+        receiver_air.field_width() + 1,
+    );
+    let sender_air = Rc::new(sender_air);
+    let receiver_air = Rc::new(receiver_air);
+
+    let any_raps: Vec<Rc<dyn AnyRap<SC>>> = vec![sender_air, receiver_air];
+    let traces = vec![sender_trace, receiver_trace];
+    let pvs = vec![vec![]; 2];
+
+    StarkForTest {
+        any_raps,
+        traces,
+        pvs,
+    }
+}
+
 #[test]
 fn test_fibonacci() {
     setup_tracing();
@@ -123,6 +154,16 @@ fn test_interactions() {
 
     run_recursive_test(
         interaction_stark_for_test::<BabyBearPoseidon2Config>(),
+        default_fri_params(),
+    )
+}
+
+#[test]
+fn test_unordered() {
+    setup_tracing();
+
+    run_recursive_test(
+        unordered_stark_for_test::<BabyBearPoseidon2Config>(),
         default_fri_params(),
     )
 }
