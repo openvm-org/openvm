@@ -50,7 +50,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         let flags = aux.flags;
         let results = [x + y, x - y, x * y, x * aux.divisor_inv];
 
-        self.opcode_encoder.initialize(builder, flags);
+        let encoder = self.opcode_encoder.initialize(builder, flags);
 
         // Imposing the following constraints:
         // - Each flag in `flags` is a boolean.
@@ -62,7 +62,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         let mut expected_opcode = AB::Expr::zero();
         let mut expected_result = AB::Expr::zero();
         for (opcode, result) in izip!(FIELD_ARITHMETIC_INSTRUCTIONS, results) {
-            let flag = self.opcode_encoder.expression_for::<AB>(opcode, flags);
+            let flag = encoder.expression_for(opcode);
 
             expected_opcode += flag.clone() * AB::Expr::from_canonical_u32(opcode as u32);
             expected_result += flag * result;
@@ -70,11 +70,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         builder.assert_eq(z, expected_result);
         builder.assert_bool(aux.is_valid);
 
-        builder.assert_eq(
-            self.opcode_encoder
-                .expression_for::<AB>(Opcode::FDIV, flags),
-            y * aux.divisor_inv,
-        );
+        builder.assert_eq(encoder.expression_for(Opcode::FDIV), y * aux.divisor_inv);
 
         self.eval_interactions(builder, io, aux, expected_opcode);
     }

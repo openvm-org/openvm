@@ -140,6 +140,11 @@ pub struct OpcodeEncoder<const N: usize> {
     coords_map: BTreeMap<Opcode, [usize; N]>,
 }
 
+pub struct OpcodeEncoderWithBuilder<AB: InteractionBuilder, const N: usize> {
+    coords_map: BTreeMap<Opcode, [usize; N]>,
+    variables: [AB::Var; N],
+}
+
 impl<const N: usize> OpcodeEncoder<N> {
     pub fn new(opcodes: impl IntoIterator<Item = Opcode>) -> Self {
         let opcodes_with_nop = iter::once(NOP).chain(opcodes);
@@ -162,7 +167,11 @@ impl<const N: usize> OpcodeEncoder<N> {
         Self { coords_map }
     }
 
-    pub fn initialize<AB: InteractionBuilder>(&self, builder: &mut AB, variables: [AB::Var; N]) {
+    pub fn initialize<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        variables: [AB::Var; N],
+    ) -> OpcodeEncoderWithBuilder<AB, N> {
         for &v in variables.iter() {
             builder.assert_zero(v * (v - AB::Expr::one()) * (v - AB::Expr::two()));
         }
@@ -170,30 +179,39 @@ impl<const N: usize> OpcodeEncoder<N> {
         builder.assert_zero(
             sum.clone() * (sum.clone() - AB::Expr::one()) * (sum.clone() - AB::Expr::two()),
         );
+        OpcodeEncoderWithBuilder {
+            coords_map: self.coords_map.clone(),
+            variables,
+        }
     }
 
     pub fn encode(&self, opcode: Opcode) -> [usize; N] {
         *self.coords_map.get(&opcode).unwrap()
     }
+}
 
-    pub fn expression_for<AB: InteractionBuilder>(
-        &self,
-        opcode: Opcode,
-        variables: [AB::Var; N],
-    ) -> AB::Expr {
-        let coords = self.coords_map.get(&opcode).unwrap();
+impl<AB: InteractionBuilder, const N: usize> OpcodeEncoderWithBuilder<AB, N> {
+    fn encode(&self, opcode: Opcode) -> [usize; N] {
+        *self.coords_map.get(&opcode).unwrap()
+    }
+
+    pub fn expression_for(&self, opcode: Opcode) -> AB::Expr {
+        let coords = self.encode(opcode);
         let mut expr = AB::Expr::one();
         // We need to "normalize" the expression so that the value at this point is 1.
         // We don't need it for the "when" condition, but we may want to calculate
         // the opcode as sum(flag * opcode).
         let mut denom = AB::F::one();
-        for i in 0..N {
-            for j in 0..coords[i] {
-                expr *= variables[i] - AB::Expr::from_canonical_usize(j);
-                denom *= AB::F::from_canonical_usize(coords[i] - j);
+        for (i, &x) in coords.iter().enumerate() {
+            for j in 0..x {
+                expr *= self.variables[i] - AB::Expr::from_canonical_usize(j);
+                denom *= AB::F::from_canonical_usize(x - j);
             }
         }
-        let sum = variables.iter().fold(AB::Expr::zero(), |acc, x| acc + (*x));
+        let sum = self
+            .variables
+            .iter()
+            .fold(AB::Expr::zero(), |acc, x| acc + (*x));
         let sum_coords = coords.iter().sum::<usize>();
         for j in sum_coords + 1..=2 {
             expr *= AB::Expr::from_canonical_usize(j) - sum.clone();
@@ -202,12 +220,7 @@ impl<const N: usize> OpcodeEncoder<N> {
         expr * denom.inverse()
     }
 
-    pub fn when<'a, AB: InteractionBuilder>(
-        &self,
-        builder: &'a mut AB,
-        variables: [AB::Var; N],
-        opcode: Opcode,
-    ) -> FilteredAirBuilder<'a, AB> {
-        builder.when(self.expression_for::<AB>(opcode, variables))
+    pub fn when<'a>(&self, builder: &'a mut AB, opcode: Opcode) -> FilteredAirBuilder<'a, AB> {
+        builder.when(self.expression_for(opcode))
     }
 }
