@@ -52,8 +52,8 @@ def create_flamegraph(metrics_file, base_label, metric_name, span_label="cycle_t
         for line in lines:
             f.write(f"{line}\n")
     with open(flamegraph_path, 'w') as f:
-        subprocess.run(["inferno-flamegraph", "--title", f"{span_label} {base_label} {metric_name}", stacks_path], stdout=f, check=True)
-    print (f"Created flamegraph at {flamegraph_path}")
+        subprocess.run(["inferno-flamegraph", "--title", f"{span_label} {base_label} {metric_name}", stacks_path], stdout=f, check=False)
+        print (f"Created flamegraph at {flamegraph_path}")
 
 def create_custom_flamegraphs(metrics_file):
     create_flamegraph(metrics_file, "opcode", "frequency")
