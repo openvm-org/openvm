@@ -14,7 +14,7 @@ use snark_verifier_sdk::snark_verifier::{
     },
     util::arithmetic::PrimeField as _,
 };
-use stark_vm::vm::cycle_tracker::span::CanDiff;
+use stark_vm::vm::cycle_tracker::CanDiff;
 
 use crate::{
     constraints::{

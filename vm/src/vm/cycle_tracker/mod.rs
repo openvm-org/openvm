@@ -86,6 +86,7 @@ impl<M: CanDiff> CycleTracker<M> {
         self.num_active_instances -= 1;
     }
 
+    #[allow(dead_code)]
     /// Get full name of span with all parent names separated by ";" in flamegraph format
     fn get_full_name(&self, span_ref: SpanRef) -> String {
         let mut span = &self.instances[&span_ref.name][span_ref.index];
