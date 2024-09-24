@@ -26,7 +26,7 @@ where `<name>` is a benchmark implemented as a rust binary (located in `src/bin`
 python sdk/scripts/metric_unify/main.py <path to json>
 ```
 
-We will add additional functionality in the future (such as automatic diff support).
+Currently the processing is done automatically at the end of `bench.py`. The script automatically detects if you have a previously saved metric file for the same benchmark and includes the diff report in the output.
 
 Latest benchmark results can be found [here](https://github.com/axiom-crypto/afs-prototype/blob/gh-pages/index.md).
 These are run via [github workflows](./.github/workflows/benchmark-call.yml) and should always be up to date with the latest `main` branch.

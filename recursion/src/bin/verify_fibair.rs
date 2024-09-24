@@ -19,18 +19,17 @@ use p3_matrix::Matrix;
 use stark_vm::vm::config::VmConfig;
 
 fn main() {
-    run_with_metric_collection("OUTPUT_PATH", || {
-        let n = 16; // STARK to calculate 16th Fibonacci number.
-        let fib_air = FibonacciAir {};
-        let trace = generate_fib_trace_rows(n); // n rows
-        let pvs = vec![vec![
-            BabyBear::from_canonical_u32(0),
-            BabyBear::from_canonical_u32(1),
-            trace.get(n - 1, 1),
-        ]];
-        let vdata =
-            BabyBearPoseidon2Engine::run_simple_test(&[&fib_air], vec![trace], &pvs).unwrap();
+    let n = 16; // STARK to calculate 16th Fibonacci number.
+    let fib_air = FibonacciAir {};
+    let trace = generate_fib_trace_rows(n); // n rows
+    let pvs = vec![vec![
+        BabyBear::from_canonical_u32(0),
+        BabyBear::from_canonical_u32(1),
+        trace.get(n - 1, 1),
+    ]];
+    let vdata = BabyBearPoseidon2Engine::run_simple_test(&[&fib_air], vec![trace], &pvs).unwrap();
 
+    run_with_metric_collection("OUTPUT_PATH", || {
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()

@@ -138,9 +138,11 @@ mod sdk {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
+        let span = tracing::info_span!("execute_and_prove_program").entered();
         let stark_for_test = gen_vm_program_stark_for_test(program, input_stream, config);
         let pvs = stark_for_test.pvs.clone();
         let vparams = stark_for_test.run_simple_test(&engine)?;
+        span.exit();
         Ok((vparams, pvs))
     }
 }

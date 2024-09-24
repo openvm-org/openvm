@@ -10,8 +10,8 @@ def labels_to_tuple(labels):
 # Helper function to add metric data into the flat dict
 def add_to_flat_dict(labels, metric, value, flat_dict):
     if labels not in flat_dict:
-        flat_dict[labels] = {}
-    flat_dict[labels][metric] = value
+        flat_dict[labels] = []
+    flat_dict[labels].append(Metric(metric, value))
 
 def custom_sort_label_keys(label_key):
     """
@@ -24,14 +24,34 @@ def custom_sort_label_keys(label_key):
     else:
         return (1, label_key)  # Normal priority for other keys
 
+class Metric:
+    name = ""
+    value = 0
+    diff_value = None
+    diff_percent = None
+
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def __str__(self):
+        # Customize the string representation for printing
+        diff_str = ""
+        if self.diff_value is not None:
+            diff_str = f", diff_value={self.diff_value}"
+        if self.diff_percent is not None:
+            diff_str += f", diff_percent={self.diff_percent:+.2%}"
+        return f"Metric(name={self.name}, value={self.value}{diff_str})"
+
+    def __repr__(self):
+        return self.__str__()
 
 class MetricDb:
-    # Dict labels => Dict[metric_name, value]
-    flat_dict = {}
-    # Dict label_keys_tuple => Dict[label_values_tuple => Dict[metric_name, value]]
-    dict_by_label_types = {}
-
     def __init__(self, metrics_file):
+        # Dict[labels => List[Metric]]
+        self.flat_dict = {}
+        # Dict label_keys_tuple => Dict[label_values_tuple => List[Metric]]
+        self.dict_by_label_types = {}
         with open(metrics_file, 'r') as f:
             data = json.load(f)
 
@@ -60,6 +80,18 @@ class MetricDb:
                 self.dict_by_label_types[label_keys] = {}
             self.dict_by_label_types[label_keys][label_values] = metrics
 
+# mutates db so metric dict has fields "diff_value" and "diff_percent"
+def diff_metrics(db: MetricDb, db_old: MetricDb):
+    for (labels, metrics) in db.flat_dict.items():
+        if labels not in db_old.flat_dict:
+            continue
+        for metric in metrics:
+            metric_old = next((m for m in db_old.flat_dict[labels] if m.name == metric.name), None)
+            if metric_old:
+                metric.diff_value = metric.value - metric_old.value
+                if metric_old.value != 0:
+                    metric.diff_percent = (metric.value - metric_old.value) / metric_old.value
+    db.separate_by_label_types()
 
 # separated_dict is dict by label types
 def generate_markdown_tables(separated_dict):
@@ -69,8 +101,8 @@ def generate_markdown_tables(separated_dict):
     for tuple_keys, metrics_dict in separated_dict.items():
         # Get all unique metric names
         metric_names = set()
-        for values_dict in metrics_dict.values():
-            metric_names.update(values_dict.keys())
+        for metric_list in metrics_dict.values():
+            metric_names.update([metric.name for metric in metric_list])
         metric_names = sorted(metric_names)
 
         # Create the table header
@@ -81,21 +113,39 @@ def generate_markdown_tables(separated_dict):
         # Fill the table with rows for each tuple_value and associated metrics
         for tuple_values, metrics in metrics_dict.items():
             row_values = list(tuple_values)
-            row_metrics = [str(metrics.get(metric, "")) for metric in metric_names]  # Fill missing metrics with empty string
+            row_metrics = []
+            for metric_name in metric_names:
+                metric = next((m for m in metrics if m.name == metric_name), None)
+                metric_str = ""
+                if metric:
+                    metric_str += f"{metric.value}"
+                    if metric.diff_percent is not None and metric.diff_value != 0:
+                        color = "red" if metric.diff_percent > 0 else "green"
+                        # Format the percentage with the color styling
+                        metric_str += f' <span style="color: {color}">({metric.diff_percent:+.1%})</span>'
+                row_metrics.append(metric_str)
             markdown_output += "| " + " | ".join(row_values + row_metrics) + " |\n"
         markdown_output += "\n"
 
     return markdown_output
 
+# old_metrics_json is optional
+def generate_displayable_metrics(metrics_json, old_metrics_json):
+    db = MetricDb(metrics_json)
+    if old_metrics_json:
+        db_old = MetricDb(old_metrics_json)
+        diff_metrics(db, db_old)
+
+    markdown_output = generate_markdown_tables(db.dict_by_label_types)
+    return markdown_output
 
 def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument('metrics_json', type=str, help="Path to the metrics JSON")
+    argparser.add_argument('--prev', type=str, required=False, help="Path to the previous metrics JSON for diff generation")
     args = argparser.parse_args()
 
-    db = MetricDb(args.metrics_json)
-
-    markdown_output = generate_markdown_tables(db.dict_by_label_types)
+    markdown_output = generate_displayable_metrics(args.metrics_json, args.prev)
     print(markdown_output)
 
 

@@ -1,6 +1,9 @@
 import argparse
 import subprocess
 import os
+import shutil
+
+from metric_unify.main import generate_displayable_metrics;
 
 def get_git_root():
     # Run the git command to get the root directory
@@ -28,6 +31,12 @@ def run_cargo_command(bin_name, feature_flags):
     os.chdir(git_root)
     create_bench_metrics_dir()
     output_path = f".bench_metrics/{bin_name}.json"
+    output_path_old = None
+
+    if os.path.exists(output_path):
+        output_path_old = f"{output_path}.old"
+        shutil.move(output_path, f"{output_path_old}")
+        print(f"Old metrics file found, moved to {git_root}/{output_path_old}")
 
     # Prepare the environment variables
     env = os.environ.copy()  # Copy current environment variables
@@ -47,6 +56,9 @@ def run_cargo_command(bin_name, feature_flags):
         print(f"Subprocess failed with error: {e}")
 
     print(f"Output metrics written to {git_root}/{output_path}")
+
+    markdown_output = generate_displayable_metrics(output_path, output_path_old)
+    print(markdown_output)
 
 def bench():
     parser = argparse.ArgumentParser()

@@ -50,8 +50,7 @@ where
     let result = result.segment_results.pop().unwrap();
     #[cfg(feature = "bench-metrics")]
     {
-        metrics::gauge!("trace_gen_time_ms", "stark" => "vm")
-            .set(start.elapsed().as_millis() as f64);
+        metrics::gauge!("trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
     }
 
     StarkForTest {
