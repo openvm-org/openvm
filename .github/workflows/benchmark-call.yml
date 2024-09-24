@@ -178,6 +178,7 @@ jobs:
           name: flamegraphs
           path: .bench_metrics/flamegraphs/*.svg
           retention-days: 7
+          overwrite: true
 
       - name: Add benchmark metadata
         run: |
