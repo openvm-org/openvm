@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use afs_primitives::{
-    is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
+    is_equal::{columns::IsEqualIoCols, IsEqualAir},
     sub_chip::SubAir,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
@@ -12,7 +12,7 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{CoreAuxCols, CoreCols, CoreIoCols},
-    CoreOptions, INST_WIDTH, WORD_SIZE,
+    CoreOptions, INST_WIDTH,
 };
 use crate::{
     arch::{bridge::ExecutionBridge, instructions::Opcode::*},
@@ -68,7 +68,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             reads,
             writes,
             read0_equals_read1,
-            is_equal_vec_aux,
+            is_equal_aux,
             reads_aux_cols,
             writes_aux_cols,
             next_pc,
@@ -335,17 +335,12 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         // evaluate equality between read1 and read2
 
-        let is_equal_vec_io_cols = IsEqualVecIoCols {
-            x: vec![read1.value],
-            y: vec![read2.value],
+        let is_equal_io_cols = IsEqualIoCols {
+            x: read1.value,
+            y: read2.value,
             is_equal: read0_equals_read1,
         };
-        SubAir::eval(
-            &IsEqualVecAir::new(WORD_SIZE),
-            builder,
-            is_equal_vec_io_cols,
-            is_equal_vec_aux,
-        );
+        SubAir::eval(&IsEqualAir, builder, is_equal_io_cols, is_equal_aux);
 
         // make sure program terminates or shards with NOP
         builder.when_last_row().assert_zero(

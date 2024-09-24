@@ -35,9 +35,6 @@ pub const CORE_MAX_READS_PER_CYCLE: usize = 3;
 pub const CORE_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CORE_MAX_ACCESSES_PER_CYCLE: usize = CORE_MAX_READS_PER_CYCLE + CORE_MAX_WRITES_PER_CYCLE;
 
-// [jpw] Temporary, we are going to remove cpu anyways
-const WORD_SIZE: usize = 1;
-
 fn timestamp_delta(opcode: Opcode) -> usize {
     match opcode {
         LOADW | STOREW => 3,
