@@ -168,7 +168,7 @@ jobs:
             python3 sdk/scripts/metric_unify/flamegraph.py $METRIC_PATH
             FLAMEGRAPH_PREFIX=".bench_metrics/flamegraphs/${BIN_NAME}"
 
-            for flamegraph in "${FLAMEGRAPH_PREFIX}*.svg"; do
+            for flamegraph in "${FLAMEGRAPH_PREFIX}"*.svg; do
               echo "" >> results.md
               cat "${flamegraph}" >> results.md
             done
