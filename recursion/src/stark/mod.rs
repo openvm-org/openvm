@@ -350,13 +350,19 @@ where
                         };
                         builder.set_value(&mats, air_idx, main_mat);
                     });
+                // FIXME: here we assume that there is only 1 commitment for all non-cached main traces.
+                let permutation = if matrix_to_air_index.len() > 1 {
+                    air_perm_by_height.clone()
+                } else {
+                    null_perm.clone()
+                };
                 builder.set_value(
                     &rounds,
                     round_idx,
                     TwoAdicPcsRoundVariable {
                         batch_commit,
                         mats,
-                        permutation: air_perm_by_height.clone(),
+                        permutation,
                     },
                 );
                 round_idx += 1;
@@ -406,17 +412,45 @@ where
             .map(|air| air.quotient_degree)
             .sum::<usize>();
 
-        let quotient_mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_quotient_mats);
-        let qc_index: Usize<_> = builder.eval(C::N::zero());
+        // The permutation array for the quotient matrices.
+        // For example:
+        // There are 2 AIRs, X and Y. X has 2 quotient matrices, X_1 and X_2. Y has 3
+        // quotient matrices, Y_1, Y_2, and Y_3.
+        // `air_perm_by_height` is [1, 0].
+        // Because quotient matrices have the same height as the trace of its AIR. So the
+        // permutation array is [Y_1, Y_2, Y_3, X_1, X_2] = [2, 3, 4, 0, 1].
+        let quotient_perm = builder.array(num_quotient_mats);
 
+        let quotient_degree_per_air = builder.array::<Usize<_>>(num_airs);
+        for i in 0..num_airs {
+            let quotient_degree = vk.per_air[i].quotient_degree;
+            builder.set(&quotient_degree_per_air, i, RVar::from(quotient_degree));
+        }
+        // AIR index -> its offset in the permutation array.
+        let perm_offset_per_air = builder.array::<Usize<_>>(num_airs);
+        let offset: Usize<_> = builder.eval(RVar::zero());
+        for i in 0..num_airs {
+            let air_index = builder.get(air_perm_by_height, i);
+            builder.set(&perm_offset_per_air, air_index.clone(), offset.clone());
+            // Last add is unnecessary.
+            if i + 1 != num_airs {
+                let quotient_degree = builder.get(&quotient_degree_per_air, air_index);
+                builder.assign(&offset, offset.clone() + quotient_degree);
+            }
+        }
+
+        let quotient_mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_quotient_mats);
         let qc_points = builder.array::<Ext<_, _>>(1);
         builder.set_value(&qc_points, 0, zeta);
 
+        let mut qc_index = 0;
         for i in 0..num_airs {
             let opened_quotient = builder.get(&proof.opening.values.quotient, i);
             let qc_domains = builder.get(&quotient_chunk_domains, i);
+            let air_offset = builder.get(&perm_offset_per_air, i);
 
-            builder.range(0, qc_domains.len()).for_each(|j, builder| {
+            let quotient_degree = vk.per_air[i].quotient_degree;
+            for j in 0..quotient_degree {
                 let qc_dom = builder.get(&qc_domains, j);
                 let qc_vals_array = builder.get(&opened_quotient, j);
                 let qc_values = builder.array::<Array<C, _>>(1);
@@ -426,14 +460,16 @@ where
                     values: qc_values,
                     points: qc_points.clone(),
                 };
-                builder.set_value(&quotient_mats, qc_index.clone(), qc_mat);
-                builder.assign(&qc_index, qc_index.clone() + C::N::one());
-            });
+                let qc_offset = builder.eval_expr(air_offset.clone() + RVar::from(j));
+                builder.set_value(&quotient_mats, qc_index, qc_mat);
+                builder.set(&quotient_perm, qc_offset, RVar::from(qc_index));
+                qc_index += 1;
+            }
         }
         let quotient_round = TwoAdicPcsRoundVariable {
             batch_commit: quotient_commit.clone(),
             mats: quotient_mats,
-            permutation: air_perm_by_height.clone(),
+            permutation: quotient_perm,
         };
         builder.set_value(&rounds, round_idx, quotient_round);
         round_idx += 1;
