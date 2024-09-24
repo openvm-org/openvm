@@ -119,6 +119,8 @@ fn air_test_with_compress_poseidon2(
 
 #[test]
 fn test_vm_1() {
+    setup_tracing_with_log_level(Level::TRACE);
+
     let n = 2;
     /*
     Instruction 0 assigns word[0]_1 to n.

@@ -1,10 +1,11 @@
-use std::{borrow::Borrow, iter::zip};
+use std::borrow::Borrow;
 
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
     sub_chip::SubAir,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::izip;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -93,16 +94,16 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .assert_eq(opcode, match_opcode);
 
         // keep track of when memory accesses should be enabled
-        let mut read1_enabled_check = AB::Expr::zero();
-        let mut read2_enabled_check = AB::Expr::zero();
-        let mut read3_enabled_check = AB::Expr::zero();
-        let mut write_enabled_check = AB::Expr::zero();
+        let mut read1_enabled = AB::Expr::zero();
+        let mut read2_enabled = AB::Expr::zero();
+        let mut read3_enabled = AB::Expr::zero();
+        let mut write_enabled = AB::Expr::zero();
 
         // LOADW: d[a] <- e[d[c] + b + d[f] * g]
         let loadw_flag = operation_flags[&LOADW];
-        read1_enabled_check = read1_enabled_check + loadw_flag;
-        read2_enabled_check = read2_enabled_check + loadw_flag;
-        write_enabled_check = write_enabled_check + loadw_flag;
+        read1_enabled += loadw_flag.into();
+        read2_enabled += loadw_flag.into();
+        write_enabled += loadw_flag.into();
 
         let mut when_loadw = builder.when(loadw_flag);
 
@@ -122,9 +123,9 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         // STOREW: e[d[c] + b] <- d[a]
         let storew_flag = operation_flags[&STOREW];
-        read1_enabled_check = read1_enabled_check + storew_flag;
-        read2_enabled_check = read2_enabled_check + storew_flag;
-        write_enabled_check = write_enabled_check + storew_flag;
+        read1_enabled += storew_flag.into();
+        read2_enabled += storew_flag.into();
+        write_enabled += storew_flag.into();
 
         let mut when_storew = builder.when(storew_flag);
         when_storew.assert_eq(read1.address_space, d);
@@ -143,10 +144,10 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         // LOADW2: d[a] <- e[d[c] + b + mem[f] * g]
         let loadw2_flag = operation_flags[&LOADW2];
-        read1_enabled_check = read1_enabled_check + loadw2_flag;
-        read2_enabled_check = read2_enabled_check + loadw2_flag;
-        read3_enabled_check = read3_enabled_check + loadw2_flag;
-        write_enabled_check = write_enabled_check + loadw2_flag;
+        read1_enabled += loadw2_flag.into();
+        read2_enabled += loadw2_flag.into();
+        read3_enabled += loadw2_flag.into();
+        write_enabled += loadw2_flag.into();
 
         let mut when_loadw2 = builder.when(loadw2_flag);
 
@@ -170,10 +171,10 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         // STOREW2: e[d[c] + b + mem[f] * g] <- d[a]
         let storew2_flag = operation_flags[&STOREW2];
-        read1_enabled_check = read1_enabled_check + storew2_flag;
-        read2_enabled_check = read2_enabled_check + storew2_flag;
-        read3_enabled_check = read3_enabled_check + storew2_flag;
-        write_enabled_check = write_enabled_check + storew2_flag;
+        read1_enabled += storew2_flag.into();
+        read2_enabled += storew2_flag.into();
+        read3_enabled += storew2_flag.into();
+        write_enabled += storew2_flag.into();
 
         let mut when_storew2 = builder.when(storew2_flag);
         when_storew2.assert_eq(read1.address_space, d);
@@ -196,8 +197,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         // SHINTW: e[d[a] + b] <- ?
         let shintw_flag = operation_flags[&SHINTW];
-        read1_enabled_check = read1_enabled_check + shintw_flag;
-        write_enabled_check = write_enabled_check + shintw_flag;
+        read1_enabled += shintw_flag.into();
+        write_enabled += shintw_flag.into();
 
         let mut when_shintw = builder.when(shintw_flag);
         when_shintw.assert_eq(read1.address_space, d);
@@ -212,7 +213,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         // JAL: d[a] <- pc + INST_WIDTH, pc <- pc + b
         let jal_flag = operation_flags[&JAL];
-        write_enabled_check = write_enabled_check + jal_flag;
+        write_enabled += jal_flag.into();
 
         let mut when_jal = builder.when(jal_flag);
 
@@ -224,8 +225,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         // BEQ: If d[a] = e[b], pc <- pc + c
         let beq_flag = operation_flags[&BEQ];
-        read1_enabled_check = read1_enabled_check + beq_flag;
-        read2_enabled_check = read2_enabled_check + beq_flag;
+        read1_enabled += beq_flag.into();
+        read2_enabled += beq_flag.into();
 
         let mut when_beq = builder.when(beq_flag);
 
@@ -246,8 +247,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         // BNE: If d[a] != e[b], pc <- pc + c
         let bne_flag = operation_flags[&BNE];
-        read1_enabled_check = read1_enabled_check + bne_flag;
-        read2_enabled_check = read2_enabled_check + bne_flag;
+        read1_enabled += bne_flag.into();
+        read2_enabled += bne_flag.into();
 
         let mut when_bne = builder.when(bne_flag);
 
@@ -279,8 +280,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         // PUBLISH
 
         let publish_flag = operation_flags[&PUBLISH];
-        read1_enabled_check = read1_enabled_check + publish_flag;
-        read2_enabled_check = read2_enabled_check + publish_flag;
+        read1_enabled += publish_flag.into();
+        read2_enabled += publish_flag.into();
 
         let mut sum_flags = AB::Expr::zero();
         let mut match_public_value_index = AB::Expr::zero();
@@ -305,7 +306,9 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         when_publish.assert_eq(read2.pointer, b);
 
         let mut op_timestamp: AB::Expr = timestamp.into();
-        for (read, read_aux_cols) in zip(&reads, reads_aux_cols) {
+
+        let reads_enabled = [read1_enabled, read2_enabled, read3_enabled];
+        for (read, read_aux_cols, enabled) in izip!(&reads, reads_aux_cols, reads_enabled) {
             self.memory_bridge
                 .read_or_immediate(
                     MemoryAddress::new(read.address_space, read.pointer),
@@ -313,11 +316,12 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
                     op_timestamp.clone(),
                     &read_aux_cols,
                 )
-                .eval(builder, read.enabled);
-            op_timestamp += read.enabled.into();
+                .eval(builder, enabled.clone());
+            op_timestamp += enabled.clone();
         }
 
-        for (write, write_aux_cols) in zip(&writes, writes_aux_cols) {
+        let writes_enabled = [write_enabled];
+        for (write, write_aux_cols, enabled) in izip!(&writes, writes_aux_cols, writes_enabled) {
             self.memory_bridge
                 .write(
                     MemoryAddress::new(write.address_space, write.pointer),
@@ -325,8 +329,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
                     op_timestamp.clone(),
                     &write_aux_cols,
                 )
-                .eval(builder, write.enabled);
-            op_timestamp += write.enabled.into();
+                .eval(builder, enabled.clone());
+            op_timestamp += enabled.clone();
         }
 
         // evaluate equality between read1 and read2
@@ -348,12 +352,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             (opcode - AB::Expr::from_canonical_usize(TERMINATE as usize))
                 * (opcode - AB::Expr::from_canonical_usize(NOP as usize)),
         );
-
-        // check accesses enabled
-        builder.assert_eq(read1.enabled, read1_enabled_check);
-        builder.assert_eq(read2.enabled, read2_enabled_check);
-        builder.assert_eq(read3.enabled, read3_enabled_check);
-        builder.assert_eq(write.enabled, write_enabled_check);
 
         // Turn on all interactions
         self.eval_interactions(builder, io, next_pc, &operation_flags);
