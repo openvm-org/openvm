@@ -3,17 +3,17 @@ use itertools::izip;
 use p3_field::AbstractField;
 
 use super::{
-    air::UintArithmeticAir,
-    columns::{UintArithmeticAuxCols, UintArithmeticIoCols},
+    air::ArithmeticLogicAir,
+    columns::{ArithmeticLogicAuxCols, ArithmeticLogicIoCols},
 };
 use crate::memory::MemoryAddress;
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintArithmeticAir<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        io: &UintArithmeticIoCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
-        aux: &UintArithmeticAuxCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
+        io: &ArithmeticLogicIoCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
+        aux: &ArithmeticLogicAuxCols<AB::Var, NUM_LIMBS, LIMB_BITS>,
         expected_opcode: AB::Expr,
     ) {
         let timestamp: AB::Var = io.from_state.timestamp;

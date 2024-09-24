@@ -26,13 +26,14 @@ use super::{
     VmCycleTracker, VmMetrics,
 };
 use crate::{
+    alu::ArithmeticLogicChip,
     arch::{
         bus::ExecutionBus,
         chips::{InstructionExecutor, InstructionExecutorVariant, MachineChip, MachineChipVariant},
         columns::ExecutionState,
         instructions::{
-            Opcode, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
-            SHIFT_256_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS, UI_32_INSTRUCTIONS,
+            Opcode, ALU_256_INSTRUCTIONS, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS,
+            FIELD_EXTENSION_INSTRUCTIONS, SHIFT_256_INSTRUCTIONS, UI_32_INSTRUCTIONS,
         },
     },
     castf::CastFChip,
@@ -50,7 +51,6 @@ use crate::{
     program::{bridge::ProgramBus, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
-    uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
 
@@ -231,14 +231,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
         // Modular multiplication also depends on U256 arithmetic.
         if config.modular_multdiv_enabled || config.u256_arithmetic_enabled {
-            let u256_chip = Rc::new(RefCell::new(UintArithmeticChip::new(
+            let u256_chip = Rc::new(RefCell::new(ArithmeticLogicChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
                 byte_xor_chip.clone(),
             )));
-            chips.push(MachineChipVariant::U256Arithmetic(u256_chip.clone()));
-            assign!(UINT256_ARITHMETIC_INSTRUCTIONS, u256_chip);
+            chips.push(MachineChipVariant::ArithmeticLogicUnit256(
+                u256_chip.clone(),
+            ));
+            assign!(ALU_256_INSTRUCTIONS, u256_chip);
         }
         if config.u256_multiplication_enabled {
             let range_tuple_bus =

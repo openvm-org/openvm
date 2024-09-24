@@ -6,7 +6,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
+        instructions::{Opcode, ALU_256_INSTRUCTIONS},
     },
     memory::MemoryChipRef,
     program::{ExecutionError, Instruction},
@@ -65,7 +65,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        assert!(UINT256_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
+        assert!(ALU_256_INSTRUCTIONS.contains(&opcode));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(

@@ -10,23 +10,23 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct UintArithmeticCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub io: UintArithmeticIoCols<T, NUM_LIMBS, LIMB_BITS>,
-    pub aux: UintArithmeticAuxCols<T, NUM_LIMBS, LIMB_BITS>,
+pub struct ArithmeticLogicCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub io: ArithmeticLogicIoCols<T, NUM_LIMBS, LIMB_BITS>,
+    pub aux: ArithmeticLogicAuxCols<T, NUM_LIMBS, LIMB_BITS>,
 }
 
 impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    UintArithmeticCols<T, NUM_LIMBS, LIMB_BITS>
+    ArithmeticLogicCols<T, NUM_LIMBS, LIMB_BITS>
 {
     pub fn width() -> usize {
-        UintArithmeticAuxCols::<T, NUM_LIMBS, LIMB_BITS>::width()
-            + UintArithmeticIoCols::<T, NUM_LIMBS, LIMB_BITS>::width()
+        ArithmeticLogicAuxCols::<T, NUM_LIMBS, LIMB_BITS>::width()
+            + ArithmeticLogicIoCols::<T, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct UintArithmeticIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ArithmeticLogicIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<T>,
     pub x: MemoryData<T, NUM_LIMBS, LIMB_BITS>,
     pub y: MemoryData<T, NUM_LIMBS, LIMB_BITS>,
@@ -37,16 +37,16 @@ pub struct UintArithmeticIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usiz
 }
 
 impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    UintArithmeticIoCols<T, NUM_LIMBS, LIMB_BITS>
+    ArithmeticLogicIoCols<T, NUM_LIMBS, LIMB_BITS>
 {
     pub fn width() -> usize {
-        size_of::<UintArithmeticIoCols<u8, NUM_LIMBS, LIMB_BITS>>()
+        size_of::<ArithmeticLogicIoCols<u8, NUM_LIMBS, LIMB_BITS>>()
     }
 }
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct UintArithmeticAuxCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ArithmeticLogicAuxCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub is_valid: T,
     pub x_sign: T,
     pub y_sign: T,
@@ -71,9 +71,9 @@ pub struct UintArithmeticAuxCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
 }
 
 impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    UintArithmeticAuxCols<T, NUM_LIMBS, LIMB_BITS>
+    ArithmeticLogicAuxCols<T, NUM_LIMBS, LIMB_BITS>
 {
     pub fn width() -> usize {
-        size_of::<UintArithmeticAuxCols<u8, NUM_LIMBS, LIMB_BITS>>()
+        size_of::<ArithmeticLogicAuxCols<u8, NUM_LIMBS, LIMB_BITS>>()
     }
 }

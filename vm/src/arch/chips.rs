@@ -15,6 +15,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 use strum_macros::IntoStaticStr;
 
 use crate::{
+    alu::ArithmeticLogicChip,
     arch::columns::ExecutionState,
     castf::CastFChip,
     core::CoreChip,
@@ -28,7 +29,6 @@ use crate::{
     program::{ExecutionError, Instruction, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
-    uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
 
@@ -129,7 +129,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
     ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
-    U256Arithmetic(Rc<RefCell<UintArithmeticChip<F, 32, 8>>>),
+    ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     Ui(Rc<RefCell<UiChip<F>>>),
@@ -151,7 +151,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     RangeTupleChecker(Arc<RangeTupleCheckerChip>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
-    U256Arithmetic(Rc<RefCell<UintArithmeticChip<F, 32, 8>>>),
+    ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     Ui(Rc<RefCell<UiChip<F>>>),

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_primitives::xor::lookup::XorLookupChip;
-use air::UintArithmeticAir;
+use air::ArithmeticLogicAir;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, UINT256_ARITHMETIC_INSTRUCTIONS},
+        instructions::{Opcode, ALU_256_INSTRUCTIONS},
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -33,12 +33,12 @@ pub const ALU_BITWISE_INSTRUCTIONS: [Opcode; 3] = [Opcode::XOR256, Opcode::AND25
 
 #[derive(Debug)]
 pub enum WriteRecord<T, const NUM_LIMBS: usize> {
-    Uint(MemoryWriteRecord<T, NUM_LIMBS>),
+    Long(MemoryWriteRecord<T, NUM_LIMBS>),
     Bool(MemoryWriteRecord<T, 1>),
 }
 
 #[derive(Debug)]
-pub struct UintArithmeticRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
 
@@ -59,15 +59,15 @@ pub struct UintArithmeticRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usiz
 }
 
 #[derive(Debug)]
-pub struct UintArithmeticChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: UintArithmeticAir<NUM_LIMBS, LIMB_BITS>,
-    data: Vec<UintArithmeticRecord<T, NUM_LIMBS, LIMB_BITS>>,
+pub struct ArithmeticLogicChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>,
+    data: Vec<ArithmeticLogicRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    UintArithmeticChip<T, NUM_LIMBS, LIMB_BITS>
+    ArithmeticLogicChip<T, NUM_LIMBS, LIMB_BITS>
 {
     pub fn new(
         execution_bus: ExecutionBus,
@@ -77,7 +77,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            air: UintArithmeticAir {
+            air: ArithmeticLogicAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus: xor_lookup_chip.bus(),
@@ -90,7 +90,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<T>
-    for UintArithmeticChip<T, NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicChip<T, NUM_LIMBS, LIMB_BITS>
 {
     fn execute(
         &mut self,
@@ -106,7 +106,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        assert!(UINT256_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
+        assert!(ALU_256_INSTRUCTIONS.contains(&opcode));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -126,7 +126,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         let z_write = if ALU_CMP_INSTRUCTIONS.contains(&opcode) {
             WriteRecord::Bool(memory_chip.write_cell(e, z_ptr_read.value(), T::from_bool(cmp)))
         } else {
-            WriteRecord::Uint(
+            WriteRecord::Long(
                 memory_chip.write::<NUM_LIMBS>(
                     e,
                     z_ptr_read.value(),
@@ -163,7 +163,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         }
 
         self.data
-            .push(UintArithmeticRecord::<T, NUM_LIMBS, LIMB_BITS> {
+            .push(ArithmeticLogicRecord::<T, NUM_LIMBS, LIMB_BITS> {
                 from_state,
                 instruction: instruction.clone(),
                 x_ptr_read,

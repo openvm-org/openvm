@@ -1,3 +1,4 @@
+pub mod alu;
 pub mod arch;
 pub mod castf;
 pub mod core;
@@ -14,6 +15,5 @@ pub mod program;
 pub mod sdk;
 pub mod shift;
 pub mod ui;
-pub mod uint_arithmetic;
 pub mod uint_multiplication;
 pub mod vm;

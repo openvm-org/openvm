@@ -12,13 +12,13 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
-    columns::UintArithmeticCols, solve_subtract, UintArithmeticChip, ALU_CMP_INSTRUCTIONS,
+    columns::ArithmeticLogicCols, solve_subtract, ArithmeticLogicChip, ALU_CMP_INSTRUCTIONS,
 };
 use crate::{
+    alu::solve_alu,
     arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
     core::BYTE_XOR_BUS,
     program::Instruction,
-    uint_arithmetic::solve_alu,
 };
 
 type F = BabyBear;
@@ -26,7 +26,7 @@ type F = BabyBear;
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 
-fn generate_uint_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     rng: &mut StdRng,
 ) -> Vec<u32> {
     (0..NUM_LIMBS)
@@ -37,7 +37,7 @@ fn generate_uint_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 #[allow(clippy::too_many_arguments)]
 fn run_alu_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     tester: &mut MachineChipTestBuilder<F>,
-    chip: &mut UintArithmeticChip<F, NUM_LIMBS, LIMB_BITS>,
+    chip: &mut ArithmeticLogicChip<F, NUM_LIMBS, LIMB_BITS>,
     opcode: Opcode,
     x: Vec<u32>,
     y: Vec<u32>,
@@ -108,7 +108,7 @@ fn run_alu_negative_test(
 ) {
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
     let mut tester: MachineChipTestBuilder<BabyBear> = MachineChipTestBuilder::default();
-    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+    let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
@@ -129,14 +129,14 @@ fn run_alu_negative_test(
     let alu_trace = chip.generate_trace();
 
     let mut alu_trace_row = alu_trace.row_slice(0).to_vec();
-    let alu_trace_cols: &mut UintArithmeticCols<F, 32, 8> = (*alu_trace_row).borrow_mut();
+    let alu_trace_cols: &mut ArithmeticLogicCols<F, 32, 8> = (*alu_trace_row).borrow_mut();
     alu_trace_cols.io.z.data = array::from_fn(|i| F::from_canonical_u32(z[i]));
     alu_trace_cols.io.cmp_result = F::from_bool(cmp_result);
     alu_trace_cols.aux.x_sign = F::from_canonical_u32(x_sign);
     alu_trace_cols.aux.y_sign = F::from_canonical_u32(y_sign);
     let alu_trace: p3_matrix::dense::DenseMatrix<_> = RowMajorMatrix::new(
         alu_trace_row,
-        UintArithmeticCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
+        ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
     );
 
     let xor_lookup_air = xor_lookup_chip.air;
@@ -161,7 +161,7 @@ fn alu_add_rand_test() {
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+    let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
@@ -169,8 +169,8 @@ fn alu_add_rand_test() {
     );
 
     for _ in 0..num_ops {
-        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::ADD256, x, y, &mut rng);
     }
 
@@ -225,7 +225,7 @@ fn alu_sub_rand_test() {
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+    let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
@@ -233,8 +233,8 @@ fn alu_sub_rand_test() {
     );
 
     for _ in 0..num_ops {
-        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::SUB256, x, y, &mut rng);
     }
 
@@ -289,7 +289,7 @@ fn alu_lt_rand_test() {
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+    let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
@@ -297,8 +297,8 @@ fn alu_lt_rand_test() {
     );
 
     for _ in 0..num_ops {
-        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::LT256, x, y, &mut rng);
     }
 
@@ -307,7 +307,7 @@ fn alu_lt_rand_test() {
 }
 
 #[test]
-fn uint_lt_wrong_subtraction_test() {
+fn alu_lt_wrong_subtraction_test() {
     run_alu_negative_test(
         Opcode::LT256,
         iter::once(65_000).chain(iter::repeat(0).take(31)).collect(),
@@ -355,7 +355,7 @@ fn alu_eq_rand_test() {
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+    let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
@@ -363,8 +363,8 @@ fn alu_eq_rand_test() {
     );
 
     for _ in 0..num_ops {
-        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::EQ256, x, y, &mut rng);
     }
 
@@ -393,7 +393,7 @@ fn alu_xor_rand_test() {
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+    let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
@@ -401,8 +401,8 @@ fn alu_xor_rand_test() {
     );
 
     for _ in 0..num_ops {
-        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::XOR256, x, y, &mut rng);
     }
 
@@ -431,7 +431,7 @@ fn alu_and_rand_test() {
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+    let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
@@ -439,8 +439,8 @@ fn alu_and_rand_test() {
     );
 
     for _ in 0..num_ops {
-        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::AND256, x, y, &mut rng);
     }
 
@@ -469,7 +469,7 @@ fn alu_or_rand_test() {
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+    let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
@@ -477,8 +477,8 @@ fn alu_or_rand_test() {
     );
 
     for _ in 0..num_ops {
-        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::OR256, x, y, &mut rng);
     }
 
@@ -510,7 +510,7 @@ fn alu_slt_rand_test() {
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = UintArithmeticChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+    let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
@@ -518,8 +518,8 @@ fn alu_slt_rand_test() {
     );
 
     for _ in 0..num_ops {
-        let x = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        let y = generate_uint_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
+        let y = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::SLT256, x, y, &mut rng);
     }
 

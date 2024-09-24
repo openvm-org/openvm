@@ -6,35 +6,35 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::columns::UintArithmeticCols;
+use super::columns::ArithmeticLogicCols;
 use crate::{
-    arch::{bridge::ExecutionBridge, instructions::UINT256_ARITHMETIC_INSTRUCTIONS},
+    arch::{bridge::ExecutionBridge, instructions::ALU_256_INSTRUCTIONS},
     memory::offline_checker::MemoryBridge,
 };
 
 #[derive(Copy, Clone, Debug)]
-pub struct UintArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
+pub struct ArithmeticLogicAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub bus: XorBus,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for UintArithmeticAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
-        UintArithmeticCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+        ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for UintArithmeticAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
 
-        let UintArithmeticCols::<_, NUM_LIMBS, LIMB_BITS> { io, aux } = (*local).borrow();
+        let ArithmeticLogicCols::<_, NUM_LIMBS, LIMB_BITS> { io, aux } = (*local).borrow();
         builder.assert_bool(aux.is_valid);
 
         let flags = [
@@ -135,7 +135,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 
         let expected_opcode = flags
             .iter()
-            .zip(UINT256_ARITHMETIC_INSTRUCTIONS)
+            .zip(ALU_256_INSTRUCTIONS)
             .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
             });

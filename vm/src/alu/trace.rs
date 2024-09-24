@@ -7,8 +7,8 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::Domain;
 
 use super::{
-    columns::{UintArithmeticAuxCols, UintArithmeticCols, UintArithmeticIoCols},
-    UintArithmeticChip, UintArithmeticRecord, WriteRecord,
+    columns::{ArithmeticLogicAuxCols, ArithmeticLogicCols, ArithmeticLogicIoCols},
+    ArithmeticLogicChip, ArithmeticLogicRecord, WriteRecord,
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
@@ -17,7 +17,7 @@ use crate::{
 };
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChip<F>
-    for UintArithmeticChip<F, NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicChip<F, NUM_LIMBS, LIMB_BITS>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
@@ -28,7 +28,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
         let mut rows = vec![F::zero(); width * padded_height];
 
         for (row, operation) in rows.chunks_mut(width).zip(self.data) {
-            let UintArithmeticRecord::<F, NUM_LIMBS, LIMB_BITS> {
+            let ArithmeticLogicRecord::<F, NUM_LIMBS, LIMB_BITS> {
                 from_state,
                 instruction,
                 x_ptr_read,
@@ -42,9 +42,9 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 cmp_buffer,
             } = operation;
 
-            let row: &mut UintArithmeticCols<F, NUM_LIMBS, LIMB_BITS> = row.borrow_mut();
+            let row: &mut ArithmeticLogicCols<F, NUM_LIMBS, LIMB_BITS> = row.borrow_mut();
 
-            row.io = UintArithmeticIoCols {
+            row.io = ArithmeticLogicIoCols {
                 from_state: from_state.map(F::from_canonical_usize),
                 x: MemoryData::<F, NUM_LIMBS, LIMB_BITS> {
                     data: x_read.data,
@@ -57,7 +57,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                     ptr_to_address: y_ptr_read.pointer,
                 },
                 z: match &z_write {
-                    WriteRecord::Uint(z) => MemoryData {
+                    WriteRecord::Long(z) => MemoryData {
                         data: z.data,
                         address: z.pointer,
                         ptr_to_address: z_ptr_read.pointer,
@@ -69,14 +69,14 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                     },
                 },
                 cmp_result: match &z_write {
-                    WriteRecord::Uint(_) => F::zero(),
+                    WriteRecord::Long(_) => F::zero(),
                     WriteRecord::Bool(z) => z.data[0],
                 },
                 ptr_as: instruction.d,
                 address_as: instruction.e,
             };
 
-            row.aux = UintArithmeticAuxCols {
+            row.aux = ArithmeticLogicAuxCols {
                 is_valid: F::one(),
                 x_sign,
                 y_sign,
@@ -93,11 +93,11 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 read_x_aux_cols: aux_cols_factory.make_read_aux_cols(x_read.clone()),
                 read_y_aux_cols: aux_cols_factory.make_read_aux_cols(y_read.clone()),
                 write_z_aux_cols: match &z_write {
-                    WriteRecord::Uint(z) => aux_cols_factory.make_write_aux_cols(z.clone()),
+                    WriteRecord::Long(z) => aux_cols_factory.make_write_aux_cols(z.clone()),
                     WriteRecord::Bool(_) => MemoryWriteAuxCols::disabled(),
                 },
                 write_cmp_aux_cols: match &z_write {
-                    WriteRecord::Uint(_) => MemoryWriteAuxCols::disabled(),
+                    WriteRecord::Long(_) => MemoryWriteAuxCols::disabled(),
                     WriteRecord::Bool(z) => aux_cols_factory.make_write_aux_cols(z.clone()),
                 },
             };
@@ -117,6 +117,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
     }
 
     fn trace_width(&self) -> usize {
-        UintArithmeticCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+        ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
