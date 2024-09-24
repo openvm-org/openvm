@@ -159,6 +159,21 @@ jobs:
             cp benchmark/tmp/_result.md results.md
           fi
 
+      - name: Install inferno-flamegraph
+        run: cargo install inferno
+
+      - name: Generate flamegraphs
+        run: |
+          if [[ -f $METRIC_PATH ]]; then
+            python3 sdk/scripts/metric_unify/flamegraph.py $METRIC_PATH
+            FLAMEGRAPH_PREFIX=".bench_metrics/flamegraphs/${BIN_NAME}"
+
+            for flamegraph in "${FLAMEGRAPH_PREFIX}*.svg"; do
+              echo "" >> results.md
+              cat "${flamegraph}" >> results.md
+            done
+          fi
+
       - name: Add benchmark metadata
         run: |
           commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"

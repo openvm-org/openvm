@@ -367,12 +367,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
             // runtime only instruction handling
             match opcode {
-                Opcode::CT_START => self
-                    .cycle_tracker
-                    .start(instruction.debug.clone(), self.collected_metrics.clone()),
-                Opcode::CT_END => self
-                    .cycle_tracker
-                    .end(instruction.debug.clone(), self.collected_metrics.clone()),
+                Opcode::CT_START => {
+                    self.update_chip_metrics();
+                    self.cycle_tracker
+                        .start(instruction.debug.clone(), self.collected_metrics.clone())
+                }
+                Opcode::CT_END => {
+                    self.update_chip_metrics();
+                    self.cycle_tracker
+                        .end(instruction.debug.clone(), self.collected_metrics.clone())
+                }
                 _ => {}
             }
 
