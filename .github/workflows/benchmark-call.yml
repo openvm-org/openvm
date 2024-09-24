@@ -167,18 +167,26 @@ jobs:
           if [[ -f $METRIC_PATH ]]; then
             python3 sdk/scripts/metric_unify/flamegraph.py $METRIC_PATH
             FLAMEGRAPH_PREFIX=".bench_metrics/flamegraphs/${BIN_NAME}"
-
-            for flamegraph in "${FLAMEGRAPH_PREFIX}"*.svg; do
-              echo "" >> results.md
-              cat "${flamegraph}" >> results.md
-            done
+            echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
+
+      - name: Upload flamegraphs
+        id: flamegraphs-upload-step
+        if: env.UPLOAD_FLAMEGRAPHS == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flamegraphs
+          path: .bench_metrics/flamegraphs/*.svg
+          retention-days: 7
 
       - name: Add benchmark metadata
         run: |
           commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
+          if [[ -n ${{ steps.flamegraphs-upload-step.outputs.artifact-url }} ]]; then
+            echo "Flamegraphs: [link](${{ steps.flamegraphs-upload-step.outputs.artifact-url }})" >> $RESULT_PATH
+          fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
           echo "AWS Instance Type: [${{ inputs.aws_instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.aws_instance_type }})" >> $RESULT_PATH
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
