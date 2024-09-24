@@ -1,4 +1,5 @@
 use core::ops::{Add, Sub};
+use std::any::type_name;
 
 use p3_field::{Field, PrimeField};
 
@@ -28,7 +29,9 @@ impl<C: Config> Builder<C> {
 
     /// Loads a value from memory.
     pub fn load<V: MemVariable<C>>(&mut self, var: V, ptr: Ptr<C::N>, index: MemIndex<C::N>) {
+        self.cycle_tracker_start(&format!("load_{}", type_name::<V>()));
         var.load(ptr, index, self);
+        self.cycle_tracker_end(&format!("load_{}", type_name::<V>()));
     }
 
     /// Stores a value to memory.

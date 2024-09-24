@@ -185,7 +185,7 @@ jobs:
           commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
-          if [[ -n ${{ steps.flamegraphs-upload-step.outputs.artifact-url }} ]]; then
+          if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
             echo "Flamegraphs: [link](${{ steps.flamegraphs-upload-step.outputs.artifact-url }})" >> $RESULT_PATH
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
