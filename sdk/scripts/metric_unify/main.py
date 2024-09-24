@@ -94,11 +94,18 @@ def diff_metrics(db: MetricDb, db_old: MetricDb):
     db.separate_by_label_types()
 
 # separated_dict is dict by label types
-def generate_markdown_tables(separated_dict):
+def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_span"]):
     markdown_output = ""
 
     # Loop through each set of tuple_keys
     for tuple_keys, metrics_dict in separated_dict.items():
+        exclude = False
+        for excluded_label in excluded_labels:
+            if excluded_label in tuple_keys:
+                exclude = True
+                break
+        if exclude:
+            continue
         # Get all unique metric names
         metric_names = set()
         for metric_list in metrics_dict.values():
@@ -130,13 +137,13 @@ def generate_markdown_tables(separated_dict):
     return markdown_output
 
 # old_metrics_json is optional
-def generate_displayable_metrics(metrics_json, old_metrics_json):
+def generate_displayable_metrics(metrics_json, old_metrics_json, excluded_labels=["cycle_tracker_span"]):
     db = MetricDb(metrics_json)
     if old_metrics_json:
         db_old = MetricDb(old_metrics_json)
         diff_metrics(db, db_old)
 
-    markdown_output = generate_markdown_tables(db.dict_by_label_types)
+    markdown_output = generate_markdown_tables(db.dict_by_label_types, excluded_labels)
     return markdown_output
 
 def main():

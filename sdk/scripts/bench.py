@@ -58,6 +58,8 @@ def run_cargo_command(bin_name, feature_flags):
     print(f"Output metrics written to {git_root}/{output_path}")
 
     markdown_output = generate_displayable_metrics(output_path, output_path_old)
+    with open(f"{git_root}/.bench_metrics/{bin_name}.md", "w") as f:
+        f.write(markdown_output)
     print(markdown_output)
 
 def bench():
