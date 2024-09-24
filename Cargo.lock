@@ -1754,6 +1754,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "datafusion"
 version = "40.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1769,7 +1783,7 @@ dependencies = [
  "bytes",
  "bzip2",
  "chrono",
- "dashmap",
+ "dashmap 5.5.3",
  "datafusion-common",
  "datafusion-common-runtime",
  "datafusion-execution",
@@ -1846,7 +1860,7 @@ checksum = "2ac0fd8b5d80bbca3fc3b6f40da4e9f6907354824ec3b18bbd83fee8cf5c3c3e"
 dependencies = [
  "arrow",
  "chrono",
- "dashmap",
+ "dashmap 5.5.3",
  "datafusion-common",
  "datafusion-expr",
  "futures",
@@ -2240,6 +2254,25 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.77",
+]
+
+[[package]]
+name = "env_filter"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f2c92ceda6ceec50f43169f9ee8424fe2db276791afde7b2cd8bc084cb376ab"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.11.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e13fa619b91fb2381732789fc5de83b45675e882f66623b7d8cb4f643017018d"
+dependencies = [
+ "env_filter",
+ "log",
 ]
 
 [[package]]
@@ -2862,6 +2895,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
 dependencies = [
  "ahash",
+ "clap",
+ "crossbeam-channel",
+ "crossbeam-utils",
+ "dashmap 6.1.0",
+ "env_logger",
  "indexmap",
  "is-terminal",
  "itoa",
@@ -5026,6 +5064,7 @@ dependencies = [
  "enum-utils",
  "enum_dispatch",
  "hex-literal",
+ "inferno",
  "itertools 0.13.0",
  "metrics",
  "num-bigint-dig",

@@ -40,6 +40,7 @@ hex-literal.workspace = true
 once_cell.workspace = true
 cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
+inferno = { workspace = true, optional = true }
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }
@@ -61,4 +62,9 @@ ax-sdk = { path = "../sdk" }
 default = ["bench-metrics"]
 parallel = ["afs-stark-backend/parallel"]
 sdk = ["dep:ax-sdk"]
-bench-metrics = ["sdk", "dep:metrics", "afs-stark-backend/bench-metrics"]
+bench-metrics = [
+    "sdk",
+    "dep:metrics",
+    "dep:inferno",
+    "afs-stark-backend/bench-metrics",
+]

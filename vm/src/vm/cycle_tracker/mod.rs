@@ -7,9 +7,8 @@ use afs_stark_backend::prover::metrics::format_number_with_underscores;
 
 use self::span::CycleTrackerSpan;
 use super::metrics::VmMetrics;
-use crate::vm::cycle_tracker::span::CanDiff;
 
-pub mod span;
+mod span;
 
 #[derive(Clone, Debug, Default)]
 pub struct CycleTracker<M: CanDiff> {
@@ -17,7 +16,15 @@ pub struct CycleTracker<M: CanDiff> {
     pub order: Vec<String>,
     pub num_active_instances: usize,
     /// Stack of span names, with most recent at the end
-    pub stack: Vec<String>,
+    stack: Vec<SpanRef>,
+}
+
+// Internal struct to use as a pointer to a CycleTrackerSpan within
+// CycleTracker.instances
+#[derive(Clone, Debug, derive_new::new)]
+pub struct SpanRef {
+    name: String,
+    index: usize,
 }
 
 impl<M: CanDiff> CycleTracker<M> {
@@ -35,6 +42,7 @@ impl<M: CanDiff> CycleTracker<M> {
     pub fn start(&mut self, name: String, metrics: M) {
         let parent = self.stack.last().cloned();
         let cycle_tracker_span = CycleTrackerSpan::start(metrics, parent);
+        let mut span_index = 0;
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
@@ -42,6 +50,7 @@ impl<M: CanDiff> CycleTracker<M> {
                 if ct_last.is_active {
                     panic!("Attempting to start another cycle tracker span named '{}' while previous is still active", name);
                 }
+                span_index = spans.len();
                 spans.push(cycle_tracker_span);
             }
             Entry::Vacant(_) => {
@@ -52,7 +61,7 @@ impl<M: CanDiff> CycleTracker<M> {
         }
 
         self.num_active_instances += 1;
-        self.stack.push(name);
+        self.stack.push(SpanRef::new(name, span_index));
     }
 
     /// Ends the cycle tracker span for the given name.
@@ -60,8 +69,8 @@ impl<M: CanDiff> CycleTracker<M> {
     pub fn end(&mut self, name: String, metrics: M) {
         let stack_top = self.stack.pop();
         assert_eq!(
-            stack_top.as_ref(),
-            Some(&name),
+            stack_top.unwrap().name,
+            name,
             "Stack top does not match name"
         );
         match self.instances.entry(name.clone()) {
@@ -76,6 +85,26 @@ impl<M: CanDiff> CycleTracker<M> {
         }
         self.num_active_instances -= 1;
     }
+
+    /// Get full name of span with all parent names separated by ";" in flamegraph format
+    fn get_full_name(&self, span_ref: SpanRef) -> String {
+        let mut span = &self.instances[&span_ref.name][span_ref.index];
+        let mut full_name = span_ref.name;
+        loop {
+            let parent = span.parent.as_ref();
+            if parent.is_none() {
+                break;
+            }
+            let parent = parent.unwrap();
+            full_name = format!("{};{}", &parent.name, full_name);
+            span = &self.instances[&parent.name][parent.index];
+        }
+        full_name
+    }
+}
+
+pub trait CanDiff {
+    fn diff(&mut self, another: &Self);
 }
 
 pub trait CanPrint {
@@ -100,12 +129,9 @@ where
 
 #[cfg(feature = "bench-metrics")]
 mod emit {
-    use std::collections::HashMap;
-
-    use itertools::Itertools;
     use metrics::counter;
 
-    use super::CycleTracker;
+    use super::{CycleTracker, SpanRef};
     use crate::vm::metrics::VmMetrics;
 
     impl CycleTracker<VmMetrics> {
@@ -114,61 +140,44 @@ mod emit {
                 return;
             }
             for name in &self.order {
-                let spans = self.instances.get(name).unwrap();
+                let spans = self.instances.get(name).unwrap().clone();
                 let num_spans = spans.len();
 
                 if num_spans == 0 {
                     continue;
                 }
-
-                let mut total_vm_metrics = HashMap::new();
-                let mut total_opcode_counts = HashMap::new();
-                let mut total_dsl_counts = HashMap::new();
-                let mut total_opcode_trace_cells = HashMap::new();
-
-                for span in spans {
-                    for (key, value) in &span.metrics.chip_metrics {
-                        *total_vm_metrics.entry(key.clone()).or_insert(0) += value;
-                    }
-                    for (key, value) in &span.metrics.opcode_counts {
-                        *total_opcode_counts.entry(key.clone()).or_insert(0) += value;
-                    }
-                    for (key, value) in &span.metrics.dsl_counts {
-                        *total_dsl_counts.entry(key.clone()).or_insert(0) += value;
-                    }
-                    for (key, value) in &span.metrics.opcode_trace_cells {
-                        *total_opcode_trace_cells.entry(key.clone()).or_insert(0) += value;
-                    }
-                }
-                let sort_and_collect = |map: HashMap<String, usize>| -> Vec<(String, usize)> {
-                    map.into_iter().sorted_by(|a, b| a.1.cmp(&b.1)).collect()
-                };
-                let sorted_opcode_counts = sort_and_collect(total_opcode_counts);
-                let sorted_dsl_counts = sort_and_collect(total_dsl_counts);
-                let sorted_opcode_trace_cells = sort_and_collect(total_opcode_trace_cells);
-
                 counter!("num_spans", &[("cycle_tracker_span", name.clone())])
                     .absolute(num_spans as u64);
-                for (key, value) in total_vm_metrics {
-                    let labels = [("chip_name", key), ("cycle_tracker_span", name.clone())];
-                    counter!("rows_used", &labels).absolute(value as u64);
-                }
-                for (key, value) in sorted_opcode_counts {
-                    if value > 0 {
-                        let labels = [("opcode", key), ("cycle_tracker_span", name.clone())];
-                        counter!("frequency", &labels).absolute(value as u64);
+
+                for (i, span) in spans.into_iter().enumerate() {
+                    let full_name = self.get_full_name(SpanRef::new(name.clone(), i));
+                    for (key, value) in span.metrics.chip_heights {
+                        let labels = [
+                            ("chip_name", key),
+                            ("cycle_tracker_span", full_name.clone()),
+                        ];
+                        counter!("rows_used", &labels).increment(value as u64);
                     }
-                }
-                for (key, value) in sorted_opcode_trace_cells {
-                    if value > 0 {
-                        let labels = [("opcode", key), ("cycle_tracker_span", name.clone())];
-                        counter!("cells_used", &labels).absolute(value as u64);
+                    for (key, value) in span.metrics.opcode_counts {
+                        if value > 0 {
+                            let labels =
+                                [("opcode", key), ("cycle_tracker_span", full_name.clone())];
+                            counter!("frequency", &labels).increment(value as u64);
+                        }
                     }
-                }
-                for (key, value) in sorted_dsl_counts {
-                    if value > 0 {
-                        let labels = [("dsl_ir", key), ("cycle_tracker_span", name.clone())];
-                        counter!("frequency", &labels).absolute(value as u64);
+                    for (key, value) in span.metrics.opcode_trace_cells {
+                        if value > 0 {
+                            let labels =
+                                [("opcode", key), ("cycle_tracker_span", full_name.clone())];
+                            counter!("cells_used", &labels).increment(value as u64);
+                        }
+                    }
+                    for (key, value) in span.metrics.dsl_counts {
+                        if value > 0 {
+                            let labels =
+                                [("dsl_ir", key), ("cycle_tracker_span", full_name.clone())];
+                            counter!("frequency", &labels).absolute(value as u64);
+                        }
                     }
                 }
             }
@@ -195,7 +204,7 @@ impl Display for CycleTracker<VmMetrics> {
             let mut total_opcode_trace_cells = std::collections::HashMap::new();
 
             for span in spans {
-                for (key, value) in &span.metrics.chip_metrics {
+                for (key, value) in &span.metrics.chip_heights {
                     *total_vm_metrics.entry(key.clone()).or_insert(0) += value;
                 }
                 for (key, value) in &span.metrics.opcode_counts {

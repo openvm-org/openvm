@@ -512,10 +512,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     }
 
     pub(crate) fn update_chip_metrics(&mut self) {
-        self.collected_metrics.chip_metrics = self.chip_metrics();
+        self.collected_metrics.chip_heights = self.chip_heights();
     }
 
-    fn chip_metrics(&self) -> BTreeMap<String, usize> {
+    fn chip_heights(&self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
         for chip in self.chips.iter() {
             let chip_name: &'static str = chip.into();
