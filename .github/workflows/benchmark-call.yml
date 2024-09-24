@@ -184,13 +184,6 @@ jobs:
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
           s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
 
-          new_result="$(<${RESULT_PATH})"
-          echo "${new_result}"
-
-          echo 'new-benchmark<<EOF' >> $GITHUB_ENV
-          echo "${new_result}" >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
-
       - name: Collapse previous comment (if exists)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -221,7 +214,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const newBenchmark = process.env['new-benchmark'];
+            const fs = require('fs')
+            const newBenchmark = fs.readFileSync('./results.md', { encoding: 'utf8', flag: 'r' })
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
