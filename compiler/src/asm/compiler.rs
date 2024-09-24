@@ -12,18 +12,18 @@ use crate::{
 };
 
 /// The memory location for the top of memory
-pub const MEMORY_TOP: i32 = (1 << 29) - 4;
-
-/// The heap pointer address.
-pub(crate) const HEAP_PTR: i32 = MEMORY_TOP - 4;
-/// Utility register.
-pub(crate) const A0: i32 = MEMORY_TOP - 8;
-
-/// The memory location for the top of the stack.
-pub(crate) const STACK_TOP: i32 = MEMORY_TOP - 64;
+pub const MEMORY_TOP: u32 = (1 << 29) - 4;
 
 // The memory location for the start of the heap.
-pub(crate) const HEAP_START_ADDRESS: usize = 64;
+pub(crate) const HEAP_START_ADDRESS: i32 = 1 << 24;
+
+/// The heap pointer address.
+pub(crate) const HEAP_PTR: i32 = HEAP_START_ADDRESS - 4;
+/// Utility register.
+pub(crate) const A0: i32 = HEAP_START_ADDRESS - 8;
+
+/// The memory location for the top of the stack.
+pub(crate) const STACK_TOP: i32 = HEAP_START_ADDRESS - 64;
 
 /// The assembly compiler.
 // #[derive(Debug, Clone, Default)]
@@ -48,14 +48,14 @@ impl<F> Var<F> {
 impl<F> Felt<F> {
     /// Gets the frame pointer for a felt.
     pub const fn fp(&self) -> i32 {
-        STACK_TOP - (8 * self.0 + 4) as i32
+        STACK_TOP - (8 * self.0 + 5) as i32
     }
 }
 
 impl<F, EF> Ext<F, EF> {
     /// Gets the frame pointer for an extension element
     pub const fn fp(&self) -> i32 {
-        STACK_TOP - (8 * self.0) as i32
+        STACK_TOP - (8 * self.0 + 4) as i32
     }
 }
 
@@ -94,7 +94,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     pub fn build(&mut self, operations: TracedVec<DslIr<AsmConfig<F, EF>>>) {
         if self.block_label().is_zero() {
             // Initialize the heap pointer value.
-            let heap_start = F::from_canonical_usize(HEAP_START_ADDRESS);
+            let heap_start = F::from_canonical_u32(HEAP_START_ADDRESS as u32);
             self.push(AsmInstruction::ImmF(HEAP_PTR, heap_start), None);
             // Jump over the TRAP instruction we are about to add.
             self.push(AsmInstruction::j(self.trap_label + F::one()), None);
