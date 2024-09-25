@@ -81,6 +81,7 @@ impl<F: Field> BaseAir<F> for FieldExprChip {
         self.num_limbs * (self.builder.num_input + self.builder.num_constraint)
             + self.builder.q_limbs.iter().sum::<usize>()
             + self.builder.carry_limbs.iter().sum::<usize>()
+            + 1 // is_valid
     }
 }
 
@@ -171,7 +172,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
             for &carry in carries.iter() {
                 range_checker.add_count((carry + carry_min_abs as isize) as u32, carry_bits);
             }
-
             all_q.push(vec_isize_to_f::<F>(q_limbs));
             all_carry.push(vec_isize_to_f::<F>(carries));
         }
@@ -187,6 +187,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
             .collect::<Vec<_>>();
 
         [
+            vec![F::one()],
             input_limbs.concat(),
             vars_limbs.concat(),
             all_q.concat(),
@@ -197,10 +198,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
 }
 
 impl FieldExprChip {
-    fn new(prime: BigUint) -> Self {
-        todo!();
-    }
-
     fn load_vars<T: Clone>(&self, arr: &[T]) -> (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>) {
         let is_valid = arr[0].clone();
         let mut idx = 1;
@@ -239,6 +236,6 @@ fn load_overflow<AB: AirBuilder>(arr: Vecs<AB::Var>) -> Vec<OverflowInt<AB::Expr
 }
 
 fn to_overflow_int(x: &BigInt, num_limbs: usize) -> OverflowInt<isize> {
-    let x_limbs = big_int_to_num_limbs(x, num_limbs, LIMB_BITS);
+    let x_limbs = big_int_to_num_limbs(x, LIMB_BITS, num_limbs);
     OverflowInt::from_vec(x_limbs, LIMB_BITS)
 }

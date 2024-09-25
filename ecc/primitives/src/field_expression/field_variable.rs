@@ -6,6 +6,7 @@ use std::{
 
 use super::{ExprBuilder, SymbolicExpr};
 
+#[derive(Clone)]
 pub struct FieldVariable {
     // 1. This will be "reset" to Var(n), when calling save on it.
     // 2. This is an expression to "compute" (instead of to "constrain")
@@ -23,16 +24,17 @@ impl FieldVariable {
 
         // Introduce a new variable to replace self.expr.
         let new_var = SymbolicExpr::Var(builder.num_constraint - 1);
-        self.expr = new_var.clone();
         // self.expr - new_var = 0
-        let new_constraint = SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(new_var));
+        let new_constraint =
+            SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(new_var.clone()));
         // limbs information.
         let (q_limbs, carry_limbs) = self.expr.constraint_limbs(&builder.prime);
-
         builder.constraints.push(new_constraint);
         builder.q_limbs.push(q_limbs);
         builder.carry_limbs.push(carry_limbs);
         builder.computes.push(self.expr.clone());
+
+        self.expr = new_var;
     }
 
     pub fn add(&self, other: &FieldVariable) -> FieldVariable {
@@ -76,8 +78,7 @@ impl FieldVariable {
             Box::new(self.expr.clone()),
         );
         // limbs information.
-        let (q_limbs, carry_limbs) = self.expr.constraint_limbs(&builder.prime);
-
+        let (q_limbs, carry_limbs) = new_constraint.constraint_limbs(&builder.prime);
         builder.constraints.push(new_constraint);
         builder.q_limbs.push(q_limbs);
         builder.carry_limbs.push(carry_limbs);

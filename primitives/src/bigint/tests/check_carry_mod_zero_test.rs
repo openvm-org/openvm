@@ -176,9 +176,6 @@ const N: usize = 16;
 fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     let limb_bits = 8;
     let num_limbs = N;
-    // The equation: x^2 + y = 0 (mod p)
-    // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N + 2^10
-    // overflow bits: limb_bits * 2 + log2(N) => 24
     let field_element_bits = 30;
 
     let range_bus = 1;

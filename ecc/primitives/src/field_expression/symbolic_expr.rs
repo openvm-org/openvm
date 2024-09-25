@@ -12,7 +12,7 @@ use super::LIMB_BITS;
 /// Example: If there are 4 inputs (x1, y1, x2, y2), and one intermediate variable lambda,
 /// Mul(Var(0), Var(0)) - Input(0) - Input(2) =>
 /// lambda * lambda - x1 - x2
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SymbolicExpr {
     Input(usize),
     Var(usize),
@@ -94,24 +94,29 @@ impl SymbolicExpr {
         }
     }
 
+    // Result will be within [0, prime).
     pub fn compute(&self, inputs: &[BigUint], variables: &[BigUint], prime: &BigUint) -> BigUint {
         match self {
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
-                lhs.compute(inputs, variables, prime) + rhs.compute(inputs, variables, prime)
+                (lhs.compute(inputs, variables, prime) + rhs.compute(inputs, variables, prime))
+                    % prime
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                lhs.compute(inputs, variables, prime) - rhs.compute(inputs, variables, prime)
+                (prime + lhs.compute(inputs, variables, prime)
+                    - rhs.compute(inputs, variables, prime))
+                    % prime
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                lhs.compute(inputs, variables, prime) * rhs.compute(inputs, variables, prime)
+                (lhs.compute(inputs, variables, prime) * rhs.compute(inputs, variables, prime))
+                    % prime
             }
             SymbolicExpr::Div(lhs, rhs) => {
                 let left = lhs.compute(inputs, variables, prime);
                 let right = rhs.compute(inputs, variables, prime);
                 let right_inv = big_uint_mod_inverse(&right, prime);
-                left * right_inv
+                (left * right_inv) % prime
             }
         }
     }
