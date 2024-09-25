@@ -53,7 +53,10 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             air: FieldArithmeticAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
-                opcode_encoder: OpcodeEncoder::new(FIELD_ARITHMETIC_INSTRUCTIONS, []),
+                opcode_encoder: OpcodeEncoder::new(
+                    [Opcode::FADD, Opcode::FSUB],
+                    [Opcode::FMUL, Opcode::FDIV],
+                ),
             },
             records: vec![],
             memory_chip,

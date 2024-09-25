@@ -36,7 +36,7 @@ pub struct FieldArithmeticIoCols<T> {
 pub struct FieldArithmeticAuxCols<T> {
     pub is_valid: T,
 
-    pub flags: [T; 2],
+    pub flags: [T; 3],
     /// `divisor_inv` is y.inverse() when opcode is FDIV and zero otherwise.
     pub divisor_inv: T,
 
@@ -92,7 +92,7 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
 
 impl<T: Clone> FieldArithmeticAuxCols<T> {
     pub const fn get_width() -> usize {
-        4 + (2 * MemoryReadOrImmediateAuxCols::<T>::width() + MemoryWriteAuxCols::<T, 1>::width())
+        5 + (2 * MemoryReadOrImmediateAuxCols::<T>::width() + MemoryWriteAuxCols::<T, 1>::width())
     }
 
     #[allow(clippy::should_implement_trait)]

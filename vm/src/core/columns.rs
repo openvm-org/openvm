@@ -137,7 +137,7 @@ impl<T> CoreMemoryAccessCols<T> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoreAuxCols<T> {
-    pub operation_flags: [T; 7],
+    pub operation_flags: [T; 6],
     pub public_value_flags: Vec<T>,
     pub reads: [CoreMemoryAccessCols<T>; CORE_MAX_READS_PER_CYCLE],
     pub writes: [CoreMemoryAccessCols<T>; CORE_MAX_WRITES_PER_CYCLE],

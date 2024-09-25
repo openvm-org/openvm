@@ -19,7 +19,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             io: Default::default(),
             aux: FieldArithmeticAuxCols {
                 is_valid: F::zero(),
-                flags: [F::zero(); 2],
+                flags: [F::zero(); 3],
                 divisor_inv: F::zero(),
                 read_x_aux_cols: MemoryReadOrImmediateAuxCols::disabled(),
                 read_y_aux_cols: MemoryReadOrImmediateAuxCols::disabled(),
@@ -41,7 +41,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
         let y = y_read.value();
         let z = z_write.value();
 
-        let flags: [F; 2] = self
+        let flags: [F; 3] = self
             .air
             .clone()
             .opcode_encoder
