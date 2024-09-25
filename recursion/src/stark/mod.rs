@@ -325,6 +325,8 @@ where
         }
 
         // 2. Then the main trace openings.
+        // Flag if the "big" commitment with all non-cached main traces has been processed.
+        let mut main_commitment_processed = false;
         vk.main_commit_to_air_graph
             .commit_to_air_index
             .iter()
@@ -359,6 +361,11 @@ where
                     });
                 // FIXME: here we assume that there is only 1 commitment for all non-cached main traces.
                 let permutation = if matrix_to_air_index.len() > 1 {
+                    assert!(
+                        !main_commitment_processed,
+                        "Only 1 commitment for all non-cached main traces is supported"
+                    );
+                    main_commitment_processed = true;
                     air_perm_by_height.clone()
                 } else {
                     null_perm.clone()
@@ -419,13 +426,13 @@ where
             .map(|air| air.quotient_degree)
             .sum::<usize>();
 
-        // The permutation array for the quotient matrices.
+        // The permutation array for the quotient chunks.
         // For example:
-        // There are 2 AIRs, X and Y. X has 2 quotient matrices, X_1 and X_2. Y has 3
-        // quotient matrices, Y_1, Y_2, and Y_3.
+        // There are 2 AIRs, X and Y. X has 2 quotient chunks, X_1 and X_2. Y has 3
+        // quotient chunks, Y_1, Y_2, and Y_3.
         // `air_perm_by_height` is [1, 0].
-        // Because quotient matrices have the same height as the trace of its AIR. So the
-        // permutation array is [Y_1, Y_2, Y_3, X_1, X_2] = [2, 3, 4, 0, 1].
+        // Because quotient chunks have the same height as the trace of its AIR. So the permutation
+        // array is [Y_1, Y_2, Y_3, X_1, X_2] = [2, 3, 4, 0, 1].
         let quotient_perm = builder.array(num_quotient_mats);
 
         let quotient_degree_per_air = builder.array::<Usize<_>>(num_airs);

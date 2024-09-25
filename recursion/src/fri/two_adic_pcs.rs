@@ -18,7 +18,8 @@ use crate::{challenger::ChallengerVariable, commit::PcsVariable, digest::DigestV
 /// Reference:
 /// https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53
 /// So traces are sorted in `opening_proof`.
-/// 2. FieldMerkleTreeMMCS keeps the raw values in the original order. So traces are not sorted in `opened_values`.
+/// 2. FieldMerkleTreeMMCS::verify_batch keeps the raw values in the original order. So traces are
+/// not sorted in `opened_values`.
 /// Reference:
 /// https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/mmcs.rs#L87
 /// https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L100
