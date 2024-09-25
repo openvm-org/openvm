@@ -16,7 +16,11 @@ use super::{
 };
 use crate::{
     alu::solve_alu,
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
+    arch::{
+        chips::MachineChip,
+        instructions::Opcode,
+        testing::{memory::gen_pointer, MachineChipTestBuilder},
+    },
     core::BYTE_XOR_BUS,
     program::Instruction,
 };
@@ -44,17 +48,16 @@ fn run_alu_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     rng: &mut StdRng,
 ) {
     let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 29;
 
     let d = rng.gen_range(address_space_range());
     let e = rng.gen_range(address_space_range());
 
-    let x_address = rng.gen_range(address_range());
-    let y_address = rng.gen_range(address_range());
-    let res_address = rng.gen_range(address_range());
-    let x_ptr_to_address = rng.gen_range(address_range());
-    let y_ptr_to_address = rng.gen_range(address_range());
-    let res_ptr_to_address = rng.gen_range(address_range());
+    let x_address = gen_pointer(rng, 32);
+    let y_address = gen_pointer(rng, 32);
+    let res_address = gen_pointer(rng, 32);
+    let x_ptr_to_address = gen_pointer(rng, 1);
+    let y_ptr_to_address = gen_pointer(rng, 1);
+    let res_ptr_to_address = gen_pointer(rng, 1);
 
     let x_f = x
         .clone()
