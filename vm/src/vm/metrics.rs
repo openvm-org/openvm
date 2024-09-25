@@ -10,6 +10,7 @@ pub struct VmMetrics {
     pub opcode_counts: BTreeMap<String, usize>,
     pub dsl_counts: BTreeMap<String, usize>,
     pub opcode_trace_cells: BTreeMap<String, usize>,
+    pub dsl_trace_cells: BTreeMap<String, usize>,
 }
 
 #[cfg(feature = "bench-metrics")]
@@ -48,8 +49,10 @@ mod emit {
             }
 
             for (name, value) in dsl_counts.iter() {
+                let cell_count = *self.dsl_trace_cells.get(name).unwrap_or(&0);
                 let labels = [("dsl_ir", name.clone())];
                 counter!("frequency", &labels).absolute(*value as u64);
+                counter!("cells_used", &labels).absolute(cell_count as u64);
             }
         }
     }
@@ -62,6 +65,7 @@ impl CanDiff for VmMetrics {
             opcode_counts: count_diff(&start.opcode_counts, &self.opcode_counts),
             dsl_counts: count_diff(&start.dsl_counts, &self.dsl_counts),
             opcode_trace_cells: count_diff(&start.opcode_trace_cells, &self.opcode_trace_cells),
+            dsl_trace_cells: count_diff(&start.dsl_trace_cells, &self.dsl_trace_cells),
         };
     }
 }

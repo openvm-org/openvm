@@ -60,6 +60,7 @@ def create_custom_flamegraphs(metrics_file):
     create_flamegraph(metrics_file, "opcode", "cells_used")
     create_flamegraph(metrics_file, "chip_name", "rows_used")
     create_flamegraph(metrics_file, "dsl_ir", "frequency")
+    create_flamegraph(metrics_file, "dsl_ir", "cells_used")
 
 
 def main():

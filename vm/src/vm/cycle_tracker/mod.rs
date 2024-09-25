@@ -180,6 +180,13 @@ mod emit {
                             counter!("frequency", &labels).absolute(value as u64);
                         }
                     }
+                    for (key, value) in span.metrics.dsl_trace_cells {
+                        if value > 0 {
+                            let labels =
+                                [("dsl_ir", key), ("cycle_tracker_span", full_name.clone())];
+                            counter!("cells_used", &labels).increment(value as u64);
+                        }
+                    }
                 }
             }
         }
