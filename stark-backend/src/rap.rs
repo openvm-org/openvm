@@ -66,15 +66,26 @@ where
 
     fn name(&self) -> String {
         let full_name = type_name::<Self>().to_string();
-        let base_name = full_name
-            .split('<')
-            .next()
-            .unwrap_or(&full_name)
-            .rsplit("::")
-            .next()
-            .unwrap_or(&full_name)
-            .to_string();
+        // Split the input by the first '<' to separate the main type from its generics
+        if let Some((main_part, generics_part)) = full_name.split_once('<') {
+            // Extract the last segment of the main type
+            let main_type = main_part.split("::").last().unwrap_or("");
 
-        base_name
+            // Remove the trailing '>' from the generics part and split by ", " to handle multiple generics
+            let generics: Vec<String> = generics_part
+                .trim_end_matches('>')
+                .split(", ")
+                .map(|generic| {
+                    // For each generic type, extract the last segment after "::"
+                    generic.split("::").last().unwrap_or("").to_string()
+                })
+                .collect();
+
+            // Join the simplified generics back together with ", " and format the result
+            format!("{}<{}>", main_type, generics.join(", "))
+        } else {
+            // If there's no generic part, just return the last segment after "::"
+            full_name.split("::").last().unwrap_or("").to_string()
+        }
     }
 }

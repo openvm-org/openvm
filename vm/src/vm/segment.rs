@@ -404,24 +404,28 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let added_trace_cells = now_trace_cells - prev_trace_cells;
 
             if collect_metrics {
-                *self.collected_metrics
+                *self
+                    .collected_metrics
                     .opcode_counts
                     .entry(opcode.to_string())
                     .or_insert(0) += 1;
 
                 if !dsl_instr.is_empty() {
-                    *self.collected_metrics
+                    *self
+                        .collected_metrics
                         .dsl_counts
                         .entry(dsl_instr.clone())
                         .or_insert(0) += 1;
                 }
 
-                *self.collected_metrics
+                *self
+                    .collected_metrics
                     .opcode_trace_cells
                     .entry(opcode.to_string())
                     .or_insert(0) += added_trace_cells;
 
-                *self.collected_metrics
+                *self
+                    .collected_metrics
                     .dsl_trace_cells
                     .entry(dsl_instr)
                     .or_insert(0) += added_trace_cells;
