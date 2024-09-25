@@ -107,7 +107,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 };
 
                 let batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
-                // `verify_challenges` requires `permed_opened_values` to be in the committed order.
+                // `verify_batch` requires `permed_opened_values` to be in the committed order.
                 let permed_opened_values = builder.array(batch_opening.opened_values.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat_index = to_perm_index(builder, k);

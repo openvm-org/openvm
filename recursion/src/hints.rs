@@ -165,7 +165,7 @@ impl Hintable<InnerConfig> for VerifierInput<BabyBearPoseidon2Config> {
         };
 
         let raw_air_perm_by_height = Vec::<usize>::read(builder);
-        // A hacky way to cast ptr.
+        // A hacky way to transmute from Array of Var to Array of Usize.
         let air_perm_by_height = if let Array::Dyn(ptr, len) = raw_air_perm_by_height {
             Array::Dyn(ptr, len)
         } else {
