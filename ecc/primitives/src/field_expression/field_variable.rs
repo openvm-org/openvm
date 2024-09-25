@@ -61,6 +61,13 @@ impl FieldVariable {
         }
     }
 
+    pub fn scalar_mul(&self, scalar: usize) -> FieldVariable {
+        FieldVariable {
+            expr: SymbolicExpr::ScalarMul(Box::new(self.expr.clone()), scalar),
+            builder: self.builder.clone(),
+        }
+    }
+
     // expr cannot have division, so auto-save a new variable.
     pub fn div(&self, other: &FieldVariable) -> FieldVariable {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));

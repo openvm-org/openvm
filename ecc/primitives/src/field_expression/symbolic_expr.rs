@@ -1,10 +1,11 @@
-use std::{
-    cmp::max,
-    ops::{Add, Mul, Sub},
-};
+use std::cmp::max;
 
-use num_bigint_dig::BigUint;
-use num_traits::One;
+use afs_primitives::bigint::OverflowInt;
+use num_bigint_dig::{BigInt, BigUint};
+use num_traits::{FromPrimitive, One};
+use p3_air::AirBuilder;
+use p3_field::AbstractField;
+use p3_util::log2_ceil_usize;
 use stark_vm::modular_addsub::big_uint_mod_inverse;
 
 use super::LIMB_BITS;
@@ -21,6 +22,7 @@ pub enum SymbolicExpr {
     Mul(Box<SymbolicExpr>, Box<SymbolicExpr>),
     // Division is not allowed in "constraints", but can only be used in "computes"
     Div(Box<SymbolicExpr>, Box<SymbolicExpr>),
+    ScalarMul(Box<SymbolicExpr>, usize),
 }
 
 impl SymbolicExpr {
@@ -52,6 +54,11 @@ impl SymbolicExpr {
                 // Should not have division in expression when calling this.
                 unreachable!()
             }
+            SymbolicExpr::ScalarMul(lhs, s) => {
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
+                let scalar = BigUint::from_usize(*s).unwrap();
+                (lhs_max_pos * &scalar, lhs_max_neg * &scalar)
+            }
         }
     }
 
@@ -73,24 +80,90 @@ impl SymbolicExpr {
         (q_limbs, carry_limbs)
     }
 
-    // T will be BigInt, OverflowInt<isize>, OverflowInt<AB::Expr>
-    pub fn evaluate<T>(&self, inputs: &[T], variables: &[T]) -> T
-    where
-        T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
-    {
+    pub fn evaluate_bigint(&self, inputs: &[BigInt], variables: &[BigInt]) -> BigInt {
         match self {
+            SymbolicExpr::ScalarMul(lhs, s) => {
+                lhs.evaluate_bigint(inputs, variables) * BigInt::from_usize(*s).unwrap()
+            }
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
-                lhs.evaluate(inputs, variables) + rhs.evaluate(inputs, variables)
+                lhs.evaluate_bigint(inputs, variables) + rhs.evaluate_bigint(inputs, variables)
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                lhs.evaluate(inputs, variables) - rhs.evaluate(inputs, variables)
+                lhs.evaluate_bigint(inputs, variables) - rhs.evaluate_bigint(inputs, variables)
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                lhs.evaluate(inputs, variables) * rhs.evaluate(inputs, variables)
+                lhs.evaluate_bigint(inputs, variables) * rhs.evaluate_bigint(inputs, variables)
             }
-            SymbolicExpr::Div(_, _) => unreachable!(),
+            SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
+        }
+    }
+
+    pub fn evaluate_overflow_isize(
+        &self,
+        inputs: &[OverflowInt<isize>],
+        variables: &[OverflowInt<isize>],
+    ) -> OverflowInt<isize> {
+        match self {
+            SymbolicExpr::ScalarMul(lhs, s) => {
+                let mut left = lhs.evaluate_overflow_isize(inputs, variables);
+                for limb in left.limbs.iter_mut() {
+                    *limb *= *s as isize;
+                }
+                left.limb_max_abs *= *s;
+                left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
+                left
+            }
+            SymbolicExpr::Input(i) => inputs[*i].clone(),
+            SymbolicExpr::Var(i) => variables[*i].clone(),
+            SymbolicExpr::Add(lhs, rhs) => {
+                lhs.evaluate_overflow_isize(inputs, variables)
+                    + rhs.evaluate_overflow_isize(inputs, variables)
+            }
+            SymbolicExpr::Sub(lhs, rhs) => {
+                lhs.evaluate_overflow_isize(inputs, variables)
+                    - rhs.evaluate_overflow_isize(inputs, variables)
+            }
+            SymbolicExpr::Mul(lhs, rhs) => {
+                lhs.evaluate_overflow_isize(inputs, variables)
+                    * rhs.evaluate_overflow_isize(inputs, variables)
+            }
+            SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
+        }
+    }
+
+    pub fn evaluate_overflow_expr<AB: AirBuilder>(
+        &self,
+        inputs: &[OverflowInt<AB::Expr>],
+        variables: &[OverflowInt<AB::Expr>],
+    ) -> OverflowInt<AB::Expr> {
+        match self {
+            SymbolicExpr::ScalarMul(lhs, s) => {
+                let mut left = lhs.evaluate_overflow_expr::<AB>(inputs, variables);
+                let scalar = AB::Expr::from_canonical_usize(*s);
+                for limb in left.limbs.iter_mut() {
+                    *limb *= scalar.clone();
+                }
+                left.limb_max_abs *= *s;
+                left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
+                left
+            }
+            SymbolicExpr::Input(i) => inputs[*i].clone(),
+            SymbolicExpr::Var(i) => variables[*i].clone(),
+            SymbolicExpr::Add(lhs, rhs) => {
+                lhs.evaluate_overflow_expr::<AB>(inputs, variables)
+                    + rhs.evaluate_overflow_expr::<AB>(inputs, variables)
+            }
+            SymbolicExpr::Sub(lhs, rhs) => {
+                lhs.evaluate_overflow_expr::<AB>(inputs, variables)
+                    - rhs.evaluate_overflow_expr::<AB>(inputs, variables)
+            }
+            SymbolicExpr::Mul(lhs, rhs) => {
+                lhs.evaluate_overflow_expr::<AB>(inputs, variables)
+                    * rhs.evaluate_overflow_expr::<AB>(inputs, variables)
+            }
+            SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
         }
     }
 
@@ -117,6 +190,11 @@ impl SymbolicExpr {
                 let right = rhs.compute(inputs, variables, prime);
                 let right_inv = big_uint_mod_inverse(&right, prime);
                 (left * right_inv) % prime
+            }
+            SymbolicExpr::ScalarMul(lhs, s) => {
+                let left = lhs.compute(inputs, variables, prime);
+                let right = BigUint::from_usize(*s).unwrap();
+                (left * right) % prime
             }
         }
     }

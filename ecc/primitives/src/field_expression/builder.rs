@@ -97,7 +97,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExprChip {
         let vars = load_overflow::<AB>(vars);
 
         for i in 0..self.builder.num_constraint {
-            let expr = self.builder.constraints[i].evaluate(&inputs, &vars);
+            let expr = self.builder.constraints[i].evaluate_overflow_expr::<AB>(&inputs, &vars);
             self.check_carry_mod_to_zero.constrain_carry_mod_to_zero(
                 builder,
                 expr,
@@ -163,7 +163,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
             vars_bigint[i] = BigInt::from_biguint(Sign::Plus, r);
             vars_overflow[i] = to_overflow_int(&vars_bigint[i], self.num_limbs);
             // expr = q * p
-            let expr_bigint = self.builder.constraints[i].evaluate(&input_bigint, &vars_bigint);
+            let expr_bigint =
+                self.builder.constraints[i].evaluate_bigint(&input_bigint, &vars_bigint);
             let q = expr_bigint / &prime_bigint;
             let q_limbs = big_int_to_num_limbs(&q, LIMB_BITS, self.builder.q_limbs[i]);
             for &q in q_limbs.iter() {
@@ -175,7 +176,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
                 limb_max_abs: (1 << LIMB_BITS),
             };
             // compute carries of (expr - q * p)
-            let expr = self.builder.constraints[i].evaluate(&input_overflow, &vars_overflow);
+            let expr = self.builder.constraints[i]
+                .evaluate_overflow_isize(&input_overflow, &vars_overflow);
             let expr = expr - q_overflow * prime_overflow.clone();
             let carries = expr.calculate_carries(LIMB_BITS);
             let max_overflow_bits = expr.max_overflow_bits;
