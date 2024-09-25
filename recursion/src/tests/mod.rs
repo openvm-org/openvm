@@ -103,6 +103,16 @@ where
 }
 
 #[test]
+fn test_fibonacci_small() {
+    setup_tracing();
+
+    run_recursive_test(
+        fibonacci_stark_for_test::<BabyBearPoseidon2Config>(1 << 5),
+        default_fri_params(),
+    )
+}
+
+#[test]
 fn test_fibonacci() {
     setup_tracing();
 
