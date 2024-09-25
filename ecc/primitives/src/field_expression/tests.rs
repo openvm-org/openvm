@@ -61,6 +61,7 @@ fn test_add() {
         builder,
         num_limbs: 32, // 256 bits / 8 bits per limb.
         check_carry_mod_to_zero: subair,
+        range_checker: range_checker.clone(),
     };
 
     let x = generate_random_biguint(&prime);
@@ -94,6 +95,7 @@ fn test_div() {
         builder,
         num_limbs: 32, // 256 bits / 8 bits per limb.
         check_carry_mod_to_zero: subair,
+        range_checker: range_checker.clone(),
     };
 
     let x = generate_random_biguint(&prime);
@@ -135,6 +137,7 @@ fn test_ec_add() {
         builder,
         num_limbs: 32, // 256 bits / 8 bits per limb.
         check_carry_mod_to_zero: subair,
+        range_checker: range_checker.clone(),
     };
 
     let (x1, y1) = SampleEcPoints[0].clone();

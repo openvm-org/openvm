@@ -74,6 +74,7 @@ pub struct FieldExprChip {
     pub num_limbs: usize,
 
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl<F: Field> BaseAir<F> for FieldExprChip {
@@ -108,7 +109,18 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExprChip {
             )
         }
 
-        // TODO: above range check q and c, still need to range check vars.
+        for var in vars.iter() {
+            for limb in var.limbs.iter() {
+                range_check(
+                    builder,
+                    self.range_checker.bus().index,
+                    self.range_checker.range_max_bits(),
+                    LIMB_BITS,
+                    limb.clone(),
+                    is_valid,
+                );
+            }
+        }
     }
 }
 
@@ -175,7 +187,11 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
             all_q.push(vec_isize_to_f::<F>(q_limbs));
             all_carry.push(vec_isize_to_f::<F>(carries));
         }
-        // TODO: range check vars libs
+        for var in vars_overflow.iter() {
+            for limb in var.limbs.iter() {
+                range_checker.add_count(*limb as u32, LIMB_BITS);
+            }
+        }
 
         let input_limbs = input_overflow
             .iter()
