@@ -125,11 +125,11 @@ def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_spa
                 metric = next((m for m in metrics if m.name == metric_name), None)
                 metric_str = ""
                 if metric:
-                    metric_str += f"{metric.value}"
+                    metric_str += f"{metric.value:,}"
                     if metric.diff_percent is not None and metric.diff_value != 0:
                         color = "red" if metric.diff_percent > 0 else "green"
                         # Format the percentage with the color styling
-                        metric_str += f' <span style="color: {color}">({metric.diff_percent:+.1%})</span>'
+                        metric_str += f' <span style="color: {color}">({metric.diff_value:+,} [{metric.diff_percent:+.1%}])</span>'
                 row_metrics.append(metric_str)
             markdown_output += "| " + " | ".join(row_values + row_metrics) + " |\n"
         markdown_output += "\n"
