@@ -8,6 +8,7 @@ use crate::asm::{AsmInstruction, AssemblyCode};
 
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
+    // The compiler will ensure that the heap pointer is aligned to be a multiple of `word_size`.
     pub word_size: usize,
     pub compile_prints: bool,
     pub enable_cycle_tracker: bool,

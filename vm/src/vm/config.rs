@@ -20,13 +20,6 @@ impl Default for MemoryConfig {
     }
 }
 
-impl MemoryConfig {
-    /// Returns a config for programs whose timestamp never reaches 2**15.
-    pub fn short() -> Self {
-        Self::new(29, 29, 15, 8)
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
     // TODO: VmConfig should just contain CoreOptions to reduce redundancy

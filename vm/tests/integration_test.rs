@@ -39,7 +39,6 @@ where
 fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig {
         field_arithmetic_enabled: true,
-        memory_config: MemoryConfig::short(),
         ..VmConfig::core()
     }
 }
@@ -80,7 +79,6 @@ fn air_test_with_compress_poseidon2(
             perm_poseidon2_enabled: false,
             num_public_values: 4,
             poseidon2_max_constraint_degree: Some(poseidon2_max_constraint_degree),
-            memory_config: MemoryConfig::short(),
             ..Default::default()
         },
         program,
@@ -276,7 +274,6 @@ fn test_vm_field_extension_arithmetic() {
         VmConfig {
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
-            memory_config: MemoryConfig::short(),
             ..VmConfig::core()
         },
         program,
@@ -457,7 +454,6 @@ fn test_vm_keccak() {
     air_test(
         VmConfig {
             keccak_enabled: true,
-            memory_config: MemoryConfig::short(),
             ..VmConfig::core()
         },
         program,
@@ -486,7 +482,6 @@ fn test_vm_keccak_non_full_round() {
     air_test(
         VmConfig {
             keccak_enabled: true,
-            memory_config: MemoryConfig::short(),
             ..VmConfig::core()
         },
         program,
