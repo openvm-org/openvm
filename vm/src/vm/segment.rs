@@ -259,7 +259,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.shift_256_enabled {
             let shift_chip = Rc::new(RefCell::new(ShiftChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
+                byte_xor_chip.clone(),
             )));
             assign!(SHIFT_256_INSTRUCTIONS, shift_chip);
             chips.push(MachineChipVariant::Shift256(shift_chip));

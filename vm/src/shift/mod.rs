@@ -1,36 +1,70 @@
+use std::{array, sync::Arc};
+
+use afs_primitives::{var_range::VariableRangeCheckerChip, xor::lookup::XorLookupChip};
 use air::ShiftAir;
 use p3_field::PrimeField32;
 
 use crate::{
     arch::{
+        bridge::ExecutionBridge,
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, ALU_256_INSTRUCTIONS},
+        instructions::{Opcode, SHIFT_256_INSTRUCTIONS},
     },
-    memory::MemoryChipRef,
-    program::{ExecutionError, Instruction},
+    memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 mod air;
+mod bridge;
+mod columns;
 mod trace;
 
 #[cfg(test)]
 mod tests;
 
 #[derive(Debug)]
+pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub from_state: ExecutionState<usize>,
+    pub instruction: Instruction<T>,
+    pub x_ptr_read: MemoryReadRecord<T, 1>,
+    pub y_ptr_read: MemoryReadRecord<T, 1>,
+    pub z_ptr_read: MemoryReadRecord<T, 1>,
+    pub x_read: MemoryReadRecord<T, NUM_LIMBS>,
+    pub y_read: MemoryReadRecord<T, NUM_LIMBS>,
+    pub z_write: MemoryWriteRecord<T, NUM_LIMBS>,
+    pub bit_shift_carry: [T; NUM_LIMBS],
+    pub bit_quotient: T,
+    pub bit_shift: usize,
+    pub limb_shift: usize,
+    pub x_sign: T,
+}
+
+#[derive(Debug)]
 pub struct ShiftChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ShiftAir<NUM_LIMBS, LIMB_BITS>,
-    // TODO: add data storage for trace generation
+    data: Vec<ShiftRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
-    // TODO: add range checker
+    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     ShiftChip<T, NUM_LIMBS, LIMB_BITS>
 {
-    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory_chip: MemoryChipRef<T>,
+        xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    ) -> Self {
         assert!(LIMB_BITS < 16, "LIMB_BITS {} >= 16", LIMB_BITS);
+        assert!(
+            LIMB_BITS.is_power_of_two(),
+            "LIMB_BITS {} not a power of 2",
+            LIMB_BITS
+        );
         assert!(
             NUM_LIMBS < (1 << (2 * LIMB_BITS)),
             "NUM_LIMBS {} >= 2^(2 * LIMB_BITS {})",
@@ -38,12 +72,18 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             LIMB_BITS
         );
         let memory_bridge = memory_chip.borrow().memory_bridge();
+        let range_checker_chip = memory_chip.borrow().range_checker.clone();
         Self {
             air: ShiftAir {
-                execution_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                range_bus: range_checker_chip.bus(),
+                xor_bus: xor_lookup_chip.bus(),
             },
+            data: vec![],
             memory_chip,
+            range_checker_chip,
+            xor_lookup_chip,
         }
     }
 }
@@ -65,7 +105,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        assert!(ALU_256_INSTRUCTIONS.contains(&opcode));
+        assert!(SHIFT_256_INSTRUCTIONS.contains(&opcode));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -80,11 +120,29 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|y| y.as_canonical_u32());
-        let z = solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, opcode);
+        let (z, limb_shift, bit_shift) = solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, opcode);
 
-        // TODO: range check add count
+        let carry = x
+            .into_iter()
+            .map(|val: u32| match opcode {
+                Opcode::SLL256 => val >> (LIMB_BITS - bit_shift),
+                _ => val % (1 << bit_shift),
+            })
+            .collect::<Vec<_>>();
 
-        let _z_write = memory_chip.write::<NUM_LIMBS>(
+        let mut x_sign = 0;
+        if opcode == Opcode::SRA256 {
+            x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
+            self.xor_lookup_chip
+                .request(x_sign * (1 << (LIMB_BITS - 1)), x[NUM_LIMBS - 1]);
+        }
+
+        for (z_val, carry_val) in z.iter().zip(carry.iter()) {
+            self.range_checker_chip.add_count(*z_val, LIMB_BITS);
+            self.range_checker_chip.add_count(*carry_val, bit_shift);
+        }
+
+        let z_write = memory_chip.write::<NUM_LIMBS>(
             e,
             z_ptr_read.value(),
             z.into_iter()
@@ -94,7 +152,21 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
                 .unwrap(),
         );
 
-        // TODO: push information to data for trace generation
+        self.data.push(ShiftRecord {
+            from_state,
+            instruction: instruction.clone(),
+            x_ptr_read,
+            y_ptr_read,
+            z_ptr_read,
+            x_read,
+            y_read,
+            z_write,
+            bit_shift_carry: array::from_fn(|i| T::from_canonical_u32(carry[i])),
+            bit_quotient: T::from_canonical_usize(y[0] as usize / LIMB_BITS),
+            bit_shift,
+            limb_shift,
+            x_sign: T::from_canonical_u32(x_sign),
+        });
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
@@ -107,7 +179,7 @@ fn solve_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
     op: Opcode,
-) -> Vec<u32> {
+) -> (Vec<u32>, usize, usize) {
     match op {
         Opcode::SLL256 => solve_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
         Opcode::SRL256 => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
@@ -119,12 +191,12 @@ fn solve_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 fn solve_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
-) -> Vec<u32> {
+) -> (Vec<u32>, usize, usize) {
     let mut result = vec![0u32; NUM_LIMBS];
 
     let (is_zero, limb_shift, bit_shift) = get_shift::<NUM_LIMBS, LIMB_BITS>(y);
     if is_zero {
-        return result;
+        return (result, limb_shift, bit_shift);
     }
 
     for i in limb_shift..NUM_LIMBS {
@@ -135,21 +207,21 @@ fn solve_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
             (x[i - limb_shift] << bit_shift) % (1 << LIMB_BITS)
         };
     }
-    result
+    (result, limb_shift, bit_shift)
 }
 
 fn solve_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
     logical: bool,
-) -> Vec<u32> {
+) -> (Vec<u32>, usize, usize) {
     let fill =
         (1 - (logical as u32)) * ((1 << LIMB_BITS) - 1) * (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
     let mut result = vec![fill; NUM_LIMBS];
 
     let (is_zero, limb_shift, bit_shift) = get_shift::<NUM_LIMBS, LIMB_BITS>(y);
     if is_zero {
-        return result;
+        return (result, limb_shift, bit_shift);
     }
 
     for i in 0..(NUM_LIMBS - limb_shift) {
@@ -161,18 +233,15 @@ fn solve_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
                 % (1 << LIMB_BITS)
         }
     }
-    result
+    (result, limb_shift, bit_shift)
 }
 
 fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u32]) -> (bool, usize, usize) {
     // We assume `NUM_LIMBS < 2^(2*LIMB_BITS)` so if there are any higher limbs, the shifted value is zero.
-    if y[2..].iter().any(|&val| val != 0) {
-        return (true, 0, 0);
-    }
     let shift = (y[0] + (y[1] * (1 << LIMB_BITS))) as usize;
-    if shift < NUM_LIMBS * LIMB_BITS {
+    if shift < NUM_LIMBS * LIMB_BITS && y[2..].iter().all(|&val| val == 0) {
         (false, shift / LIMB_BITS, shift % LIMB_BITS)
     } else {
-        (true, 0, 0)
+        (true, NUM_LIMBS, shift % LIMB_BITS)
     }
 }

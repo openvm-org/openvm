@@ -1,5 +1,3 @@
-// chip def here
-// chip is executor
 use std::sync::Arc;
 
 use afs_primitives::range_tuple::RangeTupleCheckerChip;
