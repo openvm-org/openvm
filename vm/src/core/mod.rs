@@ -9,7 +9,10 @@ use crate::{
     arch::{
         bridge::ExecutionBridge,
         bus::ExecutionBus,
-        instructions::Opcode::{self, *},
+        instructions::{
+            Opcode::{self, *},
+            OpcodeEncoder, CORE_INSTRUCTIONS,
+        },
     },
     memory::MemoryChipRef,
     program::bridge::ProgramBus,
@@ -136,6 +139,12 @@ impl<F: PrimeField32> CoreChip<F> {
                 options,
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                opcode_encoder: OpcodeEncoder::new(
+                    CORE_INSTRUCTIONS
+                        .iter()
+                        .filter(|&op| *op != Opcode::NOP)
+                        .copied(),
+                ),
             },
             rows: vec![],
             state,

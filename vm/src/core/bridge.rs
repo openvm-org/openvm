@@ -1,10 +1,11 @@
-use std::collections::BTreeMap;
-
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{columns::CoreIoCols, timestamp_delta, CoreAir};
-use crate::arch::{columns::ExecutionState, instructions::Opcode};
+use crate::arch::{
+    columns::ExecutionState,
+    instructions::{Opcode, OpcodeEncoderWithBuilder, CORE_INSTRUCTIONS},
+};
 
 impl CoreAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -12,7 +13,7 @@ impl CoreAir {
         builder: &mut AB,
         io: CoreIoCols<AB::Var>,
         next_pc: AB::Var,
-        operation_flags: &BTreeMap<Opcode, AB::Var>,
+        encoder: &OpcodeEncoderWithBuilder<AB, 5>,
     ) {
         self.execution_bridge
             .execute(
@@ -22,15 +23,18 @@ impl CoreAir {
                 ExecutionState::<AB::Expr>::new(
                     next_pc.into(),
                     io.timestamp
-                        + operation_flags
+                        + CORE_INSTRUCTIONS
                             .iter()
-                            .map(|(op, flag)| {
-                                AB::Expr::from_canonical_usize(timestamp_delta(*op))
-                                    * (*flag).into()
+                            .map(|&op| {
+                                AB::Expr::from_canonical_usize(timestamp_delta(op))
+                                    * encoder.expression_for(op)
                             })
                             .fold(AB::Expr::zero(), |x, y| x + y),
                 ),
             )
-            .eval(builder, AB::Expr::one() - operation_flags[&Opcode::NOP]);
+            .eval(
+                builder,
+                AB::Expr::one() - encoder.expression_for(Opcode::NOP),
+            );
     }
 }

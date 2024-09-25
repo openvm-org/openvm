@@ -1,21 +1,17 @@
-use std::{array, collections::BTreeMap};
+use std::array;
 
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
     sub_chip::LocalTraceInstructions,
 };
-use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 
 use super::{
     CoreAir, CoreChip, Opcode, CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE, WORD_SIZE,
 };
-use crate::{
-    arch::instructions::CORE_INSTRUCTIONS,
-    memory::{
-        offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
-        MemoryReadRecord, MemoryWriteRecord,
-    },
+use crate::memory::{
+    offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+    MemoryReadRecord, MemoryWriteRecord,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,7 +137,7 @@ impl<T> CoreMemoryAccessCols<T> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoreAuxCols<T> {
-    pub operation_flags: BTreeMap<Opcode, T>,
+    pub operation_flags: [T; 5],
     pub public_value_flags: Vec<T>,
     pub reads: [CoreMemoryAccessCols<T>; CORE_MAX_READS_PER_CYCLE],
     pub writes: [CoreMemoryAccessCols<T>; CORE_MAX_WRITES_PER_CYCLE],
@@ -156,12 +152,11 @@ pub struct CoreAuxCols<T> {
 impl<T: Clone> CoreAuxCols<T> {
     pub fn from_slice(slc: &[T], core_air: &CoreAir) -> Self {
         let mut start = 0;
-        let mut end = CORE_INSTRUCTIONS.len();
-        let operation_flags_vec = slc[start..end].to_vec();
-        let mut operation_flags = BTreeMap::new();
-        for (opcode, operation_flag) in CORE_INSTRUCTIONS.iter().zip_eq(operation_flags_vec) {
-            operation_flags.insert(*opcode, operation_flag);
-        }
+        let mut end = core_air.opcode_encoder.len();
+        let operation_flags = slc[start..end]
+            .to_vec()
+            .try_into()
+            .unwrap_or_else(|_| panic!());
 
         start = end;
         end += core_air.options.num_public_values;
@@ -213,9 +208,7 @@ impl<T: Clone> CoreAuxCols<T> {
 
     pub fn flatten(&self) -> Vec<T> {
         let mut flattened = vec![];
-        for opcode in CORE_INSTRUCTIONS {
-            flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
-        }
+        flattened.extend(self.operation_flags.clone());
         flattened.extend(self.public_value_flags.clone());
         flattened.extend(
             self.reads
@@ -248,7 +241,7 @@ impl<T: Clone> CoreAuxCols<T> {
     }
 
     pub fn get_width(core_air: &CoreAir) -> usize {
-        CORE_INSTRUCTIONS.len()
+        core_air.opcode_encoder.len()
             + core_air.options.num_public_values
             + CORE_MAX_READS_PER_CYCLE
                 * (CoreMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width())
@@ -262,17 +255,12 @@ impl<T: Clone> CoreAuxCols<T> {
 
 impl<F: PrimeField32> CoreAuxCols<F> {
     pub fn nop_row(chip: &CoreChip<F>) -> Self {
-        let mut operation_flags = BTreeMap::new();
-        for opcode in CORE_INSTRUCTIONS {
-            operation_flags.insert(opcode, F::from_bool(opcode == Opcode::NOP));
-        }
-
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
             (vec![F::zero()], vec![F::zero()]),
         );
         Self {
-            operation_flags,
+            operation_flags: array::from_fn(|_| F::zero()),
             public_value_flags: vec![F::zero(); chip.air.options.num_public_values],
             reads: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
             writes: array::from_fn(|_| CoreMemoryAccessCols::disabled()),

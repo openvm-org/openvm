@@ -15,7 +15,10 @@ use super::{
     CoreOptions, INST_WIDTH, WORD_SIZE,
 };
 use crate::{
-    arch::{bridge::ExecutionBridge, instructions::Opcode::*},
+    arch::{
+        bridge::ExecutionBridge,
+        instructions::{Opcode::*, OpcodeEncoder, CORE_INSTRUCTIONS},
+    },
     memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
@@ -25,6 +28,7 @@ pub struct CoreAir {
     pub options: CoreOptions,
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
+    pub opcode_encoder: OpcodeEncoder<5>,
 }
 
 impl<F: Field> BaseAir<F> for CoreAir {
@@ -77,21 +81,14 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let [read1, read2, read3] = &reads;
         let [write] = &writes;
 
-        // set correct operation flag
-        for &flag in operation_flags.values() {
-            builder.assert_bool(flag);
-        }
+        let encoder = self.opcode_encoder.initialize(builder, operation_flags);
 
-        let mut is_core_opcode = AB::Expr::zero();
         let mut match_opcode = AB::Expr::zero();
-        for (&opcode, &flag) in operation_flags.iter() {
-            is_core_opcode += flag.into();
+        for opcode in CORE_INSTRUCTIONS {
+            let flag = encoder.expression_for(opcode);
             match_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
         }
-        builder.assert_bool(is_core_opcode.clone());
-        builder
-            .when(is_core_opcode.clone())
-            .assert_eq(opcode, match_opcode);
+        builder.assert_eq(opcode, match_opcode);
 
         // keep track of when memory accesses should be enabled
         let mut read1_enabled = AB::Expr::zero();
@@ -100,12 +97,12 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let mut write_enabled = AB::Expr::zero();
 
         // LOADW: d[a] <- e[d[c] + b + d[f] * g]
-        let loadw_flag = operation_flags[&LOADW];
-        read1_enabled += loadw_flag.into();
-        read2_enabled += loadw_flag.into();
-        write_enabled += loadw_flag.into();
+        let loadw_flag = encoder.expression_for(LOADW);
+        read1_enabled += loadw_flag.clone();
+        read2_enabled += loadw_flag.clone();
+        write_enabled += loadw_flag.clone();
 
-        let mut when_loadw = builder.when(loadw_flag);
+        let mut when_loadw = encoder.when(builder, LOADW);
 
         when_loadw.assert_eq(read1.address_space, d);
         when_loadw.assert_eq(read1.pointer, c);
@@ -122,12 +119,12 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .assert_eq(next_pc, pc + inst_width);
 
         // STOREW: e[d[c] + b] <- d[a]
-        let storew_flag = operation_flags[&STOREW];
-        read1_enabled += storew_flag.into();
-        read2_enabled += storew_flag.into();
-        write_enabled += storew_flag.into();
+        let storew_flag = encoder.expression_for(STOREW);
+        read1_enabled += storew_flag.clone();
+        read2_enabled += storew_flag.clone();
+        write_enabled += storew_flag.clone();
 
-        let mut when_storew = builder.when(storew_flag);
+        let mut when_storew = encoder.when(builder, STOREW);
         when_storew.assert_eq(read1.address_space, d);
         when_storew.assert_eq(read1.pointer, c);
 
@@ -143,13 +140,13 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .assert_eq(next_pc, pc + inst_width);
 
         // LOADW2: d[a] <- e[d[c] + b + mem[f] * g]
-        let loadw2_flag = operation_flags[&LOADW2];
-        read1_enabled += loadw2_flag.into();
-        read2_enabled += loadw2_flag.into();
-        read3_enabled += loadw2_flag.into();
-        write_enabled += loadw2_flag.into();
+        let loadw2_flag = encoder.expression_for(LOADW2);
+        read1_enabled += loadw2_flag.clone();
+        read2_enabled += loadw2_flag.clone();
+        read3_enabled += loadw2_flag.clone();
+        write_enabled += loadw2_flag.clone();
 
-        let mut when_loadw2 = builder.when(loadw2_flag);
+        let mut when_loadw2 = encoder.when(builder, LOADW2);
 
         when_loadw2.assert_eq(read1.address_space, d);
         when_loadw2.assert_eq(read1.pointer, c);
@@ -170,13 +167,13 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .assert_eq(next_pc, pc + inst_width);
 
         // STOREW2: e[d[c] + b + mem[f] * g] <- d[a]
-        let storew2_flag = operation_flags[&STOREW2];
-        read1_enabled += storew2_flag.into();
-        read2_enabled += storew2_flag.into();
-        read3_enabled += storew2_flag.into();
-        write_enabled += storew2_flag.into();
+        let storew2_flag = encoder.expression_for(STOREW2);
+        read1_enabled += storew2_flag.clone();
+        read2_enabled += storew2_flag.clone();
+        read3_enabled += storew2_flag.clone();
+        write_enabled += storew2_flag.clone();
 
-        let mut when_storew2 = builder.when(storew2_flag);
+        let mut when_storew2 = encoder.when(builder, STOREW2);
         when_storew2.assert_eq(read1.address_space, d);
         when_storew2.assert_eq(read1.pointer, c);
 
@@ -196,11 +193,11 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .assert_eq(next_pc, pc + inst_width);
 
         // SHINTW: e[d[a] + b] <- ?
-        let shintw_flag = operation_flags[&SHINTW];
-        read1_enabled += shintw_flag.into();
-        write_enabled += shintw_flag.into();
+        let shintw_flag = encoder.expression_for(SHINTW);
+        read1_enabled += shintw_flag.clone();
+        write_enabled += shintw_flag.clone();
 
-        let mut when_shintw = builder.when(shintw_flag);
+        let mut when_shintw = encoder.when(builder, SHINTW);
         when_shintw.assert_eq(read1.address_space, d);
         when_shintw.assert_eq(read1.pointer, a);
 
@@ -212,10 +209,10 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .assert_eq(next_pc, pc + inst_width);
 
         // JAL: d[a] <- pc + INST_WIDTH, pc <- pc + b
-        let jal_flag = operation_flags[&JAL];
-        write_enabled += jal_flag.into();
+        let jal_flag = encoder.expression_for(JAL);
+        write_enabled += jal_flag;
 
-        let mut when_jal = builder.when(jal_flag);
+        let mut when_jal = encoder.when(builder, JAL);
 
         when_jal.assert_eq(write.address_space, d);
         when_jal.assert_eq(write.pointer, a);
@@ -224,11 +221,11 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         when_jal.when_transition().assert_eq(next_pc, pc + b);
 
         // BEQ: If d[a] = e[b], pc <- pc + c
-        let beq_flag = operation_flags[&BEQ];
-        read1_enabled += beq_flag.into();
-        read2_enabled += beq_flag.into();
+        let beq_flag = encoder.expression_for(BEQ);
+        read1_enabled += beq_flag.clone();
+        read2_enabled += beq_flag.clone();
 
-        let mut when_beq = builder.when(beq_flag);
+        let mut when_beq = encoder.when(builder, BEQ);
 
         when_beq.assert_eq(read1.address_space, d);
         when_beq.assert_eq(read1.pointer, a);
@@ -246,11 +243,11 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .assert_eq(next_pc, pc + inst_width);
 
         // BNE: If d[a] != e[b], pc <- pc + c
-        let bne_flag = operation_flags[&BNE];
-        read1_enabled += bne_flag.into();
-        read2_enabled += bne_flag.into();
+        let bne_flag = encoder.expression_for(BNE);
+        read1_enabled += bne_flag.clone();
+        read2_enabled += bne_flag.clone();
 
-        let mut when_bne = builder.when(bne_flag);
+        let mut when_bne = encoder.when(builder, BNE);
 
         when_bne.assert_eq(read1.address_space, d);
         when_bne.assert_eq(read1.pointer, a);
@@ -268,20 +265,18 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .assert_eq(next_pc, pc + c);
 
         // NOP constraints same pc and timestamp as next row
-        let nop_flag = operation_flags[&NOP];
-        let mut when_nop = builder.when(nop_flag);
+        let mut when_nop = encoder.when(builder, NOP);
         when_nop.when_transition().assert_eq(next_pc, pc);
 
         // TERMINATE
-        let terminate_flag = operation_flags[&TERMINATE];
-        let mut when_terminate = builder.when(terminate_flag);
+        let mut when_terminate = encoder.when(builder, TERMINATE);
         when_terminate.when_transition().assert_eq(next_pc, pc);
 
         // PUBLISH
 
-        let publish_flag = operation_flags[&PUBLISH];
-        read1_enabled += publish_flag.into();
-        read2_enabled += publish_flag.into();
+        let publish_flag = encoder.expression_for(PUBLISH);
+        read1_enabled += publish_flag.clone();
+        read2_enabled += publish_flag.clone();
 
         let mut sum_flags = AB::Expr::zero();
         let mut match_public_value_index = AB::Expr::zero();
@@ -354,6 +349,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         );
 
         // Turn on all interactions
-        self.eval_interactions(builder, io, next_pc, &operation_flags);
+        self.eval_interactions(builder, io, next_pc, &encoder);
     }
 }

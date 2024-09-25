@@ -148,20 +148,27 @@ pub struct OpcodeEncoderWithBuilder<AB: InteractionBuilder, const N: usize> {
 impl<const N: usize> OpcodeEncoder<N> {
     pub fn new(opcodes: impl IntoIterator<Item = Opcode>) -> Self {
         let opcodes_with_nop = iter::once(NOP).chain(opcodes);
-        let mut coords = [0; N];
         let mut coords_map = BTreeMap::new();
-        for opcode in opcodes_with_nop {
-            assert!(coords[0] <= 2, "too many opcodes");
-            coords_map.insert(opcode, coords);
 
-            let mut i = N - 1;
-            while i > 0 && coords[i] == 2 {
-                i -= 1;
+        // Every point can be obtained from [0; N] by adding 1 to one of the coordinates at most twice.
+        // Or, if we qualify doing nothing as adding 1 to the N-th coordinate (which is past the end), then exactly twice.
+        // This is equivalent to embedding F^N to the hyperplane {sum x_i = 2} of F^{N+1}.
+        // Now each point is defined by two numbers {i, j} where i >= j and we increment i-th and j-th coordinates.
+        // Also, we naturally want NOP to correspond to [0; N], so we iterate from N to 0 and not the other way around.
+
+        let mut range = (0..=N)
+            .rev()
+            .flat_map(|i| (0..=i).rev().map(move |j| (i, j)));
+        for opcode in opcodes_with_nop {
+            let (i, j) = range.next().expect("too many opcodes");
+            let mut coords = [0; N];
+            if i < N {
+                coords[i] += 1;
             }
-            coords[i] += 1;
-            for x in coords.iter_mut().skip(i + 1) {
-                *x = 0;
+            if j < N {
+                coords[j] += 1;
             }
+            coords_map.insert(opcode, coords);
         }
 
         Self { coords_map }
@@ -187,6 +194,11 @@ impl<const N: usize> OpcodeEncoder<N> {
 
     pub fn encode(&self, opcode: Opcode) -> [usize; N] {
         *self.coords_map.get(&opcode).unwrap()
+    }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub const fn len(&self) -> usize {
+        N
     }
 }
 

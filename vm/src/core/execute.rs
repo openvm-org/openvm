@@ -1,15 +1,11 @@
-use std::{array, collections::BTreeMap};
+use std::array;
 
 use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 
 use super::{timestamp_delta, CoreChip, CoreState, WORD_SIZE};
 use crate::{
-    arch::{
-        chips::InstructionExecutor,
-        columns::ExecutionState,
-        instructions::{Opcode::*, CORE_INSTRUCTIONS},
-    },
+    arch::{chips::InstructionExecutor, columns::ExecutionState, instructions::Opcode::*},
     core::{
         columns::{CoreAuxCols, CoreCols, CoreIoCols, CoreMemoryAccessCols},
         CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE, INST_WIDTH,
@@ -255,11 +251,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                     })
             });
 
-            let mut operation_flags = BTreeMap::new();
-            for other_opcode in CORE_INSTRUCTIONS {
-                operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
-            }
-
             let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
                 &IsEqualVecAir::new(WORD_SIZE),
                 (vec![read_cols[0].value], vec![read_cols[1].value]),
@@ -269,7 +260,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             let is_equal_vec_aux = is_equal_vec_cols.aux;
 
             let aux = CoreAuxCols {
-                operation_flags,
+                operation_flags: self
+                    .air
+                    .opcode_encoder
+                    .encode(opcode)
+                    .iter()
+                    .map(|x| F::from_canonical_usize(*x))
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap(),
                 public_value_flags,
                 reads: read_cols,
                 writes: write_cols,
