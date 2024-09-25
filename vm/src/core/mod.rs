@@ -142,8 +142,9 @@ impl<F: PrimeField32> CoreChip<F> {
                 opcode_encoder: OpcodeEncoder::new(
                     CORE_INSTRUCTIONS
                         .iter()
-                        .filter(|&op| *op != Opcode::NOP)
+                        .filter(|&op| ![NOP, BEQ, BNE, JAL].contains(op))
                         .copied(),
+                    [BEQ, BNE, JAL],
                 ),
             },
             rows: vec![],

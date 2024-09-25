@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt, iter};
+use std::{array, collections::BTreeMap, fmt, iter};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use enum_utils::FromStr;
@@ -136,18 +136,22 @@ impl Opcode {
 }
 
 #[derive(Clone, Debug)]
-pub struct OpcodeEncoder<const N: usize> {
-    coords_map: BTreeMap<Opcode, [usize; N]>,
+pub struct OpcodeEncoder<const LINEAR: usize, const TOTAL: usize> {
+    coords_map: BTreeMap<Opcode, [usize; TOTAL]>,
 }
 
-pub struct OpcodeEncoderWithBuilder<AB: InteractionBuilder, const N: usize> {
-    coords_map: BTreeMap<Opcode, [usize; N]>,
-    variables: [AB::Var; N],
+pub struct OpcodeEncoderWithBuilder<AB: InteractionBuilder, const LINEAR: usize, const TOTAL: usize>
+{
+    coords_map: BTreeMap<Opcode, [usize; TOTAL]>,
+    variables: [AB::Var; TOTAL],
 }
 
-impl<const N: usize> OpcodeEncoder<N> {
-    pub fn new(opcodes: impl IntoIterator<Item = Opcode>) -> Self {
-        let opcodes_with_nop = iter::once(NOP).chain(opcodes);
+impl<const LINEAR: usize, const TOTAL: usize> OpcodeEncoder<LINEAR, TOTAL> {
+    pub fn new(
+        linear_opcodes: impl IntoIterator<Item = Opcode>,
+        nonlinear_opcodes: impl IntoIterator<Item = Opcode>,
+    ) -> Self {
+        let opcodes_with_nop = iter::once(NOP).chain(linear_opcodes);
         let mut coords_map = BTreeMap::new();
 
         // Every point can be obtained from [0; N] by adding 1 to one of the coordinates at most twice.
@@ -156,19 +160,27 @@ impl<const N: usize> OpcodeEncoder<N> {
         // Now each point is defined by two numbers {i, j} where i >= j and we increment i-th and j-th coordinates.
         // Also, we naturally want NOP to correspond to [0; N], so we iterate from N to 0 and not the other way around.
 
-        let mut range = (0..=N)
+        let mut range = (0..=LINEAR)
             .rev()
             .flat_map(|i| (0..=i).rev().map(move |j| (i, j)));
         for opcode in opcodes_with_nop {
-            let (i, j) = range.next().expect("too many opcodes");
-            let mut coords = [0; N];
-            if i < N {
+            let (i, j) = range.next().expect("too many linear opcodes");
+            let mut coords = [0; TOTAL];
+            if i < LINEAR {
                 coords[i] += 1;
             }
-            if j < N {
+            if j < LINEAR {
                 coords[j] += 1;
             }
             coords_map.insert(opcode, coords);
+        }
+
+        for (i, opcode) in nonlinear_opcodes.into_iter().enumerate() {
+            assert!(i < TOTAL - LINEAR, "too many nonlinear opcodes");
+            coords_map.insert(
+                opcode,
+                array::from_fn(|j| if j == LINEAR + i { 1 } else { 0 }),
+            );
         }
 
         Self { coords_map }
@@ -177,44 +189,83 @@ impl<const N: usize> OpcodeEncoder<N> {
     pub fn initialize<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        variables: [AB::Var; N],
-    ) -> OpcodeEncoderWithBuilder<AB, N> {
-        for &v in variables.iter() {
+        variables: [AB::Var; TOTAL],
+    ) -> OpcodeEncoderWithBuilder<AB, LINEAR, TOTAL> {
+        // Individual constraints
+        for &v in variables.iter().take(LINEAR) {
             builder.assert_zero(v * (v - AB::Expr::one()) * (v - AB::Expr::two()));
         }
-        let sum = variables.iter().fold(AB::Expr::zero(), |acc, x| acc + (*x));
+        for &v in variables.iter().skip(LINEAR) {
+            builder.assert_bool(v);
+        }
+
+        // Sum constraints
+        let sum_linear = variables
+            .iter()
+            .take(LINEAR)
+            .fold(AB::Expr::zero(), |acc, x| acc + (*x));
+        let sum_nonlinear = variables
+            .iter()
+            .skip(LINEAR)
+            .fold(AB::Expr::zero(), |acc, x| acc + (*x));
         builder.assert_zero(
-            sum.clone() * (sum.clone() - AB::Expr::one()) * (sum.clone() - AB::Expr::two()),
+            sum_linear.clone()
+                * (sum_linear.clone() - AB::Expr::one())
+                * (sum_linear.clone() - AB::Expr::two()),
         );
+        builder.assert_bool(sum_nonlinear.clone());
+
+        // Only flags from one side can be set
+        builder.assert_zero(sum_linear * sum_nonlinear);
+
         OpcodeEncoderWithBuilder {
             coords_map: self.coords_map.clone(),
             variables,
         }
     }
 
-    pub fn encode(&self, opcode: Opcode) -> [usize; N] {
+    pub fn encode(&self, opcode: Opcode) -> [usize; TOTAL] {
         *self.coords_map.get(&opcode).unwrap()
     }
 
     #[allow(clippy::len_without_is_empty)]
     pub const fn len(&self) -> usize {
-        N
+        TOTAL
     }
 }
 
-impl<AB: InteractionBuilder, const N: usize> OpcodeEncoderWithBuilder<AB, N> {
-    fn encode(&self, opcode: Opcode) -> [usize; N] {
+impl<AB: InteractionBuilder, const LINEAR: usize, const TOTAL: usize>
+    OpcodeEncoderWithBuilder<AB, LINEAR, TOTAL>
+{
+    fn encode(&self, opcode: Opcode) -> [usize; TOTAL] {
         *self.coords_map.get(&opcode).unwrap()
     }
 
     pub fn expression_for(&self, opcode: Opcode) -> AB::Expr {
         let coords = self.encode(opcode);
+
+        if let Some(j) = coords[LINEAR..].iter().position(|x| *x == 1) {
+            return self.variables[LINEAR + j].into();
+        }
+
+        // NOP needs to be treated separately.
+        // Just because first LINEAR coordinates are zeroes, doesn't mean all of them are.
+        if opcode == NOP {
+            let sum = self
+                .variables
+                .iter()
+                .fold(AB::Expr::zero(), |acc, x| acc + (*x));
+            return (AB::Expr::two() - sum.clone())
+                * (AB::Expr::one() - sum.clone())
+                * AB::F::two().inverse();
+        }
+
         let mut expr = AB::Expr::one();
         // We need to "normalize" the expression so that the value at this point is 1.
         // We don't need it for the "when" condition, but we may want to calculate
         // the opcode as sum(flag * opcode).
         let mut denom = AB::F::one();
-        for (i, &x) in coords.iter().enumerate() {
+        for (i, &x) in coords.iter().take(LINEAR).enumerate() {
             for j in 0..x {
                 expr *= self.variables[i] - AB::Expr::from_canonical_usize(j);
                 denom *= AB::F::from_canonical_usize(x - j);
@@ -223,6 +274,7 @@ impl<AB: InteractionBuilder, const N: usize> OpcodeEncoderWithBuilder<AB, N> {
         let sum = self
             .variables
             .iter()
+            .take(LINEAR)
             .fold(AB::Expr::zero(), |acc, x| acc + (*x));
         let sum_coords = coords.iter().sum::<usize>();
         for j in sum_coords + 1..=2 {

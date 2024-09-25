@@ -13,7 +13,7 @@ impl CoreAir {
         builder: &mut AB,
         io: CoreIoCols<AB::Var>,
         next_pc: AB::Var,
-        encoder: &OpcodeEncoderWithBuilder<AB, 5>,
+        encoder: &OpcodeEncoderWithBuilder<AB, 4, 7>,
     ) {
         self.execution_bridge
             .execute(

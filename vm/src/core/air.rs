@@ -28,7 +28,7 @@ pub struct CoreAir {
     pub options: CoreOptions,
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    pub opcode_encoder: OpcodeEncoder<5>,
+    pub opcode_encoder: OpcodeEncoder<4, 7>,
 }
 
 impl<F: Field> BaseAir<F> for CoreAir {

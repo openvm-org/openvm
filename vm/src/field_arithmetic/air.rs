@@ -18,7 +18,7 @@ use crate::{
 pub struct FieldArithmeticAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
-    pub(super) opcode_encoder: OpcodeEncoder<2>,
+    pub(super) opcode_encoder: OpcodeEncoder<2, 2>,
 }
 
 impl FieldArithmeticAir {
