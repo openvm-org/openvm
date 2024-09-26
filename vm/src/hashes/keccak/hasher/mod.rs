@@ -162,7 +162,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                     bytes[i..i + copy_len].copy_from_slice(&chunk[..copy_len]);
                     reads.push(read);
                 } else {
-                    memory.increment_timestamp_by(F::from_canonical_usize(KECCAK_WORD_SIZE));
+                    memory.increment_timestamp();
                 }
             }
 

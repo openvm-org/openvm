@@ -244,8 +244,7 @@ impl KeccakVmAir {
             .enumerate()
         {
             let digest_bytes = digest_bytes.collect_vec();
-            let timestamp = start_write_timestamp.clone()
-                + AB::Expr::from_canonical_usize(i * KECCAK_WORD_SIZE);
+            let timestamp = start_write_timestamp.clone() + AB::Expr::from_canonical_usize(i);
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
@@ -268,7 +267,7 @@ impl KeccakVmAir {
         // add another KECCAK_ABSORB_READS to round up so we don't deal with padding
         len.into() * T::two()
             + T::from_canonical_usize(
-                KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
+            KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
             )
     }
 }
