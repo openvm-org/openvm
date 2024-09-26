@@ -624,3 +624,19 @@ fn alu_slt_non_boolean_sign_negative_test() {
         VerificationError::OodEvaluationMismatch,
     );
 }
+
+#[test]
+fn alu_slt_wrong_xor_test() {
+    let x = [(1 << (LIMB_BITS - 1)) + 1; NUM_LIMBS];
+    let y = [(1 << LIMB_BITS) - 1; NUM_LIMBS];
+    run_alu_negative_test(
+        Opcode::SLT256,
+        x.to_vec(),
+        y.to_vec(),
+        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        false,
+        0,
+        1,
+        VerificationError::NonZeroCumulativeSum,
+    );
+}
