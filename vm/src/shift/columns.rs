@@ -47,7 +47,6 @@ pub struct ShiftAuxCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     // Each limb is shifted by bit_shift, where y[0] = bit_shift + LIMB_BITS * bit_quotient and
     // bit_multiplier = 2^bit_shift
     pub bit_shift: T,
-    pub bit_quotient: T,
     pub bit_multiplier_left: T,
     pub bit_multiplier_right: T,
 

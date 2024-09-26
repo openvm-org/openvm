@@ -1,19 +1,23 @@
-use std::{iter, sync::Arc};
+use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
 use super::{solve_shift, ShiftChip};
 use crate::{
     arch::{
+        chips::MachineChip,
         instructions::Opcode,
         testing::{memory::gen_pointer, MachineChipTestBuilder},
     },
     core::BYTE_XOR_BUS,
     program::Instruction,
+    shift::columns::ShiftCols,
 };
 
 type F = BabyBear;
@@ -88,6 +92,69 @@ fn run_shift_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+fn run_shift_negative_test(
+    opcode: Opcode,
+    x: Vec<u32>,
+    y: Vec<u32>,
+    z: Vec<u32>,
+    bit_shift: u32,
+    bit_multiplier_left: u32,
+    bit_multiplier_right: u32,
+    x_sign: u32,
+    bit_shift_carry: Vec<u32>,
+    expected_error: VerificationError,
+) {
+    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+        xor_lookup_chip.clone(),
+    );
+
+    let mut rng = create_seeded_rng();
+    run_shift_rand_write_execute::<NUM_LIMBS, LIMB_BITS>(
+        &mut tester,
+        &mut chip,
+        opcode,
+        x,
+        y,
+        &mut rng,
+    );
+
+    let shift_trace = chip.clone().generate_trace();
+    let mut shift_trace_vec = shift_trace.row_slice(0).to_vec();
+    let shift_trace_cols: &mut ShiftCols<F, NUM_LIMBS, LIMB_BITS> = (*shift_trace_vec).borrow_mut();
+
+    shift_trace_cols.io.z.data = array::from_fn(|i| F::from_canonical_u32(z[i]));
+    shift_trace_cols.aux.bit_shift = F::from_canonical_u32(bit_shift);
+    shift_trace_cols.aux.bit_multiplier_left = F::from_canonical_u32(bit_multiplier_left);
+    shift_trace_cols.aux.bit_multiplier_right = F::from_canonical_u32(bit_multiplier_right);
+    shift_trace_cols.aux.x_sign = F::from_canonical_u32(x_sign);
+    shift_trace_cols.aux.bit_shift_carry =
+        array::from_fn(|i| F::from_canonical_u32(bit_shift_carry[i]));
+
+    let shift_trace: p3_matrix::dense::DenseMatrix<BabyBear> = RowMajorMatrix::new(
+        shift_trace_vec,
+        ShiftCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
+    );
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_with_custom_trace(chip, shift_trace)
+        .load(xor_lookup_chip)
+        .finalize();
+    let msg = format!(
+        "Expected verification to fail with {:?}, but it didn't",
+        &expected_error
+    );
+    let result = tester.simple_test();
+    assert_eq!(result.err(), Some(expected_error), "{}", msg);
+}
+
 #[test]
 fn shift_sll_rand_test() {
     let num_ops: usize = 10;
@@ -110,6 +177,160 @@ fn shift_sll_rand_test() {
 
     let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn shift_sll_wrong_answer_negative_test() {
+    run_shift_negative_test(
+        Opcode::SLL256,
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(4)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        1,
+        2,
+        0,
+        0,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_sll_wrong_bit_shift_negative_test() {
+    run_shift_negative_test(
+        Opcode::SLL256,
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(2)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        2,
+        2,
+        0,
+        0,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_sll_wrong_bit_mult_negative_test() {
+    run_shift_negative_test(
+        Opcode::SLL256,
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(4)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        1,
+        4,
+        0,
+        0,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_sll_nonzero_bit_mult_right_negative_test() {
+    run_shift_negative_test(
+        Opcode::SLL256,
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(2)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        1,
+        2,
+        1,
+        0,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_sll_nonzero_sign_negative_test() {
+    run_shift_negative_test(
+        Opcode::SLL256,
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(2)
+            .chain(iter::repeat(0).take(NUM_LIMBS - 3))
+            .chain(iter::repeat(1).take(2))
+            .collect(),
+        1,
+        2,
+        0,
+        1,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_sll_out_of_range_carry_negative_test() {
+    run_shift_negative_test(
+        Opcode::SLL256,
+        iter::once(1 << LIMB_BITS)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(0)
+            .chain(iter::once(2))
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        1,
+        2,
+        0,
+        0,
+        iter::once(2)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        VerificationError::NonZeroCumulativeSum,
+    );
 }
 
 #[test]
@@ -137,6 +358,106 @@ fn shift_srl_rand_test() {
 }
 
 #[test]
+fn shift_srl_wrong_answer_negative_test() {
+    run_shift_negative_test(
+        Opcode::SRL256,
+        iter::once(4)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        1,
+        0,
+        2,
+        0,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_srl_wrong_extension_negative_test() {
+    run_shift_negative_test(
+        Opcode::SRL256,
+        iter::once(4)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(2)
+            .chain(iter::repeat(0).take(NUM_LIMBS - 2))
+            .chain(iter::once(1 << (LIMB_BITS - 1)))
+            .collect(),
+        1,
+        0,
+        2,
+        0,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_srl_nonzero_bit_mult_left_negative_test() {
+    run_shift_negative_test(
+        Opcode::SRL256,
+        iter::once(4)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(2)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        1,
+        2,
+        2,
+        0,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_srl_nonzero_sign_negative_test() {
+    run_shift_negative_test(
+        Opcode::SRL256,
+        iter::once(4)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(2)
+            .chain(iter::repeat(0).take(NUM_LIMBS - 3))
+            .chain(iter::repeat(1).take(2))
+            .collect(),
+        1,
+        2,
+        0,
+        1,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
 fn shift_sra_rand_test() {
     let num_ops: usize = 10;
     let mut rng = create_seeded_rng();
@@ -158,6 +479,78 @@ fn shift_sra_rand_test() {
 
     let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn shift_sra_wrong_answer_negative_test() {
+    run_shift_negative_test(
+        Opcode::SRA256,
+        iter::once(4)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        1,
+        0,
+        2,
+        0,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_sra_wrong_extension_negative_test() {
+    run_shift_negative_test(
+        Opcode::SRA256,
+        iter::once(4)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::once(2)
+            .chain(iter::repeat(0).take(NUM_LIMBS - 2))
+            .chain(iter::once(1 << (LIMB_BITS - 1)))
+            .collect(),
+        1,
+        0,
+        2,
+        0,
+        vec![0; NUM_LIMBS],
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn shift_sra_wrong_sign_negative_test() {
+    run_shift_negative_test(
+        Opcode::SRA256,
+        vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
+        iter::once(1)
+            .chain(iter::repeat(0))
+            .take(NUM_LIMBS)
+            .collect(),
+        iter::repeat((1 << LIMB_BITS) - 1)
+            .take(NUM_LIMBS - 1)
+            .chain(iter::once((1 << (LIMB_BITS - 1)) - 1))
+            .collect(),
+        1,
+        0,
+        2,
+        0,
+        vec![1; NUM_LIMBS],
+        VerificationError::NonZeroCumulativeSum,
+    );
 }
 
 #[test]

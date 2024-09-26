@@ -23,7 +23,7 @@ pub use columns::*;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
@@ -36,7 +36,7 @@ pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
     pub carry: Vec<T>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,

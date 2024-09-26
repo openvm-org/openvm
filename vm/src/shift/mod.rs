@@ -24,7 +24,7 @@ mod trace;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
@@ -35,13 +35,12 @@ pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub y_read: MemoryReadRecord<T, NUM_LIMBS>,
     pub z_write: MemoryWriteRecord<T, NUM_LIMBS>,
     pub bit_shift_carry: [T; NUM_LIMBS],
-    pub bit_quotient: T,
     pub bit_shift: usize,
     pub limb_shift: usize,
     pub x_sign: T,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ShiftChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ShiftAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ShiftRecord<T, NUM_LIMBS, LIMB_BITS>>,
@@ -162,7 +161,6 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             y_read,
             z_write,
             bit_shift_carry: array::from_fn(|i| T::from_canonical_u32(carry[i])),
-            bit_quotient: T::from_canonical_usize(y[0] as usize / LIMB_BITS),
             bit_shift,
             limb_shift,
             x_sign: T::from_canonical_u32(x_sign),

@@ -2,10 +2,7 @@ use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::{
-    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    utils::create_seeded_rng,
-};
+use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -128,11 +125,10 @@ fn run_alu_negative_test(
         &mut rng,
     );
 
-    let alu_air = chip.air;
-    let alu_trace = chip.generate_trace();
-
+    let alu_trace = chip.clone().generate_trace();
     let mut alu_trace_row = alu_trace.row_slice(0).to_vec();
     let alu_trace_cols: &mut ArithmeticLogicCols<F, 32, 8> = (*alu_trace_row).borrow_mut();
+
     alu_trace_cols.io.z.data = array::from_fn(|i| F::from_canonical_u32(z[i]));
     alu_trace_cols.io.cmp_result = F::from_bool(cmp_result);
     alu_trace_cols.aux.x_sign = F::from_canonical_u32(x_sign);
@@ -142,18 +138,17 @@ fn run_alu_negative_test(
         ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
     );
 
-    let xor_lookup_air = xor_lookup_chip.air;
-    let xor_lookup_trace = xor_lookup_chip.generate_trace();
-
     disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_with_custom_trace(chip, alu_trace)
+        .load(xor_lookup_chip)
+        .finalize();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
         &expected_error
     );
-    let result = BabyBearPoseidon2Engine::run_simple_test_no_pis(
-        &any_rap_vec![&alu_air, &xor_lookup_air],
-        vec![alu_trace, xor_lookup_trace],
-    );
+    let result = tester.simple_test();
     assert_eq!(result.err(), Some(expected_error), "{}", msg);
 }
 

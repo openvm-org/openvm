@@ -39,7 +39,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 y_read,
                 z_write,
                 bit_shift_carry,
-                bit_quotient,
                 bit_shift,
                 limb_shift,
                 x_sign,
@@ -71,7 +70,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
             row.aux = ShiftAuxCols {
                 is_valid: F::one(),
                 bit_shift: F::from_canonical_usize(bit_shift),
-                bit_quotient,
                 bit_multiplier_left: F::from_canonical_usize(match instruction.opcode {
                     Opcode::SLL256 => 1 << bit_shift,
                     Opcode::SRL256 | Opcode::SRA256 => 0,
@@ -103,7 +101,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air.clone())
+        Box::new(self.air)
     }
 
     fn current_trace_height(&self) -> usize {

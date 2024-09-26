@@ -12,7 +12,7 @@ use crate::{
     memory::offline_checker::MemoryBridge,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ShiftAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
@@ -65,13 +65,10 @@ impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BIT
         let z_limbs = &io.z.data;
         let right_shift = aux.opcode_srl_flag + aux.opcode_sra_flag;
 
-        // Constrain that bit_shift, bit_quotient, and bit_multiplier are correct, i.e. that
-        // y[0] = bit_quotient * LIMB_BITS + bit_shift and bit_multiplier = 1 << bit_shift.
-        // Note that bit_shift < LIMB_BITS is constrained in bridge.rs via the range checker.
-        builder.assert_eq(
-            aux.bit_quotient * AB::F::from_canonical_usize(LIMB_BITS) + aux.bit_shift,
-            y_limbs[0],
-        );
+        // Constrain that bit_shift, bit_multiplier are correct, i.e. that bit_multiplier =
+        // 1 << bit_shift. We check that bit_shift is correct below if y < LIMB_BITS, otherwise
+        // we don't really care what its value is. Note that bit_shift < LIMB_BITS is
+        // constrained in bridge.rs via the range checker.
         builder
             .when(aux.opcode_sll_flag)
             .assert_zero(aux.bit_multiplier_right);
