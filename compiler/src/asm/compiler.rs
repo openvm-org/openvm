@@ -41,20 +41,23 @@ pub struct AsmCompiler<F, EF> {
 impl<F> Var<F> {
     /// Gets the frame pointer for a var.
     pub const fn fp(&self) -> i32 {
-        STACK_TOP - (8 * (self.0 / 2) + 3 + (self.0 % 2)) as i32
+        // Vars are stored in stack positions 1, 2, 9, 10, 17, 18, ...
+        STACK_TOP - (8 * (self.0 / 2) + 1 + (self.0 % 2)) as i32
     }
 }
 
 impl<F> Felt<F> {
     /// Gets the frame pointer for a felt.
     pub const fn fp(&self) -> i32 {
-        STACK_TOP - (8 * (self.0 / 2) + 1 + (self.0 % 2)) as i32
+        // Felts are stored in stack positions 3, 4, 11, 12, 19, 20, ...
+        STACK_TOP - (((self.0 >> 1) << 3) + 3 + (self.0 & 1)) as i32
     }
 }
 
 impl<F, EF> Ext<F, EF> {
     /// Gets the frame pointer for an extension element
     pub const fn fp(&self) -> i32 {
+        // Exts are stored in stack positions 5-8, 13-16, 21-24, ...
         STACK_TOP - 8 * self.0 as i32
     }
 }

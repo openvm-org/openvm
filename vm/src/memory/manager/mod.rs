@@ -154,6 +154,7 @@ pub struct MemoryChip<F: PrimeField32> {
     pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
     // addr_space -> Memory data structure
     memory: Memory<F>,
+    /// Maps a length to a list of access adapters with that block length as th larger size.
     adapter_records: HashMap<usize, Vec<AccessAdapterRecord<F>>>,
 }
 

@@ -7,6 +7,7 @@ use std::{
 };
 
 use p3_field::PrimeField32;
+use p3_util::log2_strict_usize;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct AddressSpace(pub u32);
@@ -132,8 +133,8 @@ impl<F: PrimeField32> Memory<F> {
         start_index: usize,
         values: [F; N],
     ) -> (MemoryWriteRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
-        let active_block_records = self.access(address_space, start_index, values.len());
-        let block_id = self.block_id(start_index, values.len());
+        let active_block_records = self.access(address_space, start_index, N);
+        let block_id = self.block_id(start_index, N);
 
         if let Some(Block::Active { data, timestamp }) =
             self.blocks.get_mut(&(address_space, block_id))
@@ -224,14 +225,7 @@ impl<F: PrimeField32> Memory<F> {
 
     fn block_id(&self, index: usize, len: usize) -> BlockId {
         // Leaves have labels from memory_size..2*memory_size - 1.
-        let mut block_id = self.memory_size + index;
-        let mut layer_len = 1;
-        while layer_len < len {
-            block_id /= 2;
-            layer_len *= 2;
-        }
-        assert_eq!(layer_len, len, "length must be a power of 2");
-        block_id
+        (self.memory_size + index) >> log2_strict_usize(len)
     }
 
     /// Recursively makes a memory block active and produces adapter records.
@@ -251,6 +245,8 @@ impl<F: PrimeField32> Memory<F> {
         len: usize,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) -> (u32, Vec<F>) {
+        // Lazily create the initial block if it doesn't exist. In initial memory,
+        // all active blocks are the leaves of the tree and have timestamp `INITIAL_TIMESTAMP`.
         let block_state =
             self.blocks
                 .entry((address_space, block_id))
