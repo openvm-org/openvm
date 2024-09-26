@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use afs_primitives::{utils::not, xor::bus::XorBus};
 use afs_stark_backend::{air_builders::sub::SubAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -6,7 +8,7 @@ use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS};
 use p3_matrix::Matrix;
 
 use super::{
-    columns::{KeccakMemoryCols, KeccakVmColsRef, NUM_KECCAK_OPCODE_COLS, NUM_KECCAK_SPONGE_COLS},
+    columns::{KeccakMemoryCols, KeccakVmCols, NUM_KECCAK_OPCODE_COLS, NUM_KECCAK_SPONGE_COLS},
     KECCAK_RATE_BYTES,
 };
 use crate::{arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge};
@@ -32,9 +34,9 @@ impl<F> BaseAir<F> for KeccakVmAir {
 impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let [local, next] = [0, 1].map(|i| main.row_slice(i));
-        let local = KeccakVmColsRef::from_slice(&local);
-        let next = KeccakVmColsRef::from_slice(&next);
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let local: &KeccakVmCols<AB::Var> = (*local).borrow();
+        let next: &KeccakVmCols<AB::Var> = (*next).borrow();
 
         builder.assert_bool(local.sponge.is_new_start);
         builder.assert_eq(
@@ -50,17 +52,17 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         self.constrain_padding(builder, local, next);
         self.constrain_consistency_across_rounds(builder, local, next);
 
-        let mem = KeccakMemoryCols::from_slice(local.mem_oc);
+        let mem = &local.mem_oc;
         // Interactions:
         self.constrain_absorb(builder, local, next);
-        let start_read_timestamp = self.eval_opcode_interactions(builder, local, mem.op_reads);
+        let start_read_timestamp = self.eval_opcode_interactions(builder, local, &mem.op_reads);
         let start_write_timestamp =
-            self.constrain_input_read(builder, local, start_read_timestamp, mem.absorb_reads);
+            self.constrain_input_read(builder, local, start_read_timestamp, &mem.absorb_reads);
         self.constrain_output_write(
             builder,
             local,
             start_write_timestamp.clone(),
-            mem.digest_writes,
+            &mem.digest_writes,
         );
 
         self.constrain_block_transition(builder, local, next, start_write_timestamp);
@@ -83,20 +85,20 @@ impl KeccakVmAir {
     pub fn constrain_consistency_across_rounds<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
-        next: KeccakVmColsRef<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
+        next: &KeccakVmCols<AB::Var>,
     ) {
         let mut transition_builder = builder.when_transition();
         let mut round_builder = transition_builder.when(not(local.is_last_round()));
         // Opcode columns
-        local.opcode.assert_eq(&mut round_builder, *next.opcode);
+        local.opcode.assert_eq(&mut round_builder, next.opcode);
     }
 
     pub fn constrain_block_transition<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
-        next: KeccakVmColsRef<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
+        next: &KeccakVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
     ) {
         // When we transition between blocks, if the next block isn't a new block
@@ -141,8 +143,8 @@ impl KeccakVmAir {
     pub fn constrain_padding<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
-        next: KeccakVmColsRef<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
+        next: &KeccakVmCols<AB::Var>,
     ) {
         let is_padding_byte = local.sponge.is_padding_byte;
         let block_bytes = &local.sponge.block_bytes;

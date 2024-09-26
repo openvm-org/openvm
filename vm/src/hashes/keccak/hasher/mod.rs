@@ -1,6 +1,7 @@
-use std::{array::from_fn, sync::Arc};
+use std::{array::from_fn, cmp::min, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
+use itertools::Itertools;
 use p3_field::PrimeField32;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
@@ -27,12 +28,12 @@ use crate::{
 
 /// Memory reads to get dst, src, len
 const KECCAK_EXECUTION_READS: usize = 3;
-// TODO[jpw]: adjust for batch read
+/// Number of cells to read/write in a single memory access
+const KECCAK_WORD_SIZE: usize = 8;
 /// Memory reads for absorb per row
-const KECCAK_ABSORB_READS: usize = KECCAK_RATE_BYTES;
-// TODO[jpw]: adjust for batch write
+const KECCAK_ABSORB_READS: usize = KECCAK_RATE_BYTES / KECCAK_WORD_SIZE;
 /// Memory writes for digest per row
-const KECCAK_DIGEST_WRITES: usize = KECCAK_DIGEST_BYTES;
+const KECCAK_DIGEST_WRITES: usize = KECCAK_DIGEST_BYTES / KECCAK_WORD_SIZE;
 
 /// Total number of sponge bytes: number of rate bytes + number of capacity
 /// bytes.
@@ -70,13 +71,13 @@ pub struct KeccakRecord<F> {
     pub src_read: MemoryReadRecord<F, 1>,
     pub len_read: MemoryReadRecord<F, 1>,
     pub input_blocks: Vec<KeccakInputBlock<F>>,
-    pub digest_writes: [MemoryWriteRecord<F, 1>; KECCAK_DIGEST_WRITES],
+    pub digest_writes: [MemoryWriteRecord<F, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
 }
 
 #[derive(Clone, Debug)]
 pub struct KeccakInputBlock<F> {
-    /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES].
-    pub bytes_read: Vec<MemoryReadRecord<F, 1>>,
+    /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES / KECCAK_WORD_SIZE].
+    pub reads: Vec<MemoryReadRecord<F, KECCAK_WORD_SIZE>>,
     /// Bytes with padding. Can be derived from `bytes_read` but we store for convenience.
     pub padded_bytes: [u8; KECCAK_RATE_BYTES],
     pub remaining_len: usize,
@@ -146,24 +147,27 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             if block_idx != 0 {
                 memory.increment_timestamp_by(F::from_canonical_usize(KECCAK_EXECUTION_READS));
             }
-            let mut bytes_read = Vec::with_capacity(KECCAK_RATE_BYTES);
-            let bytes: [_; KECCAK_RATE_BYTES] = from_fn(|i| {
+            let mut reads = Vec::with_capacity(KECCAK_RATE_BYTES);
+
+            let mut bytes = [0u8; KECCAK_RATE_BYTES];
+            for i in (0..KECCAK_RATE_BYTES).step_by(KECCAK_WORD_SIZE) {
                 if i < remaining_len {
-                    let byte_read = memory.read(e, src + F::from_canonical_usize(i));
-                    let byte = byte_read
-                        .value()
-                        .as_canonical_u32()
-                        .try_into()
-                        .expect("Memory cell not a byte");
-                    bytes_read.push(byte_read);
-                    byte
+                    let read = memory.read(e, src + F::from_canonical_usize(i));
+                    let chunk = read.data.map(|x| {
+                        x.as_canonical_u32()
+                            .try_into()
+                            .expect("Memory cell not a byte")
+                    });
+                    let copy_len = min(KECCAK_WORD_SIZE, remaining_len - i);
+                    bytes[i..i + copy_len].copy_from_slice(&chunk[..copy_len]);
+                    reads.push(read);
                 } else {
-                    memory.increment_timestamp();
-                    0u8
+                    memory.increment_timestamp_by(F::from_canonical_usize(KECCAK_WORD_SIZE));
                 }
-            });
+            }
+
             let mut block = KeccakInputBlock {
-                bytes_read,
+                reads,
                 padded_bytes: bytes,
                 remaining_len,
                 is_new_start: block_idx == 0,
@@ -189,10 +193,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let mut output = [0u8; 32];
         hasher.finalize(&mut output);
         let digest_writes: [_; KECCAK_DIGEST_WRITES] = from_fn(|i| {
-            memory.write(
+            memory.write::<KECCAK_WORD_SIZE>(
                 e,
-                dst + F::from_canonical_usize(i),
-                [F::from_canonical_u8(output[i])],
+                dst + F::from_canonical_usize(i * KECCAK_WORD_SIZE),
+                output[i..i + KECCAK_WORD_SIZE]
+                    .iter()
+                    .map(|x| F::from_canonical_u8(*x))
+                    .collect_vec()
+                    .try_into()
+                    .unwrap(),
             )
         });
         tracing::trace!("[runtime] keccak256 output: {:?}", output);
@@ -230,7 +239,7 @@ impl<F: PrimeField32> Default for KeccakInputBlock<F> {
             padded_bytes,
             remaining_len: 0,
             is_new_start: true,
-            bytes_read: Vec::new(),
+            reads: Vec::new(),
         }
     }
 }

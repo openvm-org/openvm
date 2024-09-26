@@ -274,9 +274,10 @@ impl<F: PrimeField32> MemoryChip<F> {
 
             let entry = self
                 .memory
-                .get_mut(&(address_space, cur_ptr))
-                .unwrap_or_else(|| {
-                    panic!("read of uninitialized memory ({address_space:?}, {cur_ptr:?})")
+                .entry((address_space, cur_ptr))
+                .or_insert(TimestampedValue {
+                    timestamp: F::zero(),
+                    value: F::zero(),
                 });
             debug_assert!(entry.timestamp < timestamp);
 

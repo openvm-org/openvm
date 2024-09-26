@@ -1,13 +1,14 @@
 use afs_primitives::utils::not;
 use afs_stark_backend::interaction::InteractionBuilder;
-use itertools::izip;
+use itertools::{izip, Itertools};
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 use p3_keccak_air::U64_LIMBS;
 
 use super::{
-    columns::KeccakVmColsRef, KeccakVmAir, KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES,
-    KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
+    columns::KeccakVmCols, KeccakVmAir, KECCAK_ABSORB_READS, KECCAK_DIGEST_BYTES,
+    KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S,
+    KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
 };
 use crate::{
     arch::{columns::ExecutionState, instructions::Opcode},
@@ -40,8 +41,8 @@ impl KeccakVmAir {
     pub fn constrain_absorb<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
-        next: KeccakVmColsRef<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
+        next: &KeccakVmCols<AB::Var>,
     ) {
         let updated_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
@@ -114,8 +115,8 @@ impl KeccakVmAir {
     pub fn eval_opcode_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
-        mem_aux: [MemoryReadAuxCols<AB::Var, 1>; KECCAK_EXECUTION_READS],
+        local: &KeccakVmCols<AB::Var>,
+        mem_aux: &[MemoryReadAuxCols<AB::Var, 1>; KECCAK_EXECUTION_READS],
     ) -> AB::Expr {
         let opcode = local.opcode;
         // Only receive opcode if:
@@ -143,7 +144,7 @@ impl KeccakVmAir {
             [opcode.a, opcode.b, opcode.c],
             [opcode.d, opcode.d, opcode.f],
             [opcode.dst, opcode.src, opcode.len],
-            &mem_aux,
+            mem_aux,
         ) {
             self.memory_bridge
                 .read(
@@ -169,9 +170,9 @@ impl KeccakVmAir {
     pub fn constrain_input_read<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
         start_read_timestamp: AB::Expr,
-        mem_aux: [MemoryReadAuxCols<AB::Var, 1>; KECCAK_ABSORB_READS],
+        mem_aux: &[MemoryReadAuxCols<AB::Var, KECCAK_WORD_SIZE>; KECCAK_ABSORB_READS],
     ) -> AB::Expr {
         // Only read input from memory when it is an opcode-related row
         // and only on the first round of block
@@ -181,23 +182,23 @@ impl KeccakVmAir {
         // read `state` into `word[src + ...]_e`
         // iterator of state as u16:
         for (i, (input, is_padding, mem_aux)) in izip!(
-            local.sponge.block_bytes,
-            local.sponge.is_padding_byte,
-            &mem_aux
+            local.sponge.block_bytes.chunks(KECCAK_WORD_SIZE),
+            local.sponge.is_padding_byte.chunks(KECCAK_WORD_SIZE),
+            mem_aux
         )
         .enumerate()
         {
-            let ptr = local.opcode.src + AB::F::from_canonical_usize(i);
-            // Only read byte i if it is not padding byte
+            let ptr = local.opcode.src + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE);
+            // Only read block i if it is not entirely padding bytes
             // This is constraint degree 3, which leads to quotient degree 2
             // if used as `count` in interaction
-            let count = is_input.clone() * not(is_padding);
+            let count = is_input.clone() * not(is_padding[0]);
 
             // reminder: input is currently range checked to be 8-bits in `constrain_absorb` by the XOR lookup
             self.memory_bridge
                 .read(
                     MemoryAddress::new(local.opcode.e, ptr),
-                    [input],
+                    input.try_into().unwrap(),
                     timestamp.clone(),
                     mem_aux,
                 )
@@ -211,9 +212,9 @@ impl KeccakVmAir {
     pub fn constrain_output_write<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: [MemoryWriteAuxCols<AB::Var, 1>; KECCAK_DIGEST_WRITES],
+        mem_aux: &[MemoryWriteAuxCols<AB::Var, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
     ) {
         let opcode = local.opcode;
 
@@ -236,12 +237,22 @@ impl KeccakVmAir {
                 [lo, hi.into()]
             })
         });
-        for (i, digest_byte) in updated_state_bytes.take(KECCAK_DIGEST_WRITES).enumerate() {
-            let timestamp = start_write_timestamp.clone() + AB::Expr::from_canonical_usize(i);
+        for (i, digest_bytes) in updated_state_bytes
+            .take(KECCAK_DIGEST_BYTES)
+            .chunks(KECCAK_WORD_SIZE)
+            .into_iter()
+            .enumerate()
+        {
+            let digest_bytes = digest_bytes.collect_vec();
+            let timestamp = start_write_timestamp.clone()
+                + AB::Expr::from_canonical_usize(i * KECCAK_WORD_SIZE);
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(opcode.e, opcode.dst + AB::F::from_canonical_usize(i)),
-                    [digest_byte],
+                    MemoryAddress::new(
+                        opcode.e,
+                        opcode.dst + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE),
+                    ),
+                    digest_bytes.try_into().unwrap(),
                     timestamp,
                     &mem_aux[i],
                 )
