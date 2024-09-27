@@ -1,3 +1,4 @@
+use afs_stark_backend::rap::BaseAirWithPublicValues;
 use itertools::Itertools;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, PrimeField};
@@ -9,6 +10,12 @@ pub struct FibonacciAir;
 impl<F> BaseAir<F> for FibonacciAir {
     fn width(&self) -> usize {
         2
+    }
+}
+
+impl<F> BaseAirWithPublicValues<F> for FibonacciAir {
+    fn num_public_values(&self) -> usize {
+        3
     }
 }
 

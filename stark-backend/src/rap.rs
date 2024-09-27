@@ -10,6 +10,14 @@ use crate::air_builders::{
     debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
 };
 
+/// An AIR with 0 or more public values.
+/// This trait will be merged into Plonky3 in PR: https://github.com/Plonky3/Plonky3/pull/470
+pub trait BaseAirWithPublicValues<F>: BaseAir<F> {
+    fn num_public_values(&self) -> usize {
+        0
+    }
+}
+
 /// An AIR that works with a particular `AirBuilder` which allows preprocessing
 /// and injected randomness.
 ///
@@ -44,7 +52,7 @@ pub trait AnyRap<SC: StarkGenericConfig>:
     Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
-    + BaseAir<Val<SC>>
+    + BaseAirWithPublicValues<Val<SC>>
 {
     fn as_any(&self) -> &dyn Any;
     /// Name for display purposes
@@ -57,7 +65,7 @@ where
     T: Rap<SymbolicRapBuilder<Val<SC>>>
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
-        + BaseAir<Val<SC>>
+        + BaseAirWithPublicValues<Val<SC>>
         + 'static,
 {
     fn as_any(&self) -> &dyn Any {

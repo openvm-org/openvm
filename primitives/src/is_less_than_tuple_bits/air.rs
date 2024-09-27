@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use afs_stark_backend::rap::BaseAirWithPublicValues;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -53,6 +54,7 @@ impl AirConfig for IsLessThanTupleBitsAir {
     type Cols<T> = IsLessThanTupleBitsCols<T>;
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for IsLessThanTupleBitsAir {}
 impl<F: Field> BaseAir<F> for IsLessThanTupleBitsAir {
     fn width(&self) -> usize {
         IsLessThanTupleBitsCols::<F>::get_width(self.limb_bits().clone(), self.tuple_len())

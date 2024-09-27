@@ -72,8 +72,8 @@ impl KeygenCommand {
         let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree());
         let mut keygen_builder = engine.keygen_builder();
 
-        for (air, pvs) in result.airs.iter().zip(result.public_values) {
-            keygen_builder.add_air(air.deref(), pvs.len());
+        for air in &result.airs {
+            keygen_builder.add_air(air.deref());
         }
 
         let pk = keygen_builder.generate_pk();

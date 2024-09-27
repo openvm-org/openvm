@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use derive_new::new;
 use itertools::izip;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -31,6 +31,7 @@ impl<F> AirConfig for Poseidon2VmAir<F> {
     type Cols<T> = Poseidon2VmCols<T>;
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for Poseidon2VmAir<F> {}
 impl<F: Field> BaseAir<F> for Poseidon2VmAir<F> {
     fn width(&self) -> usize {
         Poseidon2VmCols::<F>::width(self)

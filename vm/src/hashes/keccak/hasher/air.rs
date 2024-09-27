@@ -1,5 +1,7 @@
 use afs_primitives::{utils::not, xor::bus::XorBus};
-use afs_stark_backend::{air_builders::sub::SubAirBuilder, interaction::InteractionBuilder};
+use afs_stark_backend::{
+    air_builders::sub::SubAirBuilder, interaction::InteractionBuilder, rap::BaseAirWithPublicValues,
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS};
@@ -20,6 +22,7 @@ pub struct KeccakVmAir {
     // TODO: add configuration for enabling direct non-memory interactions
 }
 
+impl<F> BaseAirWithPublicValues<F> for KeccakVmAir {}
 impl<F> BaseAir<F> for KeccakVmAir {
     fn width(&self) -> usize {
         NUM_KECCAK_PERM_COLS

@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use num_bigint_dig::BigUint;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -86,6 +86,7 @@ impl EcAirConfig {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for EcAddUnequalAir {}
 impl<F: Field> BaseAir<F> for EcAddUnequalAir {
     fn width(&self) -> usize {
         EcAddCols::<F, DefaultLimbConfig>::width(self)
@@ -96,6 +97,7 @@ impl AirConfig for EcAddUnequalAir {
     type Cols<T> = EcAddCols<T, DefaultLimbConfig>;
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for EcDoubleAir {}
 impl<F: Field> BaseAir<F> for EcDoubleAir {
     fn width(&self) -> usize {
         EcDoubleCols::<F, DefaultLimbConfig>::width(self)

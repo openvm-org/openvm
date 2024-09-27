@@ -21,7 +21,7 @@ use crate::{
         NUM_PERM_EXPOSED_VALUES,
     },
     keygen::types::{StarkVerifyingParams, TraceWidth},
-    rap::{PermutationAirBuilderWithExposedValues, Rap},
+    rap::{BaseAirWithPublicValues, PermutationAirBuilderWithExposedValues, Rap},
 };
 
 pub mod symbolic_expression;
@@ -83,18 +83,17 @@ impl<F: Field> SymbolicConstraints<F> {
 pub fn get_symbolic_builder<F, R>(
     rap: &R,
     width: &TraceWidth,
-    num_public_values: usize,
     num_challenges_to_sample: &[usize],
     num_exposed_values_after_challenge: &[usize],
     interaction_chunk_size: usize,
 ) -> SymbolicRapBuilder<F>
 where
     F: Field,
-    R: Rap<SymbolicRapBuilder<F>> + ?Sized,
+    R: Rap<SymbolicRapBuilder<F>> + BaseAirWithPublicValues<F> + ?Sized,
 {
     let mut builder = SymbolicRapBuilder::new(
         width,
-        num_public_values,
+        rap.num_public_values(),
         num_challenges_to_sample,
         num_exposed_values_after_challenge,
         interaction_chunk_size,

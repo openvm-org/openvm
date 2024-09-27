@@ -344,18 +344,15 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         let t2_aux_ptr = keygen_builder.add_main_matrix(self.t2_chip.aux_width());
         let output_aux_ptr = keygen_builder.add_main_matrix(self.output_chip.aux_width());
 
-        keygen_builder.add_partitioned_air(&self.t1_chip, 0, vec![t1_main_ptr, t1_aux_ptr]);
+        keygen_builder.add_partitioned_air(&self.t1_chip, vec![t1_main_ptr, t1_aux_ptr]);
 
-        keygen_builder.add_partitioned_air(&self.t2_chip, 0, vec![t2_main_ptr, t2_aux_ptr]);
+        keygen_builder.add_partitioned_air(&self.t2_chip, vec![t2_main_ptr, t2_aux_ptr]);
 
-        keygen_builder.add_partitioned_air(
-            &self.output_chip,
-            0,
-            vec![output_main_ptr, output_aux_ptr],
-        );
+        keygen_builder
+            .add_partitioned_air(&self.output_chip, vec![output_main_ptr, output_aux_ptr]);
 
-        keygen_builder.add_air(&self.intersector_chip, 0);
-        keygen_builder.add_air(&self.range_checker.air, 0);
+        keygen_builder.add_air(&self.intersector_chip);
+        keygen_builder.add_air(&self.range_checker.air);
     }
 
     /// This function clears the trace_builder, loads in the traces for all involved chips

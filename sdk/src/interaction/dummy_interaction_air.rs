@@ -7,6 +7,7 @@
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder,
     interaction::{InteractionBuilder, InteractionType},
+    rap::BaseAirWithPublicValues,
 };
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
@@ -53,6 +54,7 @@ impl DummyInteractionAir {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for DummyInteractionAir {}
 impl<F: Field> BaseAir<F> for DummyInteractionAir {
     fn width(&self) -> usize {
         1 + self.field_width

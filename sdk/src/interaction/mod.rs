@@ -4,7 +4,6 @@ use afs_stark_backend::{
     rap::AnyRap,
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
-use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -24,8 +23,8 @@ pub fn verify_interactions(
     let config = config::baby_bear_poseidon2::default_config(&perm, log_trace_degree);
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
-    for (air, pis) in airs.iter().zip_eq(&pis) {
-        keygen_builder.add_air(*air, pis.len());
+    for air in &airs {
+        keygen_builder.add_air(*air);
     }
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();

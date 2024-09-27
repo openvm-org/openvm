@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use afs_primitives::var_range::bus::VariableRangeCheckerBus;
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -20,6 +20,7 @@ pub struct UiAir {
     pub bus: VariableRangeCheckerBus,
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for UiAir {}
 impl<F: Field> BaseAir<F> for UiAir {
     fn width(&self) -> usize {
         UiCols::<F>::width()

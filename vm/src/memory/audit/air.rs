@@ -6,7 +6,7 @@ use afs_primitives::{
     utils::{implies, or},
     var_range::bus::VariableRangeCheckerBus,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -45,6 +45,7 @@ impl MemoryAuditAir {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for MemoryAuditAir {}
 impl<F: Field> BaseAir<F> for MemoryAuditAir {
     fn width(&self) -> usize {
         self.air_width()

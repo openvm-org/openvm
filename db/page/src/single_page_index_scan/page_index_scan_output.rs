@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use afs_primitives::var_range::VariableRangeCheckerChip;
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
+    rap::BaseAirWithPublicValues,
+};
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField64};
@@ -32,6 +35,7 @@ impl PageIndexScanOutputAir {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for PageIndexScanOutputAir {}
 impl<F: Field> BaseAir<F> for PageIndexScanOutputAir {
     fn width(&self) -> usize {
         BaseAir::<F>::width(&self.inner)

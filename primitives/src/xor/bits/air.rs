@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, iter::zip};
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -29,6 +29,7 @@ impl<const N: usize> AirConfig for XorBitsAir<N> {
     type Cols<T> = XorCols<N, T>;
 }
 
+impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for XorBitsAir<N> {}
 impl<F: Field, const N: usize> BaseAir<F> for XorBitsAir<N> {
     fn width(&self) -> usize {
         XorCols::<N, F>::get_width()

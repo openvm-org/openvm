@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use afs_primitives::var_range::bus::VariableRangeCheckerBus;
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -23,6 +23,7 @@ pub struct CastFAir {
     pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for CastFAir {}
 impl<F: Field> BaseAir<F> for CastFAir {
     fn width(&self) -> usize {
         CastFCols::<F>::width()
