@@ -134,9 +134,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
                 .when(aux.opcode_eq_flag)
                 .assert_zero(io.cmp_result * (x_limbs[i] - y_limbs[i]));
         }
-        builder
-            .when(aux.opcode_eq_flag)
-            .assert_zero(sum_eq - AB::Expr::one());
+        builder.when(aux.opcode_eq_flag).assert_one(sum_eq);
 
         let expected_opcode = flags
             .iter()

@@ -66,8 +66,8 @@ impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BIT
         let right_shift = aux.opcode_srl_flag + aux.opcode_sra_flag;
 
         // Constrain that bit_shift, bit_multiplier are correct, i.e. that bit_multiplier =
-        // 1 << bit_shift. We check that bit_shift is correct below if y < LIMB_BITS, otherwise
-        // we don't really care what its value is. Note that bit_shift < LIMB_BITS is
+        // 1 << bit_shift. We check that bit_shift is correct below if y < NUM_LIMBS * LIMB_BITS,
+        // otherwise we don't really care what its value is. Note that bit_shift < LIMB_BITS is
         // constrained in bridge.rs via the range checker.
         builder
             .when(aux.opcode_sll_flag)
@@ -95,9 +95,12 @@ impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BIT
 
         let mut marker_sum = AB::Expr::zero();
 
-        // Check that z[i] = x[i] <</>> y[i] both on the bit and limb shift level.
+        // Check that z[i] = x[i] <</>> y[i] both on the bit and limb shift level if y <
+        // NUM_LIMBS * LIMB_BITS.
         for i in 0..NUM_LIMBS {
             marker_sum += aux.limb_shift_marker[i].into();
+            builder.assert_bool(aux.limb_shift_marker[i]);
+
             let mut when_limb_shift = builder.when(aux.limb_shift_marker[i]);
             when_limb_shift.assert_eq(
                 y_limbs[1] * AB::F::from_canonical_usize(1 << LIMB_BITS) + y_limbs[0]
@@ -146,8 +149,7 @@ impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BIT
         }
 
         // If the shift is larger than the number of bits, check that each limb of z is filled
-        for (z, marker) in z_limbs.iter().zip(aux.limb_shift_marker.iter()) {
-            builder.assert_bool(*marker);
+        for z in z_limbs {
             builder
                 .when(AB::Expr::one() - marker_sum.clone())
                 .assert_eq(

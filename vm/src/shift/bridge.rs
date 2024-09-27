@@ -84,13 +84,20 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftAir<NUM_LIMBS, LIMB_BI
             )
             .eval(builder, aux.is_valid);
 
+        // Check that bit_shift < LIMB_BITS
+        self.range_bus
+            .range_check(aux.bit_shift, LIMB_BITS.ilog2() as usize)
+            .eval(builder, aux.is_valid);
+
         // Check x_sign & x[NUM_LIMBS - 1] == x_sign using XOR
-        let x_sign_shifted = aux.x_sign * AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
+        let mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
+        let x_sign_shifted = aux.x_sign * mask;
         self.xor_bus
             .send(
-                x_sign_shifted.clone(),
                 io.x.data[NUM_LIMBS - 1],
-                io.x.data[NUM_LIMBS - 1] - x_sign_shifted,
+                mask,
+                io.x.data[NUM_LIMBS - 1] + mask
+                    - (AB::Expr::from_canonical_u32(2) * x_sign_shifted),
             )
             .eval(builder, aux.opcode_sra_flag);
 

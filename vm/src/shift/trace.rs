@@ -15,8 +15,6 @@ use crate::{
     uint_multiplication::MemoryData,
 };
 
-// TODO: implement trace generation
-
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChip<F>
     for ShiftChip<F, NUM_LIMBS, LIMB_BITS>
 {

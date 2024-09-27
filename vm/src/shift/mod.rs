@@ -58,16 +58,19 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         memory_chip: MemoryChipRef<T>,
         xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     ) -> Self {
+        // (1 << (2 * LIMB_BITS)) fits within a u32
         assert!(LIMB_BITS < 16, "LIMB_BITS {} >= 16", LIMB_BITS);
+        // For range check that bit_shift < LIMB_BITS
         assert!(
             LIMB_BITS.is_power_of_two(),
             "LIMB_BITS {} not a power of 2",
             LIMB_BITS
         );
+        // A non-overflow shift amount is defined entirely within y[0] and y[1]
         assert!(
-            NUM_LIMBS < (1 << (2 * LIMB_BITS)),
-            "NUM_LIMBS {} >= 2^(2 * LIMB_BITS {})",
-            NUM_LIMBS,
+            NUM_LIMBS * LIMB_BITS < (1 << (2 * LIMB_BITS)),
+            "NUM_LIMBS * LIMB_BITS {} >= 2^(2 * LIMB_BITS {})",
+            NUM_LIMBS * LIMB_BITS,
             LIMB_BITS
         );
         let memory_bridge = memory_chip.borrow().memory_bridge();
@@ -133,9 +136,11 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         if opcode == Opcode::SRA256 {
             x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             self.xor_lookup_chip
-                .request(x_sign * (1 << (LIMB_BITS - 1)), x[NUM_LIMBS - 1]);
+                .request(x[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
         }
 
+        self.range_checker_chip
+            .add_count(bit_shift as u32, LIMB_BITS.ilog2() as usize);
         for (z_val, carry_val) in z.iter().zip(carry.iter()) {
             self.range_checker_chip.add_count(*z_val, LIMB_BITS);
             self.range_checker_chip.add_count(*carry_val, bit_shift);
@@ -213,8 +218,11 @@ fn solve_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     y: &[u32],
     logical: bool,
 ) -> (Vec<u32>, usize, usize) {
-    let fill =
-        (1 - (logical as u32)) * ((1 << LIMB_BITS) - 1) * (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
+    let fill = if logical {
+        0
+    } else {
+        ((1 << LIMB_BITS) - 1) * (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1))
+    };
     let mut result = vec![fill; NUM_LIMBS];
 
     let (is_zero, limb_shift, bit_shift) = get_shift::<NUM_LIMBS, LIMB_BITS>(y);
@@ -235,7 +243,8 @@ fn solve_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 }
 
 fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u32]) -> (bool, usize, usize) {
-    // We assume `NUM_LIMBS < 2^(2*LIMB_BITS)` so if there are any higher limbs, the shifted value is zero.
+    // We assume `NUM_LIMBS * LIMB_BITS < 2^(2*LIMB_BITS)` so if there are any higher limbs,
+    // the shifted value is zero.
     let shift = (y[0] + (y[1] * (1 << LIMB_BITS))) as usize;
     if shift < NUM_LIMBS * LIMB_BITS && y[2..].iter().all(|&val| val == 0) {
         (false, shift / LIMB_BITS, shift % LIMB_BITS)

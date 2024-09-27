@@ -124,6 +124,17 @@ fn run_shift_negative_test(
         &mut rng,
     );
 
+    if expected_error == VerificationError::NonZeroCumulativeSum {
+        chip.range_checker_chip.clear();
+        chip.range_checker_chip
+            .add_count(bit_shift, LIMB_BITS.ilog2() as usize);
+        for (z_val, carry_val) in z.iter().zip(bit_shift_carry.iter()) {
+            chip.range_checker_chip.add_count(*z_val, LIMB_BITS);
+            chip.range_checker_chip
+                .add_count(*carry_val, bit_shift as usize);
+        }
+    }
+
     let shift_trace = chip.clone().generate_trace();
     let mut shift_trace_vec = shift_trace.row_slice(0).to_vec();
     let shift_trace_cols: &mut ShiftCols<F, NUM_LIMBS, LIMB_BITS> = (*shift_trace_vec).borrow_mut();
