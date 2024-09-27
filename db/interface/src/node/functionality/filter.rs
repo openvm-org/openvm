@@ -57,7 +57,7 @@ where
         let comp = filter.decompose_binary_expr().1;
         let page_controller = Self::page_controller(idx_len, data_len, comp.clone());
         let mut keygen_builder = engine.keygen_builder();
-        page_controller.set_up_keygen_builder(&mut keygen_builder, page_width, idx_len);
+        page_controller.set_up_keygen_builder(&mut keygen_builder, page_width);
 
         let pk = keygen_builder.generate_pk();
         PkUtil::<SC, E>::save_proving_key(node_name, idx_len, data_len, &pk)?;

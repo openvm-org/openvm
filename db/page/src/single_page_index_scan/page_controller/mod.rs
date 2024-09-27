@@ -281,7 +281,6 @@ where
         &'a self,
         keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
         page_width: usize,
-        idx_len: usize,
     ) {
         let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
         let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
@@ -291,17 +290,15 @@ where
 
         keygen_builder.add_partitioned_air(
             &self.input_chip.air,
-            idx_len,
             vec![input_page_ptr, input_page_aux_ptr],
         );
 
         keygen_builder.add_partitioned_air(
             &self.output_chip.air,
-            0,
             vec![output_page_ptr, output_page_aux_ptr],
         );
 
-        keygen_builder.add_partitioned_air(&self.range_checker.air, 0, vec![range_checker_ptr]);
+        keygen_builder.add_partitioned_air(&self.range_checker.air, vec![range_checker_ptr]);
     }
 
     #[allow(clippy::too_many_arguments)]

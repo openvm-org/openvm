@@ -125,11 +125,10 @@ fn page_access_chip_test() {
     let page_metadata_ptr = keygen_builder.add_main_matrix(2);
     keygen_builder.add_partitioned_air(
         &page_controller.page_access_air,
-        0,
         vec![page_data_ptr, page_metadata_ptr],
     );
 
-    keygen_builder.add_air(&page_requester, 0);
+    keygen_builder.add_air(&page_requester);
 
     let pk = keygen_builder.generate_pk();
 

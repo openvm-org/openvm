@@ -83,9 +83,9 @@ where
     if partition {
         let fields_ptr = keygen_builder.add_cached_main_matrix(air.field_width());
         let count_ptr = keygen_builder.add_main_matrix(1);
-        keygen_builder.add_partitioned_air(&air, 0, vec![count_ptr, fields_ptr]);
+        keygen_builder.add_partitioned_air(&air, vec![count_ptr, fields_ptr]);
     } else {
-        keygen_builder.add_air(&air, 0);
+        keygen_builder.add_air(&air);
     }
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();

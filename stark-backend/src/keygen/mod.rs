@@ -32,7 +32,6 @@ pub struct MultiStarkKeygenBuilder<'a, SC: StarkGenericConfig> {
     #[allow(clippy::type_complexity)]
     partitioned_airs: Vec<(
         &'a dyn AnyRap<SC>,
-        usize,
         Vec<SingleMatrixCommitPtr>,
         Option<usize>,
     )>,
@@ -58,14 +57,11 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         );
 
         let partitioned_airs = std::mem::take(&mut self.partitioned_airs);
-        for (air, num_public_values, partitioned_main_ptrs, interaction_chunk_size) in
-            partitioned_airs.into_iter()
-        {
+        for (air, partitioned_main_ptrs, interaction_chunk_size) in partitioned_airs.into_iter() {
             let interaction_chunk_size = match interaction_chunk_size {
                 Some(interaction_chunk_size) => interaction_chunk_size,
                 None => self.calc_interaction_chunk_size_for_air(
                     air,
-                    num_public_values,
                     &partitioned_main_ptrs,
                     multi_pk.max_constraint_degree,
                 ),
@@ -74,7 +70,6 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             let (prep_prover_data, prep_verifier_data, symbolic_builder) = self
                 .get_prep_data_and_symbolic_builder(
                     air,
-                    num_public_values,
                     &partitioned_main_ptrs,
                     interaction_chunk_size,
                 );
@@ -211,21 +206,19 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     /// - Generates preprocessed trace and creates a dedicated commitment for it.
     /// - Adds main trace to the last main trace commitment.
     #[instrument(level = "debug", skip_all)]
-    pub fn add_air(&mut self, air: &'a dyn AnyRap<SC>, num_public_values: usize) {
-        self.add_air_with_interaction_chunk_size(air, num_public_values, None);
+    pub fn add_air(&mut self, air: &'a dyn AnyRap<SC>) {
+        self.add_air_with_interaction_chunk_size(air, None);
     }
 
     pub fn add_air_with_interaction_chunk_size(
         &mut self,
         air: &'a dyn AnyRap<SC>,
-        num_public_values: usize,
         interaction_chunk_size: Option<usize>,
     ) {
         let main_width = <dyn AnyRap<SC> as BaseAir<Val<SC>>>::width(air);
         let ptr = self.add_main_matrix(main_width);
         self.add_partitioned_air_with_interaction_chunk_size(
             air,
-            num_public_values,
             vec![ptr],
             interaction_chunk_size,
         );
@@ -240,30 +233,19 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     pub fn add_partitioned_air(
         &mut self,
         air: &'a dyn AnyRap<SC>,
-        num_public_values: usize,
         partitioned_main_ptrs: Vec<SingleMatrixCommitPtr>,
     ) {
-        self.add_partitioned_air_with_interaction_chunk_size(
-            air,
-            num_public_values,
-            partitioned_main_ptrs,
-            None,
-        );
+        self.add_partitioned_air_with_interaction_chunk_size(air, partitioned_main_ptrs, None);
     }
 
     pub fn add_partitioned_air_with_interaction_chunk_size(
         &mut self,
         air: &'a dyn AnyRap<SC>,
-        num_public_values: usize,
         partitioned_main_ptrs: Vec<SingleMatrixCommitPtr>,
         interaction_chunk_size: Option<usize>,
     ) {
-        self.partitioned_airs.push((
-            air,
-            num_public_values,
-            partitioned_main_ptrs,
-            interaction_chunk_size,
-        ));
+        self.partitioned_airs
+            .push((air, partitioned_main_ptrs, interaction_chunk_size));
     }
 
     /// Default way to add a single Interactive AIR.
@@ -298,16 +280,11 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     fn calc_interaction_chunk_size_for_air(
         &self,
         air: &dyn AnyRap<SC>,
-        num_public_values: usize,
         partitioned_main_ptrs: &[SingleMatrixCommitPtr],
         max_constraint_degree: usize,
     ) -> usize {
-        let (_, _, symbolic_builder) = self.get_prep_data_and_symbolic_builder(
-            air,
-            num_public_values,
-            partitioned_main_ptrs,
-            1,
-        );
+        let (_, _, symbolic_builder) =
+            self.get_prep_data_and_symbolic_builder(air, partitioned_main_ptrs, 1);
 
         let (max_field_degree, max_count_degree) =
             symbolic_builder.constraints().max_interaction_degrees();
@@ -336,13 +313,9 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
 
     fn all_airs_max_constraint_degree(&mut self) -> usize {
         let mut max_constraint_degree = 0;
-        for (air, num_public_values, partitioned_main_ptrs, _) in self.partitioned_airs.iter() {
-            let (_, _, symbolic_builder) = self.get_prep_data_and_symbolic_builder(
-                *air,
-                *num_public_values,
-                partitioned_main_ptrs,
-                1,
-            );
+        for (air, partitioned_main_ptrs, _) in self.partitioned_airs.iter() {
+            let (_, _, symbolic_builder) =
+                self.get_prep_data_and_symbolic_builder(*air, partitioned_main_ptrs, 1);
 
             let symbolic_constraints = symbolic_builder.constraints();
             tracing::debug!(
@@ -361,7 +334,6 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     fn get_prep_data_and_symbolic_builder(
         &self,
         air: &dyn AnyRap<SC>,
-        num_public_values: usize,
         partitioned_main_ptrs: &[SingleMatrixCommitPtr],
         interaction_chunk_size: usize,
     ) -> (
@@ -382,14 +354,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             partitioned_main: main_widths,
             after_challenge: vec![],
         };
-        let symbolic_builder = get_symbolic_builder(
-            air,
-            &width,
-            num_public_values,
-            &[],
-            &[],
-            interaction_chunk_size,
-        );
+        let symbolic_builder = get_symbolic_builder(air, &width, &[], &[], interaction_chunk_size);
 
         (prep_prover_data, prep_verifier_data, symbolic_builder)
     }

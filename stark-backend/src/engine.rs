@@ -84,8 +84,8 @@ where
 
     let mut keygen_builder = engine.keygen_builder();
 
-    for i in 0..chips.len() {
-        keygen_builder.add_air(chips[i] as &dyn AnyRap<SC>, public_values[i].len());
+    for chip in chips {
+        keygen_builder.add_air(*chip);
     }
 
     let pk = keygen_builder.generate_pk();

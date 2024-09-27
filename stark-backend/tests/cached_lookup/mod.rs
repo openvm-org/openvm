@@ -71,9 +71,9 @@ pub fn prove_and_verify_indexless_lookups(
     let recv_fields_ptr = keygen_builder.add_cached_main_matrix(receiver_air.field_width());
     // Everything else together
     let recv_count_ptr = keygen_builder.add_main_matrix(1);
-    keygen_builder.add_partitioned_air(&receiver_air, 0, vec![recv_count_ptr, recv_fields_ptr]);
+    keygen_builder.add_partitioned_air(&receiver_air, vec![recv_count_ptr, recv_fields_ptr]);
     // Auto-adds sender matrix
-    keygen_builder.add_air(&sender_air, 0);
+    keygen_builder.add_air(&sender_air);
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 
