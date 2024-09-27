@@ -70,9 +70,9 @@ impl FieldVariable {
 
     // TODO: should check that scalar is within the range of limb bits. But we don't have limb bits here, might need to do it in eval/compute.
     // no carry (no automaticly save when limbs overflow)
-    pub fn limb_mul(&self, scalar: isize) -> FieldVariable {
+    pub fn int_mul(&self, scalar: isize) -> FieldVariable {
         FieldVariable {
-            expr: SymbolicExpr::LimbMul(Box::new(self.expr.clone()), scalar),
+            expr: SymbolicExpr::IntMul(Box::new(self.expr.clone()), scalar),
             builder: self.builder.clone(),
         }
     }
