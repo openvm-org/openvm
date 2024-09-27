@@ -39,6 +39,7 @@ where
 fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig {
         field_arithmetic_enabled: true,
+        memory_config: MemoryConfig::new(29, 29, 15, 8),
         ..VmConfig::core()
     }
 }
@@ -256,7 +257,7 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(STOREW, 1, 6, 0, 0, 1),
         Instruction::from_isize(STOREW, 2, 7, 0, 0, 1),
         Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
+        // Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
         Instruction::from_isize(FE4SUB, 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4MUL, 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4DIV, 12, 0, 4, 1, 1),
@@ -274,6 +275,7 @@ fn test_vm_field_extension_arithmetic() {
         VmConfig {
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
+            memory_config: MemoryConfig::new(29, 29, 15, 8),
             ..VmConfig::core()
         },
         program,

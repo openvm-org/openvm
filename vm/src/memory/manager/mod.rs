@@ -5,6 +5,7 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::{
     assert_less_than::{columns::AssertLessThanAuxCols, AssertLessThanAir},
+    is_less_than::IsLessThanAir,
     is_zero::IsZeroAir,
     sub_chip::LocalTraceInstructions,
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
@@ -371,7 +372,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     }
 
     pub fn access_adapter_air<const N: usize>(&self) -> AccessAdapterAir<N> {
-        let lt_air = AssertLessThanAir::new(self.range_checker.bus(), self.mem_config.clk_max_bits);
+        let lt_air = IsLessThanAir::new(self.range_checker.bus(), self.mem_config.clk_max_bits);
         AccessAdapterAir::<N> {
             memory_bus: self.memory_bus,
             lt_air,

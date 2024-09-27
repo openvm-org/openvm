@@ -1,6 +1,9 @@
 use std::{borrow::Borrow, mem::size_of};
 
-use afs_primitives::assert_less_than::{columns::AssertLessThanIoCols, AssertLessThanAir};
+use afs_primitives::is_less_than::{
+    columns::{IsLessThanAuxCols, IsLessThanIoCols},
+    IsLessThanAir,
+};
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
@@ -14,7 +17,7 @@ use crate::memory::{
 
 pub struct AccessAdapterAir<const N: usize> {
     pub memory_bus: MemoryBus,
-    pub lt_air: AssertLessThanAir<AUX_LEN>,
+    pub lt_air: IsLessThanAir,
 }
 
 impl<T, const N: usize> BaseAir<T> for AccessAdapterAir<N> {
@@ -25,6 +28,8 @@ impl<T, const N: usize> BaseAir<T> for AccessAdapterAir<N> {
 
 impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
     fn eval(&self, builder: &mut AB) {
+        assert_eq!(self.lt_air.num_limbs, AUX_LEN);
+
         let main = builder.main();
 
         let local = main.row_slice(0);
@@ -44,12 +49,15 @@ impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
 
         self.lt_air.conditional_eval(
             builder,
-            AssertLessThanIoCols {
+            IsLessThanIoCols {
                 x: local.left_timestamp.into(),
                 y: local.right_timestamp.into(),
+                less_than: local.is_right_larger.into(),
             },
-            local.lt_aux,
-            local.is_right_larger.into(),
+            IsLessThanAuxCols {
+                lower_decomp: local.lt_aux.into(),
+            },
+            local.is_valid,
         );
 
         let parent_timestamp = local.is_right_larger * local.right_timestamp
