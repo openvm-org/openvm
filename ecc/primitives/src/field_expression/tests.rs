@@ -16,7 +16,9 @@ use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use super::{ExprBuilder, FieldExprChip, LIMB_BITS};
+use super::{ExprBuilder, FieldExprChip, SymbolicExpr};
+
+const LIMB_BITS: usize = 8;
 
 pub fn generate_random_biguint(prime: &BigUint) -> BigUint {
     let mut rng = create_seeded_rng();
@@ -49,7 +51,7 @@ fn test_add() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker) = get_sub_air(&prime);
 
-    let builder = ExprBuilder::new(prime.clone());
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
@@ -59,7 +61,6 @@ fn test_add() {
 
     let chip = FieldExprChip {
         builder,
-        num_limbs: 32, // 256 bits / 8 bits per limb.
         check_carry_mod_to_zero: subair,
         range_checker: range_checker.clone(),
     };
@@ -84,7 +85,7 @@ fn test_div() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker) = get_sub_air(&prime);
 
-    let builder = ExprBuilder::new(prime.clone());
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
@@ -93,7 +94,6 @@ fn test_div() {
 
     let chip = FieldExprChip {
         builder,
-        num_limbs: 32, // 256 bits / 8 bits per limb.
         check_carry_mod_to_zero: subair,
         range_checker: range_checker.clone(),
     };
@@ -118,7 +118,7 @@ fn test_ec_add() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker) = get_sub_air(&prime);
 
-    let builder = ExprBuilder::new(prime.clone());
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input(builder.clone());
     let y1 = ExprBuilder::new_input(builder.clone());
@@ -135,7 +135,6 @@ fn test_ec_add() {
 
     let chip = FieldExprChip {
         builder,
-        num_limbs: 32, // 256 bits / 8 bits per limb.
         check_carry_mod_to_zero: subair,
         range_checker: range_checker.clone(),
     };
@@ -160,7 +159,7 @@ fn test_ec_double() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker) = get_sub_air(&prime);
 
-    let builder = ExprBuilder::new(prime.clone());
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input(builder.clone());
     let y1 = ExprBuilder::new_input(builder.clone());
@@ -175,7 +174,6 @@ fn test_ec_double() {
 
     let chip = FieldExprChip {
         builder,
-        num_limbs: 32, // 256 bits / 8 bits per limb.
         check_carry_mod_to_zero: subair,
         range_checker: range_checker.clone(),
     };
@@ -192,4 +190,50 @@ fn test_ec_double() {
         vec![trace, range_trace],
     )
     .expect("Verification failed");
+}
+
+fn test_symbolic_limbs(expr: SymbolicExpr, expected_q: usize, expected_carry: usize) {
+    let prime = secp256k1_coord_prime();
+    let (q, carry) = expr.constraint_limbs(&prime, LIMB_BITS, 32);
+    assert_eq!(q, expected_q);
+    assert_eq!(carry, expected_carry);
+}
+
+#[test]
+fn test_symbolic_limbs_add() {
+    let expr = SymbolicExpr::Add(
+        Box::new(SymbolicExpr::Var(0)),
+        Box::new(SymbolicExpr::Var(1)),
+    );
+    // x + y = pq, q should fit in q limb.
+    // x+y should have 32 limbs, pq also 32 limbs.
+    let expected_q = 1;
+    let expected_carry = 32;
+    test_symbolic_limbs(expr, expected_q, expected_carry);
+}
+
+#[test]
+fn test_symbolic_limbs_sub() {
+    let expr = SymbolicExpr::Sub(
+        Box::new(SymbolicExpr::Var(0)),
+        Box::new(SymbolicExpr::Var(1)),
+    );
+    // x - y = pq, q should fit in q limb.
+    // x - y should have 32 limbs, pq also 32 limbs.
+    let expected_q = 1;
+    let expected_carry = 32;
+    test_symbolic_limbs(expr, expected_q, expected_carry);
+}
+
+#[test]
+fn test_symbolic_limbs_mul() {
+    let expr = SymbolicExpr::Mul(
+        Box::new(SymbolicExpr::Var(0)),
+        Box::new(SymbolicExpr::Var(1)),
+    );
+    // x * y = pq, q can be up to p so can limbs as p.
+    // x * y and p * q  both have 63 limbs.
+    let expected_q = 32;
+    let expected_carry = 63;
+    test_symbolic_limbs(expr, expected_q, expected_carry);
 }

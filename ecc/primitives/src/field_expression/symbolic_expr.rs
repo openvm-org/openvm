@@ -2,13 +2,11 @@ use std::cmp::max;
 
 use afs_primitives::bigint::OverflowInt;
 use num_bigint_dig::{BigInt, BigUint};
-use num_traits::{FromPrimitive, One};
+use num_traits::{FromPrimitive, One, Zero};
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 use p3_util::log2_ceil_usize;
 use stark_vm::modular_addsub::big_uint_mod_inverse;
-
-use super::LIMB_BITS;
 
 /// Example: If there are 4 inputs (x1, y1, x2, y2), and one intermediate variable lambda,
 /// Mul(Var(0), Var(0)) - Input(0) - Input(2) =>
@@ -30,7 +28,8 @@ impl SymbolicExpr {
     pub fn max_abs(&self, prime: &BigUint) -> (BigUint, BigUint) {
         match self {
             SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => {
-                (prime.clone() - BigUint::one(), BigUint::one())
+                // Input and variable are field elements so are in [0, p)
+                (prime.clone() - BigUint::one(), BigUint::zero())
             }
             SymbolicExpr::Add(lhs, rhs) => {
                 let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
@@ -62,20 +61,40 @@ impl SymbolicExpr {
         }
     }
 
+    fn expr_limbs(&self, num_limbs: usize) -> usize {
+        match self {
+            SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => num_limbs,
+            SymbolicExpr::Add(lhs, rhs) | SymbolicExpr::Sub(lhs, rhs) => {
+                max(lhs.expr_limbs(num_limbs), rhs.expr_limbs(num_limbs))
+            }
+            SymbolicExpr::Mul(lhs, rhs) => {
+                lhs.expr_limbs(num_limbs) + rhs.expr_limbs(num_limbs) - 1
+            }
+            SymbolicExpr::Div(_, _) => {
+                unimplemented!()
+            }
+            SymbolicExpr::ScalarMul(lhs, _) => lhs.expr_limbs(num_limbs),
+        }
+    }
+
     // If the expression is equal to q * p.
     // How many limbs does q have?
     // How many carry_limbs does it need to constrain expr - q * p = 0?
-    pub fn constraint_limbs(&self, prime: &BigUint) -> (usize, usize) {
+    pub fn constraint_limbs(
+        &self,
+        prime: &BigUint,
+        limb_bits: usize,
+        num_limbs: usize,
+    ) -> (usize, usize) {
         let (max_pos_abs, max_neg_abs) = self.max_abs(prime);
         let max_abs = max(max_pos_abs, max_neg_abs);
-        let max_abs = max_abs / prime;
-        let expr_bits = max_abs.bits();
-        let q_limbs = (expr_bits + LIMB_BITS - 1) / LIMB_BITS;
-
-        let expr_limbs = (expr_bits + LIMB_BITS - 1) / LIMB_BITS;
-        let p_bits = prime.bits();
-        let p_limbs = (p_bits + LIMB_BITS - 1) / LIMB_BITS;
+        let max_q_abs = (&max_abs + prime - BigUint::one()) / prime;
+        let q_bits = max_q_abs.bits();
+        let q_limbs = q_bits.div_ceil(limb_bits);
+        let p_limbs = prime.bits().div_ceil(limb_bits);
         let qp_limbs = q_limbs + p_limbs - 1;
+
+        let expr_limbs = self.expr_limbs(num_limbs);
         let carry_limbs = max(expr_limbs, qp_limbs);
         (q_limbs, carry_limbs)
     }
