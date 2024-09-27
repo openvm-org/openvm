@@ -16,7 +16,7 @@ use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use super::{ExprBuilder, FieldExprChip, SymbolicExpr};
+use super::{super::utils::*, ExprBuilder, FieldExprChip, SymbolicExpr};
 
 const LIMB_BITS: usize = 8;
 
@@ -67,9 +67,15 @@ fn test_add() {
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
+    let expected = (&x + &y) % prime;
     let inputs = vec![x, y];
 
     let row = chip.generate_trace_row((inputs, range_checker.clone()));
+    let (_, _, vars, _, _) = chip.load_vars(&row);
+    assert_eq!(vars.len(), 1);
+    let generated = evaluate_biguint(&vars[0], LIMB_BITS);
+    assert_eq!(generated, expected);
+
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
@@ -100,9 +106,16 @@ fn test_div() {
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
+    let y_inv = big_uint_mod_inverse(&y, &prime);
+    let expected = (&x * &y_inv) % prime;
     let inputs = vec![x, y];
 
     let row = chip.generate_trace_row((inputs, range_checker.clone()));
+    let (_, _, vars, _, _) = chip.load_vars(&row);
+    assert_eq!(vars.len(), 1);
+    let generated = evaluate_biguint(&vars[0], LIMB_BITS);
+    assert_eq!(generated, expected);
+
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
@@ -141,9 +154,17 @@ fn test_ec_add() {
 
     let (x1, y1) = SampleEcPoints[0].clone();
     let (x2, y2) = SampleEcPoints[1].clone();
+    let (expected_x3, expected_y3) = SampleEcPoints[2].clone();
     let inputs = vec![x1, y1, x2, y2];
 
     let row = chip.generate_trace_row((inputs, range_checker.clone()));
+    let (_, _, vars, _, _) = chip.load_vars(&row);
+    assert_eq!(vars.len(), 3); // lambda, x3, y3
+    let generated_x3 = evaluate_biguint(&vars[1], LIMB_BITS);
+    let generated_y3 = evaluate_biguint(&vars[2], LIMB_BITS);
+    assert_eq!(generated_x3, expected_x3);
+    assert_eq!(generated_y3, expected_y3);
+
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
@@ -179,9 +200,17 @@ fn test_ec_double() {
     };
 
     let (x1, y1) = SampleEcPoints[1].clone();
+    let (expected_x3, expected_y3) = SampleEcPoints[3].clone();
     let inputs = vec![x1, y1];
 
     let row = chip.generate_trace_row((inputs, range_checker.clone()));
+    let (_, _, vars, _, _) = chip.load_vars(&row);
+    assert_eq!(vars.len(), 3); // lambda, x3, y3
+    let generated_x3 = evaluate_biguint(&vars[1], LIMB_BITS);
+    let generated_y3 = evaluate_biguint(&vars[2], LIMB_BITS);
+    assert_eq!(generated_x3, expected_x3);
+    assert_eq!(generated_y3, expected_y3);
+
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
