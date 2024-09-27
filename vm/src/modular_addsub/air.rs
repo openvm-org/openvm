@@ -5,7 +5,7 @@ use afs_primitives::bigint::{
     utils::{big_uint_to_limbs, secp256k1_coord_prime},
     OverflowInt,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -29,6 +29,11 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>
     fn width(&self) -> usize {
         ModularAddSubCols::<F, NUM_LIMBS>::width()
     }
+}
+
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAirWithPublicValues<F>
+    for ModularAddSubAir<NUM_LIMBS, LIMB_SIZE>
+{
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air<AB>

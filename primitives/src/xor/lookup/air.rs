@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -13,6 +13,7 @@ pub struct XorLookupAir<const M: usize> {
     pub bus: XorBus,
 }
 
+impl<F: Field, const M: usize> BaseAirWithPublicValues<F> for XorLookupAir<M> {}
 impl<F: Field, const M: usize> BaseAir<F> for XorLookupAir<M> {
     fn width(&self) -> usize {
         NUM_XOR_LOOKUP_COLS

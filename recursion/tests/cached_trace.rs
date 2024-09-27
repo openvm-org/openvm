@@ -2,7 +2,8 @@ use afs_compiler::util::execute_program;
 use afs_recursion::testing_utils::inner::build_verification_program;
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder, engine::VerificationData,
-    prover::trace::TraceCommitmentBuilder, verifier::VerificationError,
+    prover::trace::TraceCommitmentBuilder, rap::BaseAirWithPublicValues,
+    verifier::VerificationError,
 };
 use ax_sdk::{
     config::baby_bear_poseidon2::default_engine,
@@ -20,6 +21,7 @@ use rand::{rngs::StdRng, SeedableRng};
 /// Inner value is width of y-submatrix
 pub struct SumAir(pub usize);
 
+impl<F> BaseAirWithPublicValues<F> for SumAir {}
 impl<F> BaseAir<F> for SumAir {
     fn width(&self) -> usize {
         self.0 + 1

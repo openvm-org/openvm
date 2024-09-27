@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField};
 use p3_matrix::Matrix;
@@ -25,6 +25,7 @@ impl<F: PrimeField, Operation: OfflineCheckerOperation<F>> AirConfig
     type Cols<T> = OfflineCheckerCols<T>;
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for OfflineChecker {}
 impl<F: Field> BaseAir<F> for OfflineChecker {
     fn width(&self) -> usize {
         self.air_width()

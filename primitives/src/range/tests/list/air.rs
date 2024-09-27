@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -14,6 +14,7 @@ pub struct ListAir {
     pub bus: RangeCheckBus,
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for ListAir {}
 impl<F: Field> BaseAir<F> for ListAir {
     fn width(&self) -> usize {
         NUM_LIST_COLS

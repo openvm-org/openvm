@@ -1,7 +1,7 @@
 use std::{array, borrow::Borrow};
 
 use afs_primitives::{utils, xor::bus::XorBus};
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -25,6 +25,11 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
     fn width(&self) -> usize {
         ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
+}
+
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
+    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+{
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>

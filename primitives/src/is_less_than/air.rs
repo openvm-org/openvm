@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -84,6 +84,7 @@ impl AirConfig for IsLessThanAir {
     type Cols<T> = IsLessThanCols<T>;
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for IsLessThanAir {}
 impl<F: Field> BaseAir<F> for IsLessThanAir {
     fn width(&self) -> usize {
         IsLessThanCols::<F>::width(self)

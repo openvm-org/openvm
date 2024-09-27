@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, mem::size_of};
 
 use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -22,6 +22,7 @@ pub struct ExecutionDummyAir {
     pub bus: ExecutionBus,
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for ExecutionDummyAir {}
 impl<F: Field> BaseAir<F> for ExecutionDummyAir {
     fn width(&self) -> usize {
         size_of::<DummyExecutionInteractionCols<u8>>()

@@ -1,6 +1,9 @@
 use std::{borrow::Borrow, iter};
 
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
+    rap::BaseAirWithPublicValues,
+};
 use itertools::Itertools;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -37,6 +40,7 @@ impl PageAccessByRowIdAir {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for PageAccessByRowIdAir {}
 impl<F: Field> BaseAir<F> for PageAccessByRowIdAir {
     fn width(&self) -> usize {
         self.air_width()

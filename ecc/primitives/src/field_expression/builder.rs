@@ -10,7 +10,7 @@ use afs_primitives::{
     sub_chip::{AirConfig, LocalTraceInstructions},
     var_range::VariableRangeCheckerChip,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -93,6 +93,7 @@ impl Deref for FieldExprChip {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for FieldExprChip {}
 impl<F: Field> BaseAir<F> for FieldExprChip {
     fn width(&self) -> usize {
         self.num_limbs * (self.builder.num_input + self.builder.num_variables)

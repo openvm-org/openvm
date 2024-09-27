@@ -8,7 +8,7 @@ use afs_primitives::{
     },
     sub_chip::SubAir,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -23,6 +23,7 @@ pub struct EcAddUnequalVmAir {
     pub memory_bridge: MemoryBridge,
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for EcAddUnequalVmAir {}
 impl<F: Field> BaseAir<F> for EcAddUnequalVmAir {
     fn width(&self) -> usize {
         EcAddUnequalCols::<F>::width(&self.air.config)
@@ -74,6 +75,7 @@ pub struct EcDoubleVmAir {
     pub memory_bridge: MemoryBridge,
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for EcDoubleVmAir {}
 impl<F: Field> BaseAir<F> for EcDoubleVmAir {
     fn width(&self) -> usize {
         EcDoubleCols::<F>::width(&self.air.config)
