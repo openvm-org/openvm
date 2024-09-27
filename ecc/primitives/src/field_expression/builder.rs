@@ -184,6 +184,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
             let expr_bigint = self.constraints[i].evaluate_bigint(&input_bigint, &vars_bigint);
             let q = expr_bigint / &self.prime_bigint;
             let q_limbs = big_int_to_num_limbs(&q, limb_bits, self.q_limbs[i]);
+            assert_eq!(q_limbs.len(), self.q_limbs[i]); // If this fails, the q_limbs estimate is wrong.
             for &q in q_limbs.iter() {
                 range_checker.add_count((q + (1 << limb_bits)) as u32, limb_bits + 1);
             }
@@ -196,6 +197,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
             let expr = self.constraints[i].evaluate_overflow_isize(&input_overflow, &vars_overflow);
             let expr = expr - q_overflow * prime_overflow.clone();
             let carries = expr.calculate_carries(limb_bits);
+            assert_eq!(carries.len(), self.carry_limbs[i]); // If this fails, the carry limbs estimate is wrong.
             let max_overflow_bits = expr.max_overflow_bits;
             let (carry_min_abs, carry_bits) =
                 get_carry_max_abs_and_bits(max_overflow_bits, limb_bits);

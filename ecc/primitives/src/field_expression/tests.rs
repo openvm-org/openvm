@@ -163,8 +163,8 @@ fn test_ec_double() {
     let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input(builder.clone());
     let y1 = ExprBuilder::new_input(builder.clone());
-    let nom = (x1.clone() * x1.clone()).scalar_mul(3);
-    let denom = y1.scalar_mul(2);
+    let nom = (x1.clone() * x1.clone()).limb_mul(3);
+    let denom = y1.limb_mul(2);
     let lambda = nom / denom;
     let mut x3 = lambda.clone() * lambda.clone() - x1.clone() - x1.clone();
     x3.save();

@@ -20,7 +20,8 @@ pub enum SymbolicExpr {
     Mul(Box<SymbolicExpr>, Box<SymbolicExpr>),
     // Division is not allowed in "constraints", but can only be used in "computes"
     Div(Box<SymbolicExpr>, Box<SymbolicExpr>),
-    ScalarMul(Box<SymbolicExpr>, usize),
+    // Multiply each limb with a scalar. For BigInt this is just scalar multiplication.
+    LimbMul(Box<SymbolicExpr>, isize),
 }
 
 impl SymbolicExpr {
@@ -53,9 +54,9 @@ impl SymbolicExpr {
                 // Should not have division in expression when calling this.
                 unreachable!()
             }
-            SymbolicExpr::ScalarMul(lhs, s) => {
+            SymbolicExpr::LimbMul(lhs, s) => {
                 let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
-                let scalar = BigUint::from_usize(*s).unwrap();
+                let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
                 (lhs_max_pos * &scalar, lhs_max_neg * &scalar)
             }
         }
@@ -73,7 +74,7 @@ impl SymbolicExpr {
             SymbolicExpr::Div(_, _) => {
                 unimplemented!()
             }
-            SymbolicExpr::ScalarMul(lhs, _) => lhs.expr_limbs(num_limbs),
+            SymbolicExpr::LimbMul(lhs, _) => lhs.expr_limbs(num_limbs),
         }
     }
 
@@ -99,10 +100,11 @@ impl SymbolicExpr {
         (q_limbs, carry_limbs)
     }
 
+    // Used in trace gen to compute q.
     pub fn evaluate_bigint(&self, inputs: &[BigInt], variables: &[BigInt]) -> BigInt {
         match self {
-            SymbolicExpr::ScalarMul(lhs, s) => {
-                lhs.evaluate_bigint(inputs, variables) * BigInt::from_usize(*s).unwrap()
+            SymbolicExpr::LimbMul(lhs, s) => {
+                lhs.evaluate_bigint(inputs, variables) * BigInt::from_isize(*s).unwrap()
             }
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
@@ -119,18 +121,19 @@ impl SymbolicExpr {
         }
     }
 
+    // Used in trace gen to compute carries.
     pub fn evaluate_overflow_isize(
         &self,
         inputs: &[OverflowInt<isize>],
         variables: &[OverflowInt<isize>],
     ) -> OverflowInt<isize> {
         match self {
-            SymbolicExpr::ScalarMul(lhs, s) => {
+            SymbolicExpr::LimbMul(lhs, s) => {
                 let mut left = lhs.evaluate_overflow_isize(inputs, variables);
                 for limb in left.limbs.iter_mut() {
-                    *limb *= *s as isize;
+                    *limb *= *s;
                 }
-                left.limb_max_abs *= *s;
+                left.limb_max_abs *= s.unsigned_abs();
                 left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
                 left
             }
@@ -152,19 +155,24 @@ impl SymbolicExpr {
         }
     }
 
+    // Used in AIR eval.
     pub fn evaluate_overflow_expr<AB: AirBuilder>(
         &self,
         inputs: &[OverflowInt<AB::Expr>],
         variables: &[OverflowInt<AB::Expr>],
     ) -> OverflowInt<AB::Expr> {
         match self {
-            SymbolicExpr::ScalarMul(lhs, s) => {
+            SymbolicExpr::LimbMul(lhs, s) => {
                 let mut left = lhs.evaluate_overflow_expr::<AB>(inputs, variables);
-                let scalar = AB::Expr::from_canonical_usize(*s);
+                let scalar = if *s >= 0 {
+                    AB::Expr::from_canonical_usize(*s as usize)
+                } else {
+                    -AB::Expr::from_canonical_usize(s.unsigned_abs())
+                };
                 for limb in left.limbs.iter_mut() {
                     *limb *= scalar.clone();
                 }
-                left.limb_max_abs *= *s;
+                left.limb_max_abs *= s.unsigned_abs();
                 left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
                 left
             }
@@ -210,9 +218,13 @@ impl SymbolicExpr {
                 let right_inv = big_uint_mod_inverse(&right, prime);
                 (left * right_inv) % prime
             }
-            SymbolicExpr::ScalarMul(lhs, s) => {
+            SymbolicExpr::LimbMul(lhs, s) => {
                 let left = lhs.compute(inputs, variables, prime);
-                let right = BigUint::from_usize(*s).unwrap();
+                let right = if *s >= 0 {
+                    BigUint::from_usize(*s as usize).unwrap()
+                } else {
+                    prime - BigUint::from_usize(s.unsigned_abs()).unwrap()
+                };
                 (left * right) % prime
             }
         }
