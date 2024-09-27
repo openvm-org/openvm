@@ -166,7 +166,7 @@ impl ModularArithmeticAir {
         range_checker: Arc<VariableRangeCheckerChip>,
     ) -> ModularArithmeticCols<F> {
         // Quotient and result can be smaller, but padding to the desired length.
-        let q_limbs: Vec<isize> = big_int_to_limbs(q.clone(), self.limb_bits)
+        let q_limbs: Vec<isize> = big_int_to_limbs(&q, self.limb_bits)
             .iter()
             .chain(repeat(&0))
             .take(self.q_limbs)

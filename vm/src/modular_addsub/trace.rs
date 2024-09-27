@@ -145,7 +145,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         q: BigInt,
         is_add: bool,
     ) {
-        let mut q_limbs: Vec<isize> = big_int_to_limbs(q.clone(), LIMB_SIZE);
+        let mut q_limbs: Vec<isize> = big_int_to_limbs(&q, LIMB_SIZE);
         if q_limbs.is_empty() {
             q_limbs.push(0);
         }
