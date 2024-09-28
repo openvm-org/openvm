@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use afs_compiler::{asm::AsmBuilder, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, util::execute_program};
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
@@ -39,7 +39,10 @@ fn test_ec_mul(
     builder.assert_var_array_eq(&res.affine, &expected.affine);
     builder.halt();
 
-    let program = builder.clone().compile_isa();
+    let program = builder.clone().compile_isa_with_options(CompilerOptions {
+        word_size: 64,
+        ..Default::default()
+    });
     execute_program(program, vec![]);
 }
 
