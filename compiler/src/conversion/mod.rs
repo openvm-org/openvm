@@ -19,7 +19,7 @@ pub struct CompilerOptions {
 impl Default for CompilerOptions {
     fn default() -> Self {
         CompilerOptions {
-            word_size: 64,
+            word_size: 8,
             compile_prints: true,
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
