@@ -58,11 +58,10 @@ impl KeccakVmAir {
             })
         });
 
-        // TODO: for interaction chunking we want to keep interaction `fields`
-        // degree 1 when possible. Currently this makes `fields` degree 2.
-        // [jpw] I wanted to keep the property that input bytes are auto-range
-        // checked via xor lookup
         let pre_absorb_state_bytes = updated_state_bytes.map(|b| not(next.is_new_start()) * b);
+        // TODO[jpw]: if we assume block_bytes input are bytes, then we can switch
+        // the constraints to check when(next.is_new_start).assert_eq(next.sponge.block_bytes, post_absorb_state_bytes);
+        // Then we can use the xor lookup to check 0 ^ updated_state_bytes = updated_state_bytes to range check the output are bytes
 
         let post_absorb_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
@@ -76,7 +75,7 @@ impl KeccakVmAir {
         });
 
         // only absorb if next is first round and enabled (so don't constrain absorbs on non-enabled rows)
-        let should_absorb = next.is_first_round() * next.opcode.is_enabled;
+        let should_absorb = next.opcode.is_enabled_first_round;
         for (input, pre, post) in izip!(
             next.sponge.block_bytes,
             pre_absorb_state_bytes,
@@ -90,7 +89,7 @@ impl KeccakVmAir {
             // `next` becomes row 0 which `is_new_start`
             self.xor_bus
                 .send(input, pre, post)
-                .eval(builder, should_absorb.clone());
+                .eval(builder, should_absorb);
         }
         // constrain transition on the state outside rate
         let mut reset_builder = builder.when(local.is_new_start());
