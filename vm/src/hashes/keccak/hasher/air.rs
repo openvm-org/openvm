@@ -8,7 +8,7 @@ use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS};
 use p3_matrix::Matrix;
 
 use super::{
-    columns::{KeccakMemoryCols, KeccakVmCols, NUM_KECCAK_OPCODE_COLS, NUM_KECCAK_SPONGE_COLS},
+    columns::{KeccakVmCols, NUM_KECCAK_VM_COLS},
     KECCAK_RATE_BYTES,
 };
 use crate::{arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge};
@@ -24,10 +24,7 @@ pub struct KeccakVmAir {
 
 impl<F> BaseAir<F> for KeccakVmAir {
     fn width(&self) -> usize {
-        NUM_KECCAK_PERM_COLS
-            + NUM_KECCAK_SPONGE_COLS
-            + NUM_KECCAK_OPCODE_COLS
-            + KeccakMemoryCols::<F>::width()
+        NUM_KECCAK_VM_COLS
     }
 }
 
@@ -42,6 +39,10 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         builder.assert_eq(
             local.sponge.is_new_start,
             local.sponge.is_new_start * local.is_first_round(),
+        );
+        builder.assert_eq(
+            local.opcode.is_enabled_first_round,
+            local.opcode.is_enabled * local.is_first_round(),
         );
         // Not strictly necessary:
         builder

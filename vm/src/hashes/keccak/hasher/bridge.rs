@@ -1,4 +1,6 @@
-use afs_primitives::utils::not;
+use std::array::from_fn;
+
+use afs_primitives::utils::{not, select};
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::{izip, Itertools};
 use p3_air::AirBuilder;
@@ -174,31 +176,52 @@ impl KeccakVmAir {
         start_read_timestamp: AB::Expr,
         mem_aux: &[MemoryReadAuxCols<AB::Var, KECCAK_WORD_SIZE>; KECCAK_ABSORB_READS],
     ) -> AB::Expr {
+        let partial_block = &local.mem_oc.partial_block;
         // Only read input from memory when it is an opcode-related row
         // and only on the first round of block
-        let is_input = local.opcode.is_enabled * local.inner.step_flags[0];
+        let is_input = local.opcode.is_enabled_first_round;
 
         let mut timestamp = start_read_timestamp;
         // read `state` into `word[src + ...]_e`
         // iterator of state as u16:
         for (i, (input, is_padding, mem_aux)) in izip!(
-            local.sponge.block_bytes.chunks(KECCAK_WORD_SIZE),
-            local.sponge.is_padding_byte.chunks(KECCAK_WORD_SIZE),
+            local.sponge.block_bytes.chunks_exact(KECCAK_WORD_SIZE),
+            local.sponge.is_padding_byte.chunks_exact(KECCAK_WORD_SIZE),
             mem_aux
         )
         .enumerate()
         {
             let ptr = local.opcode.src + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE);
             // Only read block i if it is not entirely padding bytes
-            // This is constraint degree 3, which leads to quotient degree 2
-            // if used as `count` in interaction
-            let count = is_input.clone() * not(is_padding[0]);
+            // count is degree 2
+            let count = is_input * not(is_padding[0]);
+            // The memory block read is partial if first byte is not padding but the last byte is padding. Since `count` is only 1 when first byte isn't padding, use check just if last byte is padding.
+            let is_partial_read = *is_padding.last().unwrap();
+            // word is degree 2
+            let word: [_; KECCAK_WORD_SIZE] = from_fn(|i| {
+                if i == 0 {
+                    // first byte is always ok
+                    input[0].into()
+                } else {
+                    // use `partial_block` if this is a partial read, otherwise use the normal input block
+                    select(is_partial_read, partial_block[i - 1], input[i])
+                }
+            });
+            for i in 1..KECCAK_WORD_SIZE {
+                let not_padding: AB::Expr = not(is_padding[i]);
+                // When not a padding byte, the word byte and input byte must be equal
+                // This is constraint degree 3
+                builder.assert_eq(
+                    not_padding.clone() * word[i].clone(),
+                    not_padding.clone() * input[i],
+                );
+            }
 
             // reminder: input is currently range checked to be 8-bits in `constrain_absorb` by the XOR lookup
             self.memory_bridge
                 .read(
                     MemoryAddress::new(local.opcode.e, ptr),
-                    input.try_into().unwrap(),
+                    word, // degree 2
                     timestamp.clone(),
                     mem_aux,
                 )
@@ -262,12 +285,12 @@ impl KeccakVmAir {
     /// Amount to advance timestamp by after execution of one opcode instruction.
     /// This is an upper bound dependant on the length `len` operand, which is unbounded.
     pub fn timestamp_change<T: AbstractField>(len: impl Into<T>) -> T {
-        // actual number is ceil(len / 136) * (3 + 136) + KECCAK_DIGEST_WRITES
+        // actual number is ceil(len / 136) * (3 + 17) + KECCAK_DIGEST_WRITES
         // digest writes only done on last row of multi-block
         // add another KECCAK_ABSORB_READS to round up so we don't deal with padding
-        len.into() * T::two()
+        len.into()
             + T::from_canonical_usize(
-            KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
+                KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
             )
     }
 }

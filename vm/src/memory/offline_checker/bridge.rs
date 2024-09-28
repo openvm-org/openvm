@@ -311,9 +311,9 @@ impl MemoryOfflineChecker {
         }
     }
 
-    // The max degree of constraints is:
-    // deg(enabled) + max(1, deg(timestamp))
-    // Note: deg(prev_timestamp) = 1 since prev_timestamp is Var
+    /// The max degree of constraints is:
+    /// deg(enabled) + max(1, deg(timestamp))
+    /// Note: deg(prev_timestamp) = 1 since prev_timestamp is Var
     fn eval_timestamps<AB: InteractionBuilder, const N: usize>(
         &self,
         builder: &mut AB,
@@ -333,10 +333,10 @@ impl MemoryOfflineChecker {
         }
     }
 
-    // At the core, eval_bulk_access is a bunch of push_sends and push_receives.
-    // The max constraint degree of expressions in sends/recieves is:
-    // max(max_deg(data), max_deg(prev_data), max_deg(timestamp), max_deg(prev_timestamps))
-    // Also, each one of them has count with degree: deg(enabled)
+    /// At the core, eval_bulk_access is a bunch of push_sends and push_receives.
+    /// The max constraint degree of expressions in sends/recieves is:
+    /// max(max_deg(data), max_deg(prev_data), max_deg(timestamp), max_deg(prev_timestamps))
+    /// Also, each one of them has count with degree: deg(enabled)
     #[allow(clippy::too_many_arguments)]
     fn eval_bulk_access<AB, const N: usize>(
         &self,

@@ -61,6 +61,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
             let mut opcode = KeccakOpcodeCols {
                 pc: record.pc,
                 is_enabled: F::one(),
+                is_enabled_first_round: F::zero(),
                 start_timestamp: record.start_timestamp(),
                 a,
                 b,
@@ -136,6 +137,11 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
             .zip(opcode_blocks.into_par_iter())
             .for_each(|((rows, p3_keccak_mat), (opcode, diff, block))| {
                 let height = rows.len() / trace_width;
+                let partial_read_data = if let Some(partial_read_idx) = block.partial_read_idx {
+                    block.reads[partial_read_idx].data
+                } else {
+                    [F::zero(); KECCAK_WORD_SIZE]
+                };
                 for (row, p3_keccak_row) in rows
                     .chunks_exact_mut(trace_width)
                     .zip(p3_keccak_mat.chunks_exact(NUM_KECCAK_PERM_COLS))
@@ -146,6 +152,10 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                     row_mut.opcode = opcode;
 
                     row_mut.sponge.block_bytes = block.padded_bytes.map(F::from_canonical_u8);
+                    row_mut
+                        .mem_oc
+                        .partial_block
+                        .copy_from_slice(&partial_read_data[1..]);
                     for (i, is_padding) in row_mut.sponge.is_padding_byte.iter_mut().enumerate() {
                         *is_padding = F::from_bool(i >= block.remaining_len);
                     }
@@ -153,6 +163,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
                 let first_row: &mut KeccakVmCols<F> = rows[..trace_width].borrow_mut();
                 first_row.sponge.is_new_start = F::from_bool(block.is_new_start);
                 first_row.sponge.state_hi = diff.pre_hi.map(F::from_canonical_u8);
+                first_row.opcode.is_enabled_first_round = first_row.opcode.is_enabled;
                 // Make memory access aux columns. Any aux column not explicitly defined defaults to all 0s
                 if let Some(op_reads) = diff.op_reads {
                     for (i, record) in op_reads.into_iter().enumerate() {
