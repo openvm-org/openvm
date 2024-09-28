@@ -1,13 +1,16 @@
-use afs_primitives::utils::not;
+use std::array::from_fn;
+
+use afs_primitives::utils::{not, select};
 use afs_stark_backend::interaction::InteractionBuilder;
-use itertools::izip;
+use itertools::{izip, Itertools};
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 use p3_keccak_air::U64_LIMBS;
 
 use super::{
-    columns::KeccakVmColsRef, KeccakVmAir, KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES,
-    KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
+    columns::KeccakVmCols, KeccakVmAir, KECCAK_ABSORB_READS, KECCAK_DIGEST_BYTES,
+    KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S,
+    KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
 };
 use crate::{
     arch::{columns::ExecutionState, instructions::Opcode},
@@ -40,8 +43,8 @@ impl KeccakVmAir {
     pub fn constrain_absorb<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
-        next: KeccakVmColsRef<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
+        next: &KeccakVmCols<AB::Var>,
     ) {
         let updated_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
@@ -55,11 +58,10 @@ impl KeccakVmAir {
             })
         });
 
-        // TODO: for interaction chunking we want to keep interaction `fields`
-        // degree 1 when possible. Currently this makes `fields` degree 2.
-        // [jpw] I wanted to keep the property that input bytes are auto-range
-        // checked via xor lookup
         let pre_absorb_state_bytes = updated_state_bytes.map(|b| not(next.is_new_start()) * b);
+        // TODO[jpw]: if we assume block_bytes input are bytes, then we can switch
+        // the constraints to check when(next.is_new_start).assert_eq(next.sponge.block_bytes, post_absorb_state_bytes);
+        // Then we can use the xor lookup to check 0 ^ updated_state_bytes = updated_state_bytes to range check the output are bytes
 
         let post_absorb_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
@@ -73,7 +75,7 @@ impl KeccakVmAir {
         });
 
         // only absorb if next is first round and enabled (so don't constrain absorbs on non-enabled rows)
-        let should_absorb = next.is_first_round() * next.opcode.is_enabled;
+        let should_absorb = next.opcode.is_enabled_first_round;
         for (input, pre, post) in izip!(
             next.sponge.block_bytes,
             pre_absorb_state_bytes,
@@ -87,7 +89,7 @@ impl KeccakVmAir {
             // `next` becomes row 0 which `is_new_start`
             self.xor_bus
                 .send(input, pre, post)
-                .eval(builder, should_absorb.clone());
+                .eval(builder, should_absorb);
         }
         // constrain transition on the state outside rate
         let mut reset_builder = builder.when(local.is_new_start());
@@ -114,8 +116,8 @@ impl KeccakVmAir {
     pub fn eval_opcode_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
-        mem_aux: [MemoryReadAuxCols<AB::Var, 1>; KECCAK_EXECUTION_READS],
+        local: &KeccakVmCols<AB::Var>,
+        mem_aux: &[MemoryReadAuxCols<AB::Var, 1>; KECCAK_EXECUTION_READS],
     ) -> AB::Expr {
         let opcode = local.opcode;
         // Only receive opcode if:
@@ -143,7 +145,7 @@ impl KeccakVmAir {
             [opcode.a, opcode.b, opcode.c],
             [opcode.d, opcode.d, opcode.f],
             [opcode.dst, opcode.src, opcode.len],
-            &mem_aux,
+            mem_aux,
         ) {
             self.memory_bridge
                 .read(
@@ -169,35 +171,56 @@ impl KeccakVmAir {
     pub fn constrain_input_read<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
         start_read_timestamp: AB::Expr,
-        mem_aux: [MemoryReadAuxCols<AB::Var, 1>; KECCAK_ABSORB_READS],
+        mem_aux: &[MemoryReadAuxCols<AB::Var, KECCAK_WORD_SIZE>; KECCAK_ABSORB_READS],
     ) -> AB::Expr {
+        let partial_block = &local.mem_oc.partial_block;
         // Only read input from memory when it is an opcode-related row
         // and only on the first round of block
-        let is_input = local.opcode.is_enabled * local.inner.step_flags[0];
+        let is_input = local.opcode.is_enabled_first_round;
 
         let mut timestamp = start_read_timestamp;
         // read `state` into `word[src + ...]_e`
         // iterator of state as u16:
         for (i, (input, is_padding, mem_aux)) in izip!(
-            local.sponge.block_bytes,
-            local.sponge.is_padding_byte,
-            &mem_aux
+            local.sponge.block_bytes.chunks_exact(KECCAK_WORD_SIZE),
+            local.sponge.is_padding_byte.chunks_exact(KECCAK_WORD_SIZE),
+            mem_aux
         )
         .enumerate()
         {
-            let ptr = local.opcode.src + AB::F::from_canonical_usize(i);
-            // Only read byte i if it is not padding byte
-            // This is constraint degree 3, which leads to quotient degree 2
-            // if used as `count` in interaction
-            let count = is_input.clone() * not(is_padding);
+            let ptr = local.opcode.src + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE);
+            // Only read block i if it is not entirely padding bytes
+            // count is degree 2
+            let count = is_input * not(is_padding[0]);
+            // The memory block read is partial if first byte is not padding but the last byte is padding. Since `count` is only 1 when first byte isn't padding, use check just if last byte is padding.
+            let is_partial_read = *is_padding.last().unwrap();
+            // word is degree 2
+            let word: [_; KECCAK_WORD_SIZE] = from_fn(|i| {
+                if i == 0 {
+                    // first byte is always ok
+                    input[0].into()
+                } else {
+                    // use `partial_block` if this is a partial read, otherwise use the normal input block
+                    select(is_partial_read, partial_block[i - 1], input[i])
+                }
+            });
+            for i in 1..KECCAK_WORD_SIZE {
+                let not_padding: AB::Expr = not(is_padding[i]);
+                // When not a padding byte, the word byte and input byte must be equal
+                // This is constraint degree 3
+                builder.assert_eq(
+                    not_padding.clone() * word[i].clone(),
+                    not_padding.clone() * input[i],
+                );
+            }
 
             // reminder: input is currently range checked to be 8-bits in `constrain_absorb` by the XOR lookup
             self.memory_bridge
                 .read(
                     MemoryAddress::new(local.opcode.e, ptr),
-                    [input],
+                    word, // degree 2
                     timestamp.clone(),
                     mem_aux,
                 )
@@ -211,9 +234,9 @@ impl KeccakVmAir {
     pub fn constrain_output_write<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: KeccakVmColsRef<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: [MemoryWriteAuxCols<AB::Var, 1>; KECCAK_DIGEST_WRITES],
+        mem_aux: &[MemoryWriteAuxCols<AB::Var, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
     ) {
         let opcode = local.opcode;
 
@@ -236,12 +259,21 @@ impl KeccakVmAir {
                 [lo, hi.into()]
             })
         });
-        for (i, digest_byte) in updated_state_bytes.take(KECCAK_DIGEST_WRITES).enumerate() {
+        for (i, digest_bytes) in updated_state_bytes
+            .take(KECCAK_DIGEST_BYTES)
+            .chunks(KECCAK_WORD_SIZE)
+            .into_iter()
+            .enumerate()
+        {
+            let digest_bytes = digest_bytes.collect_vec();
             let timestamp = start_write_timestamp.clone() + AB::Expr::from_canonical_usize(i);
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(opcode.e, opcode.dst + AB::F::from_canonical_usize(i)),
-                    [digest_byte],
+                    MemoryAddress::new(
+                        opcode.e,
+                        opcode.dst + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE),
+                    ),
+                    digest_bytes.try_into().unwrap(),
                     timestamp,
                     &mem_aux[i],
                 )
@@ -252,10 +284,10 @@ impl KeccakVmAir {
     /// Amount to advance timestamp by after execution of one opcode instruction.
     /// This is an upper bound dependant on the length `len` operand, which is unbounded.
     pub fn timestamp_change<T: AbstractField>(len: impl Into<T>) -> T {
-        // actual number is ceil(len / 136) * (3 + 136) + KECCAK_DIGEST_WRITES
+        // actual number is ceil(len / 136) * (3 + 17) + KECCAK_DIGEST_WRITES
         // digest writes only done on last row of multi-block
         // add another KECCAK_ABSORB_READS to round up so we don't deal with padding
-        len.into() * T::two()
+        len.into()
             + T::from_canonical_usize(
                 KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
             )
