@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::rap::BaseAirWithPublicValues;
+use afs_stark_backend::rap::{BaseAirWithPublicValues, PartitionedBaseAir};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_matrix::Matrix;
 
@@ -8,6 +8,7 @@ use super::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 
 pub struct FibonacciAir;
 
+impl<F> PartitionedBaseAir<F> for FibonacciAir {}
 impl<F> BaseAir<F> for FibonacciAir {
     fn width(&self) -> usize {
         NUM_FIBONACCI_COLS

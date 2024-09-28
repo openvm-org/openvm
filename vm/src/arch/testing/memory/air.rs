@@ -1,7 +1,10 @@
 use std::{borrow::Borrow, mem::size_of};
 
 use afs_derive::AlignedBorrow;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_matrix::Matrix;
 
@@ -23,6 +26,7 @@ pub struct MemoryDummyAir<const BLOCK_SIZE: usize> {
 }
 
 impl<const BLOCK_SIZE: usize, F> BaseAirWithPublicValues<F> for MemoryDummyAir<BLOCK_SIZE> {}
+impl<const BLOCK_SIZE: usize, F> PartitionedBaseAir<F> for MemoryDummyAir<BLOCK_SIZE> {}
 impl<const BLOCK_SIZE: usize, F> BaseAir<F> for MemoryDummyAir<BLOCK_SIZE> {
     fn width(&self) -> usize {
         size_of::<DummyMemoryInteractionCols<u8, BLOCK_SIZE>>()

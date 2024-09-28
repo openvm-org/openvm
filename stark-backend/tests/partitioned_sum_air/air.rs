@@ -3,7 +3,10 @@
 //!
 //! Constrains x == a_0 + ... + a_w
 
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
@@ -12,6 +15,14 @@ use p3_matrix::Matrix;
 pub struct SumAir(pub usize);
 
 impl<F> BaseAirWithPublicValues<F> for SumAir {}
+impl<F> PartitionedBaseAir<F> for SumAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.0]
+    }
+    fn common_main_width(&self) -> usize {
+        1
+    }
+}
 impl<F> BaseAir<F> for SumAir {
     fn width(&self) -> usize {
         self.0 + 1

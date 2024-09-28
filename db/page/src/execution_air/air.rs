@@ -1,7 +1,10 @@
 use std::borrow::Borrow;
 
 use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -9,6 +12,7 @@ use p3_matrix::Matrix;
 use super::{columns::ExecutionCols, ExecutionAir};
 
 impl<F: Field> BaseAirWithPublicValues<F> for ExecutionAir {}
+impl<F: Field> PartitionedBaseAir<F> for ExecutionAir {}
 impl<F: Field> BaseAir<F> for ExecutionAir {
     fn width(&self) -> usize {
         self.air_width()

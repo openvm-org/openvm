@@ -1,7 +1,10 @@
 use std::{array, borrow::Borrow};
 
 use afs_primitives::{utils, xor::bus::XorBus};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -19,6 +22,10 @@ pub struct ArithmeticLogicAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub bus: XorBus,
 }
 
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
+    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+{
+}
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
     for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
 {

@@ -18,6 +18,18 @@ pub trait BaseAirWithPublicValues<F>: BaseAir<F> {
     }
 }
 
+/// An AIR with 1 or more main trace partitions.
+pub trait PartitionedBaseAir<F>: BaseAir<F> {
+    /// By default, an AIR has no cached main trace.
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![]
+    }
+    /// By default, an AIR has only one private main trace.
+    fn common_main_width(&self) -> usize {
+        self.width()
+    }
+}
+
 /// An AIR that works with a particular `AirBuilder` which allows preprocessing
 /// and injected randomness.
 ///
@@ -53,6 +65,7 @@ pub trait AnyRap<SC: StarkGenericConfig>:
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
     + BaseAirWithPublicValues<Val<SC>>
+    + PartitionedBaseAir<Val<SC>>
 {
     fn as_any(&self) -> &dyn Any;
     /// Name for display purposes
@@ -66,6 +79,7 @@ where
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
         + BaseAirWithPublicValues<Val<SC>>
+        + PartitionedBaseAir<Val<SC>>
         + 'static,
 {
     fn as_any(&self) -> &dyn Any {

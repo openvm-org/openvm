@@ -1,5 +1,5 @@
 use afs_derive::AlignedBorrow;
-use afs_stark_backend::rap::BaseAirWithPublicValues;
+use afs_stark_backend::rap::{BaseAirWithPublicValues, PartitionedBaseAir};
 use p3_air::BaseAir;
 
 use super::SumAir;
@@ -56,3 +56,4 @@ impl<T: Clone> BaseAir<T> for SumAir {
 }
 
 impl<T: Clone> BaseAirWithPublicValues<T> for SumAir {}
+impl<T: Clone> PartitionedBaseAir<T> for SumAir {}

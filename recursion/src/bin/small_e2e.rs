@@ -15,7 +15,7 @@ use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::{StarkForTest, StarkFriEngine},
 };

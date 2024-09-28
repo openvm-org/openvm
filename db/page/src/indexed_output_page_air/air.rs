@@ -4,8 +4,9 @@ use afs_primitives::{
     utils::{implies, or},
 };
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
-    rap::BaseAirWithPublicValues,
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -18,6 +19,14 @@ use super::{
 use crate::common::page_cols::PageCols;
 
 impl<F: Field> BaseAirWithPublicValues<F> for IndexedOutputPageAir {}
+impl<F: Field> PartitionedBaseAir<F> for IndexedOutputPageAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.page_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.aux_width()
+    }
+}
 impl<F: Field> BaseAir<F> for IndexedOutputPageAir {
     fn width(&self) -> usize {
         self.air_width()

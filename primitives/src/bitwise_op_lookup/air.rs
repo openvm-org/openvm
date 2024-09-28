@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -25,6 +28,10 @@ pub struct BitwiseOperationLookupAir<const NUM_BITS: usize> {
 }
 
 impl<F: Field, const NUM_BITS: usize> BaseAirWithPublicValues<F>
+    for BitwiseOperationLookupAir<NUM_BITS>
+{
+}
+impl<F: Field, const NUM_BITS: usize> PartitionedBaseAir<F>
     for BitwiseOperationLookupAir<NUM_BITS>
 {
 }

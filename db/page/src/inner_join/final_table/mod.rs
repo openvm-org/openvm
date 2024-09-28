@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
-    rap::BaseAirWithPublicValues,
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField};
@@ -87,6 +88,14 @@ impl FinalTableAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for FinalTableAir {}
+impl<F: Field> PartitionedBaseAir<F> for FinalTableAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.table_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.aux_width()
+    }
+}
 impl<F: Field> BaseAir<F> for FinalTableAir {
     fn width(&self) -> usize {
         self.air_width()

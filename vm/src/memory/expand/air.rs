@@ -9,6 +9,7 @@ pub struct ExpandAir<const CHUNK: usize> {
     pub memory_dimensions: MemoryDimensions,
 }
 
+impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for ExpandAir<CHUNK> { }
 impl<const CHUNK: usize, F: Field> BaseAir<F> for ExpandAir<CHUNK> {
     fn width(&self) -> usize {
         ExpandCols::<CHUNK, F>::get_width()

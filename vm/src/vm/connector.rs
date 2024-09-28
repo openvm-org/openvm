@@ -1,4 +1,7 @@
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -11,6 +14,7 @@ pub struct VmConnectorAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {}
+impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
 impl<F: Field> BaseAir<F> for VmConnectorAir {
     fn width(&self) -> usize {
         2

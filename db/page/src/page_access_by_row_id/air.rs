@@ -1,8 +1,9 @@
 use std::{borrow::Borrow, iter};
 
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
-    rap::BaseAirWithPublicValues,
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use itertools::Itertools;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -41,6 +42,14 @@ impl PageAccessByRowIdAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for PageAccessByRowIdAir {}
+impl<F: Field> PartitionedBaseAir<F> for PageAccessByRowIdAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.page_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.air_width() - self.page_width()
+    }
+}
 impl<F: Field> BaseAir<F> for PageAccessByRowIdAir {
     fn width(&self) -> usize {
         self.air_width()

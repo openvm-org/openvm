@@ -4,7 +4,10 @@ use afs_primitives::{
     is_equal::{columns::IsEqualIoCols, IsEqualAir},
     sub_chip::SubAir,
 };
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use itertools::izip;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -27,6 +30,7 @@ pub struct CoreAir {
     pub memory_bridge: MemoryBridge,
 }
 
+impl<F: Field> PartitionedBaseAir<F> for CoreAir {}
 impl<F: Field> BaseAir<F> for CoreAir {
     fn width(&self) -> usize {
         CoreCols::<F>::get_width(self)

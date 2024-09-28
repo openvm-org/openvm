@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -14,6 +17,7 @@ pub struct RangeCheckerGateAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for RangeCheckerGateAir {}
+impl<F: Field> PartitionedBaseAir<F> for RangeCheckerGateAir {}
 impl<F: Field> BaseAir<F> for RangeCheckerGateAir {
     fn width(&self) -> usize {
         NUM_RANGE_GATE_COLS

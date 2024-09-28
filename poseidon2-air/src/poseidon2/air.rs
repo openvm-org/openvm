@@ -1,7 +1,10 @@
 use std::borrow::Borrow;
 
 use afs_primitives::sub_chip::{AirConfig, SubAir};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
@@ -180,6 +183,7 @@ impl Default for Poseidon2Air<16, BabyBear> {
 }
 
 impl<const WIDTH: usize, F: Field> BaseAirWithPublicValues<F> for Poseidon2Air<WIDTH, F> {}
+impl<const WIDTH: usize, F: Field> PartitionedBaseAir<F> for Poseidon2Air<WIDTH, F> {}
 impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2Air<WIDTH, F> {
     fn width(&self) -> usize {
         self.get_width()

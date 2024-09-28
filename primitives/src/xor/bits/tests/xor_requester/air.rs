@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -14,6 +17,7 @@ pub struct XorRequesterAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for XorRequesterAir {}
+impl<F: Field> PartitionedBaseAir<F> for XorRequesterAir {}
 impl<F: Field> BaseAir<F> for XorRequesterAir {
     fn width(&self) -> usize {
         NUM_XOR_REQUESTER_COLS

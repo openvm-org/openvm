@@ -5,7 +5,10 @@ use afs_primitives::bigint::{
     utils::{big_uint_to_limbs, secp256k1_coord_prime},
     OverflowInt,
 };
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -27,6 +30,10 @@ pub struct ModularMultDivAir<
     pub(super) subair: CheckCarryModToZeroSubAir,
 }
 
+impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
+    PartitionedBaseAir<F> for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+{
+}
 impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>
     for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
 {

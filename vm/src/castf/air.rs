@@ -1,7 +1,10 @@
 use std::borrow::Borrow;
 
 use afs_primitives::var_range::bus::VariableRangeCheckerBus;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -24,6 +27,7 @@ pub struct CastFAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for CastFAir {}
+impl<F: Field> PartitionedBaseAir<F> for CastFAir {}
 impl<F: Field> BaseAir<F> for CastFAir {
     fn width(&self) -> usize {
         CastFCols::<F>::width()

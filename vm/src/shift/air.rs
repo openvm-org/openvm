@@ -1,7 +1,10 @@
 use std::borrow::Borrow;
 
 use afs_primitives::{utils, var_range::bus::VariableRangeCheckerBus, xor::bus::XorBus};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -20,6 +23,10 @@ pub struct ShiftAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
 }
 
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
+    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+{
+}
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
     for ShiftAir<NUM_LIMBS, LIMB_BITS>
 {

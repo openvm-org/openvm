@@ -5,8 +5,9 @@ use afs_primitives::{
     sub_chip::{AirConfig, SubAir},
 };
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
-    rap::BaseAirWithPublicValues,
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
@@ -19,6 +20,14 @@ use super::{
 use crate::common::{page::Page, page_cols::PageCols};
 
 impl<F: Field> BaseAirWithPublicValues<F> for GroupByAir {}
+impl<F: Field> PartitionedBaseAir<F> for GroupByAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.page_width]
+    }
+    fn common_main_width(&self) -> usize {
+        <Self as BaseAir<F>>::width(self) - self.page_width
+    }
+}
 impl<F: Field> BaseAir<F> for GroupByAir {
     fn width(&self) -> usize {
         self.get_width()

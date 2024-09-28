@@ -1,4 +1,4 @@
-use afs_stark_backend::rap::BaseAirWithPublicValues;
+use afs_stark_backend::rap::{BaseAirWithPublicValues, PartitionedBaseAir};
 use itertools::Itertools;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, PrimeField};
@@ -7,6 +7,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 
 pub struct FibonacciAir;
 
+impl<F> PartitionedBaseAir<F> for FibonacciAir {}
 impl<F> BaseAir<F> for FibonacciAir {
     fn width(&self) -> usize {
         2

@@ -2,7 +2,9 @@ use std::borrow::Borrow;
 
 use afs_primitives::{utils::not, xor::bus::XorBus};
 use afs_stark_backend::{
-    air_builders::sub::SubAirBuilder, interaction::InteractionBuilder, rap::BaseAirWithPublicValues,
+    air_builders::sub::SubAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
@@ -25,6 +27,7 @@ pub struct KeccakVmAir {
 }
 
 impl<F> BaseAirWithPublicValues<F> for KeccakVmAir {}
+impl<F> PartitionedBaseAir<F> for KeccakVmAir {}
 impl<F> BaseAir<F> for KeccakVmAir {
     fn width(&self) -> usize {
         NUM_KECCAK_VM_COLS

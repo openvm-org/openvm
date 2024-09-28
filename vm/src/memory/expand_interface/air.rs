@@ -10,6 +10,9 @@ pub struct MemoryExpandInterfaceAir<const NUM_WORDS: usize, const WORD_SIZE: usi
     pub memory_dimensions: MemoryDimensions,
 }
 
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: Field> PartitionedBaseAir<F>
+    for MemoryExpandInterfaceAir<NUM_WORDS, WORD_SIZE>
+{ }
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: Field> BaseAir<F>
     for MemoryExpandInterfaceAir<NUM_WORDS, WORD_SIZE>
 {

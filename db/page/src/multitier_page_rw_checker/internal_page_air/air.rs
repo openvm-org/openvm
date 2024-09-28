@@ -5,8 +5,9 @@ use afs_primitives::{
     utils::implies,
 };
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
-    rap::BaseAirWithPublicValues,
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -22,7 +23,16 @@ impl<F: Field, const COMMITMENT_LEN: usize> BaseAir<F> for InternalPageAir<COMMI
         self.air_width()
     }
 }
-
+impl<F: Field, const COMMITMENT_LEN: usize> PartitionedBaseAir<F>
+    for InternalPageAir<COMMITMENT_LEN>
+{
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.cached_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.main_width()
+    }
+}
 impl<F: Field, const COMMITMENT_LEN: usize> BaseAirWithPublicValues<F>
     for InternalPageAir<COMMITMENT_LEN>
 {
