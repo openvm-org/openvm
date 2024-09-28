@@ -385,7 +385,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     let src = 0;
     instructions.push(Instruction::from_isize(STOREW, src, 0, b, 0, 1));
     // dst word[a]_1 <- 3 // use weird offset
-    let dst = 3;
+    let dst = 8;
     instructions.push(Instruction::from_isize(STOREW, dst, 0, a, 0, 1));
     // word[2^29 - 1]_1 <- len // emulate stack
     instructions.push(Instruction::from_isize(

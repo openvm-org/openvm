@@ -4,7 +4,7 @@ use afs_primitives::is_less_than::{
     columns::{IsLessThanAuxCols, IsLessThanIoCols},
     IsLessThanAir,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
@@ -20,6 +20,7 @@ pub struct AccessAdapterAir<const N: usize> {
     pub lt_air: IsLessThanAir,
 }
 
+impl<T, const N: usize> BaseAirWithPublicValues<T> for AccessAdapterAir<N> {}
 impl<T, const N: usize> BaseAir<T> for AccessAdapterAir<N> {
     fn width(&self) -> usize {
         size_of::<AccessAdapterCols<u8, N>>()

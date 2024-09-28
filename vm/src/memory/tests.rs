@@ -8,7 +8,10 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::AnyRap};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{AnyRap, BaseAirWithPublicValues},
+};
 use ax_sdk::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
     engine::StarkFriEngine,
@@ -58,6 +61,7 @@ struct MemoryRequesterAir {
     memory_bridge: MemoryBridge,
 }
 
+impl<T> BaseAirWithPublicValues<T> for MemoryRequesterAir {}
 impl<T> BaseAir<T> for MemoryRequesterAir {
     fn width(&self) -> usize {
         mem::size_of::<MemoryRequesterCols<u8>>()
