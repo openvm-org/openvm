@@ -1,9 +1,9 @@
-use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var, util::execute_program};
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, One, Zero};
 use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use p3_field::{extension::BinomialExtensionField, AbstractField, ExtensionField, TwoAdicField};
 use rand::RngCore;
 
 fn secp256k1_coord_prime() -> BigUint {
@@ -12,6 +12,16 @@ fn secp256k1_coord_prime() -> BigUint {
         result -= BigUint::one() << power;
     }
     result
+}
+
+fn test_modular_arithmetic_program<EF: ExtensionField<BabyBear> + TwoAdicField>(
+    builder: AsmBuilder<BabyBear, EF>,
+) {
+    let program = builder.compile_isa_with_options(CompilerOptions {
+        word_size: 32,
+        ..Default::default()
+    });
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -31,9 +41,7 @@ fn test_compiler_modular_arithmetic_1() {
     let r_check_var = builder.eval_biguint(r);
     builder.assert_secp256k1_coord_eq(&r_var, &r_check_var);
     builder.halt();
-
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -62,8 +70,7 @@ fn test_compiler_modular_arithmetic_2() {
     builder.assert_secp256k1_coord_eq(&r_var, &r_check_var);
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -105,8 +112,7 @@ fn test_compiler_modular_arithmetic_conditional() {
 
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -122,8 +128,7 @@ fn test_compiler_modular_arithmetic_negative() {
     builder.assert_secp256k1_coord_eq(&one_times_one, &zero);
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -165,8 +170,7 @@ fn test_compiler_modular_scalar_arithmetic_conditional() {
 
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -182,6 +186,5 @@ fn test_compiler_modular_scalar_arithmetic_negative() {
     builder.assert_secp256k1_scalar_eq(&one_times_one, &zero);
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
