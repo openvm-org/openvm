@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use afs_compiler::{asm::AsmBuilder, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, util::execute_program};
 use k256::{
     ecdsa::{hazmat::DigestPrimitive, signature::Signer, Signature, SigningKey, VerifyingKey},
     sha2::digest::FixedOutput,
@@ -23,7 +23,10 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 fn run_test_program(test_program: impl FnOnce(&mut AsmBuilder<F, EF>)) {
     let mut builder = AsmBuilder::<F, EF>::bigint_builder();
     test_program(&mut builder);
-    let program = builder.compile_isa();
+    let program = builder.compile_isa_with_options(CompilerOptions {
+        word_size: 64,
+        ..Default::default()
+    });
     execute_program(program, vec![]);
 }
 

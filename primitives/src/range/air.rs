@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -21,6 +21,7 @@ impl RangeCheckerAir {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for RangeCheckerAir {}
 impl<F: Field> BaseAir<F> for RangeCheckerAir {
     fn width(&self) -> usize {
         NUM_RANGE_COLS

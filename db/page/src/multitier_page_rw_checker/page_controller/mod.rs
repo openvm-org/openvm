@@ -482,13 +482,12 @@ where
             .iter()
             .zip(init_leaf_data_ptrs.into_iter())
         {
-            keygen_builder.add_partitioned_air(chip, COMMITMENT_LEN, vec![ptr]);
+            keygen_builder.add_partitioned_air(chip, vec![ptr]);
         }
 
         for i in 0..self.init_internal_chips.len() {
             keygen_builder.add_partitioned_air(
                 &self.init_internal_chips[i],
-                COMMITMENT_LEN,
                 vec![init_internal_data_ptrs[i], init_internal_main_ptrs[i]],
             );
         }
@@ -496,7 +495,6 @@ where
         for i in 0..self.final_leaf_chips.len() {
             keygen_builder.add_partitioned_air(
                 &self.final_leaf_chips[i],
-                COMMITMENT_LEN,
                 vec![final_leaf_data_ptrs[i], final_leaf_main_ptrs[i]],
             );
         }
@@ -504,28 +502,19 @@ where
         for i in 0..self.final_internal_chips.len() {
             keygen_builder.add_partitioned_air(
                 &self.final_internal_chips[i],
-                COMMITMENT_LEN,
                 vec![final_internal_data_ptrs[i], final_internal_main_ptrs[i]],
             );
         }
 
-        keygen_builder.add_partitioned_air(&self.offline_checker, 0, vec![ops_ptr]);
+        keygen_builder.add_partitioned_air(&self.offline_checker, vec![ops_ptr]);
 
-        keygen_builder.add_partitioned_air(
-            &self.init_root_signal,
-            COMMITMENT_LEN,
-            vec![init_root_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.init_root_signal, vec![init_root_ptr]);
 
-        keygen_builder.add_partitioned_air(
-            &self.final_root_signal,
-            COMMITMENT_LEN,
-            vec![final_root_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.final_root_signal, vec![final_root_ptr]);
 
-        keygen_builder.add_air(&self.range_checker.air, 0);
+        keygen_builder.add_air(&self.range_checker.air);
 
-        keygen_builder.add_air(ops_sender, 0);
+        keygen_builder.add_air(ops_sender);
     }
     /// This function clears the trace_builder, loads in the traces for all involved chips
     /// (including the range_checker and the ops_sender, which is passed in along with its trace),

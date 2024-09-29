@@ -58,3 +58,9 @@ pub fn or<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
 pub fn implies<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
     or(F::one() - a.into(), b.into())
 }
+
+/// Assumes that `cond` is boolean. Returns `a` if `cond` is true, otherwise returns `b`.
+pub fn select<F: AbstractField>(cond: impl Into<F>, a: impl Into<F>, b: impl Into<F>) -> F {
+    let cond = cond.into();
+    cond.clone() * a.into() + (F::one() - cond) * b.into()
+}

@@ -1,4 +1,5 @@
 use afs_derive::AlignedBorrow;
+use afs_stark_backend::rap::BaseAirWithPublicValues;
 use p3_air::BaseAir;
 
 use super::SumAir;
@@ -53,3 +54,5 @@ impl<T: Clone> BaseAir<T> for SumAir {
         4 + IsLessThanAuxCols::<T>::width(&self.is_lt_air)
     }
 }
+
+impl<T: Clone> BaseAirWithPublicValues<T> for SumAir {}

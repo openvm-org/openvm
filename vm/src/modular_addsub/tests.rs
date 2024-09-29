@@ -75,8 +75,8 @@ fn test_modular_addsub() {
 
         let data_as = 2;
         let address1 = 0;
-        let address2 = 100;
-        let address3 = 200;
+        let address2 = 128;
+        let address3 = 256;
 
         tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
         tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));

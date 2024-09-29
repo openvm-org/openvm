@@ -1,328 +1,286 @@
-// use std::{collections::HashMap, iter, sync::Arc};
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+    iter, mem,
+    ops::Deref,
+    sync::Arc,
+};
 
-// use afs_primitives::var_range::VariableRangeCheckerChip;
-// use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-// use ax_sdk::{
-//     config::baby_bear_poseidon2::run_simple_test_no_pis,
-//     interaction::dummy_interaction_air::DummyInteractionAir,
-// };
-// use p3_baby_bear::BabyBear;
-// use p3_field::AbstractField;
-// use p3_matrix::dense::RowMajorMatrix;
+use afs_derive::AlignedBorrow;
+use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{AnyRap, BaseAirWithPublicValues},
+};
+use ax_sdk::{
+    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    engine::StarkFriEngine,
+};
+use itertools::Itertools;
+use p3_air::{Air, BaseAir};
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rand::{prelude::SliceRandom, thread_rng, Rng};
 
-// use super::{offline_checker::MemoryChip, MemoryAccess, OpType};
-// use crate::{
-//     core::{MEMORY_BUS, RANGE_CHECKER_BUS},
-//     vm::config::MemoryConfig,
-// };
+use super::{MemoryChip, MemoryReadRecord};
+use crate::{
+    arch::chips::MachineChip,
+    core::RANGE_CHECKER_BUS,
+    memory::{
+        offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
+        MemoryAddress, MemoryWriteRecord,
+    },
+    vm::config::MemoryConfig,
+};
 
-// const WORD_SIZE: usize = 3;
-// const ADDR_SPACE_LIMB_BITS: usize = 8;
-// const POINTER_LIMB_BITS: usize = 8;
-// const CLK_LIMB_BITS: usize = 8;
-// const DECOMP: usize = 4;
-// const RANGE_MAX: u32 = 1 << DECOMP;
+const MAX: usize = 64;
 
-// const TRACE_DEGREE: usize = 16;
+#[repr(C)]
+#[derive(AlignedBorrow)]
+struct MemoryRequesterCols<T> {
+    address_space: T,
+    pointer: T,
+    data_1: [T; 1],
+    data_4: [T; 4],
+    data_max: [T; MAX],
+    timestamp: T,
+    write_1_aux: MemoryWriteAuxCols<T, 1>,
+    write_4_aux: MemoryWriteAuxCols<T, 4>,
+    read_1_aux: MemoryReadAuxCols<T, 1>,
+    read_4_aux: MemoryReadAuxCols<T, 4>,
+    read_max_aux: MemoryReadAuxCols<T, MAX>,
+    is_write_1: T,
+    is_write_4: T,
+    is_read_1: T,
+    is_read_4: T,
+    is_read_max: T,
+}
 
-// #[test]
-// fn test_offline_checker() {
-//     let mem_config = MemoryConfig {
-//         addr_space_max_bits: ADDR_SPACE_LIMB_BITS,
-//         pointer_max_bits: POINTER_LIMB_BITS,
-//         clk_max_bits: CLK_LIMB_BITS,
-//         decomp: DECOMP,
-//     };
+struct MemoryRequesterAir {
+    memory_bridge: MemoryBridge,
+}
 
-//     let range_checker = Arc::new(VariableRangeCheckerChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-//     let mut memory_chip = MemoryChip::new(mem_config, HashMap::new());
-//     let requester = DummyInteractionAir::new(
-//         2 + memory_chip.air.offline_checker.idx_data_width(),
-//         true,
-//         MEMORY_BUS,
-//     );
+impl<T> BaseAirWithPublicValues<T> for MemoryRequesterAir {}
+impl<T> BaseAir<T> for MemoryRequesterAir {
+    fn width(&self) -> usize {
+        mem::size_of::<MemoryRequesterCols<u8>>()
+    }
+}
 
-//     let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
-//         MemoryAccess {
-//             timestamp: 1,
-//             op_type: OpType::Write,
-//             address_space: BabyBear::one(),
-//             address: BabyBear::one(),
-//             data: [
-//                 BabyBear::from_canonical_usize(232),
-//                 BabyBear::from_canonical_usize(888),
-//                 BabyBear::from_canonical_usize(5954),
-//             ],
-//         },
-//         MemoryAccess {
-//             timestamp: 0,
-//             op_type: OpType::Write,
-//             address_space: BabyBear::one(),
-//             address: BabyBear::zero(),
-//             data: [
-//                 BabyBear::from_canonical_usize(2324),
-//                 BabyBear::from_canonical_usize(433),
-//                 BabyBear::from_canonical_usize(1778),
-//             ],
-//         },
-//         MemoryAccess {
-//             timestamp: 4,
-//             op_type: OpType::Write,
-//             address_space: BabyBear::one(),
-//             address: BabyBear::zero(),
-//             data: [
-//                 BabyBear::from_canonical_usize(231),
-//                 BabyBear::from_canonical_usize(3883),
-//                 BabyBear::from_canonical_usize(17),
-//             ],
-//         },
-//         MemoryAccess {
-//             timestamp: 2,
-//             op_type: OpType::Read,
-//             address_space: BabyBear::one(),
-//             address: BabyBear::one(),
-//             data: [
-//                 BabyBear::from_canonical_usize(232),
-//                 BabyBear::from_canonical_usize(888),
-//                 BabyBear::from_canonical_usize(5954),
-//             ],
-//         },
-//         MemoryAccess {
-//             timestamp: 6,
-//             op_type: OpType::Read,
-//             address_space: BabyBear::two(),
-//             address: BabyBear::zero(),
-//             data: [
-//                 BabyBear::from_canonical_usize(4382),
-//                 BabyBear::from_canonical_usize(8837),
-//                 BabyBear::from_canonical_usize(192),
-//             ],
-//         },
-//         MemoryAccess {
-//             timestamp: 5,
-//             op_type: OpType::Write,
-//             address_space: BabyBear::two(),
-//             address: BabyBear::zero(),
-//             data: [
-//                 BabyBear::from_canonical_usize(4382),
-//                 BabyBear::from_canonical_usize(8837),
-//                 BabyBear::from_canonical_usize(192),
-//             ],
-//         },
-//         MemoryAccess {
-//             timestamp: 3,
-//             op_type: OpType::Write,
-//             address_space: BabyBear::one(),
-//             address: BabyBear::one(),
-//             data: [
-//                 BabyBear::from_canonical_usize(3243),
-//                 BabyBear::from_canonical_usize(3214),
-//                 BabyBear::from_canonical_usize(6639),
-//             ],
-//         },
-//     ];
-//     let mut ops_sorted = ops.clone();
-//     ops_sorted.sort_by_key(|op| op.timestamp);
+impl<AB: InteractionBuilder> Air<AB> for MemoryRequesterAir {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let local = main.row_slice(0);
+        let local: &MemoryRequesterCols<AB::Var> = (*local).borrow();
 
-//     for op in ops_sorted.iter() {
-//         match op.op_type {
-//             OpType::Read => {
-//                 assert_eq!(
-//                     memory_chip.read_word(op.timestamp, op.address_space, op.address),
-//                     op.data
-//                 );
-//             }
-//             OpType::Write => {
-//                 memory_chip.write_word(op.timestamp, op.address_space, op.address, op.data);
-//             }
-//         }
-//     }
+        let flags = [
+            local.is_read_1,
+            local.is_write_1,
+            local.is_read_4,
+            local.is_write_4,
+            local.is_read_max,
+        ];
 
-//     let trace = memory_chip.generate_trace(range_checker.clone());
-//     let range_checker_trace = range_checker.generate_trace();
-//     let requester_trace = RowMajorMatrix::new(
-//         ops.iter()
-//             .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
-//                 [
-//                     BabyBear::one(),
-//                     BabyBear::from_canonical_usize(op.timestamp),
-//                     BabyBear::from_canonical_u8(op.op_type as u8),
-//                     op.address_space,
-//                     op.address,
-//                 ]
-//                 .into_iter()
-//                 .chain(op.data.iter().cloned())
-//             })
-//             .chain(
-//                 iter::repeat_with(|| {
-//                     iter::repeat(BabyBear::zero()).take(1 + requester.field_width())
-//                 })
-//                 .take(TRACE_DEGREE - ops.len())
-//                 .flatten(),
-//             )
-//             .collect(),
-//         1 + requester.field_width(),
-//     );
+        let mut sum = AB::Expr::zero();
+        for flag in flags {
+            builder.assert_bool(flag);
+            sum += flag.into();
+        }
+        builder.assert_one(sum);
 
-//     run_simple_test_no_pis(
-//         vec![&memory_chip.air, &range_checker.air, &requester],
-//         vec![trace, range_checker_trace, requester_trace],
-//     )
-//     .expect("Verification failed");
-// }
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(local.address_space, local.pointer),
+                local.data_1,
+                local.timestamp,
+                &local.read_1_aux,
+            )
+            .eval(builder, local.is_read_1);
 
-// #[test]
-// fn test_offline_checker_valid_first_read() {
-//     let mem_config = MemoryConfig {
-//         addr_space_max_bits: ADDR_SPACE_LIMB_BITS,
-//         pointer_max_bits: POINTER_LIMB_BITS,
-//         clk_max_bits: CLK_LIMB_BITS,
-//         decomp: DECOMP,
-//     };
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(local.address_space, local.pointer),
+                local.data_4,
+                local.timestamp,
+                &local.read_4_aux,
+            )
+            .eval(builder, local.is_read_4);
 
-//     let range_checker = Arc::new(VariableRangeCheckerChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-//     let mut memory_chip = MemoryChip::new(
-//         ADDR_SPACE_LIMB_BITS,
-//         POINTER_LIMB_BITS,
-//         CLK_LIMB_BITS,
-//         DECOMP,
-//         HashMap::new(),
-//     );
-//     let requester = DummyInteractionAir::new(
-//         2 + memory_chip.air.offline_checker.idx_data_width(),
-//         true,
-//         MEMORY_BUS,
-//     );
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(local.address_space, local.pointer),
+                local.data_1,
+                local.timestamp,
+                &local.write_1_aux,
+            )
+            .eval(builder, local.is_write_1);
 
-//     memory_chip.write_word(
-//         0,
-//         BabyBear::one(),
-//         BabyBear::zero(),
-//         [BabyBear::zero(), BabyBear::zero(), BabyBear::zero()],
-//     );
-//     // read before writing, but first operation in block so should pass
-//     memory_chip.accesses[0].op_type = OpType::Read;
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(local.address_space, local.pointer),
+                local.data_4,
+                local.timestamp,
+                &local.write_4_aux,
+            )
+            .eval(builder, local.is_write_4);
 
-//     let memory_trace = memory_chip.generate_trace(range_checker.clone());
-//     let range_checker_trace = range_checker.generate_trace();
-//     let requester_trace = RowMajorMatrix::new(
-//         memory_chip
-//             .accesses
-//             .iter()
-//             .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
-//                 iter::once(BabyBear::one())
-//                     .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
-//                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
-//                     .chain(iter::once(op.address_space))
-//                     .chain(iter::once(op.address))
-//                     .chain(op.data.iter().cloned())
-//             })
-//             .chain(
-//                 iter::repeat_with(|| {
-//                     iter::repeat(BabyBear::zero()).take(1 + requester.field_width())
-//                 })
-//                 .take(TRACE_DEGREE - memory_chip.accesses.len())
-//                 .flatten(),
-//             )
-//             .collect(),
-//         1 + requester.field_width(),
-//     );
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(local.address_space, local.pointer),
+                local.data_max,
+                local.timestamp,
+                &local.read_max_aux,
+            )
+            .eval(builder, local.is_read_max);
+    }
+}
 
-//     run_simple_test_no_pis(
-//         vec![&memory_chip.air, &range_checker.air, &requester],
-//         vec![memory_trace, range_checker_trace, requester_trace],
-//     )
-//     .expect("Verification failed");
-// }
+/// Simple integration test for memory chip.
+///
+/// Creates a bunch of random read/write records, used to generate a trace for [MemoryRequesterAir],
+/// which sends reads/writes over [MemoryBridge].
+#[test]
+fn test_memory_chip() {
+    type F = BabyBear;
 
-// #[test]
-// fn test_offline_checker_negative_data_mismatch() {
-//     let range_checker = Arc::new(VariableRangeCheckerChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-//     let mut memory_chip = MemoryChip::new(
-//         ADDR_SPACE_LIMB_BITS,
-//         POINTER_LIMB_BITS,
-//         CLK_LIMB_BITS,
-//         DECOMP,
-//         HashMap::new(),
-//     );
-//     let requester = DummyInteractionAir::new(
-//         2 + memory_chip.air.offline_checker.idx_data_width(),
-//         true,
-//         MEMORY_BUS,
-//     );
+    let memory_bus = MemoryBus(1);
+    let memory_config = MemoryConfig {
+        addr_space_max_bits: 2,
+        pointer_max_bits: 15,
+        clk_max_bits: 15,
+        decomp: 8,
+    };
+    let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-//     let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
-//         MemoryAccess {
-//             timestamp: 0,
-//             op_type: OpType::Write,
-//             address_space: BabyBear::one(),
-//             address: BabyBear::zero(),
-//             data: [
-//                 BabyBear::from_canonical_usize(2324),
-//                 BabyBear::from_canonical_usize(433),
-//                 BabyBear::from_canonical_usize(1778),
-//             ],
-//         },
-//         MemoryAccess {
-//             timestamp: 1,
-//             op_type: OpType::Write,
-//             address_space: BabyBear::one(),
-//             address: BabyBear::one(),
-//             data: [
-//                 BabyBear::from_canonical_usize(232),
-//                 BabyBear::from_canonical_usize(888),
-//                 BabyBear::from_canonical_usize(5954),
-//             ],
-//         },
-//         // data read does not match write from previous operation
-//         MemoryAccess {
-//             timestamp: 2,
-//             op_type: OpType::Read,
-//             address_space: BabyBear::one(),
-//             address: BabyBear::one(),
-//             data: [
-//                 BabyBear::from_canonical_usize(233),
-//                 BabyBear::from_canonical_usize(888),
-//                 BabyBear::from_canonical_usize(5954),
-//             ],
-//         },
-//     ];
+    let mut memory_chip =
+        MemoryChip::with_volatile_memory(memory_bus, memory_config, range_checker.clone());
+    let aux_factory = memory_chip.aux_cols_factory();
 
-//     memory_chip.accesses.clone_from(&ops);
+    #[allow(clippy::large_enum_variant)]
+    enum Record {
+        Write(MemoryWriteRecord<F, 1>),
+        Read(MemoryReadRecord<F, 1>),
+        Read4(MemoryReadRecord<F, 4>),
+        Write4(MemoryWriteRecord<F, 4>),
+        ReadMax(MemoryReadRecord<F, MAX>),
+    }
 
-//     let trace = memory_chip.generate_trace(range_checker.clone());
+    let mut rng = thread_rng();
+    let records = (0..1024)
+        .map(|_| {
+            let address_space = F::from_canonical_u32(*[1, 2].choose(&mut rng).unwrap());
+            let pointer = rng.gen_range(0..(1 << memory_config.pointer_max_bits) - 100);
 
-//     let range_checker_trace = range_checker.generate_trace();
-//     let requester_trace = RowMajorMatrix::new(
-//         ops.iter()
-//             .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
-//                 iter::once(BabyBear::one())
-//                     .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
-//                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
-//                     .chain(iter::once(op.address_space))
-//                     .chain(iter::once(op.address))
-//                     .chain(op.data.iter().cloned())
-//             })
-//             .chain(
-//                 iter::repeat_with(|| {
-//                     iter::repeat(BabyBear::zero()).take(1 + requester.field_width())
-//                 })
-//                 .take(TRACE_DEGREE - ops.len())
-//                 .flatten(),
-//             )
-//             .collect(),
-//         1 + requester.field_width(),
-//     );
+            match rng.gen_range(0..5) {
+                0 => {
+                    let pointer = F::from_canonical_u32(pointer);
+                    let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
+                    Record::Write(memory_chip.write(address_space, pointer, [data]))
+                }
+                1 => {
+                    let pointer = F::from_canonical_u32(pointer);
+                    Record::Read(memory_chip.read::<1>(address_space, pointer))
+                }
+                2 => {
+                    let pointer = F::from_canonical_u32((pointer / 4) * 4);
+                    Record::Read4(memory_chip.read::<4>(address_space, pointer))
+                }
+                3 => {
+                    let pointer = F::from_canonical_u32((pointer / 4) * 4);
+                    let data = array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..1 << 30)));
+                    Record::Write4(memory_chip.write::<4>(address_space, pointer, data))
+                }
+                4 => {
+                    let pointer = F::from_canonical_usize(((pointer as usize) / MAX) * MAX);
+                    Record::ReadMax(memory_chip.read::<MAX>(address_space, pointer))
+                }
+                _ => unreachable!(),
+            }
+        })
+        .collect_vec();
 
-//     USE_DEBUG_BUILDER.with(|debug| {
-//         *debug.lock().unwrap() = false;
-//     });
-//     assert_eq!(
-//         run_simple_test_no_pis(
-//             vec![&memory_chip.air, &range_checker.air, &requester,],
-//             vec![trace, range_checker_trace, requester_trace],
-//         ),
-//         Err(VerificationError::OodEvaluationMismatch),
-//         "Expected verification to fail, but it passed"
-//     );
-// }
+    let memory_requester_air = MemoryRequesterAir {
+        memory_bridge: memory_chip.memory_bridge(),
+    };
+
+    let memory_requester_trace = {
+        let height = records.len().next_power_of_two();
+        let width = BaseAir::<F>::width(&memory_requester_air);
+        let mut values = vec![F::zero(); height * width];
+        for (row, record) in values.chunks_mut(width).zip(records) {
+            let row: &mut MemoryRequesterCols<F> = row.borrow_mut();
+            match record {
+                Record::Write(record) => {
+                    row.address_space = record.address_space;
+                    row.pointer = record.pointer;
+                    row.timestamp = record.timestamp;
+
+                    row.data_1 = record.data;
+                    row.write_1_aux = aux_factory.make_write_aux_cols(record);
+                    row.is_write_1 = F::one();
+                }
+                Record::Read(record) => {
+                    row.address_space = record.address_space;
+                    row.pointer = record.pointer;
+                    row.timestamp = record.timestamp;
+
+                    row.data_1 = record.data;
+                    row.read_1_aux = aux_factory.make_read_aux_cols(record);
+                    row.is_read_1 = F::one();
+                }
+                Record::Read4(record) => {
+                    row.address_space = record.address_space;
+                    row.pointer = record.pointer;
+                    row.timestamp = record.timestamp;
+
+                    row.data_4 = record.data;
+                    row.read_4_aux = aux_factory.make_read_aux_cols(record);
+                    row.is_read_4 = F::one();
+                }
+                Record::Write4(record) => {
+                    row.address_space = record.address_space;
+                    row.pointer = record.pointer;
+                    row.timestamp = record.timestamp;
+
+                    row.data_4 = record.data;
+                    row.write_4_aux = aux_factory.make_write_aux_cols(record);
+                    row.is_write_4 = F::one();
+                }
+                Record::ReadMax(record) => {
+                    row.address_space = record.address_space;
+                    row.pointer = record.pointer;
+                    row.timestamp = record.timestamp;
+
+                    row.data_max = record.data;
+                    row.read_max_aux = aux_factory.make_read_aux_cols(record);
+                    row.is_read_max = F::one();
+                }
+            }
+        }
+        RowMajorMatrix::new(values, width)
+    };
+
+    let memory_airs = memory_chip.airs();
+    let range_checker_air = range_checker.air();
+    let airs: Vec<&dyn AnyRap<BabyBearPoseidon2Config>> = memory_airs
+        .iter()
+        .map(Deref::deref)
+        .chain(iter::once(
+            &memory_requester_air as &dyn AnyRap<BabyBearPoseidon2Config>,
+        ))
+        .chain(iter::once(
+            range_checker_air.deref() as &dyn AnyRap<BabyBearPoseidon2Config>
+        ))
+        .collect();
+
+    let traces = memory_chip
+        .generate_traces()
+        .into_iter()
+        .chain(iter::once(memory_requester_trace))
+        .chain(iter::once(range_checker.generate_trace()))
+        .collect();
+
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&airs, traces).expect("Verification failed");
+}

@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of};
 
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::{interaction::InteractionType, rap::AnyRap};
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -12,7 +12,7 @@ use crate::{
     arch::chips::MachineChip,
     memory::{
         offline_checker::{MemoryBus, MemoryBusInteraction},
-        MemoryAddress, MemoryChipRef, OpType,
+        MemoryAddress, MemoryChipRef,
     },
 };
 
@@ -29,7 +29,7 @@ pub struct MemoryTester<F: PrimeField32> {
     pub bus: MemoryBus,
     pub chip: MemoryChipRef<F>,
     /// Log of raw bus messages
-    pub records: Vec<MemoryBusInteraction<F, 1>>,
+    pub records: Vec<MemoryBusInteraction<F>>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
@@ -48,10 +48,12 @@ impl<F: PrimeField32> MemoryTester<F> {
         // core::BorrowMut confuses compiler
         let read = RefCell::borrow_mut(&self.chip).read_cell(addr_space, pointer);
         let address = MemoryAddress::new(addr_space, pointer);
+        self.records.push(
+            self.bus
+                .receive(address, read.data.to_vec(), read.prev_timestamp),
+        );
         self.records
-            .push(self.bus.read(address, read.data, read.prev_timestamps[0]));
-        self.records
-            .push(self.bus.write(address, read.data, read.timestamp));
+            .push(self.bus.send(address, read.data.to_vec(), read.timestamp));
         read.value()
     }
 
@@ -59,12 +61,13 @@ impl<F: PrimeField32> MemoryTester<F> {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         let write = RefCell::borrow_mut(&self.chip).write_cell(addr_space, pointer, value);
         let address = MemoryAddress::new(addr_space, pointer);
-        self.records.push(
-            self.bus
-                .read(address, write.prev_data, write.prev_timestamps[0]),
-        );
+        self.records.push(self.bus.receive(
+            address,
+            write.prev_data.to_vec(),
+            write.prev_timestamp,
+        ));
         self.records
-            .push(self.bus.write(address, write.data, write.timestamp));
+            .push(self.bus.send(address, write.data.to_vec(), write.timestamp));
     }
 
     pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
@@ -91,18 +94,17 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
         let mut values = vec![F::zero(); height * width];
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, record) in values.chunks_mut(width).zip(&self.records) {
+        for (row, record) in values.chunks_mut(width).zip(self.records) {
             let row: &mut DummyMemoryInteractionCols<F, WORD_SIZE> = row.borrow_mut();
             row.address = record.address;
-            row.data = record.data;
+            row.data = record.data.try_into().unwrap();
             row.timestamp = record.timestamp;
-            row.count = if record.op_type == OpType::Write {
-                F::one()
-            } else {
-                -F::one()
+            row.count = match record.interaction_type {
+                InteractionType::Send => F::one(),
+                InteractionType::Receive => -F::one(),
             };
         }
-        RowMajorMatrix::new(values, self.trace_width())
+        RowMajorMatrix::new(values, width)
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
@@ -133,5 +135,5 @@ where
     R: Rng + ?Sized,
 {
     const MAX_MEMORY: usize = 1 << 29;
-    rng.gen_range(0..MAX_MEMORY - len)
+    rng.gen_range(0..MAX_MEMORY - len) / len * len
 }

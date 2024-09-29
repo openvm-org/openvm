@@ -142,7 +142,7 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         is_mult: bool,
     ) {
         // Quotient and result can be smaller, but padding to the desired length.
-        let q_limbs: Vec<isize> = big_int_to_limbs(q.clone(), LIMB_SIZE)
+        let q_limbs: Vec<isize> = big_int_to_limbs(&q, LIMB_SIZE)
             .iter()
             .chain(repeat(&0))
             .take(NUM_LIMBS)

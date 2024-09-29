@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use afs_primitives::range_tuple::bus::RangeTupleCheckerBus;
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -24,6 +24,11 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
     fn width(&self) -> usize {
         UintMultiplicationCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
+}
+
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
+    for UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>
+{
 }
 
 impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>

@@ -84,6 +84,7 @@ where
 }
 
 impl<T> OverflowInt<T> {
+    // Similar to CanonicalUint, but specify the limb bits as a param.
     pub fn from_var_vec<AB: AirBuilder, V: Into<AB::Expr>>(
         x: Vec<V>,
         limb_bits: usize,
@@ -91,6 +92,15 @@ impl<T> OverflowInt<T> {
         let limbs = x.into_iter().map(|x| x.into()).collect();
         OverflowInt {
             limbs,
+            max_overflow_bits: limb_bits,
+            limb_max_abs: (1 << limb_bits) - 1,
+        }
+    }
+
+    // Similar to CanonicalUint, but specify the limb bits as a param.
+    pub fn from_vec(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
+        OverflowInt {
+            limbs: x,
             max_overflow_bits: limb_bits,
             limb_max_abs: (1 << limb_bits) - 1,
         }

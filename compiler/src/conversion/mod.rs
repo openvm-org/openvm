@@ -8,6 +8,8 @@ use crate::asm::{AsmInstruction, AssemblyCode};
 
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
+    // The compiler will ensure that the heap pointer is aligned to be a multiple of `word_size`.
+    pub word_size: usize,
     pub compile_prints: bool,
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
@@ -17,6 +19,7 @@ pub struct CompilerOptions {
 impl Default for CompilerOptions {
     fn default() -> Self {
         CompilerOptions {
+            word_size: 8,
             compile_prints: true,
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,

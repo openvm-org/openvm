@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
@@ -16,13 +16,14 @@ use p3_util::log2_strict_usize;
 use rand::Rng;
 use tiny_keccak::Hasher;
 
-use super::{columns::KeccakVmColsMut, utils::num_keccak_f, KeccakVmChip};
+use super::{utils::num_keccak_f, KeccakVmChip};
 use crate::{
     arch::{
         instructions::Opcode,
         testing::{MachineChipTestBuilder, MachineChipTester},
     },
     core::BYTE_XOR_BUS,
+    hashes::keccak::hasher::columns::KeccakVmCols,
     program::Instruction,
 };
 
@@ -74,7 +75,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
         );
         if let Some(output) = prank_output {
             for i in 0..16 {
-                chip.records.last_mut().unwrap().digest_writes[i].data[0] =
+                chip.records.last_mut().unwrap().digest_writes[i / 8].data[i % 8] =
                     BabyBear::from_canonical_u16(
                         output[2 * i] as u16 + ((output[2 * i + 1] as u16) << 8),
                     );
@@ -95,7 +96,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
             continue;
         }
         let output = output.unwrap();
-        let digest_row = KeccakVmColsMut::from_mut_slice(keccak_trace.row_mut(row - 1));
+        let digest_row: &mut KeccakVmCols<_> = keccak_trace.row_mut(row - 1).borrow_mut();
         for i in 0..16 {
             let out_limb = BabyBear::from_canonical_u16(
                 output[2 * i] as u16 + ((output[2 * i + 1] as u16) << 8),

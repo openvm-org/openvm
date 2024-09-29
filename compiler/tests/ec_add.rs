@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use afs_compiler::{
     asm::AsmBuilder,
+    conversion::CompilerOptions,
     ir::{Array, Builder, Config, Var},
     util::{execute_program_with_config, LIMB_SIZE, NUM_LIMBS},
 };
@@ -95,7 +96,10 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
 
     builder.halt();
 
-    let program = builder.clone().compile_isa();
+    let program = builder.clone().compile_isa_with_options(CompilerOptions {
+        word_size: 64,
+        ..Default::default()
+    });
     execute_program_with_config(
         VmConfig {
             secp256k1_enabled: true,

@@ -15,7 +15,7 @@ use crate::{
     arch::{
         chips::MachineChip,
         instructions::{Opcode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
-        testing::MachineChipTestBuilder,
+        testing::{memory::gen_pointer, MachineChipTestBuilder},
     },
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
     program::Instruction,
@@ -28,7 +28,6 @@ fn field_arithmetic_air_test() {
     let elem_range = || 1..=100;
     let z_address_space_range = || 1usize..=2;
     let xy_address_space_range = || 0usize..=2;
-    let address_range = || 0usize..1 << 29;
 
     let mut tester = MachineChipTestBuilder::default();
     let mut field_arithmetic_chip = FieldArithmeticChip::new(
@@ -55,15 +54,15 @@ fn field_arithmetic_air_test() {
         let address1 = if as1 == 0 {
             operand1.as_canonical_u32() as usize
         } else {
-            rng.gen_range(address_range())
+            gen_pointer(&mut rng, 1)
         };
         let address2 = if as2 == 0 {
             operand2.as_canonical_u32() as usize
         } else {
-            rng.gen_range(address_range())
+            gen_pointer(&mut rng, 1)
         };
         assert_ne!(address1, address2);
-        let result_address = rng.gen_range(address_range());
+        let result_address = gen_pointer(&mut rng, 1);
 
         let result = FieldArithmetic::solve(opcode, (operand1, operand2)).unwrap();
         tracing::debug!(

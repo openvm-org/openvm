@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -15,6 +15,7 @@ impl DummyAir {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for DummyAir {}
 impl<F: Field> BaseAir<F> for DummyAir {
     fn width(&self) -> usize {
         4

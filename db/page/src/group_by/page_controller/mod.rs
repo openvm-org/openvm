@@ -182,15 +182,12 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let range_checker_ptr =
             keygen_builder.add_main_matrix(BaseAir::<Val<SC>>::width(&self.range_checker.air));
 
-        keygen_builder.add_partitioned_air(&self.group_by, 0, vec![group_by_ptr, group_by_aux_ptr]);
+        keygen_builder.add_partitioned_air(&self.group_by, vec![group_by_ptr, group_by_aux_ptr]);
 
-        keygen_builder.add_partitioned_air(
-            &self.final_chip,
-            0,
-            vec![final_page_ptr, final_page_aux_ptr],
-        );
+        keygen_builder
+            .add_partitioned_air(&self.final_chip, vec![final_page_ptr, final_page_aux_ptr]);
 
-        keygen_builder.add_partitioned_air(&self.range_checker.air, 0, vec![range_checker_ptr]);
+        keygen_builder.add_partitioned_air(&self.range_checker.air, vec![range_checker_ptr]);
     }
 
     pub fn prove(

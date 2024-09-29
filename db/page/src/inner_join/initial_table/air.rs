@@ -1,10 +1,14 @@
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
+    rap::BaseAirWithPublicValues,
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::{columns::TableCols, InitialTableAir};
 
+impl<F: Field> BaseAirWithPublicValues<F> for InitialTableAir {}
 impl<F: Field> BaseAir<F> for InitialTableAir {
     fn width(&self) -> usize {
         self.air_width()

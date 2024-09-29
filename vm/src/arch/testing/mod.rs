@@ -6,6 +6,7 @@ use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
 };
+use itertools::izip;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -153,9 +154,17 @@ pub struct MachineChipTester {
 
 impl MachineChipTester {
     pub fn load<C: MachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
-        self.public_values.push(chip.generate_public_values());
-        self.airs.push(chip.air());
-        self.traces.push(chip.generate_trace());
+        let public_values = chip.generate_public_values_per_air();
+        let airs = chip.airs();
+        let traces = chip.generate_traces();
+
+        for (public_value, air, trace) in izip!(public_values, airs, traces) {
+            if trace.height() > 0 {
+                self.public_values.push(public_value);
+                self.airs.push(air);
+                self.traces.push(trace);
+            }
+        }
 
         self
     }

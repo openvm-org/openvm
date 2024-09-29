@@ -4,7 +4,10 @@ use afs_primitives::{
     sub_chip::{AirConfig, SubAir},
     utils::implies,
 };
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
+    rap::BaseAirWithPublicValues,
+};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -17,6 +20,14 @@ use super::{
 impl<F: Field, const COMMITMENT_LEN: usize> BaseAir<F> for InternalPageAir<COMMITMENT_LEN> {
     fn width(&self) -> usize {
         self.air_width()
+    }
+}
+
+impl<F: Field, const COMMITMENT_LEN: usize> BaseAirWithPublicValues<F>
+    for InternalPageAir<COMMITMENT_LEN>
+{
+    fn num_public_values(&self) -> usize {
+        COMMITMENT_LEN
     }
 }
 

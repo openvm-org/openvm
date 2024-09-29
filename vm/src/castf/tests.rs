@@ -15,7 +15,11 @@ use super::{
     CastFChip,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
+    arch::{
+        chips::MachineChip,
+        instructions::Opcode,
+        testing::{memory::gen_pointer, MachineChipTestBuilder},
+    },
     program::Instruction,
 };
 
@@ -32,14 +36,13 @@ fn prepare_castf_rand_write_execute(
     rng: &mut StdRng,
 ) {
     let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 29;
 
     let operand1 = y;
 
     let as_x = rng.gen_range(address_space_range()); // d
     let as_y = rng.gen_range(address_space_range()); // e
-    let address_x = rng.gen_range(address_range()); // op_a
-    let address_y = rng.gen_range(address_range()); // op_b
+    let address_x = gen_pointer(rng, 32); // op_a
+    let address_y = gen_pointer(rng, 32); // op_b
 
     let operand1_f = F::from_canonical_u32(y);
 

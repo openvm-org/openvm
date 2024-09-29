@@ -410,8 +410,8 @@ impl<C: Config> Variable<C> for Var<C::N> {
     type Expression = SymbolicVar<C::N>;
 
     fn uninit(builder: &mut Builder<C>) -> Self {
-        builder.stack_ptr += 1;
-        Var(builder.stack_ptr, PhantomData)
+        builder.var_count += 1;
+        Var(builder.var_count, PhantomData)
     }
 
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
@@ -780,8 +780,8 @@ impl<C: Config> Variable<C> for Felt<C::F> {
     type Expression = SymbolicFelt<C::F>;
 
     fn uninit(builder: &mut Builder<C>) -> Self {
-        builder.stack_ptr += 1;
-        Felt(builder.stack_ptr, PhantomData)
+        builder.felt_count += 1;
+        Felt(builder.felt_count, PhantomData)
     }
 
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
@@ -1209,8 +1209,8 @@ impl<C: Config> Variable<C> for Ext<C::F, C::EF> {
     type Expression = SymbolicExt<C::F, C::EF>;
 
     fn uninit(builder: &mut Builder<C>) -> Self {
-        builder.stack_ptr += <Self as MemVariable<C>>::size_of() as u32;
-        Ext(builder.stack_ptr, PhantomData)
+        builder.ext_count += 1;
+        Ext(builder.ext_count, PhantomData)
     }
 
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
