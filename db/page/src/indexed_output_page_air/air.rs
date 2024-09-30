@@ -45,10 +45,10 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for IndexedOutputPa
     // to construct the columns manually before calling SubAir)
     #[inline]
     fn eval(&self, builder: &mut AB) {
-        assert!(builder.partitioned_main().len() >= 2);
+        assert_eq!(builder.cached_mains().len(), 1);
 
-        let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
-        let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let page_trace: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
+        let aux_trace: &<AB as AirBuilder>::M = builder.common_main();
 
         let [page_local, page_next] = [0, 1].map(|i| {
             PageCols::<AB::Var>::from_slice(&page_trace.row_slice(i), self.idx_len, self.data_len)

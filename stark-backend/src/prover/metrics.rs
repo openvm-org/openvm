@@ -30,7 +30,8 @@ pub struct SingleTraceMetrics {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TraceCells {
     pub preprocessed: Option<usize>,
-    pub partitioned_main: Vec<usize>,
+    pub cached_mains: Vec<usize>,
+    pub common_main: usize,
     pub after_challenge: Vec<usize>,
 }
 
@@ -54,7 +55,7 @@ impl Display for SingleTraceMetrics {
            f,
             "{:<20} | Rows = {:<10} | Cells = {:<11} | Prep Cols = {:<5} | Main Cols = {:<5} | Perm Cols = {:<5}",
             self.air_name, format_number_with_underscores(self.height), format_number_with_underscores(self.total_cells), self.width.preprocessed.unwrap_or(0),
-            format!("{:?}", self.width.partitioned_main),
+            format!("{:?}", self.width.main_widths()),
             format!("{:?}",self.width.after_challenge),
         )?;
         Ok(())
@@ -78,12 +79,14 @@ pub fn trace_metrics<SC: StarkGenericConfig>(
             }
             let cells = TraceCells {
                 preprocessed: width.preprocessed.map(|w| w * height),
-                partitioned_main: width.partitioned_main.iter().map(|w| w * height).collect(),
+                cached_mains: width.cached_mains.iter().map(|w| w * height).collect(),
+                common_main: width.common_main * height,
                 after_challenge: width.after_challenge.iter().map(|w| w * height).collect(),
             };
             let total_cells = cells
-                .partitioned_main
+                .cached_mains
                 .iter()
+                .chain([&cells.common_main])
                 .chain(cells.after_challenge.iter())
                 .sum::<usize>();
             SingleTraceMetrics {
@@ -139,8 +142,9 @@ mod emit {
             counter!("rows", &labels).absolute(self.height as u64);
             counter!("cells", &labels).absolute(self.total_cells as u64);
             counter!("prep_cols", &labels).absolute(self.width.preprocessed.unwrap_or(0) as u64);
-            counter!("main_cols", &labels)
-                .absolute(self.width.partitioned_main.iter().sum::<usize>() as u64);
+            counter!("main_cols", &labels).absolute(
+                (self.width.cached_mains.iter().sum::<usize>() + self.width.common_main) as u64,
+            );
             counter!("perm_cols", &labels)
                 .absolute(self.width.after_challenge.iter().sum::<usize>() as u64);
         }

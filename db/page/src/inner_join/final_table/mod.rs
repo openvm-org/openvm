@@ -107,7 +107,7 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for FinalTableAir {
         // Making sure the page is in the proper format
         self.final_air.eval(builder);
 
-        let page = &builder.partitioned_main()[0];
+        let page = &builder.cached_mains()[0];
         let page = PageCols::from_slice(
             &page.row_slice(0),
             self.final_air.idx_len,

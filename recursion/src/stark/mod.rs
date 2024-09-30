@@ -608,13 +608,11 @@ where
             }
         }
 
-        assert_eq!(
-            partitioned_main_values.len(),
-            constants.width.partitioned_main.len()
-        );
+        let main_widths = constants.width.main_widths();
+        assert_eq!(partitioned_main_values.len(), main_widths.len());
         let partitioned_main_values = partitioned_main_values
             .iter()
-            .zip_eq(constants.width.partitioned_main.iter())
+            .zip_eq(main_widths.iter())
             .map(|(main_values, &width)| {
                 builder.assert_eq::<Usize<_>>(main_values.local.len(), RVar::from(width));
                 builder.assert_eq::<Usize<_>>(main_values.next.len(), RVar::from(width));

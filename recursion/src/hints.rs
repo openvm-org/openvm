@@ -286,12 +286,14 @@ impl Hintable<InnerConfig> for TraceWidth {
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let preprocessed = Vec::<usize>::read(builder);
-        let partitioned_main = Vec::<usize>::read(builder);
+        let cached_mains = Vec::<usize>::read(builder);
+        let common_main = usize::read(builder);
         let after_challenge = Vec::<usize>::read(builder);
 
         TraceWidthVariable {
             preprocessed,
-            partitioned_main,
+            cached_mains,
+            common_main,
             after_challenge,
         }
     }
@@ -300,7 +302,8 @@ impl Hintable<InnerConfig> for TraceWidth {
         let mut stream = Vec::new();
 
         stream.extend(self.preprocessed.into_iter().collect::<Vec<_>>().write());
-        stream.extend(self.partitioned_main.write());
+        stream.extend(self.cached_mains.write());
+        stream.extend(<usize as Hintable<InnerConfig>>::write(&self.common_main));
         stream.extend(self.after_challenge.write());
 
         stream

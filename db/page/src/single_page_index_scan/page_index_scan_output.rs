@@ -56,7 +56,7 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for PageIndexScanOu
         // Making sure the page is in the proper format
         self.inner.eval(builder);
 
-        let page = &builder.partitioned_main()[0];
+        let page = &builder.cached_mains()[0];
         let page_local = page.row_slice(0);
         let page_blob = page_local.iter().skip(1).copied().collect_vec();
         let is_alloc = page_local[0];

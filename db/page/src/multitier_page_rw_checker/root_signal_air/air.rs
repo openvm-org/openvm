@@ -42,7 +42,7 @@ where
 {
     fn eval(&self, builder: &mut AB) {
         // only constrain that root_commitment is accurate according to public values
-        let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
+        let main: &<AB as AirBuilder>::M = &builder.common_main().clone();
         let local = main.row_slice(0);
         let pi = builder.public_values().to_vec();
         self.eval_interactions(

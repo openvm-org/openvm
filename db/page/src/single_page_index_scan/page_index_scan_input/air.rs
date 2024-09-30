@@ -216,8 +216,8 @@ where
     AB: PartitionedAirBuilder + AirBuilderWithPublicValues + InteractionBuilder,
 {
     fn eval(&self, builder: &mut AB) {
-        let page_main = &builder.partitioned_main()[0];
-        let aux_main = &builder.partitioned_main()[1];
+        let page_main = &builder.cached_mains()[0];
+        let aux_main = builder.common_main();
 
         // get the public value x
         let pis = builder.public_values();

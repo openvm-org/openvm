@@ -11,7 +11,7 @@ use crate::{
         debug::{generate_logical_interactions, LogicalInteractions},
         InteractionType, SymbolicInteraction,
     },
-    rap::Rap,
+    rap::{PartitionedBaseAir, Rap},
 };
 
 /// Check that all constraints vanish on the subgroup.
@@ -24,7 +24,10 @@ pub fn check_constraints<R, SC>(
     public_values: &[Val<SC>],
     exposed_values_after_challenge: &[Vec<SC::Challenge>],
 ) where
-    R: for<'a> Rap<DebugConstraintBuilder<'a, SC>> + BaseAir<Val<SC>> + ?Sized,
+    R: for<'a> Rap<DebugConstraintBuilder<'a, SC>>
+        + BaseAir<Val<SC>>
+        + PartitionedBaseAir<Val<SC>>
+        + ?Sized,
     SC: StarkGenericConfig,
 {
     let height = partitioned_main[0].height();
@@ -87,6 +90,7 @@ pub fn check_constraints<R, SC>(
             is_first_row: Val::<SC>::zero(),
             is_last_row: Val::<SC>::zero(),
             is_transition: Val::<SC>::one(),
+            has_common_main: rap.common_main_width() > 0,
         };
         if i == 0 {
             builder.is_first_row = Val::<SC>::one();

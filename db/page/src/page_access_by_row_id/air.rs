@@ -59,7 +59,7 @@ impl<F: Field> BaseAir<F> for PageAccessByRowIdAir {
 impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for PageAccessByRowIdAir {
     fn eval(&self, builder: &mut AB) {
         // Choosing the second partition of the trace, which looks like (index, mult)
-        let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let main: &<AB as AirBuilder>::M = builder.common_main();
 
         let (local_slc, next_slc) = (main.row_slice(0), main.row_slice(1));
         let local: &PageAccessByRowIdAuxCols<AB::Var> = (*local_slc).borrow();
@@ -78,7 +78,7 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for PageAccessByRow
             .when_transition()
             .assert_eq(row_id + AB::Expr::one(), next_row_id);
 
-        let page_main = &builder.partitioned_main()[0];
+        let page_main = &builder.cached_mains()[0];
         let page_local = page_main.row_slice(0);
         let page_row_with_row_id = iter::once(row_id)
             .chain(page_local.iter().copied())

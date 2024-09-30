@@ -40,13 +40,13 @@ where
     fn eval(&self, builder: &mut AB) {
         let io = [0, 1].map(|i| {
             PageCols::from_slice(
-                &builder.partitioned_main()[0].row_slice(i),
+                &builder.cached_mains()[0].row_slice(i),
                 self.final_air.idx_len,
                 self.final_air.data_len,
             )
         });
         let aux = [0, 1].map(|i| {
-            IndexedPageWriteAuxCols::from_slice(&builder.partitioned_main()[1].row_slice(i), self)
+            IndexedPageWriteAuxCols::from_slice(&builder.common_main().row_slice(i), self)
         });
         // Making sure the page is in the proper format
         SubAir::eval(self, builder, io, aux);

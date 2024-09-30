@@ -17,10 +17,10 @@ pub struct SumAir(pub usize);
 impl<F> BaseAirWithPublicValues<F> for SumAir {}
 impl<F> PartitionedBaseAir<F> for SumAir {
     fn cached_main_widths(&self) -> Vec<usize> {
-        vec![self.0]
+        vec![1]
     }
     fn common_main_width(&self) -> usize {
-        1
+        self.0
     }
 }
 impl<F> BaseAir<F> for SumAir {
@@ -31,11 +31,10 @@ impl<F> BaseAir<F> for SumAir {
 
 impl<AB: PartitionedAirBuilder> Air<AB> for SumAir {
     fn eval(&self, builder: &mut AB) {
-        let partitioned_main = builder.partitioned_main();
-        assert_eq!(partitioned_main.len(), 2);
+        assert_eq!(builder.cached_mains().len(), 1);
 
-        let x = partitioned_main[0].row_slice(0)[0];
-        let ys = partitioned_main[1].row_slice(0);
+        let x = builder.cached_mains()[0].row_slice(0)[0];
+        let ys = builder.common_main().row_slice(0);
 
         let mut y_sum = AB::Expr::zero();
         for &y in &*ys {
