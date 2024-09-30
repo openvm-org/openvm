@@ -10,10 +10,7 @@ use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::{
-            fri_params_with_80_bits_of_security,
-            standard_fri_params_with_100_bits_conjectured_security,
-        },
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::{StarkForTest, StarkFriEngine},
 };
@@ -73,7 +70,9 @@ fn main() {
         let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
         let engine =
             BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-        let vdata = engine.run_simple_test(&any_raps, traces, &pvs).unwrap();
+        let vdata = engine
+            .run_simple_test_impl(&any_raps, traces, &pvs)
+            .unwrap();
         span.exit();
 
         let compiler_options = CompilerOptions {
