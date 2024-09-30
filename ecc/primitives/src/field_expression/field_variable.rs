@@ -11,7 +11,7 @@ use p3_util::log2_ceil_usize;
 
 use super::{ExprBuilder, SymbolicExpr};
 
-pub trait FieldVariableConfig {
+pub trait FieldVariableConfig: Clone {
     // This is the limb bits for a canonical field element. Typically 8.
     fn canonical_limb_bits() -> usize;
     // The max bits allowed per limb, determined by the underlying field we use to represent the field element.
