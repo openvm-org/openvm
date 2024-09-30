@@ -159,31 +159,23 @@ mod emit {
                         ];
                         counter!("rows_used", &labels).increment(value as u64);
                     }
-                    for (key, value) in span.metrics.opcode_counts {
+                    for ((dsl_ir, opcode), value) in span.metrics.opcode_counts {
                         if value > 0 {
-                            let labels =
-                                [("opcode", key), ("cycle_tracker_span", full_name.clone())];
+                            let labels = [
+                                ("opcode", opcode),
+                                ("dsl_ir", dsl_ir.unwrap_or_else(String::new)),
+                                ("cycle_tracker_span", full_name.clone()),
+                            ];
                             counter!("frequency", &labels).increment(value as u64);
                         }
                     }
-                    for (key, value) in span.metrics.opcode_trace_cells {
+                    for ((dsl_ir, opcode), value) in span.metrics.opcode_trace_cells {
                         if value > 0 {
-                            let labels =
-                                [("opcode", key), ("cycle_tracker_span", full_name.clone())];
-                            counter!("cells_used", &labels).increment(value as u64);
-                        }
-                    }
-                    for (key, value) in span.metrics.dsl_counts {
-                        if value > 0 {
-                            let labels =
-                                [("dsl_ir", key), ("cycle_tracker_span", full_name.clone())];
-                            counter!("frequency", &labels).absolute(value as u64);
-                        }
-                    }
-                    for (key, value) in span.metrics.dsl_trace_cells {
-                        if value > 0 {
-                            let labels =
-                                [("dsl_ir", key), ("cycle_tracker_span", full_name.clone())];
+                            let labels = [
+                                ("opcode", opcode),
+                                ("dsl_ir", dsl_ir.unwrap_or_else(String::new)),
+                                ("cycle_tracker_span", full_name.clone()),
+                            ];
                             counter!("cells_used", &labels).increment(value as u64);
                         }
                     }
@@ -208,7 +200,6 @@ impl Display for CycleTracker<VmMetrics> {
 
             let mut total_vm_metrics = std::collections::HashMap::new();
             let mut total_opcode_counts = std::collections::HashMap::new();
-            let mut total_dsl_counts = std::collections::HashMap::new();
             let mut total_opcode_trace_cells = std::collections::HashMap::new();
 
             for span in spans {
@@ -218,20 +209,13 @@ impl Display for CycleTracker<VmMetrics> {
                 for (key, value) in &span.metrics.opcode_counts {
                     *total_opcode_counts.entry(key.clone()).or_insert(0) += value;
                 }
-                for (key, value) in &span.metrics.dsl_counts {
-                    *total_dsl_counts.entry(key.clone()).or_insert(0) += value;
-                }
                 for (key, value) in &span.metrics.opcode_trace_cells {
                     *total_opcode_trace_cells.entry(key.clone()).or_insert(0) += value;
                 }
             }
-            let mut sorted_opcode_counts: Vec<(&String, &usize)> =
-                total_opcode_counts.iter().collect();
+            let mut sorted_opcode_counts: Vec<_> = total_opcode_counts.iter().collect();
             sorted_opcode_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
-            let mut sorted_dsl_counts: Vec<(&String, &usize)> = total_dsl_counts.iter().collect();
-            sorted_dsl_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
-            let mut sorted_opcode_trace_cells: Vec<(&String, &usize)> =
-                total_opcode_trace_cells.iter().collect();
+            let mut sorted_opcode_trace_cells: Vec<_> = total_opcode_trace_cells.iter().collect();
             sorted_opcode_trace_cells.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
 
             writeln!(
@@ -260,21 +244,27 @@ impl Display for CycleTracker<VmMetrics> {
                 }
             }
 
-            for (key, value) in sorted_opcode_counts {
+            for ((dsl_ir, opcode), value) in sorted_opcode_counts {
                 if *value > 0 {
-                    writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
+                    writeln!(
+                        f,
+                        "  - {:?}::{}: {}",
+                        dsl_ir,
+                        opcode,
+                        format_number_with_underscores(*value)
+                    )?;
                 }
             }
 
-            for (key, value) in sorted_dsl_counts {
+            for ((dsl_ir, opcode), value) in sorted_opcode_trace_cells {
                 if *value > 0 {
-                    writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
-                }
-            }
-
-            for (key, value) in sorted_opcode_trace_cells {
-                if *value > 0 {
-                    writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
+                    writeln!(
+                        f,
+                        "  - {:?}::{}: {}",
+                        dsl_ir,
+                        opcode,
+                        format_number_with_underscores(*value)
+                    )?;
                 }
             }
 

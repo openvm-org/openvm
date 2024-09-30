@@ -48,7 +48,7 @@ use crate::{
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
     modular_addsub::{ModularAddSubChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     modular_multdiv::ModularMultDivChip,
-    program::{bridge::ProgramBus, ExecutionError, Program, ProgramChip},
+    program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
     uint_multiplication::UintMultiplicationChip,
@@ -349,9 +349,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 RefCell::borrow_mut(&self.program_chip).get_instruction(pc_usize)?;
             tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
 
-            let dsl_instr = match &debug_info {
-                Some(debug_info) => debug_info.dsl_instruction.to_string(),
-                None => String::new(),
+            let (dsl_instr, trace) = match debug_info {
+                Some(debug_info) => {
+                    let DebugInfo {
+                        dsl_instruction,
+                        trace,
+                        ..
+                    } = debug_info;
+                    (Some(dsl_instruction), trace)
+                }
+                None => (None, None),
             };
 
             let opcode = instruction.opcode;
@@ -406,34 +413,21 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let added_trace_cells = now_trace_cells - prev_trace_cells;
 
             if collect_metrics {
+                let key = (dsl_instr.clone(), opcode.to_string());
                 *self
                     .collected_metrics
                     .opcode_counts
-                    .entry(opcode.to_string())
+                    .entry(key.clone())
                     .or_insert(0) += 1;
-
-                if !dsl_instr.is_empty() {
-                    *self
-                        .collected_metrics
-                        .dsl_counts
-                        .entry(dsl_instr.clone())
-                        .or_insert(0) += 1;
-                }
 
                 *self
                     .collected_metrics
                     .opcode_trace_cells
-                    .entry(opcode.to_string())
-                    .or_insert(0) += added_trace_cells;
-
-                *self
-                    .collected_metrics
-                    .dsl_trace_cells
-                    .entry(dsl_instr)
+                    .entry(key)
                     .or_insert(0) += added_trace_cells;
             }
 
-            prev_backtrace = debug_info.and_then(|debug_info| debug_info.trace);
+            prev_backtrace = trace;
 
             pc = next_pc;
 
