@@ -103,5 +103,8 @@ fn test_fibonacci_program_halo2_verify() {
     setup_tracing();
 
     let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
-    run_static_verifier_test(&fib_program_stark, default_fri_params());
+    run_static_verifier_test(
+        &fib_program_stark,
+        standard_fri_params_with_100_bits_conjectured_security(3),
+    );
 }
