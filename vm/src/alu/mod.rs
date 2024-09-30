@@ -27,7 +27,7 @@ pub use columns::*;
 #[cfg(test)]
 mod tests;
 
-pub const ALU_CMP_INSTRUCTIONS: [Opcode; 3] = [Opcode::LT256, Opcode::EQ256, Opcode::SLT256];
+pub const ALU_CMP_INSTRUCTIONS: [Opcode; 3] = [Opcode::SLTU256, Opcode::EQ256, Opcode::SLT256];
 pub const ALU_ARITHMETIC_INSTRUCTIONS: [Opcode; 2] = [Opcode::ADD256, Opcode::SUB256];
 pub const ALU_BITWISE_INSTRUCTIONS: [Opcode; 3] = [Opcode::XOR256, Opcode::AND256, Opcode::OR256];
 
@@ -195,7 +195,7 @@ fn solve_alu<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 ) -> (Vec<u32>, bool) {
     match opcode {
         Opcode::ADD256 => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::SUB256 | Opcode::LT256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        Opcode::SUB256 | Opcode::SLTU256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
         Opcode::EQ256 => solve_eq::<T, NUM_LIMBS, LIMB_BITS>(x, y),
         Opcode::XOR256 => solve_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
         Opcode::AND256 => solve_and::<NUM_LIMBS, LIMB_BITS>(x, y),

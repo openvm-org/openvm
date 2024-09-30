@@ -24,7 +24,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicAir<NUM_LIMB
         };
 
         let range_check =
-            aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag + aux.opcode_slt_flag;
+            aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_sltu_flag + aux.opcode_slt_flag;
         let bitwise = aux.opcode_xor_flag + aux.opcode_and_flag + aux.opcode_or_flag;
 
         // Read the operand pointer's values, which are themselves pointers
@@ -89,7 +89,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicAir<NUM_LIMB
             )
             .eval(
                 builder,
-                aux.opcode_lt_flag + aux.opcode_eq_flag + aux.opcode_slt_flag,
+                aux.opcode_sltu_flag + aux.opcode_eq_flag + aux.opcode_slt_flag,
             );
         timestamp_delta += 1;
 

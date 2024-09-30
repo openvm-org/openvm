@@ -82,7 +82,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 y_sign,
                 opcode_add_flag: F::from_bool(instruction.opcode == Opcode::ADD256),
                 opcode_sub_flag: F::from_bool(instruction.opcode == Opcode::SUB256),
-                opcode_lt_flag: F::from_bool(instruction.opcode == Opcode::LT256),
+                opcode_sltu_flag: F::from_bool(instruction.opcode == Opcode::SLTU256),
                 opcode_eq_flag: F::from_bool(instruction.opcode == Opcode::EQ256),
                 opcode_xor_flag: F::from_bool(instruction.opcode == Opcode::XOR256),
                 opcode_and_flag: F::from_bool(instruction.opcode == Opcode::AND256),

@@ -52,7 +52,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
         let flags = [
             aux.opcode_add_flag,
             aux.opcode_sub_flag,
-            aux.opcode_lt_flag,
+            aux.opcode_sltu_flag,
             aux.opcode_eq_flag,
             aux.opcode_xor_flag,
             aux.opcode_and_flag,
@@ -104,7 +104,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
                         AB::Expr::zero()
                     });
             builder
-                .when(aux.opcode_sub_flag + aux.opcode_lt_flag + aux.opcode_slt_flag)
+                .when(aux.opcode_sub_flag + aux.opcode_sltu_flag + aux.opcode_slt_flag)
                 .assert_bool(carry_sub[i].clone());
         }
 
@@ -121,7 +121,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
             .assert_zero(aux.y_sign);
 
         let slt_xor =
-            (aux.opcode_lt_flag + aux.opcode_slt_flag) * io.cmp_result + aux.x_sign + aux.y_sign
+            (aux.opcode_sltu_flag + aux.opcode_slt_flag) * io.cmp_result + aux.x_sign + aux.y_sign
                 - AB::Expr::from_canonical_u32(2)
                     * (io.cmp_result * aux.x_sign
                         + io.cmp_result * aux.y_sign
@@ -129,7 +129,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
                 + AB::Expr::from_canonical_u32(4) * (io.cmp_result * aux.x_sign * aux.y_sign);
         builder.assert_eq(
             slt_xor,
-            (aux.opcode_lt_flag + aux.opcode_slt_flag) * carry_sub[NUM_LIMBS - 1].clone(),
+            (aux.opcode_sltu_flag + aux.opcode_slt_flag) * carry_sub[NUM_LIMBS - 1].clone(),
         );
 
         // For EQ, z is filled with 0 except at the lowest index i such that x[i] != y[i]. If

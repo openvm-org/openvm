@@ -281,7 +281,7 @@ fn alu_sub_wrong_negative_test() {
 }
 
 #[test]
-fn alu_lt_rand_test() {
+fn alu_sltu_rand_test() {
     let num_ops: usize = 10;
     let mut rng = create_seeded_rng();
 
@@ -297,7 +297,7 @@ fn alu_lt_rand_test() {
     for _ in 0..num_ops {
         let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         let y = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::LT256, x, y, &mut rng);
+        run_alu_rand_write_execute(&mut tester, &mut chip, Opcode::SLTU256, x, y, &mut rng);
     }
 
     let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
@@ -305,9 +305,9 @@ fn alu_lt_rand_test() {
 }
 
 #[test]
-fn alu_lt_wrong_subtraction_test() {
+fn alu_sltu_wrong_subtraction_test() {
     run_alu_negative_test(
-        Opcode::LT256,
+        Opcode::SLTU256,
         iter::once(65_000).chain(iter::repeat(0).take(31)).collect(),
         iter::once(65_000).chain(iter::repeat(0).take(31)).collect(),
         std::iter::once(1).chain(iter::repeat(0).take(31)).collect(),
@@ -319,9 +319,9 @@ fn alu_lt_wrong_subtraction_test() {
 }
 
 #[test]
-fn alu_lt_wrong_negative_test() {
+fn alu_sltu_wrong_negative_test() {
     run_alu_negative_test(
-        Opcode::LT256,
+        Opcode::SLTU256,
         iter::once(1).chain(iter::repeat(0).take(31)).collect(),
         iter::once(1).chain(iter::repeat(0).take(31)).collect(),
         iter::once(0).chain(iter::repeat(0).take(31)).collect(),
@@ -333,9 +333,9 @@ fn alu_lt_wrong_negative_test() {
 }
 
 #[test]
-fn alu_lt_non_zero_sign_negative_test() {
+fn alu_sltu_non_zero_sign_negative_test() {
     run_alu_negative_test(
-        Opcode::LT256,
+        Opcode::SLTU256,
         vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
         vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
         vec![0; NUM_LIMBS],

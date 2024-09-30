@@ -349,21 +349,21 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
-                DslIr::AddU256(dst, lhs, rhs) => {
+                DslIr::Add256(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::AddU256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        AsmInstruction::Add256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
-                DslIr::SubU256(dst, lhs, rhs) => {
+                DslIr::Sub256(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::SubU256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        AsmInstruction::Sub256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
-                DslIr::MulU256(dst, lhs, rhs) => {
+                DslIr::Mul256(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::MulU256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        AsmInstruction::Mul256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
@@ -373,9 +373,59 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
-                DslIr::EqualToU256(dst, lhs, rhs) => {
+                DslIr::EqualTo256(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::EqualToU256(dst.fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        AsmInstruction::EqualTo256(dst.fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::Xor256(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::Xor256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::And256(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::And256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::Or256(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::Or256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::LessThanI256(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::LessThanI256(dst.fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::ShiftLeft256(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::ShiftLeft256(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::ShiftRightLogic256(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::ShiftRightLogic256(
+                            dst.ptr_fp(),
+                            lhs.ptr_fp(),
+                            rhs.ptr_fp(),
+                        ),
+                        debug_info,
+                    );
+                }
+                DslIr::ShiftRightArith256(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::ShiftRightArith256(
+                            dst.ptr_fp(),
+                            lhs.ptr_fp(),
+                            rhs.ptr_fp(),
+                        ),
                         debug_info,
                     );
                 }
