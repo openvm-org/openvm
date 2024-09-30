@@ -47,6 +47,10 @@ impl<F: PrimeField32> MachineChip<F> for CastFChip<F> {
         Box::new(self.air)
     }
 
+    fn air_name(&self) -> String {
+        "CastF".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.data.len()
     }

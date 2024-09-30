@@ -40,6 +40,10 @@ impl<F: PrimeField32> MachineChip<F> for CoreChip<F> {
         Box::new(self.air.clone())
     }
 
+    fn air_name(&self) -> String {
+        "Core".to_string()
+    }
+
     fn generate_public_values(&mut self) -> Vec<F> {
         let first_row_pc = self.start_state.pc;
         let last_row_pc = self.state.pc;

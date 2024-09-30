@@ -102,6 +102,10 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
         Box::new(self.air)
     }
 
+    fn air_name(&self) -> String {
+        "Shift".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.data.len()
     }

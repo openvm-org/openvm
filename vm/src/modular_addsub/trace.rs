@@ -95,6 +95,10 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChi
         Box::new(self.air.clone())
     }
 
+    fn air_name(&self) -> String {
+        "ModularAddSub".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.data.len()
     }

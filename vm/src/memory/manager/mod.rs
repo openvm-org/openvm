@@ -436,6 +436,21 @@ impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
         ]
     }
 
+    fn air_name(&self) -> String {
+        panic!("cannot call air_name on MemoryChip, which has more than one trace");
+    }
+    fn air_names(&self) -> Vec<String> {
+        vec![
+            "Audit".to_string(),
+            "AccessAdapter<2>".to_string(),
+            "AccessAdapter<4>".to_string(),
+            "AccessAdapter<8>".to_string(),
+            "AccessAdapter<16>".to_string(),
+            "AccessAdapter<32>".to_string(),
+            "AccessAdapter<64>".to_string(),
+        ]
+    }
+
     fn current_trace_height(&self) -> usize {
         panic!("cannot call current_trace_height on MemoryChip, which has more than one trace");
     }

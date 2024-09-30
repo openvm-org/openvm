@@ -99,6 +99,10 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
         RowMajorMatrix::new(trace, self.trace_width())
     }
 
+    fn air_name(&self) -> String {
+        "FieldArithmetic".to_string()
+    }
+
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,

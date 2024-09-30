@@ -70,6 +70,10 @@ impl<F: Field> MachineChip<F> for ProgramTester<F> {
         Box::new(ProgramDummyAir::new(self.bus))
     }
 
+    fn air_name(&self) -> String {
+        "ProgramDummy".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.records.len()
     }

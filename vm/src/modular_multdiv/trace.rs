@@ -98,6 +98,10 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         Box::new(self.air.clone())
     }
 
+    fn air_name(&self) -> String {
+        "ModularMultDiv".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.data.len()
     }

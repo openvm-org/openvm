@@ -47,6 +47,10 @@ impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
         Box::new(self.air)
     }
 
+    fn air_name(&self) -> String {
+        "FieldExtensionArithmetic".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.records.len()
     }

@@ -40,6 +40,10 @@ impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
         Box::new(self.air.clone())
     }
 
+    fn air_name(&self) -> String {
+        "Poseidon2".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.records.len()
     }

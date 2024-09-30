@@ -47,6 +47,7 @@ pub trait MachineChip<F>: Sized {
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>;
+    fn air_name(&self) -> String;
     fn generate_public_values(&mut self) -> Vec<F> {
         vec![]
     }
@@ -61,6 +62,9 @@ pub trait MachineChip<F>: Sized {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         vec![self.air()]
+    }
+    fn air_names(&self) -> Vec<String> {
+        vec![self.air_name()]
     }
     fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
         vec![self.generate_public_values()]
@@ -124,6 +128,13 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
     }
     fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
         self.borrow_mut().generate_public_values_per_air()
+    }
+
+    fn air_name(&self) -> String {
+        self.borrow().air_name()
+    }
+    fn air_names(&self) -> Vec<String> {
+        self.borrow().air_names()
     }
 
     fn current_trace_height(&self) -> usize {
@@ -194,6 +205,10 @@ impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
         Box::new(self.air)
     }
 
+    fn air_name(&self) -> String {
+        "VariableRangeChecker".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         1 << (1 + self.air.bus.range_max_bits)
     }
@@ -215,6 +230,10 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeTupleCheckerChip> {
         Box::new(self.air.clone())
     }
 
+    fn air_name(&self) -> String {
+        "RangeTupleChecker".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.air.height() as usize
     }
@@ -234,6 +253,10 @@ impl<F: PrimeField32, const M: usize> MachineChip<F> for Arc<XorLookupChip<M>> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air)
+    }
+
+    fn air_name(&self) -> String {
+        "XorLookup".to_string()
     }
 
     fn current_trace_height(&self) -> usize {

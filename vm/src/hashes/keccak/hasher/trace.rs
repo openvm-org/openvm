@@ -200,6 +200,10 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
         Box::new(self.air)
     }
 
+    fn air_name(&self) -> String {
+        "KeccakVm".to_string()
+    }
+
     fn trace_width(&self) -> usize {
         BaseAir::<F>::width(&self.air)
     }

@@ -47,6 +47,10 @@ impl<F: PrimeField32> MachineChip<F> for UiChip<F> {
         Box::new(self.air)
     }
 
+    fn air_name(&self) -> String {
+        "Ui".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.data.len()
     }

@@ -43,6 +43,10 @@ impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
         Box::new(self.air.clone())
     }
 
+    fn air_name(&self) -> String {
+        "EcAddUnequal".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.data.len()
     }
@@ -129,6 +133,10 @@ impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
         p3_uni_stark::Domain<SC>: p3_commit::PolynomialSpace<Val = F>,
     {
         Box::new(self.air.clone())
+    }
+
+    fn air_name(&self) -> String {
+        "EcDouble".to_string()
     }
 
     fn current_trace_height(&self) -> usize {

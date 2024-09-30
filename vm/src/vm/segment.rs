@@ -13,7 +13,7 @@ use afs_primitives::{
 };
 use afs_stark_backend::rap::AnyRap;
 use backtrace::Backtrace;
-use itertools::izip;
+use itertools::{izip, Itertools};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -410,21 +410,20 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
 
             let now_trace_cells = self.current_trace_cells();
-            let added_trace_cells = now_trace_cells - prev_trace_cells;
 
             if collect_metrics {
                 let key = (dsl_instr.clone(), opcode.to_string());
-                *self
-                    .collected_metrics
-                    .opcode_counts
-                    .entry(key.clone())
-                    .or_insert(0) += 1;
+                *self.collected_metrics.counts.entry(key).or_insert(0) += 1;
 
-                *self
-                    .collected_metrics
-                    .opcode_trace_cells
-                    .entry(key)
-                    .or_insert(0) += added_trace_cells;
+                for (chip_name, now_value) in now_trace_cells.iter() {
+                    let metrics_key = (dsl_instr.clone(), opcode.to_string(), chip_name.clone());
+                    let prev_value = prev_trace_cells.get(chip_name).unwrap_or(&0);
+                    *self
+                        .collected_metrics
+                        .trace_cells
+                        .entry(metrics_key)
+                        .or_insert(0) += now_value - prev_value;
+                }
             }
 
             prev_backtrace = trace;
@@ -437,7 +436,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
                 collect_metrics = false;
                 #[cfg(feature = "bench-metrics")]
-                metrics::counter!("total_cells_used").absolute(self.current_trace_cells() as u64);
+                metrics::counter!("total_cells_used")
+                    .absolute(self.current_trace_cells().into_values().sum::<usize>() as u64);
             }
             if opcode == Opcode::TERMINATE {
                 break;
@@ -459,6 +459,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
 
         Ok(())
+    }
+
+    pub fn current_trace_cells(&self) -> BTreeMap<String, usize> {
+        self.chips
+            .iter()
+            .flat_map(|chip| {
+                chip.air_names()
+                    .into_iter()
+                    .zip_eq(chip.current_trace_cells())
+            })
+            .collect()
     }
 
     /// Compile the AIRs and trace generation outputs for the chips used in this segment
@@ -511,13 +522,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 .iter()
                 .any(|height| *height > self.config.max_segment_len)
         })
-    }
-
-    fn current_trace_cells(&self) -> usize {
-        self.chips
-            .iter()
-            .map(|chip| chip.current_trace_cells().into_iter().sum::<usize>())
-            .sum()
     }
 
     pub(crate) fn update_chip_metrics(&mut self) {

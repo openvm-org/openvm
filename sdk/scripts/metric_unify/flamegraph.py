@@ -51,7 +51,7 @@ def create_flamegraph(metrics_file, stack_keys, metric_name, reverse=False):
 
     fname = os.path.splitext(os.path.basename(metrics_file))[0]
 
-    path_prefix = f"{FLAMEGRAPHS_DIR}{fname}.{'.'.join(stack_keys)}.{metric_name}"
+    path_prefix = f"{FLAMEGRAPHS_DIR}{fname}.{'.'.join(stack_keys)}.{metric_name}{'.reverse' if reverse else ''}"
     stacks_path = f"{path_prefix}.stacks"
     flamegraph_path = f"{path_prefix}.svg"
 
@@ -69,9 +69,10 @@ def create_flamegraph(metrics_file, stack_keys, metric_name, reverse=False):
 
 
 def create_custom_flamegraphs(metrics_file):
-    create_flamegraph(metrics_file, ["cycle_tracker_span", "dsl_ir", "opcode"], "frequency", reverse=True)
-    create_flamegraph(metrics_file, ["cycle_tracker_span", "dsl_ir", "opcode"], "cells_used", reverse=True)
-    create_flamegraph(metrics_file, ["cycle_tracker_span", "chip_name"], "rows_used")
+    for reverse in [False, True]:
+        create_flamegraph(metrics_file, ["cycle_tracker_span", "dsl_ir", "opcode"], "frequency", reverse=reverse)
+        create_flamegraph(metrics_file, ["cycle_tracker_span", "dsl_ir", "opcode", "air_name"], "cells_used", reverse=reverse)
+        create_flamegraph(metrics_file, ["cycle_tracker_span", "chip_name"], "rows_used", reverse=reverse)
 
 
 def main():

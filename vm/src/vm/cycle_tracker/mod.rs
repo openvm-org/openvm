@@ -159,7 +159,7 @@ mod emit {
                         ];
                         counter!("rows_used", &labels).increment(value as u64);
                     }
-                    for ((dsl_ir, opcode), value) in span.metrics.opcode_counts {
+                    for ((dsl_ir, opcode), value) in span.metrics.counts {
                         if value > 0 {
                             let labels = [
                                 ("opcode", opcode),
@@ -169,9 +169,10 @@ mod emit {
                             counter!("frequency", &labels).increment(value as u64);
                         }
                     }
-                    for ((dsl_ir, opcode), value) in span.metrics.opcode_trace_cells {
+                    for ((dsl_ir, opcode, air_name), value) in span.metrics.trace_cells {
                         if value > 0 {
                             let labels = [
+                                ("air_name", air_name),
                                 ("opcode", opcode),
                                 ("dsl_ir", dsl_ir.unwrap_or_else(String::new)),
                                 ("cycle_tracker_span", full_name.clone()),
@@ -206,10 +207,10 @@ impl Display for CycleTracker<VmMetrics> {
                 for (key, value) in &span.metrics.chip_heights {
                     *total_vm_metrics.entry(key.clone()).or_insert(0) += value;
                 }
-                for (key, value) in &span.metrics.opcode_counts {
+                for (key, value) in &span.metrics.counts {
                     *total_opcode_counts.entry(key.clone()).or_insert(0) += value;
                 }
-                for (key, value) in &span.metrics.opcode_trace_cells {
+                for (key, value) in &span.metrics.trace_cells {
                     *total_opcode_trace_cells.entry(key.clone()).or_insert(0) += value;
                 }
             }
@@ -248,21 +249,22 @@ impl Display for CycleTracker<VmMetrics> {
                 if *value > 0 {
                     writeln!(
                         f,
-                        "  - {:?}::{}: {}",
-                        dsl_ir,
+                        "  - {};{}: {}",
+                        dsl_ir.as_ref().unwrap_or(&String::new()),
                         opcode,
                         format_number_with_underscores(*value)
                     )?;
                 }
             }
 
-            for ((dsl_ir, opcode), value) in sorted_opcode_trace_cells {
+            for ((dsl_ir, opcode, air_name), value) in sorted_opcode_trace_cells {
                 if *value > 0 {
                     writeln!(
                         f,
-                        "  - {:?}::{}: {}",
-                        dsl_ir,
+                        "  - {};{};{}: {}",
+                        dsl_ir.as_ref().unwrap_or(&String::new()),
                         opcode,
+                        air_name,
                         format_number_with_underscores(*value)
                     )?;
                 }

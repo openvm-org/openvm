@@ -25,6 +25,10 @@ impl<F: PrimeField64> MachineChip<F> for ProgramChip<F> {
         Box::new(self.air.clone())
     }
 
+    fn air_name(&self) -> String {
+        "Program".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.true_program_length
     }
