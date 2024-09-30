@@ -18,7 +18,6 @@ use crate::{
         program::Instruction,
     },
 };
-
 // Assuming two reads 1 write.
 
 /// Reads `NUM_READS` register values and uses each register value as a pointer to batch read `READ_SIZE` memory cells from

@@ -1,14 +1,14 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{air::MemoryAuditAir, columns::AuditCols};
+use super::{air::VolatileBoundaryAir, columns::VolatileBoundaryCols};
 use crate::system::memory::MemoryAddress;
 
-impl MemoryAuditAir {
+impl VolatileBoundaryAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: AuditCols<AB::Var>,
+        local: VolatileBoundaryCols<AB::Var>,
     ) {
         let mult = AB::Expr::one() - local.is_extra;
         // Write the initial memory values at initial timestamps

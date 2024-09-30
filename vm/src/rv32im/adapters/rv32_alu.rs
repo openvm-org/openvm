@@ -14,7 +14,8 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAuxColsFactory, MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
+            MemoryAuxColsFactory, MemoryChipRef, MemoryChip, MemoryReadRecord,
+            MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },

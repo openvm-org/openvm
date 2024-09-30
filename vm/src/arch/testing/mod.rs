@@ -144,7 +144,8 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let memory_chip = MemoryChip::new(MemoryBus(1), mem_config, range_checker);
+        let memory_chip =
+            MemoryChip::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
         Self {
             memory: MemoryTester::new(Rc::new(RefCell::new(memory_chip))),
             execution: ExecutionTester::new(ExecutionBus(0)),

@@ -1,16 +1,14 @@
 use std::{
     cmp::{max, Ordering},
-    collections::HashMap,
+    collections::{BTreeMap, HashMap, HashSet},
     fmt::Debug,
-    hash::Hash,
     mem,
 };
 
 use p3_field::PrimeField32;
 use p3_util::log2_strict_usize;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct AddressSpace(pub u32);
+use crate::system::memory::{MemoryEquipartition, TimestampedValues};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Block<T> {
@@ -20,7 +18,7 @@ enum Block<T> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum AccessAdapterRecordKind {
+pub enum AccessAdapterRecordKind {
     Split,
     Merge {
         left_timestamp: u32,
@@ -29,12 +27,12 @@ pub(super) enum AccessAdapterRecordKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct AccessAdapterRecord<T> {
-    pub(super) timestamp: u32,
-    pub(super) address_space: T,
-    pub(super) start_index: T,
-    pub(super) data: Vec<T>,
-    pub(super) kind: AccessAdapterRecordKind,
+pub struct AccessAdapterRecord<T> {
+    pub timestamp: u32,
+    pub address_space: T,
+    pub start_index: T,
+    pub data: Vec<T>,
+    pub kind: AccessAdapterRecordKind,
 }
 
 /// Represents a single or batch memory write operation.
@@ -74,6 +72,12 @@ impl<T: Copy> MemoryReadRecord<T, 1> {
     }
 }
 
+// The ID of the node corresponding to the block in the binary trie. (See [Memory] for more details.)
+//
+// The ID of the root node is 1. The ID of the left child of a node with id `node_id` is `2*node_id`,
+// and the ID of the right child is `2*node_id + 1`.
+//
+// Thus, the ith block of size 2^j has ID `2^{pointer_max_bits - j} + i`.
 type BlockId = usize;
 
 /// Tracks the state of memory cells specified by `(address_space, index)` tuples.
@@ -85,8 +89,8 @@ type BlockId = usize;
 #[derive(Debug, Clone)]
 pub struct Memory<T> {
     timestamp: u32,
-    memory_size: usize,
-    blocks: HashMap<(AddressSpace, BlockId), Block<T>>,
+    pointer_max_bits: usize,
+    blocks: HashMap<(T, BlockId), Block<T>>,
     initial_block_len: usize,
 }
 
@@ -94,18 +98,27 @@ impl<F: PrimeField32> Memory<F> {
     /// The timestamp corresponding to initial memory.
     const INITIAL_TIMESTAMP: u32 = 0;
 
-    /// Creates a new `Memory` instance with the given `memory_size` and `initial_block_len`.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if `memory_size` is not a power of two.
-    pub fn new(memory_size: usize, initial_block_len: usize) -> Self {
-        assert!(memory_size.is_power_of_two());
+    /// Creates a new `Memory` instance with the given `pointer_max_bits` and `initial_block_len`.
+    pub fn new<const N: usize>(
+        initial_memory: &MemoryEquipartition<F, N>,
+        pointer_max_bits: usize,
+    ) -> Self {
+        let mut blocks = HashMap::new();
+        for ((address_space, label), timestamped_values) in initial_memory {
+            let block_id = ((1 << pointer_max_bits) + label * N) >> log2_strict_usize(N);
+            blocks.insert(
+                (*address_space, block_id),
+                Block::Active {
+                    timestamp: timestamped_values.timestamp,
+                    data: timestamped_values.values.into(),
+                },
+            );
+        }
         Self {
             timestamp: Self::INITIAL_TIMESTAMP + 1,
-            blocks: HashMap::new(),
-            memory_size,
-            initial_block_len,
+            blocks,
+            pointer_max_bits,
+            initial_block_len: N,
         }
     }
 
@@ -129,7 +142,7 @@ impl<F: PrimeField32> Memory<F> {
     /// Writes an array of values to the memory at the specified address space and start index.
     pub fn write<const N: usize>(
         &mut self,
-        address_space: AddressSpace,
+        address_space: F,
         start_index: usize,
         values: [F; N],
     ) -> (MemoryWriteRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
@@ -150,7 +163,7 @@ impl<F: PrimeField32> Memory<F> {
 
             *timestamp = self.timestamp;
             let record = MemoryWriteRecord {
-                address_space: F::from_canonical_u32(address_space.0),
+                address_space,
                 pointer: F::from_canonical_usize(start_index),
                 timestamp: F::from_canonical_u32(self.timestamp),
                 prev_timestamp: F::from_canonical_u32(prev_timestamp),
@@ -169,7 +182,7 @@ impl<F: PrimeField32> Memory<F> {
     /// Reads an array of values from the memory at the specified address space and start index.
     pub fn read<const N: usize>(
         &mut self,
-        address_space: AddressSpace,
+        address_space: F,
         start_index: usize,
     ) -> (MemoryReadRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
         let new_active_block_records = self.access(address_space, start_index, N);
@@ -189,7 +202,7 @@ impl<F: PrimeField32> Memory<F> {
 
             *timestamp = self.timestamp;
             let record = MemoryReadRecord {
-                address_space: F::from_canonical_u32(address_space.0),
+                address_space,
                 pointer: F::from_canonical_usize(start_index),
                 timestamp: F::from_canonical_u32(self.timestamp),
                 prev_timestamp: F::from_canonical_u32(prev_timestamp),
@@ -206,7 +219,7 @@ impl<F: PrimeField32> Memory<F> {
 
     pub(super) fn access(
         &mut self,
-        address_space: AddressSpace,
+        address_space: F,
         start_index: usize,
         len: usize,
     ) -> Vec<AccessAdapterRecord<F>> {
@@ -223,9 +236,10 @@ impl<F: PrimeField32> Memory<F> {
         records
     }
 
+    // Returns the block ID of the block of length `len` containing the index `index`.
     fn block_id(&self, index: usize, len: usize) -> BlockId {
-        // Leaves have labels from memory_size..2*memory_size - 1.
-        (self.memory_size + index) >> log2_strict_usize(len)
+        // Leaves have labels from (1 << pointer_max_bits)..(1 << (pointer_max_bits + 1)) - 1.
+        ((1 << self.pointer_max_bits) + index) >> log2_strict_usize(len)
     }
 
     /// Recursively makes a memory block active and produces adapter records.
@@ -239,7 +253,7 @@ impl<F: PrimeField32> Memory<F> {
     /// each block of max size.
     fn node_access(
         &mut self,
-        address_space: AddressSpace,
+        address_space: F,
         block_id: BlockId,
         start: usize,
         len: usize,
@@ -292,7 +306,7 @@ impl<F: PrimeField32> Memory<F> {
 
                 records.push(AccessAdapterRecord {
                     timestamp,
-                    address_space: F::from_canonical_u32(address_space.0),
+                    address_space,
                     start_index: F::from_canonical_usize(start),
                     data: data.clone(),
                     kind: AccessAdapterRecordKind::Merge {
@@ -343,7 +357,7 @@ impl<F: PrimeField32> Memory<F> {
 
                 records.push(AccessAdapterRecord {
                     timestamp: parent_timestamp,
-                    address_space: F::from_canonical_u32(address_space.0),
+                    address_space,
                     start_index: F::from_canonical_usize(parent_start),
                     data: parent_data,
                     kind: AccessAdapterRecordKind::Split,
@@ -353,36 +367,106 @@ impl<F: PrimeField32> Memory<F> {
         }
     }
 
+    /// Finalizes the memory state to a partition in which all parts have size `N`.
+    pub fn finalize<const N: usize>(
+        &mut self,
+    ) -> (MemoryEquipartition<F, N>, Vec<AccessAdapterRecord<F>>) {
+        let mut adapter_records = vec![];
+        let mut blocks = HashSet::new();
+
+        let target_block_height = log2_strict_usize(N);
+
+        for ((address_space, block_id), block) in self.blocks.iter() {
+            if !matches!(block, Block::Active { .. }) {
+                continue;
+            }
+            // Leaves are at `block_height = 0`.
+            let block_height =
+                (self.pointer_max_bits + 1) - (usize::BITS - block_id.leading_zeros()) as usize;
+
+            match block_height.cmp(&target_block_height) {
+                Ordering::Less => {
+                    // we need to access the block of height `target_block_height` containing this block
+                    blocks.insert((
+                        *address_space,
+                        block_id >> (target_block_height - block_height),
+                    ));
+                }
+                Ordering::Greater => {
+                    let start_block_id = block_id << (block_height - target_block_height);
+                    for i in 0..(1 << (block_height - target_block_height)) {
+                        blocks.insert((*address_space, start_block_id + i));
+                    }
+                }
+                Ordering::Equal => {
+                    blocks.insert((*address_space, *block_id));
+                }
+            }
+        }
+
+        let mut final_memory = BTreeMap::new();
+
+        for (address_space, block_id) in blocks {
+            let start_index = (block_id << target_block_height) - (1 << self.pointer_max_bits);
+            let label = start_index / N;
+            let (timestamp, data) = self.node_access(
+                address_space,
+                block_id,
+                start_index,
+                N,
+                &mut adapter_records,
+            );
+            final_memory.insert(
+                (address_space, label),
+                TimestampedValues {
+                    values: data.try_into().unwrap(),
+                    timestamp,
+                },
+            );
+        }
+        (final_memory, adapter_records)
+    }
+
     /// Retrieves the value and timestamp at a specific memory index within an address space.
-    pub fn get(&self, address_space: AddressSpace, index: usize) -> Option<(u32, &F)> {
-        let mut block_id = self.block_id(index, 1);
+    pub fn get(&self, address_space: F, index: usize) -> Option<(u32, &F)> {
+        let mut block_len = self.initial_block_len;
+        let mut block_id = self.block_id(index, block_len);
 
         while let Some(block) = self.blocks.get(&(address_space, block_id)) {
             match block {
                 Block::ContainedInActive => {
                     block_id /= 2;
+                    block_len *= 2;
                 }
                 Block::Active { data, timestamp } => {
-                    let height = block_id.trailing_zeros();
-                    let index = index & ((1 << height) - 1);
-                    return Some((*timestamp, data.get(index)?));
+                    let index_in_block = index & (block_len - 1);
+                    return Some((*timestamp, data.get(index_in_block)?));
                 }
-                Block::ContainsActive => unreachable!(),
+                Block::ContainsActive => {
+                    let index_in_block = index & (block_len - 1);
+                    if index_in_block < block_len / 2 {
+                        block_id *= 2;
+                    } else {
+                        block_id = block_id * 2 + 1;
+                    }
+                    block_len /= 2;
+                }
             }
         }
         None
     }
 }
 
+// TODO: Fix tests for other starting partition sizes.
 #[cfg(test)]
 mod tests {
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
 
-    use super::{AccessAdapterRecord, AccessAdapterRecordKind, AddressSpace, Memory};
-    use crate::system::memory::{MemoryReadRecord, MemoryWriteRecord};
-
-    const MEMORY_SIZE: usize = 1 << 30;
+    use super::{AccessAdapterRecord, AccessAdapterRecordKind, Memory};
+    use crate::system::memory::{
+        MemoryEquipartition, MemoryReadRecord, MemoryWriteRecord, TimestampedValues,
+    };
 
     macro_rules! bb {
         ($x:expr) => {
@@ -403,25 +487,45 @@ mod tests {
     }
 
     #[test]
-    fn test_write_read() {
-        let mut memory = Memory::<BabyBear>::new(MEMORY_SIZE, 1);
+    fn test_write_read_initial_block_len_1() {
+        let initial_memory = MemoryEquipartition::<BabyBear, 1>::new();
+        let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
+        let address_space = BabyBear::one();
 
-        memory.write(AddressSpace(1), 0, bba![1, 2, 3, 4]);
+        memory.write(address_space, 0, bba![1, 2, 3, 4]);
 
-        let (read_record, _) = memory.read::<2>(AddressSpace(1), 0);
+        let (read_record, _) = memory.read::<2>(address_space, 0);
         assert_eq!(read_record.data, bba![1, 2]);
 
-        memory.write(AddressSpace(1), 2, bba![100]);
+        memory.write(address_space, 2, bba![100]);
 
-        let (read_record, _) = memory.read::<4>(AddressSpace(1), 0);
+        let (read_record, _) = memory.read::<4>(address_space, 0);
         assert_eq!(read_record.data, bba![1, 2, 100, 4]);
     }
 
     #[test]
-    fn test_records() {
-        let mut memory = Memory::<BabyBear>::new(MEMORY_SIZE, 1);
+    fn test_write_read_initial_block_len_8() {
+        let initial_memory = MemoryEquipartition::<BabyBear, 8>::new();
+        let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
+        let address_space = BabyBear::one();
 
-        let (write_record, adapter_records) = memory.write(AddressSpace(1), 0, bba![1, 2, 3, 4]);
+        memory.write(address_space, 0, bba![1, 2, 3, 4]);
+
+        let (read_record, _) = memory.read::<2>(address_space, 0);
+        assert_eq!(read_record.data, bba![1, 2]);
+
+        memory.write(address_space, 2, bba![100]);
+
+        let (read_record, _) = memory.read::<4>(address_space, 0);
+        assert_eq!(read_record.data, bba![1, 2, 100, 4]);
+    }
+
+    #[test]
+    fn test_records_initial_block_len_1() {
+        let initial_memory = MemoryEquipartition::<BabyBear, 1>::new();
+        let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
+
+        let (write_record, adapter_records) = memory.write(bb!(1), 0, bba![1, 2, 3, 4]);
 
         // Above write first causes merge of [0:1] and [1:2] into [0:2].
         assert_eq!(
@@ -479,7 +583,7 @@ mod tests {
         );
         assert_eq!(memory.timestamp(), 2);
 
-        let (read_record, adapter_records) = memory.read::<4>(AddressSpace(1), 0);
+        let (read_record, adapter_records) = memory.read::<4>(bb!(1), 0);
         // At time 2 we read [0:4].
         assert_eq!(adapter_records.len(), 0);
         assert_eq!(
@@ -494,7 +598,7 @@ mod tests {
         );
         assert_eq!(memory.timestamp(), 3);
 
-        let (read_record, adapter_records) = memory.write::<2>(AddressSpace(1), 0, bba![10, 11]);
+        let (read_record, adapter_records) = memory.write::<2>(bb!(1), 0, bba![10, 11]);
         // write causes split [0:4] into [0:2] and [2:4] (to prepare for write to [0:2]).
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
@@ -521,7 +625,7 @@ mod tests {
             }
         );
 
-        let (read_record, adapter_records) = memory.read::<4>(AddressSpace(1), 0);
+        let (read_record, adapter_records) = memory.read::<4>(bb!(1), 0);
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
             adapter_records[0],
@@ -550,29 +654,228 @@ mod tests {
     }
 
     #[test]
-    fn test_get() {
-        let mut memory = Memory::<BabyBear>::new(MEMORY_SIZE, 1);
+    fn test_records_initial_block_len_8() {
+        let initial_memory = MemoryEquipartition::<BabyBear, 8>::new();
+        let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
 
-        memory.write(AddressSpace(1), 0, bba![4, 3, 2, 1]);
+        let (write_record, adapter_records) = memory.write(bb!(1), 0, bba![1, 2, 3, 4]);
+
+        // Above write first causes split of [0:8] into [0:4] and [4:8].
+        assert_eq!(adapter_records.len(), 1);
+        assert_eq!(
+            adapter_records[0],
+            AccessAdapterRecord {
+                timestamp: 0,
+                address_space: bb!(1),
+                start_index: bb!(0),
+                data: bbvec![0, 0, 0, 0, 0, 0, 0, 0],
+                kind: AccessAdapterRecordKind::Split,
+            }
+        );
+        // At time 1 we write [0:4].
+        assert_eq!(
+            write_record,
+            MemoryWriteRecord {
+                address_space: bb!(1),
+                pointer: bb!(0),
+                timestamp: bb!(1),
+                prev_timestamp: bb!(0),
+                data: bba![1, 2, 3, 4],
+                prev_data: bba![0, 0, 0, 0],
+            }
+        );
+        assert_eq!(memory.timestamp(), 2);
+
+        let (read_record, adapter_records) = memory.read::<4>(bb!(1), 0);
+        // At time 2 we read [0:4].
+        assert_eq!(adapter_records.len(), 0);
+        assert_eq!(
+            read_record,
+            MemoryReadRecord {
+                address_space: bb!(1),
+                pointer: bb!(0),
+                timestamp: bb!(2),
+                prev_timestamp: bb!(1),
+                data: bba![1, 2, 3, 4],
+            }
+        );
+        assert_eq!(memory.timestamp(), 3);
+
+        let (read_record, adapter_records) = memory.write::<2>(bb!(1), 0, bba![10, 11]);
+        // write causes split [0:4] into [0:2] and [2:4] (to prepare for write to [0:2]).
+        assert_eq!(adapter_records.len(), 1);
+        assert_eq!(
+            adapter_records[0],
+            AccessAdapterRecord {
+                timestamp: 2,
+                address_space: bb!(1),
+                start_index: bb!(0),
+                data: bbvec![1, 2, 3, 4],
+                kind: AccessAdapterRecordKind::Split,
+            }
+        );
+
+        // At time 3 we write [10, 11] into [0, 2].
+        assert_eq!(
+            read_record,
+            MemoryWriteRecord {
+                address_space: bb!(1),
+                pointer: bb!(0),
+                timestamp: bb!(3),
+                prev_timestamp: bb!(2),
+                data: bba![10, 11],
+                prev_data: bba![1, 2],
+            }
+        );
+
+        let (read_record, adapter_records) = memory.read::<4>(bb!(1), 0);
+        assert_eq!(adapter_records.len(), 1);
+        assert_eq!(
+            adapter_records[0],
+            AccessAdapterRecord {
+                timestamp: 3,
+                address_space: bb!(1),
+                start_index: bb!(0),
+                data: bbvec![10, 11, 3, 4],
+                kind: AccessAdapterRecordKind::Merge {
+                    left_timestamp: 3,
+                    right_timestamp: 2
+                },
+            }
+        );
+        // At time 9 we read [0:4].
+        assert_eq!(
+            read_record,
+            MemoryReadRecord {
+                address_space: bb!(1),
+                pointer: bb!(0),
+                timestamp: bb!(4),
+                prev_timestamp: bb!(3),
+                data: bba![10, 11, 3, 4],
+            }
+        );
+    }
+
+    #[test]
+    fn test_get_initial_block_len_1() {
+        let initial_memory = MemoryEquipartition::<BabyBear, 1>::new();
+        let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
+
+        memory.write(bb!(1), 0, bba![4, 3, 2, 1]);
 
         assert_eq!(
-            memory.get(AddressSpace(1), 0),
+            memory.get(bb!(1), 0),
             Some((1, &BabyBear::from_canonical_u32(4)))
         );
         assert_eq!(
-            memory.get(AddressSpace(1), 1),
+            memory.get(bb!(1), 1),
             Some((1, &BabyBear::from_canonical_u32(3)))
         );
         assert_eq!(
-            memory.get(AddressSpace(1), 2),
+            memory.get(bb!(1), 2),
             Some((1, &BabyBear::from_canonical_u32(2)))
         );
         assert_eq!(
-            memory.get(AddressSpace(1), 3),
+            memory.get(bb!(1), 3),
             Some((1, &BabyBear::from_canonical_u32(1)))
         );
-        assert_eq!(memory.get(AddressSpace(1), 5), None);
+        assert_eq!(memory.get(bb!(1), 5), None);
 
-        assert_eq!(memory.get(AddressSpace(0), 0), None);
+        assert_eq!(memory.get(bb!(0), 0), None);
+    }
+
+    #[test]
+    fn test_get_initial_block_len_8() {
+        let initial_memory = MemoryEquipartition::<BabyBear, 8>::new();
+        let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
+
+        memory.write(bb!(1), 0, bba![4, 3, 2, 1]);
+
+        assert_eq!(
+            memory.get(bb!(1), 0),
+            Some((1, &BabyBear::from_canonical_u32(4)))
+        );
+        assert_eq!(
+            memory.get(bb!(1), 1),
+            Some((1, &BabyBear::from_canonical_u32(3)))
+        );
+        assert_eq!(
+            memory.get(bb!(1), 2),
+            Some((1, &BabyBear::from_canonical_u32(2)))
+        );
+        assert_eq!(
+            memory.get(bb!(1), 3),
+            Some((1, &BabyBear::from_canonical_u32(1)))
+        );
+        assert_eq!(memory.get(bb!(1), 5), Some((0, &BabyBear::zero())));
+        assert_eq!(memory.get(bb!(1), 9), None);
+
+        assert_eq!(memory.get(bb!(0), 0), None);
+    }
+
+    #[test]
+    fn test_finalize_empty() {
+        let initial_memory = MemoryEquipartition::<BabyBear, 4>::new();
+        let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
+
+        let (memory, records) = memory.finalize::<4>();
+        assert_eq!(memory.len(), 0);
+        assert_eq!(records.len(), 0);
+    }
+
+    #[test]
+    fn test_finalize_block_len_8() {
+        let initial_memory = MemoryEquipartition::<BabyBear, 8>::new();
+        let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
+        // Make block 0:4 in address space 1 active.
+        memory.write(bb!(1), 0, bba![1, 2, 3, 4]);
+
+        // Make block 16:32 in address space 1 active.
+        memory.write(
+            bb!(1),
+            16,
+            bba![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        );
+
+        // Make block 64:72 in address space 2 active.
+        memory.write(bb!(2), 64, bba![8, 7, 6, 5, 4, 3, 2, 1]);
+
+        // Finalize to a partition of size 8.
+        let (final_memory, records) = memory.finalize::<8>();
+        assert_eq!(final_memory.len(), 4);
+        assert_eq!(
+            final_memory.get(&(bb!(1), 0)),
+            Some(&TimestampedValues {
+                values: bba![1, 2, 3, 4, 0, 0, 0, 0],
+                timestamp: 1,
+            })
+        );
+        // start_index = 16 corresponds to label = 2
+        assert_eq!(
+            final_memory.get(&(bb!(1), 2)),
+            Some(&TimestampedValues {
+                values: bba![1, 1, 1, 1, 1, 1, 1, 1],
+                timestamp: 2,
+            })
+        );
+        // start_index = 24 corresponds to label = 3
+        assert_eq!(
+            final_memory.get(&(bb!(1), 3)),
+            Some(&TimestampedValues {
+                values: bba![1, 1, 1, 1, 1, 1, 1, 1],
+                timestamp: 2,
+            })
+        );
+        // start_index = 64 corresponds to label = 8
+        assert_eq!(
+            final_memory.get(&(bb!(2), 8)),
+            Some(&TimestampedValues {
+                values: bba![8, 7, 6, 5, 4, 3, 2, 1],
+                timestamp: 3,
+            })
+        );
+
+        // We need to do 1 + 1 + 0 = 2 adapters.
+        assert_eq!(records.len(), 2);
     }
 }

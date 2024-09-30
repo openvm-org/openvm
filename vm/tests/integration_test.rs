@@ -21,7 +21,10 @@ use stark_vm::{
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     system::{
         program::{Instruction, Program},
-        vm::{config::VmConfig, VirtualMachine},
+        vm::{
+            config::{MemoryConfig, PersistenceType, VmConfig},
+            VirtualMachine,
+        },
     },
 };
 use tracing::Level;
@@ -60,10 +63,15 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
 fn air_test_with_compress_poseidon2(
     poseidon2_max_constraint_degree: usize,
     program: Program<BabyBear>,
+    memory_persistence: PersistenceType,
 ) {
     let vm = VirtualMachine::new(
         VmConfig {
             poseidon2_max_constraint_degree,
+            memory_config: MemoryConfig {
+                persistence_type: memory_persistence,
+                ..Default::default()
+            },
             ..VmConfig::core()
         }
         .add_default_executor(ExecutorName::Poseidon2),
@@ -131,6 +139,46 @@ fn test_vm_1() {
     let program = Program::from_instructions(&instructions);
 
     air_test(vm_config_with_field_arithmetic(), program, vec![]);
+}
+
+#[test]
+fn test_vm_1_persistent() {
+    setup_tracing_with_log_level(Level::TRACE);
+
+    let n = 6;
+    /*
+    Instruction 0 assigns word[0]_1 to n.
+    Instruction 4 terminates
+    The remainder is a loop that decrements word[0]_1 until it reaches 0, then terminates.
+    Instruction 1 checks if word[0]_1 is 0 yet, and if so sets pc to 5 in order to terminate
+    Instruction 2 decrements word[0]_1 (using word[1]_1)
+    Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
+     */
+    let instructions = vec![
+        // word[0]_1 <- word[n]_0
+        Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
+        // if word[0]_1 == 0 then pc += 3
+        Instruction::from_isize(BEQ.with_default_offset(), 0, 0, 3, 1, 0),
+        // word[0]_1 <- word[0]_1 - word[1]_0
+        Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
+        // word[2]_1 <- pc + 1, pc -= 2
+        Instruction::from_isize(JAL.with_default_offset(), 2, -2, 0, 1, 0),
+        // terminate
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+
+    air_test(
+        VmConfig {
+            poseidon2_max_constraint_degree: 3,
+            memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
+            ..VmConfig::core()
+        }
+        .add_default_executor(ExecutorName::FieldArithmetic),
+        program,
+        vec![],
+    );
 }
 
 #[test]
@@ -217,6 +265,8 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
 #[test]
 fn test_vm_field_extension_arithmetic() {
+    setup_tracing_with_log_level(Level::DEBUG);
+
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 2, 1, 0, 0, 1),
@@ -227,7 +277,7 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(STOREW.with_default_offset(), 1, 6, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 2, 7, 0, 0, 1),
         Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
-        // Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
         Instruction::from_isize(FE4SUB.with_default_offset(), 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4MUL.with_default_offset(), 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4DIV.with_default_offset(), 12, 0, 4, 1, 1),
@@ -240,6 +290,42 @@ fn test_vm_field_extension_arithmetic() {
         VmConfig::core()
             .add_default_executor(ExecutorName::FieldArithmetic)
             .add_default_executor(ExecutorName::FieldExtension),
+        program,
+        vec![],
+    );
+}
+
+#[test]
+fn test_vm_field_extension_arithmetic_persistent() {
+    setup_tracing_with_log_level(Level::DEBUG);
+
+    let instructions = vec![
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 1, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 2, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 3, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 4, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 5, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 6, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 7, 0, 0, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4MUL.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4DIV.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+
+    air_test(
+        VmConfig {
+            poseidon2_max_constraint_degree: 3,
+            memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
+            ..VmConfig::core()
+        }
+        .add_default_executor(ExecutorName::FieldArithmetic)
+        .add_default_executor(ExecutorName::FieldExtension),
         program,
         vec![],
     );
@@ -357,8 +443,10 @@ fn test_vm_compress_poseidon2_as2() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test_with_compress_poseidon2(7, program.clone());
-    air_test_with_compress_poseidon2(3, program);
+    air_test_with_compress_poseidon2(7, program.clone(), PersistenceType::Volatile);
+    air_test_with_compress_poseidon2(3, program.clone(), PersistenceType::Volatile);
+    air_test_with_compress_poseidon2(7, program.clone(), PersistenceType::Persistent);
+    air_test_with_compress_poseidon2(3, program.clone(), PersistenceType::Persistent);
 }
 
 /// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output

@@ -71,7 +71,10 @@ use crate::{
         rv32_jalr::{Rv32JalrChip, Rv32JalrCoreChip},
     },
     system::{
-        memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
+        memory::{
+            expand::MemoryMerkleBus, offline_checker::MemoryBus, MemoryChipRef, MemoryChip,
+            MemoryEquipartition, CHUNK,
+        },
         program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
         vm::config::PersistenceType,
     },
@@ -120,6 +123,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let execution_bus = ExecutionBus(0);
         let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
         let memory_bus = MemoryBus(1);
+        let merkle_bus = MemoryMerkleBus(12);
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -128,11 +132,24 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, [(1 << 8), 32 * (1 << 8)]);
         let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
-        let memory_chip = Rc::new(RefCell::new(MemoryChip::new(
-            memory_bus,
-            config.memory_config.clone(),
-            range_checker.clone(),
-        )));
+        let memory_chip = match config.memory_config.persistence_type {
+            PersistenceType::Volatile => {
+                Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
+                    memory_bus,
+                    config.memory_config.clone(),
+                    range_checker.clone(),
+                )))
+            }
+            PersistenceType::Persistent => {
+                Rc::new(RefCell::new(MemoryChip::with_persistent_memory(
+                    memory_bus,
+                    config.memory_config.clone(),
+                    range_checker.clone(),
+                    merkle_bus,
+                    MemoryEquipartition::<F, CHUNK>::new(),
+                )))
+            }
+        };
         let program_chip = ProgramChip::new(program);
 
         let mut executors: BTreeMap<usize, AxVmInstructionExecutor<F>> = BTreeMap::new();
@@ -187,6 +204,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             )))
         };
 
+        let mut needs_poseidon_chip =
+            config.memory_config.persistence_type == PersistenceType::Persistent;
+
         for (range, executor, offset) in config.clone().executors {
             for opcode in range.clone() {
                 if executors.contains_key(&opcode) {
@@ -237,7 +257,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, poseidon_chip.clone().into());
                     }
-                    chips.push(AxVmChip::Poseidon2(poseidon_chip.clone()));
+                    needs_poseidon_chip = true;
                 }
                 ExecutorName::Keccak256 => {
                     let chip = Rc::new(RefCell::new(KeccakVmChip::new(
@@ -466,6 +486,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     unreachable!("Modular executors should be handled differently")
                 }
             }
+        }
+
+        if needs_poseidon_chip {
+            chips.push(AxVmChip::Poseidon2(poseidon_chip.clone()));
         }
 
         for (range, executor, offset, modulus) in config.clone().modular_executors {

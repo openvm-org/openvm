@@ -1,14 +1,14 @@
 use afs_derive::AlignedBorrow;
 
 mod adapter;
-mod audit;
-// pub mod expand;
-// pub mod expand_interface;
+pub mod expand;
 mod manager;
 pub mod offline_checker;
+mod persistent;
 #[cfg(test)]
 mod tests;
 pub mod tree;
+mod volatile;
 
 pub use manager::*;
 

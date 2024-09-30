@@ -17,7 +17,7 @@ use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result, VmChip};
 use crate::system::{
-    memory::{MemoryChip, MemoryChipRef},
+    memory::{MemoryChipRef, MemoryChip},
     program::Instruction,
 };
 

@@ -22,6 +22,7 @@ The following must exist in any VM circuit:
 
 - The program chip
 - The core chip
+- A set of memory-related chips (different depending on the persistence type)
 - A program bus
 - An execution bus
 - A memory bus
@@ -98,7 +99,7 @@ checking argument of [BEGKN92](https://www.cs.ubc.ca/~will/papers/memcheck.pdf).
 Any offline memory checking aims to have a transcript consisting of `(a, v, t)` with address `a`, value `v`,
 timestamp `t` (in our ISA `a = (address_space, address)` but we omit this distinction here for brevity). The timestamp
 here is a single field element. As far as we know, the timestamp **must** be global and match what is used by the
-EXECUTION_BUS to ensure that the temporal sequencing of memory accesses matches the temporal sequencing of instruction
+`EXECUTION_BUS` to ensure that the temporal sequencing of memory accesses matches the temporal sequencing of instruction
 execution.
 
 <!--
