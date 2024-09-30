@@ -42,8 +42,8 @@ impl<AB: PartitionedAirBuilder> Air<AB> for SumAir {
     fn eval(&self, builder: &mut AB) {
         assert_eq!(builder.cached_mains().len(), 1);
 
-        let x = builder.cached_mains()[0].row_slice(0)[0];
-        let ys = builder.common_main().row_slice(0);
+        let x = builder.common_main().row_slice(0)[0];
+        let ys = builder.cached_mains()[0].row_slice(0);
 
         let mut y_sum = AB::Expr::zero();
         for &y in &*ys {
@@ -73,7 +73,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let mut keygen_builder = engine.keygen_builder();
     let y_ptr = keygen_builder.add_cached_main_matrix(y_width);
     let x_ptr = keygen_builder.add_main_matrix(1);
-    keygen_builder.add_partitioned_air(&air, vec![x_ptr, y_ptr]);
+    keygen_builder.add_partitioned_air(&air, vec![y_ptr, x_ptr]);
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 

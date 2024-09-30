@@ -114,7 +114,7 @@ fn page_access_chip_test() {
         })
         .collect::<Vec<Vec<Vec<u32>>>>();
 
-    let mut page_controller = PageController::new(bus_index);
+    let mut page_controller = PageController::new(bus_index, page_width);
     let page_requester = DummyInteractionAir::new(1 + page_width, true, bus_index);
 
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(log_num_requests));
