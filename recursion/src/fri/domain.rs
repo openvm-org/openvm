@@ -167,8 +167,8 @@ where
 pub(crate) mod tests {
     use afs_compiler::{asm::AsmBuilder, util::execute_program};
     use ax_sdk::config::{
-        baby_bear_poseidon2::{default_config, default_perm, BabyBearPoseidon2Config},
-        fri_params::default_fri_params,
+        baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
+        FriParameters,
     };
     use p3_commit::{Pcs, PolynomialSpace};
     use p3_field::PrimeField;
@@ -218,7 +218,8 @@ pub(crate) mod tests {
         type ScPcs = <SC as StarkGenericConfig>::Pcs;
 
         let mut rng = thread_rng();
-        let config = default_config(&default_perm(), 27);
+        let fri_params = FriParameters::standard_fast();
+        let config = config_from_perm(&default_perm(), 27, fri_params);
         let pcs = config.pcs();
         let natural_domain_for_degree = |degree: usize| -> Domain<SC> {
             <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(pcs, degree)
@@ -228,7 +229,7 @@ pub(crate) mod tests {
         let mut builder = AsmBuilder::<F, EF>::default();
         builder.flags.static_only = static_only;
 
-        let config_var = const_fri_config(&mut builder, &default_fri_params());
+        let config_var = const_fri_config(&mut builder, &fri_params);
         for i in 0..5 {
             let log_d_val = 10 + i;
 

@@ -8,8 +8,7 @@ use afs_compiler::{
 };
 use ax_sdk::{
     config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::fri_params_with_80_bits_of_security, setup_tracing_with_log_level,
+        baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing_with_log_level, FriParameters,
     },
     engine::StarkFriEngine,
 };
@@ -63,7 +62,7 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
             keccak_enabled: true,
             ..Default::default()
         },
-        BabyBearPoseidon2Engine::new(fri_params_with_80_bits_of_security()[1]),
+        BabyBearPoseidon2Engine::new(FriParameters::standard_fast()),
     )
     .unwrap();
 }

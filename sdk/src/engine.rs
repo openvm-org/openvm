@@ -10,9 +10,7 @@ use afs_stark_backend::{
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
-use crate::config::{
-    fri_params::default_fri_params, instrument::StarkHashStatistics, FriParameters,
-};
+use crate::config::{instrument::StarkHashStatistics, FriParameters};
 
 pub trait StarkEngineWithHashInstrumentation<SC: StarkGenericConfig>: StarkEngine<SC> {
     fn clear_instruments(&mut self);
@@ -86,7 +84,7 @@ where
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: &[Vec<Val<SC>>],
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        let engine = Self::new(default_fri_params());
+        let engine = Self::new(FriParameters::standard_fast());
         StarkFriEngine::<_>::run_simple_test_impl(&engine, chips, traces, public_values)
     }
     fn run_simple_test_no_pis(

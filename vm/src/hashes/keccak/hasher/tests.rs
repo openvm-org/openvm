@@ -5,7 +5,7 @@ use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationErro
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{default_perm, engine_from_perm, BabyBearPoseidon2Engine},
-        fri_params::fri_params_with_80_bits_of_security,
+        FriParameters,
     },
     utils::create_seeded_rng,
 };
@@ -30,7 +30,7 @@ use crate::{
 fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = default_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let fri_params = FriParameters::standard_fast();
     engine_from_perm(perm, max_log_degree, fri_params)
 }
 

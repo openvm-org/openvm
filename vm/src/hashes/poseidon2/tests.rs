@@ -1,9 +1,9 @@
 use afs_primitives::sub_chip::LocalTraceInstructions;
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
-        fri_params::fri_params_with_80_bits_of_security,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     utils::create_seeded_rng,
 };
@@ -26,7 +26,7 @@ use crate::{
 fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
     engine_from_perm(perm, max_log_degree, fri_params)
 }
 
@@ -145,9 +145,7 @@ fn poseidon2_negative_test() {
 
     tester.test(get_engine).expect("Verification failed");
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     for _ in 0..10 {
         // TODO: better way to modify existing traces in tester
         let trace = &mut tester.traces[2];

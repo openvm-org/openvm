@@ -4,7 +4,7 @@ use super::{
     baby_bear_bytehash::{
         self, config_from_byte_hash, BabyBearByteHashConfig, BabyBearByteHashEngine,
     },
-    fri_params::default_fri_params,
+    FriParameters,
 };
 use crate::config::baby_bear_bytehash::BabyBearByteHashEngineWithDefaultHash;
 
@@ -18,7 +18,7 @@ pub fn default_engine(pcs_log_degree: usize) -> BabyBearKeccakEngine {
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_config(pcs_log_degree: usize) -> BabyBearKeccakConfig {
-    let fri_params = default_fri_params();
+    let fri_params = FriParameters::standard_fast();
     config_from_byte_hash(Keccak256Hash, pcs_log_degree, fri_params)
 }
 

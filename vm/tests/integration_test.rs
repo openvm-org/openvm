@@ -6,8 +6,8 @@ use ax_sdk::{
         baby_bear_poseidon2::{
             default_perm, engine_from_perm, random_perm, BabyBearPoseidon2Config,
         },
-        fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
-        setup_tracing_with_log_level,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        setup_tracing_with_log_level, FriParameters,
     },
     engine::StarkEngine,
     utils::create_seeded_rng,
@@ -44,17 +44,11 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
     }
 }
 
-// log_blowup = 2 by default
 fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Vec<BabyBear>>) {
     let vm = VirtualMachine::new(config, program, witness_stream);
 
-    // TODO: using log_blowup = 3 because keccak interaction chunking is not optimal right now
     let perm = default_perm();
-    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-        fri_params_fast_testing()[1]
-    } else {
-        fri_params_with_80_bits_of_security()[1]
-    };
+    let fri_params = FriParameters::standard_fast();
 
     let result = vm.execute_and_generate().unwrap();
 
@@ -89,10 +83,10 @@ fn air_test_with_compress_poseidon2(
     let result = vm.execute_and_generate().unwrap();
 
     let perm = random_perm();
-    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-        fri_params_fast_testing()[1]
-    } else {
-        fri_params_with_80_bits_of_security()[1]
+    let mut fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
+    if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params.num_queries = 2;
+        fri_params.proof_of_work_bits = 0;
     };
 
     for segment_result in result.segment_results {
