@@ -143,6 +143,51 @@ fn test_div() {
 }
 
 #[test]
+fn test_auto_carry() {
+    let prime = secp256k1_coord_prime();
+    let (subair, range_checker) = get_sub_air(&prime);
+
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
+    let builder = Rc::new(RefCell::new(builder));
+    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x3 = x1.clone() * x2.clone();
+    println!("x3: {} {}", x3.limb_max_abs, x3.max_overflow_bits);
+    let x4 = x3.clone() * x1.clone();
+    println!("x4: {} {}", x4.limb_max_abs, x4.max_overflow_bits);
+    println!("x3: {:?}", x3.expr);
+    println!("x4: {:?}", x4.expr);
+
+    let builder = builder.borrow().clone();
+
+    let chip = FieldExprChip {
+        builder,
+        check_carry_mod_to_zero: subair,
+        range_checker: range_checker.clone(),
+    };
+
+    let x = generate_random_biguint(&prime);
+    let y = generate_random_biguint(&prime);
+    let expected = (&x * &x * &y) % prime;
+    let inputs = vec![x, y];
+
+    let row = chip.generate_trace_row((inputs, range_checker.clone()));
+    let (_, _, vars, _, _) = chip.load_vars(&row);
+    assert_eq!(vars.len(), 1);
+    let generated = evaluate_biguint(&vars[0], LIMB_BITS);
+    assert_eq!(generated, expected);
+
+    let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
+    let range_trace = range_checker.generate_trace();
+
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&chip, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
+}
+
+#[test]
 fn test_ec_add() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker) = get_sub_air(&prime);

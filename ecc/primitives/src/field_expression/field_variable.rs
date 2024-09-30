@@ -64,65 +64,82 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         builder.computes.push(self.expr.clone());
 
         self.expr = new_var;
+        self.limb_max_abs = (1 << C::canonical_limb_bits()) - 1;
+        self.max_overflow_bits = C::canonical_limb_bits();
+        self.expr_limbs = C::num_limbs_per_field_element();
     }
 
-    // no carry (no automaticly save when limbs overflow)
     pub fn add(&self, other: &FieldVariable<C>) -> FieldVariable<C> {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
         let limb_max_abs = self.limb_max_abs + other.limb_max_abs;
-        FieldVariable {
+        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
+        let mut res = FieldVariable {
             expr: SymbolicExpr::Add(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
             builder: self.builder.clone(),
             limb_max_abs,
-            max_overflow_bits: log2_ceil_usize(limb_max_abs),
+            max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
             _marker: PhantomData,
+        };
+        if max_overflow_bits > C::max_limb_bits() {
+            res.save();
         }
+        res
     }
 
-    // no carry (no automaticly save when limbs overflow)
     pub fn sub(&self, other: &FieldVariable<C>) -> FieldVariable<C> {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
         let limb_max_abs = self.limb_max_abs + other.limb_max_abs;
-        FieldVariable {
+        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
+        let mut res = FieldVariable {
             expr: SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
             builder: self.builder.clone(),
             limb_max_abs,
-            max_overflow_bits: log2_ceil_usize(limb_max_abs),
+            max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
             _marker: PhantomData,
+        };
+        if max_overflow_bits > C::max_limb_bits() {
+            res.save();
         }
+        res
     }
 
-    // no carry (no automaticly save when limbs overflow)
     pub fn mul(&self, other: &FieldVariable<C>) -> FieldVariable<C> {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
         let limb_max_abs =
             self.limb_max_abs * other.limb_max_abs * min(self.expr_limbs, other.expr_limbs);
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-        FieldVariable {
+        let mut res = FieldVariable {
             expr: SymbolicExpr::Mul(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
             builder: self.builder.clone(),
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs + other.expr_limbs - 1,
             _marker: PhantomData,
+        };
+        if max_overflow_bits > C::max_limb_bits() {
+            res.save();
         }
+        res
     }
 
-    // TODO: should check that scalar is within the range of limb bits. But we don't have limb bits here, might need to do it in eval/compute.
-    // no carry (no automaticly save when limbs overflow)
     pub fn int_mul(&self, scalar: isize) -> FieldVariable<C> {
+        assert!(scalar.unsigned_abs() < (1 << C::max_limb_bits()));
         let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-        FieldVariable {
+        let mut res = FieldVariable {
             expr: SymbolicExpr::IntMul(Box::new(self.expr.clone()), scalar),
             builder: self.builder.clone(),
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs,
             _marker: PhantomData,
+        };
+        if max_overflow_bits > C::max_limb_bits() {
+            res.save();
         }
+        res
     }
 
     // expr cannot have division, so auto-save a new variable.
@@ -163,7 +180,6 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
     }
 }
 
-// TODO: these operations should auto-carry.
 impl<C: FieldVariableConfig> Add for FieldVariable<C> {
     type Output = FieldVariable<C>;
 
