@@ -16,7 +16,7 @@ use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use super::{super::utils::*, ExprBuilder, FieldExprChip, SymbolicExpr};
+use super::{super::utils::*, ExprBuilder, FieldExprChip, FieldVariableConfig, SymbolicExpr};
 
 const LIMB_BITS: usize = 8;
 
@@ -46,6 +46,22 @@ fn get_sub_air(prime: &BigUint) -> (CheckCarryModToZeroSubAir, Arc<VariableRange
     (subair, range_checker)
 }
 
+#[derive(Clone)]
+pub struct TestConfig;
+impl FieldVariableConfig for TestConfig {
+    fn canonical_limb_bits() -> usize {
+        LIMB_BITS
+    }
+
+    fn max_limb_bits() -> usize {
+        29
+    }
+
+    fn num_limbs_per_field_element() -> usize {
+        32
+    }
+}
+
 #[test]
 fn test_add() {
     let prime = secp256k1_coord_prime();
@@ -53,8 +69,8 @@ fn test_add() {
 
     let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
+    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut x3 = x1 + x2;
     x3.save();
     let builder = builder.borrow().clone();
@@ -93,8 +109,8 @@ fn test_div() {
 
     let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
+    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let _x3 = x1 / x2; // auto save on division.
     let builder = builder.borrow().clone();
 
@@ -133,10 +149,10 @@ fn test_ec_add() {
 
     let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let y1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
-    let y2 = ExprBuilder::new_input(builder.clone());
+    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let y1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let y2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let dx = x2.clone() - x1.clone();
     let dy = y2.clone() - y1.clone();
     let lambda = dy / dx; // auto save on division.
@@ -182,8 +198,8 @@ fn test_ec_double() {
 
     let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let y1 = ExprBuilder::new_input(builder.clone());
+    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let y1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let nom = (x1.clone() * x1.clone()).int_mul(3);
     let denom = y1.int_mul(2);
     let lambda = nom / denom;
