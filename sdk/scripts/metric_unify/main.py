@@ -96,18 +96,20 @@ def diff_metrics(db: MetricDb, db_old: MetricDb):
     db.separate_by_label_types()
 
 # separated_dict is dict by label types
-def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_span"]):
+def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_span"], summary_labels=["dsl_ir"]):
     markdown_output = ""
 
     # Loop through each set of tuple_keys
     for tuple_keys, metrics_dict in separated_dict.items():
-        exclude = False
-        for excluded_label in excluded_labels:
-            if excluded_label in tuple_keys:
-                exclude = True
-                break
+        tuple_keys = list(tuple_keys)
+        exclude = any(excluded_label in tuple_keys for excluded_label in excluded_labels)
         if exclude:
             continue
+
+        # Check if the current tuple_keys contains any of the summary labels
+        should_summarize = any(label in tuple_keys for label in summary_labels)
+        if should_summarize:
+            markdown_output += "<details>\n<summary>Click to expand</summary>\n\n"
         # Get all unique metric names
         metric_names = set()
         for metric_list in metrics_dict.values():
@@ -135,26 +137,30 @@ def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_spa
                 row_metrics.append(metric_str)
             markdown_output += "| " + " | ".join(row_values + row_metrics) + " |\n"
         markdown_output += "\n"
+        if should_summarize:
+            markdown_output += "</details>\n\n"
 
     return markdown_output
 
 # old_metrics_json is optional
-def generate_displayable_metrics(metrics_json, old_metrics_json, excluded_labels=["cycle_tracker_span"]):
+def generate_displayable_metrics(metrics_json, old_metrics_json, excluded_labels=["cycle_tracker_span"], summary_labels=["dsl_ir"]):
     db = MetricDb(metrics_json)
     if old_metrics_json:
         db_old = MetricDb(old_metrics_json)
         diff_metrics(db, db_old)
 
-    markdown_output = generate_markdown_tables(db.dict_by_label_types, excluded_labels)
+    markdown_output = generate_markdown_tables(db.dict_by_label_types, excluded_labels, summary_labels)
     return markdown_output
 
 def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument('metrics_json', type=str, help="Path to the metrics JSON")
     argparser.add_argument('--prev', type=str, required=False, help="Path to the previous metrics JSON for diff generation")
+    argparser.add_argument('--excluded-labels', type=str, required=False, help="Comma-separated list of labels to exclude from the table")
+    argparser.add_argument('--summary-labels', type=str, required=False, help="Comma-separated list of labels to include in summary rows")
     args = argparser.parse_args()
 
-    markdown_output = generate_displayable_metrics(args.metrics_json, args.prev)
+    markdown_output = generate_displayable_metrics(args.metrics_json, args.prev, args.excluded_labels.split(",") if args.excluded_labels else ["cycle_tracker_span"], args.summary_labels.split(",") if args.summary_labels else ["dsl_ir"])
     print(markdown_output)
 
 
