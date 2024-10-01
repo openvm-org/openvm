@@ -2,7 +2,14 @@ use afs_derive::AlignedBorrow;
 
 #[derive(Copy, Clone, Debug, AlignedBorrow, PartialEq, Eq)]
 #[repr(C)]
-pub struct ProgramPreprocessedCols<T> {
+pub struct ProgramCols<T> {
+    pub exec: ProgramExecutionCols<T>,
+    pub exec_freq: T,
+}
+
+#[derive(Copy, Clone, Debug, AlignedBorrow, PartialEq, Eq)]
+#[repr(C)]
+pub struct ProgramExecutionCols<T> {
     pub pc: T,
 
     pub opcode: T,
@@ -15,7 +22,32 @@ pub struct ProgramPreprocessedCols<T> {
     pub op_g: T,
 }
 
-impl<T: Clone> ProgramPreprocessedCols<T> {
+// Straightforward implementation for from_slice, flatten, and width functions.
+
+impl<T: Clone> ProgramCols<T> {
+    // TODO[osama]: implement from_partitioned_slice
+
+    pub fn from_slice(slc: &[T]) -> Self {
+        Self {
+            exec: ProgramExecutionCols::from_slice(&slc[0..slc.len() - 1]),
+            exec_freq: slc[slc.len() - 1].clone(),
+        }
+    }
+
+    pub fn flatten(self) -> Vec<T> {
+        self.exec
+            .flatten()
+            .into_iter()
+            .chain(vec![self.exec_freq])
+            .collect()
+    }
+
+    pub fn width() -> usize {
+        ProgramExecutionCols::<T>::width() + 1
+    }
+}
+
+impl<T: Clone> ProgramExecutionCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             pc: slc[0].clone(),
@@ -44,7 +76,7 @@ impl<T: Clone> ProgramPreprocessedCols<T> {
         ]
     }
 
-    pub fn get_width() -> usize {
+    pub fn width() -> usize {
         9
     }
 }
