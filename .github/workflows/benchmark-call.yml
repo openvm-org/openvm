@@ -11,6 +11,7 @@ on:
           - vm_verify_fibair
           - halo2_static_verify_fibair
           - tiny_e2e
+          - alu256_e2e
           - small_e2e
           - single_rw
           - single_filter
@@ -110,6 +111,14 @@ jobs:
         working-directory: recursion
         run: |
           BIN_NAME="tiny_e2e"
+          python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
+
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'alu256_e2e'
+        working-directory: recursion
+        run: |
+          BIN_NAME="alu256_e2e"
           python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
