@@ -75,12 +75,16 @@
 //!
 //! [^starter-ex]: The example is based on the [Factors example](https://github.com/risc0/risc0/tree/main/examples/factors).
 
+#![cfg_attr(not(feature = "std"), no_std)]
+#![deny(rustdoc::broken_intra_doc_links)]
 #![deny(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 extern crate alloc;
 
-pub mod env;
-pub mod serde;
+// FIXME: re-enable for std
+// pub mod env;
+// pub mod serde;
 
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
@@ -100,14 +104,14 @@ fn _fault() -> ! {
     unreachable!();
 }
 
-/// Aborts the guest with the given message.
-pub fn abort(msg: &str) -> ! {
-    // SAFETY: A compliant host should fault when it receives this syscall.
-    // sys_panic will issue an invalid instruction for non-compliant hosts.
-    unsafe {
-        sys_panic(msg.as_ptr(), msg.len());
-    }
-}
+// /// Aborts the guest with the given message.
+// pub fn abort(msg: &str) -> ! {
+//     // SAFETY: A compliant host should fault when it receives this syscall.
+//     // sys_panic will issue an invalid instruction for non-compliant hosts.
+//     unsafe {
+//         sys_panic(msg.as_ptr(), msg.len());
+//     }
+// }
 
 /// Used for defining the guest's entrypoint and main function.
 ///
@@ -151,7 +155,7 @@ unsafe extern "C" fn __start() -> ! {
     #[cfg(feature = "heap-embedded-alloc")]
     axvm_platform::heap::embedded::init();
 
-    env::init();
+    // env::init();
 
     {
         extern "C" {
@@ -160,7 +164,7 @@ unsafe extern "C" fn __start() -> ! {
         main()
     }
 
-    env::finalize(true, 0);
+    // env::finalize(true, 0);
     unreachable!();
 }
 
