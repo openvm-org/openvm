@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::BorrowMut};
 
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::rap::{get_air_name, AnyRap};
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -201,7 +201,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
     }
 
     fn air_name(&self) -> String {
-        "KeccakVm".to_string()
+        get_air_name(&self.air)
     }
 
     fn trace_width(&self) -> usize {

@@ -1,4 +1,4 @@
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::rap::{get_air_name, AnyRap};
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -41,7 +41,7 @@ impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
     }
 
     fn air_name(&self) -> String {
-        "Poseidon2".to_string()
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

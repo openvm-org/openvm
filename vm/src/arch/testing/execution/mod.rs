@@ -80,7 +80,7 @@ impl<F: Field> MachineChip<F> for ExecutionTester<F> {
     }
 
     fn air_name(&self) -> String {
-        "ExecutionDummy".to_string()
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

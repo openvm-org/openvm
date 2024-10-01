@@ -1,4 +1,5 @@
 use afs_primitives::{ecc::EcAuxCols as EcPrimitiveAuxCols, sub_chip::LocalTraceInstructions};
+use afs_stark_backend::rap::get_air_name;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -44,7 +45,7 @@ impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
     }
 
     fn air_name(&self) -> String {
-        "EcAddUnequal".to_string()
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {
@@ -136,7 +137,7 @@ impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
     }
 
     fn air_name(&self) -> String {
-        "EcDouble".to_string()
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

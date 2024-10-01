@@ -4,7 +4,7 @@ use afs_primitives::{
     range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip,
     xor::lookup::XorLookupChip,
 };
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::rap::{get_air_name, AnyRap};
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
 use p3_air::BaseAir;
@@ -43,6 +43,7 @@ pub trait InstructionExecutor<F> {
 
 #[enum_dispatch]
 pub trait MachineChip<F>: Sized {
+    // Functions for when chip owns a single AIR
     fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
@@ -54,6 +55,10 @@ pub trait MachineChip<F>: Sized {
     fn current_trace_height(&self) -> usize;
     fn trace_width(&self) -> usize;
 
+    // Functions for when chip owns multiple AIRs.
+    // Default implementations fallback to single AIR functions, but
+    // these can be overridden, in which case the single AIR functions
+    // should be `unreachable!()`.
     fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
         vec![self.generate_trace()]
     }
@@ -76,6 +81,7 @@ pub trait MachineChip<F>: Sized {
         vec![self.trace_width()]
     }
 
+    /// For metrics collection
     fn current_trace_cells(&self) -> Vec<usize> {
         self.trace_widths()
             .iter()
@@ -206,7 +212,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
     }
 
     fn air_name(&self) -> String {
-        "VariableRangeChecker".to_string()
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {
@@ -231,7 +237,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeTupleCheckerChip> {
     }
 
     fn air_name(&self) -> String {
-        "RangeTupleChecker".to_string()
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {
@@ -256,7 +262,7 @@ impl<F: PrimeField32, const M: usize> MachineChip<F> for Arc<XorLookupChip<M>> {
     }
 
     fn air_name(&self) -> String {
-        "XorLookup".to_string()
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

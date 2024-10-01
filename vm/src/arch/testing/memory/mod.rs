@@ -1,6 +1,9 @@
 use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of};
 
-use afs_stark_backend::{interaction::InteractionType, rap::AnyRap};
+use afs_stark_backend::{
+    interaction::InteractionType,
+    rap::{get_air_name, AnyRap},
+};
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -115,7 +118,7 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
     }
 
     fn air_name(&self) -> String {
-        "MemoryDummy".to_string()
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {
