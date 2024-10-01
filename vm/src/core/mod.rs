@@ -1,4 +1,3 @@
-use core::panic;
 use std::collections::VecDeque;
 
 use afs_primitives::xor::bus::XorBus;
@@ -9,7 +8,7 @@ use crate::{
     arch::{
         bridge::ExecutionBridge,
         bus::ExecutionBus,
-        instructions::Opcode::{self, *},
+        instructions::CoreOpcode::{self, *},
     },
     memory::MemoryChipRef,
     program::bridge::ProgramBus,
@@ -35,7 +34,7 @@ pub const CORE_MAX_READS_PER_CYCLE: usize = 3;
 pub const CORE_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CORE_MAX_ACCESSES_PER_CYCLE: usize = CORE_MAX_READS_PER_CYCLE + CORE_MAX_WRITES_PER_CYCLE;
 
-fn timestamp_delta(opcode: Opcode) -> usize {
+fn timestamp_delta(opcode: CoreOpcode) -> usize {
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,
@@ -49,7 +48,6 @@ fn timestamp_delta(opcode: Opcode) -> usize {
         HINT_INPUT | HINT_BITS | HINT_BYTES => 0,
         CT_START | CT_END => 0,
         NOP => 0,
-        _ => panic!("Non-Core opcode: {:?}", opcode),
     }
 }
 

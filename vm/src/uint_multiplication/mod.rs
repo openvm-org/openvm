@@ -8,7 +8,7 @@ use p3_field::PrimeField32;
 use crate::{
     arch::{
         bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
-        columns::ExecutionState, instructions::Opcode,
+        columns::ExecutionState, instructions::U256Opcode,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -104,7 +104,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        assert!(opcode == Opcode::MUL256);
+        assert!(opcode == U256Opcode::MUL as usize);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(

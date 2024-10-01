@@ -31,10 +31,7 @@ use crate::{
         bus::ExecutionBus,
         chips::{InstructionExecutor, InstructionExecutorVariant, MachineChip, MachineChipVariant},
         columns::ExecutionState,
-        instructions::{
-            Opcode, ALU_256_INSTRUCTIONS, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS,
-            FIELD_EXTENSION_INSTRUCTIONS, SHIFT_256_INSTRUCTIONS, UI_32_INSTRUCTIONS,
-        },
+        instructions::*,
     },
     castf::CastFChip,
     core::{
@@ -58,7 +55,7 @@ use crate::{
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
 
-    pub executors: BTreeMap<Opcode, InstructionExecutorVariant<F>>,
+    pub executors: BTreeMap<usize, InstructionExecutorVariant<F>>,
     pub chips: Vec<MachineChipVariant<F>>,
     pub core_chip: Rc<RefCell<CoreChip<F>>>,
     pub program_chip: Rc<RefCell<ProgramChip<F>>>,
@@ -118,7 +115,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         )));
         let program_chip = Rc::new(RefCell::new(ProgramChip::new(program)));
 
-        let mut executors: BTreeMap<Opcode, InstructionExecutorVariant<F>> = BTreeMap::new();
+        let mut executors: BTreeMap<usize, InstructionExecutorVariant<F>> = BTreeMap::new();
         macro_rules! assign {
             ($opcodes: expr, $executor: expr) => {
                 for opcode in $opcodes {

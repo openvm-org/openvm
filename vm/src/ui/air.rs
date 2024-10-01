@@ -8,7 +8,7 @@ use p3_matrix::Matrix;
 
 use super::columns::UiCols;
 use crate::{
-    arch::{bridge::ExecutionBridge, instructions::Opcode},
+    arch::{bridge::ExecutionBridge, instructions::U32Opcode},
     memory::offline_checker::MemoryBridge,
 };
 
@@ -41,7 +41,7 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for UiAir {
                 + local_cols.aux.imm_lo_hex,
         );
 
-        let expected_opcode = AB::Expr::from_canonical_u32(Opcode::LUI as u32);
+        let expected_opcode = AB::Expr::from_canonical_u32(U32Opcode::LUI as u32);
 
         self.eval_interactions(builder, &local_cols.io, &local_cols.aux, expected_opcode);
     }

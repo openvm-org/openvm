@@ -6,7 +6,7 @@ use p3_field::PrimeField32;
 use crate::{
     arch::{
         bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
-        columns::ExecutionState, instructions::Opcode,
+        columns::ExecutionState, instructions::CastfOpcode,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -84,7 +84,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
             e,
             ..
         } = instruction.clone();
-        assert_eq!(opcode, Opcode::CASTF);
+        assert_eq!(opcode, CastfOpcode::CASTF as usize);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
 

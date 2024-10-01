@@ -15,7 +15,7 @@ use super::{
     CoreOptions, INST_WIDTH,
 };
 use crate::{
-    arch::{bridge::ExecutionBridge, instructions::Opcode::*},
+    arch::{bridge::ExecutionBridge, instructions::CoreOpcode::*},
     memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 

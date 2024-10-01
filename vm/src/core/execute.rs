@@ -2,13 +2,17 @@ use std::{array, collections::BTreeMap};
 
 use afs_primitives::{is_equal::IsEqualAir, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
+use strum::IntoEnumIterator;
 
 use super::{timestamp_delta, CoreChip, CoreState};
 use crate::{
     arch::{
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode::*, CORE_INSTRUCTIONS},
+        instructions::{
+            CoreOpcode::{self, *},
+            UsizeOpcode,
+        },
     },
     core::{
         columns::{CoreAuxCols, CoreCols, CoreIoCols, CoreMemoryAccessCols},
@@ -86,6 +90,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let hint_stream = &mut self.streams.hint_stream;
 
+        let opcode = CoreOpcode::from_usize(opcode);
         match opcode {
             // d[a] <- e[d[c] + b]
             LOADW => {
@@ -256,7 +261,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             });
 
             let mut operation_flags = BTreeMap::new();
-            for other_opcode in CORE_INSTRUCTIONS {
+            for other_opcode in CoreOpcode::iter() {
                 operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
             }
 

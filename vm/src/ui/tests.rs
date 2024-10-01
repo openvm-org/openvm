@@ -6,7 +6,7 @@ use rand::{rngs::StdRng, Rng};
 
 use super::UiChip;
 use crate::{
-    arch::{instructions::Opcode, testing::MachineChipTestBuilder},
+    arch::{instructions::U32Opcode, testing::MachineChipTestBuilder},
     program::Instruction,
 };
 
@@ -27,7 +27,10 @@ fn prepare_lui_write_execute(
 ) {
     let x = UiChip::<F>::solve_lui(b as u32);
 
-    tester.execute(chip, Instruction::from_usize(Opcode::LUI, [a, b]));
+    tester.execute(
+        chip,
+        Instruction::from_usize(U32Opcode::LUI as usize, [a, b]),
+    );
     assert_eq!(x.map(F::from_canonical_u32), tester.read::<4>(1usize, a));
 }
 

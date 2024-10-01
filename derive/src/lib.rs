@@ -222,3 +222,23 @@ pub fn hintable_derive(input: TokenStream) -> TokenStream {
         Err(err) => err.into(),
     }
 }
+
+#[proc_macro_derive(UsizeOpcode)]
+pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+
+    let methods = quote! {
+        impl UsizeOpcode for #name {
+            // fn to_usize(&self) -> usize {
+            //     *self as usize
+            // }
+
+            fn from_usize(value: usize) -> Self {
+                Self::from_repr(value.try_into().unwrap()).unwrap()
+            }
+        }
+    };
+
+    TokenStream::from(methods)
+}

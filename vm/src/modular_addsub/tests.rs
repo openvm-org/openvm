@@ -8,7 +8,10 @@ use rand::Rng;
 use super::{ModularAddSubChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME};
 use crate::{
     arch::{
-        instructions::{Opcode::*, MODULAR_ADDSUB_INSTRUCTIONS},
+        instructions::{
+            ModularArithmeticOpcode::{self, *},
+            UsizeOpcode,
+        },
         testing::MachineChipTestBuilder,
     },
     program::Instruction,
@@ -48,11 +51,11 @@ fn test_modular_addsub() {
             .collect();
         let mut b = BigUint::new(b_digits);
 
-        let opcode = MODULAR_ADDSUB_INSTRUCTIONS[rng.gen_range(0..4)];
+        let opcode = rng.gen_range(0..4);
 
-        let (is_scalar, modulus) = match opcode {
-            SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB => (true, SECP256K1_SCALAR_PRIME.clone()),
-            SECP256K1_COORD_ADD | SECP256K1_COORD_SUB => (false, SECP256K1_COORD_PRIME.clone()),
+        let (is_scalar, modulus) = match ModularArithmeticOpcode::from_usize(opcode) {
+            SCALAR_ADD | SCALAR_SUB => (true, SECP256K1_SCALAR_PRIME.clone()),
+            COORD_ADD | COORD_SUB => (false, SECP256K1_COORD_PRIME.clone()),
             _ => unreachable!(),
         };
 
@@ -61,7 +64,11 @@ fn test_modular_addsub() {
         assert!(a < modulus);
         assert!(b < modulus);
 
-        let r = ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::solve(opcode, a.clone(), b.clone());
+        let r = ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::solve(
+            ModularArithmeticOpcode::from_usize(opcode),
+            a.clone(),
+            b.clone(),
+        );
 
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:

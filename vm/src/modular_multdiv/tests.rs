@@ -7,7 +7,10 @@ use rand::Rng;
 
 use crate::{
     arch::{
-        instructions::{Opcode::*, MODULAR_MULTDIV_INSTRUCTIONS},
+        instructions::{
+            ModularArithmeticOpcode::{self, *},
+            UsizeOpcode,
+        },
         testing::MachineChipTestBuilder,
     },
     modular_multdiv::{ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
@@ -50,11 +53,11 @@ fn test_modular_multdiv() {
             .collect();
         let mut b = BigUint::new(b_digits);
 
-        let opcode = MODULAR_MULTDIV_INSTRUCTIONS[rng.gen_range(0..4)];
+        let opcode = ModularArithmeticOpcode::from_usize(rng.gen_range(4..8));
 
         let (is_scalar, modulus) = match opcode {
-            SECP256K1_SCALAR_MUL | SECP256K1_SCALAR_DIV => (true, SECP256K1_SCALAR_PRIME.clone()),
-            SECP256K1_COORD_MUL | SECP256K1_COORD_DIV => (false, SECP256K1_COORD_PRIME.clone()),
+            SCALAR_MUL | SCALAR_DIV => (true, SECP256K1_SCALAR_PRIME.clone()),
+            COORD_MUL | COORD_DIV => (false, SECP256K1_COORD_PRIME.clone()),
             _ => unreachable!(),
         };
 
@@ -98,7 +101,7 @@ fn test_modular_multdiv() {
         tester.write(data_as, address2, b_limbs);
 
         let instruction = Instruction::from_isize(
-            opcode,
+            opcode as usize,
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,

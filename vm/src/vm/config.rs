@@ -1,7 +1,13 @@
+use std::{collections::BTreeMap, ops::Range};
+
 use derive_new::new;
+use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
-use crate::core::CoreOptions;
+use crate::{
+    arch::chips::{InstructionExecutorVariant, MachineChipVariant},
+    core::CoreOptions,
+};
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
 pub const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 7; // the sbox degree used for Poseidon2
@@ -20,24 +26,12 @@ impl Default for MemoryConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct VmConfig {
-    // TODO: VmConfig should just contain CoreOptions to reduce redundancy
-    pub field_arithmetic_enabled: bool,
-    pub field_extension_enabled: bool,
-    pub compress_poseidon2_enabled: bool,
-    pub perm_poseidon2_enabled: bool,
+#[derive(Debug, Clone)]
+pub struct VmConfig<F: PrimeField32> {
+    pub executors: BTreeMap<usize, (InstructionExecutorVariant<F>, usize)>, // (who executes, offset)
+    pub chips: Vec<MachineChipVariant<F>>,
+
     pub poseidon2_max_constraint_degree: Option<usize>,
-    pub keccak_enabled: bool,
-    pub modular_addsub_enabled: bool,
-    pub modular_multdiv_enabled: bool,
-    pub is_less_than_enabled: bool,
-    pub u256_arithmetic_enabled: bool,
-    pub u256_multiplication_enabled: bool,
-    pub shift_256_enabled: bool,
-    pub ui_32_enabled: bool,
-    pub castf_enabled: bool,
-    pub secp256k1_enabled: bool,
     pub memory_config: MemoryConfig,
     pub num_public_values: usize,
     pub max_segment_len: usize,
@@ -47,29 +41,79 @@ pub struct VmConfig {
     pub bigint_limb_size: usize,
 }
 
+impl<F: PrimeField32> VmConfig<F> {
+    pub fn from_parameters(
+        poseidon2_max_constraint_degree: Option<usize>,
+        memory_config: MemoryConfig,
+        num_public_values: usize,
+        max_segment_len: usize,
+        collect_metrics: bool,
+        bigint_limb_size: usize,
+    ) -> Self {
+        VmConfig {
+            executors: BTreeMap::new(),
+            chips: Vec::new(),
+            poseidon2_max_constraint_degree,
+            memory_config,
+            num_public_values,
+            max_segment_len,
+            collect_metrics,
+            bigint_limb_size,
+        }
+    }
+
+    pub fn add_executor_custom_offset(
+        mut self,
+        range: Range<usize>,
+        executor: InstructionExecutorVariant<F>,
+        offset: usize,
+    ) -> Self {
+        for i in range {
+            self.executors.insert(i, (executor.clone(), offset));
+        }
+        self
+    }
+
+    pub fn add_executor(
+        mut self,
+        range: Range<usize>,
+        executor: InstructionExecutorVariant<F>,
+    ) -> Self {
+        self.add_executor_custom_offset(range, executor, range.start)
+    }
+}
+
 impl Default for VmConfig {
     fn default() -> Self {
-        VmConfig {
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
-            compress_poseidon2_enabled: true,
-            perm_poseidon2_enabled: true,
-            poseidon2_max_constraint_degree: Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
-            keccak_enabled: false,
-            modular_addsub_enabled: false,
-            modular_multdiv_enabled: false,
-            is_less_than_enabled: false,
-            u256_arithmetic_enabled: false,
-            u256_multiplication_enabled: false,
-            shift_256_enabled: false,
-            ui_32_enabled: false,
-            castf_enabled: false,
-            secp256k1_enabled: false,
-            memory_config: Default::default(),
-            num_public_values: 0,
-            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
-            collect_metrics: false,
-            bigint_limb_size: 8,
+        Self::from_parameters(
+            Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
+            Default::default(),
+            0,
+            DEFAULT_MAX_SEGMENT_LEN,
+            false,
+            8,
+        )
+        // VmConfig {
+        //     field_arithmetic_enabled: true,
+        //     field_extension_enabled: true,
+        //     compress_poseidon2_enabled: true,
+        //     perm_poseidon2_enabled: true,
+        //     poseidon2_max_constraint_degree: Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
+        //     keccak_enabled: false,
+        //     modular_addsub_enabled: false,
+        //     modular_multdiv_enabled: false,
+        //     is_less_than_enabled: false,
+        //     u256_arithmetic_enabled: false,
+        //     u256_multiplication_enabled: false,
+        //     shift_256_enabled: false,
+        //     ui_32_enabled: false,
+        //     castf_enabled: false,
+        //     secp256k1_enabled: false,
+        //     memory_config: Default::default(),
+        //     num_public_values: 0,
+        //     max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+        //     collect_metrics: false,
+        //     bigint_limb_size: 8,
         }
     }
 }

@@ -9,12 +9,16 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::Rng;
+use strum::EnumCount;
 
 use super::{FieldArithmetic, FieldArithmeticChip};
 use crate::{
     arch::{
         chips::MachineChip,
-        instructions::{Opcode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
+        instructions::{
+            FieldArithmeticOpcode::{self, *},
+            UsizeOpcode,
+        },
         testing::MachineChipTestBuilder,
     },
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
@@ -40,7 +44,8 @@ fn field_arithmetic_air_test() {
     let mut rng = create_seeded_rng();
 
     for _ in 0..num_ops {
-        let opcode = FIELD_ARITHMETIC_INSTRUCTIONS[rng.gen_range(0..4)];
+        let opcode =
+            FieldArithmeticOpcode::from_usize(rng.gen_range(0..FieldArithmeticOpcode::COUNT));
 
         let operand1 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
         let operand2 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
@@ -67,7 +72,7 @@ fn field_arithmetic_air_test() {
 
         let result = FieldArithmetic::solve(opcode, (operand1, operand2)).unwrap();
         tracing::debug!(
-            "{opcode} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",
+            "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",
             result_as, as1, as2, result_address, address1, address2, result, operand1, operand2,
         );
 
@@ -80,7 +85,7 @@ fn field_arithmetic_air_test() {
         tester.execute(
             &mut field_arithmetic_chip,
             Instruction::from_usize(
-                opcode,
+                opcode as usize,
                 [result_address, address1, address2, result_as, as1, as2],
             ),
         );
@@ -130,7 +135,7 @@ fn field_arithmetic_air_zero_div_zero() {
 
     tester.execute(
         &mut field_arithmetic_chip,
-        Instruction::from_usize(FDIV, [0, 0, 1, 1, 1, 1]),
+        Instruction::from_usize(FDIV as usize, [0, 0, 1, 1, 1, 1]),
     );
 
     let air = field_arithmetic_chip.air;
@@ -164,6 +169,6 @@ fn field_arithmetic_air_test_panic() {
     // should panic
     tester.execute(
         &mut field_arithmetic_chip,
-        Instruction::from_usize(FDIV, [0, 0, 0, 1, 1, 1]),
+        Instruction::from_usize(FDIV as usize, [0, 0, 0, 1, 1, 1]),
     );
 }

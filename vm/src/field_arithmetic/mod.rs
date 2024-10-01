@@ -6,7 +6,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
+        instructions::{FieldArithmeticOpcode, UsizeOpcode},
     },
     field_arithmetic::columns::Operand,
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -26,7 +26,7 @@ use crate::memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord};
 
 #[derive(Clone, Debug)]
 pub struct FieldArithmeticRecord<F> {
-    pub opcode: Opcode,
+    pub opcode: usize,
     pub from_state: ExecutionState<usize>,
     pub x_read: MemoryReadRecord<F, 1>,
     pub y_read: MemoryReadRecord<F, 1>,
@@ -76,7 +76,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             op_f: y_as,
             ..
         } = instruction;
-        assert!(FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
 
@@ -90,7 +89,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
 
         let x = x_read.value();
         let y = y_read.value();
-        let z = FieldArithmetic::solve(opcode, (x, y)).unwrap();
+        let z = FieldArithmetic::solve(FieldArithmeticOpcode::from_usize(opcode), (x, y)).unwrap();
 
         let z_write = memory_chip.write_cell(z_as, z_address, z);
 
@@ -115,19 +114,18 @@ impl FieldArithmetic {
     /// Evaluates given opcode using given operands.
     ///
     /// Returns None for non-arithmetic operations.
-    fn solve<T: Field>(op: Opcode, operands: (T, T)) -> Option<T> {
+    fn solve<T: Field>(op: FieldArithmeticOpcode, operands: (T, T)) -> Option<T> {
         match op {
-            Opcode::FADD => Some(operands.0 + operands.1),
-            Opcode::FSUB => Some(operands.0 - operands.1),
-            Opcode::FMUL => Some(operands.0 * operands.1),
-            Opcode::FDIV => {
+            FieldArithmeticOpcode::FADD => Some(operands.0 + operands.1),
+            FieldArithmeticOpcode::FSUB => Some(operands.0 - operands.1),
+            FieldArithmeticOpcode::FMUL => Some(operands.0 * operands.1),
+            FieldArithmeticOpcode::FDIV => {
                 if operands.1 == T::zero() {
                     None
                 } else {
                     Some(operands.0 / operands.1)
                 }
             }
-            _ => unreachable!(),
         }
     }
 }

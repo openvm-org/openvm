@@ -4,7 +4,7 @@ use poseidon2_air::poseidon2::columns::Poseidon2IoCols;
 
 use super::{air::Poseidon2VmAir, columns::Poseidon2VmIoCols, WIDTH};
 use crate::{
-    arch::{columns::ExecutionState, instructions::Opcode::PERM_POS2},
+    arch::{columns::ExecutionState, instructions::Poseidon2Opcode::PERM_POS2},
     core::POSEIDON2_DIRECT_BUS,
 };
 

@@ -10,7 +10,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, ALU_256_INSTRUCTIONS},
+        instructions::{U256Opcode, UsizeOpcode},
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -27,9 +27,10 @@ pub use columns::*;
 #[cfg(test)]
 mod tests;
 
-pub const ALU_CMP_INSTRUCTIONS: [Opcode; 3] = [Opcode::LT256, Opcode::EQ256, Opcode::SLT256];
-pub const ALU_ARITHMETIC_INSTRUCTIONS: [Opcode; 2] = [Opcode::ADD256, Opcode::SUB256];
-pub const ALU_BITWISE_INSTRUCTIONS: [Opcode; 3] = [Opcode::XOR256, Opcode::AND256, Opcode::OR256];
+pub const ALU_CMP_INSTRUCTIONS: [U256Opcode; 3] = [U256Opcode::LT, U256Opcode::EQ, U256Opcode::SLT];
+pub const ALU_ARITHMETIC_INSTRUCTIONS: [U256Opcode; 2] = [U256Opcode::ADD, U256Opcode::SUB];
+pub const ALU_BITWISE_INSTRUCTIONS: [U256Opcode; 3] =
+    [U256Opcode::XOR, U256Opcode::AND, U256Opcode::OR];
 
 #[derive(Debug)]
 pub enum WriteRecord<T, const NUM_LIMBS: usize> {
@@ -106,7 +107,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        assert!(ALU_256_INSTRUCTIONS.contains(&opcode));
+        let opcode = U256Opcode::from_usize(opcode);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -143,7 +144,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         let mut x_sign = 0;
         let mut y_sign = 0;
 
-        if opcode == Opcode::SLT256 {
+        if opcode == U256Opcode::SLT {
             x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             y_sign = y[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             self.xor_lookup_chip
@@ -156,7 +157,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             for i in 0..NUM_LIMBS {
                 self.xor_lookup_chip.request(x[i], y[i]);
             }
-        } else if opcode != Opcode::EQ256 {
+        } else if opcode != U256Opcode::EQ {
             for z_val in &z {
                 self.xor_lookup_chip.request(*z_val, *z_val);
             }
@@ -189,18 +190,18 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 }
 
 fn solve_alu<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    opcode: Opcode,
+    opcode: U256Opcode,
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, bool) {
     match opcode {
-        Opcode::ADD256 => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::SUB256 | Opcode::LT256 => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::EQ256 => solve_eq::<T, NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::XOR256 => solve_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::AND256 => solve_and::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::OR256 => solve_or::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::SLT256 => {
+        U256Opcode::ADD => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::SUB | U256Opcode::LT => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::EQ => solve_eq::<T, NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::XOR => solve_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::AND => solve_and::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::OR => solve_or::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::SLT => {
             let (z, cmp) = solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y);
             (
                 z,

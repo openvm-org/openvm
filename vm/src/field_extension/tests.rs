@@ -7,12 +7,13 @@ use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
-use rand::{seq::SliceRandom, Rng};
+use rand::Rng;
+use strum::EnumCount;
 
 use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
     arch::{
-        instructions::FIELD_EXTENSION_INSTRUCTIONS,
+        instructions::{FieldExtensionOpcode, UsizeOpcode},
         testing::{
             memory::{gen_address_space, gen_pointer},
             MachineChipTestBuilder,
@@ -37,7 +38,8 @@ fn field_extension_air_test() {
     let num_ops: usize = 7; // test padding with dummy row
 
     for _ in 0..num_ops {
-        let opcode = *FIELD_EXTENSION_INSTRUCTIONS.choose(&mut rng).unwrap();
+        let opcode =
+            FieldExtensionOpcode::from_usize(rng.gen_range(0..FieldExtensionOpcode::COUNT));
 
         let as_d = gen_address_space(&mut rng);
         let as_e = gen_address_space(&mut rng);
@@ -57,7 +59,10 @@ fn field_extension_air_test() {
 
         tester.execute(
             &mut chip,
-            Instruction::from_usize(opcode, [result_address, address1, address2, as_d, as_e]),
+            Instruction::from_usize(
+                opcode as usize,
+                [result_address, address1, address2, as_d, as_e],
+            ),
         );
         assert_eq!(result, tester.read(as_d, result_address));
     }

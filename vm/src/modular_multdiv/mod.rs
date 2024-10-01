@@ -17,7 +17,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, MODULAR_MULTDIV_INSTRUCTIONS},
+        instructions::{ModularArithmeticOpcode, UsizeOpcode},
     },
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -134,12 +134,11 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         } = instruction.clone();
         assert_eq!(CARRY_LIMBS, NUM_LIMBS * 2 - 1);
         assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
-        assert!(MODULAR_MULTDIV_INSTRUCTIONS.contains(&opcode));
-        match opcode {
-            Opcode::SECP256K1_COORD_MUL | Opcode::SECP256K1_COORD_DIV => {
+        match ModularArithmeticOpcode::from_usize(opcode) {
+            ModularArithmeticOpcode::COORD_MUL | ModularArithmeticOpcode::COORD_DIV => {
                 assert_eq!(self.modulus, SECP256K1_COORD_PRIME.clone());
             }
-            Opcode::SECP256K1_SCALAR_MUL | Opcode::SECP256K1_SCALAR_DIV => {
+            ModularArithmeticOpcode::SCALAR_MUL | ModularArithmeticOpcode::SCALAR_DIV => {
                 assert_eq!(self.modulus, SECP256K1_SCALAR_PRIME.clone());
             }
             _ => unreachable!(),
@@ -160,7 +159,11 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         let x_biguint = Self::limbs_to_biguint(&x);
         let y_biguint = Self::limbs_to_biguint(&y);
 
-        let z_biguint = Self::solve(opcode, x_biguint, y_biguint);
+        let z_biguint = Self::solve(
+            ModularArithmeticOpcode::from_usize(opcode),
+            x_biguint,
+            y_biguint,
+        );
         let z_limbs = Self::biguint_to_limbs(z_biguint);
 
         let z_array_write = memory_chip.write_heap::<NUM_LIMBS>(
@@ -188,16 +191,16 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
 impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     ModularMultDivChip<T, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
 {
-    pub fn solve(opcode: Opcode, x: BigUint, y: BigUint) -> BigUint {
+    pub fn solve(opcode: ModularArithmeticOpcode, x: BigUint, y: BigUint) -> BigUint {
         match opcode {
-            Opcode::SECP256K1_COORD_MUL => (x * y) % SECP256K1_COORD_PRIME.clone(),
-            Opcode::SECP256K1_SCALAR_MUL => (x * y) % SECP256K1_SCALAR_PRIME.clone(),
-            Opcode::SECP256K1_COORD_DIV => {
+            ModularArithmeticOpcode::COORD_MUL => (x * y) % SECP256K1_COORD_PRIME.clone(),
+            ModularArithmeticOpcode::SCALAR_MUL => (x * y) % SECP256K1_SCALAR_PRIME.clone(),
+            ModularArithmeticOpcode::COORD_DIV => {
                 let tmp = SECP256K1_COORD_PRIME.clone();
                 let y_inv = big_uint_mod_inverse(&y, &tmp);
                 (x * y_inv) % &tmp
             }
-            Opcode::SECP256K1_SCALAR_DIV => {
+            ModularArithmeticOpcode::SCALAR_DIV => {
                 let tmp = SECP256K1_SCALAR_PRIME.clone();
                 let y_inv = big_uint_mod_inverse(&y, &tmp);
                 (x * y_inv) % &tmp

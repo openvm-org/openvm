@@ -18,8 +18,11 @@ pub use air::KeccakVmAir;
 
 use crate::{
     arch::{
-        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
-        columns::ExecutionState, instructions::Opcode,
+        bridge::ExecutionBridge,
+        bus::ExecutionBus,
+        chips::InstructionExecutor,
+        columns::ExecutionState,
+        instructions::{Keccak256Opcode, UsizeOpcode},
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -122,7 +125,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             op_f: f,
             ..
         } = instruction;
-        debug_assert_eq!(opcode, Opcode::KECCAK256);
+        debug_assert_eq!(
+            Keccak256Opcode::from_usize(opcode),
+            Keccak256Opcode::KECCAK256
+        );
 
         let mut memory = self.memory_chip.borrow_mut();
         debug_assert_eq!(

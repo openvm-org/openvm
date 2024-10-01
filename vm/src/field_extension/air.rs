@@ -9,7 +9,7 @@ use super::columns::FieldExtensionArithmeticCols;
 use crate::{
     arch::{
         bridge::ExecutionBridge,
-        instructions::Opcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
+        instructions::FieldExtensionOpcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
     },
     field_extension::chip::FieldExtensionArithmetic,
     memory::offline_checker::MemoryBridge,
@@ -72,7 +72,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
             builder.assert_bool(flag);
 
             flag_sum += flag.into();
-            expected_opcode += flag * AB::F::from_canonical_u32(opcode as u32);
+            expected_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
 
             for (j, result_part) in result.into_iter().enumerate() {
                 expected_result[j] += flag * result_part;

@@ -6,7 +6,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, ALU_256_INSTRUCTIONS},
+        instructions::{U256Opcode, UsizeOpcode},
     },
     memory::MemoryChipRef,
     program::{ExecutionError, Instruction},
@@ -65,7 +65,6 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        assert!(ALU_256_INSTRUCTIONS.contains(&opcode));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -80,7 +79,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|y| y.as_canonical_u32());
-        let z = solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, opcode);
+        let z = solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, U256Opcode::from_usize(opcode));
 
         // TODO: range check add count
 
@@ -106,12 +105,12 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 fn solve_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
-    op: Opcode,
+    op: U256Opcode,
 ) -> Vec<u32> {
     match op {
-        Opcode::SLL256 => solve_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::SRL256 => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
-        Opcode::SRA256 => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, false),
+        U256Opcode::SLL => solve_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::SRL => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
+        U256Opcode::SRA => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, false),
         _ => unreachable!(),
     }
 }

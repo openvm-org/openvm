@@ -8,8 +8,14 @@ use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
 use self::air::Poseidon2VmAir;
 use crate::{
     arch::{
-        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
-        columns::ExecutionState, instructions::Opcode::*,
+        bridge::ExecutionBridge,
+        bus::ExecutionBus,
+        chips::InstructionExecutor,
+        columns::ExecutionState,
+        instructions::{
+            Poseidon2Opcode::{self, *},
+            UsizeOpcode,
+        },
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -142,7 +148,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
                 c: record.instruction.op_c,
                 d: record.instruction.d,
                 e: record.instruction.e,
-                cmp: F::from_bool(record.instruction.opcode == COMP_POS2),
+                cmp: F::from_bool(record.instruction.opcode == COMP_POS2 as usize),
             },
             aux: Poseidon2VmAuxCols {
                 dst_ptr,
@@ -197,6 +203,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             ..
         } = instruction;
 
+        let opcode = Poseidon2Opcode::from_usize(opcode);
+
         assert!(matches!(opcode, COMP_POS2 | PERM_POS2));
         debug_assert_eq!(WIDTH, CHUNK * 2);
 
@@ -217,7 +225,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
                 memory_chip.increment_timestamp();
                 (lhs_ptr + chunk_f, None)
             }
-            _ => panic!("unrecognized Poseidon2Chip opcode"),
         };
 
         let lhs_read = memory_chip.read(e, lhs_ptr);
@@ -243,7 +250,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
                 None
             }
             PERM_POS2 => Some(memory_chip.write(e, dst_ptr + chunk_f, output2)),
-            _ => unreachable!(),
         };
 
         self.records.push(Poseidon2Record {

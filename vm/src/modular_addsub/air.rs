@@ -12,7 +12,7 @@ use p3_matrix::Matrix;
 
 use super::columns::ModularAddSubCols;
 use crate::{
-    arch::{bridge::ExecutionBridge, instructions::Opcode},
+    arch::{bridge::ExecutionBridge, instructions::ModularArithmeticOpcode},
     memory::offline_checker::MemoryBridge,
 };
 
@@ -51,15 +51,15 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air
         let expected_opcode = if self.subair.modulus_limbs
             == big_uint_to_limbs(&secp256k1_coord_prime(), LIMB_SIZE)
         {
-            AB::Expr::from_canonical_u8(Opcode::SECP256K1_COORD_SUB as u8)
+            AB::Expr::from_canonical_u8(ModularArithmeticOpcode::COORD_SUB as u8)
                 + aux.is_add
-                    * (AB::Expr::from_canonical_u8(Opcode::SECP256K1_COORD_ADD as u8)
-                        - AB::Expr::from_canonical_u8(Opcode::SECP256K1_COORD_SUB as u8))
+                    * (AB::Expr::from_canonical_u8(ModularArithmeticOpcode::COORD_ADD as u8)
+                        - AB::Expr::from_canonical_u8(ModularArithmeticOpcode::COORD_SUB as u8))
         } else {
-            AB::Expr::from_canonical_u8(Opcode::SECP256K1_SCALAR_SUB as u8)
+            AB::Expr::from_canonical_u8(ModularArithmeticOpcode::SCALAR_SUB as u8)
                 + aux.is_add
-                    * (AB::Expr::from_canonical_u8(Opcode::SECP256K1_SCALAR_ADD as u8)
-                        - AB::Expr::from_canonical_u8(Opcode::SECP256K1_SCALAR_SUB as u8))
+                    * (AB::Expr::from_canonical_u8(ModularArithmeticOpcode::SCALAR_ADD as u8)
+                        - AB::Expr::from_canonical_u8(ModularArithmeticOpcode::SCALAR_SUB as u8))
         };
 
         let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(

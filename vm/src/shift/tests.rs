@@ -1,5 +1,5 @@
 use super::solve_shift;
-use crate::arch::instructions::Opcode;
+use crate::arch::instructions::U256Opcode;
 
 #[test]
 fn solve_sll_sanity_test() {
@@ -15,7 +15,7 @@ fn solve_sll_sanity_test() {
         0, 0, 0, 104, 57, 232, 209, 141, 169, 185, 35, 138, 188, 49, 243, 75, 24, 190, 208, 40,
         198, 222, 255, 80, 106, 111, 228, 18, 195, 133, 85, 3,
     ];
-    let sll_result = solve_shift::<32, 8>(&x, &y, Opcode::SLL256);
+    let sll_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SLL);
     for i in 0..32 {
         assert_eq!(z[i], sll_result[i])
     }
@@ -35,8 +35,8 @@ fn solve_srl_sanity_test() {
         104, 211, 236, 126, 23, 149, 98, 132, 16, 68, 72, 202, 178, 225, 86, 75, 141, 235, 116,
         173, 234, 220, 187, 127, 119, 215, 15, 223, 110, 36, 0, 0,
     ];
-    let srl_result = solve_shift::<32, 8>(&x, &y, Opcode::SRL256);
-    let sra_result = solve_shift::<32, 8>(&x, &y, Opcode::SRA256);
+    let srl_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SRL);
+    let sra_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SRA);
     for i in 0..32 {
         assert_eq!(z[i], srl_result[i]);
         assert_eq!(z[i], sra_result[i]);
@@ -57,7 +57,7 @@ fn solve_sra_sanity_test() {
         104, 211, 236, 126, 23, 149, 98, 132, 16, 68, 72, 202, 178, 225, 86, 75, 141, 235, 116,
         173, 234, 220, 187, 127, 119, 215, 15, 223, 110, 228, 255, 255,
     ];
-    let sra_result = solve_shift::<32, 8>(&x, &y, Opcode::SRA256);
+    let sra_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SRA);
     for i in 0..32 {
         assert_eq!(z[i], sra_result[i])
     }

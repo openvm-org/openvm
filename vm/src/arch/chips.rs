@@ -119,7 +119,7 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum InstructionExecutorVariant<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
@@ -138,7 +138,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
-#[derive(Debug, IntoStaticStr)]
+#[derive(Debug, Clone, IntoStaticStr)]
 #[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),

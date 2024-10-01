@@ -17,7 +17,10 @@ use super::{
     ModularAddSubChip,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{
+        chips::MachineChip,
+        instructions::{ModularArithmeticOpcode, UsizeOpcode},
+    },
     memory::MemoryHeapDataIoCols,
 };
 
@@ -63,9 +66,9 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChi
                     .data
                     .map(|x| x.as_canonical_u32()),
             );
-            let is_add = match record.instruction.opcode {
-                Opcode::SECP256K1_SCALAR_ADD | Opcode::SECP256K1_COORD_ADD => true,
-                Opcode::SECP256K1_SCALAR_SUB | Opcode::SECP256K1_COORD_SUB => false,
+            let is_add = match ModularArithmeticOpcode::from_usize(record.instruction.opcode) {
+                ModularArithmeticOpcode::SCALAR_ADD | ModularArithmeticOpcode::COORD_ADD => true,
+                ModularArithmeticOpcode::SCALAR_SUB | ModularArithmeticOpcode::COORD_SUB => false,
                 _ => unreachable!(),
             };
 

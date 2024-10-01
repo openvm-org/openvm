@@ -10,7 +10,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, UI_32_INSTRUCTIONS},
+        instructions::{U32Opcode, UsizeOpcode},
     },
     memory::{MemoryChipRef, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -75,7 +75,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
             op_b: b,
             ..
         } = instruction.clone();
-        assert!(UI_32_INSTRUCTIONS.contains(&opcode));
+        let opcode = U32Opcode::from_usize(opcode);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -86,19 +86,17 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
         let b: u32 = b.as_canonical_u32();
 
         let x = match opcode {
-            Opcode::LUI => Self::solve_lui(b),
-            Opcode::AUIPC => Self::solve_auipc(b),
-            _ => unreachable!(),
+            U32Opcode::LUI => Self::solve_lui(b),
+            U32Opcode::AUIPC => Self::solve_auipc(b),
         };
 
         match opcode {
-            Opcode::LUI => {
+            U32Opcode::LUI => {
                 self.range_checker_chip.add_count(x[1] >> 4, 4);
                 self.range_checker_chip.add_count(x[2], 8);
                 self.range_checker_chip.add_count(x[3], 8);
             }
-            Opcode::AUIPC => unimplemented!(),
-            _ => unimplemented!(),
+            U32Opcode::AUIPC => unimplemented!(),
         };
 
         let x = x.map(T::from_canonical_u32);

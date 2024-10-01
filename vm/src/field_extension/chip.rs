@@ -11,7 +11,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
+        instructions::{FieldExtensionOpcode, UsizeOpcode},
     },
     field_extension::air::FieldExtensionArithmeticAir,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
@@ -65,8 +65,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
             ..
         } = instruction;
 
-        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
-
         assert_ne!(d, F::zero());
         assert_ne!(e, F::zero());
 
@@ -78,7 +76,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
         let y_read = memory_chip.read(e, op_c);
         let y: [F; EXT_DEG] = y_read.data;
 
-        let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
+        let z = FieldExtensionArithmetic::solve(FieldExtensionOpcode::from_usize(opcode), x, y)
+            .unwrap();
         let z_write = memory_chip.write(d, op_a, z);
 
         self.records.push(FieldExtensionArithmeticRecord {
@@ -129,16 +128,15 @@ impl FieldExtensionArithmetic {
     ///
     /// Returns None for opcodes not in core::FIELD_EXTENSION_INSTRUCTIONS.
     pub(crate) fn solve<T: Field>(
-        op: Opcode,
+        op: FieldExtensionOpcode,
         x: [T; EXT_DEG],
         y: [T; EXT_DEG],
     ) -> Option<[T; EXT_DEG]> {
         match op {
-            Opcode::FE4ADD => Some(Self::add(x, y)),
-            Opcode::FE4SUB => Some(Self::subtract(x, y)),
-            Opcode::BBE4MUL => Some(Self::multiply(x, y)),
-            Opcode::BBE4DIV => Some(Self::divide(x, y)),
-            _ => None,
+            FieldExtensionOpcode::FE4ADD => Some(Self::add(x, y)),
+            FieldExtensionOpcode::FE4SUB => Some(Self::subtract(x, y)),
+            FieldExtensionOpcode::BBE4MUL => Some(Self::multiply(x, y)),
+            FieldExtensionOpcode::BBE4DIV => Some(Self::divide(x, y)),
         }
     }
 

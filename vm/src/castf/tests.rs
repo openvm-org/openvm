@@ -15,7 +15,7 @@ use super::{
     CastFChip,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
+    arch::{chips::MachineChip, instructions::CastfOpcode, testing::MachineChipTestBuilder},
     program::Instruction,
 };
 
@@ -48,7 +48,10 @@ fn prepare_castf_rand_write_execute(
 
     tester.execute(
         chip,
-        Instruction::from_usize(Opcode::CASTF, [address_x, address_y, 0, as_x, as_y]),
+        Instruction::from_usize(
+            CastfOpcode::CASTF as usize,
+            [address_x, address_y, 0, as_x, as_y],
+        ),
     );
     assert_eq!(
         x.map(F::from_canonical_u32),

@@ -9,7 +9,7 @@ use super::columns::FieldArithmeticCols;
 use crate::{
     arch::{
         bridge::ExecutionBridge,
-        instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
+        instructions::FieldArithmeticOpcode::{FADD, FDIV, FMUL, FSUB},
     },
     memory::offline_checker::MemoryBridge,
 };

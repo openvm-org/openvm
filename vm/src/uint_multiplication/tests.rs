@@ -13,7 +13,7 @@ use rand::{rngs::StdRng, Rng};
 
 use super::{columns::UintMultiplicationCols, solve_uint_multiplication, UintMultiplicationChip};
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
+    arch::{chips::MachineChip, instructions::U256Opcode, testing::MachineChipTestBuilder},
     core::RANGE_TUPLE_CHECKER_BUS,
     program::Instruction,
 };
@@ -69,7 +69,7 @@ fn run_uint_multiplication_rand_write_execute<const NUM_LIMBS: usize, const LIMB
     tester.execute(
         chip,
         Instruction::from_usize(
-            Opcode::MUL256,
+            U256Opcode::MUL as usize,
             [z_ptr_to_address, x_ptr_to_address, y_ptr_to_address, d, e],
         ),
     );

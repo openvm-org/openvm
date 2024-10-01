@@ -17,7 +17,7 @@ use crate::{
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, MODULAR_ADDSUB_INSTRUCTIONS},
+        instructions::{ModularArithmeticOpcode, UsizeOpcode},
     },
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -127,12 +127,11 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
             ..
         } = instruction.clone();
         assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
-        assert!(MODULAR_ADDSUB_INSTRUCTIONS.contains(&opcode));
-        match opcode {
-            Opcode::SECP256K1_COORD_ADD | Opcode::SECP256K1_COORD_SUB => {
+        match ModularArithmeticOpcode::from_usize(opcode) {
+            ModularArithmeticOpcode::COORD_ADD | ModularArithmeticOpcode::COORD_SUB => {
                 assert_eq!(self.modulus, SECP256K1_COORD_PRIME.clone());
             }
-            Opcode::SECP256K1_SCALAR_ADD | Opcode::SECP256K1_SCALAR_SUB => {
+            ModularArithmeticOpcode::SCALAR_ADD | ModularArithmeticOpcode::SCALAR_SUB => {
                 assert_eq!(self.modulus, SECP256K1_SCALAR_PRIME.clone());
             }
             _ => unreachable!(),
@@ -153,7 +152,11 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
         let x_biguint = Self::limbs_to_biguint(&x);
         let y_biguint = Self::limbs_to_biguint(&y);
 
-        let z_biguint = Self::solve(opcode, x_biguint, y_biguint);
+        let z_biguint = Self::solve(
+            ModularArithmeticOpcode::from_usize(opcode),
+            x_biguint,
+            y_biguint,
+        );
         let z_limbs = Self::biguint_to_limbs(z_biguint);
 
         let z_array_write = memory_chip.write_heap::<NUM_LIMBS>(
@@ -181,18 +184,18 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     ModularAddSubChip<T, NUM_LIMBS, LIMB_SIZE>
 {
-    pub fn solve(opcode: Opcode, mut x: BigUint, y: BigUint) -> BigUint {
+    pub fn solve(opcode: ModularArithmeticOpcode, mut x: BigUint, y: BigUint) -> BigUint {
         match opcode {
-            Opcode::SECP256K1_COORD_ADD => (x + y) % SECP256K1_COORD_PRIME.clone(),
-            Opcode::SECP256K1_SCALAR_ADD => (x + y) % SECP256K1_SCALAR_PRIME.clone(),
-            Opcode::SECP256K1_COORD_SUB => {
+            ModularArithmeticOpcode::COORD_ADD => (x + y) % SECP256K1_COORD_PRIME.clone(),
+            ModularArithmeticOpcode::SCALAR_ADD => (x + y) % SECP256K1_SCALAR_PRIME.clone(),
+            ModularArithmeticOpcode::COORD_SUB => {
                 let tmp = SECP256K1_COORD_PRIME.clone();
                 while x < y {
                     x += &tmp;
                 }
                 (x - y) % &tmp
             }
-            Opcode::SECP256K1_SCALAR_SUB => {
+            ModularArithmeticOpcode::SCALAR_SUB => {
                 let tmp = SECP256K1_SCALAR_PRIME.clone();
                 while x < y {
                     x += &tmp;
