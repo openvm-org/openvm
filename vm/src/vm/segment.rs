@@ -349,36 +349,28 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 RefCell::borrow_mut(&self.program_chip).get_instruction(pc_usize)?;
             tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
 
-            let (dsl_instr, trace) = match debug_info {
-                Some(debug_info) => {
-                    let DebugInfo {
-                        dsl_instruction,
-                        trace,
-                        ..
-                    } = debug_info;
-                    (Some(dsl_instruction), trace)
-                }
-                None => (None, None),
-            };
+            let (dsl_instr, trace) = debug_info.map_or(
+                (None, None),
+                |DebugInfo {
+                     dsl_instruction,
+                     trace,
+                 }| (Some(dsl_instruction), trace),
+            );
 
             let opcode = instruction.opcode;
-
-            let next_pc;
-
             let prev_trace_cells = self.current_trace_cells();
-
-            if opcode == Opcode::FAIL {
-                if let Some(mut backtrace) = prev_backtrace {
-                    backtrace.resolve();
-                    eprintln!("eDSL program failure; backtrace:\n{:?}", backtrace);
-                } else {
-                    eprintln!("eDSL program failure; no backtrace");
-                }
-                return Err(ExecutionError::Fail(pc_usize));
-            }
 
             // runtime only instruction handling
             match opcode {
+                Opcode::FAIL => {
+                    if let Some(mut backtrace) = prev_backtrace {
+                        backtrace.resolve();
+                        eprintln!("eDSL program failure; backtrace:\n{:?}", backtrace);
+                    } else {
+                        eprintln!("eDSL program failure; no backtrace");
+                    }
+                    return Err(ExecutionError::Fail(pc_usize));
+                }
                 Opcode::CT_START => {
                     self.update_chip_metrics();
                     self.cycle_tracker
@@ -391,6 +383,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 _ => {}
             }
+            prev_backtrace = trace;
 
             if self.executors.contains_key(&opcode) {
                 let executor = self.executors.get_mut(&opcode).unwrap();
@@ -400,7 +393,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     ExecutionState::new(pc_usize, timestamp),
                 ) {
                     Ok(next_state) => {
-                        next_pc = F::from_canonical_usize(next_state.pc);
+                        pc = F::from_canonical_usize(next_state.pc);
                         timestamp = next_state.timestamp;
                     }
                     Err(e) => return Err(e),
@@ -415,26 +408,22 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 let key = (dsl_instr.clone(), opcode.to_string());
                 *self.collected_metrics.counts.entry(key).or_insert(0) += 1;
 
-                for (air_name, now_value) in now_trace_cells {
-                    let prev_value = prev_trace_cells.get(&air_name).unwrap_or(&0);
-                    let key = (dsl_instr.clone(), opcode.to_string(), air_name);
-                    *self.collected_metrics.trace_cells.entry(key).or_insert(0) +=
-                        now_value - prev_value;
+                for (air_name, now_value) in &now_trace_cells {
+                    let prev_value = prev_trace_cells.get(air_name).unwrap_or(&0);
+                    if prev_value != now_value {
+                        let key = (dsl_instr.clone(), opcode.to_string(), air_name.to_owned());
+                        *self.collected_metrics.trace_cells.entry(key).or_insert(0) +=
+                            now_value - prev_value;
+                    }
                 }
-            }
-
-            prev_backtrace = trace;
-
-            pc = next_pc;
-
-            // clock_cycle += 1;
-            if opcode == Opcode::TERMINATE && collect_metrics {
-                self.update_chip_metrics();
-                // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
-                collect_metrics = false;
-                #[cfg(feature = "bench-metrics")]
-                metrics::counter!("total_cells_used")
-                    .absolute(now_trace_cells.into_values().sum::<usize>() as u64);
+                if opcode == Opcode::TERMINATE {
+                    self.update_chip_metrics();
+                    // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
+                    collect_metrics = false;
+                    #[cfg(feature = "bench-metrics")]
+                    metrics::counter!("total_cells_used")
+                        .absolute(now_trace_cells.into_values().sum::<usize>() as u64);
+                }
             }
             if opcode == Opcode::TERMINATE {
                 break;

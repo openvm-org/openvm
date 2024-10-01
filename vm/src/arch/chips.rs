@@ -84,8 +84,8 @@ pub trait MachineChip<F>: Sized {
     /// For metrics collection
     fn current_trace_cells(&self) -> Vec<usize> {
         self.trace_widths()
-            .iter()
-            .zip_eq(self.current_trace_heights().iter())
+            .into_iter()
+            .zip_eq(self.current_trace_heights())
             .map(|(width, height)| width * height)
             .collect()
     }
