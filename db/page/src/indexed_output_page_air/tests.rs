@@ -2,16 +2,15 @@ use std::{collections::HashSet, iter, sync::Arc};
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
-    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
-    verifier::VerificationError,
+    keygen::MultiStarkKeygenBuilder, prover::USE_DEBUG_BUILDER, verifier::VerificationError,
 };
 use ax_sdk::{
+    any_rap_vec,
     config::{
         self,
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
     },
-    engine::StarkEngine,
+    engine::{StarkFriEngine, VerificationDataWithFriParams},
     utils::create_seeded_rng,
 };
 use rand::Rng;
@@ -19,42 +18,22 @@ use rand::Rng;
 use crate::common::page::Page;
 
 fn test_single_page(
-    engine: &BabyBearPoseidon2Engine,
     page: &Page,
     final_page_chip: &super::IndexedOutputPageAir,
     range_checker: Arc<VariableRangeCheckerChip>,
-    trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-    pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
-) -> Result<(), VerificationError> {
+) -> Result<VerificationDataWithFriParams<BabyBearPoseidon2Config>, VerificationError> {
     let page_trace = final_page_chip.gen_page_trace::<BabyBearPoseidon2Config>(page);
-    let page_prover_data = trace_builder.committer.commit(vec![page_trace.clone()]);
-
     let aux_trace =
         final_page_chip.gen_aux_trace::<BabyBearPoseidon2Config>(page, range_checker.clone());
     let range_checker_trace = range_checker.generate_trace();
 
-    trace_builder.clear();
-
-    trace_builder.load_cached_trace(page_trace, page_prover_data);
-    trace_builder.load_trace(aux_trace);
-    trace_builder.load_trace(range_checker_trace);
-
-    trace_builder.commit_current();
-
-    let vk = pk.vk();
-
-    let main_trace_data = trace_builder.view(&vk, vec![final_page_chip, &range_checker.air]);
-
-    let pis = vec![vec![]; vk.per_air.len()];
-
-    let prover = engine.prover();
-    let verifier = engine.verifier();
-
-    let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
-
-    let mut challenger = engine.new_challenger();
-    verifier.verify(&mut challenger, &vk, &proof)
+    BabyBearPoseidon2Engine::run_test_no_pis(
+        &any_rap_vec![final_page_chip, &range_checker.air],
+        vec![
+            vec![page_trace.clone(), aux_trace.clone()],
+            vec![range_checker_trace.clone()],
+        ],
+    )
 }
 
 #[test]
@@ -126,20 +105,7 @@ fn final_page_chip_test() {
 
     keygen_builder.add_air(&range_checker.air);
 
-    let pk = keygen_builder.generate_pk();
-
-    let prover = MultiTraceStarkProver::new(&engine.config);
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-
-    test_single_page(
-        &engine,
-        &page,
-        &final_page_chip,
-        range_checker.clone(),
-        &mut trace_builder,
-        &pk,
-    )
-    .expect("Verification Failed");
+    test_single_page(&page, &final_page_chip, range_checker.clone()).expect("Verification Failed");
 
     // Creating a new page with the first two rows swapped
     let mut page_rows = page.to_2d_vec();
@@ -149,16 +115,12 @@ fn final_page_chip_test() {
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
-    assert_eq!(
-        test_single_page(
-            &engine,
-            &page,
-            &final_page_chip,
-            range_checker.clone(),
-            &mut trace_builder,
-            &pk,
+
+    assert!(
+        matches!(
+            test_single_page(&page, &final_page_chip, range_checker.clone()),
+            Err(VerificationError::OodEvaluationMismatch),
         ),
-        Err(VerificationError::OodEvaluationMismatch),
-        "Expected verification to fail, but it passed"
+        "Expected constraints to fail"
     );
 }
