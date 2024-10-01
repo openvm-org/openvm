@@ -6,6 +6,7 @@ use std::{
     rc::Rc,
 };
 
+use afs_primitives::bigint::check_carry_to_zero::get_carry_max_abs_and_bits;
 use p3_util::log2_ceil_usize;
 
 use super::{ExprBuilder, SymbolicExpr};
@@ -18,6 +19,8 @@ pub trait FieldVariableConfig {
     fn max_limb_bits() -> usize;
     // Number of limbs to represent a field element.
     fn num_limbs_per_field_element() -> usize;
+    // The max bits allowed for each limb, determined by range checker.
+    fn range_checker_bits() -> usize;
 }
 
 #[derive(Clone)]
@@ -69,63 +72,100 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         self.expr_limbs = C::num_limbs_per_field_element();
     }
 
-    pub fn add(&self, other: &FieldVariable<C>) -> FieldVariable<C> {
-        assert!(Rc::ptr_eq(&self.builder, &other.builder));
-        let limb_max_abs = self.limb_max_abs + other.limb_max_abs;
+    fn save_if_overflow(
+        a: &mut FieldVariable<C>,
+        b: &mut FieldVariable<C>,
+        limb_max_fn: fn(&FieldVariable<C>, &FieldVariable<C>) -> usize,
+    ) {
+        let limb_max_abs = limb_max_fn(a, b);
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-        let mut res = FieldVariable {
+        let (_, carry_bits) =
+            get_carry_max_abs_and_bits(max_overflow_bits, C::canonical_limb_bits());
+        if carry_bits > C::range_checker_bits() {
+            // Need to save self or other (or both) to prevent overflow.
+            if a.max_overflow_bits > b.max_overflow_bits {
+                assert!(a.max_overflow_bits > C::canonical_limb_bits());
+                a.save();
+            } else {
+                assert!(b.max_overflow_bits > C::canonical_limb_bits());
+                b.save();
+            }
+        }
+    }
+
+    // TODO: rethink about how should auto-save work.
+    // This implementation requires self and other to be mutable, and might actually mutate them.
+    // This might surprise the caller or introduce hard bug if the caller clone the FieldVariable and then call this.
+    pub fn add(&mut self, other: &mut FieldVariable<C>) -> FieldVariable<C> {
+        assert!(Rc::ptr_eq(&self.builder, &other.builder));
+        let limb_max_fn =
+            |a: &FieldVariable<C>, b: &FieldVariable<C>| a.limb_max_abs + b.limb_max_abs;
+        FieldVariable::<C>::save_if_overflow(self, other, limb_max_fn);
+        // Do again to check if the other also needs to be saved.
+        FieldVariable::<C>::save_if_overflow(self, other, limb_max_fn);
+
+        let limb_max_abs = limb_max_fn(self, other);
+        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
+        FieldVariable {
             expr: SymbolicExpr::Add(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
             builder: self.builder.clone(),
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
             _marker: PhantomData,
-        };
-        if max_overflow_bits > C::max_limb_bits() {
-            res.save();
         }
-        res
     }
 
-    pub fn sub(&self, other: &FieldVariable<C>) -> FieldVariable<C> {
+    pub fn sub(&mut self, other: &mut FieldVariable<C>) -> FieldVariable<C> {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
-        let limb_max_abs = self.limb_max_abs + other.limb_max_abs;
+        let limb_max_fn =
+            |a: &FieldVariable<C>, b: &FieldVariable<C>| a.limb_max_abs + b.limb_max_abs;
+        FieldVariable::<C>::save_if_overflow(self, other, limb_max_fn);
+        // Do again to check if the other also needs to be saved.
+        FieldVariable::<C>::save_if_overflow(self, other, limb_max_fn);
+
+        let limb_max_abs = limb_max_fn(self, other);
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-        let mut res = FieldVariable {
+        FieldVariable {
             expr: SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
             builder: self.builder.clone(),
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
             _marker: PhantomData,
-        };
-        if max_overflow_bits > C::max_limb_bits() {
-            res.save();
         }
-        res
     }
 
-    pub fn mul(&self, other: &FieldVariable<C>) -> FieldVariable<C> {
+    pub fn mul(&mut self, other: &mut FieldVariable<C>) -> FieldVariable<C> {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
-        let limb_max_abs =
-            self.limb_max_abs * other.limb_max_abs * min(self.expr_limbs, other.expr_limbs);
+        let limb_max_fn = |a: &FieldVariable<C>, b: &FieldVariable<C>| {
+            a.limb_max_abs * b.limb_max_abs * min(a.expr_limbs, b.expr_limbs)
+        };
+        FieldVariable::<C>::save_if_overflow(self, other, limb_max_fn);
+        // Do again to check if the other also needs to be saved.
+        FieldVariable::<C>::save_if_overflow(self, other, limb_max_fn);
+
+        let limb_max_abs = limb_max_fn(self, other);
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-        let mut res = FieldVariable {
+        FieldVariable {
             expr: SymbolicExpr::Mul(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
             builder: self.builder.clone(),
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs + other.expr_limbs - 1,
             _marker: PhantomData,
-        };
-        if max_overflow_bits > C::max_limb_bits() {
-            res.save();
         }
-        res
     }
 
-    pub fn int_mul(&self, scalar: isize) -> FieldVariable<C> {
+    pub fn int_mul(&mut self, scalar: isize) -> FieldVariable<C> {
         assert!(scalar.unsigned_abs() < (1 << C::max_limb_bits()));
+        let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
+        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
+        let (_, carry_bits) =
+            get_carry_max_abs_and_bits(max_overflow_bits, C::canonical_limb_bits());
+        if carry_bits > C::range_checker_bits() {
+            self.save();
+        }
         let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let mut res = FieldVariable {
@@ -180,75 +220,54 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
     }
 }
 
-impl<C: FieldVariableConfig> Add for FieldVariable<C> {
+impl<C: FieldVariableConfig> Add<&mut FieldVariable<C>> for &mut FieldVariable<C> {
     type Output = FieldVariable<C>;
 
-    fn add(self, rhs: FieldVariable<C>) -> Self::Output {
-        self.add(&rhs)
+    fn add(self, rhs: &mut FieldVariable<C>) -> Self::Output {
+        self.add(rhs)
     }
 }
 
-impl<C: FieldVariableConfig> Add<FieldVariable<C>> for &FieldVariable<C> {
+impl<C: FieldVariableConfig> Add<FieldVariable<C>> for FieldVariable<C> {
     type Output = FieldVariable<C>;
 
-    fn add(self, rhs: FieldVariable<C>) -> Self::Output {
-        self.add(&rhs)
-    }
-}
-
-impl<C: FieldVariableConfig> Add<&FieldVariable<C>> for FieldVariable<C> {
-    type Output = FieldVariable<C>;
-
-    fn add(self, rhs: &FieldVariable<C>) -> Self::Output {
-        FieldVariable::add(&self, rhs)
+    fn add(mut self, mut rhs: FieldVariable<C>) -> Self::Output {
+        let x = &mut self;
+        x.add(&mut rhs)
     }
 }
 
 impl<C: FieldVariableConfig> Sub<FieldVariable<C>> for FieldVariable<C> {
     type Output = FieldVariable<C>;
 
-    fn sub(self, rhs: FieldVariable<C>) -> Self::Output {
-        self.sub(&rhs)
+    fn sub(mut self, mut rhs: FieldVariable<C>) -> Self::Output {
+        let x = &mut self;
+        x.sub(&mut rhs)
     }
 }
 
-impl<C: FieldVariableConfig> Sub<FieldVariable<C>> for &FieldVariable<C> {
+impl<C: FieldVariableConfig> Sub<&mut FieldVariable<C>> for &mut FieldVariable<C> {
     type Output = FieldVariable<C>;
 
-    fn sub(self, rhs: FieldVariable<C>) -> Self::Output {
-        self.sub(&rhs)
+    fn sub(self, rhs: &mut FieldVariable<C>) -> Self::Output {
+        self.sub(rhs)
     }
 }
 
-impl<C: FieldVariableConfig> Sub<&FieldVariable<C>> for FieldVariable<C> {
+impl<C: FieldVariableConfig> Mul<FieldVariable<C>> for FieldVariable<C> {
     type Output = FieldVariable<C>;
 
-    fn sub(self, rhs: &FieldVariable<C>) -> Self::Output {
-        FieldVariable::sub(&self, rhs)
+    fn mul(mut self, mut rhs: FieldVariable<C>) -> Self::Output {
+        let x = &mut self;
+        x.mul(&mut rhs)
     }
 }
 
-impl<C: FieldVariableConfig> Mul for FieldVariable<C> {
+impl<C: FieldVariableConfig> Mul<&mut FieldVariable<C>> for &mut FieldVariable<C> {
     type Output = FieldVariable<C>;
 
-    fn mul(self, rhs: FieldVariable<C>) -> Self::Output {
-        self.mul(&rhs)
-    }
-}
-
-impl<C: FieldVariableConfig> Mul<FieldVariable<C>> for &FieldVariable<C> {
-    type Output = FieldVariable<C>;
-
-    fn mul(self, rhs: FieldVariable<C>) -> Self::Output {
-        self.mul(&rhs)
-    }
-}
-
-impl<C: FieldVariableConfig> Mul<&FieldVariable<C>> for FieldVariable<C> {
-    type Output = FieldVariable<C>;
-
-    fn mul(self, rhs: &FieldVariable<C>) -> Self::Output {
-        FieldVariable::mul(&self, rhs)
+    fn mul(self, rhs: &mut FieldVariable<C>) -> Self::Output {
+        FieldVariable::mul(self, rhs)
     }
 }
 
@@ -273,5 +292,13 @@ impl<C: FieldVariableConfig> Div<&FieldVariable<C>> for FieldVariable<C> {
 
     fn div(self, rhs: &FieldVariable<C>) -> Self::Output {
         FieldVariable::div(&self, rhs)
+    }
+}
+
+impl<C: FieldVariableConfig> Div<&FieldVariable<C>> for &FieldVariable<C> {
+    type Output = FieldVariable<C>;
+
+    fn div(self, rhs: &FieldVariable<C>) -> Self::Output {
+        FieldVariable::div(self, rhs)
     }
 }

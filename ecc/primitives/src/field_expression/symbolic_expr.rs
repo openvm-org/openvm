@@ -11,7 +11,7 @@ use stark_vm::modular_addsub::big_uint_mod_inverse;
 /// Example: If there are 4 inputs (x1, y1, x2, y2), and one intermediate variable lambda,
 /// Mul(Var(0), Var(0)) - Input(0) - Input(2) =>
 /// lambda * lambda - x1 - x2
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SymbolicExpr {
     Input(usize),
     Var(usize),

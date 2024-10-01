@@ -20,6 +20,8 @@ pub struct CheckCarryToZeroSubAir {
     pub decomp: usize,
 }
 
+// max_overflow_bits: number of bits needed to represent the limbs of an expr / OverflowInt.
+// limb_bits: number of bits for each limb for a canonical representation, typically 8.
 pub fn get_carry_max_abs_and_bits(max_overflow_bits: usize, limb_bits: usize) -> (usize, usize) {
     let carry_bits = max_overflow_bits - limb_bits;
     let carry_min_value_abs = 1 << carry_bits;
