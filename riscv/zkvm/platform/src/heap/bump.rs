@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::syscall::sys_alloc_aligned;
 use core::alloc::{GlobalAlloc, Layout};
+
+use crate::syscall::sys_alloc_aligned;
 
 #[global_allocator]
 pub static HEAP: BumpPointerAlloc = BumpPointerAlloc;
