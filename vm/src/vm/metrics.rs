@@ -28,17 +28,17 @@ mod emit {
 
             for ((dsl_ir, opcode), value) in self.counts.iter() {
                 let labels = [
-                    ("opcode", opcode.clone()),
                     ("dsl_ir", dsl_ir.clone().unwrap_or_else(String::new)),
+                    ("opcode", opcode.clone()),
                 ];
                 counter!("frequency", &labels).absolute(*value as u64);
             }
 
             for ((dsl_ir, opcode, air_name), value) in self.trace_cells.iter() {
                 let labels = [
-                    ("air_name", air_name.clone()),
-                    ("opcode", opcode.clone()),
                     ("dsl_ir", dsl_ir.clone().unwrap_or_else(String::new)),
+                    ("opcode", opcode.clone()),
+                    ("air_name", air_name.clone()),
                 ];
                 counter!("cells_used", &labels).absolute(*value as u64);
             }
