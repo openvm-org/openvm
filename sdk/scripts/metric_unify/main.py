@@ -60,6 +60,8 @@ class MetricDb:
             labels = labels_to_tuple(counter['labels'])
             metric = counter['metric']
             value = int(counter['value'])
+            if value == 0:
+                continue
             add_to_flat_dict(labels, metric, value, self.flat_dict)
 
         # Process gauges
@@ -125,8 +127,6 @@ def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_spa
                 metric = next((m for m in metrics if m.name == metric_name), None)
                 metric_str = ""
                 if metric:
-                    if metric.value is None or metric.value == 0:
-                        continue
                     metric_str += f"{metric.value:,}"
                     if metric.diff_percent is not None and metric.diff_value != 0:
                         color = "red" if metric.diff_percent > 0 else "green"
