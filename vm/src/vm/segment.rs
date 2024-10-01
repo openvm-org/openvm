@@ -417,11 +417,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
                 for (air_name, now_value) in now_trace_cells {
                     let prev_value = prev_trace_cells.get(&air_name).unwrap_or(&0);
-                    let metrics_key = (dsl_instr.clone(), opcode.to_string(), air_name);
+                    let key = (dsl_instr.clone(), opcode.to_string(), air_name);
                     *self
                         .collected_metrics
                         .trace_cells
-                        .entry(metrics_key)
+                        .entry(key)
                         .or_insert(0) += now_value - prev_value;
                 }
             }
@@ -437,7 +437,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 collect_metrics = false;
                 #[cfg(feature = "bench-metrics")]
                 metrics::counter!("total_cells_used")
-                    .absolute(self.current_trace_cells().into_values().sum::<usize>() as u64);
+                    .absolute(now_trace_cells.into_values().sum::<usize>() as u64);
             }
             if opcode == Opcode::TERMINATE {
                 break;
@@ -459,17 +459,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
 
         Ok(())
-    }
-
-    pub fn current_trace_cells(&self) -> BTreeMap<String, usize> {
-        self.chips
-            .iter()
-            .flat_map(|chip| {
-                chip.air_names()
-                    .into_iter()
-                    .zip_eq(chip.current_trace_cells())
-            })
-            .collect()
     }
 
     /// Compile the AIRs and trace generation outputs for the chips used in this segment
@@ -522,6 +511,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 .iter()
                 .any(|height| *height > self.config.max_segment_len)
         })
+    }
+
+    fn current_trace_cells(&self) -> BTreeMap<String, usize> {
+        self.chips
+            .iter()
+            .flat_map(|chip| {
+                chip.air_names()
+                    .into_iter()
+                    .zip_eq(chip.current_trace_cells())
+            })
+            .collect()
     }
 
     pub(crate) fn update_chip_metrics(&mut self) {
