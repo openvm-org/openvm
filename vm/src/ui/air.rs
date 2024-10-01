@@ -1,27 +1,30 @@
 use std::borrow::Borrow;
 
 use afs_primitives::var_range::bus::VariableRangeCheckerBus;
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::UiCols;
 use crate::{
-    arch::{bus::ExecutionBus, instructions::Opcode},
+    arch::{bridge::ExecutionBridge, instructions::Opcode},
     memory::offline_checker::MemoryBridge,
-    program::bridge::ProgramBus,
 };
 
 #[derive(Copy, Clone, Debug)]
 pub struct UiAir {
-    pub(super) execution_bus: ExecutionBus,
-    pub(super) program_bus: ProgramBus,
+    pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 
     pub bus: VariableRangeCheckerBus,
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for UiAir {}
+impl<F: Field> PartitionedBaseAir<F> for UiAir {}
 impl<F: Field> BaseAir<F> for UiAir {
     fn width(&self) -> usize {
         UiCols::<F>::width()

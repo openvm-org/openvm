@@ -2,6 +2,7 @@ use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
+        bridge::ExecutionBridge,
         bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
@@ -50,8 +51,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: FieldArithmeticAir {
-                execution_bus,
-                program_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
             records: vec![],

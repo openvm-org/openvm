@@ -53,7 +53,7 @@ fn index_scan_test(
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
     let page_width = 1 + idx_len + data_len;
 
-    page_controller.set_up_keygen_builder(&mut keygen_builder, page_width, idx_len);
+    page_controller.set_up_keygen_builder(&mut keygen_builder, page_width);
 
     let pk = keygen_builder.generate_pk();
 
@@ -63,12 +63,12 @@ fn index_scan_test(
         trace_builder,
         input_prover_data,
         output_prover_data,
-        x.clone(),
+        x,
         idx_decomp,
     );
     let vk = pk.vk();
 
-    page_controller.verify(engine, vk, &proof, x.clone())
+    page_controller.verify(engine, vk, &proof)
 }
 
 #[test]

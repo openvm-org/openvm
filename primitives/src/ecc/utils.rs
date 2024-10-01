@@ -7,20 +7,12 @@ use p3_field::PrimeField64;
 use super::EcModularConfig;
 use crate::{
     bigint::{
-        check_carry_to_zero::get_carry_max_abs_and_bits, utils::big_int_to_num_limbs,
+        check_carry_to_zero::get_carry_max_abs_and_bits,
+        utils::{big_int_to_num_limbs, vec_isize_to_f},
         CanonicalUint, DefaultLimbConfig, OverflowInt,
     },
     var_range::VariableRangeCheckerChip,
 };
-
-pub(super) fn vec_isize_to_f<F: PrimeField64>(x: Vec<isize>) -> Vec<F> {
-    x.iter()
-        .map(|x| {
-            F::from_canonical_usize(x.unsigned_abs())
-                * if x >= &0 { F::one() } else { F::neg_one() }
-        })
-        .collect()
-}
 
 pub(super) fn to_canonical(
     x: &BigUint,
@@ -66,7 +58,7 @@ pub(super) fn compute_lambda_q_limbs(
     let prime_signed = BigInt::from_biguint(Sign::Plus, config.prime.clone());
     let lambda_q_signed: BigInt =
         (lambda_signed * (x2_signed - x1_signed) - y2_signed + y1_signed) / prime_signed;
-    big_int_to_num_limbs(lambda_q_signed, config.limb_bits, config.num_limbs + 1)
+    big_int_to_num_limbs(&lambda_q_signed, config.limb_bits, config.num_limbs + 1)
 }
 
 pub(super) fn compute_lambda_carries(
@@ -109,7 +101,7 @@ pub(super) fn compute_x3_q_limbs(
     let prime_signed = BigInt::from_biguint(Sign::Plus, config.prime.clone());
     let x3_q_signed =
         (lambda_signed.clone() * lambda_signed - x1_signed - x2_signed - x3_signed) / prime_signed;
-    big_int_to_num_limbs(x3_q_signed, config.limb_bits, config.num_limbs)
+    big_int_to_num_limbs(&x3_q_signed, config.limb_bits, config.num_limbs)
 }
 
 pub(super) fn compute_x3_carries(
@@ -153,7 +145,7 @@ pub(super) fn compute_y3_q_limbs(
     let y3_q_signed = (y3_signed + lambda_signed.clone() * x3_signed + y1_signed
         - lambda_signed * x1_signed)
         / prime_signed;
-    big_int_to_num_limbs(y3_q_signed, config.limb_bits, config.num_limbs)
+    big_int_to_num_limbs(&y3_q_signed, config.limb_bits, config.num_limbs)
 }
 
 pub(super) fn compute_y3_carries(
@@ -197,7 +189,7 @@ pub(super) fn compute_lambda_q_limbs_double(
     let three = BigInt::from_u8(3).unwrap();
     let lambda_q_signed: BigInt =
         (lambda_signed * two * y1_signed - three * x1_signed.clone() * x1_signed) / prime_signed;
-    big_int_to_num_limbs(lambda_q_signed, config.limb_bits, config.num_limbs + 1)
+    big_int_to_num_limbs(&lambda_q_signed, config.limb_bits, config.num_limbs + 1)
 }
 
 pub(super) fn compute_lambda_carries_double(

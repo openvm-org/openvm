@@ -6,7 +6,10 @@ use rand::{rngs::StdRng, Rng};
 
 use super::UiChip;
 use crate::{
-    arch::{instructions::Opcode, testing::MachineChipTestBuilder},
+    arch::{
+        instructions::Opcode,
+        testing::{memory::gen_pointer, MachineChipTestBuilder},
+    },
     program::Instruction,
 };
 
@@ -31,11 +34,10 @@ fn prepare_lui_write_execute(
     assert_eq!(x.map(F::from_canonical_u32), tester.read::<4>(1usize, a));
 }
 
-fn generate_random_input(rng: &mut StdRng, address_bits: usize, imm_bits: usize) -> (usize, usize) {
-    let address_range = || 0usize..1 << address_bits;
+fn generate_random_input(rng: &mut StdRng, imm_bits: usize) -> (usize, usize) {
     let imm_range = || 0usize..1 << imm_bits;
 
-    let a = rng.gen_range(address_range());
+    let a = gen_pointer(rng, 32);
     let b = rng.gen_range(imm_range());
 
     (a, b)
@@ -54,7 +56,7 @@ fn lui_test() {
     let num_tests: usize = 10;
 
     for _ in 0..num_tests {
-        let (a, b) = generate_random_input(&mut rng, 29, 20);
+        let (a, b) = generate_random_input(&mut rng, 20);
         prepare_lui_write_execute(&mut tester, &mut chip, a, b);
     }
 
@@ -72,7 +74,7 @@ fn negative_lui_invalid_imm_test() {
     );
 
     // (1 << 20) + 1 exceeds the 20-bit bound
-    prepare_lui_write_execute(&mut tester, &mut chip, 3, (1 << 20) + 1);
+    prepare_lui_write_execute(&mut tester, &mut chip, 4, (1 << 20) + 1);
 
     let tester = tester.build().load(chip).finalize();
     disable_debug_builder();

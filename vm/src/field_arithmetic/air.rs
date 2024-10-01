@@ -1,5 +1,8 @@
 use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use itertools::izip;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -8,17 +11,15 @@ use p3_matrix::Matrix;
 use super::columns::FieldArithmeticCols;
 use crate::{
     arch::{
-        bus::ExecutionBus,
+        bridge::ExecutionBridge,
         instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
     },
     memory::offline_checker::MemoryBridge,
-    program::bridge::ProgramBus,
 };
 
 #[derive(Clone, Copy, Debug)]
 pub struct FieldArithmeticAir {
-    pub(super) execution_bus: ExecutionBus,
-    pub(super) program_bus: ProgramBus,
+    pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 }
 
@@ -30,6 +31,8 @@ impl AirConfig for FieldArithmeticAir {
     type Cols<T> = FieldArithmeticCols<T>;
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for FieldArithmeticAir {}
+impl<F: Field> PartitionedBaseAir<F> for FieldArithmeticAir {}
 impl<F: Field> BaseAir<F> for FieldArithmeticAir {
     fn width(&self) -> usize {
         FieldArithmeticCols::<F>::get_width()

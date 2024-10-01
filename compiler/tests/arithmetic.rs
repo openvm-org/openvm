@@ -255,13 +255,7 @@ fn test_ext_immediate() {
     let program = builder.clone().compile_isa();
     execute_program(program, vec![]);
 
-    let program = builder.compile_isa_with_options(CompilerOptions {
-        compile_prints: false,
-        enable_cycle_tracker: false,
-        field_arithmetic_enabled: true,
-        field_extension_enabled: true,
-        field_less_than_enabled: false,
-    });
+    let program = builder.compile_isa();
     execute_program(program, vec![]);
 }
 
@@ -314,13 +308,7 @@ fn test_ext_felt_arithmetic() {
     let program = builder.clone().compile_isa();
     execute_program(program, vec![]);
 
-    let program = builder.compile_isa_with_options(CompilerOptions {
-        compile_prints: false,
-        enable_cycle_tracker: false,
-        field_arithmetic_enabled: true,
-        field_extension_enabled: true,
-        field_less_than_enabled: false,
-    });
+    let program = builder.compile_isa();
     execute_program(program, vec![]);
 }
 

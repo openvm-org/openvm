@@ -13,6 +13,16 @@ use super::{
 };
 use crate::{challenger::ChallengerVariable, commit::PcsVariable, digest::DigestVariable};
 
+/// Notes:
+/// 1. FieldMerkleTreeMMCS sorts traces by height in descending order when committing data.
+/// Reference:
+/// https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53
+/// So traces are sorted in `opening_proof`.
+/// 2. FieldMerkleTreeMMCS::verify_batch keeps the raw values in the original order. So traces are
+/// not sorted in `opened_values`.
+/// Reference:
+/// https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/mmcs.rs#L87
+/// https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L100
 pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
@@ -70,30 +80,53 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let round = builder.get(&rounds, j);
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
+                let permutation = round.permutation;
+                let to_perm_index = |builder: &mut Builder<_>, k: RVar<_>| {
+                    // Always no permutation in static mode
+                    if builder.flags.static_only {
+                        builder.eval(k)
+                    } else {
+                        let ret: Usize<_> = builder.uninit();
+                        builder.if_eq(permutation.len(), RVar::zero()).then_or_else(
+                            |builder| {
+                                builder.assign(&ret, k);
+                            },
+                            |builder| {
+                                let value = builder.get(&permutation, k);
+                                builder.assign(&ret, value);
+                            },
+                        );
+                        ret
+                    }
+                };
 
-                let batch_heights_log2: Array<C, Usize<C::N>> = builder.array(mats.len());
-                builder.range(0, mats.len()).for_each(|k, builder| {
-                    let mat = builder.get(&mats, k);
+                let log_batch_max_height: Usize<_> = {
+                    let log_batch_max_index = to_perm_index(builder, RVar::zero());
+                    let mat = builder.get(&mats, log_batch_max_index);
                     let domain = mat.domain;
-                    let height_log2: Usize<_> = builder.eval(domain.log_n + RVar::from(log_blowup));
-                    builder.set_value(&batch_heights_log2, k, height_log2);
-                });
+                    builder.eval(domain.log_n + RVar::from(log_blowup))
+                };
+
                 let batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
+                // `verify_batch` requires `permed_opened_values` to be in the committed order.
+                let permed_opened_values = builder.array(batch_opening.opened_values.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
-                    let mat = builder.get(&mats, k);
+                    let mat_index = to_perm_index(builder, k);
+
+                    let mat = builder.get(&mats, mat_index.clone());
                     let domain = mat.domain;
                     let dim = DimensionsVariable::<C> {
                         height: builder.eval(domain.size() * RVar::from(blowup)),
                     };
                     builder.set_value(&batch_dims, k, dim);
+                    let opened_value = builder.get(&batch_opening.opened_values, mat_index);
+                    builder.set_value(&permed_opened_values, k, opened_value);
                 });
+                let permed_opened_values = NestedOpenedValues::Felt(permed_opened_values);
 
-                let log_batch_max_height = builder.get(&batch_heights_log2, 0);
                 let bits_reduced: Usize<_> =
                     builder.eval(log_global_max_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
-
-                let opened_values = NestedOpenedValues::Felt(batch_opening.opened_values);
 
                 builder.cycle_tracker_start("verify-batch");
                 verify_batch::<C>(
@@ -101,18 +134,14 @@ pub fn verify_two_adic_pcs<C: Config>(
                     &batch_commit,
                     batch_dims,
                     index_bits_shifted_v1,
-                    &opened_values,
+                    &permed_opened_values,
                     &batch_opening.opening_proof,
                 );
                 builder.cycle_tracker_end("verify-batch");
 
-                // hack to move batch_opening.opened_values back
-                let opened_values = match opened_values {
-                    NestedOpenedValues::Felt(opened_values) => opened_values,
-                    _ => unreachable!(),
-                };
-
                 builder.cycle_tracker_start("compute-reduced-opening");
+                // `verify_challenges` requires `opened_values` to be in the original order.
+                let opened_values = batch_opening.opened_values;
                 builder
                     .range(0, opened_values.len())
                     .for_each(|k, builder| {
@@ -231,6 +260,7 @@ where
         Self {
             batch_commit: DigestVariable::Felt(commit),
             mats,
+            permutation: builder.dyn_array(0),
         }
     }
 }

@@ -1,5 +1,9 @@
 use afs_primitives::sub_chip::{AirConfig, SubAir};
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -10,6 +14,15 @@ use super::{
 };
 use crate::{common::page_cols::PageCols, indexed_output_page_air::columns::IndexedOutputPageCols};
 
+impl<F: Field> BaseAirWithPublicValues<F> for IndexedPageWriteAir {}
+impl<F: Field> PartitionedBaseAir<F> for IndexedPageWriteAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.page_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.aux_width()
+    }
+}
 impl<F: Field> BaseAir<F> for IndexedPageWriteAir {
     fn width(&self) -> usize {
         self.air_width()

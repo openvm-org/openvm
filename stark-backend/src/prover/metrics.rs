@@ -117,3 +117,32 @@ pub fn format_number_with_underscores(n: usize) -> String {
     // Reverse the result to get the correct order
     result.chars().rev().collect()
 }
+
+#[cfg(feature = "bench-metrics")]
+mod emit {
+    use metrics::counter;
+
+    use super::{SingleTraceMetrics, TraceMetrics};
+
+    impl TraceMetrics {
+        pub fn emit(&self) {
+            for trace_metrics in &self.per_air {
+                trace_metrics.emit();
+            }
+            counter!("total_cells").absolute(self.total_cells as u64);
+        }
+    }
+
+    impl SingleTraceMetrics {
+        pub fn emit(&self) {
+            let labels = [("air_name", self.air_name.clone())];
+            counter!("rows", &labels).absolute(self.height as u64);
+            counter!("cells", &labels).absolute(self.total_cells as u64);
+            counter!("prep_cols", &labels).absolute(self.width.preprocessed.unwrap_or(0) as u64);
+            counter!("main_cols", &labels)
+                .absolute(self.width.partitioned_main.iter().sum::<usize>() as u64);
+            counter!("perm_cols", &labels)
+                .absolute(self.width.after_challenge.iter().sum::<usize>() as u64);
+        }
+    }
+}

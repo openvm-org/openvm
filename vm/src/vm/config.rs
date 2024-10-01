@@ -29,7 +29,8 @@ pub struct VmConfig {
     pub perm_poseidon2_enabled: bool,
     pub poseidon2_max_constraint_degree: Option<usize>,
     pub keccak_enabled: bool,
-    pub modular_multiplication_enabled: bool,
+    pub modular_addsub_enabled: bool,
+    pub modular_multdiv_enabled: bool,
     pub is_less_than_enabled: bool,
     pub u256_arithmetic_enabled: bool,
     pub u256_multiplication_enabled: bool,
@@ -55,7 +56,8 @@ impl Default for VmConfig {
             perm_poseidon2_enabled: true,
             poseidon2_max_constraint_degree: Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
             keccak_enabled: false,
-            modular_multiplication_enabled: false,
+            modular_addsub_enabled: false,
+            modular_multdiv_enabled: false,
             is_less_than_enabled: false,
             u256_arithmetic_enabled: false,
             u256_multiplication_enabled: false,
@@ -88,6 +90,14 @@ impl VmConfig {
             perm_poseidon2_enabled: false,
             keccak_enabled: false,
             ..Default::default()
+        }
+    }
+
+    pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
+        VmConfig {
+            poseidon2_max_constraint_degree: Some(poseidon2_max_constraint_degree),
+            num_public_values: 4,
+            ..VmConfig::default()
         }
     }
 }

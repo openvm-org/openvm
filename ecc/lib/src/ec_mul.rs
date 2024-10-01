@@ -1,6 +1,5 @@
-use afs_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var};
+use afs_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var, NUM_LIMBS};
 use p3_field::{AbstractField, PrimeField64};
-use stark_vm::modular_arithmetic::NUM_LIMBS;
 
 use crate::types::ECPointVariable;
 

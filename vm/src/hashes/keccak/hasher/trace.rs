@@ -1,4 +1,4 @@
-use std::array::from_fn;
+use std::{array::from_fn, borrow::BorrowMut};
 
 use afs_stark_backend::rap::AnyRap;
 use p3_air::BaseAir;
@@ -12,14 +12,14 @@ use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 use tiny_keccak::keccakf;
 
-use super::{KeccakVmChip, KECCAK_DIGEST_WRITES};
+use super::{KeccakVmChip, KECCAK_DIGEST_WRITES, KECCAK_WORD_SIZE};
 use crate::{
     arch::chips::MachineChip,
     hashes::keccak::hasher::{
-        columns::{KeccakOpcodeCols, KeccakVmColsMut},
+        columns::{KeccakOpcodeCols, KeccakVmCols},
         KECCAK_ABSORB_READS, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
     },
-    memory::{offline_checker::MemoryReadAuxCols, MemoryReadRecord, MemoryWriteRecord},
+    memory::{MemoryReadRecord, MemoryWriteRecord},
 };
 
 impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
@@ -39,7 +39,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
             /// if first block
             op_reads: Option<[MemoryReadRecord<F, 1>; 3]>,
             /// if last block
-            digest_writes: Option<[MemoryWriteRecord<F, 1>; KECCAK_DIGEST_WRITES]>,
+            digest_writes: Option<[MemoryWriteRecord<F, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES]>,
         }
 
         impl<F> Default for StateDiff<F> {
@@ -61,6 +61,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
             let mut opcode = KeccakOpcodeCols {
                 pc: record.pc,
                 is_enabled: F::one(),
+                is_enabled_first_round: F::zero(),
                 start_timestamp: record.start_timestamp(),
                 a,
                 b,
@@ -136,53 +137,55 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
             .zip(opcode_blocks.into_par_iter())
             .for_each(|((rows, p3_keccak_mat), (opcode, diff, block))| {
                 let height = rows.len() / trace_width;
+                let partial_read_data = if let Some(partial_read_idx) = block.partial_read_idx {
+                    block.reads[partial_read_idx].data
+                } else {
+                    [F::zero(); KECCAK_WORD_SIZE]
+                };
                 for (row, p3_keccak_row) in rows
                     .chunks_exact_mut(trace_width)
                     .zip(p3_keccak_mat.chunks_exact(NUM_KECCAK_PERM_COLS))
                 {
                     // Safety: `KeccakPermCols` **must** be the first field in `KeccakVmCols`
                     row[..NUM_KECCAK_PERM_COLS].copy_from_slice(p3_keccak_row);
-                    let row_mut = KeccakVmColsMut::from_mut_slice(row);
-                    *row_mut.opcode = opcode;
+                    let row_mut: &mut KeccakVmCols<F> = row.borrow_mut();
+                    row_mut.opcode = opcode;
 
                     row_mut.sponge.block_bytes = block.padded_bytes.map(F::from_canonical_u8);
+                    row_mut
+                        .mem_oc
+                        .partial_block
+                        .copy_from_slice(&partial_read_data[1..]);
                     for (i, is_padding) in row_mut.sponge.is_padding_byte.iter_mut().enumerate() {
                         *is_padding = F::from_bool(i >= block.remaining_len);
                     }
                 }
-                let first_row = KeccakVmColsMut::from_mut_slice(&mut rows[..trace_width]);
+                let first_row: &mut KeccakVmCols<F> = rows[..trace_width].borrow_mut();
                 first_row.sponge.is_new_start = F::from_bool(block.is_new_start);
                 first_row.sponge.state_hi = diff.pre_hi.map(F::from_canonical_u8);
+                first_row.opcode.is_enabled_first_round = first_row.opcode.is_enabled;
                 // Make memory access aux columns. Any aux column not explicitly defined defaults to all 0s
-                let mut slc_idx = 0;
                 if let Some(op_reads) = diff.op_reads {
-                    for record in op_reads {
-                        let aux = aux_cols_factory.make_read_aux_cols(record).flatten();
-                        first_row.mem_oc[slc_idx..][..aux.len()].copy_from_slice(&aux);
-                        slc_idx += aux.len();
+                    for (i, record) in op_reads.into_iter().enumerate() {
+                        // TODO[jpw] make_read_aux_cols should directly write into slice
+                        first_row.mem_oc.op_reads[i] = aux_cols_factory.make_read_aux_cols(record);
                     }
                 }
-                slc_idx = KECCAK_EXECUTION_READS * MemoryReadAuxCols::<F, 1>::width();
-                for record in block.bytes_read {
+                for (i, record) in block.reads.into_iter().enumerate() {
                     // TODO[jpw] make_read_aux_cols should directly write into slice
-                    let aux = aux_cols_factory.make_read_aux_cols(record).flatten();
-                    first_row.mem_oc[slc_idx..][..aux.len()].copy_from_slice(&aux);
-                    slc_idx += aux.len();
+                    first_row.mem_oc.absorb_reads[i] = aux_cols_factory.make_read_aux_cols(record);
                 }
 
-                let last_row =
-                    KeccakVmColsMut::from_mut_slice(&mut rows[(height - 1) * trace_width..]);
+                let last_row: &mut KeccakVmCols<F> =
+                    rows[(height - 1) * trace_width..].borrow_mut();
                 last_row.sponge.state_hi = diff.post_hi.map(F::from_canonical_u8);
                 last_row.inner.export =
                     opcode.is_enabled * F::from_bool(block.remaining_len < KECCAK_RATE_BYTES);
                 if let Some(digest_writes) = diff.digest_writes {
-                    slc_idx = (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS)
-                        * MemoryReadAuxCols::<F, 1>::width();
-                    for record in digest_writes {
+                    for (i, record) in digest_writes.into_iter().enumerate() {
                         // TODO: these aux columns are only used for the last row - can we share them with aux reads in first row?
-                        let aux = aux_cols_factory.make_write_aux_cols(record).flatten();
-                        last_row.mem_oc[slc_idx..][..aux.len()].copy_from_slice(&aux);
-                        slc_idx += aux.len();
+                        last_row.mem_oc.digest_writes[i] =
+                            aux_cols_factory.make_write_aux_cols(record);
                     }
                 }
             });

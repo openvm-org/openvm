@@ -41,15 +41,6 @@ impl FieldExtensionArithmeticAir {
             ..
         } = aux;
 
-        // Interaction with program
-        self.program_bus.send_instruction(
-            builder,
-            pc,
-            expected_opcode.clone(),
-            [op_a, op_b, op_c, d, e],
-            is_valid,
-        );
-
         let mut timestamp_delta = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
@@ -86,11 +77,13 @@ impl FieldExtensionArithmeticAir {
             )
             .eval(builder, is_valid);
 
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.is_valid,
-            ExecutionState::new(pc, timestamp),
-            AB::F::from_canonical_usize(timestamp_delta),
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                expected_opcode,
+                [op_a, op_b, op_c, d, e],
+                ExecutionState::new(pc, timestamp),
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, is_valid);
     }
 }

@@ -26,6 +26,8 @@ num-traits.workspace = true
 # disable jemalloc to be compatible with afs-starkbackend
 snark-verifier-sdk = { workspace = true, optional = true }
 zkhash = { workspace = true }
+metrics = { workspace = true, optional = true }
+cfg-if = { workspace = true }
 
 [dev-dependencies]
 hex = "0.4.3"
@@ -34,8 +36,11 @@ p3-symmetric = { workspace = true }
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
 rand = "0.8.5"
+afs-compiler = { path = ".", features = ["sdk"] }
 
 [features]
 default = []
 halo2-compiler = ["dep:snark-verifier-sdk"]
 parallel = ["stark-vm/parallel"]
+sdk = ["stark-vm/sdk"]
+bench-metrics = ["sdk", "dep:metrics", "stark-vm/bench-metrics"]

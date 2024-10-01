@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::{
     EcAddUnequalAuxCols, EcAddUnequalChip, EcAddUnequalCols, EcAddUnequalIoCols,
     EcAddUnequalRecord, EcDoubleAuxCols, EcDoubleChip, EcDoubleCols, EcDoubleIoCols,
-    EcDoubleRecord,
+    EcDoubleRecord, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS,
 };
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
@@ -14,7 +14,7 @@ use crate::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols, MemoryHeapReadRecord,
     },
-    modular_arithmetic::{limbs_to_biguint, NUM_LIMBS, TWO_NUM_LIMBS},
+    modular_addsub::ModularAddSubChip,
 };
 
 fn load_ec_point<F: PrimeField32>(
@@ -24,12 +24,12 @@ fn load_ec_point<F: PrimeField32>(
         .iter()
         .map(|x| x.as_canonical_u32())
         .collect::<Vec<_>>();
-    let x = limbs_to_biguint(&x_limbs);
+    let x = ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&x_limbs);
     let y_limbs = array_read.data_read.data[NUM_LIMBS..]
         .iter()
         .map(|x| x.as_canonical_u32())
         .collect::<Vec<_>>();
-    let y = limbs_to_biguint(&y_limbs);
+    let y = ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::limbs_to_biguint(&y_limbs);
     (x, y)
 }
 

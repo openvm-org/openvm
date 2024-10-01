@@ -2,23 +2,23 @@ use std::fmt::Display;
 
 use afs_stark_backend::prover::metrics::format_number_with_underscores;
 
+use super::{CanDiff, SpanRef};
 use crate::vm::metrics::VmMetrics;
 
 #[derive(Debug, Clone)]
 pub struct CycleTrackerSpan<M: CanDiff> {
     pub is_active: bool,
     pub metrics: M,
-}
-
-pub trait CanDiff {
-    fn diff(&mut self, another: &Self);
+    /// The name of the parent span, if any
+    pub parent: Option<SpanRef>,
 }
 
 impl<M: CanDiff> CycleTrackerSpan<M> {
-    pub fn start(metrics: M) -> Self {
+    pub fn start(metrics: M, parent: Option<SpanRef>) -> Self {
         Self {
             is_active: true,
             metrics,
+            parent,
         }
     }
 
@@ -31,7 +31,7 @@ impl<M: CanDiff> CycleTrackerSpan<M> {
 
 impl Display for CycleTrackerSpan<VmMetrics> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (key, value) in &self.metrics.chip_metrics {
+        for (key, value) in &self.metrics.chip_heights {
             writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
         }
 

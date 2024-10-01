@@ -10,6 +10,26 @@ use crate::air_builders::{
     debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
 };
 
+/// An AIR with 0 or more public values.
+/// This trait will be merged into Plonky3 in PR: https://github.com/Plonky3/Plonky3/pull/470
+pub trait BaseAirWithPublicValues<F>: BaseAir<F> {
+    fn num_public_values(&self) -> usize {
+        0
+    }
+}
+
+/// An AIR with 1 or more main trace partitions.
+pub trait PartitionedBaseAir<F>: BaseAir<F> {
+    /// By default, an AIR has no cached main trace.
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![]
+    }
+    /// By default, an AIR has only one private main trace.
+    fn common_main_width(&self) -> usize {
+        self.width()
+    }
+}
+
 /// An AIR that works with a particular `AirBuilder` which allows preprocessing
 /// and injected randomness.
 ///
@@ -44,7 +64,8 @@ pub trait AnyRap<SC: StarkGenericConfig>:
     Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
-    + BaseAir<Val<SC>>
+    + BaseAirWithPublicValues<Val<SC>>
+    + PartitionedBaseAir<Val<SC>>
 {
     fn as_any(&self) -> &dyn Any;
     /// Name for display purposes
@@ -57,7 +78,8 @@ where
     T: Rap<SymbolicRapBuilder<Val<SC>>>
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
-        + BaseAir<Val<SC>>
+        + BaseAirWithPublicValues<Val<SC>>
+        + PartitionedBaseAir<Val<SC>>
         + 'static,
 {
     fn as_any(&self) -> &dyn Any {
@@ -66,15 +88,26 @@ where
 
     fn name(&self) -> String {
         let full_name = type_name::<Self>().to_string();
-        let base_name = full_name
-            .split('<')
-            .next()
-            .unwrap_or(&full_name)
-            .rsplit("::")
-            .next()
-            .unwrap_or(&full_name)
-            .to_string();
+        // Split the input by the first '<' to separate the main type from its generics
+        if let Some((main_part, generics_part)) = full_name.split_once('<') {
+            // Extract the last segment of the main type
+            let main_type = main_part.split("::").last().unwrap_or("");
 
-        base_name
+            // Remove the trailing '>' from the generics part and split by ", " to handle multiple generics
+            let generics: Vec<String> = generics_part
+                .trim_end_matches('>')
+                .split(", ")
+                .map(|generic| {
+                    // For each generic type, extract the last segment after "::"
+                    generic.split("::").last().unwrap_or("").to_string()
+                })
+                .collect();
+
+            // Join the simplified generics back together with ", " and format the result
+            format!("{}<{}>", main_type, generics.join(", "))
+        } else {
+            // If there's no generic part, just return the last segment after "::"
+            full_name.split("::").last().unwrap_or("").to_string()
+        }
     }
 }

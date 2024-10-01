@@ -15,6 +15,7 @@ We want to make the VM modular, so that adding new instructions and chips involv
 The following must exist in any VM circuit:
 
 - The program chip
+- The core chip
 - A program bus
 - An execution bus
 - A memory bus
@@ -27,24 +28,28 @@ We follow the Harvard architecture where the program code (ROM) is stored separa
 
 A cached trace is used so that the commitment to the program code is the proof system trace commitment. This commitment could be changed to a flat hash, likely with worse performance.
 
-### No-CPU
+### Our no-CPU design
 
 The main motivation is that the existence of a CPU forces the existence of a trace matrix with rows growing with the total number of clock cycles of the program execution. We claim that the no-CPU design gives the minimum lower bound on the number of required trace cells added per opcode execution.
 
-Traditionally, the CPU is in charge of reading/writing from memory and forwarding that information to the appropriate chip. We are changing to a model where each chip directly accesses memory itself. Traditionally this is also inefficient because the CPU uses physical general purpose registers for instruction execution, whereas in our architecture, registers are emulated as memory in a dedicated address space.
+Traditionally, the CPU is in charge of reading/writing from memory and forwarding that information to the appropriate chip. We have switched to a model where each chip directly accesses memory itself. Traditionally this is also inefficient because the CPU uses physical general purpose registers for instruction execution, whereas in our architecture, registers are emulated as memory in a dedicated address space.
 
 Each chip has IO columns `(timestamp, pc, instruction)` where `instruction` is `(opcode, operands)`.
-The chip would receive `(pc, instruction)` on the PROGRAM_BUS to ensure it is reading the correct line of the program code.
+The chip receives `(pc, instruction)` on the PROGRAM_BUS to ensure it is reading the correct line of the program code.
 There is a maximum length to `operands` defined by the PROGRAM_BUS, but each chip can receive only a subset of the operands (setting the rest to zero) without paying the cost for the unused operands.
 
 Each chip receives `(timestamp, pc)` on EXECUTION_BUS and "after"
-executing an instruction, sends `(new_timestamp, new_pc)` on the same bus.
-The chip is in charge of constraining that `new_timestamp > timestamp`. (Here we say "after" to correspond to the temporal nature of runtime execution, but there is no before/after in the AIR matrix itself.)
+executing an instruction, sends `(new_timestamp, new_pc)` on the same bus (here `new_pc` is `pc + 1` most of the time, but not always).
+The chip is in charge of constraining that `new_timestamp` is consistent with `timestamp`. In particular, `new_timestamp` must be (almost always strictly) greater than `timestamp`, but not by a lot (so that the timestamps do not overflow the field characteristic).
 The bus enforces that each timestamp transition corresponds to a particular instruction being executed.
+
+There is an `ExecutionBridge` for more convenient communicating with these two buses.
 
 The chip must constrain that `opcode` is one of the opcodes the chip itself owns. The chip then constrains the rest of the validity of the opcode execution, according to the opcode spec.
 
-When there are no continuations, there will need to be another very simple source/sink chip with a 2 row trace that sends out (1, 0) on EXECUTION_BUS and receives `(final_timestamp, final_pc)` on EXECUTION_BUS. With continuations, the start and end timestamp/pc will need to be constrained with respect to the pre/post-states.
+There is also another very simple "connector" chip with a 2 row trace that sends out `(1, 0)` on EXECUTION_BUS and receives `(final_timestamp, final_pc)` on EXECUTION_BUS. These four values are public values of the program. With continuations, the start and end timestamp/pc will need to be constrained with respect to the pre/post-states.
+
+The vm design is so that the core chip is just one of such chips. The instructions directed at managing the execution flow are passed to the core chip. Such design is modular enough in the sense that it allows us to treat the control flow instructions similarly to most of the other opcodes. Also, instead of having the execution protocol in a single matrix and duplicate the instructions with the chips that actually execute them, we have each step of execution only generating one new row in the machine chip (and maybe more lines in other primitive chips that it uses for execution).
 
 See [internal doc](https://docs.google.com/document/d/1-UkvxiW5tvYH5qw7O4t2WjMIY8v2Gso9kt_MrWW5hPg/edit?usp=sharing) for discussion of alternatives and the trace cell cost analysis.
 

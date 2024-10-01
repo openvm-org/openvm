@@ -3,13 +3,13 @@ use std::{iter, mem::size_of};
 use afs_derive::AlignedBorrow;
 use afs_primitives::ecc::{EcAirConfig, EcAuxCols as EcPrimitivesAuxCols};
 
+use super::TWO_NUM_LIMBS;
 use crate::{
     arch::columns::ExecutionState,
     memory::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols,
     },
-    modular_arithmetic::TWO_NUM_LIMBS,
 };
 
 pub struct EcAddUnequalCols<T: Clone> {

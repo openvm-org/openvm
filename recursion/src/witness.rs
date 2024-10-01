@@ -144,12 +144,13 @@ impl Witnessable<OuterConfig> for VerifierInput<BabyBearPoseidon2OuterConfig> {
         let proof = self.proof.read(builder);
         // This reads nothing because it's a constant.
         let log_degree_per_air = self.log_degree_per_air.read(builder);
-        let public_values = self.public_values.read(builder);
+        // This also reads nothing because log_degree_per_air is a constant.
+        let air_perm_by_height = builder.array(0);
 
         VerifierInputVariable {
             proof,
             log_degree_per_air,
-            public_values,
+            air_perm_by_height,
         }
     }
 
@@ -157,7 +158,6 @@ impl Witnessable<OuterConfig> for VerifierInput<BabyBearPoseidon2OuterConfig> {
         self.proof.write(witness);
         // This writes nothing because it's a constant in static mode.
         <Vec<_> as Witnessable<C>>::write(&self.log_degree_per_air, witness);
-        <Vec<_> as Witnessable<C>>::write(&self.public_values, witness);
     }
 }
 
@@ -168,10 +168,12 @@ impl Witnessable<OuterConfig> for Proof<BabyBearPoseidon2OuterConfig> {
         let commitments = self.commitments.read(builder);
         let opening = self.opening.read(builder);
         let exposed_values_after_challenge = self.exposed_values_after_challenge.read(builder);
+        let public_values = self.public_values.read(builder);
         Self::WitnessVariable {
             commitments,
             opening,
             exposed_values_after_challenge,
+            public_values,
         }
     }
 
@@ -179,6 +181,7 @@ impl Witnessable<OuterConfig> for Proof<BabyBearPoseidon2OuterConfig> {
         self.commitments.write(witness);
         self.opening.write(witness);
         <Vec<_> as Witnessable<C>>::write(&self.exposed_values_after_challenge, witness);
+        <Vec<_> as Witnessable<C>>::write(&self.public_values, witness);
     }
 }
 

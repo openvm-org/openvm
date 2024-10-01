@@ -1,5 +1,3 @@
-// chip def here
-// chip is executor
 use std::sync::Arc;
 
 use afs_primitives::range_tuple::RangeTupleCheckerChip;
@@ -7,8 +5,8 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
-        instructions::Opcode,
+        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
+        columns::ExecutionState, instructions::Opcode,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -25,7 +23,7 @@ pub use columns::*;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
@@ -38,7 +36,7 @@ pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
     pub carry: Vec<T>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,
@@ -76,8 +74,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: UintMultiplicationAir {
-                execution_bus,
-                program_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus: bus.clone(),
             },

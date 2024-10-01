@@ -56,7 +56,7 @@ where
             filter_op.predicate,
         );
         let mut keygen_builder = engine.keygen_builder();
-        page_controller.set_up_keygen_builder(&mut keygen_builder, page_width, idx_len);
+        page_controller.set_up_keygen_builder(&mut keygen_builder, page_width);
 
         // Write the partial pk and vk to disk
         let pk = keygen_builder.generate_pk();

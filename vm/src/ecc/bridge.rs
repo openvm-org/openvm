@@ -17,20 +17,6 @@ impl EcAddUnequalVmAir {
         let mut timestamp_delta = AB::Expr::zero();
         let timestamp: AB::Expr = io.from_state.timestamp.into();
 
-        self.program_bus.send_instruction(
-            builder,
-            io.from_state.pc,
-            AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
-            [
-                io.p3.address.address,
-                io.p1.address.address,
-                io.p2.address.address,
-                io.p1.address.address_space,
-                io.p1.data.address_space,
-            ],
-            aux.aux.is_valid,
-        );
-
         self.memory_bridge
             .read_from_cols(
                 io.p1.address.clone(),
@@ -82,12 +68,20 @@ impl EcAddUnequalVmAir {
             .eval(builder, aux.aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.aux.is_valid,
-            io.from_state.map(Into::into),
-            timestamp_delta,
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
+                [
+                    io.p3.address.address,
+                    io.p1.address.address,
+                    io.p2.address.address,
+                    io.p1.address.address_space,
+                    io.p1.data.address_space,
+                ],
+                io.from_state,
+                timestamp_delta,
+            )
+            .eval(builder, aux.aux.is_valid);
     }
 }
 
@@ -100,20 +94,6 @@ impl EcDoubleVmAir {
     ) {
         let mut timestamp_delta = AB::Expr::zero();
         let timestamp: AB::Expr = io.from_state.timestamp.into();
-
-        self.program_bus.send_instruction(
-            builder,
-            io.from_state.pc,
-            AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
-            [
-                io.p2.address.address.into(),
-                io.p1.address.address.into(),
-                AB::Expr::zero(),
-                io.p1.address.address_space.into(),
-                io.p1.data.address_space.into(),
-            ],
-            aux.aux.is_valid,
-        );
 
         self.memory_bridge
             .read_from_cols(
@@ -149,11 +129,19 @@ impl EcDoubleVmAir {
             .eval(builder, aux.aux.is_valid);
         timestamp_delta += AB::Expr::one();
 
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.aux.is_valid,
-            io.from_state.map(Into::into),
-            timestamp_delta,
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
+                [
+                    io.p2.address.address.into(),
+                    io.p1.address.address.into(),
+                    AB::Expr::zero(),
+                    io.p1.address.address_space.into(),
+                    io.p1.data.address_space.into(),
+                ],
+                io.from_state,
+                timestamp_delta,
+            )
+            .eval(builder, aux.aux.is_valid);
     }
 }

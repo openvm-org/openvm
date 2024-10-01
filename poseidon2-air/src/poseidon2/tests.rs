@@ -1,10 +1,10 @@
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ark_ff::PrimeField as _;
 use ax_sdk::{
     any_rap_vec,
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
-        fri_params::fri_params_with_80_bits_of_security,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::StarkEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
@@ -53,7 +53,7 @@ fn test_poseidon2_default() {
         .collect();
 
     // air and trace generation
-    let poseidon2_air = Poseidon2Air::<16, BabyBear>::default();
+    let poseidon2_air = Poseidon2Air::<16, BabyBear>::default(); // max constraint degree = 7
 
     let mut poseidon2_trace = poseidon2_air.generate_trace(states.clone());
     let mut outputs = states.clone();
@@ -98,7 +98,7 @@ fn test_poseidon2_default() {
     let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3); // max constraint degree = 7 requires log blowup = 3
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
     // positive test
@@ -111,9 +111,7 @@ fn test_poseidon2_default() {
         .expect("Verification failed");
 
     // negative test
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     for _ in 0..10 {
         let width = rng.gen_range(0..poseidon2_air.get_width());
         let height = rng.gen_range(0..num_rows);
@@ -216,7 +214,7 @@ fn test_poseidon2() {
     let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
     // positive test
@@ -229,9 +227,7 @@ fn test_poseidon2() {
         .expect("Verification failed");
 
     // negative test
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     for _ in 0..10 {
         let width = rng.gen_range(0..poseidon2_air.get_width());
         let height = rng.gen_range(0..num_rows);

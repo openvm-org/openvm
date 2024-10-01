@@ -5,8 +5,8 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
-        instructions::Opcode,
+        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
+        columns::ExecutionState, instructions::Opcode,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -48,6 +48,7 @@ impl<T: PrimeField32> CastFChip<T> {
     ) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
+        let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let bus = range_checker_chip.bus();
 
         assert!(
@@ -58,8 +59,7 @@ impl<T: PrimeField32> CastFChip<T> {
         );
         Self {
             air: CastFAir {
-                execution_bus,
-                program_bus,
+                execution_bridge,
                 memory_bridge,
                 bus,
             },

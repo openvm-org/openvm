@@ -2,7 +2,11 @@ use afs_primitives::{
     is_less_than_tuple::columns::IsLessThanTupleIoCols,
     sub_chip::{AirConfig, SubAir},
 };
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -16,6 +20,21 @@ use crate::common::page_cols::PageCols;
 impl<F: Field, const COMMITMENT_LEN: usize> BaseAir<F> for LeafPageAir<COMMITMENT_LEN> {
     fn width(&self) -> usize {
         self.air_width()
+    }
+}
+impl<F: Field, const COMMITMENT_LEN: usize> PartitionedBaseAir<F> for LeafPageAir<COMMITMENT_LEN> {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.cached_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.main_width()
+    }
+}
+impl<F: Field, const COMMITMENT_LEN: usize> BaseAirWithPublicValues<F>
+    for LeafPageAir<COMMITMENT_LEN>
+{
+    fn num_public_values(&self) -> usize {
+        COMMITMENT_LEN
     }
 }
 

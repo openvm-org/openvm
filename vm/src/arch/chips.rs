@@ -6,6 +6,7 @@ use afs_primitives::{
 };
 use afs_stark_backend::rap::AnyRap;
 use enum_dispatch::enum_dispatch;
+use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -14,6 +15,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 use strum_macros::IntoStaticStr;
 
 use crate::{
+    alu::ArithmeticLogicChip,
     arch::columns::ExecutionState,
     castf::CastFChip,
     core::CoreChip,
@@ -22,11 +24,11 @@ use crate::{
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::MemoryChipRef,
-    modular_arithmetic::{ModularArithmeticAirVariant, ModularArithmeticChip},
+    modular_addsub::ModularAddSubChip,
+    modular_multdiv::ModularMultDivChip,
     program::{ExecutionError, Instruction, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
-    uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
 
@@ -40,7 +42,7 @@ pub trait InstructionExecutor<F> {
 }
 
 #[enum_dispatch]
-pub trait MachineChip<F> {
+pub trait MachineChip<F>: Sized {
     fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
@@ -50,8 +52,32 @@ pub trait MachineChip<F> {
     }
     fn current_trace_height(&self) -> usize;
     fn trace_width(&self) -> usize;
-    fn current_trace_cells(&self) -> usize {
-        self.current_trace_height() * self.trace_width()
+
+    fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
+        vec![self.generate_trace()]
+    }
+    fn airs<SC: StarkGenericConfig>(&self) -> Vec<Box<dyn AnyRap<SC>>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        vec![self.air()]
+    }
+    fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
+        vec![self.generate_public_values()]
+    }
+    fn current_trace_heights(&self) -> Vec<usize> {
+        vec![self.current_trace_height()]
+    }
+    fn trace_widths(&self) -> Vec<usize> {
+        vec![self.trace_width()]
+    }
+
+    fn current_trace_cells(&self) -> Vec<usize> {
+        self.trace_widths()
+            .iter()
+            .zip_eq(self.current_trace_heights().iter())
+            .map(|(width, height)| width * height)
+            .collect()
     }
 }
 
@@ -73,23 +99,45 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
         }
     }
 
+    fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
+        match Rc::try_unwrap(self) {
+            Ok(ref_cell) => ref_cell.into_inner().generate_traces(),
+            Err(_) => panic!("cannot generate trace while other chips still hold a reference"),
+        }
+    }
+
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         self.borrow().air()
     }
+    fn airs<SC: StarkGenericConfig>(&self) -> Vec<Box<dyn AnyRap<SC>>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        self.borrow().airs()
+    }
 
     fn generate_public_values(&mut self) -> Vec<F> {
         self.borrow_mut().generate_public_values()
+    }
+    fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
+        self.borrow_mut().generate_public_values_per_air()
     }
 
     fn current_trace_height(&self) -> usize {
         self.borrow().current_trace_height()
     }
+    fn current_trace_heights(&self) -> Vec<usize> {
+        self.borrow().current_trace_heights()
+    }
 
     fn trace_width(&self) -> usize {
         self.borrow().trace_width()
+    }
+    fn trace_widths(&self) -> Vec<usize> {
+        self.borrow().trace_widths()
     }
 }
 
@@ -101,8 +149,9 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
-    ModularArithmetic(Rc<RefCell<ModularArithmeticChip<F, ModularArithmeticAirVariant>>>),
-    U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
+    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
+    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     Ui(Rc<RefCell<UiChip<F>>>),
@@ -124,7 +173,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     RangeTupleChecker(Arc<RangeTupleCheckerChip>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
-    U256Arithmetic(Rc<RefCell<UintArithmeticChip<256, 8, F>>>),
+    ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     Ui(Rc<RefCell<UiChip<F>>>),

@@ -1,33 +1,34 @@
-use std::{cmp::Reverse, rc::Rc};
-
-use afs_compiler::util::execute_and_prove_program;
-use afs_stark_backend::{engine::VerificationData, rap::AnyRap};
-use itertools::{izip, multiunzip, Itertools};
-use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::{StarkGenericConfig, Val};
-use stark_vm::{
-    program::Program,
-    vm::{config::VmConfig, VirtualMachine},
+use afs_compiler::{conversion::CompilerOptions, util::execute_and_prove_program};
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
+    engine::VerificationData,
+    verifier::VerificationError,
 };
+use ax_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    engine::{StarkForTest, StarkFriEngine, VerificationDataWithFriParams},
+};
+use inner::build_verification_program;
+use p3_baby_bear::BabyBear;
+use p3_commit::PolynomialSpace;
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use stark_vm::{program::Program, vm::config::VmConfig};
 
 use crate::{
     hints::InnerVal,
-    stark::{sort_chips, VerifierProgram},
+    stark::VerifierProgram,
     types::{new_from_inner_multi_vk, VerifierInput},
 };
 
-/// A struct that contains all the necessary data to build a verifier for a Stark.
-pub struct StarkForTest<SC: StarkGenericConfig> {
-    pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
-    pub traces: Vec<RowMajorMatrix<Val<SC>>>,
-    pub pvs: Vec<Vec<Val<SC>>>,
-}
+type InnerSC = BabyBearPoseidon2Config;
 
 pub mod inner {
+    use afs_compiler::conversion::CompilerOptions;
     use ax_sdk::{
-        config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        config::{
+            baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+            FriParameters,
+        },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
     use stark_vm::vm::config::VmConfig;
@@ -36,21 +37,27 @@ pub mod inner {
     use crate::hints::Hintable;
 
     pub fn build_verification_program(
-        pvs: Vec<Vec<InnerVal>>,
-        vparams: VerificationDataWithFriParams<BabyBearPoseidon2Config>,
+        vparams: VerificationDataWithFriParams<InnerSC>,
+        compiler_options: CompilerOptions,
     ) -> (Program<BabyBear>, Vec<Vec<InnerVal>>) {
         let VerificationDataWithFriParams { data, fri_params } = vparams;
         let VerificationData { proof, vk } = data;
 
         let advice = new_from_inner_multi_vk(&vk);
-        let program = VerifierProgram::build(advice, &fri_params);
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "bench-metrics")] {
+                let start = std::time::Instant::now();
+            }
+        }
+        let program = VerifierProgram::build_with_options(advice, &fri_params, compiler_options);
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("verify_program_compile_ms").set(start.elapsed().as_millis() as f64);
 
         let log_degree_per_air = proof.log_degrees();
 
         let input = VerifierInput {
             proof,
             log_degree_per_air,
-            public_values: pvs.clone(),
         };
 
         let mut input_stream = Vec::new();
@@ -63,14 +70,18 @@ pub mod inner {
     /// 1. Generate a stark proof, P.
     /// 2. build a verifier program which can verify P.
     /// 3. Execute the verifier program and generate a proof.
-    pub fn run_recursive_test(stark_for_test: StarkForTest<BabyBearPoseidon2Config>) {
+    ///
+    /// This is a convenience function with default configs for testing purposes only.
+    pub fn run_recursive_test(
+        stark_for_test: StarkForTest<BabyBearPoseidon2Config>,
+        fri_params: FriParameters,
+    ) {
         let StarkForTest {
             any_raps,
             traces,
             pvs,
         } = stark_for_test;
         let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-        let (any_raps, traces, pvs) = sort_chips(any_raps, traces, pvs);
 
         let vparams =
             <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_simple_test(
@@ -78,59 +89,38 @@ pub mod inner {
             )
             .unwrap();
 
-        let (program, witness_stream) = build_verification_program(pvs, vparams);
-        execute_and_prove_program(
-            program,
-            witness_stream,
-            VmConfig {
-                num_public_values: 4,
-                ..Default::default()
-            },
-        );
+        recursive_stark_test(
+            vparams,
+            CompilerOptions::default(),
+            VmConfig::aggregation(7),
+            BabyBearPoseidon2Engine::new(fri_params),
+        )
+        .unwrap();
     }
 }
 
-pub fn gen_vm_program_stark_for_test<SC: StarkGenericConfig>(
-    program: Program<Val<SC>>,
-    input_stream: Vec<Vec<Val<SC>>>,
-    config: VmConfig,
-) -> StarkForTest<SC>
+/// 1. Builds the recursive verification program to verify `vparams`
+/// 2. Execute and proves the program in VM with `AggSC` config using `engine`.
+///
+/// The `vparams` must be from the BabyBearPoseidon2 stark config for the recursion
+/// program to work at the moment.
+#[allow(clippy::type_complexity)]
+pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>(
+    vparams: VerificationDataWithFriParams<InnerSC>,
+    compiler_options: CompilerOptions,
+    vm_config: VmConfig,
+    engine: E,
+) -> Result<(VerificationDataWithFriParams<AggSC>, Vec<Vec<Val<AggSC>>>), VerificationError>
 where
-    Val<SC>: PrimeField32,
+    Domain<AggSC>: PolynomialSpace<Val = BabyBear>,
+    AggSC::Pcs: Sync,
+    Domain<AggSC>: Send + Sync,
+    PcsProverData<AggSC>: Send + Sync,
+    Com<AggSC>: Send + Sync,
+    AggSC::Challenge: Send + Sync,
+    PcsProof<AggSC>: Send + Sync,
 {
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "bench-metrics")] {
-            let start = std::time::Instant::now();
-            let mut config= config;
-            config.collect_metrics = true;
-        }
-    }
+    let (program, witness_stream) = build_verification_program(vparams, compiler_options);
 
-    let vm = VirtualMachine::new(config, program, input_stream);
-
-    let mut result = vm.execute_and_generate().unwrap();
-    assert_eq!(
-        result.segment_results.len(),
-        1,
-        "only proving one segment for now"
-    );
-
-    let result = result.segment_results.pop().unwrap();
-    #[cfg(feature = "bench-metrics")]
-    {
-        let total_cell = result.metrics.chip_metrics.into_values().sum::<usize>();
-        metrics::gauge!("vm_total_cells").set(total_cell as f64);
-        metrics::gauge!("trace_gen_time_ms", "stark" => "vm")
-            .set(start.elapsed().as_millis() as f64);
-    }
-
-    let mut groups = izip!(result.airs, result.traces, result.public_values).collect_vec();
-    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
-    let (airs, traces, pvs): (Vec<_>, _, _) = multiunzip(groups);
-
-    StarkForTest {
-        any_raps: airs.into_iter().map(|x| x.into()).collect(),
-        traces,
-        pvs,
-    }
+    execute_and_prove_program(program, witness_stream, vm_config, engine)
 }

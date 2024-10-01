@@ -13,6 +13,7 @@ use afs_primitives::{
 };
 use afs_stark_backend::rap::AnyRap;
 use backtrace::Backtrace;
+use itertools::izip;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -25,13 +26,14 @@ use super::{
     VmCycleTracker, VmMetrics,
 };
 use crate::{
+    alu::ArithmeticLogicChip,
     arch::{
         bus::ExecutionBus,
         chips::{InstructionExecutor, InstructionExecutorVariant, MachineChip, MachineChipVariant},
         columns::ExecutionState,
         instructions::{
-            Opcode, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS,
-            SHIFT_256_INSTRUCTIONS, UINT256_ARITHMETIC_INSTRUCTIONS, UI_32_INSTRUCTIONS,
+            Opcode, ALU_256_INSTRUCTIONS, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS,
+            FIELD_EXTENSION_INSTRUCTIONS, SHIFT_256_INSTRUCTIONS, UI_32_INSTRUCTIONS,
         },
     },
     castf::CastFChip,
@@ -44,13 +46,11 @@ use crate::{
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
-    modular_arithmetic::{
-        ModularArithmeticChip, ModularArithmeticOp, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
-    },
+    modular_addsub::{ModularAddSubChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    modular_multdiv::ModularMultDivChip,
     program::{bridge::ProgramBus, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
-    uint_arithmetic::UintArithmeticChip,
     uint_multiplication::UintMultiplicationChip,
 };
 
@@ -102,6 +102,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
 
         let memory_chip = Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
             memory_bus,
@@ -111,6 +112,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let core_chip = Rc::new(RefCell::new(CoreChip::from_state(
             config.core_options(),
             execution_bus,
+            program_bus,
             memory_chip.clone(),
             state.state,
         )));
@@ -174,7 +176,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
         }
         if config.keccak_enabled {
-            let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
             let keccak_chip = Rc::new(RefCell::new(KeccakVmChip::new(
                 execution_bus,
                 program_bus,
@@ -183,107 +184,63 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             )));
             assign!([Opcode::KECCAK256], keccak_chip);
             chips.push(MachineChipVariant::Keccak256(keccak_chip));
-            chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         }
-        if config.modular_multiplication_enabled {
-            let add_coord = ModularArithmeticChip::new(
+        if config.modular_addsub_enabled {
+            let mod_addsub_coord: ModularAddSubChip<F, 32, 8> = ModularAddSubChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
-                ModularArithmeticOp::Add,
             );
-            let add_scalar = ModularArithmeticChip::new(
+            let mod_addsub_scalar: ModularAddSubChip<F, 32, 8> = ModularAddSubChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
-                ModularArithmeticOp::Add,
             );
-            let sub_coord = ModularArithmeticChip::new(
+            assign!(
+                [Opcode::SECP256K1_COORD_ADD, Opcode::SECP256K1_COORD_SUB],
+                Rc::new(RefCell::new(mod_addsub_coord.clone()))
+            );
+            assign!(
+                [Opcode::SECP256K1_SCALAR_ADD, Opcode::SECP256K1_SCALAR_SUB],
+                Rc::new(RefCell::new(mod_addsub_scalar.clone()))
+            );
+        }
+        if config.modular_multdiv_enabled {
+            let mod_multdiv_coord: ModularMultDivChip<F, 63, 32, 8> = ModularMultDivChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
                 SECP256K1_COORD_PRIME.clone(),
-                ModularArithmeticOp::Sub,
             );
-            let sub_scalar = ModularArithmeticChip::new(
+            let mod_multdiv_scalar: ModularMultDivChip<F, 63, 32, 8> = ModularMultDivChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
                 SECP256K1_SCALAR_PRIME.clone(),
-                ModularArithmeticOp::Sub,
-            );
-            let mul_coord = ModularArithmeticChip::new(
-                execution_bus,
-                program_bus,
-                memory_chip.clone(),
-                SECP256K1_COORD_PRIME.clone(),
-                ModularArithmeticOp::Mul,
-            );
-            let mul_scalar = ModularArithmeticChip::new(
-                execution_bus,
-                program_bus,
-                memory_chip.clone(),
-                SECP256K1_SCALAR_PRIME.clone(),
-                ModularArithmeticOp::Mul,
-            );
-            let div_coord = ModularArithmeticChip::new(
-                execution_bus,
-                program_bus,
-                memory_chip.clone(),
-                SECP256K1_COORD_PRIME.clone(),
-                ModularArithmeticOp::Div,
-            );
-            let div_scalar = ModularArithmeticChip::new(
-                execution_bus,
-                program_bus,
-                memory_chip.clone(),
-                SECP256K1_SCALAR_PRIME.clone(),
-                ModularArithmeticOp::Div,
             );
             assign!(
-                [Opcode::SECP256K1_COORD_ADD],
-                Rc::new(RefCell::new(add_coord.clone()))
+                [Opcode::SECP256K1_COORD_MUL, Opcode::SECP256K1_COORD_DIV],
+                Rc::new(RefCell::new(mod_multdiv_coord.clone()))
             );
             assign!(
-                [Opcode::SECP256K1_SCALAR_ADD],
-                Rc::new(RefCell::new(add_scalar.clone()))
-            );
-            assign!(
-                [Opcode::SECP256K1_COORD_SUB],
-                Rc::new(RefCell::new(sub_coord.clone()))
-            );
-            assign!(
-                [Opcode::SECP256K1_SCALAR_SUB],
-                Rc::new(RefCell::new(sub_scalar.clone()))
-            );
-            assign!(
-                [Opcode::SECP256K1_COORD_MUL],
-                Rc::new(RefCell::new(mul_coord.clone()))
-            );
-            assign!(
-                [Opcode::SECP256K1_SCALAR_MUL],
-                Rc::new(RefCell::new(mul_scalar.clone()))
-            );
-            assign!(
-                [Opcode::SECP256K1_COORD_DIV],
-                Rc::new(RefCell::new(div_coord.clone()))
-            );
-            assign!(
-                [Opcode::SECP256K1_SCALAR_DIV],
-                Rc::new(RefCell::new(div_scalar.clone()))
+                [Opcode::SECP256K1_SCALAR_MUL, Opcode::SECP256K1_SCALAR_DIV],
+                Rc::new(RefCell::new(mod_multdiv_scalar.clone()))
             );
         }
         // Modular multiplication also depends on U256 arithmetic.
-        if config.modular_multiplication_enabled || config.u256_arithmetic_enabled {
-            let u256_chip = Rc::new(RefCell::new(UintArithmeticChip::new(
+        if config.modular_multdiv_enabled || config.u256_arithmetic_enabled {
+            let u256_chip = Rc::new(RefCell::new(ArithmeticLogicChip::new(
                 execution_bus,
                 program_bus,
                 memory_chip.clone(),
+                byte_xor_chip.clone(),
             )));
-            chips.push(MachineChipVariant::U256Arithmetic(u256_chip.clone()));
-            assign!(UINT256_ARITHMETIC_INSTRUCTIONS, u256_chip);
+            chips.push(MachineChipVariant::ArithmeticLogicUnit256(
+                u256_chip.clone(),
+            ));
+            assign!(ALU_256_INSTRUCTIONS, u256_chip);
         }
         if config.u256_multiplication_enabled {
             let range_tuple_bus =
@@ -302,7 +259,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.shift_256_enabled {
             let shift_chip = Rc::new(RefCell::new(ShiftChip::new(
                 execution_bus,
+                program_bus,
                 memory_chip.clone(),
+                byte_xor_chip.clone(),
             )));
             assign!(SHIFT_256_INSTRUCTIONS, shift_chip);
             chips.push(MachineChipVariant::Shift256(shift_chip));
@@ -343,6 +302,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             ));
             chips.push(MachineChipVariant::Secp256k1Double(secp256k1_double_chip));
         }
+        chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         // Most chips have a reference to the memory chip, and the memory chip has a reference to
         // the range checker chip.
         chips.push(MachineChipVariant::Memory(memory_chip.clone()));
@@ -412,12 +372,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
             // runtime only instruction handling
             match opcode {
-                Opcode::CT_START => self
-                    .cycle_tracker
-                    .start(instruction.debug.clone(), self.collected_metrics.clone()),
-                Opcode::CT_END => self
-                    .cycle_tracker
-                    .end(instruction.debug.clone(), self.collected_metrics.clone()),
+                Opcode::CT_START => {
+                    self.update_chip_metrics();
+                    self.cycle_tracker
+                        .start(instruction.debug.clone(), self.collected_metrics.clone())
+                }
+                Opcode::CT_END => {
+                    self.update_chip_metrics();
+                    self.cycle_tracker
+                        .end(instruction.debug.clone(), self.collected_metrics.clone())
+                }
                 _ => {}
             }
 
@@ -442,25 +406,31 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let added_trace_cells = now_trace_cells - prev_trace_cells;
 
             if collect_metrics {
-                self.collected_metrics
+                *self
+                    .collected_metrics
                     .opcode_counts
                     .entry(opcode.to_string())
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
+                    .or_insert(0) += 1;
 
                 if !dsl_instr.is_empty() {
-                    self.collected_metrics
+                    *self
+                        .collected_metrics
                         .dsl_counts
-                        .entry(dsl_instr)
-                        .and_modify(|count| *count += 1)
-                        .or_insert(1);
+                        .entry(dsl_instr.clone())
+                        .or_insert(0) += 1;
                 }
 
-                self.collected_metrics
+                *self
+                    .collected_metrics
                     .opcode_trace_cells
                     .entry(opcode.to_string())
-                    .and_modify(|count| *count += added_trace_cells)
-                    .or_insert(added_trace_cells);
+                    .or_insert(0) += added_trace_cells;
+
+                *self
+                    .collected_metrics
+                    .dsl_trace_cells
+                    .entry(dsl_instr)
+                    .or_insert(0) += added_trace_cells;
             }
 
             prev_backtrace = debug_info.and_then(|debug_info| debug_info.trace);
@@ -472,6 +442,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 self.update_chip_metrics();
                 // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
                 collect_metrics = false;
+                #[cfg(feature = "bench-metrics")]
+                metrics::counter!("total_cells_used").absolute(self.current_trace_cells() as u64);
             }
             if opcode == Opcode::TERMINATE {
                 break;
@@ -515,10 +487,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         drop(self.memory_chip);
 
         for mut chip in self.chips {
-            if chip.current_trace_height() != 0 {
-                result.airs.push(chip.air());
-                result.public_values.push(chip.generate_public_values());
-                result.traces.push(chip.generate_trace());
+            let heights = chip.current_trace_heights();
+            let airs = chip.airs();
+            let public_values = chip.generate_public_values_per_air();
+            let traces = chip.generate_traces();
+
+            for (height, air, public_values, trace) in izip!(heights, airs, public_values, traces) {
+                if height != 0 {
+                    result.airs.push(air);
+                    result.public_values.push(public_values);
+                    result.traces.push(trace);
+                }
             }
         }
         let trace = self.connector_chip.generate_trace();
@@ -533,27 +512,35 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {
-        self.chips
-            .iter()
-            .any(|chip| chip.current_trace_height() > self.config.max_segment_len)
+        self.chips.iter().any(|chip| {
+            chip.current_trace_heights()
+                .iter()
+                .any(|height| *height > self.config.max_segment_len)
+        })
     }
 
     fn current_trace_cells(&self) -> usize {
         self.chips
             .iter()
-            .map(|chip| chip.current_trace_cells())
+            .map(|chip| chip.current_trace_cells().into_iter().sum::<usize>())
             .sum()
     }
 
     pub(crate) fn update_chip_metrics(&mut self) {
-        self.collected_metrics.chip_metrics = self.chip_metrics();
+        self.collected_metrics.chip_heights = self.chip_heights();
     }
 
-    fn chip_metrics(&self) -> BTreeMap<String, usize> {
+    fn chip_heights(&self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
         for chip in self.chips.iter() {
             let chip_name: &'static str = chip.into();
-            metrics.insert(chip_name.into(), chip.current_trace_height());
+            for (i, height) in chip.current_trace_heights().iter().enumerate() {
+                if i == 0 {
+                    metrics.insert(chip_name.into(), *height);
+                } else {
+                    metrics.insert(format!("{} {}", chip_name, i + 1), *height);
+                }
+            }
         }
         metrics
     }

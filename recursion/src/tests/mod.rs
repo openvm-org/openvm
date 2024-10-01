@@ -6,7 +6,12 @@ use afs_primitives::{
 };
 use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing},
+    config::{
+        baby_bear_poseidon2::BabyBearPoseidon2Config,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
+        FriParameters,
+    },
+    engine::StarkForTest,
     interaction::dummy_interaction_air::DummyInteractionAir,
     utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
 };
@@ -14,7 +19,7 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::testing_utils::{inner::run_recursive_test, StarkForTest};
+use crate::testing_utils::inner::run_recursive_test;
 
 pub fn fibonacci_stark_for_test<SC: StarkGenericConfig>(n: usize) -> StarkForTest<SC>
 where
@@ -98,17 +103,78 @@ where
     }
 }
 
+pub fn unordered_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC>
+where
+    Val<SC>: PrimeField32,
+{
+    const BUS: usize = 0;
+    const SENDER_HEIGHT: usize = 2;
+    const RECEIVER_HEIGHT: usize = 4;
+    let sender_air = DummyInteractionAir::new(1, true, BUS);
+    let sender_trace = RowMajorMatrix::new(
+        to_field_vec([[2, 1]; SENDER_HEIGHT].into_iter().flatten().collect()),
+        sender_air.field_width() + 1,
+    );
+    let receiver_air = DummyInteractionAir::new(1, false, BUS);
+    let receiver_trace = RowMajorMatrix::new(
+        to_field_vec([[1, 1]; RECEIVER_HEIGHT].into_iter().flatten().collect()),
+        receiver_air.field_width() + 1,
+    );
+    let sender_air = Rc::new(sender_air);
+    let receiver_air = Rc::new(receiver_air);
+
+    let any_raps: Vec<Rc<dyn AnyRap<SC>>> = vec![sender_air, receiver_air];
+    let traces = vec![sender_trace, receiver_trace];
+    let pvs = vec![vec![]; 2];
+
+    StarkForTest {
+        any_raps,
+        traces,
+        pvs,
+    }
+}
+
+#[test]
+fn test_fibonacci_small() {
+    setup_tracing();
+
+    run_recursive_test(
+        fibonacci_stark_for_test::<BabyBearPoseidon2Config>(1 << 5),
+        standard_fri_params_with_100_bits_conjectured_security(3),
+    )
+}
+
 #[test]
 fn test_fibonacci() {
     setup_tracing();
 
     // test lde = 27
-    run_recursive_test(fibonacci_stark_for_test::<BabyBearPoseidon2Config>(1 << 24))
+    run_recursive_test(
+        fibonacci_stark_for_test::<BabyBearPoseidon2Config>(1 << 24),
+        FriParameters {
+            log_blowup: 3,
+            num_queries: 2,
+            proof_of_work_bits: 0,
+        },
+    )
 }
 
 #[test]
 fn test_interactions() {
     setup_tracing();
 
-    run_recursive_test(interaction_stark_for_test::<BabyBearPoseidon2Config>())
+    run_recursive_test(
+        interaction_stark_for_test::<BabyBearPoseidon2Config>(),
+        standard_fri_params_with_100_bits_conjectured_security(3),
+    )
+}
+
+#[test]
+fn test_unordered() {
+    setup_tracing();
+
+    run_recursive_test(
+        unordered_stark_for_test::<BabyBearPoseidon2Config>(),
+        standard_fri_params_with_100_bits_conjectured_security(3),
+    )
 }

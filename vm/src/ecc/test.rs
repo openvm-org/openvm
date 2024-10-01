@@ -3,11 +3,10 @@ use ax_sdk::config::setup_tracing;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::EcAddUnequalChip;
+use super::{EcAddUnequalChip, EcDoubleChip, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS};
 use crate::{
     arch::{instructions, testing::MachineChipTestBuilder},
-    ecc::EcDoubleChip,
-    modular_arithmetic::{biguint_to_limbs, NUM_LIMBS, TWO_NUM_LIMBS},
+    modular_addsub::ModularAddSubChip,
     program::Instruction,
 };
 
@@ -33,23 +32,31 @@ fn test_ec_add() {
 
     let data_as = 2;
     let address1 = 0;
-    let address2 = 1000;
-    let address3 = 2000;
+    let address2 = 1024;
+    let address3 = 2048;
 
     tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
     tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
     tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
     let mut p1_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
-    p1_limbs[..NUM_LIMBS]
-        .copy_from_slice(&biguint_to_limbs(p1_x).map(BabyBear::from_canonical_u32));
-    p1_limbs[NUM_LIMBS..]
-        .copy_from_slice(&biguint_to_limbs(p1_y).map(BabyBear::from_canonical_u32));
+    p1_limbs[..NUM_LIMBS].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_x)
+            .map(BabyBear::from_canonical_u32),
+    );
+    p1_limbs[NUM_LIMBS..].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_y)
+            .map(BabyBear::from_canonical_u32),
+    );
     tester.write(data_as, address1, p1_limbs);
     let mut p2_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
-    p2_limbs[..NUM_LIMBS]
-        .copy_from_slice(&biguint_to_limbs(p2_x).map(BabyBear::from_canonical_u32));
-    p2_limbs[NUM_LIMBS..]
-        .copy_from_slice(&biguint_to_limbs(p2_y).map(BabyBear::from_canonical_u32));
+    p2_limbs[..NUM_LIMBS].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_x)
+            .map(BabyBear::from_canonical_u32),
+    );
+    p2_limbs[NUM_LIMBS..].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_y)
+            .map(BabyBear::from_canonical_u32),
+    );
     tester.write(data_as, address2, p2_limbs);
 
     let add_opcode = instructions::Opcode::SECP256K1_EC_ADD_NE;
@@ -69,10 +76,14 @@ fn test_ec_add() {
 
     let (p3_x, p3_y) = SampleEcPoints[2].clone();
     let mut p3_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
-    p3_limbs[..NUM_LIMBS]
-        .copy_from_slice(&biguint_to_limbs(p3_x).map(BabyBear::from_canonical_u32));
-    p3_limbs[NUM_LIMBS..]
-        .copy_from_slice(&biguint_to_limbs(p3_y).map(BabyBear::from_canonical_u32));
+    p3_limbs[..NUM_LIMBS].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p3_x)
+            .map(BabyBear::from_canonical_u32),
+    );
+    p3_limbs[NUM_LIMBS..].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p3_y)
+            .map(BabyBear::from_canonical_u32),
+    );
     let read_p3 = tester.read::<TWO_NUM_LIMBS>(data_as, address3);
     assert_eq!(p3_limbs, read_p3);
 
@@ -100,15 +111,19 @@ fn test_ec_double() {
 
     let data_as = 2;
     let address1 = 0;
-    let address2 = 1000;
+    let address2 = 1024;
 
     tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
     tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
     let mut p1_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
-    p1_limbs[..NUM_LIMBS]
-        .copy_from_slice(&biguint_to_limbs(p1_x).map(BabyBear::from_canonical_u32));
-    p1_limbs[NUM_LIMBS..]
-        .copy_from_slice(&biguint_to_limbs(p1_y).map(BabyBear::from_canonical_u32));
+    p1_limbs[..NUM_LIMBS].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_x)
+            .map(BabyBear::from_canonical_u32),
+    );
+    p1_limbs[NUM_LIMBS..].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p1_y)
+            .map(BabyBear::from_canonical_u32),
+    );
     tester.write(data_as, address1, p1_limbs);
 
     let double_opcode = instructions::Opcode::SECP256K1_EC_DOUBLE;
@@ -128,10 +143,14 @@ fn test_ec_double() {
 
     let (p2_x, p2_y) = SampleEcPoints[3].clone();
     let mut p2_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
-    p2_limbs[..NUM_LIMBS]
-        .copy_from_slice(&biguint_to_limbs(p2_x).map(BabyBear::from_canonical_u32));
-    p2_limbs[NUM_LIMBS..]
-        .copy_from_slice(&biguint_to_limbs(p2_y).map(BabyBear::from_canonical_u32));
+    p2_limbs[..NUM_LIMBS].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_x)
+            .map(BabyBear::from_canonical_u32),
+    );
+    p2_limbs[NUM_LIMBS..].copy_from_slice(
+        &ModularAddSubChip::<BabyBear, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(p2_y)
+            .map(BabyBear::from_canonical_u32),
+    );
     let read_p2 = tester.read::<TWO_NUM_LIMBS>(data_as, address2);
     assert_eq!(p2_limbs, read_p2);
 

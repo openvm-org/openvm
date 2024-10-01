@@ -6,7 +6,12 @@ use afs_compiler::{
     ir::{Array, Var},
     util::execute_and_prove_program,
 };
-use ax_sdk::config::setup_tracing_with_log_level;
+use ax_sdk::{
+    config::{
+        baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing_with_log_level, FriParameters,
+    },
+    engine::StarkFriEngine,
+};
 use hex::FromHex;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -44,9 +49,6 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
     builder.halt();
 
     let program = builder.compile_isa_with_options(CompilerOptions {
-        compile_prints: false,
-        enable_cycle_tracker: false,
-        field_arithmetic_enabled: true,
         field_extension_enabled: false,
         ..Default::default()
     });
@@ -60,7 +62,9 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
             keccak_enabled: true,
             ..Default::default()
         },
-    );
+        BabyBearPoseidon2Engine::new(FriParameters::standard_fast()),
+    )
+    .unwrap();
 }
 
 // Keccak Known Answer Test (KAT) vectors from https://keccak.team/obsolete/KeccakKAT-3.zip.

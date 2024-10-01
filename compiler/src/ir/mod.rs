@@ -11,6 +11,8 @@ pub use symbolic::*;
 pub use types::*;
 pub use var::*;
 
+pub use crate::util::{LIMB_SIZE, NUM_LIMBS};
+
 mod bits;
 mod builder;
 mod collections;

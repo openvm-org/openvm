@@ -23,20 +23,14 @@ impl<F: Field> Poseidon2VmAir<F> {
     ) {
         let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
 
-        self.program_bus.send_instruction(
-            builder,
-            io.pc,
-            opcode.clone(),
-            [io.a, io.b, io.c, io.d, io.e],
-            io.is_opcode,
-        );
-
-        self.execution_bus.execute_increment_pc(
-            builder,
-            io.is_opcode,
-            ExecutionState::new(io.pc, io.timestamp),
-            timestamp_delta,
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                opcode,
+                [io.a, io.b, io.c, io.d, io.e],
+                ExecutionState::new(io.pc, io.timestamp),
+                timestamp_delta,
+            )
+            .eval(builder, io.is_opcode);
 
         // DIRECT
         if self.direct {

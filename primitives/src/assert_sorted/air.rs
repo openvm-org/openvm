@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -26,6 +29,8 @@ impl AssertSortedAir {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for AssertSortedAir {}
+impl<F: Field> PartitionedBaseAir<F> for AssertSortedAir {}
 impl<F: Field> BaseAir<F> for AssertSortedAir {
     fn width(&self) -> usize {
         AssertSortedCols::<F>::get_width(

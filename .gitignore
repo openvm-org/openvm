@@ -23,3 +23,6 @@ rustc-*
 
 # Axiom intermediate files
 .axiom/
+
+# Bench metrics
+.bench_metrics/

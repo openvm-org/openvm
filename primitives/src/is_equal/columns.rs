@@ -3,20 +3,22 @@ use afs_derive::AlignedBorrow;
 pub const NUM_COLS: usize = 4;
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Clone, Debug, PartialEq, Eq)]
 pub struct IsEqualCols<T> {
     pub io: IsEqualIoCols<T>,
     pub aux: IsEqualAuxCols<T>,
 }
 
-#[derive(Clone, Copy)]
+#[repr(C)]
+#[derive(AlignedBorrow, Clone, Debug, PartialEq, Eq)]
 pub struct IsEqualIoCols<T> {
     pub x: T,
     pub y: T,
     pub is_equal: T,
 }
 
-#[derive(Debug, Clone)]
+#[repr(C)]
+#[derive(AlignedBorrow, Clone, Debug, PartialEq, Eq)]
 pub struct IsEqualAuxCols<T> {
     pub inv: T,
 }
@@ -30,6 +32,10 @@ impl<T: Clone> IsEqualAuxCols<T> {
 
     pub fn flatten(&self) -> Vec<T> {
         vec![self.inv.clone()]
+    }
+
+    pub fn width() -> usize {
+        1
     }
 }
 impl<T: Clone> IsEqualCols<T> {

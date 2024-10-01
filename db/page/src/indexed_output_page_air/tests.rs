@@ -54,7 +54,7 @@ fn test_single_page(
     let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
-    verifier.verify(&mut challenger, &vk, &proof, &pis)
+    verifier.verify(&mut challenger, &vk, &proof)
 }
 
 #[test]
@@ -122,9 +122,9 @@ fn final_page_chip_test() {
 
     let page_data_ptr = keygen_builder.add_cached_main_matrix(final_page_chip.page_width());
     let page_aux_ptr = keygen_builder.add_main_matrix(final_page_chip.aux_width());
-    keygen_builder.add_partitioned_air(&final_page_chip, 0, vec![page_data_ptr, page_aux_ptr]);
+    keygen_builder.add_partitioned_air(&final_page_chip, vec![page_data_ptr, page_aux_ptr]);
 
-    keygen_builder.add_air(&range_checker.air, 0);
+    keygen_builder.add_air(&range_checker.air);
 
     let pk = keygen_builder.generate_pk();
 

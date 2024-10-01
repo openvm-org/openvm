@@ -19,7 +19,6 @@ use zkhash::{
 };
 
 use super::{
-    fri_params::default_fri_params,
     instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
     FriParameters,
 };
@@ -99,7 +98,7 @@ where
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_engine(pcs_log_degree: usize) -> BabyBearPoseidon2OuterEngine {
-    default_engine_impl(pcs_log_degree, default_fri_params())
+    default_engine_impl(pcs_log_degree, FriParameters::standard_fast())
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
@@ -113,8 +112,7 @@ fn default_engine_impl(
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> BabyBearPoseidon2OuterConfig {
-    // target 80 bits of security, with conjectures:
-    let fri_params = default_fri_params();
+    let fri_params = FriParameters::standard_fast();
     config_from_perm(perm, pcs_log_degree, fri_params)
 }
 

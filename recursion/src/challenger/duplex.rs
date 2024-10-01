@@ -120,13 +120,11 @@ impl<C: Config> DuplexChallengerVariable<C> {
 
         builder.poseidon2_permute_mut(&self.sponge_state);
 
-        builder.assign(&self.nb_outputs, C::N::zero());
-
-        for i in 0..PERMUTATION_WIDTH {
-            let element = builder.get(&self.sponge_state, i);
-            builder.set(&self.output_buffer, i, element);
-            builder.assign(&self.nb_outputs, self.nb_outputs + C::N::one());
-        }
+        self.output_buffer = self.sponge_state.clone();
+        builder.assign(
+            &self.nb_outputs,
+            C::N::from_canonical_usize(PERMUTATION_WIDTH),
+        );
     }
 
     fn observe(&mut self, builder: &mut Builder<C>, value: Felt<C::F>) {

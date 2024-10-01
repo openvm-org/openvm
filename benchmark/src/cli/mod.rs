@@ -7,11 +7,6 @@ use crate::{
         multitier_rw::{run_mtrw_bench, MultitierRwCommand},
         predicate::{run_bench_predicate, PredicateCommand},
         rw::{run_bench_rw, RwCommand},
-        vm::{
-            vm_fib_program::benchmark_fib_program,
-            vm_fib_verifier_program::benchmark_fib_verifier_program,
-            vm_verify_fibair::benchmark_verify_fibair, VmCommand,
-        },
     },
     config::benchmark_data::{
         benchmark_data_multitier_rw, benchmark_data_predicate, benchmark_data_rw,
@@ -42,18 +37,6 @@ pub enum Commands {
     #[command(name = "predicate", about = "Benchmark Predicate")]
     /// Predicate functions
     Predicate(PredicateCommand),
-
-    #[command(name = "vm_fib_program", about = "Benchmark VM Fibonacci Program")]
-    VmFibProgram(VmCommand),
-
-    #[command(name = "vm_verify_fibair", about = "Benchmark VM Verify FibAir")]
-    VmVerifyFibAir(VmCommand),
-
-    #[command(
-        name = "vm_fib_verifier_program",
-        about = "Benchmark VM Fibonacci Verifier Program"
-    )]
-    VmFibVerifierProgram(VmCommand),
 }
 
 impl Cli {
@@ -111,9 +94,6 @@ impl Cli {
                 )
                 .unwrap();
             }
-            Commands::VmFibProgram(vm) => benchmark_fib_program(vm.n).unwrap(),
-            Commands::VmVerifyFibAir(vm) => benchmark_verify_fibair(vm.n).unwrap(),
-            Commands::VmFibVerifierProgram(vm) => benchmark_fib_verifier_program(vm.n).unwrap(),
         }
     }
 }

@@ -16,13 +16,13 @@ impl ProgramBus {
         builder: &mut AB,
         pc: impl Into<AB::Expr>,
         opcode: impl Into<AB::Expr>,
-        instruction: impl IntoIterator<Item = E>,
+        operands: impl IntoIterator<Item = E>,
         multiplicity: impl Into<AB::Expr>,
     ) {
         builder.push_send(
             self.0,
             [pc.into(), opcode.into()].into_iter().chain(
-                instruction
+                operands
                     .into_iter()
                     .map(Into::into)
                     .chain(iter::repeat(AB::Expr::zero()))

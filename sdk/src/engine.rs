@@ -10,9 +10,7 @@ use afs_stark_backend::{
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
-use crate::config::{
-    fri_params::default_fri_params, instrument::StarkHashStatistics, FriParameters,
-};
+use crate::config::{instrument::StarkHashStatistics, FriParameters};
 
 pub trait StarkEngineWithHashInstrumentation<SC: StarkGenericConfig>: StarkEngine<SC> {
     fn clear_instruments(&mut self);
@@ -25,11 +23,36 @@ pub struct VerificationDataWithFriParams<SC: StarkGenericConfig> {
     pub fri_params: FriParameters,
 }
 
-/// A struct that contains all the necessary data to build a verifier for a Stark.
+/// A struct that contains all the necessary data to:
+/// - generate proving and verifying keys for AIRs,
+/// - commit to trace matrices and generate STARK proofs
 pub struct StarkForTest<SC: StarkGenericConfig> {
     pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
     pub traces: Vec<RowMajorMatrix<Val<SC>>>,
     pub pvs: Vec<Vec<Val<SC>>>,
+}
+
+impl<SC: StarkGenericConfig> StarkForTest<SC> {
+    pub fn run_simple_test(
+        self,
+        engine: &impl StarkFriEngine<SC>,
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError>
+    where
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        let StarkForTest {
+            any_raps,
+            traces,
+            pvs,
+        } = self;
+        let chips: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
+        engine.run_simple_test_impl(&chips, traces, &pvs)
+    }
 }
 
 /// Stark engine using Fri.
@@ -61,7 +84,7 @@ where
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: &[Vec<Val<SC>>],
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        let engine = Self::new(default_fri_params());
+        let engine = Self::new(FriParameters::standard_fast());
         StarkFriEngine::<_>::run_simple_test_impl(&engine, chips, traces, public_values)
     }
     fn run_simple_test_no_pis(

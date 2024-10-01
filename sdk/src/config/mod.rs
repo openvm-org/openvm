@@ -13,6 +13,8 @@ pub mod fri_params;
 pub mod goldilocks_poseidon;
 pub mod instrument;
 
+pub use fri_params::FriParameters;
+
 pub fn setup_tracing() {
     setup_tracing_with_log_level(Level::INFO);
 }
@@ -26,13 +28,6 @@ pub fn setup_tracing_with_log_level(level: Level) {
         .with(env_filter)
         .with(ForestLayer::default())
         .try_init();
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct FriParameters {
-    pub log_blowup: usize,
-    pub num_queries: usize,
-    pub proof_of_work_bits: usize,
 }
 
 #[derive(Clone, Copy, Default, Display, Debug, Serialize, Deserialize)]

@@ -94,11 +94,14 @@ dependencies = [
 name = "afs-compiler"
 version = "0.1.0"
 dependencies = [
+ "afs-compiler",
  "afs-derive",
  "ax-sdk",
  "backtrace",
+ "cfg-if",
  "hex",
  "itertools 0.13.0",
+ "metrics",
  "num-bigint 0.4.6",
  "num-bigint-dig",
  "num-integer",
@@ -208,8 +211,6 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "metrics",
- "metrics-tracing-context",
- "metrics-util",
  "num-bigint-dig",
  "once_cell",
  "p3-air",
@@ -232,8 +233,6 @@ dependencies = [
  "snark-verifier-sdk",
  "stark-vm",
  "tracing",
- "tracing-forest",
- "tracing-subscriber",
  "zkhash",
 ]
 
@@ -919,6 +918,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "ax-ecc-primitives"
+version = "0.1.0"
+dependencies = [
+ "afs-compiler",
+ "afs-primitives",
+ "afs-stark-backend",
+ "ax-sdk",
+ "elliptic-curve",
+ "ff 0.13.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "k256",
+ "num-bigint-dig",
+ "num-traits",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-matrix",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha3",
+ "snark-verifier-sdk",
+ "stark-vm",
+ "tracing",
+ "zkhash",
+]
+
+[[package]]
 name = "ax-sdk"
 version = "0.1.0"
 dependencies = [
@@ -926,6 +964,9 @@ dependencies = [
  "derive_more",
  "ff 0.13.0",
  "itertools 0.13.0",
+ "metrics",
+ "metrics-tracing-context",
+ "metrics-util",
  "p3-air",
  "p3-baby-bear",
  "p3-blake3",
@@ -946,6 +987,7 @@ dependencies = [
  "p3-util",
  "rand",
  "serde",
+ "serde_json",
  "toml",
  "tracing",
  "tracing-forest",
@@ -1832,6 +1874,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "datafusion"
 version = "40.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1847,7 +1903,7 @@ dependencies = [
  "bytes",
  "bzip2",
  "chrono",
- "dashmap",
+ "dashmap 5.5.3",
  "datafusion-common",
  "datafusion-common-runtime",
  "datafusion-execution",
@@ -1924,7 +1980,7 @@ checksum = "2ac0fd8b5d80bbca3fc3b6f40da4e9f6907354824ec3b18bbd83fee8cf5c3c3e"
 dependencies = [
  "arrow",
  "chrono",
- "dashmap",
+ "dashmap 5.5.3",
  "datafusion-common",
  "datafusion-expr",
  "futures",
@@ -2330,6 +2386,25 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.77",
+]
+
+[[package]]
+name = "env_filter"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f2c92ceda6ceec50f43169f9ee8424fe2db276791afde7b2cd8bc084cb376ab"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.11.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e13fa619b91fb2381732789fc5de83b45675e882f66623b7d8cb4f643017018d"
+dependencies = [
+ "env_filter",
+ "log",
 ]
 
 [[package]]
@@ -2952,6 +3027,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
 dependencies = [
  "ahash",
+ "clap",
+ "crossbeam-channel",
+ "crossbeam-utils",
+ "dashmap 6.1.0",
+ "env_logger",
  "indexmap",
  "is-terminal",
  "itoa",
@@ -5139,12 +5219,14 @@ dependencies = [
  "ark-ff 0.4.2",
  "ax-sdk",
  "backtrace",
+ "cfg-if",
  "derive-new 0.5.9",
  "enum-utils",
  "enum_dispatch",
- "getset",
  "hex-literal",
+ "inferno",
  "itertools 0.13.0",
+ "metrics",
  "num-bigint-dig",
  "num-traits",
  "once_cell",
@@ -5164,7 +5246,6 @@ dependencies = [
  "p3-symmetric",
  "p3-uni-stark",
  "p3-util",
- "parking_lot",
  "poseidon2-air",
  "rand",
  "rand_xoshiro",

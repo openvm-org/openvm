@@ -7,10 +7,12 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
+        bridge::ExecutionBridge,
         bus::ExecutionBus,
         instructions::Opcode::{self, *},
     },
     memory::MemoryChipRef,
+    program::bridge::ProgramBus,
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
@@ -32,9 +34,6 @@ pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
 pub const CORE_MAX_READS_PER_CYCLE: usize = 3;
 pub const CORE_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CORE_MAX_ACCESSES_PER_CYCLE: usize = CORE_MAX_READS_PER_CYCLE + CORE_MAX_WRITES_PER_CYCLE;
-
-// [jpw] Temporary, we are going to remove cpu anyways
-const WORD_SIZE: usize = 1;
 
 fn timestamp_delta(opcode: Opcode) -> usize {
     match opcode {
@@ -103,9 +102,16 @@ impl<F: PrimeField32> CoreChip<F> {
     pub fn new(
         options: CoreOptions,
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
     ) -> Self {
-        Self::from_state(options, execution_bus, memory_chip, CoreState::initial())
+        Self::from_state(
+            options,
+            execution_bus,
+            program_bus,
+            memory_chip,
+            CoreState::initial(),
+        )
     }
 
     /// Sets the current state of the Core.
@@ -117,6 +123,7 @@ impl<F: PrimeField32> CoreChip<F> {
     pub fn from_state(
         options: CoreOptions,
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
         state: CoreState,
     ) -> Self {
@@ -124,7 +131,7 @@ impl<F: PrimeField32> CoreChip<F> {
         Self {
             air: CoreAir {
                 options,
-                execution_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
             rows: vec![],

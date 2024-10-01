@@ -84,8 +84,8 @@ where
 
     let mut keygen_builder = engine.keygen_builder();
 
-    for i in 0..chips.len() {
-        keygen_builder.add_air(chips[i] as &dyn AnyRap<SC>, public_values[i].len());
+    for chip in chips {
+        keygen_builder.add_air(*chip);
     }
 
     let pk = keygen_builder.generate_pk();
@@ -112,10 +112,11 @@ where
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, public_values);
 
     #[cfg(feature = "bench-metrics")]
-    metrics::gauge!("stark_proof_time_ms").set(prove_start.elapsed().as_millis() as f64);
+    metrics::gauge!("stark_prove_excluding_trace_time_ms")
+        .set(prove_start.elapsed().as_millis() as f64);
 
     let mut challenger = engine.new_challenger();
     let verifier = engine.verifier();
-    verifier.verify(&mut challenger, &vk, &proof, public_values)?;
+    verifier.verify(&mut challenger, &vk, &proof)?;
     Ok(VerificationData { vk, proof })
 }

@@ -2,7 +2,7 @@ use itertools::{izip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::{AbstractExtensionField, AbstractField};
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig};
 use tracing::instrument;
 
 pub mod constraints;
@@ -34,7 +34,6 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         challenger: &mut SC::Challenger,
         vk: &MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
-        public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {
         let cumulative_sums = proof
             .exposed_values_after_challenge
@@ -55,7 +54,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
             })
             .collect_vec();
 
-        self.verify_raps(challenger, vk, proof, public_values)?;
+        self.verify_raps(challenger, vk, proof)?;
 
         // Check cumulative sum
         let sum: SC::Challenge = cumulative_sums
@@ -81,8 +80,9 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         challenger: &mut SC::Challenger,
         vk: &MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
-        public_values: &[Vec<Val<SC>>],
+        // public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {
+        let public_values = &proof.public_values;
         // Challenger must observe public values
         for pis in public_values {
             challenger.observe_slice(pis);

@@ -8,25 +8,26 @@ use afs_primitives::{
     },
     sub_chip::SubAir,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use super::columns::*;
-use crate::{
-    arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge, modular_arithmetic::NUM_LIMBS,
-    program::bridge::ProgramBus,
-};
+use super::{columns::*, NUM_LIMBS};
+use crate::{arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge};
 
 #[derive(Clone, Debug)]
 pub struct EcAddUnequalVmAir {
     pub air: EcAddUnequalAir,
-    pub execution_bus: ExecutionBus,
-    pub program_bus: ProgramBus,
+    pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for EcAddUnequalVmAir {}
+impl<F: Field> PartitionedBaseAir<F> for EcAddUnequalVmAir {}
 impl<F: Field> BaseAir<F> for EcAddUnequalVmAir {
     fn width(&self) -> usize {
         EcAddUnequalCols::<F>::width(&self.air.config)
@@ -74,11 +75,12 @@ impl<AB: InteractionBuilder> Air<AB> for EcAddUnequalVmAir {
 #[derive(Clone, Debug)]
 pub struct EcDoubleVmAir {
     pub air: EcDoubleAir,
-    pub execution_bus: ExecutionBus,
-    pub program_bus: ProgramBus,
+    pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for EcDoubleVmAir {}
+impl<F: Field> PartitionedBaseAir<F> for EcDoubleVmAir {}
 impl<F: Field> BaseAir<F> for EcDoubleVmAir {
     fn width(&self) -> usize {
         EcDoubleCols::<F>::width(&self.air.config)

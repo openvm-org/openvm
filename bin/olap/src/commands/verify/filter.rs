@@ -69,7 +69,7 @@ where
         // Load from disk and deserialize partial verifying key
         let prefix = config.generate_filename();
         let encoded_vk = read_from_path(keys_folder.clone() + "/" + &prefix + ".vk").unwrap();
-        let vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
+        let vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk)?;
 
         // Get proof from disk
         let filter_info = format!(
@@ -81,10 +81,10 @@ where
         let default_proof_path = format!("{}/{}-{}.proof.bin", cache_folder, table_id, filter_info);
         let proof_path = proof_path.unwrap_or(default_proof_path);
         let encoded_proof = read_from_path(proof_path).unwrap();
-        let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
+        let proof: Proof<SC> = bincode::deserialize(&encoded_proof)?;
 
         // Verify proof
-        page_controller.verify(engine, vk, &proof, value).unwrap();
+        page_controller.verify(engine, vk, &proof).unwrap();
 
         if !common.silent {
             println!("Proof verified in {:?}", start.elapsed());

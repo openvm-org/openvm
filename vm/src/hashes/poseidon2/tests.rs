@@ -1,9 +1,9 @@
 use afs_primitives::sub_chip::LocalTraceInstructions;
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
-        fri_params::fri_params_with_80_bits_of_security,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     utils::create_seeded_rng,
 };
@@ -11,24 +11,22 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
-use rand::{Rng, RngCore};
+use rand::Rng;
 
 use super::{Poseidon2Chip, CHUNK, WIDTH};
 use crate::{
     arch::{
         instructions::Opcode::*,
-        testing::{MachineChipTestBuilder, MachineChipTester},
+        testing::{memory::gen_pointer, MachineChipTestBuilder, MachineChipTester},
     },
     hashes::poseidon2::Poseidon2VmIoCols,
     program::Instruction,
 };
 
-const ADDRESS_BITS: usize = 29;
-
 fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
     engine_from_perm(perm, max_log_degree, fri_params)
 }
 
@@ -37,9 +35,8 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
     let mut rng = create_seeded_rng();
     (0..num_ops)
         .map(|_| {
-            let [a, b, c] = std::array::from_fn(|_| {
-                BabyBear::from_wrapped_u32(rng.next_u32() % (1 << ADDRESS_BITS))
-            });
+            let [a, b, c] =
+                std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
             Instruction {
                 opcode: if rng.gen_bool(0.5) {
                     PERM_POS2
@@ -61,7 +58,6 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
 
 fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
     let elem_range = || 1..=100;
-    let address_range = || 0usize..1 << ADDRESS_BITS;
 
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = Poseidon2Chip::from_poseidon2_config(
@@ -85,9 +81,9 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
         ]
         .map(|elem| elem.as_canonical_u64() as usize);
 
-        let dst = rng.gen_range(address_range());
-        let lhs = rng.gen_range(address_range());
-        let rhs = rng.gen_range(address_range());
+        let dst = gen_pointer(&mut rng, CHUNK);
+        let lhs = gen_pointer(&mut rng, CHUNK);
+        let rhs = gen_pointer(&mut rng, CHUNK);
 
         let data: [_; WIDTH] =
             std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
@@ -149,9 +145,7 @@ fn poseidon2_negative_test() {
 
     tester.test(get_engine).expect("Verification failed");
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     for _ in 0..10 {
         // TODO: better way to modify existing traces in tester
         let trace = &mut tester.traces[2];

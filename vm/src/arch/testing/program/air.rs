@@ -1,4 +1,7 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -11,6 +14,8 @@ pub struct ProgramDummyAir {
     pub bus: ProgramBus,
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for ProgramDummyAir {}
+impl<F: Field> PartitionedBaseAir<F> for ProgramDummyAir {}
 impl<F: Field> BaseAir<F> for ProgramDummyAir {
     fn width(&self) -> usize {
         ProgramTester::<F>::width()

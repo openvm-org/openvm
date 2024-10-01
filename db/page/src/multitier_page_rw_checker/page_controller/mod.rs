@@ -482,13 +482,12 @@ where
             .iter()
             .zip(init_leaf_data_ptrs.into_iter())
         {
-            keygen_builder.add_partitioned_air(chip, COMMITMENT_LEN, vec![ptr]);
+            keygen_builder.add_partitioned_air(chip, vec![ptr]);
         }
 
         for i in 0..self.init_internal_chips.len() {
             keygen_builder.add_partitioned_air(
                 &self.init_internal_chips[i],
-                COMMITMENT_LEN,
                 vec![init_internal_data_ptrs[i], init_internal_main_ptrs[i]],
             );
         }
@@ -496,7 +495,6 @@ where
         for i in 0..self.final_leaf_chips.len() {
             keygen_builder.add_partitioned_air(
                 &self.final_leaf_chips[i],
-                COMMITMENT_LEN,
                 vec![final_leaf_data_ptrs[i], final_leaf_main_ptrs[i]],
             );
         }
@@ -504,28 +502,19 @@ where
         for i in 0..self.final_internal_chips.len() {
             keygen_builder.add_partitioned_air(
                 &self.final_internal_chips[i],
-                COMMITMENT_LEN,
                 vec![final_internal_data_ptrs[i], final_internal_main_ptrs[i]],
             );
         }
 
-        keygen_builder.add_partitioned_air(&self.offline_checker, 0, vec![ops_ptr]);
+        keygen_builder.add_partitioned_air(&self.offline_checker, vec![ops_ptr]);
 
-        keygen_builder.add_partitioned_air(
-            &self.init_root_signal,
-            COMMITMENT_LEN,
-            vec![init_root_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.init_root_signal, vec![init_root_ptr]);
 
-        keygen_builder.add_partitioned_air(
-            &self.final_root_signal,
-            COMMITMENT_LEN,
-            vec![final_root_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.final_root_signal, vec![final_root_ptr]);
 
-        keygen_builder.add_air(&self.range_checker.air, 0);
+        keygen_builder.add_air(&self.range_checker.air);
 
-        keygen_builder.add_air(ops_sender, 0);
+        keygen_builder.add_air(ops_sender);
     }
     /// This function clears the trace_builder, loads in the traces for all involved chips
     /// (including the range_checker and the ops_sender, which is passed in along with its trace),
@@ -541,7 +530,7 @@ where
         prover_data: PageControllerProverData<SC>,
         ops_sender: &dyn AnyRap<SC>,
         ops_sender_trace: DenseMatrix<Val<SC>>,
-    ) -> (Proof<SC>, Vec<Vec<Val<SC>>>)
+    ) -> Proof<SC>
     where
         Val<SC>: PrimeField,
         Domain<SC>: Send + Sync,
@@ -664,10 +653,7 @@ where
         pis.push(vec![]);
         let prover = engine.prover();
         let mut challenger = engine.new_challenger();
-        (
-            prover.prove(&mut challenger, pk, main_trace_data, &pis),
-            pis,
-        )
+        prover.prove(&mut challenger, pk, main_trace_data, &pis)
     }
 
     /// This function takes a proof (returned by the prove function) and verifies it
@@ -676,7 +662,6 @@ where
         engine: &impl StarkEngine<SC>,
         vk: &MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
-        pis: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError>
     where
         Val<SC>: PrimeField,
@@ -684,7 +669,7 @@ where
         let verifier = engine.verifier();
 
         let mut challenger = engine.new_challenger();
-        verifier.verify(&mut challenger, vk, proof, pis)
+        verifier.verify(&mut challenger, vk, proof)
     }
 
     pub fn airs<'a>(&'a self, ops_sender: &'a dyn AnyRap<SC>) -> Vec<&'a dyn AnyRap<SC>> {

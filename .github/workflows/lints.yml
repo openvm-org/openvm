@@ -16,7 +16,11 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
@@ -25,13 +29,9 @@ jobs:
           override: false
           components: rustfmt, clippy
 
-      - uses: Swatinem/rust-cache@v1
-        with:
-          cache-on-failure: true
-
       - name: Run fmt
         run: |
           cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --all -- -D warnings
+        run: cargo clippy --all-targets --all -- -D warnings
