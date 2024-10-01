@@ -418,11 +418,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 for (air_name, now_value) in now_trace_cells {
                     let prev_value = prev_trace_cells.get(&air_name).unwrap_or(&0);
                     let key = (dsl_instr.clone(), opcode.to_string(), air_name);
-                    *self
-                        .collected_metrics
-                        .trace_cells
-                        .entry(key)
-                        .or_insert(0) += now_value - prev_value;
+                    *self.collected_metrics.trace_cells.entry(key).or_insert(0) +=
+                        now_value - prev_value;
                 }
             }
 
