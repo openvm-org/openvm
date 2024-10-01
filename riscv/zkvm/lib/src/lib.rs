@@ -89,8 +89,6 @@ extern crate alloc;
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
 
-use axvm_platform::syscall::sys_panic;
-
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memset.s"));
 #[cfg(target_os = "zkvm")]
