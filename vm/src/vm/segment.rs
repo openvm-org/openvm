@@ -409,15 +409,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
             }
 
-            let now_trace_cells = self.current_trace_cells();
-
             if collect_metrics {
+                let now_trace_cells = self.current_trace_cells();
+
                 let key = (dsl_instr.clone(), opcode.to_string());
                 *self.collected_metrics.counts.entry(key).or_insert(0) += 1;
 
-                for (chip_name, now_value) in now_trace_cells.iter() {
-                    let metrics_key = (dsl_instr.clone(), opcode.to_string(), chip_name.clone());
-                    let prev_value = prev_trace_cells.get(chip_name).unwrap_or(&0);
+                for (air_name, now_value) in now_trace_cells {
+                    let prev_value = prev_trace_cells.get(&air_name).unwrap_or(&0);
+                    let metrics_key = (dsl_instr.clone(), opcode.to_string(), air_name);
                     *self
                         .collected_metrics
                         .trace_cells

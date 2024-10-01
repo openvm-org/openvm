@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, mem::size_of};
 
-use afs_stark_backend::rap::{get_air_name, AnyRap};
+use afs_stark_backend::rap::AnyRap;
 use air::ProgramDummyAir;
 use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32};
@@ -71,7 +71,7 @@ impl<F: Field> MachineChip<F> for ProgramTester<F> {
     }
 
     fn air_name(&self) -> String {
-        get_air_name(&self.air)
+        "ProgramDummyAir".to_string()
     }
 
     fn current_trace_height(&self) -> usize {
