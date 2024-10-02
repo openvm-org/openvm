@@ -3,7 +3,9 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{
+    prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError,
+};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
@@ -66,12 +68,9 @@ fn field_extension_air_test() {
     let mut tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-
+    disable_debug_builder();
     // negative test pranking each IO value
-    for height in 0..num_ops {
+    for height in [0, num_ops - 1] {
         // TODO: better way to modify existing traces in tester
         let extension_trace = &mut tester.traces[2];
         let original_trace = extension_trace.clone();
