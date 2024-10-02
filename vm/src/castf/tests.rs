@@ -67,6 +67,7 @@ fn castf_rand_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
     let num_tests: usize = 10;
 
@@ -86,6 +87,7 @@ fn negative_castf_overflow_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -120,6 +122,7 @@ fn negative_castf_memread_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -154,6 +157,7 @@ fn negative_castf_memwrite_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -188,6 +192,7 @@ fn negative_castf_as_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();

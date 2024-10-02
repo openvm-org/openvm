@@ -44,6 +44,8 @@ pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const
     data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip>,
+
+    offset: usize,
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
@@ -54,6 +56,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         range_tuple_chip: Arc<RangeTupleCheckerChip>,
+        offset: usize,
     ) -> Self {
         assert!(LIMB_BITS < 16, "LIMB_BITS {} >= 16", LIMB_BITS);
 
@@ -83,6 +86,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             data: vec![],
             memory_chip,
             range_tuple_chip,
+            offset,
         }
     }
 }
@@ -103,7 +107,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             d,
             e,
             ..
-        } = instruction.clone();
+        } = instruction;
+        let opcode = opcode - self.offset;
         assert!(opcode == U256Opcode::MUL as usize);
 
         let mut memory_chip = self.memory_chip.borrow_mut();

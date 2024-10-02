@@ -98,6 +98,7 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
         tester.program_bus(),
         tester.memory_chip(),
         range_tuple_chip.clone(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -154,6 +155,7 @@ fn uint_multiplication_rand_air_test() {
         tester.program_bus(),
         tester.memory_chip(),
         range_tuple_chip.clone(),
+        0,
     );
 
     let mut rng = create_seeded_rng();

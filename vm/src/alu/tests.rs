@@ -113,6 +113,7 @@ fn run_alu_negative_test(
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -166,6 +167,7 @@ fn alu_add_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
@@ -230,6 +232,7 @@ fn alu_sub_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
@@ -294,6 +297,7 @@ fn alu_lt_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
@@ -360,6 +364,7 @@ fn alu_eq_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
@@ -398,6 +403,7 @@ fn alu_xor_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
@@ -436,6 +442,7 @@ fn alu_and_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
@@ -474,6 +481,7 @@ fn alu_or_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
@@ -515,6 +523,7 @@ fn alu_slt_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {

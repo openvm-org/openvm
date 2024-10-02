@@ -94,6 +94,8 @@ pub struct CoreChip<F: PrimeField32> {
 
     // TODO[jpw] Unclear Core should own this
     pub streams: Streams<F>,
+
+    offset: usize,
 }
 
 impl<F: PrimeField32> CoreChip<F> {
@@ -102,6 +104,7 @@ impl<F: PrimeField32> CoreChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
+        offset: usize,
     ) -> Self {
         Self::from_state(
             options,
@@ -109,6 +112,7 @@ impl<F: PrimeField32> CoreChip<F> {
             program_bus,
             memory_chip,
             CoreState::initial(),
+            offset,
         )
     }
 
@@ -124,6 +128,7 @@ impl<F: PrimeField32> CoreChip<F> {
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
         state: CoreState,
+        offset: usize,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
@@ -138,6 +143,7 @@ impl<F: PrimeField32> CoreChip<F> {
             public_values: vec![None; options.num_public_values],
             memory_chip,
             streams: Default::default(),
+            offset,
         }
     }
 }

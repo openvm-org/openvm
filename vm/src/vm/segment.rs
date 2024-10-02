@@ -130,6 +130,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         program_bus,
                         memory_chip.clone(),
                         state.state,
+                        offset,
                     ))));
                     for opcode in range {
                         executors.insert(opcode, core_chip.clone().unwrap().into());
@@ -141,6 +142,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         execution_bus,
                         program_bus,
                         memory_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -152,6 +154,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         execution_bus,
                         program_bus,
                         memory_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -167,6 +170,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         execution_bus,
                         program_bus,
                         memory_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -179,6 +183,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         program_bus,
                         memory_chip.clone(),
                         byte_xor_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -192,6 +197,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                             program_bus,
                             memory_chip.clone(),
                             SECP256K1_COORD_PRIME.clone(),
+                            offset,
                         )))
                     } else {
                         Rc::new(RefCell::new(ModularAddSubChip::new(
@@ -199,6 +205,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                             program_bus,
                             memory_chip.clone(),
                             SECP256K1_SCALAR_PRIME.clone(),
+                            offset,
                         )))
                     };
                     modular_addsub_chips.push(new_chip.clone());
@@ -213,6 +220,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                             program_bus,
                             memory_chip.clone(),
                             SECP256K1_COORD_PRIME.clone(),
+                            offset,
                         )))
                     } else {
                         Rc::new(RefCell::new(ModularMultDivChip::new(
@@ -220,6 +228,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                             program_bus,
                             memory_chip.clone(),
                             SECP256K1_SCALAR_PRIME.clone(),
+                            offset,
                         )))
                     };
                     modular_muldiv_chips.push(new_chip.clone());
@@ -235,6 +244,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         program_bus,
                         memory_chip.clone(),
                         byte_xor_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -252,6 +262,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         program_bus,
                         memory_chip.clone(),
                         range_tuple_checker.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -262,6 +273,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     let chip = Rc::new(RefCell::new(ShiftChip::new(
                         execution_bus,
                         memory_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -273,6 +285,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         execution_bus,
                         program_bus,
                         memory_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -284,6 +297,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         execution_bus,
                         program_bus,
                         memory_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -295,6 +309,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         execution_bus,
                         program_bus,
                         memory_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -306,6 +321,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         execution_bus,
                         program_bus,
                         memory_chip.clone(),
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());

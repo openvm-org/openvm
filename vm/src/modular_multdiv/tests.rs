@@ -29,6 +29,7 @@ fn test_modular_multdiv() {
             tester.program_bus(),
             tester.memory_chip(),
             secp256k1_coord_prime(),
+            0,
         );
     let mut scalar_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
         ModularMultDivChip::new(
@@ -36,6 +37,7 @@ fn test_modular_multdiv() {
             tester.program_bus(),
             tester.memory_chip(),
             secp256k1_scalar_prime(),
+            4,
         );
     let mut rng = create_seeded_rng();
     let num_tests = 100;
@@ -97,7 +99,7 @@ fn test_modular_multdiv() {
         tester.write(data_as, address2, b_limbs);
 
         let instruction = Instruction::from_isize(
-            opcode as usize,
+            opcode as usize + if is_scalar { 4 } else { 0 },
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,

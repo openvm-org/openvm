@@ -20,6 +20,7 @@ fn test_ec_add() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
@@ -101,6 +102,7 @@ fn test_ec_double() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let (p1_x, p1_y) = SampleEcPoints[1].clone();

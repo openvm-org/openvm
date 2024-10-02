@@ -73,6 +73,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();

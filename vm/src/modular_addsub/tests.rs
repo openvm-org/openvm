@@ -28,12 +28,14 @@ fn test_modular_addsub() {
         tester.program_bus(),
         tester.memory_chip(),
         secp256k1_coord_prime(),
+        0,
     );
     let mut scalar_chip: ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE> = ModularAddSubChip::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
         secp256k1_scalar_prime(),
+        4,
     );
     let mut rng = create_seeded_rng();
     let num_tests = 100;
@@ -104,7 +106,7 @@ fn test_modular_addsub() {
         tester.write(data_as, address2, b_limbs);
 
         let instruction = Instruction::from_isize(
-            opcode,
+            opcode + if is_scalar { 4 } else { 0 },
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,

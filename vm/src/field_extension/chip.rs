@@ -47,6 +47,8 @@ pub struct FieldExtensionArithmeticChip<F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir,
     pub(crate) memory_chip: MemoryChipRef<F>,
     pub(crate) records: Vec<FieldExtensionArithmeticRecord<F>>,
+
+    offset: usize,
 }
 
 impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F> {
@@ -64,6 +66,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
             e,
             ..
         } = instruction;
+        let opcode = opcode - self.offset;
 
         assert_ne!(d, F::zero());
         assert_ne!(e, F::zero());
@@ -104,6 +107,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory: MemoryChipRef<F>,
+        offset: usize,
     ) -> Self {
         let air = FieldExtensionArithmeticAir::new(
             ExecutionBridge::new(execution_bus, program_bus),
@@ -113,6 +117,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             air,
             records: vec![],
             memory_chip: memory,
+            offset,
         }
     }
 

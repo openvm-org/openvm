@@ -68,6 +68,8 @@ pub struct ModularAddSubChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB
     memory_chip: MemoryChipRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     modulus: BigUint,
+
+    offset: usize,
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
@@ -78,6 +80,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         modulus: BigUint,
+        offset: usize,
     ) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
@@ -105,6 +108,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
             memory_chip,
             range_checker_chip,
             modulus,
+            offset,
         }
     }
 }
@@ -125,7 +129,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
             d,
             e,
             ..
-        } = instruction.clone();
+        } = instruction;
+        let opcode = opcode - self.offset;
         assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
 
         let mut memory_chip = self.memory_chip.borrow_mut();

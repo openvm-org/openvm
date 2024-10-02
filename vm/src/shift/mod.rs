@@ -24,12 +24,13 @@ pub struct ShiftChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: u
     // TODO: add data storage for trace generation
     memory_chip: MemoryChipRef<T>,
     // TODO: add range checker
+    offset: usize,
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     ShiftChip<T, NUM_LIMBS, LIMB_BITS>
 {
-    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>) -> Self {
+    pub fn new(execution_bus: ExecutionBus, memory_chip: MemoryChipRef<T>, offset: usize) -> Self {
         assert!(LIMB_BITS < 16, "LIMB_BITS {} >= 16", LIMB_BITS);
         assert!(
             NUM_LIMBS < (1 << (2 * LIMB_BITS)),
@@ -44,6 +45,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
                 memory_bridge,
             },
             memory_chip,
+            offset,
         }
     }
 }
@@ -64,7 +66,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             d,
             e,
             ..
-        } = instruction.clone();
+        } = instruction;
+        let opcode = opcode - self.offset;
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(

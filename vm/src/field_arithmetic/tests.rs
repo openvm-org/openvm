@@ -39,6 +39,7 @@ fn field_arithmetic_air_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -129,6 +130,7 @@ fn field_arithmetic_air_zero_div_zero() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
     tester.write_cell(1, 0, BabyBear::zero());
     tester.write_cell(1, 1, BabyBear::one());
@@ -164,6 +166,7 @@ fn field_arithmetic_air_test_panic() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
     tester.write_cell(1, 0, BabyBear::zero());
     // should panic

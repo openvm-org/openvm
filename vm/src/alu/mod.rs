@@ -65,6 +65,8 @@ pub struct ArithmeticLogicChip<T: PrimeField32, const NUM_LIMBS: usize, const LI
     data: Vec<ArithmeticLogicRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+
+    offset: usize,
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
@@ -75,6 +77,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+        offset: usize,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
@@ -86,6 +89,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             data: vec![],
             memory_chip,
             xor_lookup_chip,
+            offset,
         }
     }
 }
@@ -107,7 +111,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        let opcode = U256Opcode::from_usize(opcode);
+        let opcode = U256Opcode::from_usize(opcode - self.offset);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(

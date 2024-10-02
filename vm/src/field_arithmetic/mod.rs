@@ -39,6 +39,8 @@ pub struct FieldArithmeticChip<F: PrimeField32> {
     pub records: Vec<FieldArithmeticRecord<F>>,
 
     pub memory_chip: MemoryChipRef<F>,
+
+    offset: usize,
 }
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
@@ -47,6 +49,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
+        offset: usize,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
@@ -56,6 +59,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             },
             records: vec![],
             memory_chip,
+            offset,
         }
     }
 }
@@ -76,6 +80,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             op_f: y_as,
             ..
         } = instruction;
+        let opcode = opcode - self.offset;
 
         let mut memory_chip = self.memory_chip.borrow_mut();
 

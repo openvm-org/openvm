@@ -45,6 +45,8 @@ pub struct Poseidon2Chip<F: PrimeField32> {
     pub memory_chip: MemoryChipRef<F>,
 
     records: Vec<Poseidon2Record<F>>,
+
+    offset: usize,
 }
 
 impl<F: PrimeField32> Poseidon2VmAir<F> {
@@ -94,6 +96,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
+        offset: usize,
     ) -> Self {
         let air = Poseidon2VmAir::<F>::from_poseidon2_config(
             p2_config,
@@ -106,6 +109,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
             air,
             records: vec![],
             memory_chip,
+            offset,
         }
     }
 
@@ -202,6 +206,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             e,
             ..
         } = instruction;
+        let opcode = opcode - self.offset;
 
         let opcode = Poseidon2Opcode::from_usize(opcode);
 

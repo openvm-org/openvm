@@ -64,6 +64,8 @@ pub struct KeccakVmChip<F: PrimeField32> {
     pub records: Vec<KeccakRecord<F>>,
     pub memory_chip: MemoryChipRef<F>,
     pub byte_xor_chip: Arc<XorLookupChip<8>>,
+
+    offset: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -94,6 +96,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
         byte_xor_chip: Arc<XorLookupChip<8>>,
+        offset: usize,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
@@ -105,6 +108,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
             memory_chip,
             byte_xor_chip,
             records: Vec::new(),
+            offset,
         }
     }
 }
@@ -125,6 +129,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             op_f: f,
             ..
         } = instruction;
+        let opcode = opcode - self.offset;
         debug_assert_eq!(
             Keccak256Opcode::from_usize(opcode),
             Keccak256Opcode::KECCAK256

@@ -53,6 +53,7 @@ fn lui_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
     let num_tests: usize = 10;
 
@@ -72,6 +73,7 @@ fn negative_lui_invalid_imm_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     // (1 << 20) + 1 exceeds the 20-bit bound

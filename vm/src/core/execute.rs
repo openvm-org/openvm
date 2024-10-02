@@ -36,7 +36,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let pc_usize = pc.as_canonical_u64() as usize;
 
-        let opcode = instruction.opcode;
+        let opcode = instruction.opcode - self.offset;
         let a = instruction.op_a;
         let b = instruction.op_b;
         let c = instruction.op_c;

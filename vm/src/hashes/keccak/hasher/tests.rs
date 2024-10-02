@@ -44,6 +44,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
         tester.program_bus(),
         tester.memory_chip(),
         xor_chip.clone(),
+        0,
     );
 
     let mut dst = 0;

@@ -32,6 +32,7 @@ fn field_extension_air_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
