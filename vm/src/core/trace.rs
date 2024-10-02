@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{columns::CoreCols, CoreChip};
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField32> CoreChip<F> {
     /// Pad with NOP rows.

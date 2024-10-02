@@ -13,7 +13,7 @@ use super::{
     columns::{UiAuxCols, UiCols, UiIoCols},
     UiChip,
 };
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField32> MachineChip<F> for UiChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {

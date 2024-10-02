@@ -6,7 +6,7 @@ use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use crate::arch::{bus::ExecutionBus, columns::ExecutionState};
+use crate::arch::{ExecutionBus, ExecutionState};
 
 #[derive(Debug)]
 pub struct VmConnectorAir {

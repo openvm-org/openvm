@@ -10,7 +10,7 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::{
-    arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge,
+    arch::ExecutionBridge, memory::offline_checker::MemoryBridge,
     uint_multiplication::columns::UintMultiplicationCols,
 };
 

@@ -13,7 +13,7 @@ use super::{
     columns::{CastFAuxCols, CastFCols, CastFIoCols},
     CastFChip,
 };
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField32> MachineChip<F> for CastFChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {

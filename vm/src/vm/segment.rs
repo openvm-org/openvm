@@ -28,13 +28,12 @@ use super::{
 use crate::{
     alu::ArithmeticLogicChip,
     arch::{
-        bus::ExecutionBus,
-        chips::{InstructionExecutor, InstructionExecutorVariant, MachineChip, MachineChipVariant},
-        columns::ExecutionState,
         instructions::{
             Opcode, ALU_256_INSTRUCTIONS, CORE_INSTRUCTIONS, FIELD_ARITHMETIC_INSTRUCTIONS,
             FIELD_EXTENSION_INSTRUCTIONS, SHIFT_256_INSTRUCTIONS, UI_32_INSTRUCTIONS,
         },
+        ExecutionBus, ExecutionState, InstructionExecutor, InstructionExecutorVariant, MachineChip,
+        MachineChipVariant,
     },
     castf::CastFChip,
     core::{

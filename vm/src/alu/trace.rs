@@ -14,7 +14,7 @@ use super::{
     ArithmeticLogicChip, ArithmeticLogicRecord, WriteRecord,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{instructions::Opcode, MachineChip},
     memory::offline_checker::MemoryWriteAuxCols,
     uint_multiplication::MemoryData,
 };

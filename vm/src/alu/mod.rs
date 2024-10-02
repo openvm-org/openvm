@@ -6,11 +6,8 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        bridge::ExecutionBridge,
-        bus::ExecutionBus,
-        chips::InstructionExecutor,
-        columns::ExecutionState,
         instructions::{Opcode, ALU_256_INSTRUCTIONS},
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},

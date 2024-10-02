@@ -17,7 +17,7 @@ use super::{
     ModularAddSubChip,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{instructions::Opcode, MachineChip},
     memory::MemoryHeapDataIoCols,
 };
 

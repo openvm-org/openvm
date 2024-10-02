@@ -8,8 +8,7 @@ use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
 use self::air::Poseidon2VmAir;
 use crate::{
     arch::{
-        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
-        columns::ExecutionState, instructions::Opcode::*,
+        instructions::Opcode::*, ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},

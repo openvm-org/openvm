@@ -14,7 +14,7 @@ use tiny_keccak::keccakf;
 
 use super::{KeccakVmChip, KECCAK_DIGEST_WRITES, KECCAK_WORD_SIZE};
 use crate::{
-    arch::chips::MachineChip,
+    arch::MachineChip,
     hashes::keccak::hasher::{
         columns::{KeccakOpcodeCols, KeccakVmCols},
         KECCAK_ABSORB_READS, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,

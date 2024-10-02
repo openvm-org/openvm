@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField64};
 
 use crate::{
     arch::{
-        columns::NUM_OPERANDS,
         instructions::Opcode::{self, FAIL, NOP},
+        NUM_OPERANDS,
     },
     core::READ_INSTRUCTION_BUS,
 };

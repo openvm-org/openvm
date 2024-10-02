@@ -10,7 +10,7 @@ use super::{
     EcDoubleRecord, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{instructions::Opcode, MachineChip},
     memory::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols, MemoryHeapReadRecord,

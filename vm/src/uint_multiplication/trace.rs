@@ -15,7 +15,7 @@ use super::{
     },
     UintMultiplicationChip, UintMultiplicationRecord,
 };
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChip<F>
     for UintMultiplicationChip<F, NUM_LIMBS, LIMB_BITS>

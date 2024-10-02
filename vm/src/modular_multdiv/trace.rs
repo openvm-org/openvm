@@ -17,7 +17,7 @@ use super::{
     ModularMultDivChip,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{instructions::Opcode, MachineChip},
     memory::MemoryHeapDataIoCols,
 };
 

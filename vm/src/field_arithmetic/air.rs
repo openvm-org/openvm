@@ -11,8 +11,8 @@ use p3_matrix::Matrix;
 use super::columns::FieldArithmeticCols;
 use crate::{
     arch::{
-        bridge::ExecutionBridge,
         instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
+        ExecutionBridge,
     },
     memory::offline_checker::MemoryBridge,
 };

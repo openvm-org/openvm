@@ -16,7 +16,7 @@ use strum_macros::IntoStaticStr;
 
 use crate::{
     alu::ArithmeticLogicChip,
-    arch::columns::ExecutionState,
+    arch::ExecutionState,
     castf::CastFChip,
     core::CoreChip,
     ecc::{EcAddUnequalChip, EcDoubleChip},

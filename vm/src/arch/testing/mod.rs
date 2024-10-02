@@ -14,7 +14,7 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use crate::{
-    arch::{chips::MachineChip, columns::ExecutionState},
+    arch::{ExecutionState, MachineChip},
     core::RANGE_CHECKER_BUS,
     memory::{offline_checker::MemoryBus, MemoryChip},
     program::{bridge::ProgramBus, Instruction},
@@ -28,7 +28,7 @@ pub mod program;
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
 
-use super::{bus::ExecutionBus, chips::InstructionExecutor};
+use super::{ExecutionBus, InstructionExecutor};
 use crate::memory::MemoryChipRef;
 
 #[derive(Clone, Debug)]

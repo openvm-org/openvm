@@ -7,7 +7,7 @@ use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use crate::arch::{bus::ExecutionBus, chips::MachineChip, columns::ExecutionState};
+use crate::arch::{ExecutionBus, ExecutionState, MachineChip};
 
 pub mod air;
 

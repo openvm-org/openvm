@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{columns::*, Poseidon2Chip};
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
     /// Generates final Poseidon2VmAir trace from cached rows.

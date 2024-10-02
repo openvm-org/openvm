@@ -15,7 +15,7 @@ use p3_matrix::Matrix;
 
 use super::columns::ModularAddSubCols;
 use crate::{
-    arch::{bridge::ExecutionBridge, instructions::Opcode},
+    arch::{instructions::Opcode, ExecutionBridge},
     memory::offline_checker::MemoryBridge,
 };
 

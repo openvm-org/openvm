@@ -24,7 +24,7 @@ use super::{
     offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
 };
 use crate::{
-    arch::chips::MachineChip,
+    arch::MachineChip,
     core::RANGE_CHECKER_BUS,
     memory::{
         adapter::AccessAdapterAir,

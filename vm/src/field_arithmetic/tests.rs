@@ -13,9 +13,9 @@ use rand::Rng;
 use super::{FieldArithmetic, FieldArithmeticChip};
 use crate::{
     arch::{
-        chips::MachineChip,
         instructions::{Opcode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
         testing::{memory::gen_pointer, MachineChipTestBuilder},
+        MachineChip,
     },
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
     program::Instruction,

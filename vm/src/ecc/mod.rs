@@ -11,10 +11,10 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        bridge::ExecutionBridge,
-        bus::ExecutionBus,
-        chips::InstructionExecutor,
-        columns::ExecutionState, // instructions::Opcode,
+        ExecutionBridge,
+        ExecutionBus,
+        ExecutionState, // instructions::Opcode,
+        InstructionExecutor,
     },
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
     modular_addsub::{ModularAddSubChip, FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},

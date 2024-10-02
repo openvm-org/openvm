@@ -14,7 +14,7 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{
-    arch::bridge::ExecutionBridge,
+    arch::ExecutionBridge,
     memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 

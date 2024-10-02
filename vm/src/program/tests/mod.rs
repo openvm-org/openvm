@@ -11,7 +11,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::Program;
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode::*},
+    arch::{instructions::Opcode::*, MachineChip},
     core::READ_INSTRUCTION_BUS,
     program::{columns::ProgramPreprocessedCols, Instruction, ProgramChip},
 };

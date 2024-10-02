@@ -14,7 +14,7 @@ use super::{
     ShiftChip, ShiftRecord,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{instructions::Opcode, MachineChip},
     uint_multiplication::MemoryData,
 };
 
