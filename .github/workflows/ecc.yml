@@ -30,8 +30,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
 
       - name: Run ecc-lib crate tests
         working-directory: ecc/lib
         run: |
-          cargo test --profile=fast --features parallel
+          cargo nextest run --cargo-profile=fast --features parallel

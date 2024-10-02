@@ -29,11 +29,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
 
       - name: Run DB unit tests
         working-directory: db/page
         run: |
-          cargo t --features parallel --profile=fast
+          cargo nextest run --cargo-profile=fast --features parallel
 
   benchmark-rw:
     uses: ./.github/workflows/benchmark-call.yml
