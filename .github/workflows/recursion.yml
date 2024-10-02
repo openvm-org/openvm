@@ -22,7 +22,7 @@ env:
 
 jobs:
   tests:
-    runs-on: ubuntu-arm64-16core-64ram
+    runs-on: ubuntu-latest-16core-64ram # must use x86 because solc has no arm64 linux binary...
 
     steps:
       - uses: actions/checkout@v4
