@@ -68,7 +68,7 @@ pub trait MachineAdapter<F: PrimeField32> {
         interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
     ) -> AB::Expr;
 
-    fn air(&self) -> &Self::Air;
+    fn air(&self) -> Self::Air;
 }
 
 /// Trait to be implemented on primitive chip to integrate with the machine.
@@ -100,7 +100,7 @@ pub trait MachineIntegration<F: PrimeField32, A: MachineAdapter<F>> {
         local_adapter: &A::Cols<AB::Var>,
     ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>>;
 
-    fn air(&self) -> &Self::Air;
+    fn air(&self) -> Self::Air;
 }
 
 pub struct InstructionOutput<T, I: MachineAdapterInterface<T>> {
