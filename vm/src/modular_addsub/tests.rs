@@ -8,10 +8,7 @@ use rand::Rng;
 use super::{ModularAddSubChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME};
 use crate::{
     arch::{
-        instructions::{
-            ModularArithmeticOpcode::{self, *},
-            UsizeOpcode,
-        },
+        instructions::{ModularArithmeticOpcode, UsizeOpcode},
         testing::MachineChipTestBuilder,
     },
     program::Instruction,
@@ -51,12 +48,12 @@ fn test_modular_addsub() {
             .collect();
         let mut b = BigUint::new(b_digits);
 
-        let opcode = rng.gen_range(0..4);
-
-        let (is_scalar, modulus) = match ModularArithmeticOpcode::from_usize(opcode) {
-            SCALAR_ADD | SCALAR_SUB => (true, SECP256K1_SCALAR_PRIME.clone()),
-            COORD_ADD | COORD_SUB => (false, SECP256K1_COORD_PRIME.clone()),
-            _ => unreachable!(),
+        let opcode = rng.gen_range(0..2);
+        let is_scalar = rng.gen_bool(0.5);
+        let modulus = if is_scalar {
+            SECP256K1_SCALAR_PRIME.clone()
+        } else {
+            SECP256K1_COORD_PRIME.clone()
         };
 
         a %= modulus.clone();
@@ -64,11 +61,19 @@ fn test_modular_addsub() {
         assert!(a < modulus);
         assert!(b < modulus);
 
-        let r = ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::solve(
-            ModularArithmeticOpcode::from_usize(opcode),
-            a.clone(),
-            b.clone(),
-        );
+        let r = if is_scalar {
+            scalar_chip.solve(
+                ModularArithmeticOpcode::from_usize(opcode),
+                a.clone(),
+                b.clone(),
+            )
+        } else {
+            coord_chip.solve(
+                ModularArithmeticOpcode::from_usize(opcode),
+                a.clone(),
+                b.clone(),
+            )
+        };
 
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:

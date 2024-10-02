@@ -50,7 +50,7 @@ fn field_arithmetic_air_test() {
         let operand1 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
         let operand2 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
 
-        if opcode == FDIV && operand2.is_zero() {
+        if opcode == DIV && operand2.is_zero() {
             continue;
         }
 
@@ -135,7 +135,7 @@ fn field_arithmetic_air_zero_div_zero() {
 
     tester.execute(
         &mut field_arithmetic_chip,
-        Instruction::from_usize(FDIV as usize, [0, 0, 1, 1, 1, 1]),
+        Instruction::from_usize(DIV as usize, [0, 0, 1, 1, 1, 1]),
     );
 
     let air = field_arithmetic_chip.air;
@@ -169,6 +169,6 @@ fn field_arithmetic_air_test_panic() {
     // should panic
     tester.execute(
         &mut field_arithmetic_chip,
-        Instruction::from_usize(FDIV as usize, [0, 0, 0, 1, 1, 1]),
+        Instruction::from_usize(DIV as usize, [0, 0, 0, 1, 1, 1]),
     );
 }

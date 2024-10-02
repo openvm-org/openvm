@@ -9,7 +9,7 @@ use super::columns::FieldArithmeticCols;
 use crate::{
     arch::{
         bridge::ExecutionBridge,
-        instructions::FieldArithmeticOpcode::{FADD, FDIV, FMUL, FSUB},
+        instructions::FieldArithmeticOpcode::{ADD, DIV, MUL, SUB},
     },
     memory::offline_checker::MemoryBridge,
 };
@@ -48,7 +48,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         let z = io.z.value;
 
         let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_div];
-        let opcodes = [FADD, FSUB, FMUL, FDIV];
+        let opcodes = [ADD, SUB, MUL, DIV];
         let results = [x + y, x - y, x * y, x * aux.divisor_inv];
 
         // Imposing the following constraints:

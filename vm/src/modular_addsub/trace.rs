@@ -67,8 +67,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChi
                     .map(|x| x.as_canonical_u32()),
             );
             let is_add = match ModularArithmeticOpcode::from_usize(record.instruction.opcode) {
-                ModularArithmeticOpcode::SCALAR_ADD | ModularArithmeticOpcode::COORD_ADD => true,
-                ModularArithmeticOpcode::SCALAR_SUB | ModularArithmeticOpcode::COORD_SUB => false,
+                ModularArithmeticOpcode::ADD => true,
+                ModularArithmeticOpcode::SUB => false,
                 _ => unreachable!(),
             };
 

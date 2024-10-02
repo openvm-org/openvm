@@ -134,15 +134,6 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         } = instruction.clone();
         assert_eq!(CARRY_LIMBS, NUM_LIMBS * 2 - 1);
         assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
-        match ModularArithmeticOpcode::from_usize(opcode) {
-            ModularArithmeticOpcode::COORD_MUL | ModularArithmeticOpcode::COORD_DIV => {
-                assert_eq!(self.modulus, SECP256K1_COORD_PRIME.clone());
-            }
-            ModularArithmeticOpcode::SCALAR_MUL | ModularArithmeticOpcode::SCALAR_DIV => {
-                assert_eq!(self.modulus, SECP256K1_SCALAR_PRIME.clone());
-            }
-            _ => unreachable!(),
-        }
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -159,7 +150,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         let x_biguint = Self::limbs_to_biguint(&x);
         let y_biguint = Self::limbs_to_biguint(&y);
 
-        let z_biguint = Self::solve(
+        let z_biguint = self.solve(
             ModularArithmeticOpcode::from_usize(opcode),
             x_biguint,
             y_biguint,
@@ -191,19 +182,12 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
 impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     ModularMultDivChip<T, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
 {
-    pub fn solve(opcode: ModularArithmeticOpcode, x: BigUint, y: BigUint) -> BigUint {
+    pub fn solve(&self, opcode: ModularArithmeticOpcode, x: BigUint, y: BigUint) -> BigUint {
         match opcode {
-            ModularArithmeticOpcode::COORD_MUL => (x * y) % SECP256K1_COORD_PRIME.clone(),
-            ModularArithmeticOpcode::SCALAR_MUL => (x * y) % SECP256K1_SCALAR_PRIME.clone(),
-            ModularArithmeticOpcode::COORD_DIV => {
-                let tmp = SECP256K1_COORD_PRIME.clone();
-                let y_inv = big_uint_mod_inverse(&y, &tmp);
-                (x * y_inv) % &tmp
-            }
-            ModularArithmeticOpcode::SCALAR_DIV => {
-                let tmp = SECP256K1_SCALAR_PRIME.clone();
-                let y_inv = big_uint_mod_inverse(&y, &tmp);
-                (x * y_inv) % &tmp
+            ModularArithmeticOpcode::MUL => (x * y) % self.modulus.clone(),
+            ModularArithmeticOpcode::DIV => {
+                let y_inv = big_uint_mod_inverse(&y, &self.modulus);
+                (x * y_inv) % &self.modulus
             }
             _ => unreachable!(),
         }

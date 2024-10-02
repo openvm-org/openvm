@@ -76,7 +76,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
             self.segments.len() + 1
         );
         let program = self.program.clone();
-        let segment = ExecutionSegment::new(self.config, program, state);
+        let segment = ExecutionSegment::new(self.config.clone(), program, state);
         let segment_rc = Rc::new(RefCell::new(segment));
         segment_rc.borrow_mut().cycle_tracker = cycle_tracker;
         self.segments

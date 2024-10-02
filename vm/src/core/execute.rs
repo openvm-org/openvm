@@ -48,7 +48,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         let io = CoreIoCols {
             timestamp: F::from_canonical_usize(timestamp),
             pc,
-            opcode: F::from_canonical_usize(opcode as usize),
+            opcode: F::from_canonical_usize(opcode),
             op_a: a,
             op_b: b,
             op_c: c,

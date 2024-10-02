@@ -1,11 +1,11 @@
-use std::{collections::BTreeMap, ops::Range};
+use std::ops::Range;
 
 use derive_new::new;
-use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
+use strum::EnumCount;
 
 use crate::{
-    arch::chips::{InstructionExecutorVariant, MachineChipVariant},
+    arch::{chips::InstructionExecutorVariantName, instructions::*},
     core::CoreOptions,
 };
 
@@ -26,10 +26,33 @@ impl Default for MemoryConfig {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct VmConfig<F: PrimeField32> {
-    pub executors: BTreeMap<usize, (InstructionExecutorVariant<F>, usize)>, // (who executes, offset)
-    pub chips: Vec<MachineChipVariant<F>>,
+fn default_executor_range(executor: InstructionExecutorVariantName) -> (Range<usize>, usize) {
+    let (start, len, offset) = match executor {
+        InstructionExecutorVariantName::Core => (0, CoreOpcode::COUNT, 0),
+        InstructionExecutorVariantName::FieldArithmetic => {
+            (0x100, FieldArithmeticOpcode::COUNT, 0x100)
+        }
+        InstructionExecutorVariantName::FieldExtension => {
+            (0x110, FieldExtensionOpcode::COUNT, 0x110)
+        }
+        InstructionExecutorVariantName::Poseidon2 => (0x120, Poseidon2Opcode::COUNT, 0x120),
+        InstructionExecutorVariantName::Keccak256 => (0x130, Keccak256Opcode::COUNT, 0x130),
+        InstructionExecutorVariantName::ModularAddSub => (0x140, 4, 0x140),
+        InstructionExecutorVariantName::ModularMultDiv => (0x144, 4, 0x140),
+        InstructionExecutorVariantName::ArithmeticLogicUnit256 => (0x150, 7, 0x150),
+        InstructionExecutorVariantName::U256Multiplication => (0x150 + 11, 1, 0x150),
+        InstructionExecutorVariantName::Shift256 => (0x150 + 7, 4, 0x150),
+        InstructionExecutorVariantName::Ui => (0x160, U32Opcode::COUNT, 0x160),
+        InstructionExecutorVariantName::CastF => (0x170, CastfOpcode::COUNT, 0x170),
+        InstructionExecutorVariantName::Secp256k1AddUnequal => (0x180, 1, 0x180),
+        InstructionExecutorVariantName::Secp256k1Double => (0x181, 1, 0x180),
+    };
+    (start..(start + len), offset)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VmConfig {
+    pub executors: Vec<(Range<usize>, InstructionExecutorVariantName, usize)>, // (range of opcodes, who executes, offset)
 
     pub poseidon2_max_constraint_degree: Option<usize>,
     pub memory_config: MemoryConfig,
@@ -41,7 +64,7 @@ pub struct VmConfig<F: PrimeField32> {
     pub bigint_limb_size: usize,
 }
 
-impl<F: PrimeField32> VmConfig<F> {
+impl VmConfig {
     pub fn from_parameters(
         poseidon2_max_constraint_degree: Option<usize>,
         memory_config: MemoryConfig,
@@ -51,8 +74,7 @@ impl<F: PrimeField32> VmConfig<F> {
         bigint_limb_size: usize,
     ) -> Self {
         VmConfig {
-            executors: BTreeMap::new(),
-            chips: Vec::new(),
+            executors: Vec::new(),
             poseidon2_max_constraint_degree,
             memory_config,
             num_public_values,
@@ -62,24 +84,19 @@ impl<F: PrimeField32> VmConfig<F> {
         }
     }
 
-    pub fn add_executor_custom_offset(
-        mut self,
-        range: Range<usize>,
-        executor: InstructionExecutorVariant<F>,
-        offset: usize,
-    ) -> Self {
-        for i in range {
-            self.executors.insert(i, (executor.clone(), offset));
-        }
-        self
-    }
-
     pub fn add_executor(
         mut self,
         range: Range<usize>,
-        executor: InstructionExecutorVariant<F>,
+        executor: InstructionExecutorVariantName,
+        offset: usize,
     ) -> Self {
-        self.add_executor_custom_offset(range, executor, range.start)
+        self.executors.push((range, executor, offset));
+        self
+    }
+
+    pub fn add_default_executor(self, executor: InstructionExecutorVariantName) -> Self {
+        let (range, offset) = default_executor_range(executor);
+        self.add_executor(range, executor, offset)
     }
 }
 
@@ -93,28 +110,9 @@ impl Default for VmConfig {
             false,
             8,
         )
-        // VmConfig {
-        //     field_arithmetic_enabled: true,
-        //     field_extension_enabled: true,
-        //     compress_poseidon2_enabled: true,
-        //     perm_poseidon2_enabled: true,
-        //     poseidon2_max_constraint_degree: Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
-        //     keccak_enabled: false,
-        //     modular_addsub_enabled: false,
-        //     modular_multdiv_enabled: false,
-        //     is_less_than_enabled: false,
-        //     u256_arithmetic_enabled: false,
-        //     u256_multiplication_enabled: false,
-        //     shift_256_enabled: false,
-        //     ui_32_enabled: false,
-        //     castf_enabled: false,
-        //     secp256k1_enabled: false,
-        //     memory_config: Default::default(),
-        //     num_public_values: 0,
-        //     max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
-        //     collect_metrics: false,
-        //     bigint_limb_size: 8,
-        }
+        .add_default_executor(InstructionExecutorVariantName::FieldArithmetic)
+        .add_default_executor(InstructionExecutorVariantName::FieldExtension)
+        .add_default_executor(InstructionExecutorVariantName::Poseidon2)
     }
 }
 
@@ -126,15 +124,15 @@ impl VmConfig {
     }
 
     pub fn core() -> Self {
-        VmConfig {
-            field_arithmetic_enabled: false,
-            field_extension_enabled: false,
-            compress_poseidon2_enabled: false,
-            poseidon2_max_constraint_degree: None,
-            perm_poseidon2_enabled: false,
-            keccak_enabled: false,
-            ..Default::default()
-        }
+        Self::from_parameters(
+            None,
+            Default::default(),
+            0,
+            DEFAULT_MAX_SEGMENT_LEN,
+            false,
+            8,
+        )
+        .add_default_executor(InstructionExecutorVariantName::Core)
     }
 
     pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {

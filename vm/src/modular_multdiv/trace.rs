@@ -67,8 +67,8 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
                     .map(|x| x.as_canonical_u32()),
             );
             let is_mult = match ModularArithmeticOpcode::from_usize(record.instruction.opcode) {
-                ModularArithmeticOpcode::SCALAR_MUL | ModularArithmeticOpcode::COORD_MUL => true,
-                ModularArithmeticOpcode::SCALAR_DIV | ModularArithmeticOpcode::COORD_DIV => false,
+                ModularArithmeticOpcode::MUL => true,
+                ModularArithmeticOpcode::DIV => false,
                 _ => unreachable!(),
             };
 

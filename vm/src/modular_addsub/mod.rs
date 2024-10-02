@@ -127,15 +127,6 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
             ..
         } = instruction.clone();
         assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
-        match ModularArithmeticOpcode::from_usize(opcode) {
-            ModularArithmeticOpcode::COORD_ADD | ModularArithmeticOpcode::COORD_SUB => {
-                assert_eq!(self.modulus, SECP256K1_COORD_PRIME.clone());
-            }
-            ModularArithmeticOpcode::SCALAR_ADD | ModularArithmeticOpcode::SCALAR_SUB => {
-                assert_eq!(self.modulus, SECP256K1_SCALAR_PRIME.clone());
-            }
-            _ => unreachable!(),
-        }
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -152,7 +143,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
         let x_biguint = Self::limbs_to_biguint(&x);
         let y_biguint = Self::limbs_to_biguint(&y);
 
-        let z_biguint = Self::solve(
+        let z_biguint = self.solve(
             ModularArithmeticOpcode::from_usize(opcode),
             x_biguint,
             y_biguint,
@@ -184,23 +175,14 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     ModularAddSubChip<T, NUM_LIMBS, LIMB_SIZE>
 {
-    pub fn solve(opcode: ModularArithmeticOpcode, mut x: BigUint, y: BigUint) -> BigUint {
+    pub fn solve(&self, opcode: ModularArithmeticOpcode, mut x: BigUint, y: BigUint) -> BigUint {
         match opcode {
-            ModularArithmeticOpcode::COORD_ADD => (x + y) % SECP256K1_COORD_PRIME.clone(),
-            ModularArithmeticOpcode::SCALAR_ADD => (x + y) % SECP256K1_SCALAR_PRIME.clone(),
-            ModularArithmeticOpcode::COORD_SUB => {
-                let tmp = SECP256K1_COORD_PRIME.clone();
+            ModularArithmeticOpcode::ADD => (x + y) % self.modulus.clone(),
+            ModularArithmeticOpcode::SUB => {
                 while x < y {
-                    x += &tmp;
+                    x += &self.modulus;
                 }
-                (x - y) % &tmp
-            }
-            ModularArithmeticOpcode::SCALAR_SUB => {
-                let tmp = SECP256K1_SCALAR_PRIME.clone();
-                while x < y {
-                    x += &tmp;
-                }
-                (x - y) % &tmp
+                (x - y) % &self.modulus
             }
             _ => unreachable!(),
         }

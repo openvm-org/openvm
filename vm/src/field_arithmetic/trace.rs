@@ -48,11 +48,11 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
         let y = y_read.value();
         let z = z_write.value();
 
-        let is_add = F::from_bool(opcode == FieldArithmeticOpcode::FADD);
-        let is_sub = F::from_bool(opcode == FieldArithmeticOpcode::FSUB);
-        let is_div = F::from_bool(opcode == FieldArithmeticOpcode::FDIV);
-        let is_mul = F::from_bool(opcode == FieldArithmeticOpcode::FMUL);
-        let divisor_inv = if opcode == FieldArithmeticOpcode::FDIV {
+        let is_add = F::from_bool(opcode == FieldArithmeticOpcode::ADD);
+        let is_sub = F::from_bool(opcode == FieldArithmeticOpcode::SUB);
+        let is_div = F::from_bool(opcode == FieldArithmeticOpcode::DIV);
+        let is_mul = F::from_bool(opcode == FieldArithmeticOpcode::MUL);
+        let divisor_inv = if opcode == FieldArithmeticOpcode::DIV {
             y.inverse()
         } else {
             F::zero()

@@ -2,7 +2,6 @@ use std::{borrow::Borrow, iter::zip};
 
 use afs_primitives::bigint::{
     check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
-    utils::{big_uint_to_limbs, secp256k1_coord_prime},
     OverflowInt,
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
@@ -56,19 +55,10 @@ impl<
         // we assume aux.is_div is represented aux.is_valid - aux.is_mult
         builder.assert_bool(aux.is_mult);
         builder.assert_bool(aux.is_valid - aux.is_mult);
-        let expected_opcode = if self.subair.modulus_limbs
-            == big_uint_to_limbs(&secp256k1_coord_prime(), LIMB_SIZE)
-        {
-            AB::Expr::from_canonical_u8(ModularArithmeticOpcode::COORD_DIV as u8)
-                + aux.is_mult
-                    * (AB::Expr::from_canonical_u8(ModularArithmeticOpcode::COORD_MUL as u8)
-                        - AB::Expr::from_canonical_u8(ModularArithmeticOpcode::COORD_DIV as u8))
-        } else {
-            AB::Expr::from_canonical_u8(ModularArithmeticOpcode::SCALAR_DIV as u8)
-                + aux.is_mult
-                    * (AB::Expr::from_canonical_u8(ModularArithmeticOpcode::SCALAR_MUL as u8)
-                        - AB::Expr::from_canonical_u8(ModularArithmeticOpcode::SCALAR_DIV as u8))
-        };
+        let expected_opcode = AB::Expr::from_canonical_u8(ModularArithmeticOpcode::DIV as u8)
+            + aux.is_mult
+                * (AB::Expr::from_canonical_u8(ModularArithmeticOpcode::MUL as u8)
+                    - AB::Expr::from_canonical_u8(ModularArithmeticOpcode::DIV as u8));
 
         // We want expr = x * y - z if the operation is mult,
         //     and expr = y * z - x if the operation is div

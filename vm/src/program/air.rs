@@ -16,7 +16,7 @@ impl<F: Field> BaseAir<F> for ProgramAir<F> {
         for (pc, instruction) in self.program.instructions.iter().enumerate() {
             let preprocessed_cols = ProgramPreprocessedCols {
                 pc: F::from_canonical_usize(pc),
-                opcode: F::from_canonical_usize(instruction.opcode as usize),
+                opcode: F::from_canonical_usize(instruction.opcode),
                 op_a: instruction.op_a,
                 op_b: instruction.op_b,
                 op_c: instruction.op_c,

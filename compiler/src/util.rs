@@ -40,12 +40,17 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            modular_addsub_enabled: true,
-            modular_multdiv_enabled: true,
-            secp256k1_enabled: true,
             bigint_limb_size: 8,
-            ..Default::default()
-        },
+            ..VmConfig::core()
+        }
+        .add_default_executor(stark_vm::arch::chips::InstructionExecutorVariantName::ModularAddSub)
+        .add_default_executor(stark_vm::arch::chips::InstructionExecutorVariantName::ModularMultDiv)
+        .add_default_executor(
+            stark_vm::arch::chips::InstructionExecutorVariantName::Secp256k1AddUnequal,
+        )
+        .add_default_executor(
+            stark_vm::arch::chips::InstructionExecutorVariantName::Secp256k1Double,
+        ),
         program,
         input_stream,
     );

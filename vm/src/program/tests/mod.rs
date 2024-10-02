@@ -11,7 +11,10 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::Program;
 use crate::{
-    arch::{chips::MachineChip, instructions::*},
+    arch::{
+        chips::MachineChip,
+        instructions::{CoreOpcode::*, FieldArithmeticOpcode::*},
+    },
     core::READ_INSTRUCTION_BUS,
     program::{columns::ProgramPreprocessedCols, Instruction, ProgramChip},
 };
@@ -48,7 +51,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
         program_cells.extend(vec![
             BabyBear::from_canonical_usize(execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
-            BabyBear::from_canonical_usize(instruction.opcode as usize),
+            BabyBear::from_canonical_usize(instruction.opcode),
             instruction.op_a,
             instruction.op_b,
             instruction.op_c,
@@ -83,17 +86,17 @@ fn test_program_1() {
     // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::large_from_isize(STOREW, n, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW as usize, n, 0, 0, 0, 1, 0, 1),
         // word[1]_1 <- word[1]_1
-        Instruction::large_from_isize(STOREW, 1, 1, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW as usize, 1, 1, 0, 0, 1, 0, 1),
         // if word[0]_1 == 0 then pc += 3
-        Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
+        Instruction::from_isize(BEQ as usize, 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction::from_isize(FSUB, 0, 0, 1, 1, 1),
+        Instruction::from_isize(SUB as usize, 0, 0, 1, 1, 1),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
+        Instruction::from_isize(JAL as usize, 2, -2, 0, 1, 0),
         // terminate
-        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0),
     ];
 
     let program = Program {
@@ -109,15 +112,15 @@ fn test_program_without_field_arithmetic() {
     // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::large_from_isize(STOREW, 5, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW as usize, 5, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 2
-        Instruction::from_isize(BNE, 0, 4, 3, 1, 0),
+        Instruction::from_isize(BNE as usize, 0, 4, 3, 1, 0),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
+        Instruction::from_isize(JAL as usize, 2, -2, 0, 1, 0),
         // terminate
-        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= 1
-        Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
+        Instruction::from_isize(BEQ as usize, 0, 5, -1, 1, 0),
     ];
 
     let program = Program {
@@ -132,9 +135,9 @@ fn test_program_without_field_arithmetic() {
 #[should_panic(expected = "assertion `left == right` failed")]
 fn test_program_negative() {
     let instructions = vec![
-        Instruction::large_from_isize(STOREW, -1, 0, 0, 0, 1, 0, 1),
-        Instruction::large_from_isize(LOADW, -1, 0, 0, 1, 1, 0, 1),
-        Instruction::large_from_isize(TERMINATE, 0, 0, 0, 0, 0, 0, 0),
+        Instruction::large_from_isize(STOREW as usize, -1, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(LOADW as usize, -1, 0, 0, 1, 1, 0, 1),
+        Instruction::large_from_isize(TERMINATE as usize, 0, 0, 0, 0, 0, 0, 0),
     ];
     let program = Program {
         instructions: instructions.clone(),
@@ -155,7 +158,7 @@ fn test_program_negative() {
         program_rows.extend(vec![
             BabyBear::from_canonical_usize(execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
-            BabyBear::from_canonical_usize(instruction.opcode as usize),
+            BabyBear::from_canonical_usize(instruction.opcode),
             instruction.op_a,
             instruction.op_b,
             instruction.op_c,

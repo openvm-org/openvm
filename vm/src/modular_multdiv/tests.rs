@@ -7,10 +7,7 @@ use rand::Rng;
 
 use crate::{
     arch::{
-        instructions::{
-            ModularArithmeticOpcode::{self, *},
-            UsizeOpcode,
-        },
+        instructions::{ModularArithmeticOpcode, UsizeOpcode},
         testing::MachineChipTestBuilder,
     },
     modular_multdiv::{ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
@@ -53,24 +50,23 @@ fn test_modular_multdiv() {
             .collect();
         let mut b = BigUint::new(b_digits);
 
-        let opcode = ModularArithmeticOpcode::from_usize(rng.gen_range(4..8));
-
-        let (is_scalar, modulus) = match opcode {
-            SCALAR_MUL | SCALAR_DIV => (true, SECP256K1_SCALAR_PRIME.clone()),
-            COORD_MUL | COORD_DIV => (false, SECP256K1_COORD_PRIME.clone()),
-            _ => unreachable!(),
+        let is_scalar = rng.gen_bool(0.5);
+        let opcode = ModularArithmeticOpcode::from_usize(rng.gen_range(2..4));
+        let modulus = if is_scalar {
+            SECP256K1_SCALAR_PRIME.clone()
+        } else {
+            SECP256K1_COORD_PRIME.clone()
         };
-
         a %= modulus.clone();
         b %= modulus.clone();
         assert!(a < modulus);
         assert!(b < modulus);
 
-        let r = ModularMultDivChip::<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>::solve(
-            opcode,
-            a.clone(),
-            b.clone(),
-        );
+        let r = if is_scalar {
+            scalar_chip.solve(opcode, a.clone(), b.clone())
+        } else {
+            coord_chip.solve(opcode, a.clone(), b.clone())
+        };
 
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:

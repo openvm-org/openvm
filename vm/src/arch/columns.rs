@@ -103,7 +103,7 @@ impl<F: Field> InstructionCols<F> {
             ..
         } = instruction;
         Self {
-            opcode: F::from_canonical_usize(*opcode as usize),
+            opcode: F::from_canonical_usize(*opcode),
             operands: [op_a, op_b, op_c, d, e, op_f, op_g].map(|&f| f),
         }
     }

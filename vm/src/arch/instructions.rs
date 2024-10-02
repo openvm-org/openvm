@@ -1,5 +1,3 @@
-use std::fmt;
-
 use afs_derive::UsizeOpcode;
 use enum_utils::FromStr;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
@@ -73,10 +71,10 @@ pub enum CoreOpcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum FieldArithmeticOpcode {
-    FADD,
-    FSUB,
-    FMUL,
-    FDIV,
+    ADD,
+    SUB,
+    MUL,
+    DIV,
 }
 
 #[derive(
@@ -180,15 +178,10 @@ pub enum Keccak256Opcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum ModularArithmeticOpcode {
-    COORD_ADD,
-    COORD_SUB,
-    SCALAR_ADD,
-    SCALAR_SUB,
-
-    COORD_MUL,
-    COORD_DIV,
-    SCALAR_MUL,
-    SCALAR_DIV,
+    ADD,
+    SUB,
+    MUL,
+    DIV,
 }
 
 #[derive(
@@ -232,16 +225,18 @@ pub enum U256Opcode {
     // maybe later we will make it uint and specify the parameters in the config
     ADD,
     SUB,
-    MUL,
     LT,
     EQ,
     XOR,
     AND,
     OR,
+
     SLT,
     SLL,
     SRL,
     SRA,
+
+    MUL,
 }
 
 #[derive(

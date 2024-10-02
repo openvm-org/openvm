@@ -8,7 +8,7 @@ use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{Rng, RngCore};
-use stark_vm::vm::config::VmConfig;
+use stark_vm::{arch::chips::InstructionExecutorVariantName, vm::config::VmConfig};
 
 #[test]
 fn test_compiler_u256_add_sub() {
@@ -85,10 +85,10 @@ fn test_compiler_u256_mul() {
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            u256_multiplication_enabled: true,
             bigint_limb_size: 8,
             ..Default::default()
-        },
+        }
+        .add_default_executor(InstructionExecutorVariantName::U256Multiplication),
         program,
         vec![],
     );

@@ -116,10 +116,10 @@ impl FieldArithmetic {
     /// Returns None for non-arithmetic operations.
     fn solve<T: Field>(op: FieldArithmeticOpcode, operands: (T, T)) -> Option<T> {
         match op {
-            FieldArithmeticOpcode::FADD => Some(operands.0 + operands.1),
-            FieldArithmeticOpcode::FSUB => Some(operands.0 - operands.1),
-            FieldArithmeticOpcode::FMUL => Some(operands.0 * operands.1),
-            FieldArithmeticOpcode::FDIV => {
+            FieldArithmeticOpcode::ADD => Some(operands.0 + operands.1),
+            FieldArithmeticOpcode::SUB => Some(operands.0 - operands.1),
+            FieldArithmeticOpcode::MUL => Some(operands.0 * operands.1),
+            FieldArithmeticOpcode::DIV => {
                 if operands.1 == T::zero() {
                     None
                 } else {
