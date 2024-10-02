@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::BorrowMut};
 
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::rap::{get_air_name, AnyRap};
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -14,7 +14,7 @@ use tiny_keccak::keccakf;
 
 use super::{KeccakVmChip, KECCAK_DIGEST_WRITES, KECCAK_WORD_SIZE};
 use crate::{
-    arch::chips::MachineChip,
+    arch::MachineChip,
     hashes::keccak::hasher::{
         columns::{KeccakOpcodeCols, KeccakVmCols},
         KECCAK_ABSORB_READS, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
@@ -198,6 +198,10 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air)
+    }
+
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
 
     fn trace_width(&self) -> usize {

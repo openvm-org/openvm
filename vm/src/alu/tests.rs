@@ -14,9 +14,9 @@ use super::{
 use crate::{
     alu::solve_alu,
     arch::{
-        chips::MachineChip,
         instructions::Opcode,
         testing::{memory::gen_pointer, MachineChipTestBuilder},
+        MachineChip,
     },
     core::BYTE_XOR_BUS,
     program::Instruction,

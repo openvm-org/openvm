@@ -55,6 +55,10 @@ harness = false
 required-features = ["bench-metrics"]
 
 [[bin]]
+name = "alu256_e2e"
+required-features = ["bench-metrics"]
+
+[[bin]]
 name = "small_e2e"
 required-features = ["bench-metrics"]
 

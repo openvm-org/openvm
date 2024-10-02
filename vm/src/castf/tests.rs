@@ -16,9 +16,9 @@ use super::{
 };
 use crate::{
     arch::{
-        chips::MachineChip,
         instructions::Opcode,
         testing::{memory::gen_pointer, MachineChipTestBuilder},
+        MachineChip,
     },
     program::Instruction,
 };

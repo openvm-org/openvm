@@ -9,7 +9,7 @@ use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::arch::{bus::ExecutionBus, columns::ExecutionState};
+use crate::arch::{ExecutionBus, ExecutionState};
 
 #[derive(Clone, Copy, Debug, AlignedBorrow, derive_new::new)]
 #[repr(C)]

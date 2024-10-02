@@ -15,7 +15,7 @@ use super::{
     columns::{KeccakVmCols, NUM_KECCAK_VM_COLS},
     KECCAK_RATE_BYTES,
 };
-use crate::{arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge};
+use crate::{arch::ExecutionBridge, memory::offline_checker::MemoryBridge};
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakVmAir {

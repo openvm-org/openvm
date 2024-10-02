@@ -2,7 +2,7 @@ use std::mem::size_of;
 
 use afs_derive::AlignedBorrow;
 
-use crate::{arch::columns::ExecutionState, memory::offline_checker::MemoryWriteAuxCols};
+use crate::{arch::ExecutionState, memory::offline_checker::MemoryWriteAuxCols};
 
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Debug)]

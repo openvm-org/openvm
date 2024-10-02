@@ -6,7 +6,7 @@ use super::{
     columns::{FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols},
 };
 use crate::{
-    arch::columns::ExecutionState, field_extension::columns::FieldExtensionArithmeticAuxCols,
+    arch::ExecutionState, field_extension::columns::FieldExtensionArithmeticAuxCols,
     memory::MemoryAddress,
 };
 

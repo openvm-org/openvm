@@ -24,7 +24,7 @@ use super::{
     offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
 };
 use crate::{
-    arch::chips::MachineChip,
+    arch::MachineChip,
     core::RANGE_CHECKER_BUS,
     memory::{
         adapter::AccessAdapterAir,
@@ -433,6 +433,21 @@ impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
             Box::new(self.access_adapter_air::<16>()),
             Box::new(self.access_adapter_air::<32>()),
             Box::new(self.access_adapter_air::<64>()),
+        ]
+    }
+
+    fn air_name(&self) -> String {
+        panic!("cannot call air_name on MemoryChip, which has more than one trace");
+    }
+    fn air_names(&self) -> Vec<String> {
+        vec![
+            "Audit".to_string(),
+            "AccessAdapter<2>".to_string(),
+            "AccessAdapter<4>".to_string(),
+            "AccessAdapter<8>".to_string(),
+            "AccessAdapter<16>".to_string(),
+            "AccessAdapter<32>".to_string(),
+            "AccessAdapter<64>".to_string(),
         ]
     }
 

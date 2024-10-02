@@ -60,19 +60,13 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         for (air, partitioned_main_ptrs, interaction_chunk_size) in partitioned_airs.into_iter() {
             let interaction_chunk_size = match interaction_chunk_size {
                 Some(interaction_chunk_size) => interaction_chunk_size,
-                None => self.calc_interaction_chunk_size_for_air(
-                    air,
-                    &partitioned_main_ptrs,
-                    multi_pk.max_constraint_degree,
-                ),
+                None => {
+                    self.calc_interaction_chunk_size_for_air(air, multi_pk.max_constraint_degree)
+                }
             };
 
-            let (prep_prover_data, prep_verifier_data, symbolic_builder) = self
-                .get_prep_data_and_symbolic_builder(
-                    air,
-                    &partitioned_main_ptrs,
-                    interaction_chunk_size,
-                );
+            let (prep_prover_data, prep_verifier_data, symbolic_builder) =
+                self.get_prep_data_and_symbolic_builder(air, interaction_chunk_size);
 
             let params = symbolic_builder.params();
             let symbolic_constraints = symbolic_builder.constraints();
@@ -149,7 +143,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
                 pk.air_name,
                 pk.vk.quotient_degree,
                 width.preprocessed.unwrap_or(0),
-                format!("{:?}",width.partitioned_main),
+                format!("{:?}",width.main_widths()),
                 format!("{:?}",width.after_challenge.iter().map(|&x| x * <SC::Challenge as AbstractExtensionField<Val<SC>>>::D).collect_vec()),
                 pk.vk.symbolic_constraints.constraints.len(),
                 pk.vk.symbolic_constraints.interactions.len(),
@@ -280,11 +274,9 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     fn calc_interaction_chunk_size_for_air(
         &self,
         air: &dyn AnyRap<SC>,
-        partitioned_main_ptrs: &[SingleMatrixCommitPtr],
         max_constraint_degree: usize,
     ) -> usize {
-        let (_, _, symbolic_builder) =
-            self.get_prep_data_and_symbolic_builder(air, partitioned_main_ptrs, 1);
+        let (_, _, symbolic_builder) = self.get_prep_data_and_symbolic_builder(air, 1);
 
         let (max_field_degree, max_count_degree) =
             symbolic_builder.constraints().max_interaction_degrees();
@@ -313,9 +305,8 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
 
     fn all_airs_max_constraint_degree(&mut self) -> usize {
         let mut max_constraint_degree = 0;
-        for (air, partitioned_main_ptrs, _) in self.partitioned_airs.iter() {
-            let (_, _, symbolic_builder) =
-                self.get_prep_data_and_symbolic_builder(*air, partitioned_main_ptrs, 1);
+        for (air, _, _) in self.partitioned_airs.iter() {
+            let (_, _, symbolic_builder) = self.get_prep_data_and_symbolic_builder(*air, 1);
 
             let symbolic_constraints = symbolic_builder.constraints();
             tracing::debug!(
@@ -334,7 +325,6 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     fn get_prep_data_and_symbolic_builder(
         &self,
         air: &dyn AnyRap<SC>,
-        partitioned_main_ptrs: &[SingleMatrixCommitPtr],
         interaction_chunk_size: usize,
     ) -> (
         Option<ProverOnlySinglePreprocessedData<SC>>,
@@ -345,13 +335,10 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             self.get_single_preprocessed_data(air).unzip();
         let preprocessed_width = prep_prover_data.as_ref().map(|d| d.trace.width());
 
-        let main_widths = partitioned_main_ptrs
-            .iter()
-            .map(|ptr| self.placeholder_main_matrix_in_commit[ptr.commit_index][ptr.matrix_index])
-            .collect();
         let width = TraceWidth {
             preprocessed: preprocessed_width,
-            partitioned_main: main_widths,
+            cached_mains: air.cached_main_widths(),
+            common_main: air.common_main_width(),
             after_challenge: vec![],
         };
         let symbolic_builder = get_symbolic_builder(air, &width, &[], &[], interaction_chunk_size);

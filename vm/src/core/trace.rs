@@ -1,4 +1,4 @@
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::rap::{get_air_name, AnyRap};
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{columns::CoreCols, CoreChip};
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField32> CoreChip<F> {
     /// Pad with NOP rows.
@@ -38,6 +38,10 @@ impl<F: PrimeField32> MachineChip<F> for CoreChip<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air.clone())
+    }
+
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
 
     fn generate_public_values(&mut self) -> Vec<F> {

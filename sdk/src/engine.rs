@@ -67,17 +67,26 @@ where
 {
     fn new(fri_parameters: FriParameters) -> Self;
     fn fri_params(&self) -> FriParameters;
+    fn run_test_with_trace_partitions(
+        &self,
+        chips: &[&dyn AnyRap<SC>],
+        traces: Vec<Vec<DenseMatrix<Val<SC>>>>,
+        public_values: &[Vec<Val<SC>>],
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
+        let data = <Self as StarkEngine<_>>::run_test(self, chips, traces, public_values)?;
+        Ok(VerificationDataWithFriParams {
+            data,
+            fri_params: self.fri_params(),
+        })
+    }
     fn run_simple_test_impl(
         &self,
         chips: &[&dyn AnyRap<SC>],
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: &[Vec<Val<SC>>],
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        let data = <Self as StarkEngine<_>>::run_simple_test(self, chips, traces, public_values)?;
-        Ok(VerificationDataWithFriParams {
-            data,
-            fri_params: self.fri_params(),
-        })
+        let trace_partitions = traces.into_iter().map(|t| vec![t]).collect();
+        self.run_test_with_trace_partitions(chips, trace_partitions, public_values)
     }
     fn run_simple_test(
         chips: &[&dyn AnyRap<SC>],
@@ -92,5 +101,19 @@ where
         traces: Vec<DenseMatrix<Val<SC>>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         <Self as StarkFriEngine<SC>>::run_simple_test(chips, traces, &vec![vec![]; chips.len()])
+    }
+    fn run_test(
+        chips: &[&dyn AnyRap<SC>],
+        traces: Vec<Vec<DenseMatrix<Val<SC>>>>,
+        public_values: &[Vec<Val<SC>>],
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
+        let engine = Self::new(FriParameters::standard_fast());
+        StarkFriEngine::<_>::run_test_with_trace_partitions(&engine, chips, traces, public_values)
+    }
+    fn run_test_no_pis(
+        chips: &[&dyn AnyRap<SC>],
+        traces: Vec<Vec<DenseMatrix<Val<SC>>>>,
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
+        <Self as StarkFriEngine<SC>>::run_test(chips, traces, &vec![vec![]; chips.len()])
     }
 }

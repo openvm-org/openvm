@@ -84,8 +84,8 @@ impl<F: Field> BaseAir<F> for DummyInteractionAir {
 impl<AB: InteractionBuilder + PartitionedAirBuilder> Air<AB> for DummyInteractionAir {
     fn eval(&self, builder: &mut AB) {
         let (fields, count) = if self.partition {
-            let local_0 = builder.partitioned_main()[0].row_slice(0);
-            let local_1 = builder.partitioned_main()[1].row_slice(0);
+            let local_0 = builder.cached_mains()[0].row_slice(0);
+            let local_1 = builder.common_main().row_slice(0);
             let count = local_0[0];
             let fields = local_1.to_vec();
             (fields, count)

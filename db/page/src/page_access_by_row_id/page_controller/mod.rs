@@ -26,9 +26,9 @@ impl<SC: StarkGenericConfig> PageController<SC>
 where
     Val<SC>: AbstractField,
 {
-    pub fn new(bus_index: usize) -> Self {
+    pub fn new(bus_index: usize, page_width: usize) -> Self {
         PageController {
-            page_access_air: PageAccessByRowIdAir::new(bus_index, 0),
+            page_access_air: PageAccessByRowIdAir::new(bus_index, page_width),
             request_count: vec![],
             page_trace: None,
             page_commitment: None,

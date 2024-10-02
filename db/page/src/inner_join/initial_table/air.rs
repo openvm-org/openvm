@@ -26,8 +26,8 @@ impl<F: Field> BaseAir<F> for InitialTableAir {
 
 impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for InitialTableAir {
     fn eval(&self, builder: &mut AB) {
-        let page: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
-        let aux: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let page: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
+        let aux: &<AB as AirBuilder>::M = builder.common_main();
 
         let table_local = TableCols::from_partitioned_slice(
             &page.row_slice(0),

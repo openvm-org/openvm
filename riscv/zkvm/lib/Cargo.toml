@@ -1,0 +1,36 @@
+[package]
+name = "axvm"
+description = "Axiom zkVM"
+version = { workspace = true }
+edition = { workspace = true }
+# license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+anyhow = { version = "1.0", default-features = false }
+borsh = { version = "1.5", default-features = false, features = ["derive"] }
+bytemuck = { version = "1.13", features = ["extern_crate_alloc"] }
+getrandom = { version = "0.2", features = ["custom"] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+axvm-platform = { workspace = true, features = [
+    "rust-runtime",
+    "export-getrandom",
+] }
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+
+[dev-dependencies]
+chrono = { version = "0.4", default-features = false, features = ["serde"] }
+
+[features]
+default = []
+# The zkVM exposes a getrandom implementation that panics by default. This will
+# expose a getrandom implementation that uses the `sys_random` ecall.
+getrandom = ["axvm-platform/getrandom"]
+# The zkVM uses a bump-pointer heap allocator by default which does not free
+# memory. This will use a slower linked-list heap allocator to reclaim memory.
+heap-embedded-alloc = ["axvm-platform/heap-embedded-alloc"]
+std = ["anyhow/std", "hex/std", "serde/std"]

@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 
 use super::columns::ArithmeticLogicCols;
 use crate::{
-    arch::{bridge::ExecutionBridge, instructions::ALU_256_INSTRUCTIONS},
+    arch::{instructions::ALU_256_INSTRUCTIONS, ExecutionBridge},
     memory::offline_checker::MemoryBridge,
 };
 

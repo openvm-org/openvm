@@ -1,4 +1,4 @@
-name: Lints
+name: Lint and Build Workspace
 
 on:
   push:
@@ -22,16 +22,12 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          override: false
-          components: rustfmt, clippy
-
       - name: Run fmt
         run: |
           cargo fmt --all -- --check
 
       - name: Run clippy
         run: cargo clippy --all-targets --all -- -D warnings
+
+      - name: Build
+        run: cargo build

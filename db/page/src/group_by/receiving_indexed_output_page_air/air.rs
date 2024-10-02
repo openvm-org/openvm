@@ -35,7 +35,7 @@ where
     <AB as p3_air::AirBuilder>::M: Clone,
 {
     fn eval(&self, builder: &mut AB) {
-        let page_trace: &<AB>::M = &builder.partitioned_main()[0];
+        let page_trace: &<AB>::M = &builder.cached_mains()[0];
 
         let page_local = PageCols::<AB::Var>::from_slice(
             &page_trace.row_slice(0),

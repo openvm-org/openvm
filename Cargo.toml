@@ -19,6 +19,8 @@ members = [
     "sdk",
     "vm",
     "vm/bin",
+    "riscv/zkvm/lib",
+    "riscv/zkvm/platform",
 ]
 resolver = "2"
 
@@ -26,6 +28,8 @@ resolver = "2"
 version = "0.1.0"
 authors = ["Intrinsic Technologies"]
 edition = "2021"
+homepage = "https://axiom.xyz"
+repository = "https://github.com/axiom-crypto/"
 
 # Fastest runtime configuration
 [profile.release]
@@ -61,6 +65,9 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
+axvm-platform = { path = "riscv/zkvm/platform" }
+axvm = { path = "riscv/zkvm/lib" }
+
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }

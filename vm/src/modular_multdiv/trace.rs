@@ -5,7 +5,7 @@ use afs_primitives::bigint::{
     utils::{big_int_to_limbs, big_uint_sub},
     CanonicalUint, DefaultLimbConfig, OverflowInt,
 };
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::rap::{get_air_name, AnyRap};
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -17,7 +17,7 @@ use super::{
     ModularMultDivChip,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{instructions::Opcode, MachineChip},
     memory::MemoryHeapDataIoCols,
 };
 
@@ -96,6 +96,10 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air.clone())
+    }
+
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

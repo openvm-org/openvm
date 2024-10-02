@@ -12,7 +12,7 @@ use crate::{
     air_builders::prover::ProverConstraintFolder,
     config::{Com, PcsProverData},
     keygen::types::{MultiStarkProvingKey, StarkVerifyingKey},
-    rap::{AnyRap, Rap},
+    rap::{AnyRap, PartitionedBaseAir, Rap},
 };
 
 pub mod single;
@@ -88,7 +88,10 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         public_values: &'a [Val<SC>],
     ) -> SingleQuotientData<SC>
     where
-        R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + Sync + ?Sized,
+        R: for<'b> Rap<ProverConstraintFolder<'b, SC>>
+            + PartitionedBaseAir<Val<SC>>
+            + Sync
+            + ?Sized,
     {
         let quotient_degree = vk.quotient_degree;
         let trace_domain = trace.domain;

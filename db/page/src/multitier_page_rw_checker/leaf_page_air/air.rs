@@ -55,7 +55,7 @@ where
         let pi = builder.public_values().to_vec();
         match &self.page_chip {
             PageRwAir::Initial(i) => {
-                let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
+                let data: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
                 let cached_data =
                     PageCols::from_slice(&data.row_slice(0), self.idx_len, self.data_len);
                 let page_cols = LeafPageCols {
@@ -69,9 +69,9 @@ where
                 SubAir::eval(i, builder, page_cols.cache_cols, ());
             }
             PageRwAir::Final(fin) => {
-                let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+                let main: &<AB as AirBuilder>::M = builder.common_main();
                 let [local, next] = [0, 1].map(|i| main.row_slice(i));
-                let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
+                let data: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
                 let cached_data =
                     PageCols::from_slice(&data.row_slice(0), self.idx_len, self.data_len);
                 let next_data =

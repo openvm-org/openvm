@@ -5,7 +5,7 @@ use afs_primitives::ecc::{EcAirConfig, EcAuxCols as EcPrimitivesAuxCols};
 
 use super::TWO_NUM_LIMBS;
 use crate::{
-    arch::columns::ExecutionState,
+    arch::ExecutionState,
     memory::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols,

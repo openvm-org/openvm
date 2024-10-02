@@ -173,8 +173,8 @@ where
     /// Re-references builder into page_trace and aux_trace, then slices into local and next rows
     /// to evaluate using SubAir::eval(GroupByAir)
     fn eval(&self, builder: &mut AB) {
-        let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
-        let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let page_trace: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
+        let aux_trace: &<AB as AirBuilder>::M = builder.common_main();
 
         // get the current row and the next row
         let (local_page, next_page) = (page_trace.row_slice(0), page_trace.row_slice(1));

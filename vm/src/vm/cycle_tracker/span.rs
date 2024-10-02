@@ -35,33 +35,34 @@ impl Display for CycleTrackerSpan<VmMetrics> {
             writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
         }
 
-        let mut sorted_opcode_counts: Vec<(&String, &usize)> =
-            self.metrics.opcode_counts.iter().collect();
+        let mut sorted_opcode_counts: Vec<_> = self.metrics.counts.iter().collect();
         sorted_opcode_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
 
-        for (key, value) in sorted_opcode_counts {
+        for ((dsl_ir, opcode), value) in sorted_opcode_counts {
             if *value > 0 {
-                writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
+                writeln!(
+                    f,
+                    "  - {};{}: {}",
+                    dsl_ir.as_ref().unwrap_or(&String::new()),
+                    opcode,
+                    format_number_with_underscores(*value)
+                )?;
             }
         }
 
-        let mut sorted_dsl_counts: Vec<(&String, &usize)> =
-            self.metrics.dsl_counts.iter().collect();
-        sorted_dsl_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
-
-        for (key, value) in sorted_dsl_counts {
-            if *value > 0 {
-                writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
-            }
-        }
-
-        let mut sorted_opcode_trace_cells: Vec<(&String, &usize)> =
-            self.metrics.opcode_trace_cells.iter().collect();
+        let mut sorted_opcode_trace_cells: Vec<_> = self.metrics.trace_cells.iter().collect();
         sorted_opcode_trace_cells.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
 
-        for (key, value) in sorted_opcode_trace_cells {
+        for ((dsl_ir, opcode, air_name), value) in sorted_opcode_trace_cells {
             if *value > 0 {
-                writeln!(f, "  - {}: {}", key, format_number_with_underscores(*value))?;
+                writeln!(
+                    f,
+                    "  - {};{};{}: {}",
+                    dsl_ir.as_ref().unwrap_or(&String::new()),
+                    opcode,
+                    air_name,
+                    format_number_with_underscores(*value)
+                )?;
             }
         }
 

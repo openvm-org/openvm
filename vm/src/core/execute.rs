@@ -6,9 +6,8 @@ use p3_field::PrimeField32;
 use super::{timestamp_delta, CoreChip, CoreState};
 use crate::{
     arch::{
-        chips::InstructionExecutor,
-        columns::ExecutionState,
         instructions::{Opcode::*, CORE_INSTRUCTIONS},
+        ExecutionState, InstructionExecutor,
     },
     core::{
         columns::{CoreAuxCols, CoreCols, CoreIoCols, CoreMemoryAccessCols},

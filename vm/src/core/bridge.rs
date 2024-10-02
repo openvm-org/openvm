@@ -4,7 +4,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{columns::CoreIoCols, timestamp_delta, CoreAir};
-use crate::arch::{columns::ExecutionState, instructions::Opcode};
+use crate::arch::{instructions::Opcode, ExecutionState};
 
 impl CoreAir {
     pub fn eval_interactions<AB: InteractionBuilder>(

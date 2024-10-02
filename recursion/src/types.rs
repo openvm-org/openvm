@@ -45,7 +45,8 @@ pub struct VerifierInputVariable<C: Config> {
 #[derive(DslVariable, Clone)]
 pub struct TraceWidthVariable<C: Config> {
     pub preprocessed: Array<C, Var<C::N>>,
-    pub partitioned_main: Array<C, Var<C::N>>,
+    pub cached_mains: Array<C, Var<C::N>>,
+    pub common_main: Var<C::N>,
     pub after_challenge: Array<C, Var<C::N>>,
 }
 

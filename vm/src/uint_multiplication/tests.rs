@@ -11,9 +11,9 @@ use rand::{rngs::StdRng, Rng};
 use super::{columns::UintMultiplicationCols, solve_uint_multiplication, UintMultiplicationChip};
 use crate::{
     arch::{
-        chips::MachineChip,
         instructions::Opcode,
         testing::{memory::gen_pointer, MachineChipTestBuilder},
+        MachineChip,
     },
     core::RANGE_TUPLE_CHECKER_BUS,
     program::Instruction,

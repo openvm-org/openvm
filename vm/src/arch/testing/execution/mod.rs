@@ -7,7 +7,7 @@ use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use crate::arch::{bus::ExecutionBus, chips::MachineChip, columns::ExecutionState};
+use crate::arch::{ExecutionBus, ExecutionState, MachineChip};
 
 pub mod air;
 
@@ -77,6 +77,10 @@ impl<F: Field> MachineChip<F> for ExecutionTester<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(ExecutionDummyAir::new(self.bus))
+    }
+
+    fn air_name(&self) -> String {
+        "ExecutionDummyAir".to_string()
     }
 
     fn current_trace_height(&self) -> usize {

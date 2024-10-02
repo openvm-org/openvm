@@ -18,8 +18,7 @@ pub use air::KeccakVmAir;
 
 use crate::{
     arch::{
-        bridge::ExecutionBridge, bus::ExecutionBus, chips::InstructionExecutor,
-        columns::ExecutionState, instructions::Opcode,
+        instructions::Opcode, ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},

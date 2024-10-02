@@ -4,7 +4,7 @@ use afs_primitives::{
     range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip,
     xor::lookup::XorLookupChip,
 };
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::rap::{get_air_name, AnyRap};
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
 use p3_air::BaseAir;
@@ -16,7 +16,7 @@ use strum_macros::IntoStaticStr;
 
 use crate::{
     alu::ArithmeticLogicChip,
-    arch::columns::ExecutionState,
+    arch::ExecutionState,
     castf::CastFChip,
     core::CoreChip,
     ecc::{EcAddUnequalChip, EcDoubleChip},
@@ -43,16 +43,22 @@ pub trait InstructionExecutor<F> {
 
 #[enum_dispatch]
 pub trait MachineChip<F>: Sized {
+    // Functions for when chip owns a single AIR
     fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>;
+    fn air_name(&self) -> String;
     fn generate_public_values(&mut self) -> Vec<F> {
         vec![]
     }
     fn current_trace_height(&self) -> usize;
     fn trace_width(&self) -> usize;
 
+    // Functions for when chip owns multiple AIRs.
+    // Default implementations fallback to single AIR functions, but
+    // these can be overridden, in which case the single AIR functions
+    // should be `unreachable!()`.
     fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
         vec![self.generate_trace()]
     }
@@ -61,6 +67,9 @@ pub trait MachineChip<F>: Sized {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         vec![self.air()]
+    }
+    fn air_names(&self) -> Vec<String> {
+        vec![self.air_name()]
     }
     fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
         vec![self.generate_public_values()]
@@ -72,10 +81,11 @@ pub trait MachineChip<F>: Sized {
         vec![self.trace_width()]
     }
 
+    /// For metrics collection
     fn current_trace_cells(&self) -> Vec<usize> {
         self.trace_widths()
-            .iter()
-            .zip_eq(self.current_trace_heights().iter())
+            .into_iter()
+            .zip_eq(self.current_trace_heights())
             .map(|(width, height)| width * height)
             .collect()
     }
@@ -124,6 +134,13 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
     }
     fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
         self.borrow_mut().generate_public_values_per_air()
+    }
+
+    fn air_name(&self) -> String {
+        self.borrow().air_name()
+    }
+    fn air_names(&self) -> Vec<String> {
+        self.borrow().air_names()
     }
 
     fn current_trace_height(&self) -> usize {
@@ -194,6 +211,10 @@ impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
         Box::new(self.air)
     }
 
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
     fn current_trace_height(&self) -> usize {
         1 << (1 + self.air.bus.range_max_bits)
     }
@@ -215,6 +236,10 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeTupleCheckerChip> {
         Box::new(self.air.clone())
     }
 
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
     fn current_trace_height(&self) -> usize {
         self.air.height() as usize
     }
@@ -234,6 +259,10 @@ impl<F: PrimeField32, const M: usize> MachineChip<F> for Arc<XorLookupChip<M>> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air)
+    }
+
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

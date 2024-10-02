@@ -3,7 +3,7 @@ use std::mem::size_of;
 use afs_derive::AlignedBorrow;
 
 use crate::{
-    arch::columns::ExecutionState,
+    arch::ExecutionState,
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 

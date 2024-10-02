@@ -11,8 +11,8 @@ use p3_matrix::Matrix;
 use super::columns::FieldExtensionArithmeticCols;
 use crate::{
     arch::{
-        bridge::ExecutionBridge,
         instructions::Opcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
+        ExecutionBridge,
     },
     field_extension::chip::FieldExtensionArithmetic,
     memory::offline_checker::MemoryBridge,

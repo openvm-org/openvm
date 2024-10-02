@@ -54,10 +54,10 @@ where
 {
     fn eval(&self, builder: &mut AB) {
         self.eval_without_interactions(builder);
-        let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let main: &<AB as AirBuilder>::M = builder.common_main();
         let local = main.row_slice(0);
         let pi = builder.public_values().to_vec();
-        let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
+        let data: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
         let metadata = InternalPageMetadataCols::from_slice(
             &local,
             self.idx_len,
@@ -85,9 +85,9 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
     {
         // only constrain that own_commitment is accurate
         // partition is physical page data vs metadata
-        let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let main: &<AB as AirBuilder>::M = builder.common_main();
         let local = main.row_slice(0);
-        let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
+        let data: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
         let metadata = InternalPageMetadataCols::from_slice(
             &local,
             self.idx_len,

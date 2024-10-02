@@ -1,6 +1,9 @@
 use std::borrow::BorrowMut;
 
-use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap};
+use afs_stark_backend::{
+    config::StarkGenericConfig,
+    rap::{get_air_name, AnyRap},
+};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -10,7 +13,7 @@ use super::{
     columns::{UiAuxCols, UiCols, UiIoCols},
     UiChip,
 };
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField32> MachineChip<F> for UiChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
@@ -45,6 +48,10 @@ impl<F: PrimeField32> MachineChip<F> for UiChip<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air)
+    }
+
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

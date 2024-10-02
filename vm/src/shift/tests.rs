@@ -11,9 +11,9 @@ use rand::{rngs::StdRng, Rng};
 use super::{solve_shift, ShiftChip};
 use crate::{
     arch::{
-        chips::MachineChip,
         instructions::Opcode,
         testing::{memory::gen_pointer, MachineChipTestBuilder},
+        MachineChip,
     },
     core::BYTE_XOR_BUS,
     program::Instruction,

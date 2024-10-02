@@ -10,7 +10,7 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::columns::CastFCols;
-use crate::{arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge};
+use crate::{arch::ExecutionBridge, memory::offline_checker::MemoryBridge};
 
 // LIMB_SIZE is the size of the limbs in bits.
 pub(crate) const LIMB_SIZE: usize = 8;

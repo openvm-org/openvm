@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 
 use super::columns::ShiftCols;
 use crate::{
-    arch::{bridge::ExecutionBridge, instructions::SHIFT_256_INSTRUCTIONS},
+    arch::{instructions::SHIFT_256_INSTRUCTIONS, ExecutionBridge},
     memory::offline_checker::MemoryBridge,
 };
 

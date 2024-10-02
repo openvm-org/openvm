@@ -114,6 +114,10 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
         Box::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
     }
 
+    fn air_name(&self) -> String {
+        "MemoryDummyAir".to_string()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.records.len() / self.trace_width()
     }

@@ -114,12 +114,14 @@ pub struct SymbolicRapBuilder<F: Field> {
     constraints: Vec<SymbolicExpression<F>>,
     interactions: Vec<Interaction<SymbolicExpression<F>>>,
     interaction_chunk_size: usize,
+    trace_width: TraceWidth,
 }
 
 impl<F: Field> SymbolicRapBuilder<F> {
     /// - `num_challenges_to_sample`: for each challenge phase, how many challenges to sample
     /// - `num_exposed_values_after_challenge`: in each challenge phase, how many values to expose to verifier
     pub(crate) fn new(
+        // FIXME: width.after_challenge is incorrect. It cannot be determined when the function is called.
         width: &TraceWidth,
         num_public_values: usize,
         num_challenges_to_sample: &[usize],
@@ -136,22 +138,15 @@ impl<F: Field> SymbolicRapBuilder<F> {
             .collect();
         let preprocessed = RowMajorMatrix::new(prep_values, preprocessed_width);
 
-        let partitioned_main: Vec<_> = width
-            .partitioned_main
+        let mut partitioned_main: Vec<_> = width
+            .cached_mains
             .iter()
             .enumerate()
-            .map(|(part_index, &width)| {
-                let mat_values = [0, 1]
-                    .into_iter()
-                    .flat_map(|offset| {
-                        (0..width).map(move |index| {
-                            SymbolicVariable::new(Entry::Main { part_index, offset }, index)
-                        })
-                    })
-                    .collect_vec();
-                RowMajorMatrix::new(mat_values, width)
-            })
+            .map(|(part_index, &width)| gen_main_trace(part_index, width))
             .collect();
+        if width.common_main != 0 {
+            partitioned_main.push(gen_main_trace(width.cached_mains.len(), width.common_main));
+        }
         let after_challenge = Self::new_after_challenge(&width.after_challenge);
 
         let public_values = (0..num_public_values)
@@ -173,6 +168,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
             constraints: vec![],
             interactions: vec![],
             interaction_chunk_size,
+            trace_width: width.clone(),
         }
     }
 
@@ -196,12 +192,9 @@ impl<F: Field> SymbolicRapBuilder<F> {
     }
 
     pub fn width(&self) -> TraceWidth {
-        let preprocessed_width = self.preprocessed.width();
-        TraceWidth {
-            preprocessed: (preprocessed_width != 0).then_some(preprocessed_width),
-            partitioned_main: self.partitioned_main.iter().map(|m| m.width()).collect(),
-            after_challenge: self.after_challenge.iter().map(|m| m.width()).collect(),
-        }
+        let mut ret = self.trace_width.clone();
+        ret.after_challenge = self.after_challenge.iter().map(|m| m.width()).collect();
+        ret
     }
 
     pub fn num_exposed_values_after_challenge(&self) -> Vec<usize> {
@@ -402,8 +395,15 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
 }
 
 impl<F: Field> PartitionedAirBuilder for SymbolicRapBuilder<F> {
-    fn partitioned_main(&self) -> &[Self::M] {
-        &self.partitioned_main
+    fn cached_mains(&self) -> &[Self::M] {
+        &self.partitioned_main[..self.trace_width.cached_mains.len()]
+    }
+    fn common_main(&self) -> &Self::M {
+        assert_ne!(
+            self.trace_width.common_main, 0,
+            "AIR doesn't have a common main trace"
+        );
+        &self.partitioned_main[self.trace_width.cached_mains.len()]
     }
 }
 
@@ -436,4 +436,18 @@ impl LocalOnlyChecker {
             SymbolicExpression::Mul { x, y, .. } => Self::check_expr(x) && Self::check_expr(y),
         }
     }
+}
+
+fn gen_main_trace<F: Field>(
+    part_index: usize,
+    width: usize,
+) -> RowMajorMatrix<SymbolicVariable<F>> {
+    let mat_values = [0, 1]
+        .into_iter()
+        .flat_map(|offset| {
+            (0..width)
+                .map(move |index| SymbolicVariable::new(Entry::Main { part_index, offset }, index))
+        })
+        .collect_vec();
+    RowMajorMatrix::new(mat_values, width)
 }
