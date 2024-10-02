@@ -11,6 +11,8 @@ use crate::{arch::bus::ExecutionBus, memory::offline_checker::MemoryBridge};
 pub struct ShiftAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub(super) execution_bus: ExecutionBus,
     pub(super) memory_bridge: MemoryBridge,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>

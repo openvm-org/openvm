@@ -103,6 +103,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 subair,
+                offset,
             },
             data: vec![],
             memory_chip,

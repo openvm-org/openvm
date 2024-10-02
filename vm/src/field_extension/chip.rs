@@ -112,6 +112,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         let air = FieldExtensionArithmeticAir::new(
             ExecutionBridge::new(execution_bus, program_bus),
             memory.borrow().memory_bridge(),
+            offset,
         );
         Self {
             air,

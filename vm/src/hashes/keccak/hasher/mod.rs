@@ -104,6 +104,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 byte_xor_chip.bus(),
+                offset,
             ),
             memory_chip,
             byte_xor_chip,

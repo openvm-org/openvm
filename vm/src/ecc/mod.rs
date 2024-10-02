@@ -132,6 +132,7 @@ impl<T: PrimeField32> EcAddUnequalChip<T> {
             air: EcAddUnequalAir { config: ec_config },
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
+            offset,
         };
         let config = make_ec_chip_config(memory_chip);
 
@@ -232,6 +233,7 @@ impl<T: PrimeField32> EcDoubleChip<T> {
             air: EcDoubleAir { config: ec_config },
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
+            offset,
         };
         let config = make_ec_chip_config(memory_chip);
 

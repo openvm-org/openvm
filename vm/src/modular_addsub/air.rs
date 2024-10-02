@@ -20,6 +20,8 @@ pub struct ModularAddSubAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub(super) subair: CheckCarryModToZeroSubAir,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>

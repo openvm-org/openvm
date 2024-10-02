@@ -57,6 +57,7 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
+        offset: usize,
     ) -> Self {
         let inner = Poseidon2Air::<WIDTH, F>::from_config(config, max_constraint_degree, 0);
         Self {
@@ -64,6 +65,7 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             direct: true,
+            offset,
         }
     }
 
@@ -104,6 +106,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
             execution_bus,
             program_bus,
             memory_chip.borrow().memory_bridge(),
+            offset,
         );
         Self {
             air,

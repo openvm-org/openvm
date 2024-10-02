@@ -136,6 +136,7 @@ impl<F: PrimeField32> CoreChip<F> {
                 options,
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                offset,
             },
             rows: vec![],
             state,

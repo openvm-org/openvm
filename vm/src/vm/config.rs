@@ -28,24 +28,74 @@ impl Default for MemoryConfig {
 
 fn default_executor_range(executor: InstructionExecutorVariantName) -> (Range<usize>, usize) {
     let (start, len, offset) = match executor {
-        InstructionExecutorVariantName::Core => (0, CoreOpcode::COUNT, 0),
-        InstructionExecutorVariantName::FieldArithmetic => {
-            (0x100, FieldArithmeticOpcode::COUNT, 0x100)
+        InstructionExecutorVariantName::Core => (
+            CoreOpcode::default_offset(),
+            CoreOpcode::COUNT,
+            CoreOpcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::FieldArithmetic => (
+            FieldArithmeticOpcode::default_offset(),
+            FieldArithmeticOpcode::COUNT,
+            FieldArithmeticOpcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::FieldExtension => (
+            FieldExtensionOpcode::default_offset(),
+            FieldExtensionOpcode::COUNT,
+            FieldExtensionOpcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::Poseidon2 => (
+            Poseidon2Opcode::default_offset(),
+            Poseidon2Opcode::COUNT,
+            Poseidon2Opcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::Keccak256 => (
+            Keccak256Opcode::default_offset(),
+            Keccak256Opcode::COUNT,
+            Keccak256Opcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::ModularAddSub => (
+            ModularArithmeticOpcode::default_offset(),
+            2,
+            ModularArithmeticOpcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::ModularMultDiv => (
+            ModularArithmeticOpcode::default_offset() + 2,
+            2,
+            ModularArithmeticOpcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::ArithmeticLogicUnit256 => (
+            U256Opcode::default_offset(),
+            7,
+            U256Opcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::U256Multiplication => (
+            U256Opcode::default_offset() + 11,
+            1,
+            U256Opcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::Shift256 => (
+            U256Opcode::default_offset() + 7,
+            4,
+            U256Opcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::Ui => (
+            U32Opcode::default_offset(),
+            U32Opcode::COUNT,
+            U32Opcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::CastF => (
+            CastfOpcode::default_offset(),
+            CastfOpcode::COUNT,
+            CastfOpcode::default_offset(),
+        ),
+        InstructionExecutorVariantName::Secp256k1AddUnequal => {
+            (EccOpcode::default_offset(), 1, EccOpcode::default_offset())
         }
-        InstructionExecutorVariantName::FieldExtension => {
-            (0x110, FieldExtensionOpcode::COUNT, 0x110)
-        }
-        InstructionExecutorVariantName::Poseidon2 => (0x120, Poseidon2Opcode::COUNT, 0x120),
-        InstructionExecutorVariantName::Keccak256 => (0x130, Keccak256Opcode::COUNT, 0x130),
-        InstructionExecutorVariantName::ModularAddSub => (0x140, 4, 0x140),
-        InstructionExecutorVariantName::ModularMultDiv => (0x144, 4, 0x140),
-        InstructionExecutorVariantName::ArithmeticLogicUnit256 => (0x150, 7, 0x150),
-        InstructionExecutorVariantName::U256Multiplication => (0x150 + 11, 1, 0x150),
-        InstructionExecutorVariantName::Shift256 => (0x150 + 7, 4, 0x150),
-        InstructionExecutorVariantName::Ui => (0x160, U32Opcode::COUNT, 0x160),
-        InstructionExecutorVariantName::CastF => (0x170, CastfOpcode::COUNT, 0x170),
-        InstructionExecutorVariantName::Secp256k1AddUnequal => (0x180, 1, 0x180),
-        InstructionExecutorVariantName::Secp256k1Double => (0x181, 1, 0x180),
+        InstructionExecutorVariantName::Secp256k1Double => (
+            EccOpcode::default_offset() + 1,
+            1,
+            EccOpcode::default_offset(),
+        ),
     };
     (start..(start + len), offset)
 }

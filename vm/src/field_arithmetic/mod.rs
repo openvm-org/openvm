@@ -56,6 +56,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             air: FieldArithmeticAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                offset,
             },
             records: vec![],
             memory_chip,

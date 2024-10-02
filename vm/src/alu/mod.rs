@@ -85,6 +85,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus: xor_lookup_chip.bus(),
+                offset,
             },
             data: vec![],
             memory_chip,

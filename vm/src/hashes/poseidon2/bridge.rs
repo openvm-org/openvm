@@ -25,7 +25,7 @@ impl<F: Field> Poseidon2VmAir<F> {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                opcode,
+                opcode + AB::Expr::from_canonical_usize(self.offset),
                 [io.a, io.b, io.c, io.d, io.e],
                 ExecutionState::new(io.pc, io.timestamp),
                 timestamp_delta,

@@ -25,6 +25,8 @@ pub struct CoreAir {
     pub options: CoreOptions,
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for CoreAir {

@@ -20,7 +20,7 @@ use stark_vm::{
         chips::InstructionExecutorVariantName,
         instructions::{
             CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*, Keccak256Opcode::*,
-            Poseidon2Opcode::*,
+            Poseidon2Opcode::*, UsizeOpcode,
         },
     },
     hashes::keccak::hasher::utils::keccak256,
@@ -134,15 +134,15 @@ fn test_vm_1() {
      */
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::from_isize(STOREW as usize, n, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
         // if word[0]_1 == 0 then pc += 3
-        Instruction::from_isize(BEQ as usize, 0, 0, 3, 1, 0),
+        Instruction::from_isize(BEQ.with_default_offset(), 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_0
-        Instruction::large_from_isize(SUB as usize, 0, 0, 1, 1, 1, 0, 0),
+        Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction::from_isize(JAL as usize, 2, -2, 0, 1, 0),
+        Instruction::from_isize(JAL.with_default_offset(), 2, -2, 0, 1, 0),
         // terminate
-        Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program {
@@ -164,15 +164,15 @@ fn test_vm_without_field_arithmetic() {
      */
     let instructions = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::from_isize(STOREW as usize, 5, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 5, 0, 0, 0, 1),
         // if word[0]_1 != 4 then pc += 2
-        Instruction::from_isize(BNE as usize, 0, 4, 3, 1, 0),
+        Instruction::from_isize(BNE.with_default_offset(), 0, 4, 3, 1, 0),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction::from_isize(JAL as usize, 2, -2, 0, 1, 0),
+        Instruction::from_isize(JAL.with_default_offset(), 2, -2, 0, 1, 0),
         // terminate
-        Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= 1
-        Instruction::from_isize(BEQ as usize, 0, 5, -1, 1, 0),
+        Instruction::from_isize(BEQ.with_default_offset(), 0, 5, -1, 1, 0),
     ];
 
     let program = Program {
@@ -186,19 +186,19 @@ fn test_vm_without_field_arithmetic() {
 #[test]
 fn test_vm_fibonacci_old() {
     let instructions = vec![
-        Instruction::from_isize(STOREW as usize, 9, 0, 0, 0, 1),
-        Instruction::from_isize(STOREW as usize, 1, 0, 2, 0, 1),
-        Instruction::from_isize(STOREW as usize, 1, 0, 3, 0, 1),
-        Instruction::from_isize(STOREW as usize, 0, 0, 0, 0, 2),
-        Instruction::from_isize(STOREW as usize, 1, 0, 1, 0, 2),
-        Instruction::from_isize(BEQ as usize, 2, 0, 7, 1, 1),
-        Instruction::large_from_isize(ADD as usize, 2, 2, 3, 1, 1, 1, 0),
-        Instruction::from_isize(LOADW as usize, 4, -2, 2, 1, 2),
-        Instruction::from_isize(LOADW as usize, 5, -1, 2, 1, 2),
-        Instruction::large_from_isize(ADD as usize, 6, 4, 5, 1, 1, 1, 0),
-        Instruction::from_isize(STOREW as usize, 6, 0, 2, 1, 2),
-        Instruction::from_isize(JAL as usize, 7, -6, 0, 1, 0),
-        Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0),
+        Instruction::from_isize(STOREW.with_default_offset(), 9, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 2, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 3, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 0, 0, 0, 0, 2),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 1, 0, 2),
+        Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
+        Instruction::large_from_isize(ADD.with_default_offset(), 2, 2, 3, 1, 1, 1, 0),
+        Instruction::from_isize(LOADW.with_default_offset(), 4, -2, 2, 1, 2),
+        Instruction::from_isize(LOADW.with_default_offset(), 5, -1, 2, 1, 2),
+        Instruction::large_from_isize(ADD.with_default_offset(), 6, 4, 5, 1, 1, 1, 0),
+        Instruction::from_isize(STOREW.with_default_offset(), 6, 0, 2, 1, 2),
+        Instruction::from_isize(JAL.with_default_offset(), 7, -6, 0, 1, 0),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
     let program_len = instructions.len();
@@ -215,27 +215,27 @@ fn test_vm_fibonacci_old() {
 fn test_vm_fibonacci_old_cycle_tracker() {
     // NOTE: Instructions commented until cycle tracker instructions are not counted as additional assembly Instructions
     let instructions = vec![
-        Instruction::debug(CT_START as usize, "full program"),
-        Instruction::debug(CT_START as usize, "store"),
-        Instruction::from_isize(STOREW as usize, 9, 0, 0, 0, 1),
-        Instruction::from_isize(STOREW as usize, 1, 0, 2, 0, 1),
-        Instruction::from_isize(STOREW as usize, 1, 0, 3, 0, 1),
-        Instruction::from_isize(STOREW as usize, 0, 0, 0, 0, 2),
-        Instruction::from_isize(STOREW as usize, 1, 0, 1, 0, 2),
-        Instruction::debug(CT_END as usize, "store"),
-        Instruction::debug(CT_START as usize, "total loop"),
-        Instruction::from_isize(BEQ as usize, 2, 0, 9, 1, 1), // Instruction::from_isize(BEQ as usize, 2, 0, 7, 1, 1),
-        Instruction::large_from_isize(ADD as usize, 2, 2, 3, 1, 1, 1, 0),
-        Instruction::debug(CT_START as usize, "inner loop"),
-        Instruction::from_isize(LOADW as usize, 4, -2, 2, 1, 2),
-        Instruction::from_isize(LOADW as usize, 5, -1, 2, 1, 2),
-        Instruction::large_from_isize(ADD as usize, 6, 4, 5, 1, 1, 1, 0),
-        Instruction::from_isize(STOREW as usize, 6, 0, 2, 1, 2),
-        Instruction::debug(CT_END as usize, "inner loop"),
-        Instruction::from_isize(JAL as usize, 7, -8, 0, 1, 0), // Instruction::from_isize(JAL as usize, 7, -6, 0, 1, 0),
-        Instruction::debug(CT_END as usize, "total loop"),
-        Instruction::debug(CT_END as usize, "full program"),
-        Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0),
+        Instruction::debug(CT_START.with_default_offset(), "full program"),
+        Instruction::debug(CT_START.with_default_offset(), "store"),
+        Instruction::from_isize(STOREW.with_default_offset(), 9, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 2, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 3, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 0, 0, 0, 0, 2),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 1, 0, 2),
+        Instruction::debug(CT_END.with_default_offset(), "store"),
+        Instruction::debug(CT_START.with_default_offset(), "total loop"),
+        Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 9, 1, 1), // Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
+        Instruction::large_from_isize(ADD.with_default_offset(), 2, 2, 3, 1, 1, 1, 0),
+        Instruction::debug(CT_START.with_default_offset(), "inner loop"),
+        Instruction::from_isize(LOADW.with_default_offset(), 4, -2, 2, 1, 2),
+        Instruction::from_isize(LOADW.with_default_offset(), 5, -1, 2, 1, 2),
+        Instruction::large_from_isize(ADD.with_default_offset(), 6, 4, 5, 1, 1, 1, 0),
+        Instruction::from_isize(STOREW.with_default_offset(), 6, 0, 2, 1, 2),
+        Instruction::debug(CT_END.with_default_offset(), "inner loop"),
+        Instruction::from_isize(JAL.with_default_offset(), 7, -8, 0, 1, 0), // Instruction::from_isize(JAL.with_default_offset(), 7, -6, 0, 1, 0),
+        Instruction::debug(CT_END.with_default_offset(), "total loop"),
+        Instruction::debug(CT_END.with_default_offset(), "full program"),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
     let program_len = instructions.len();
@@ -251,20 +251,20 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 #[test]
 fn test_vm_field_extension_arithmetic() {
     let instructions = vec![
-        Instruction::from_isize(STOREW as usize, 1, 0, 0, 0, 1),
-        Instruction::from_isize(STOREW as usize, 2, 1, 0, 0, 1),
-        Instruction::from_isize(STOREW as usize, 1, 2, 0, 0, 1),
-        Instruction::from_isize(STOREW as usize, 2, 3, 0, 0, 1),
-        Instruction::from_isize(STOREW as usize, 2, 4, 0, 0, 1),
-        Instruction::from_isize(STOREW as usize, 1, 5, 0, 0, 1),
-        Instruction::from_isize(STOREW as usize, 1, 6, 0, 0, 1),
-        Instruction::from_isize(STOREW as usize, 2, 7, 0, 0, 1),
-        Instruction::from_isize(FE4ADD as usize, 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4ADD as usize, 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4SUB as usize, 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4MUL as usize, 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4DIV as usize, 12, 0, 4, 1, 1),
-        Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 1, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 2, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 3, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 4, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 5, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 6, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 7, 0, 0, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4MUL.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4DIV.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
     let program_len = instructions.len();
@@ -293,25 +293,25 @@ fn test_vm_field_extension_arithmetic() {
 #[test]
 fn test_vm_hint() {
     let instructions = vec![
-        Instruction::from_isize(STOREW as usize, 0, 0, 16, 0, 1),
-        Instruction::large_from_isize(ADD as usize, 20, 16, 16777220, 1, 1, 0, 0),
-        Instruction::large_from_isize(ADD as usize, 32, 20, 0, 1, 1, 0, 0),
-        Instruction::large_from_isize(ADD as usize, 20, 20, 1, 1, 1, 0, 0),
-        Instruction::from_isize(HINT_INPUT as usize, 0, 0, 0, 1, 2),
-        Instruction::from_isize(SHINTW as usize, 32, 0, 0, 1, 2),
-        Instruction::from_isize(LOADW as usize, 38, 0, 32, 1, 2),
-        Instruction::large_from_isize(ADD as usize, 44, 20, 0, 1, 1, 0, 0),
-        Instruction::from_isize(MUL as usize, 24, 38, 1, 1, 0),
-        Instruction::large_from_isize(ADD as usize, 20, 20, 24, 1, 1, 1, 0),
-        Instruction::large_from_isize(ADD as usize, 50, 16, 0, 1, 1, 0, 0),
-        Instruction::from_isize(JAL as usize, 24, 6, 0, 1, 0),
-        Instruction::from_isize(MUL as usize, 0, 50, 1, 1, 0),
-        Instruction::large_from_isize(ADD as usize, 0, 44, 0, 1, 1, 1, 0),
-        Instruction::from_isize(SHINTW as usize, 0, 0, 0, 1, 2),
-        Instruction::large_from_isize(ADD as usize, 50, 50, 1, 1, 1, 0, 0),
-        Instruction::from_isize(BNE as usize, 50, 38, 2013265917, 1, 1),
-        Instruction::from_isize(BNE as usize, 50, 38, 2013265916, 1, 1),
-        Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0),
+        Instruction::from_isize(STOREW.with_default_offset(), 0, 0, 16, 0, 1),
+        Instruction::large_from_isize(ADD.with_default_offset(), 20, 16, 16777220, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.with_default_offset(), 32, 20, 0, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.with_default_offset(), 20, 20, 1, 1, 1, 0, 0),
+        Instruction::from_isize(HINT_INPUT.with_default_offset(), 0, 0, 0, 1, 2),
+        Instruction::from_isize(SHINTW.with_default_offset(), 32, 0, 0, 1, 2),
+        Instruction::from_isize(LOADW.with_default_offset(), 38, 0, 32, 1, 2),
+        Instruction::large_from_isize(ADD.with_default_offset(), 44, 20, 0, 1, 1, 0, 0),
+        Instruction::from_isize(MUL.with_default_offset(), 24, 38, 1, 1, 0),
+        Instruction::large_from_isize(ADD.with_default_offset(), 20, 20, 24, 1, 1, 1, 0),
+        Instruction::large_from_isize(ADD.with_default_offset(), 50, 16, 0, 1, 1, 0, 0),
+        Instruction::from_isize(JAL.with_default_offset(), 24, 6, 0, 1, 0),
+        Instruction::from_isize(MUL.with_default_offset(), 0, 50, 1, 1, 0),
+        Instruction::large_from_isize(ADD.with_default_offset(), 0, 44, 0, 1, 1, 1, 0),
+        Instruction::from_isize(SHINTW.with_default_offset(), 0, 0, 0, 1, 2),
+        Instruction::large_from_isize(ADD.with_default_offset(), 50, 50, 1, 1, 1, 0, 0),
+        Instruction::from_isize(BNE.with_default_offset(), 50, 38, 2013265917, 1, 1),
+        Instruction::from_isize(BNE.with_default_offset(), 50, 38, 2013265916, 1, 1),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
     let program_len = instructions.len();
@@ -338,7 +338,7 @@ fn test_vm_compress_poseidon2_as2() {
     for i in 0..8 {
         // [lhs_ptr + i]_2 <- rnd()
         instructions.push(Instruction::from_isize(
-            STOREW as usize,
+            STOREW.with_default_offset(),
             rng.gen_range(1..1 << 20),
             i,
             lhs_ptr,
@@ -350,7 +350,7 @@ fn test_vm_compress_poseidon2_as2() {
     for i in 0..8 {
         // [rhs_ptr + i]_2 <- rnd()
         instructions.push(Instruction::from_isize(
-            STOREW as usize,
+            STOREW.with_default_offset(),
             rng.gen_range(1..1 << 20),
             i,
             rhs_ptr,
@@ -362,7 +362,7 @@ fn test_vm_compress_poseidon2_as2() {
 
     // [11]_1 <- lhs_ptr
     instructions.push(Instruction::from_isize(
-        STOREW as usize,
+        STOREW.with_default_offset(),
         lhs_ptr,
         0,
         11,
@@ -371,7 +371,7 @@ fn test_vm_compress_poseidon2_as2() {
     ));
     // [22]_1 <- rhs_ptr
     instructions.push(Instruction::from_isize(
-        STOREW as usize,
+        STOREW.with_default_offset(),
         rhs_ptr,
         0,
         22,
@@ -380,7 +380,7 @@ fn test_vm_compress_poseidon2_as2() {
     ));
     // [33]_1 <- rhs_ptr
     instructions.push(Instruction::from_isize(
-        STOREW as usize,
+        STOREW.with_default_offset(),
         dst_ptr,
         0,
         33,
@@ -389,14 +389,21 @@ fn test_vm_compress_poseidon2_as2() {
     ));
 
     instructions.push(Instruction::from_isize(
-        COMP_POS2 as usize,
+        COMP_POS2.with_default_offset(),
         33,
         11,
         22,
         1,
         2,
     ));
-    instructions.push(Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0));
+    instructions.push(Instruction::from_isize(
+        TERMINATE.with_default_offset(),
+        0,
+        0,
+        0,
+        0,
+        0,
+    ));
 
     let program_len = instructions.len();
 
@@ -412,19 +419,47 @@ fn test_vm_compress_poseidon2_as2() {
 /// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output
 fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     let mut instructions = vec![];
-    instructions.push(Instruction::from_isize(JAL as usize, 0, 2, 0, 1, 1)); // skip fail
-    instructions.push(Instruction::from_isize(FAIL as usize, 0, 0, 0, 0, 0));
+    instructions.push(Instruction::from_isize(
+        JAL.with_default_offset(),
+        0,
+        2,
+        0,
+        1,
+        1,
+    )); // skip fail
+    instructions.push(Instruction::from_isize(
+        FAIL.with_default_offset(),
+        0,
+        0,
+        0,
+        0,
+        0,
+    ));
 
     let [a, b, c] = [1, 0, (1 << LIMB_BITS) - 1];
     // src = word[b]_1 <- 0
     let src = 0;
-    instructions.push(Instruction::from_isize(STOREW as usize, src, 0, b, 0, 1));
+    instructions.push(Instruction::from_isize(
+        STOREW.with_default_offset(),
+        src,
+        0,
+        b,
+        0,
+        1,
+    ));
     // dst word[a]_1 <- 3 // use weird offset
     let dst = 3;
-    instructions.push(Instruction::from_isize(STOREW as usize, dst, 0, a, 0, 1));
+    instructions.push(Instruction::from_isize(
+        STOREW.with_default_offset(),
+        dst,
+        0,
+        a,
+        0,
+        1,
+    ));
     // word[2^29 - 1]_1 <- len // emulate stack
     instructions.push(Instruction::from_isize(
-        STOREW as usize,
+        STOREW.with_default_offset(),
         input.len() as isize,
         0,
         c,
@@ -437,7 +472,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
 
     for (i, byte) in input.iter().enumerate() {
         instructions.push(Instruction::from_isize(
-            STOREW as usize,
+            STOREW.with_default_offset(),
             *byte as isize,
             0,
             src + i as isize,
@@ -448,7 +483,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     // dst = word[a]_1, src = word[b]_1, len = word[c]_1,
     // read and write io to address space 2
     instructions.push(Instruction::large_from_isize(
-        KECCAK256 as usize,
+        KECCAK256.with_default_offset(),
         a,
         b,
         c,
@@ -461,7 +496,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     // read expected result to check correctness
     for (i, expected_byte) in expected.into_iter().enumerate() {
         instructions.push(Instruction::from_isize(
-            BNE as usize,
+            BNE.with_default_offset(),
             dst + i as isize,
             expected_byte as isize,
             -(instructions.len() as isize) + 1, // jump to fail
@@ -486,7 +521,14 @@ fn test_vm_keccak() {
         .iter()
         .flat_map(|input| instructions_for_keccak256_test(input))
         .collect::<Vec<_>>();
-    instructions.push(Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0));
+    instructions.push(Instruction::from_isize(
+        TERMINATE.with_default_offset(),
+        0,
+        0,
+        0,
+        0,
+        0,
+    ));
 
     let program_len = instructions.len();
 
@@ -511,7 +553,14 @@ fn test_vm_keccak_non_full_round() {
         .iter()
         .flat_map(|input| instructions_for_keccak256_test(input))
         .collect::<Vec<_>>();
-    instructions.push(Instruction::from_isize(TERMINATE as usize, 0, 0, 0, 0, 0));
+    instructions.push(Instruction::from_isize(
+        TERMINATE.with_default_offset(),
+        0,
+        0,
+        0,
+        0,
+        0,
+    ));
 
     let program_len = instructions.len();
 

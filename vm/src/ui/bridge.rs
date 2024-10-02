@@ -38,7 +38,7 @@ impl UiAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                expected_opcode,
+                expected_opcode + AB::Expr::from_canonical_usize(self.offset),
                 [io.op_a, io.op_b],
                 io.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),

@@ -65,6 +65,7 @@ impl<T: PrimeField32> CastFChip<T> {
                 execution_bridge,
                 memory_bridge,
                 bus,
+                offset,
             },
             data: vec![],
             memory_chip,

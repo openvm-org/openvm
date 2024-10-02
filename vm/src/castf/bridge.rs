@@ -61,7 +61,7 @@ impl CastFAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_u8(CastfOpcode::CASTF as u8),
+                AB::Expr::from_canonical_usize(CastfOpcode::CASTF as usize + self.offset),
                 [
                     io.op_a.into(),
                     io.op_b.into(),

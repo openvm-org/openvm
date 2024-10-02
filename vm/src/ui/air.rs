@@ -18,6 +18,8 @@ pub struct UiAir {
     pub(super) memory_bridge: MemoryBridge,
 
     pub bus: VariableRangeCheckerBus,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for UiAir {}

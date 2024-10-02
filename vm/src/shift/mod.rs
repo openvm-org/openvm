@@ -43,6 +43,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             air: ShiftAir {
                 execution_bus,
                 memory_bridge,
+                offset,
             },
             memory_chip,
             offset,

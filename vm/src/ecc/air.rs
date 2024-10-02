@@ -21,6 +21,8 @@ pub struct EcAddUnequalVmAir {
     pub air: EcAddUnequalAir,
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for EcAddUnequalVmAir {}
@@ -73,6 +75,8 @@ pub struct EcDoubleVmAir {
     pub air: EcDoubleAir,
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for EcDoubleVmAir {}

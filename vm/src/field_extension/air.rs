@@ -22,6 +22,8 @@ use crate::{
 pub struct FieldExtensionArithmeticAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
+
+    pub(super) offset: usize,
 }
 
 impl AirConfig for FieldExtensionArithmeticAir {

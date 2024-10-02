@@ -3,8 +3,13 @@ use enum_utils::FromStr;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 pub trait UsizeOpcode {
-    // fn to_usize(&self) -> usize;
+    fn default_offset() -> usize;
     fn from_usize(value: usize) -> Self;
+    fn as_usize(&self) -> usize;
+
+    fn with_default_offset(&self) -> usize {
+        self.as_usize() + Self::default_offset()
+    }
 }
 
 #[derive(
@@ -21,6 +26,7 @@ pub trait UsizeOpcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum CoreOpcode {
@@ -68,6 +74,7 @@ pub enum CoreOpcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0x100]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum FieldArithmeticOpcode {
@@ -91,6 +98,7 @@ pub enum FieldArithmeticOpcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0x110]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum FieldExtensionOpcode {
@@ -114,6 +122,7 @@ pub enum FieldExtensionOpcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0x170]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum CastfOpcode {
@@ -134,6 +143,7 @@ pub enum CastfOpcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0x120]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum Poseidon2Opcode {
@@ -155,6 +165,7 @@ pub enum Poseidon2Opcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0x130]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum Keccak256Opcode {
@@ -175,6 +186,7 @@ pub enum Keccak256Opcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0x140]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum ModularArithmeticOpcode {
@@ -198,6 +210,7 @@ pub enum ModularArithmeticOpcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0x180]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum EccOpcode {
@@ -219,6 +232,7 @@ pub enum EccOpcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0x150]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum U256Opcode {
@@ -253,9 +267,14 @@ pub enum U256Opcode {
     FromRepr,
     UsizeOpcode,
 )]
+#[opcode_offset = 0x160]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum U32Opcode {
     LUI,
     AUIPC,
+}
+
+pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
+    Opcode::default_offset() + opcode.as_usize()
 }

@@ -58,6 +58,7 @@ impl<T: PrimeField32> UiChip<T> {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus,
+                offset,
             },
             data: vec![],
             memory_chip,
