@@ -146,7 +146,8 @@ fn poseidon2_negative_test() {
     tester.test(get_engine).expect("Verification failed");
 
     disable_debug_builder();
-    for _ in 0..10 {
+    // test is slow, avoid too many repetitions
+    for _ in 0..5 {
         // TODO: better way to modify existing traces in tester
         let trace = &mut tester.traces[2];
         let original_trace = trace.clone();

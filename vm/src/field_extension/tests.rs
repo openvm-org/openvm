@@ -3,9 +3,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use afs_stark_backend::{
-    prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError,
-};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
