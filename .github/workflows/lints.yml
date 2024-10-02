@@ -1,4 +1,4 @@
-name: Lint and Build Workspace
+name: Lint Workspace
 
 on:
   push:

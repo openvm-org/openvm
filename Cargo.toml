@@ -55,10 +55,10 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 
-# For O3 optimization but still fast(ish) compile times
+# For O1 optimization but still fast(ish) compile times
 [profile.fast]
 inherits = "dev"
-opt-level = 3
+opt-level = 1
 debug-assertions = true
 # better recompile times
 incremental = true
