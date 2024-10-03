@@ -44,6 +44,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             bigint_limb_size: 8,
             ..Default::default()
         }
+        .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
         .add_default_executor(ExecutorName::ModularAddSub)
         .add_default_executor(ExecutorName::ModularMultDiv)
         .add_default_executor(ExecutorName::Secp256k1AddUnequal)

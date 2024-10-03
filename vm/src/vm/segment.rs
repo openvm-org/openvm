@@ -20,6 +20,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
+use strum::EnumCount;
 
 use super::{
     connector::VmConnectorChip, cycle_tracker::CycleTracker, VirtualMachineState, VmConfig,
@@ -115,7 +116,30 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         let mut modular_muldiv_chips = vec![];
         let mut modular_addsub_chips = vec![];
-        let mut core_chip = None;
+        let mut core_chip = if config
+            .executors
+            .iter()
+            .any(|(_, executor, _)| matches!(executor, ExecutorName::Core))
+        {
+            None
+        } else {
+            let offset = 0; // Core offset should be 0 by default; maybe it makes sense to make this always the case?
+            let chip = Rc::new(RefCell::new(CoreChip::from_state(
+                config.core_options(),
+                execution_bus,
+                program_bus,
+                memory_chip.clone(),
+                state.state,
+                offset,
+            )));
+            let range = 0..CoreOpcode::COUNT;
+            for opcode in range {
+                executors.insert(offset + opcode, chip.clone().into());
+            }
+            chips.push(MachineChipVariant::Core(chip.clone()));
+            Some(chip)
+        };
+
         for (range, executor, offset) in config.clone().executors {
             for opcode in range.clone() {
                 if let Some(old_executor) = executors.get(&opcode) {
@@ -127,6 +151,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
             match executor {
                 ExecutorName::Core => {
+                    assert!(core_chip.is_none(), "Core chip already initialized");
                     core_chip = Some(Rc::new(RefCell::new(CoreChip::from_state(
                         config.core_options(),
                         execution_bus,
@@ -348,7 +373,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             config,
             executors,
             chips,
-            core_chip: core_chip.expect("Core chip should be initialized"),
+            core_chip: core_chip.unwrap(),
             program_chip,
             memory_chip,
             connector_chip,

@@ -286,7 +286,7 @@ fn test_compiler_256_sll_srl() {
             bigint_limb_size: 8,
             ..Default::default()
         }
-        .add_default_executor(ExecutorName::ArithmeticLogicUnit256),
+        .add_default_executor(ExecutorName::Shift256),
         program,
         vec![],
     );
@@ -346,7 +346,7 @@ fn test_compiler_256_sra() {
             bigint_limb_size: 8,
             ..Default::default()
         }
-        .add_default_executor(ExecutorName::ArithmeticLogicUnit256),
+        .add_default_executor(ExecutorName::Shift256),
         program,
         vec![],
     );

@@ -81,7 +81,6 @@ fn air_test_with_compress_poseidon2(
             false,
             8,
         )
-        .add_default_executor(ExecutorName::Core)
         .add_default_executor(ExecutorName::Poseidon2),
         program,
         vec![],
