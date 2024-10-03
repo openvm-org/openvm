@@ -162,7 +162,10 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
 
         self.data.push(ModularAddSubRecord {
             from_state,
-            instruction,
+            instruction: Instruction {
+                opcode,
+                ..instruction
+            },
             x_array_read,
             y_array_read,
             z_array_write,
