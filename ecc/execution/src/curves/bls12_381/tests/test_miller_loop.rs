@@ -1,6 +1,7 @@
 use halo2curves_axiom::bls12_381::{
     Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, MillerLoopResult, G2,
 };
+use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
 use subtle::{Choice, ConditionallySelectable};
 
@@ -17,83 +18,43 @@ use crate::{
 #[allow(non_snake_case)]
 fn test_multi_miller_loop_bls12_381() {
     // Generate random G1 and G2 points
-    // let mut rng0 = StdRng::seed_from_u64(8);
-    // let P = G1Affine::random(&mut rng0);
-    // let mut rng1 = StdRng::seed_from_u64(8 * 2);
-    // let Q = G2Affine::random(&mut rng1);
-    // let either_identity = P.is_identity() | Q.is_identity();
-    // let P = G1Affine::conditional_select(&P, &G1Affine::generator(), either_identity);
-    // let Q = G2Affine::conditional_select(&Q, &G2Affine::generator(), either_identity);
-
-    let P = G1Affine::generator();
-    let Q = G2Affine::generator();
-
-    let P_ecpoint = EcPoint { x: P.x, y: P.y };
-    let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
+    let rand_seeds = vec![2, 8, 15, 29, 55, 166];
+    let (P_vec, Q_vec) = rand_seeds
+        .iter()
+        .map(|seed| {
+            let mut rng0 = StdRng::seed_from_u64(*seed);
+            let p = G1Affine::random(&mut rng0);
+            let mut rng1 = StdRng::seed_from_u64(*seed * 2);
+            let q = G2Affine::random(&mut rng1);
+            let either_identity = p.is_identity() | q.is_identity();
+            let p = G1Affine::conditional_select(&p, &G1Affine::generator(), either_identity);
+            let q = G2Affine::conditional_select(&q, &G2Affine::generator(), either_identity);
+            (p, q)
+        })
+        .unzip::<_, _, Vec<_>, Vec<_>>();
+    let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
+        .map(|(P, Q)| (EcPoint { x: P.x, y: P.y }, EcPoint { x: Q.x, y: Q.y }))
+        .unzip::<_, _, Vec<_>, Vec<_>>();
 
     // Compare against halo2curves implementation
-    // let g2_prepared = G2Prepared::from(Q);
-    // let compare_miller = halo2curves_axiom::bls12_381::multi_miller_loop(&[(&P, &g2_prepared)]);
-    // let compare_final = compare_miller.final_exponentiation();
-    let compare_final = halo2curves_axiom::bls12_381::pairing(&P, &Q);
+    let g2_prepareds = Q_vec
+        .iter()
+        .map(|q| G2Prepared::from(q.clone()))
+        .collect::<Vec<_>>();
+    let terms = P_vec.iter().zip(g2_prepareds.iter()).collect::<Vec<_>>();
+    let compare_miller = halo2curves_axiom::bls12_381::multi_miller_loop(terms.as_slice());
+    let compare_final = compare_miller.final_exponentiation();
 
     // Run the multi-miller loop
     let f = multi_miller_loop::<Fq, Fq2, Fq12>(
-        // let f = multi_miller_loop_separate_double_plus_add::<Fq, Fq2, Fq12>(
-        &[P_ecpoint],
-        &[Q_ecpoint],
+        P_ecpoints.as_slice(),
+        Q_ecpoints.as_slice(),
         GNARK_BLS12_381_PBE.as_slice(),
         BLS12_381_XI,
     );
 
-    // let f = multi_miller_loop_separate_double_plus_add_custom_debug::<Fq, Fq2, Fq12>(
-    //     &[P_ecpoint],
-    //     &[Q_ecpoint],
-    //     GNARK_BLS12_381_PBE.as_slice(),
-    //     BLS12_381_XI,
-    //     |label, idx, elem: EcPoint<Fq2>| {
-    //         let mut Q_acc_aff = G2Affine::generator();
-    //         Q_acc_aff.x = elem.x;
-    //         Q_acc_aff.y = elem.y;
-    //         let Q_acc_proj = G2::from(Q_acc_aff);
-    //         println!("{}, {}: {:?}", idx, label, Q_acc_proj.x.c0.0);
-    //     },
-    //     |label, idx, elem: Fq12| {
-    //         println!("{}, {}: {:?}", idx, label, elem.c0.c0.c0.0);
-    //     },
-    // );
-
-    // let f = multi_miller_loop_gnark::<Fq, Fq2, Fq12>(
-    //     &[P_ecpoint],
-    //     &[Q_ecpoint],
-    //     GNARK_BLS12_381_PBE.as_slice(),
-    //     BLS12_381_XI,
-    //     |label, ecpt: EcPoint<Fq2>| {
-    //         println!("{}", label);
-    //         println!("ecpt.x.c0.0: {:?}", ecpt.x.c0.0);
-    //         println!("ecpt.x.c0.1: {:?}", ecpt.x.c1.0);
-    //         println!("ecpt.y.c0.0: {:?}", ecpt.y.c0.0);
-    //         println!("ecpt.y.c0.1: {:?}", ecpt.y.c1.0);
-    //     },
-    // );
-
     let wrapped_f = MillerLoopResult(f);
     let final_f = wrapped_f.final_exponentiation();
-    println!("final_f: {:#?}", final_f);
-
-    let cf = final_f.0;
-    println!("cf.c0.c0.c0: {:?}", cf.c0.c0.c0.0);
-    println!("cf.c0.c0.c1: {:?}", cf.c0.c0.c1.0);
-    println!("cf.c0.c1.c0: {:?}", cf.c0.c1.c0.0);
-    println!("cf.c0.c1.c1: {:?}", cf.c0.c1.c1.0);
-    println!("cf.c0.c2.c0: {:?}", cf.c0.c2.c0.0);
-    println!("cf.c0.c2.c1: {:?}", cf.c0.c2.c1.0);
-    println!("cf.c1.c0.c0: {:?}", cf.c1.c0.c0.0);
-    println!("cf.c1.c0.c1: {:?}", cf.c1.c0.c1.0);
-    println!("cf.c1.c1.c0: {:?}", cf.c1.c1.c0.0);
-    println!("cf.c1.c1.c1: {:?}", cf.c1.c1.c1.0);
-    println!("cf.c1.c2.c0: {:?}", cf.c1.c2.c0.0);
-    println!("cf.c1.c2.c1: {:?}", cf.c1.c2.c1.0);
 
     // Run halo2curves final exponentiation on our multi_miller_loop output
     assert_eq!(final_f, compare_final);
@@ -123,28 +84,13 @@ fn test_on_curve() {
 #[allow(non_snake_case)]
 fn test_f_mul() {
     // Generate random G1 and G2 points
-    // let mut rng0 = StdRng::seed_from_u64(8);
-    // let P = G1Affine::random(&mut rng0);
-    // let mut rng1 = StdRng::seed_from_u64(8 * 2);
-    // let Q = G2Affine::random(&mut rng1);
-    // let either_identity = P.is_identity() | Q.is_identity();
-    // let P = G1Affine::conditional_select(&P, &G1Affine::generator(), either_identity);
-    // let Q = G2Affine::conditional_select(&Q, &G2Affine::generator(), either_identity);
-
-    // let two = Fq::one() + Fq::one();
-    // let three = Fq::one() + Fq::one() + Fq::one();
-    // let mut P = G1Affine::default();
-    // P.x = Fq::zero();
-    // P.y = Fq::one();
-    // let mut Q: G2Affine = G2Affine::default();
-    // Q.x = Fq2 {
-    //     c0: Fq::zero(),
-    //     c1: Fq::one(),
-    // };
-    // Q.y = Fq2 { c0: two, c1: three };
-
-    let P = G1Affine::generator();
-    let Q = G2Affine::generator();
+    let mut rng0 = StdRng::seed_from_u64(2);
+    let P = G1Affine::random(&mut rng0);
+    let mut rng1 = StdRng::seed_from_u64(2 * 2);
+    let Q = G2Affine::random(&mut rng1);
+    let either_identity = P.is_identity() | Q.is_identity();
+    let P = G1Affine::conditional_select(&P, &G1Affine::generator(), either_identity);
+    let Q = G2Affine::conditional_select(&Q, &G2Affine::generator(), either_identity);
 
     let P_ecpoint = EcPoint { x: P.x, y: P.y };
     let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
