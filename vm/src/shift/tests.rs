@@ -7,6 +7,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
+use test_log::test;
 
 use super::{solve_shift, ShiftChip};
 use crate::{

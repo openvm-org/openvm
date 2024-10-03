@@ -28,9 +28,8 @@ use super::{
 use crate::{
     alu::ArithmeticLogicChip,
     arch::{
-        instructions::*, ExecutionBus, ExecutionState, InstructionExecutor,
-        InstructionExecutorVariant, InstructionExecutorVariantName, MachineChip,
-        MachineChipVariant,
+        instructions::*, ExecutionBus, ExecutionState, ExecutorName, InstructionExecutor,
+        InstructionExecutorVariant, MachineChip, MachineChipVariant,
     },
     castf::CastFChip,
     core::{
@@ -127,7 +126,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
             }
             match executor {
-                InstructionExecutorVariantName::Core => {
+                ExecutorName::Core => {
                     core_chip = Some(Rc::new(RefCell::new(CoreChip::from_state(
                         config.core_options(),
                         execution_bus,
@@ -141,7 +140,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::Core(core_chip.clone().unwrap()));
                 }
-                InstructionExecutorVariantName::FieldArithmetic => {
+                ExecutorName::FieldArithmetic => {
                     let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
                         execution_bus,
                         program_bus,
@@ -153,7 +152,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::FieldArithmetic(chip));
                 }
-                InstructionExecutorVariantName::FieldExtension => {
+                ExecutorName::FieldExtension => {
                     let chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
                         execution_bus,
                         program_bus,
@@ -165,7 +164,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::FieldExtension(chip));
                 }
-                InstructionExecutorVariantName::Poseidon2 => {
+                ExecutorName::Poseidon2 => {
                     let chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
                         Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
                         config
@@ -181,7 +180,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::Poseidon2(chip));
                 }
-                InstructionExecutorVariantName::Keccak256 => {
+                ExecutorName::Keccak256 => {
                     let chip = Rc::new(RefCell::new(KeccakVmChip::new(
                         execution_bus,
                         program_bus,
@@ -194,7 +193,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::Keccak256(chip));
                 }
-                InstructionExecutorVariantName::ModularAddSub => {
+                ExecutorName::ModularAddSub => {
                     let new_chip = if modular_addsub_chips.is_empty() {
                         Rc::new(RefCell::new(ModularAddSubChip::new(
                             execution_bus,
@@ -217,7 +216,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, new_chip.clone().into());
                     }
                 }
-                InstructionExecutorVariantName::ModularMultDiv => {
+                ExecutorName::ModularMultDiv => {
                     let new_chip = if modular_muldiv_chips.is_empty() {
                         Rc::new(RefCell::new(ModularMultDivChip::new(
                             execution_bus,
@@ -240,7 +239,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, new_chip.clone().into());
                     }
                 }
-                InstructionExecutorVariantName::ArithmeticLogicUnit256 => {
+                ExecutorName::ArithmeticLogicUnit256 => {
                     // We probably must include this chip if we include any modular arithmetic,
                     // not sure if we need to enforce this here.
                     let chip = Rc::new(RefCell::new(ArithmeticLogicChip::new(
@@ -255,7 +254,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::ArithmeticLogicUnit256(chip));
                 }
-                InstructionExecutorVariantName::U256Multiplication => {
+                ExecutorName::U256Multiplication => {
                     let range_tuple_bus = RangeTupleCheckerBus::new(
                         RANGE_TUPLE_CHECKER_BUS,
                         vec![(1 << 8), 32 * (1 << 8)],
@@ -273,7 +272,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::U256Multiplication(chip));
                 }
-                InstructionExecutorVariantName::Shift256 => {
+                ExecutorName::Shift256 => {
                     let chip = Rc::new(RefCell::new(ShiftChip::new(
                         execution_bus,
                         program_bus,
@@ -286,7 +285,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::Shift256(chip));
                 }
-                InstructionExecutorVariantName::Ui => {
+                ExecutorName::Ui => {
                     let chip = Rc::new(RefCell::new(UiChip::new(
                         execution_bus,
                         program_bus,
@@ -298,7 +297,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::Ui(chip));
                 }
-                InstructionExecutorVariantName::CastF => {
+                ExecutorName::CastF => {
                     let chip = Rc::new(RefCell::new(CastFChip::new(
                         execution_bus,
                         program_bus,
@@ -310,7 +309,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::CastF(chip));
                 }
-                InstructionExecutorVariantName::Secp256k1AddUnequal => {
+                ExecutorName::Secp256k1AddUnequal => {
                     let chip = Rc::new(RefCell::new(EcAddUnequalChip::new(
                         execution_bus,
                         program_bus,
@@ -322,7 +321,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::Secp256k1AddUnequal(chip));
                 }
-                InstructionExecutorVariantName::Secp256k1Double => {
+                ExecutorName::Secp256k1Double => {
                     let chip = Rc::new(RefCell::new(EcDoubleChip::new(
                         execution_bus,
                         program_bus,
@@ -396,6 +395,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let prev_trace_cells = self.current_trace_cells();
 
             // runtime only instruction handling
+            // FIXME: assumes CoreOpcode has offset 0:
             if opcode == CoreOpcode::FAIL as usize {
                 if let Some(mut backtrace) = prev_backtrace {
                     backtrace.resolve();
@@ -405,8 +405,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 return Err(ExecutionError::Fail(pc_usize));
             }
-
-            // runtime only instruction handling
             if opcode == CoreOpcode::CT_START as usize {
                 self.update_chip_metrics();
                 self.cycle_tracker

@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, iter::zip};
 
 use afs_primitives::{utils, var_range::bus::VariableRangeCheckerBus, xor::bus::XorBus};
 use afs_stark_backend::{
@@ -167,11 +167,9 @@ impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BIT
                 );
         }
 
-        let expected_opcode = flags
-            .iter()
-            .zip(U256Opcode::shift_opcodes())
+        let expected_opcode = zip(flags, U256Opcode::shift_opcodes())
             .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+                acc + flag * AB::Expr::from_canonical_u8(opcode as u8)
             });
 
         self.eval_interactions(builder, io, aux, expected_opcode);
