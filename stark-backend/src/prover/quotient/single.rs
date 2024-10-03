@@ -11,7 +11,7 @@ use tracing::instrument;
 
 use crate::{
     air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicConstraints},
-    rap::Rap,
+    rap::{PartitionedBaseAir, Rap},
 };
 
 // Starting reference: p3_uni_stark::prover::quotient_values
@@ -39,7 +39,7 @@ pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
 ) -> Vec<SC::Challenge>
 where
     // TODO: avoid ?Sized to prevent dynamic dispatching because `eval` is called many many times
-    R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + Sync + ?Sized,
+    R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + PartitionedBaseAir<Val<SC>> + Sync + ?Sized,
     SC: StarkGenericConfig,
     Mat: Matrix<Val<SC>> + Sync,
 {
@@ -160,6 +160,7 @@ where
                 symbolic_interactions: &symbolic_constraints.interactions,
                 interactions: vec![],
                 interaction_chunk_size,
+                has_common_main: rap.common_main_width() > 0,
             };
             rap.eval(&mut folder);
 

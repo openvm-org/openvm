@@ -6,7 +6,7 @@ use std::{
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_sdk::{
-    config::baby_bear_poseidon2::run_simple_test_no_pis,
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -15,7 +15,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
 use crate::{
-    cpu::RANGE_CHECKER_BUS,
+    core::RANGE_CHECKER_BUS,
     memory::{audit::MemoryAuditChip, manager::TimestampedValue, offline_checker::MemoryBus},
 };
 
@@ -65,8 +65,8 @@ fn audit_air_test() {
 
     let diff_height = num_addresses.next_power_of_two() - num_addresses;
 
-    let init_memory_dummy_air = DummyInteractionAir::new(4, false, MEMORY_BUS);
-    let final_memory_dummy_air = DummyInteractionAir::new(4, true, MEMORY_BUS);
+    let init_memory_dummy_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
+    let final_memory_dummy_air = DummyInteractionAir::new(5, true, MEMORY_BUS);
 
     let init_memory_trace = RowMajorMatrix::new(
         distinct_addresses
@@ -76,11 +76,12 @@ fn audit_air_test() {
                     .into_iter()
                     .chain(iter::once(Val::zero()))
                     .chain(iter::once(Val::zero()))
+                    .chain(iter::once(Val::one()))
                     .collect::<Vec<_>>()
             })
-            .chain(iter::repeat(Val::zero()).take(5 * diff_height))
+            .chain(iter::repeat(Val::zero()).take(6 * diff_height))
             .collect(),
-        5,
+        6,
     );
 
     let final_memory_trace = RowMajorMatrix::new(
@@ -93,22 +94,23 @@ fn audit_air_test() {
                     .into_iter()
                     .chain(iter::once(timestamped_value.value))
                     .chain(iter::once(timestamped_value.timestamp))
+                    .chain(iter::once(Val::one()))
                     .collect::<Vec<_>>()
             })
-            .chain(iter::repeat(Val::zero()).take(5 * diff_height))
+            .chain(iter::repeat(Val::zero()).take(6 * diff_height))
             .collect(),
-        5,
+        6,
     );
 
     let audit_trace = audit_chip.generate_trace(&final_memory);
     let range_checker_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![
             &audit_chip.air,
             &range_checker.air,
             &init_memory_dummy_air,
-            &final_memory_dummy_air,
+            &final_memory_dummy_air
         ],
         vec![
             audit_trace,

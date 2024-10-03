@@ -1,5 +1,9 @@
 use afs_primitives::sub_chip::{AirConfig, SubAir};
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -10,6 +14,15 @@ use super::{
 };
 use crate::{common::page_cols::PageCols, indexed_output_page_air::columns::IndexedOutputPageCols};
 
+impl<F: Field> BaseAirWithPublicValues<F> for IndexedPageWriteAir {}
+impl<F: Field> PartitionedBaseAir<F> for IndexedPageWriteAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.page_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.aux_width()
+    }
+}
 impl<F: Field> BaseAir<F> for IndexedPageWriteAir {
     fn width(&self) -> usize {
         self.air_width()
@@ -27,13 +40,13 @@ where
     fn eval(&self, builder: &mut AB) {
         let io = [0, 1].map(|i| {
             PageCols::from_slice(
-                &builder.partitioned_main()[0].row_slice(i),
+                &builder.cached_mains()[0].row_slice(i),
                 self.final_air.idx_len,
                 self.final_air.data_len,
             )
         });
         let aux = [0, 1].map(|i| {
-            IndexedPageWriteAuxCols::from_slice(&builder.partitioned_main()[1].row_slice(i), self)
+            IndexedPageWriteAuxCols::from_slice(&builder.common_main().row_slice(i), self)
         });
         // Making sure the page is in the proper format
         SubAir::eval(self, builder, io, aux);

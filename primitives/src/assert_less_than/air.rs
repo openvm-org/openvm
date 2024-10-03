@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -80,6 +83,8 @@ impl<const AUX_LEN: usize> AirConfig for AssertLessThanAir<AUX_LEN> {
     type Cols<T> = AssertLessThanCols<T, AUX_LEN>;
 }
 
+impl<F: Field, const AUX_LEN: usize> BaseAirWithPublicValues<F> for AssertLessThanAir<AUX_LEN> {}
+impl<F: Field, const AUX_LEN: usize> PartitionedBaseAir<F> for AssertLessThanAir<AUX_LEN> {}
 impl<F: Field, const AUX_LEN: usize> BaseAir<F> for AssertLessThanAir<AUX_LEN> {
     fn width(&self) -> usize {
         AssertLessThanCols::<F, AUX_LEN>::width()

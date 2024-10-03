@@ -6,13 +6,16 @@ use afs_primitives::{
     utils::{implies, or},
     var_range::bus::VariableRangeCheckerBus,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::columns::AuditCols;
-use crate::{cpu::RANGE_CHECKER_BUS, memory::offline_checker::MemoryBus};
+use crate::{core::RANGE_CHECKER_BUS, memory::offline_checker::MemoryBus};
 
 #[derive(Clone, Debug)]
 pub struct MemoryAuditAir {
@@ -45,6 +48,8 @@ impl MemoryAuditAir {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for MemoryAuditAir {}
+impl<F: Field> PartitionedBaseAir<F> for MemoryAuditAir {}
 impl<F: Field> BaseAir<F> for MemoryAuditAir {
     fn width(&self) -> usize {
         self.air_width()

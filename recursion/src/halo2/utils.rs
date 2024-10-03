@@ -1,7 +1,11 @@
-use std::sync::Arc;
+use std::{cmp::Reverse, sync::Arc};
 
+use afs_stark_backend::rap::AnyRap;
+use itertools::{izip, multiunzip, Itertools};
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_uni_stark::{StarkGenericConfig, Val};
 use rand::{prelude::StdRng, SeedableRng};
 use snark_verifier_sdk::{
     halo2::{PoseidonTranscript, POSEIDON_SPEC},
@@ -87,4 +91,23 @@ pub(crate) fn read_params(k: u32) -> Arc<ParamsKZG<Bn256>> {
     } else {
         Arc::new(read_params_impl(k))
     }
+}
+
+/// Sort AIRs by their trace height in descending order. This should not be used outside
+/// static-verifier because a dynamic verifier should support any AIR order.
+/// This is related to an implementation detail of FieldMerkleTreeMMCS which is used in most configs.
+/// Reference: https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53
+#[allow(clippy::type_complexity)]
+pub fn sort_chips<SC: StarkGenericConfig>(
+    chips: Vec<&dyn AnyRap<SC>>,
+    traces: Vec<RowMajorMatrix<Val<SC>>>,
+    pvs: Vec<Vec<Val<SC>>>,
+) -> (
+    Vec<&dyn AnyRap<SC>>,
+    Vec<RowMajorMatrix<Val<SC>>>,
+    Vec<Vec<Val<SC>>>,
+) {
+    let mut groups = izip!(chips, traces, pvs).collect_vec();
+    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
+    multiunzip(groups)
 }

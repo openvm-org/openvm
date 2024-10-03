@@ -281,7 +281,6 @@ where
         &'a self,
         keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
         page_width: usize,
-        idx_len: usize,
     ) {
         let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
         let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
@@ -291,23 +290,21 @@ where
 
         keygen_builder.add_partitioned_air(
             &self.input_chip.air,
-            idx_len,
             vec![input_page_ptr, input_page_aux_ptr],
         );
 
         keygen_builder.add_partitioned_air(
             &self.output_chip.air,
-            0,
             vec![output_page_ptr, output_page_aux_ptr],
         );
 
-        keygen_builder.add_partitioned_air(&self.range_checker.air, 0, vec![range_checker_ptr]);
+        keygen_builder.add_partitioned_air(&self.range_checker.air, vec![range_checker_ptr]);
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn prove(
         &mut self,
-        engine: &dyn StarkEngine<SC>,
+        engine: &impl StarkEngine<SC>,
         pk: &MultiStarkProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
         input_prover_data: Arc<ProverTraceData<SC>>,
@@ -384,26 +381,16 @@ where
     /// This function takes a proof (returned by the prove function) and verifies it
     pub fn verify(
         &self,
-        engine: &dyn StarkEngine<SC>,
+        engine: &impl StarkEngine<SC>,
         vk: MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
-        x: Vec<u32>,
     ) -> Result<(), VerificationError>
     where
         Val<SC>: PrimeField,
     {
         let verifier = engine.verifier();
-
-        let pis = vec![
-            x.iter()
-                .map(|x| Val::<SC>::from_canonical_u32(*x))
-                .collect(),
-            vec![],
-            vec![],
-        ];
-
         let mut challenger = engine.new_challenger();
-        verifier.verify(&mut challenger, &vk, proof, &pis)
+        verifier.verify(&mut challenger, &vk, proof)
     }
 
     #[allow(clippy::too_many_arguments)]

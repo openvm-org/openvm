@@ -1,7 +1,10 @@
 use std::borrow::Borrow;
 
 use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use derive_new::new;
 use itertools::izip;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -11,7 +14,7 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{
-    arch::bus::ExecutionBus,
+    arch::ExecutionBridge,
     memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
@@ -22,7 +25,7 @@ use crate::{
 #[derive(Clone, new, Debug)]
 pub struct Poseidon2VmAir<T> {
     pub inner: Poseidon2Air<WIDTH, T>,
-    pub execution_bus: ExecutionBus,
+    pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub direct: bool, // Whether direct interactions are enabled.
 }
@@ -31,6 +34,8 @@ impl<F> AirConfig for Poseidon2VmAir<F> {
     type Cols<T> = Poseidon2VmCols<T>;
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for Poseidon2VmAir<F> {}
+impl<F: Field> PartitionedBaseAir<F> for Poseidon2VmAir<F> {}
 impl<F: Field> BaseAir<F> for Poseidon2VmAir<F> {
     fn width(&self) -> usize {
         Poseidon2VmCols::<F>::width(self)
@@ -47,8 +52,11 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
         let cols = Poseidon2VmCols::<AB::Var>::from_slice(local, self);
         let internal_io = cols.aux.internal.io;
 
-        self.inner
-            .eval_without_interactions(builder, cols.aux.internal.io, cols.aux.internal.aux);
+        self.inner.eval_without_interactions(
+            builder,
+            cols.aux.internal.io,
+            cols.aux.internal.aux.into_expr::<AB>(),
+        );
 
         // boolean constraints for alloc/cmp markers
         // these constraints hold for current trace generation mechanism but are in actuality not necessary

@@ -1,5 +1,8 @@
+use std::cmp::Reverse;
+
 use afs_compiler::ir::{
-    Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE,
+    Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE, LIMB_SIZE,
+    NUM_LIMBS,
 };
 use afs_stark_backend::{
     keygen::types::TraceWidth,
@@ -13,6 +16,7 @@ use ax_ecc_lib::types::{
     ECPointVariable,
 };
 use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
@@ -21,7 +25,7 @@ use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFr
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use stark_vm::modular_arithmetic::{big_uint_to_num_limbs, LIMB_SIZE, NUM_LIMBS};
+use stark_vm::modular_addsub::big_uint_to_num_limbs;
 
 use crate::types::{
     AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, OpenedValuesVariable,
@@ -151,6 +155,7 @@ impl Hintable<InnerConfig> for VerifierInput<BabyBearPoseidon2Config> {
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let proof = Proof::<BabyBearPoseidon2Config>::read(builder);
+
         let raw_log_degree_per_air = Vec::<usize>::read(builder);
         // A hacky way to cast ptr.
         let log_degree_per_air = if let Array::Dyn(ptr, len) = raw_log_degree_per_air {
@@ -158,21 +163,32 @@ impl Hintable<InnerConfig> for VerifierInput<BabyBearPoseidon2Config> {
         } else {
             unreachable!();
         };
-        let public_values = Vec::<Vec<InnerVal>>::read(builder);
+
+        let raw_air_perm_by_height = Vec::<usize>::read(builder);
+        // A hacky way to transmute from Array of Var to Array of Usize.
+        let air_perm_by_height = if let Array::Dyn(ptr, len) = raw_air_perm_by_height {
+            Array::Dyn(ptr, len)
+        } else {
+            unreachable!();
+        };
 
         VerifierInputVariable {
             proof,
             log_degree_per_air,
-            public_values,
+            air_perm_by_height,
         }
     }
 
     fn write(&self) -> Vec<Vec<InnerVal>> {
         let mut stream = Vec::new();
+        // Explict enforce consistency when matrixs have the same height.
+        let air_perm_by_height: Vec<_> = (0..self.log_degree_per_air.len())
+            .sorted_by_key(|i| Reverse(self.log_degree_per_air[*i]))
+            .collect();
 
         stream.extend(self.proof.write());
         stream.extend(self.log_degree_per_air.write());
-        stream.extend(self.public_values.write());
+        stream.extend(air_perm_by_height.write());
 
         stream
     }
@@ -270,12 +286,14 @@ impl Hintable<InnerConfig> for TraceWidth {
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let preprocessed = Vec::<usize>::read(builder);
-        let partitioned_main = Vec::<usize>::read(builder);
+        let cached_mains = Vec::<usize>::read(builder);
+        let common_main = usize::read(builder);
         let after_challenge = Vec::<usize>::read(builder);
 
         TraceWidthVariable {
             preprocessed,
-            partitioned_main,
+            cached_mains,
+            common_main,
             after_challenge,
         }
     }
@@ -284,7 +302,8 @@ impl Hintable<InnerConfig> for TraceWidth {
         let mut stream = Vec::new();
 
         stream.extend(self.preprocessed.into_iter().collect::<Vec<_>>().write());
-        stream.extend(self.partitioned_main.write());
+        stream.extend(self.cached_mains.write());
+        stream.extend(<usize as Hintable<InnerConfig>>::write(&self.common_main));
         stream.extend(self.after_challenge.write());
 
         stream
@@ -298,11 +317,13 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
         let commitments = Commitments::<BabyBearPoseidon2Config>::read(builder);
         let opening = OpeningProof::<BabyBearPoseidon2Config>::read(builder);
         let exposed_values_after_challenge = Vec::<Vec<Vec<InnerChallenge>>>::read(builder);
+        let public_values = Vec::<Vec<InnerVal>>::read(builder);
 
         StarkProofVariable {
             commitments,
             opening,
             exposed_values_after_challenge,
+            public_values,
         }
     }
 
@@ -312,6 +333,7 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
         stream.extend(self.commitments.write());
         stream.extend(self.opening.write());
         stream.extend(self.exposed_values_after_challenge.write());
+        stream.extend(self.public_values.write());
 
         stream
     }
@@ -438,17 +460,22 @@ impl Hintable<InnerConfig> for BigUint {
 impl Hintable<InnerConfig> for ECPoint {
     type HintVariable = ECPointVariable<InnerConfig>;
 
+    // FIXME: should depend on curve for coordinate bits
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let x = BigUint::read(builder);
-        let y = BigUint::read(builder);
+        let ret = builder.array(2 * NUM_LIMBS);
+        for i in 0..2 * NUM_LIMBS {
+            // FIXME: range check for each element.
+            let v = builder.hint_var();
+            builder.set_value(&ret, i, v);
+        }
         // ECPointVariable::`new` checks if the point is on the curve.
-        ECPointVariable { x, y }
+        ECPointVariable { affine: ret }
     }
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        let mut ret: Vec<Vec<<InnerConfig as Config>::N>> = self.x.write();
-        ret.extend(self.y.write());
-        ret
+        let x = self.x.write().pop().unwrap();
+        let y = self.y.write().pop().unwrap();
+        vec![[x, y].concat()]
     }
 }
 

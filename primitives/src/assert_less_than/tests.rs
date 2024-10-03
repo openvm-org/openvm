@@ -1,7 +1,9 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::DenseMatrix;
@@ -42,8 +44,8 @@ fn test_assert_less_than_chip_lt() {
     let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![&chip.air, &chip.range_checker.air],
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![&chip.air, &chip.range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -62,8 +64,8 @@ fn test_lt_chip_decomp_does_not_divide() {
     let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![&chip.air, &chip.range_checker.air],
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![&chip.air, &chip.range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -89,11 +91,12 @@ fn test_assert_less_than_negative_1() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(
-            vec![&chip.air, &chip.range_checker.air],
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&chip.air, &chip.range_checker.air],
             vec![trace, range_trace],
-        ),
-        Err(VerificationError::OodEvaluationMismatch),
+        )
+        .err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
 }
@@ -117,11 +120,12 @@ fn test_assert_less_than_negative_2() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(
-            vec![&chip.air, &chip.range_checker.air],
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&chip.air, &chip.range_checker.air],
             vec![trace, range_trace],
-        ),
-        Err(VerificationError::OodEvaluationMismatch),
+        )
+        .err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
 }

@@ -1,10 +1,23 @@
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::{columns::TableCols, InitialTableAir};
 
+impl<F: Field> BaseAirWithPublicValues<F> for InitialTableAir {}
+impl<F: Field> PartitionedBaseAir<F> for InitialTableAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.table_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.aux_width()
+    }
+}
 impl<F: Field> BaseAir<F> for InitialTableAir {
     fn width(&self) -> usize {
         self.air_width()
@@ -13,8 +26,8 @@ impl<F: Field> BaseAir<F> for InitialTableAir {
 
 impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for InitialTableAir {
     fn eval(&self, builder: &mut AB) {
-        let page: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
-        let aux: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let page: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
+        let aux: &<AB as AirBuilder>::M = builder.common_main();
 
         let table_local = TableCols::from_partitioned_slice(
             &page.row_slice(0),

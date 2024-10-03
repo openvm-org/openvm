@@ -9,6 +9,9 @@ use super::{
     MerkleProofAir,
 };
 
+impl<F, const DEPTH: usize, const DIGEST_WIDTH: usize> PartitionedBaseAir<F>
+    for MerkleProofAir<DEPTH, DIGEST_WIDTH>
+{ }
 impl<F, const DEPTH: usize, const DIGEST_WIDTH: usize> BaseAir<F>
     for MerkleProofAir<DEPTH, DIGEST_WIDTH>
 {

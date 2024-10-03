@@ -1,13 +1,10 @@
 #[cfg(test)]
 use std::fs::create_dir_all;
 
-use ax_sdk::config::FriParameters;
+use ax_sdk::config::fri_params::standard_fri_params_with_100_bits_conjectured_security;
 #[allow(unused_imports)]
 use ax_sdk::{
-    config::{
-        fri_params::{fri_params_with_100_bits_of_security, fri_params_with_80_bits_of_security},
-        EngineType,
-    },
+    config::EngineType,
     page_config::{
         MultitierPageConfig, MultitierPageParamsConfig, PageConfig, PageMode, PageParamsConfig,
         StarkEngineConfig, TreeParamsConfig,
@@ -34,13 +31,7 @@ pub fn get_multitier_configs(config_folder: Option<String>) -> Vec<MultitierPage
 }
 
 pub fn generate_configs() -> Vec<PageConfig> {
-    let fri_params_vec = vec![
-        // fri_params_with_80_bits_of_security()[0],
-        // fri_params_with_80_bits_of_security()[1],
-        fri_params_with_80_bits_of_security()[2],
-        // fri_params_with_100_bits_of_security()[0],
-        // fri_params_with_100_bits_of_security()[1],
-    ];
+    let fri_params_vec = vec![standard_fri_params_with_100_bits_conjectured_security(1)];
     let idx_bytes_vec = vec![32];
     let data_bytes_vec = vec![32, 256, 1024];
 
@@ -90,14 +81,9 @@ pub fn generate_configs() -> Vec<PageConfig> {
 }
 
 pub fn generate_multitier_configs() -> Vec<MultitierPageConfig> {
-    let fri_params_vec = vec![
-        fri_params_with_80_bits_of_security(),
-        fri_params_with_100_bits_of_security(),
-    ];
-    let fri_params_vec = fri_params_vec
-        .into_iter()
-        .flatten()
-        .collect::<Vec<FriParameters>>();
+    let fri_params_vec = [1, 2, 3, 4]
+        .map(standard_fri_params_with_100_bits_conjectured_security)
+        .to_vec();
     let idx_bytes_vec = vec![16, 32];
     let data_bytes_vec = vec![16, 32];
     // let idx_bytes_vec = vec![32];

@@ -32,20 +32,21 @@ pub const PROOF_MAX_NUM_PVS: usize = 240;
 pub struct VerifierInput<SC: StarkGenericConfig> {
     pub proof: Proof<SC>,
     pub log_degree_per_air: Vec<usize>,
-    pub public_values: Vec<Vec<Val<SC>>>,
 }
 
 #[derive(DslVariable, Clone)]
 pub struct VerifierInputVariable<C: Config> {
     pub proof: StarkProofVariable<C>,
     pub log_degree_per_air: Array<C, Usize<C::N>>,
-    pub public_values: Array<C, Array<C, Felt<C::F>>>,
+    /// A permutation of AIR indexes which are sorted by log_degree in descending order.
+    pub air_perm_by_height: Array<C, Usize<C::N>>,
 }
 
 #[derive(DslVariable, Clone)]
 pub struct TraceWidthVariable<C: Config> {
     pub preprocessed: Array<C, Var<C::N>>,
-    pub partitioned_main: Array<C, Var<C::N>>,
+    pub cached_mains: Array<C, Var<C::N>>,
+    pub common_main: Var<C::N>,
     pub after_challenge: Array<C, Var<C::N>>,
 }
 
@@ -62,6 +63,7 @@ pub struct StarkProofVariable<C: Config> {
     pub opening: OpeningProofVariable<C>,
     #[allow(clippy::type_complexity)]
     pub exposed_values_after_challenge: Array<C, Array<C, Array<C, Ext<C::F, C::EF>>>>,
+    pub public_values: Array<C, Array<C, Felt<C::F>>>,
 }
 
 #[derive(DslVariable, Clone)]

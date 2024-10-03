@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
 use afs_primitives::range_tuple::{bus::RangeTupleCheckerBus, RangeTupleCheckerChip};
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -10,8 +10,13 @@ use rand::{rngs::StdRng, Rng};
 
 use super::{columns::UintMultiplicationCols, solve_uint_multiplication, UintMultiplicationChip};
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
-    cpu::{trace::Instruction, RANGE_TUPLE_CHECKER_BUS},
+    arch::{
+        instructions::Opcode,
+        testing::{memory::gen_pointer, MachineChipTestBuilder},
+        MachineChip,
+    },
+    core::RANGE_TUPLE_CHECKER_BUS,
+    program::Instruction,
 };
 
 type F = BabyBear;
@@ -32,17 +37,16 @@ fn run_uint_multiplication_rand_write_execute<const NUM_LIMBS: usize, const LIMB
     rng: &mut StdRng,
 ) {
     let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 29;
 
     let d = rng.gen_range(address_space_range());
     let e = rng.gen_range(address_space_range());
 
-    let x_address = rng.gen_range(address_range());
-    let y_address = rng.gen_range(address_range());
-    let z_address = rng.gen_range(address_range());
-    let x_ptr_to_address = rng.gen_range(address_range());
-    let y_ptr_to_address = rng.gen_range(address_range());
-    let z_ptr_to_address = rng.gen_range(address_range());
+    let x_address = gen_pointer(rng, 64);
+    let y_address = gen_pointer(rng, 64);
+    let z_address = gen_pointer(rng, 64);
+    let x_ptr_to_address = gen_pointer(rng, 1);
+    let y_ptr_to_address = gen_pointer(rng, 1);
+    let z_ptr_to_address = gen_pointer(rng, 1);
 
     let x_f = x
         .clone()
@@ -91,6 +95,7 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
         range_tuple_chip.clone(),
     );
@@ -98,12 +103,11 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
     let mut rng = create_seeded_rng();
     run_uint_multiplication_rand_write_execute(&mut tester, &mut chip, x, y, &mut rng);
 
-    let mult_air = chip.air.clone();
-    let mult_trace = chip.generate_trace();
-
+    let mult_trace = chip.clone().generate_trace();
     let mut mult_trace_vec = mult_trace.row_slice(0).to_vec();
     let mult_trace_cols: &mut UintMultiplicationCols<F, NUM_LIMBS, LIMB_BITS> =
         (*mult_trace_vec).borrow_mut();
+
     mult_trace_cols.io.z.data = array::from_fn(|i| F::from_canonical_u32(z[i]));
     mult_trace_cols.aux.carry = array::from_fn(|i| F::from_canonical_u32(carry[i]));
     let mult_trace: p3_matrix::dense::DenseMatrix<BabyBear> = RowMajorMatrix::new(
@@ -111,20 +115,18 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
         UintMultiplicationCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
     );
 
-    let range_air = range_tuple_chip.air.clone();
-    let range_trace = range_tuple_chip.generate_trace();
-
     disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_with_custom_trace(chip, mult_trace)
+        .load(range_tuple_chip)
+        .finalize();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
         &expected_error
     );
-    assert_eq!(
-        run_simple_test_no_pis(vec![&mult_air, &range_air], vec![mult_trace, range_trace],),
-        Err(expected_error),
-        "{}",
-        msg
-    );
+    let result = tester.simple_test();
+    assert_eq!(result.err(), Some(expected_error), "{}", msg);
 }
 
 #[test]
@@ -142,6 +144,7 @@ fn uint_multiplication_rand_air_test() {
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
+        tester.program_bus(),
         tester.memory_chip(),
         range_tuple_chip.clone(),
     );
@@ -217,25 +220,26 @@ fn negative_uint_multiplication_out_of_range_z_test() {
 fn negative_uint_multiplication_out_of_range_carry_test() {
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
-    // x = 00...000[2^8] (out of range)
-    // y = 00...000[2^8] (out of range)
-    // z = 00...0100
-    // carry = 00...001[2^8] (out of range)
+    // x = 00...000[2^12] (out of range)
+    // y = 00...000[2^12] (out of range)
+    // z = 00...1000
+    // carry = 00...01[2^8][2^16] (out of range)
     run_negative_uint_multiplication_test::<NUM_LIMBS, LIMB_BITS>(
-        iter::once(1 << LIMB_BITS)
+        iter::once(1 << (LIMB_BITS + (LIMB_BITS / 2)))
             .chain(iter::repeat(0).take(31))
             .collect(),
-        iter::once(1 << LIMB_BITS)
+        iter::once(1 << (LIMB_BITS + (LIMB_BITS / 2)))
             .chain(iter::repeat(0).take(31))
             .collect(),
         iter::repeat(0)
-            .take(2)
+            .take(3)
+            .chain(iter::once(1))
+            .chain(iter::repeat(0).take(28))
+            .collect(),
+        iter::once(1 << (2 * LIMB_BITS))
+            .chain(iter::once(1 << LIMB_BITS))
             .chain(iter::once(1))
             .chain(iter::repeat(0).take(29))
-            .collect(),
-        iter::once(1 << LIMB_BITS)
-            .chain(iter::once(1))
-            .chain(iter::repeat(0).take(30))
             .collect(),
         VerificationError::NonZeroCumulativeSum,
     );

@@ -6,10 +6,7 @@ use super::{
     air::UintMultiplicationAir,
     columns::{UintMultiplicationAuxCols, UintMultiplicationIoCols},
 };
-use crate::{
-    arch::{columns::InstructionCols, instructions::Opcode},
-    memory::MemoryAddress,
-};
+use crate::{arch::instructions::Opcode, memory::MemoryAddress};
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_LIMBS, LIMB_BITS> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -71,12 +68,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
             )
             .eval(builder, aux.is_valid);
 
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.is_valid,
-            io.from_state.map(Into::into),
-            AB::F::from_canonical_usize(timestamp_delta),
-            InstructionCols::new(
+        self.execution_bridge
+            .execute_and_increment_pc(
                 AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
                 [
                     io.z.ptr_to_address,
@@ -85,8 +78,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
                     io.ptr_as,
                     io.address_as,
                 ],
-            ),
-        );
+                io.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, aux.is_valid);
 
         for (z, carry) in io.z.data.iter().zip(aux.carry.iter()) {
             self.bus.send(vec![*z, *carry]).eval(builder, aux.is_valid);

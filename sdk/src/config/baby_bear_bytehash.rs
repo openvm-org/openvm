@@ -8,8 +8,8 @@ use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_symmetric::{CompressionFunctionFromHasher, CryptographicHasher, SerializingHasher32};
 use p3_uni_stark::StarkConfig;
 
-use super::{fri_params::default_fri_params, FriParameters};
-use crate::engine::StarkEngine;
+use super::FriParameters;
+use crate::engine::{StarkEngine, StarkFriEngine};
 
 type Val = BabyBear;
 type Challenge = BinomialExtensionField<Val, 4>;
@@ -55,7 +55,7 @@ pub fn default_engine<H>(pcs_log_degree: usize, byte_hash: H) -> BabyBearByteHas
 where
     H: CryptographicHasher<u8, [u8; 32]> + Clone,
 {
-    let fri_params = default_fri_params();
+    let fri_params = FriParameters::standard_fast();
     engine_from_byte_hash(byte_hash, pcs_log_degree, fri_params)
 }
 
@@ -96,4 +96,24 @@ where
     };
     let pcs = Pcs::new(pcs_log_degree, dft, val_mmcs, fri_config);
     BabyBearByteHashConfig::new(pcs)
+}
+
+pub trait BabyBearByteHashEngineWithDefaultHash<H>
+where
+    H: CryptographicHasher<u8, [u8; 32]> + Clone,
+{
+    fn default_hash() -> H;
+}
+
+impl<H: CryptographicHasher<u8, [u8; 32]> + Clone + Send + Sync>
+    StarkFriEngine<BabyBearByteHashConfig<H>> for BabyBearByteHashEngine<H>
+where
+    BabyBearByteHashEngine<H>: BabyBearByteHashEngineWithDefaultHash<H>,
+{
+    fn new(fri_params: FriParameters) -> Self {
+        engine_from_byte_hash(Self::default_hash(), 27, fri_params)
+    }
+    fn fri_params(&self) -> FriParameters {
+        self.fri_params
+    }
 }

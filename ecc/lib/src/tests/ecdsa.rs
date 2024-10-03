@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use afs_compiler::{asm::AsmBuilder, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, util::execute_program};
 use k256::{
     ecdsa::{hazmat::DigestPrimitive, signature::Signer, Signature, SigningKey, VerifyingKey},
     sha2::digest::FixedOutput,
@@ -12,12 +12,10 @@ use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{rngs::StdRng, SeedableRng};
 use sha3::Digest;
 
+use super::SECP256K1_COORD_BITS;
 use crate::{
     ecdsa::verify_ecdsa_secp256k1,
-    types::{
-        ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
-        ECPointVariable,
-    },
+    types::{ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint},
 };
 
 type F = BabyBear;
@@ -25,7 +23,10 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 fn run_test_program(test_program: impl FnOnce(&mut AsmBuilder<F, EF>)) {
     let mut builder = AsmBuilder::<F, EF>::bigint_builder();
     test_program(&mut builder);
-    let program = builder.compile_isa();
+    let program = builder.compile_isa_with_options(CompilerOptions {
+        word_size: 64,
+        ..Default::default()
+    });
     execute_program(program, vec![]);
 }
 
@@ -38,10 +39,7 @@ fn test_verify_single_ecdsa(input: ECDSAInput) {
         } = input;
 
         let input_var = ECDSAInputVariable {
-            pubkey: ECPointVariable {
-                x: builder.eval_biguint(pubkey.x),
-                y: builder.eval_biguint(pubkey.y),
-            },
+            pubkey: pubkey.load_const(builder, SECP256K1_COORD_BITS),
             sig: ECDSASignatureVariable {
                 r: builder.eval_biguint(sig.r),
                 s: builder.eval_biguint(sig.s),
@@ -98,36 +96,35 @@ fn test_ecdsa_verify_negative() {
 fn test_ec_point_verify() {
     run_test_program(move |builder: &mut AsmBuilder<F, EF>| {
         // Point on curve.
-        let point1 = ECPointVariable {
-            x: builder.eval_biguint(
-                BigUint::from_str(
-                    "55066263022277343669578718895168534326250603453777594175500187360389116729240",
-                )
-                .unwrap(),
-            ),
-            y: builder.eval_biguint(
-                BigUint::from_str(
-                    "32670510020758816978083085130507043184471273380659243275938904335757337482424",
-                )
-                .unwrap(),
-            ),
-        };
+        let point1 = ECPoint {
+            x: BigUint::from_str(
+                "55066263022277343669578718895168534326250603453777594175500187360389116729240",
+            )
+            .unwrap(),
+            y: BigUint::from_str(
+                "32670510020758816978083085130507043184471273380659243275938904335757337482424",
+            )
+            .unwrap(),
+        }
+        .load_const(builder, SECP256K1_COORD_BITS);
         let point1_valid = point1.is_valid(builder);
         builder.assert_var_eq(point1_valid, F::one());
 
         // Point (2,1) not on curve.
-        let point2 = ECPointVariable {
-            x: builder.eval_biguint(BigUint::from_str("2").unwrap()),
-            y: builder.eval_biguint(BigUint::from_str("1").unwrap()),
-        };
+        let point2 = ECPoint {
+            x: BigUint::from_str("2").unwrap(),
+            y: BigUint::from_str("1").unwrap(),
+        }
+        .load_const(builder, SECP256K1_COORD_BITS);
         let point2_valid = point2.is_valid(builder);
         builder.assert_var_eq(point2_valid, F::zero());
 
         // Identity point is valid.
-        let point3 = ECPointVariable {
-            x: builder.eval_biguint(BigUint::from_str("0").unwrap()),
-            y: builder.eval_biguint(BigUint::from_str("0").unwrap()),
-        };
+        let point3 = ECPoint {
+            x: BigUint::from_str("0").unwrap(),
+            y: BigUint::from_str("0").unwrap(),
+        }
+        .load_const(builder, SECP256K1_COORD_BITS);
         let point3_valid = point3.is_valid(builder);
         builder.assert_var_eq(point3_valid, F::one());
         builder.halt();

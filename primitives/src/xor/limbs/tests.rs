@@ -2,7 +2,7 @@ use std::iter;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
-    config::baby_bear_blake3::run_simple_test_no_pis,
+    any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -82,7 +82,8 @@ fn test_xor_limbs_chip() {
         .chain(iter::once(xor_lookup_chip_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+        .expect("Verification failed");
 }
 
 #[test]
@@ -139,14 +140,13 @@ fn negative_test_xor_limbs_chip() {
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
-    let result = run_simple_test_no_pis(
-        vec![&requester, &xor_chip.air, &xor_chip.xor_lookup_chip.air],
+    let result = BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&requester, &xor_chip.air, &xor_chip.xor_lookup_chip.air],
         vec![requester_trace, xor_limbs_chip_trace, xor_lookup_chip_trace],
     );
-
     assert_eq!(
-        result,
-        Err(VerificationError::NonZeroCumulativeSum),
+        result.err(),
+        Some(VerificationError::NonZeroCumulativeSum),
         "Expected verification to fail, but it passed"
     );
 }

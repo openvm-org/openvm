@@ -26,7 +26,6 @@ use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::Pcs;
 use p3_field::{AbstractExtensionField, PrimeField};
 use p3_matrix::{dense::DenseMatrix, Matrix};
-use p3_maybe_rayon::prelude::ParallelIterator;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use pprof::criterion::{Output, PProfProfiler}; // Add this line
 

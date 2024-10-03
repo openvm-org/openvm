@@ -5,7 +5,7 @@ use num_traits::FromPrimitive;
 use p3_field::PrimeField64;
 
 use super::{
-    air::{EcAddUnequalAir, EccDoubleAir},
+    air::{EcAddUnequalAir, EcDoubleAir},
     columns::{EcAddCols, EcAddIoCols, EcAuxCols, EcDoubleCols, EcDoubleIoCols},
     utils::*,
     EcModularConfig, EcPoint,
@@ -13,7 +13,8 @@ use super::{
 use crate::{
     bigint::{
         check_carry_mod_to_zero::CheckCarryModToZeroCols,
-        check_carry_to_zero::get_carry_max_abs_and_bits, utils::big_uint_mod_inverse,
+        check_carry_to_zero::get_carry_max_abs_and_bits,
+        utils::{big_uint_mod_inverse, vec_isize_to_f},
     },
     sub_chip::LocalTraceInstructions,
     var_range::VariableRangeCheckerChip,
@@ -106,7 +107,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for EcAddUnequalAir {
     }
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for EccDoubleAir {
+impl<F: PrimeField64> LocalTraceInstructions<F> for EcDoubleAir {
     type LocalInput = ((BigUint, BigUint), Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {

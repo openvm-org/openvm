@@ -38,8 +38,8 @@ pub enum DslIr<C: Config> {
     AddSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Add two modular BigInts over scalar field.
     AddSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Add two u256
-    AddU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Add two 256-bit integers
+    Add256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Subtractions.
     /// Subtracts two variables (var = var - var).
@@ -68,8 +68,8 @@ pub enum DslIr<C: Config> {
     SubSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Subtracts two modular BigInts over scalar field.
     SubSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Subtract two u256
-    SubU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Subtract two 256-bit integers
+    Sub256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Multiplications.
     /// Multiplies two variables (var = var * var).
@@ -92,8 +92,8 @@ pub enum DslIr<C: Config> {
     MulSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Multiplies two modular BigInts over scalar field.
     MulSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Multiply two u256
-    MulU256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Multiply two 256-bit integers
+    Mul256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Divisions.
     /// Divides two variables (var = var / var).
@@ -132,8 +132,27 @@ pub enum DslIr<C: Config> {
     LessThanVI(Var<C::N>, Var<C::N>, C::N),
     /// Compare two u256 for <
     LessThanU256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
-    /// Compare two u256 for ==
-    EqualToU256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
+    /// Compare two 256-bit integers for ==
+    EqualTo256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
+    /// Compare two signed 256-bit integers for <
+    LessThanI256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
+
+    // Bitwise operations.
+    /// Bitwise XOR on two 256-bit integers
+    Xor256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Bitwise AND on two 256-bit integers
+    And256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Bitwise OR on two 256-bit integers
+    Or256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+
+    // Shifts.
+    /// Shift left on 256-bit integers
+    ShiftLeft256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Shift right logical on 256-bit integers
+    ShiftRightLogic256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Shift right arithmetic on 256-bit integers
+    ShiftRightArith256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+
     // =======
 
     // Control flow.
@@ -234,6 +253,24 @@ pub enum DslIr<C: Config> {
     /// overwrite the `input` memory. The `output` is in `u16` limbs, with conversion to bytes being
     /// **little-endian**. The `output` is exactly 16 limbs (32 bytes).
     Keccak256(Array<C, Var<C::N>>, Array<C, Var<C::N>>),
+
+    /// ```ignore
+    /// Secp256k1AddUnequal(dst, p, q)
+    /// ```
+    /// Reads `p,q` from heap and writes `dst = p + q` to heap. A point is represented on the heap
+    /// as two affine coordinates concatenated together into a byte array.
+    /// Assumes that `p.x != q.x` which is equivalent to `p != +-q`.
+    Secp256k1AddUnequal(
+        Array<C, Var<C::N>>,
+        Array<C, Var<C::N>>,
+        Array<C, Var<C::N>>,
+    ),
+    /// ```ignore
+    /// Secp256k1Double(dst, p)
+    /// ```
+    /// Reads `p` from heap and writes `dst = p + p` to heap. A point is represented on the heap
+    /// as two affine coordinates concatenated together into a byte array.
+    Secp256k1Double(Array<C, Var<C::N>>, Array<C, Var<C::N>>),
 
     // Miscellaneous instructions.
     /// Prints a variable.

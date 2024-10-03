@@ -1,11 +1,9 @@
-use std::borrow::Cow;
-
-use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var, util::execute_program};
 use ax_sdk::utils::create_seeded_rng;
-use num_bigint_dig::{algorithms::mod_inverse, BigUint};
-use num_traits::{abs, signum, FromPrimitive, One, Zero};
+use num_bigint_dig::BigUint;
+use num_traits::{FromPrimitive, One, Zero};
 use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use p3_field::{extension::BinomialExtensionField, AbstractField, ExtensionField, TwoAdicField};
 use rand::RngCore;
 
 fn secp256k1_coord_prime() -> BigUint {
@@ -14,6 +12,16 @@ fn secp256k1_coord_prime() -> BigUint {
         result -= BigUint::one() << power;
     }
     result
+}
+
+fn test_modular_arithmetic_program<EF: ExtensionField<BabyBear> + TwoAdicField>(
+    builder: AsmBuilder<BabyBear, EF>,
+) {
+    let program = builder.compile_isa_with_options(CompilerOptions {
+        word_size: 32,
+        ..Default::default()
+    });
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -33,9 +41,7 @@ fn test_compiler_modular_arithmetic_1() {
     let r_check_var = builder.eval_biguint(r);
     builder.assert_secp256k1_coord_eq(&r_var, &r_check_var);
     builder.halt();
-
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -64,8 +70,7 @@ fn test_compiler_modular_arithmetic_2() {
     builder.assert_secp256k1_coord_eq(&r_var, &r_check_var);
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -107,8 +112,7 @@ fn test_compiler_modular_arithmetic_conditional() {
 
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -124,8 +128,7 @@ fn test_compiler_modular_arithmetic_negative() {
     builder.assert_secp256k1_coord_eq(&one_times_one, &zero);
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -167,8 +170,7 @@ fn test_compiler_modular_scalar_arithmetic_conditional() {
 
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_modular_arithmetic_program(builder);
 }
 
 #[test]
@@ -184,110 +186,5 @@ fn test_compiler_modular_scalar_arithmetic_negative() {
     builder.assert_secp256k1_scalar_eq(&one_times_one, &zero);
     builder.halt();
 
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
-}
-
-struct Fraction {
-    num: isize,
-    denom: isize,
-}
-
-impl Fraction {
-    fn new(num: isize, denom: isize) -> Self {
-        Self { num, denom }
-    }
-
-    fn to_biguint(&self) -> BigUint {
-        let sign = signum(self.num) * signum(self.denom);
-        let num = BigUint::from_isize(abs(self.num)).unwrap();
-        let denom = BigUint::from_isize(abs(self.denom)).unwrap();
-        let mut value = num
-            * mod_inverse(
-                Cow::Borrowed(&denom),
-                Cow::Borrowed(&secp256k1_coord_prime()),
-            )
-            .unwrap()
-            .to_biguint()
-            .unwrap();
-        if sign == -1 {
-            value = secp256k1_coord_prime() - value;
-        }
-        value
-    }
-}
-
-impl From<isize> for Fraction {
-    fn from(value: isize) -> Self {
-        Self::new(value, 1)
-    }
-}
-
-struct Point {
-    x: Fraction,
-    y: Fraction,
-}
-
-impl Point {
-    fn new(x: impl Into<Fraction>, y: impl Into<Fraction>) -> Self {
-        Self {
-            x: x.into(),
-            y: y.into(),
-        }
-    }
-}
-
-fn test_ec_add(point_1: Point, point_2: Point, point_3: Point) {
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
-    let mut builder = AsmBuilder::<F, EF>::default();
-
-    let x1_var = builder.eval_biguint(point_1.x.to_biguint());
-    let y1_var = builder.eval_biguint(point_1.y.to_biguint());
-    let x2_var = builder.eval_biguint(point_2.x.to_biguint());
-    let y2_var = builder.eval_biguint(point_2.y.to_biguint());
-    let x3_check = builder.eval_biguint(point_3.x.to_biguint());
-    let y3_check = builder.eval_biguint(point_3.y.to_biguint());
-
-    let (x3_var, y3_var) = builder.ec_add(&(x1_var, y1_var), &(x2_var, y2_var));
-
-    builder.assert_secp256k1_coord_eq(&x3_var, &x3_check);
-    builder.assert_secp256k1_coord_eq(&y3_var, &y3_check);
-
-    builder.halt();
-
-    let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
-}
-
-// tests for x^3 = y^2 + 7
-
-#[test]
-fn test_compiler_ec_double() {
-    test_ec_add(Point::new(2, 1), Point::new(2, 1), Point::new(32, -181));
-}
-
-#[test]
-fn test_compiler_ec_ne_add() {
-    test_ec_add(Point::new(2, 1), Point::new(32, 181), Point::new(2, -1));
-}
-
-#[test]
-fn test_compiler_ec_add_to_zero() {
-    test_ec_add(Point::new(2, 1), Point::new(2, -1), Point::new(0, 0));
-}
-
-#[test]
-fn test_compiler_ec_add_zero_left() {
-    test_ec_add(Point::new(0, 0), Point::new(2, 1), Point::new(2, 1))
-}
-
-#[test]
-fn test_compiler_ec_add_zero_right() {
-    test_ec_add(Point::new(2, 1), Point::new(0, 0), Point::new(2, 1))
-}
-
-#[test]
-fn test_compiler_ec_double_zero() {
-    test_ec_add(Point::new(0, 0), Point::new(0, 0), Point::new(0, 0))
+    test_modular_arithmetic_program(builder);
 }

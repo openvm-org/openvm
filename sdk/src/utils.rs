@@ -1,3 +1,4 @@
+use afs_stark_backend::rap::{BaseAirWithPublicValues, PartitionedBaseAir};
 use itertools::Itertools;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, PrimeField};
@@ -6,9 +7,16 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 
 pub struct FibonacciAir;
 
+impl<F> PartitionedBaseAir<F> for FibonacciAir {}
 impl<F> BaseAir<F> for FibonacciAir {
     fn width(&self) -> usize {
         2
+    }
+}
+
+impl<F> BaseAirWithPublicValues<F> for FibonacciAir {
+    fn num_public_values(&self) -> usize {
+        3
     }
 }
 
@@ -70,4 +78,16 @@ pub fn generate_random_matrix<F: AbstractField>(
 
 pub fn to_field_vec<F: AbstractField>(v: Vec<u32>) -> Vec<F> {
     v.into_iter().map(F::from_canonical_u32).collect()
+}
+
+/// A macro to create a `Vec<&dyn AnyRap<_>>` from a list of chips because Rust cannot infer the
+/// type correctly when using `vec!`.
+#[macro_export]
+macro_rules! any_rap_vec {
+    [$($e:expr),*] => {
+        {
+            let chips: Vec<&dyn afs_stark_backend::rap::AnyRap<_>> = vec![$($e),*];
+            chips
+        }
+    };
 }

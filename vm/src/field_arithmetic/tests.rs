@@ -1,6 +1,8 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{
-    config::{baby_bear_poseidon2::run_simple_test_no_pis, setup_tracing},
+    any_rap_vec,
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing},
+    engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -11,12 +13,12 @@ use rand::Rng;
 use super::{FieldArithmetic, FieldArithmeticChip};
 use crate::{
     arch::{
-        chips::MachineChip,
         instructions::{Opcode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
-        testing::MachineChipTestBuilder,
+        testing::{memory::gen_pointer, MachineChipTestBuilder},
+        MachineChip,
     },
-    cpu::trace::Instruction,
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
+    program::Instruction,
 };
 
 #[test]
@@ -26,11 +28,13 @@ fn field_arithmetic_air_test() {
     let elem_range = || 1..=100;
     let z_address_space_range = || 1usize..=2;
     let xy_address_space_range = || 0usize..=2;
-    let address_range = || 0usize..1 << 29;
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut field_arithmetic_chip =
-        FieldArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut field_arithmetic_chip = FieldArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
 
@@ -50,15 +54,15 @@ fn field_arithmetic_air_test() {
         let address1 = if as1 == 0 {
             operand1.as_canonical_u32() as usize
         } else {
-            rng.gen_range(address_range())
+            gen_pointer(&mut rng, 1)
         };
         let address2 = if as2 == 0 {
             operand2.as_canonical_u32() as usize
         } else {
-            rng.gen_range(address_range())
+            gen_pointer(&mut rng, 1)
         };
         assert_ne!(address1, address2);
-        let result_address = rng.gen_range(address_range());
+        let result_address = gen_pointer(&mut rng, 1);
 
         let result = FieldArithmetic::solve(opcode, (operand1, operand2)).unwrap();
         tracing::debug!(
@@ -94,7 +98,7 @@ fn field_arithmetic_air_test() {
     // negative test pranking each IO value
     for height in 0..num_ops {
         // TODO: better way to modify existing traces in tester
-        let arith_trace = &mut tester.traces[1];
+        let arith_trace = &mut tester.traces[2];
         let old_trace = arith_trace.clone();
         for width in 0..FieldArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
@@ -103,8 +107,8 @@ fn field_arithmetic_air_test() {
 
         // Run a test after pranking each row
         assert_eq!(
-            tester.simple_test(),
-            Err(VerificationError::OodEvaluationMismatch),
+            tester.simple_test().err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
 
@@ -115,8 +119,11 @@ fn field_arithmetic_air_test() {
 #[test]
 fn field_arithmetic_air_zero_div_zero() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut field_arithmetic_chip =
-        FieldArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut field_arithmetic_chip = FieldArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
     tester.write_cell(1, 0, BabyBear::zero());
     tester.write_cell(1, 1, BabyBear::one());
 
@@ -135,9 +142,10 @@ fn field_arithmetic_air_zero_div_zero() {
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
+
     assert_eq!(
-        run_simple_test_no_pis(vec![&air], vec![trace]),
-        Err(VerificationError::OodEvaluationMismatch),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace]).err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
 }
@@ -146,8 +154,11 @@ fn field_arithmetic_air_zero_div_zero() {
 #[test]
 fn field_arithmetic_air_test_panic() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut field_arithmetic_chip =
-        FieldArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut field_arithmetic_chip = FieldArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
     tester.write_cell(1, 0, BabyBear::zero());
     // should panic
     tester.execute(

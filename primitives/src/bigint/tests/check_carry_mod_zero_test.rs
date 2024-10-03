@@ -1,7 +1,13 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use afs_stark_backend::interaction::InteractionBuilder;
-use ax_sdk::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    utils::create_seeded_rng,
+};
 use num_bigint_dig::BigUint;
 use num_traits::FromPrimitive;
 use p3_air::{Air, BaseAir};
@@ -82,6 +88,8 @@ impl AirConfig for TestCarryAir<N> {
     type Cols<T> = TestCarryCols<N, T>;
 }
 
+impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for TestCarryAir<N> {}
+impl<F: Field, const N: usize> PartitionedBaseAir<F> for TestCarryAir<N> {}
 impl<F: Field, const N: usize> BaseAir<F> for TestCarryAir<N> {
     fn width(&self) -> usize {
         TestCarryCols::<N, F>::get_width()
@@ -173,9 +181,6 @@ const N: usize = 16;
 fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     let limb_bits = 8;
     let num_limbs = N;
-    // The equation: x^2 + y = 0 (mod p)
-    // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N + 2^10
-    // overflow bits: limb_bits * 2 + log2(N) => 24
     let field_element_bits = 30;
 
     let range_bus = 1;
@@ -207,8 +212,8 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&test_air));
     let range_trace = range_checker.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![&test_air, &range_checker.air],
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&test_air, &range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");

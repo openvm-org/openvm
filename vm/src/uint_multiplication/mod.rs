@@ -1,5 +1,3 @@
-// chip def here
-// chip is executor
 use std::sync::Arc;
 
 use afs_primitives::range_tuple::RangeTupleCheckerChip;
@@ -7,11 +5,10 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
-        instructions::Opcode,
+        instructions::Opcode, ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
-    cpu::trace::Instruction,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 mod air;
@@ -25,7 +22,7 @@ pub use columns::*;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
@@ -38,7 +35,7 @@ pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
     pub carry: Vec<T>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,
@@ -51,6 +48,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 {
     pub fn new(
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         range_tuple_chip: Arc<RangeTupleCheckerChip>,
     ) -> Self {
@@ -75,7 +73,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: UintMultiplicationAir {
-                execution_bus,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus: bus.clone(),
             },
@@ -93,7 +91,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         &mut self,
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -146,10 +144,10 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             carry: carry.into_iter().map(T::from_canonical_u32).collect(),
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

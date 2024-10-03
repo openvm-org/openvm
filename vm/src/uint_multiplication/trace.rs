@@ -1,6 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
-use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap};
+use afs_stark_backend::{
+    config::StarkGenericConfig,
+    rap::{get_air_name, AnyRap},
+};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -12,7 +15,7 @@ use super::{
     },
     UintMultiplicationChip, UintMultiplicationRecord,
 };
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChip<F>
     for UintMultiplicationChip<F, NUM_LIMBS, LIMB_BITS>
@@ -79,6 +82,10 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air.clone())
+    }
+
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

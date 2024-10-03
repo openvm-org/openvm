@@ -1,4 +1,4 @@
-use stark_vm::vm::cycle_tracker::{span::CanDiff, CycleTracker};
+use stark_vm::vm::cycle_tracker::{CanDiff, CycleTracker};
 use tracing::info;
 
 pub(crate) type Halo2CellTracker = CycleTracker<Halo2Stats>;

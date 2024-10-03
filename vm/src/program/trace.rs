@@ -1,4 +1,4 @@
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::rap::{get_air_name, AnyRap};
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField64;
@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::ProgramChip;
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField64> MachineChip<F> for ProgramChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
@@ -23,6 +23,10 @@ impl<F: PrimeField64> MachineChip<F> for ProgramChip<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air.clone())
+    }
+
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

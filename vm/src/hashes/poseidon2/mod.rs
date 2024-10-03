@@ -8,15 +8,14 @@ use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
 use self::air::Poseidon2VmAir;
 use crate::{
     arch::{
-        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
-        instructions::Opcode::*,
+        instructions::Opcode::*, ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
-    cpu::trace::Instruction,
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         tree::Hasher,
         MemoryAuxColsFactory, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
     },
+    program::{bridge::ProgramBus, ExecutionError, Instruction},
 };
 
 #[cfg(test)]
@@ -45,13 +44,15 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
     /// Construct from Poseidon2 config and bus index.
     pub fn from_poseidon2_config(
         config: Poseidon2Config<WIDTH, F>,
+        max_constraint_degree: usize,
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
     ) -> Self {
-        let inner = Poseidon2Air::<WIDTH, F>::from_config(config, 0);
+        let inner = Poseidon2Air::<WIDTH, F>::from_config(config, max_constraint_degree, 0);
         Self {
             inner,
-            execution_bus,
+            execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             direct: true,
         }
@@ -82,12 +83,16 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
     /// Construct from Poseidon2 config and bus index.
     pub fn from_poseidon2_config(
         p2_config: Poseidon2Config<WIDTH, F>,
+        max_constraint_degree: usize,
         execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
     ) -> Self {
         let air = Poseidon2VmAir::<F>::from_poseidon2_config(
             p2_config,
+            max_constraint_degree,
             execution_bus,
+            program_bus,
             memory_chip.borrow().memory_bridge(),
         );
         Self {
@@ -178,7 +183,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
-    ) -> ExecutionState<usize> {
+    ) -> Result<ExecutionState<usize>, ExecutionError> {
         let mut memory_chip = self.memory_chip.borrow_mut();
 
         let Instruction {
@@ -254,10 +259,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             output2_write,
         });
 
-        ExecutionState {
+        Ok(ExecutionState {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
-        }
+        })
     }
 }
 

@@ -48,4 +48,12 @@ impl<const M: usize> XorLookupChip<M> {
 
         self.calc_xor(x, y)
     }
+
+    pub fn clear(&self) {
+        for i in 0..(1 << M) {
+            for j in 0..(1 << M) {
+                self.count[i][j].store(0, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
 }

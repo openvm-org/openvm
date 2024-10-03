@@ -3,6 +3,7 @@ use std::{borrow::Cow, cmp::max, collections::VecDeque, iter::repeat, ops::Neg, 
 use afs_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{algorithms::mod_inverse, BigInt, BigUint, Sign};
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use p3_field::PrimeField64;
 
 use super::modular_arithmetic::ModularArithmeticAir;
 use crate::var_range::bus::VariableRangeCheckerBus;
@@ -72,7 +73,7 @@ pub fn get_arithmetic_air(
     )
 }
 
-pub fn big_int_abs(x: BigInt) -> BigUint {
+pub fn big_int_abs(x: &BigInt) -> BigUint {
     if x.sign() == Sign::Minus {
         x.neg().to_biguint().unwrap()
     } else {
@@ -118,7 +119,7 @@ pub fn big_uint_to_num_limbs(x: &BigUint, limb_bits: usize, num_limbs: usize) ->
         .collect()
 }
 
-pub fn big_int_to_limbs(x: BigInt, limb_bits: usize) -> Vec<isize> {
+pub fn big_int_to_limbs(x: &BigInt, limb_bits: usize) -> Vec<isize> {
     let x_sign = x.sign();
     let limbs = big_uint_to_limbs(&big_int_abs(x), limb_bits);
     if x_sign == Sign::Minus {
@@ -128,7 +129,7 @@ pub fn big_int_to_limbs(x: BigInt, limb_bits: usize) -> Vec<isize> {
     }
 }
 
-pub fn big_int_to_num_limbs(x: BigInt, limb_bits: usize, num_limbs: usize) -> Vec<isize> {
+pub fn big_int_to_num_limbs(x: &BigInt, limb_bits: usize, num_limbs: usize) -> Vec<isize> {
     let limbs = big_int_to_limbs(x, limb_bits);
     let num_limbs = max(num_limbs, limbs.len());
     limbs
@@ -145,4 +146,13 @@ pub fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
         .enumerate()
         .map(|(i, bit)| bit << i)
         .sum()
+}
+
+pub fn vec_isize_to_f<F: PrimeField64>(x: Vec<isize>) -> Vec<F> {
+    x.iter()
+        .map(|x| {
+            F::from_canonical_usize(x.unsigned_abs())
+                * if x >= &0 { F::one() } else { F::neg_one() }
+        })
+        .collect()
 }

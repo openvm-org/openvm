@@ -2,10 +2,6 @@ mod multi_field32;
 mod outer_poseidon2;
 mod stark;
 
-// REVM is incompatible with our rust version. evm_verify will panic if it's running in debug mode.
-#[cfg(not(debug_assertions))]
-mod verifier;
-
 use afs_compiler::ir::{Builder, Witness};
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;

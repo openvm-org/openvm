@@ -1,43 +1,26 @@
 use core::mem::size_of;
-use std::{
-    array::from_fn,
-    borrow::{Borrow, BorrowMut},
-};
 
 use afs_derive::AlignedBorrow;
 use p3_air::AirBuilder;
-use p3_keccak_air::{KeccakCols as KeccakPermCols, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS};
+use p3_keccak_air::KeccakCols as KeccakPermCols;
 
 use super::{
     KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES,
-    KECCAK_RATE_U16S,
+    KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
 };
 use crate::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 
-#[derive(Clone, Copy, Debug)]
-pub struct KeccakVmColsRef<'a, T> {
+#[repr(C)]
+#[derive(Debug, AlignedBorrow)]
+pub struct KeccakVmCols<T> {
     /// Columns for keccak-f permutation
-    pub inner: &'a KeccakPermCols<T>,
+    pub inner: KeccakPermCols<T>,
     /// Columns for sponge and padding
-    pub sponge: &'a KeccakSpongeCols<T>,
+    pub sponge: KeccakSpongeCols<T>,
     /// Columns for opcode interface and operand memory access
-    pub opcode: &'a KeccakOpcodeCols<T>,
+    pub opcode: KeccakOpcodeCols<T>,
     /// Auxiliary columns for offline memory checking
-    /// This should be convertable to [KeccakMemoryCols]
-    pub mem_oc: &'a [T],
-}
-
-#[derive(Debug)]
-pub struct KeccakVmColsMut<'a, T> {
-    /// Columns for keccak-f permutation
-    pub inner: &'a mut KeccakPermCols<T>,
-    /// Columns for sponge and padding
-    pub sponge: &'a mut KeccakSpongeCols<T>,
-    /// Columns for opcode interface and operand memory access
-    pub opcode: &'a mut KeccakOpcodeCols<T>,
-    /// Auxiliary columns for offline memory checking
-    /// This should be convertable to [KeccakMemoryCols]
-    pub mem_oc: &'a mut [T],
+    pub mem_oc: KeccakMemoryCols<T>,
 }
 
 /// Columns specific to the KECCAK256 opcode.
@@ -51,6 +34,9 @@ pub struct KeccakOpcodeCols<T> {
     /// True for all rows that are part of opcode execution.
     /// False on dummy rows only used to pad the height.
     pub is_enabled: T,
+    /// Is enabled and first round of block. Used to lower constraint degree.
+    /// is_enabled * inner.step_flags[0]
+    pub is_enabled_first_round: T,
     /// The starting timestamp to use for memory access in this row.
     /// A single row will do multiple memory accesses.
     pub start_timestamp: T,
@@ -96,17 +82,22 @@ pub struct KeccakSpongeCols<T> {
     pub state_hi: [T; KECCAK_RATE_U16S],
 }
 
-// Grouping all memory aux columns together because they can't use AlignedBorrow
-#[derive(Clone, Debug)]
+#[repr(C)]
+#[derive(Clone, Debug, AlignedBorrow)]
 pub struct KeccakMemoryCols<T> {
     pub op_reads: [MemoryReadAuxCols<T, 1>; KECCAK_EXECUTION_READS],
-    // TODO[jpw] switch to word_size=8
-    pub absorb_reads: [MemoryReadAuxCols<T, 1>; KECCAK_ABSORB_READS],
-    // TODO[jpw] switch to word_size=? (4 or 8 or 16)
-    pub digest_writes: [MemoryWriteAuxCols<T, 1>; KECCAK_DIGEST_WRITES],
+    pub absorb_reads: [MemoryReadAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_ABSORB_READS],
+    pub digest_writes: [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
+    /// The input bytes are batch read in blocks of [KECCAK_WORD_SIZE] bytes. However
+    /// if the input length is not a multiple of [KECCAK_WORD_SIZE], we read into
+    /// `partial_block` more bytes than we need. On the other hand `block_bytes` expects
+    /// only the partial block of bytes and then the correctly padded bytes.
+    /// We will select between `partial_block` and `block_bytes` for what to read from memory.
+    /// We never read a full padding block, so the first byte is always ok.
+    pub partial_block: [T; KECCAK_WORD_SIZE - 1],
 }
 
-impl<'a, T: Copy> KeccakVmColsRef<'a, T> {
+impl<T: Copy> KeccakVmCols<T> {
     pub const fn remaining_len(&self) -> T {
         self.opcode.len
     }
@@ -129,34 +120,6 @@ impl<'a, T: Copy> KeccakVmColsRef<'a, T> {
     }
 }
 
-impl<'a, T> KeccakVmColsRef<'a, T> {
-    pub fn from_slice(slc: &'a [T]) -> Self {
-        let (inner, slc) = slc.split_at(NUM_KECCAK_PERM_COLS);
-        let (sponge, slc) = slc.split_at(NUM_KECCAK_SPONGE_COLS);
-        let (opcode, mem_oc) = slc.split_at(NUM_KECCAK_OPCODE_COLS);
-        Self {
-            inner: inner.borrow(),
-            sponge: sponge.borrow(),
-            opcode: opcode.borrow(),
-            mem_oc,
-        }
-    }
-}
-
-impl<'a, T> KeccakVmColsMut<'a, T> {
-    pub fn from_mut_slice(slc: &'a mut [T]) -> Self {
-        let (inner, slc) = slc.split_at_mut(NUM_KECCAK_PERM_COLS);
-        let (sponge, slc) = slc.split_at_mut(NUM_KECCAK_SPONGE_COLS);
-        let (opcode, mem_oc) = slc.split_at_mut(NUM_KECCAK_OPCODE_COLS);
-        Self {
-            inner: inner.borrow_mut(),
-            sponge: sponge.borrow_mut(),
-            opcode: opcode.borrow_mut(),
-            mem_oc,
-        }
-    }
-}
-
 impl<T: Copy> KeccakOpcodeCols<T> {
     pub fn assert_eq<AB: AirBuilder>(&self, builder: &mut AB, other: Self)
     where
@@ -175,46 +138,7 @@ impl<T: Copy> KeccakOpcodeCols<T> {
     }
 }
 
+pub const NUM_KECCAK_VM_COLS: usize = size_of::<KeccakVmCols<u8>>();
 pub const NUM_KECCAK_OPCODE_COLS: usize = size_of::<KeccakOpcodeCols<u8>>();
 pub const NUM_KECCAK_SPONGE_COLS: usize = size_of::<KeccakSpongeCols<u8>>();
-
-impl<T> KeccakMemoryCols<T> {
-    pub const fn width() -> usize {
-        (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS) * MemoryReadAuxCols::<T, 1>::width()
-            + KECCAK_DIGEST_WRITES * MemoryWriteAuxCols::<T, 1>::width()
-    }
-
-    pub fn from_slice(slc: &[T]) -> Self
-    where
-        T: Clone,
-    {
-        let mut it = slc.iter().cloned();
-        let mut next = || MemoryReadAuxCols::from_iterator(&mut it);
-        let op_reads = from_fn(|_| next());
-        let absorb_reads = from_fn(|_| next());
-        let digest_writes = from_fn(|_| MemoryWriteAuxCols::from_iterator(&mut it));
-
-        Self {
-            op_reads,
-            absorb_reads,
-            digest_writes,
-        }
-    }
-
-    pub fn flatten(self) -> Vec<T> {
-        self.op_reads
-            .into_iter()
-            .flat_map(|read| read.flatten())
-            .chain(
-                self.absorb_reads
-                    .into_iter()
-                    .flat_map(|read| read.flatten()),
-            )
-            .chain(
-                self.digest_writes
-                    .into_iter()
-                    .flat_map(|write| write.flatten()),
-            )
-            .collect()
-    }
-}
+pub const NUM_KECCAK_MEMORY_COLS: usize = size_of::<KeccakMemoryCols<u8>>();

@@ -6,8 +6,7 @@ use super::{
     columns::{FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols},
 };
 use crate::{
-    arch::columns::{ExecutionState, InstructionCols},
-    field_extension::columns::FieldExtensionArithmeticAuxCols,
+    arch::ExecutionState, field_extension::columns::FieldExtensionArithmeticAuxCols,
     memory::MemoryAddress,
 };
 
@@ -78,12 +77,13 @@ impl FieldExtensionArithmeticAir {
             )
             .eval(builder, is_valid);
 
-        self.execution_bus.execute_increment_pc(
-            builder,
-            aux.is_valid,
-            ExecutionState::new(pc, timestamp),
-            AB::F::from_canonical_usize(timestamp_delta),
-            InstructionCols::new(expected_opcode, [op_a, op_b, op_c, d, e]),
-        );
+        self.execution_bridge
+            .execute_and_increment_pc(
+                expected_opcode,
+                [op_a, op_b, op_c, d, e],
+                ExecutionState::new(pc, timestamp),
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, is_valid);
     }
 }

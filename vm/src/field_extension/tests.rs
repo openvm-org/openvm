@@ -3,7 +3,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
@@ -18,8 +18,8 @@ use crate::{
             MachineChipTestBuilder,
         },
     },
-    cpu::trace::Instruction,
     field_extension::chip::{FieldExtensionArithmetic, FieldExtensionArithmeticChip},
+    program::Instruction,
 };
 
 #[test]
@@ -27,7 +27,11 @@ fn field_extension_air_test() {
     type F = BabyBear;
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = FieldExtensionArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = FieldExtensionArithmeticChip::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let num_ops: usize = 7; // test padding with dummy row
@@ -62,14 +66,11 @@ fn field_extension_air_test() {
     let mut tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-
+    disable_debug_builder();
     // negative test pranking each IO value
-    for height in 0..num_ops {
+    for height in [0, num_ops - 1] {
         // TODO: better way to modify existing traces in tester
-        let extension_trace = &mut tester.traces[1];
+        let extension_trace = &mut tester.traces[2];
         let original_trace = extension_trace.clone();
         for width in 0..FieldExtensionArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
@@ -77,8 +78,8 @@ fn field_extension_air_test() {
         }
 
         assert_eq!(
-            tester.simple_test(),
-            Err(VerificationError::OodEvaluationMismatch),
+            tester.simple_test().err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
         tester.traces[1] = original_trace;

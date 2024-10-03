@@ -412,12 +412,15 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .collect_vec();
 
         tracing::info!("{}", trace_metrics(&pk.per_air, &degrees));
+        #[cfg(feature = "bench-metrics")]
+        trace_metrics(&pk.per_air, &degrees).emit();
 
         Proof {
             degrees,
             commitments,
             opening,
             exposed_values_after_challenge,
+            public_values: public_values.to_vec(),
         }
     }
 }

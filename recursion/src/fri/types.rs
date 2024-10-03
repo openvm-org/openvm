@@ -77,6 +77,9 @@ pub struct BatchOpeningVariable<C: Config> {
 pub struct TwoAdicPcsRoundVariable<C: Config> {
     pub batch_commit: DigestVariable<C>,
     pub mats: Array<C, TwoAdicPcsMatsVariable<C>>,
+    /// Optional. `permutation` could be empty if `mats` is already sorted. Otherwise, it's a
+    /// permutation of indexes of mats which domains are sorted by degree in descending order.
+    pub permutation: Array<C, Usize<C::N>>,
 }
 
 #[derive(DslVariable, Clone)]

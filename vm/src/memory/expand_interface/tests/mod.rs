@@ -10,7 +10,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
 use crate::{
-    cpu::{EXPAND_BUS, MEMORY_BUS, WORD_SIZE},
+    core::{EXPAND_BUS, MEMORY_BUS, WORD_SIZE},
     memory::{
         expand_interface::{columns::MemoryExpandInterfaceCols, MemoryExpandInterfaceChip},
         manager::{access_cell::AccessCell, dimensions::MemoryDimensions},

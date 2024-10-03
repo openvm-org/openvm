@@ -1,7 +1,10 @@
 use std::borrow::BorrowMut;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    utils::create_seeded_rng,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
@@ -12,8 +15,12 @@ use super::{
     CastFChip,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode, testing::MachineChipTestBuilder},
-    cpu::trace::Instruction,
+    arch::{
+        instructions::Opcode,
+        testing::{memory::gen_pointer, MachineChipTestBuilder},
+        MachineChip,
+    },
+    program::Instruction,
 };
 
 type F = BabyBear;
@@ -29,14 +36,13 @@ fn prepare_castf_rand_write_execute(
     rng: &mut StdRng,
 ) {
     let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 29;
 
     let operand1 = y;
 
     let as_x = rng.gen_range(address_space_range()); // d
     let as_y = rng.gen_range(address_space_range()); // e
-    let address_x = rng.gen_range(address_range()); // op_a
-    let address_y = rng.gen_range(address_range()); // op_b
+    let address_x = gen_pointer(rng, 32); // op_a
+    let address_y = gen_pointer(rng, 32); // op_b
 
     let operand1_f = F::from_canonical_u32(y);
 
@@ -57,7 +63,11 @@ fn prepare_castf_rand_write_execute(
 fn castf_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
     let num_tests: usize = 10;
 
     for _ in 0..num_tests {
@@ -72,7 +82,11 @@ fn castf_rand_test() {
 #[test]
 fn negative_castf_overflow_test() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
@@ -89,8 +103,12 @@ fn negative_castf_overflow_test() {
 
     disable_debug_builder();
     assert_eq!(
-        run_simple_test_no_pis(vec![&air, &range_air], vec![trace, range_trace],),
-        Err(VerificationError::NonZeroCumulativeSum),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&air, &range_air],
+            vec![trace, range_trace],
+        )
+        .err(),
+        Some(VerificationError::NonZeroCumulativeSum),
         "Expected verification to fail, but it didn't"
     );
 }
@@ -98,25 +116,33 @@ fn negative_castf_overflow_test() {
 #[test]
 fn negative_castf_memread_test() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
 
-    let air = chip.air.clone();
+    let air = chip.air;
     let range_checker_chip = chip.range_checker_chip.clone();
     let range_air = range_checker_chip.air;
     let mut trace = chip.generate_trace();
     let cols: &mut CastFCols<F> = trace.values[..].borrow_mut();
-    cols.io.op_b = cols.io.op_b + F::one();
+    cols.io.op_b += F::one();
 
     let range_trace = range_checker_chip.generate_trace();
 
     disable_debug_builder();
     assert_eq!(
-        run_simple_test_no_pis(vec![&air, &range_air], vec![trace, range_trace],),
-        Err(VerificationError::NonZeroCumulativeSum),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&air, &range_air],
+            vec![trace, range_trace],
+        )
+        .err(),
+        Some(VerificationError::NonZeroCumulativeSum),
         "Expected verification to fail, but it didn't"
     );
 }
@@ -124,25 +150,33 @@ fn negative_castf_memread_test() {
 #[test]
 fn negative_castf_memwrite_test() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
 
-    let air = chip.air.clone();
+    let air = chip.air;
     let range_checker_chip = chip.range_checker_chip.clone();
     let range_air = range_checker_chip.air;
     let mut trace = chip.generate_trace();
     let cols: &mut CastFCols<F> = trace.values[..].borrow_mut();
-    cols.io.op_a = cols.io.op_a + F::one();
+    cols.io.op_a += F::one();
 
     let range_trace = range_checker_chip.generate_trace();
 
     disable_debug_builder();
     assert_eq!(
-        run_simple_test_no_pis(vec![&air, &range_air], vec![trace, range_trace],),
-        Err(VerificationError::NonZeroCumulativeSum),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&air, &range_air],
+            vec![trace, range_trace],
+        )
+        .err(),
+        Some(VerificationError::NonZeroCumulativeSum),
         "Expected verification to fail, but it didn't"
     );
 }
@@ -150,25 +184,33 @@ fn negative_castf_memwrite_test() {
 #[test]
 fn negative_castf_as_test() {
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(tester.execution_bus(), tester.memory_chip());
+    let mut chip = CastFChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
 
-    let air = chip.air.clone();
+    let air = chip.air;
     let range_checker_chip = chip.range_checker_chip.clone();
     let range_air = range_checker_chip.air;
     let mut trace = chip.generate_trace();
     let cols: &mut CastFCols<F> = trace.values[..].borrow_mut();
-    cols.io.d = cols.io.d + F::one();
+    cols.io.d += F::one();
 
     let range_trace = range_checker_chip.generate_trace();
 
     disable_debug_builder();
     assert_eq!(
-        run_simple_test_no_pis(vec![&air, &range_air], vec![trace, range_trace],),
-        Err(VerificationError::NonZeroCumulativeSum),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&air, &range_air],
+            vec![trace, range_trace],
+        )
+        .err(),
+        Some(VerificationError::NonZeroCumulativeSum),
         "Expected verification to fail, but it didn't"
     );
 }

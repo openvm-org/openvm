@@ -1,9 +1,10 @@
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ark_ff::PrimeField as _;
 use ax_sdk::{
+    any_rap_vec,
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
-        fri_params::fri_params_with_80_bits_of_security,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::StarkEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
@@ -52,7 +53,7 @@ fn test_poseidon2_default() {
         .collect();
 
     // air and trace generation
-    let poseidon2_air = Poseidon2Air::<16, BabyBear>::default();
+    let poseidon2_air = Poseidon2Air::<16, BabyBear>::default(); // max constraint degree = 7
 
     let mut poseidon2_trace = poseidon2_air.generate_trace(states.clone());
     let mut outputs = states.clone();
@@ -97,34 +98,34 @@ fn test_poseidon2_default() {
     let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3); // max constraint degree = 7 requires log blowup = 3
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
     // positive test
     engine
         .run_simple_test(
-            vec![&poseidon2_air, &page_requester],
+            &any_rap_vec![&poseidon2_air, &page_requester],
             traces,
-            vec![vec![]; 2],
+            &vec![vec![]; 2],
         )
         .expect("Verification failed");
 
     // negative test
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     for _ in 0..10 {
         let width = rng.gen_range(0..poseidon2_air.get_width());
         let height = rng.gen_range(0..num_rows);
         let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
         poseidon2_trace.row_mut(height)[width] += rand;
         assert_eq!(
-            engine.run_simple_test(
-                vec![&poseidon2_air, &page_requester],
-                vec![poseidon2_trace.clone(), dummy_trace.clone()],
-                vec![vec![]; 2],
-            ),
-            Err(VerificationError::OodEvaluationMismatch),
+            engine
+                .run_simple_test(
+                    &any_rap_vec![&poseidon2_air, &page_requester],
+                    vec![poseidon2_trace.clone(), dummy_trace.clone()],
+                    &vec![vec![]; 2],
+                )
+                .err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
         poseidon2_trace.row_mut(height)[width] -= rand;
@@ -167,6 +168,7 @@ fn test_poseidon2() {
         MDS_MAT_4,
         POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
         BabyBear::from_wrapped_u64(1u64 << 32).inverse(), // 943718400
+        3,
         0,
     );
     let mut poseidon2_trace = poseidon2_air.generate_trace(states.clone());
@@ -212,34 +214,34 @@ fn test_poseidon2() {
     let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
     // positive test
     engine
         .run_simple_test(
-            vec![&poseidon2_air, &page_requester],
+            &any_rap_vec![&poseidon2_air, &page_requester],
             traces,
-            vec![vec![]; 2],
+            &vec![vec![]; 2],
         )
         .expect("Verification failed");
 
     // negative test
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     for _ in 0..10 {
         let width = rng.gen_range(0..poseidon2_air.get_width());
         let height = rng.gen_range(0..num_rows);
         let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
         poseidon2_trace.row_mut(height)[width] += rand;
         assert_eq!(
-            engine.run_simple_test(
-                vec![&poseidon2_air, &page_requester],
-                vec![poseidon2_trace.clone(), dummy_trace.clone()],
-                vec![vec![]; 2],
-            ),
-            Err(VerificationError::OodEvaluationMismatch),
+            engine
+                .run_simple_test(
+                    &any_rap_vec![&poseidon2_air, &page_requester],
+                    vec![poseidon2_trace.clone(), dummy_trace.clone()],
+                    &vec![vec![]; 2],
+                )
+                .err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
         poseidon2_trace.row_mut(height)[width] -= rand;
@@ -258,6 +260,7 @@ fn test_horizen_poseidon2() {
         HL_MDS_MAT_4,
         horizen_int_diag,
         BabyBear::one(),
+        3,
         0,
     );
     let u32state = (0..16)
@@ -301,6 +304,7 @@ where
         MDS_MAT_4,
         POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
         BabyBear::from_wrapped_u64(1u64 << 32).inverse(), // 943718400
+        3,
         0,
     );
     let input: [BabyBear; 16] = [

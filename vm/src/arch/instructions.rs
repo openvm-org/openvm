@@ -23,7 +23,6 @@ pub enum Opcode {
     FDIV = 13,
 
     CASTF = 14,
-    F_LESS_THAN = 15,
 
     FAIL = 20,
     PRINTF = 21,
@@ -65,10 +64,23 @@ pub enum Opcode {
     ADD256 = 80,
     SUB256 = 81,
     MUL256 = 82,
-    LT256 = 83,
+    SLTU256 = 83,
     EQ256 = 84,
+    XOR256 = 85,
+    AND256 = 86,
+    OR256 = 87,
+    SLT256 = 88,
+    SLL256 = 89,
+    SRL256 = 90,
+    SRA256 = 91,
+
+    LUI = 98,
+    AUIPC = 99,
 
     NOP = 100,
+
+    SECP256K1_EC_ADD_NE = 101,
+    SECP256K1_EC_DOUBLE = 102,
 }
 
 impl fmt::Display for Opcode {
@@ -77,23 +89,28 @@ impl fmt::Display for Opcode {
     }
 }
 
-pub const CORE_INSTRUCTIONS: [Opcode; 16] = [
-    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS, HINT_BYTES, PUBLISH,
-    CT_START, CT_END, NOP, LOADW2, STOREW2,
+pub const CORE_INSTRUCTIONS: [Opcode; 17] = [
+    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, PRINTF, SHINTW, HINT_INPUT, HINT_BITS, HINT_BYTES,
+    PUBLISH, CT_START, CT_END, NOP, LOADW2, STOREW2,
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [Opcode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4DIV];
-pub const UINT256_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [ADD256, SUB256, LT256, EQ256];
-pub const SECP256K1_COORD_MODULAR_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [
+pub const ALU_256_INSTRUCTIONS: [Opcode; 8] = [
+    ADD256, SUB256, SLTU256, EQ256, XOR256, AND256, OR256, SLT256,
+];
+pub const SHIFT_256_INSTRUCTIONS: [Opcode; 3] = [SLL256, SRL256, SRA256];
+pub const UI_32_INSTRUCTIONS: [Opcode; 2] = [LUI, AUIPC];
+
+pub const MODULAR_ADDSUB_INSTRUCTIONS: [Opcode; 4] = [
     SECP256K1_COORD_ADD,
     SECP256K1_COORD_SUB,
-    SECP256K1_COORD_MUL,
-    SECP256K1_COORD_DIV,
-];
-
-pub const SECP256K1_SCALAR_MODULAR_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [
     SECP256K1_SCALAR_ADD,
     SECP256K1_SCALAR_SUB,
+];
+
+pub const MODULAR_MULTDIV_INSTRUCTIONS: [Opcode; 4] = [
+    SECP256K1_COORD_MUL,
+    SECP256K1_COORD_DIV,
     SECP256K1_SCALAR_MUL,
     SECP256K1_SCALAR_DIV,
 ];
@@ -104,7 +121,7 @@ impl Opcode {
         all_opcodes.extend(CORE_INSTRUCTIONS);
         all_opcodes.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
         all_opcodes.extend(FIELD_EXTENSION_INSTRUCTIONS);
-        all_opcodes.extend([FAIL, PRINTF]);
+        all_opcodes.extend([FAIL]);
         all_opcodes.extend([PERM_POS2, COMP_POS2]);
         all_opcodes
     }

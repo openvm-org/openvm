@@ -1,11 +1,16 @@
 use afs_compiler::util::execute_program;
-use afs_recursion::testing_utils::{inner::build_verification_program, VerificationData};
+use afs_recursion::testing_utils::inner::build_verification_program;
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, prover::trace::TraceCommitmentBuilder,
+    air_builders::PartitionedAirBuilder,
+    engine::VerificationData,
+    prover::trace::TraceCommitmentBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     verifier::VerificationError,
 };
 use ax_sdk::{
-    config::baby_bear_poseidon2::default_engine, engine::StarkEngine, utils::generate_random_matrix,
+    config::baby_bear_poseidon2::default_engine,
+    engine::{StarkEngine, VerificationDataWithFriParams},
+    utils::generate_random_matrix,
 };
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
@@ -18,6 +23,15 @@ use rand::{rngs::StdRng, SeedableRng};
 /// Inner value is width of y-submatrix
 pub struct SumAir(pub usize);
 
+impl<F> BaseAirWithPublicValues<F> for SumAir {}
+impl<F> PartitionedBaseAir<F> for SumAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.0]
+    }
+    fn common_main_width(&self) -> usize {
+        1
+    }
+}
 impl<F> BaseAir<F> for SumAir {
     fn width(&self) -> usize {
         self.0 + 1
@@ -26,11 +40,10 @@ impl<F> BaseAir<F> for SumAir {
 
 impl<AB: PartitionedAirBuilder> Air<AB> for SumAir {
     fn eval(&self, builder: &mut AB) {
-        let partitioned_main = builder.partitioned_main();
-        assert_eq!(partitioned_main.len(), 2);
+        assert_eq!(builder.cached_mains().len(), 1);
 
-        let x = partitioned_main[0].row_slice(0)[0];
-        let ys = partitioned_main[1].row_slice(0);
+        let x = builder.common_main().row_slice(0)[0];
+        let ys = builder.cached_mains()[0].row_slice(0);
 
         let mut y_sum = AB::Expr::zero();
         for &y in &*ys {
@@ -60,7 +73,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let mut keygen_builder = engine.keygen_builder();
     let y_ptr = keygen_builder.add_cached_main_matrix(y_width);
     let x_ptr = keygen_builder.add_main_matrix(1);
-    keygen_builder.add_partitioned_air(&air, 0, vec![x_ptr, y_ptr]);
+    keygen_builder.add_partitioned_air(&air, vec![y_ptr, x_ptr]);
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 
@@ -80,12 +93,11 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let mut challenger = engine.new_challenger();
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
 
-    let vparams = VerificationData {
-        vk,
-        proof,
+    let vparams = VerificationDataWithFriParams {
+        data: VerificationData { vk, proof },
         fri_params: engine.fri_params,
     };
-    let (program, input_stream) = build_verification_program(pvs, vparams);
+    let (program, input_stream) = build_verification_program(vparams, Default::default());
     execute_program(program, input_stream);
 
     Ok(())

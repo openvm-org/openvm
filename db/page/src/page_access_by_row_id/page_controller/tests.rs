@@ -85,7 +85,7 @@ fn load_page_test(
     let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
-    verifier.verify(&mut challenger, &vk, &proof, &pis)
+    verifier.verify(&mut challenger, &vk, &proof)
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn page_access_chip_test() {
         })
         .collect::<Vec<Vec<Vec<u32>>>>();
 
-    let mut page_controller = PageController::new(bus_index);
+    let mut page_controller = PageController::new(bus_index, page_width);
     let page_requester = DummyInteractionAir::new(1 + page_width, true, bus_index);
 
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(log_num_requests));
@@ -125,11 +125,10 @@ fn page_access_chip_test() {
     let page_metadata_ptr = keygen_builder.add_main_matrix(2);
     keygen_builder.add_partitioned_air(
         &page_controller.page_access_air,
-        0,
         vec![page_data_ptr, page_metadata_ptr],
     );
 
-    keygen_builder.add_air(&page_requester, 0);
+    keygen_builder.add_air(&page_requester);
 
     let pk = keygen_builder.generate_pk();
 

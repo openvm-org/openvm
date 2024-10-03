@@ -91,7 +91,8 @@ pub struct Proof<SC: StarkGenericConfig> {
     /// For each RAP, for each challenge phase with trace,
     /// the values to expose to the verifier in that phase
     pub exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
-    // Should we include public values here?
+    // For each RAP, the public values to expose to the verifier
+    pub public_values: Vec<Vec<Val<SC>>>,
 }
 
 impl<SC: StarkGenericConfig> Proof<SC> {

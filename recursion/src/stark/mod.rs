@@ -1,6 +1,6 @@
 pub mod outer;
 
-use std::{cmp::Reverse, marker::PhantomData};
+use std::marker::PhantomData;
 
 use afs_compiler::{
     conversion::CompilerOptions,
@@ -13,18 +13,13 @@ use afs_stark_backend::{
         verifier::GenericVerifierConstraintFolder,
     },
     prover::opener::AdjacentOpenedValues,
-    rap::AnyRap,
 };
 use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
-use itertools::{izip, multiunzip, Itertools};
+use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
-use p3_matrix::{
-    dense::{RowMajorMatrix, RowMajorMatrixView},
-    stack::VerticalPair,
-    Matrix,
-};
+use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
 use stark_vm::program::Program;
 
 use crate::{
@@ -150,7 +145,9 @@ where
         let VerifierInputVariable::<C> {
             proof,
             log_degree_per_air,
-            public_values,
+            // Extra checking for air_perm_by_height is unnecessary because only a valid permutation
+            // can pass the FRI verification.
+            air_perm_by_height,
         } = input;
 
         let num_airs = vk.per_air.len();
@@ -159,8 +156,15 @@ where
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
 
+        let air_perm_by_height = if builder.flags.static_only {
+            let perm = (0..num_airs).map(|i| builder.eval(RVar::from(i))).collect();
+            &builder.vec(perm)
+        } else {
+            air_perm_by_height
+        };
+
         for k in 0..num_airs {
-            let pvs = builder.get(public_values, k);
+            let pvs = builder.get(&proof.public_values, k);
             for j in 0..vk.per_air[k].num_public_values {
                 let element = builder.get(&pvs, j);
                 challenger.observe(builder, element);
@@ -181,6 +185,7 @@ where
             after_challenge: after_challenge_commits,
             quotient: quotient_commit,
         } = &proof.commitments;
+        let public_values = &proof.public_values;
 
         // Observe main trace commitments
         for i in 0..vk.num_main_trace_commitments {
@@ -279,6 +284,9 @@ where
         let rounds = builder.array::<TwoAdicPcsRoundVariable<_>>(total_rounds);
         let mut round_idx = 0;
 
+        // For rounds which don't need permutation
+        let null_perm = builder.array(0);
+
         // 1. First the preprocessed trace openings: one round per AIR with preprocessing.
         let prep_idx: Usize<_> = builder.eval(C::N::zero());
         for i in 0..num_airs {
@@ -306,13 +314,19 @@ where
                 builder.set_value(
                     &rounds,
                     round_idx,
-                    TwoAdicPcsRoundVariable { batch_commit, mats },
+                    TwoAdicPcsRoundVariable {
+                        batch_commit,
+                        mats,
+                        permutation: null_perm.clone(),
+                    },
                 );
                 round_idx += 1;
             }
         }
 
         // 2. Then the main trace openings.
+        // Flag if the "big" commitment with all non-cached main traces has been processed.
+        let mut main_commitment_processed = false;
         vk.main_commit_to_air_graph
             .commit_to_air_index
             .iter()
@@ -345,10 +359,25 @@ where
                         };
                         builder.set_value(&mats, air_idx, main_mat);
                     });
+                // FIXME: here we assume that there is only 1 commitment for all non-cached main traces.
+                let permutation = if matrix_to_air_index.len() > 1 {
+                    assert!(
+                        !main_commitment_processed,
+                        "Only 1 commitment for all non-cached main traces is supported"
+                    );
+                    main_commitment_processed = true;
+                    air_perm_by_height.clone()
+                } else {
+                    null_perm.clone()
+                };
                 builder.set_value(
                     &rounds,
                     round_idx,
-                    TwoAdicPcsRoundVariable { batch_commit, mats },
+                    TwoAdicPcsRoundVariable {
+                        batch_commit,
+                        mats,
+                        permutation,
+                    },
                 );
                 round_idx += 1;
             });
@@ -381,7 +410,11 @@ where
             builder.set_value(
                 &rounds,
                 round_idx,
-                TwoAdicPcsRoundVariable { batch_commit, mats },
+                TwoAdicPcsRoundVariable {
+                    batch_commit,
+                    mats,
+                    permutation: air_perm_by_height.clone(),
+                },
             );
             round_idx += 1;
         }
@@ -393,17 +426,45 @@ where
             .map(|air| air.quotient_degree)
             .sum::<usize>();
 
-        let quotient_mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_quotient_mats);
-        let qc_index: Usize<_> = builder.eval(C::N::zero());
+        // The permutation array for the quotient chunks.
+        // For example:
+        // There are 2 AIRs, X and Y. X has 2 quotient chunks, X_1 and X_2. Y has 3
+        // quotient chunks, Y_1, Y_2, and Y_3.
+        // `air_perm_by_height` is [1, 0].
+        // Because quotient chunks have the same height as the trace of its AIR. So the permutation
+        // array is [Y_1, Y_2, Y_3, X_1, X_2] = [2, 3, 4, 0, 1].
+        let quotient_perm = builder.array(num_quotient_mats);
 
+        let quotient_degree_per_air = builder.array::<Usize<_>>(num_airs);
+        for i in 0..num_airs {
+            let quotient_degree = vk.per_air[i].quotient_degree;
+            builder.set(&quotient_degree_per_air, i, RVar::from(quotient_degree));
+        }
+        // AIR index -> its offset in the permutation array.
+        let perm_offset_per_air = builder.array::<Usize<_>>(num_airs);
+        let offset: Usize<_> = builder.eval(RVar::zero());
+        for i in 0..num_airs {
+            let air_index = builder.get(air_perm_by_height, i);
+            builder.set(&perm_offset_per_air, air_index.clone(), offset.clone());
+            // Last add is unnecessary.
+            if i + 1 != num_airs {
+                let quotient_degree = builder.get(&quotient_degree_per_air, air_index);
+                builder.assign(&offset, offset.clone() + quotient_degree);
+            }
+        }
+
+        let quotient_mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_quotient_mats);
         let qc_points = builder.array::<Ext<_, _>>(1);
         builder.set_value(&qc_points, 0, zeta);
 
+        let mut qc_index = 0;
         for i in 0..num_airs {
             let opened_quotient = builder.get(&proof.opening.values.quotient, i);
             let qc_domains = builder.get(&quotient_chunk_domains, i);
+            let air_offset = builder.get(&perm_offset_per_air, i);
 
-            builder.range(0, qc_domains.len()).for_each(|j, builder| {
+            let quotient_degree = vk.per_air[i].quotient_degree;
+            for j in 0..quotient_degree {
                 let qc_dom = builder.get(&qc_domains, j);
                 let qc_vals_array = builder.get(&opened_quotient, j);
                 let qc_values = builder.array::<Array<C, _>>(1);
@@ -413,13 +474,16 @@ where
                     values: qc_values,
                     points: qc_points.clone(),
                 };
-                builder.set_value(&quotient_mats, qc_index.clone(), qc_mat);
-                builder.assign(&qc_index, qc_index.clone() + C::N::one());
-            });
+                let qc_offset = builder.eval_expr(air_offset.clone() + RVar::from(j));
+                builder.set_value(&quotient_mats, qc_index, qc_mat);
+                builder.set(&quotient_perm, qc_offset, RVar::from(qc_index));
+                qc_index += 1;
+            }
         }
         let quotient_round = TwoAdicPcsRoundVariable {
             batch_commit: quotient_commit.clone(),
             mats: quotient_mats,
+            permutation: quotient_perm,
         };
         builder.set_value(&rounds, round_idx, quotient_round);
         round_idx += 1;
@@ -544,13 +608,11 @@ where
             }
         }
 
-        assert_eq!(
-            partitioned_main_values.len(),
-            constants.width.partitioned_main.len()
-        );
+        let main_widths = constants.width.main_widths();
+        assert_eq!(partitioned_main_values.len(), main_widths.len());
         let partitioned_main_values = partitioned_main_values
             .iter()
-            .zip_eq(constants.width.partitioned_main.iter())
+            .zip_eq(main_widths.iter())
             .map(|(main_values, &width)| {
                 builder.assert_eq::<Usize<_>>(main_values.local.len(), RVar::from(width));
                 builder.assert_eq::<Usize<_>>(main_values.next.len(), RVar::from(width));
@@ -759,12 +821,12 @@ where
         let VerifierInputVariable::<C> {
             proof,
             log_degree_per_air,
-            public_values,
+            ..
         } = input;
 
         builder.assert_eq::<Usize<_>>(log_degree_per_air.len(), RVar::from(num_airs));
         // Challenger must observe public values
-        builder.assert_eq::<Usize<_>>(public_values.len(), RVar::from(num_airs));
+        builder.assert_eq::<Usize<_>>(proof.public_values.len(), RVar::from(num_airs));
 
         builder.assert_eq::<Usize<_>>(
             proof.commitments.main_trace.len(),
@@ -791,7 +853,7 @@ where
         builder.assert_eq::<Usize<_>>(proof.opening.values.quotient.len(), RVar::from(num_airs));
         let mut num_preprocessed = 0;
         vk.per_air.iter().enumerate().for_each(|(i, air_const)| {
-            let pvs = builder.get(public_values, i);
+            let pvs = builder.get(&proof.public_values, i);
             builder.assert_eq::<Usize<_>>(pvs.len(), RVar::from(air_const.num_public_values));
 
             if air_const.preprocessed_data.is_some() {
@@ -836,19 +898,4 @@ where
         );
         // FIXME: check if all necessary validation is covered.
     }
-}
-
-#[allow(clippy::type_complexity)]
-pub fn sort_chips(
-    chips: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    traces: Vec<RowMajorMatrix<BabyBear>>,
-    pvs: Vec<Vec<BabyBear>>,
-) -> (
-    Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    Vec<RowMajorMatrix<BabyBear>>,
-    Vec<Vec<BabyBear>>,
-) {
-    let mut groups = izip!(chips, traces, pvs).collect_vec();
-    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
-    multiunzip(groups)
 }

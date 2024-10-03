@@ -6,7 +6,7 @@ use std::{
 
 use color_eyre::eyre::{Report, Result};
 use p3_field::PrimeField64;
-use stark_vm::cpu::trace::Instruction;
+use stark_vm::program::Instruction;
 
 pub fn parse_asm_file<F: PrimeField64>(path: &Path) -> Result<Vec<Instruction<F>>> {
     let file = File::open(path)?;

@@ -1,5 +1,8 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use ax_sdk::{config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    utils::create_seeded_rng,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
@@ -38,7 +41,8 @@ fn test_vec_is_equal_vec(x: [u32; 3], y: [u32; 3], is_equal: u32, expected_prods
         );
     }
 
-    run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test]
@@ -73,7 +77,8 @@ fn test_all_is_equal_vec() {
             .collect(),
     );
 
-    run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test_case([1, 2, 3], [1, 2, 3], [1, 1, 1] ; "1, 2, 3 == 1, 2, 3")]
@@ -102,8 +107,12 @@ fn test_single_is_equal_vec_fail(x: [u32; 3], y: [u32; 3], expected: [u32; 3]) {
             *debug.lock().unwrap() = false;
         });
         assert_eq!(
-            run_simple_test_no_pis(vec![&chip], vec![trace.clone()]),
-            Err(VerificationError::OodEvaluationMismatch),
+            BabyBearPoseidon2Engine::run_simple_test_no_pis(
+                &any_rap_vec![&chip],
+                vec![trace.clone()]
+            )
+            .err(),
+            Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
         trace.values[6 + i] = BabyBear::one() - trace.values[6 + i];
@@ -133,8 +142,12 @@ fn test_vec_is_equal_vec_fail() {
                 *debug.lock().unwrap() = false;
             });
             assert_eq!(
-                run_simple_test_no_pis(vec![&chip], vec![trace.clone()]),
-                Err(VerificationError::OodEvaluationMismatch),
+                BabyBearPoseidon2Engine::run_simple_test_no_pis(
+                    &any_rap_vec![&chip],
+                    vec![trace.clone()]
+                )
+                .err(),
+                Some(VerificationError::OodEvaluationMismatch),
                 "Expected constraint to fail"
             );
             trace.row_mut(i)[j] = BabyBear::one() - trace.row_mut(i)[j];
@@ -142,8 +155,12 @@ fn test_vec_is_equal_vec_fail() {
                 *debug.lock().unwrap() = false;
             });
             assert_eq!(
-                run_simple_test_no_pis(vec![&chip], vec![trace.clone()]),
-                Err(VerificationError::OodEvaluationMismatch),
+                BabyBearPoseidon2Engine::run_simple_test_no_pis(
+                    &any_rap_vec![&chip],
+                    vec![trace.clone()]
+                )
+                .err(),
+                Some(VerificationError::OodEvaluationMismatch),
                 "Expected constraint to fail"
             );
         }

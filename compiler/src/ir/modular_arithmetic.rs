@@ -1,10 +1,11 @@
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_field::{AbstractField, PrimeField64};
-use stark_vm::modular_arithmetic::{
-    big_uint_to_num_limbs, LIMB_SIZE, NUM_LIMBS, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+use stark_vm::modular_addsub::{
+    big_uint_to_num_limbs, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
 };
 
+use super::{LIMB_SIZE, NUM_LIMBS};
 use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
 
 pub type BigUintVar<C> = Array<C, Var<<C as Config>::N>>;
@@ -95,14 +96,14 @@ where
         // FIXME: reuse constant zero.
         let big_zero = self.eval_biguint(BigUint::zero());
         self.operations
-            .push(DslIr::EqualToU256(ret_arr.ptr(), biguint.clone(), big_zero));
+            .push(DslIr::EqualTo256(ret_arr.ptr(), biguint.clone(), big_zero));
         let ret: Var<_> = self.get(&ret_arr, 0);
         self.if_ne(ret, C::N::one()).then(|builder| {
             // FIXME: reuse constant.
             let big_n = builder.eval_biguint(SECP256K1_COORD_PRIME.clone());
             builder
                 .operations
-                .push(DslIr::EqualToU256(ret_arr.ptr(), biguint.clone(), big_n));
+                .push(DslIr::EqualTo256(ret_arr.ptr(), biguint.clone(), big_n));
             let _ret: Var<_> = builder.get(&ret_arr, 0);
             builder.assign(&ret, _ret);
         });
@@ -172,14 +173,14 @@ where
         // FIXME: reuse constant zero.
         let big_zero = self.eval_biguint(BigUint::zero());
         self.operations
-            .push(DslIr::EqualToU256(ret_arr.ptr(), biguint.clone(), big_zero));
+            .push(DslIr::EqualTo256(ret_arr.ptr(), biguint.clone(), big_zero));
         let ret: Var<_> = self.get(&ret_arr, 0);
         self.if_ne(ret, C::N::one()).then(|builder| {
             // FIXME: reuse constant.
             let big_n = builder.eval_biguint(SECP256K1_SCALAR_PRIME.clone());
             builder
                 .operations
-                .push(DslIr::EqualToU256(ret_arr.ptr(), biguint.clone(), big_n));
+                .push(DslIr::EqualTo256(ret_arr.ptr(), biguint.clone(), big_n));
             let _ret: Var<_> = builder.get(&ret_arr, 0);
             builder.assign(&ret, _ret);
         });

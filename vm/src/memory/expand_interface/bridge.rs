@@ -5,7 +5,7 @@ use p3_field::{AbstractField, Field};
 
 use super::columns::MemoryExpandInterfaceCols;
 use crate::{
-    cpu::{EXPAND_BUS, MEMORY_BUS},
+    core::{EXPAND_BUS, MEMORY_BUS},
     memory::expand_interface::air::MemoryExpandInterfaceAir,
 };
 

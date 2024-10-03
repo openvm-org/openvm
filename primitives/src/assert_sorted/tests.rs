@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use assert_sorted::AssertSortedChip;
-use ax_sdk::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use ax_sdk::{
+    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+};
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::DenseMatrix;
 
@@ -54,8 +56,8 @@ fn test_assert_sorted_chip_small_positive() {
         assert_sorted_chip.generate_trace(requests.clone());
     let range_checker_trace = assert_sorted_chip.range_checker.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![&assert_sorted_chip.air, &range_checker_chip.air],
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![&assert_sorted_chip.air, &range_checker_chip.air],
         vec![assert_sorted_chip_trace, range_checker_trace],
     )
     .expect("Verification failed");
@@ -81,8 +83,8 @@ fn test_assert_sorted_chip_large_positive() {
         assert_sorted_chip.generate_trace(requests.clone());
     let range_checker_trace = assert_sorted_chip.range_checker.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![&assert_sorted_chip.air, &range_checker_chip.air],
+    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+        &any_rap_vec![&assert_sorted_chip.air, &range_checker_chip.air],
         vec![assert_sorted_chip_trace, range_checker_trace],
     )
     .expect("Verification failed");
@@ -112,11 +114,12 @@ fn test_assert_sorted_chip_unsorted_negative() {
 
     disable_debug_builder();
     assert_eq!(
-        run_simple_test_no_pis(
-            vec![&assert_sorted_chip.air, &range_checker_chip.air],
+        BabyBearPoseidon2Engine::run_simple_test_no_pis(
+            &any_rap_vec![&assert_sorted_chip.air, &range_checker_chip.air],
             vec![assert_sorted_chip_trace, range_checker_trace],
-        ),
-        Err(VerificationError::OodEvaluationMismatch),
+        )
+        .err(),
+        Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
 }

@@ -1,17 +1,21 @@
 use std::ops::Deref;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use num_bigint_dig::BigUint;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::columns::{EcAddCols, EcDoubleCols};
+use super::{EcAddCols, EcAddIoCols, EcAuxCols, EcDoubleCols, EcDoubleIoCols};
 use crate::{
     bigint::{check_carry_mod_to_zero::CheckCarryModToZeroSubAir, DefaultLimbConfig, OverflowInt},
-    sub_chip::AirConfig,
+    sub_chip::{AirConfig, SubAir},
 };
 
+#[derive(Clone, Debug)]
 pub struct EcAirConfig {
     // e.g. secp256k1 is 2^256 - 2^32 - 977.
     pub prime: BigUint,
@@ -30,6 +34,7 @@ pub struct EcAirConfig {
     pub decomp: usize,
 }
 
+#[derive(Clone, Debug)]
 pub struct EcAddUnequalAir {
     pub config: EcAirConfig,
 }
@@ -42,11 +47,12 @@ impl Deref for EcAddUnequalAir {
     }
 }
 
-pub struct EccDoubleAir {
+#[derive(Clone, Debug)]
+pub struct EcDoubleAir {
     pub config: EcAirConfig,
 }
 
-impl Deref for EccDoubleAir {
+impl Deref for EcDoubleAir {
     type Target = EcAirConfig;
 
     fn deref(&self) -> &Self::Target {
@@ -83,6 +89,8 @@ impl EcAirConfig {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for EcAddUnequalAir {}
+impl<F: Field> PartitionedBaseAir<F> for EcAddUnequalAir {}
 impl<F: Field> BaseAir<F> for EcAddUnequalAir {
     fn width(&self) -> usize {
         EcAddCols::<F, DefaultLimbConfig>::width(self)
@@ -93,13 +101,15 @@ impl AirConfig for EcAddUnequalAir {
     type Cols<T> = EcAddCols<T, DefaultLimbConfig>;
 }
 
-impl<F: Field> BaseAir<F> for EccDoubleAir {
+impl<F: Field> BaseAirWithPublicValues<F> for EcDoubleAir {}
+impl<F: Field> PartitionedBaseAir<F> for EcDoubleAir {}
+impl<F: Field> BaseAir<F> for EcDoubleAir {
     fn width(&self) -> usize {
         EcDoubleCols::<F, DefaultLimbConfig>::width(self)
     }
 }
 
-impl AirConfig for EccDoubleAir {
+impl AirConfig for EcDoubleAir {
     type Cols<T> = EcDoubleCols<T, DefaultLimbConfig>;
 }
 
@@ -111,6 +121,15 @@ impl<AB: InteractionBuilder> Air<AB> for EcAddUnequalAir {
 
         let EcAddCols { io, aux } = local;
 
+        SubAir::eval(self, builder, io, aux);
+    }
+}
+
+impl<AB: InteractionBuilder> SubAir<AB> for EcAddUnequalAir {
+    type IoView = EcAddIoCols<AB::Var, DefaultLimbConfig>;
+    type AuxView = EcAuxCols<AB::Var>;
+
+    fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         // λ = (y2 - y1) / (x2 - x1)
         let lambda =
             OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(aux.lambda, self.limb_bits);
@@ -137,7 +156,7 @@ impl<AB: InteractionBuilder> Air<AB> for EcAddUnequalAir {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for EccDoubleAir {
+impl<AB: InteractionBuilder> Air<AB> for EcDoubleAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -145,6 +164,15 @@ impl<AB: InteractionBuilder> Air<AB> for EccDoubleAir {
 
         let EcDoubleCols { io, aux } = local;
 
+        SubAir::eval(self, builder, io, aux);
+    }
+}
+
+impl<AB: InteractionBuilder> SubAir<AB> for EcDoubleAir {
+    type IoView = EcDoubleIoCols<AB::Var, DefaultLimbConfig>;
+    type AuxView = EcAuxCols<AB::Var>;
+
+    fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         // λ = (3 * x1^2) / (2 * y1)
         let lambda =
             OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(aux.lambda, self.limb_bits);

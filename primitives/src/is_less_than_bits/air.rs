@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use afs_stark_backend::rap::{BaseAirWithPublicValues, PartitionedBaseAir};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
@@ -22,6 +23,8 @@ impl AirConfig for IsLessThanBitsAir {
     type Cols<T> = IsLessThanBitsCols<T>;
 }
 
+impl<F> BaseAirWithPublicValues<F> for IsLessThanBitsAir {}
+impl<F> PartitionedBaseAir<F> for IsLessThanBitsAir {}
 impl<F> BaseAir<F> for IsLessThanBitsAir {
     fn width(&self) -> usize {
         3 + (self.limb_bits + 1)

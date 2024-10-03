@@ -26,25 +26,67 @@ env:
 jobs:
   benchmark:
     uses: ./.github/workflows/benchmark-call.yml
-    # run on non-draft pull request with label 'run-benchmark'
+    # run on pull request with label 'run-benchmark'
     # and always run on push to main
     if: |
       (github.event_name == 'pull_request' &&
-      github.event.pull_request.draft == false &&
       contains(github.event.pull_request.labels.*.name, 'run-benchmark')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
       benchmark_name: vm_verify_fibair
     secrets: inherit
+
   benchmark_static:
+    uses: ./.github/workflows/benchmark-call.yml
+    # run on pull request with label 'run-benchmark-e2e'
+    # and always run on push to main
+    if: |
+      (github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e')) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    with:
+      benchmark_name: halo2_static_verify_fibair
+    secrets: inherit
+
+  benchmark_tiny_e2e:
+    uses: ./.github/workflows/benchmark-call.yml
+    # run on pull request with label 'run-benchmark' or 'run-benchmark-e2e'
+    # and always run on push to main
+    # only run-benchmark-e2e will run halo2 verifier
+    if: |
+      (github.event_name == 'pull_request' &&
+      (contains(github.event.pull_request.labels.*.name, 'run-benchmark') ||
+      contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e'))) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    with:
+      aws_instance_type: r7g.16xlarge
+      benchmark_name: tiny_e2e
+    secrets: inherit
+
+  benchmark_alu256_e2e:
+    uses: ./.github/workflows/benchmark-call.yml
+    # run on pull request with label 'run-benchmark' or 'run-benchmark-e2e'
+    # and always run on push to main
+    if: |
+      (github.event_name == 'pull_request' &&
+      (contains(github.event.pull_request.labels.*.name, 'run-benchmark') ||
+      contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e'))) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    with:
+      aws_instance_type: r7g.16xlarge
+      benchmark_name: alu256_e2e
+    secrets: inherit
+
+  benchmark_small_e2e:
     uses: ./.github/workflows/benchmark-call.yml
     # run on non-draft pull request with label 'run-benchmark'
     # and always run on push to main
     if: |
       (github.event_name == 'pull_request' &&
-      github.event.pull_request.draft == false &&
-      contains(github.event.pull_request.labels.*.name, 'run-benchmark')) ||
+      (contains(github.event.pull_request.labels.*.name, 'run-benchmark') ||
+      contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e'))) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
-      benchmark_name: vm_static_verify_fibair
+      aws_instance_type: r7g.16xlarge
+      benchmark_name: small_e2e
     secrets: inherit

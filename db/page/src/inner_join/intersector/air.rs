@@ -3,7 +3,10 @@ use afs_primitives::{
     sub_chip::{AirConfig, SubAir},
     utils::or,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -13,6 +16,8 @@ use super::{
     IntersectorAir,
 };
 
+impl<F: Field> BaseAirWithPublicValues<F> for IntersectorAir {}
+impl<F: Field> PartitionedBaseAir<F> for IntersectorAir {}
 impl<F: Field> BaseAir<F> for IntersectorAir {
     fn width(&self) -> usize {
         self.air_width()

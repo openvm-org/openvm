@@ -1,4 +1,7 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -17,6 +20,8 @@ impl RangeTupleCheckerAir {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for RangeTupleCheckerAir {}
+impl<F: Field> PartitionedBaseAir<F> for RangeTupleCheckerAir {}
 impl<F: Field> BaseAir<F> for RangeTupleCheckerAir {
     fn width(&self) -> usize {
         NUM_RANGE_TUPLE_COLS

@@ -1,7 +1,10 @@
 use std::iter;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
-use ax_sdk::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
+use ax_sdk::{
+    config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    utils::create_seeded_rng,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
@@ -76,7 +79,8 @@ fn test_variable_range_checker_chip_send() {
         .chain(iter::once(var_range_checker_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+        .expect("Verification failed");
 }
 
 #[test]
@@ -124,8 +128,8 @@ fn negative_test_variable_range_checker_chip_send() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(all_chips, all_traces),
-        Err(VerificationError::NonZeroCumulativeSum),
+        BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces).err(),
+        Some(VerificationError::NonZeroCumulativeSum),
         "Expected constraint to fail"
     );
 }
@@ -188,7 +192,8 @@ fn test_variable_range_checker_chip_range_check() {
         .chain(iter::once(var_range_checker_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
+    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+        .expect("Verification failed");
 }
 
 #[test]
@@ -234,8 +239,8 @@ fn negative_test_variable_range_checker_chip_range_check() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(all_chips, all_traces),
-        Err(VerificationError::NonZeroCumulativeSum),
+        BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces).err(),
+        Some(VerificationError::NonZeroCumulativeSum),
         "Expected constraint to fail"
     );
 }

@@ -11,7 +11,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::RngCore;
 
 use crate::{
-    cpu::EXPAND_BUS,
+    core::EXPAND_BUS,
     memory::{
         expand::{columns::ExpandCols, tests::util::HashTestChip, ExpandChip, MemoryDimensions},
         tree::MemoryNode,

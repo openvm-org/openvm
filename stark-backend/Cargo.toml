@@ -23,6 +23,7 @@ serde = { workspace = true, default-features = false, features = [
     "rc",
 ] }
 derivative = "2.2.0"
+metrics = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 tikv-jemallocator = { version = "0.6", optional = true }
@@ -55,3 +56,4 @@ default = []
 parallel = ["p3-maybe-rayon/parallel", "dep:rayon"]
 jemalloc = ["dep:tikv-jemallocator"]
 jemalloc-prof = ["jemalloc", "tikv-jemallocator?/profiling"]
+bench-metrics = ["dep:metrics"]

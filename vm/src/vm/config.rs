@@ -1,9 +1,10 @@
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 
-use crate::cpu::CpuOptions;
+use crate::core::CoreOptions;
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
+pub const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 7; // the sbox degree used for Poseidon2
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
 pub struct MemoryConfig {
@@ -21,17 +22,22 @@ impl Default for MemoryConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
-    // TODO: VmConfig should just contain CpuOptions to reduce redundancy
+    // TODO: VmConfig should just contain CoreOptions to reduce redundancy
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
+    pub poseidon2_max_constraint_degree: Option<usize>,
     pub keccak_enabled: bool,
-    pub modular_multiplication_enabled: bool,
+    pub modular_addsub_enabled: bool,
+    pub modular_multdiv_enabled: bool,
     pub is_less_than_enabled: bool,
     pub u256_arithmetic_enabled: bool,
     pub u256_multiplication_enabled: bool,
+    pub shift_256_enabled: bool,
+    pub ui_32_enabled: bool,
     pub castf_enabled: bool,
+    pub secp256k1_enabled: bool,
     pub memory_config: MemoryConfig,
     pub num_public_values: usize,
     pub max_segment_len: usize,
@@ -48,12 +54,17 @@ impl Default for VmConfig {
             field_extension_enabled: true,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
+            poseidon2_max_constraint_degree: Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
             keccak_enabled: false,
-            modular_multiplication_enabled: false,
+            modular_addsub_enabled: false,
+            modular_multdiv_enabled: false,
             is_less_than_enabled: false,
             u256_arithmetic_enabled: false,
             u256_multiplication_enabled: false,
+            shift_256_enabled: false,
+            ui_32_enabled: false,
             castf_enabled: false,
+            secp256k1_enabled: false,
             memory_config: Default::default(),
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
@@ -64,8 +75,8 @@ impl Default for VmConfig {
 }
 
 impl VmConfig {
-    pub fn cpu_options(&self) -> CpuOptions {
-        CpuOptions {
+    pub fn core_options(&self) -> CoreOptions {
+        CoreOptions {
             num_public_values: self.num_public_values,
         }
     }
@@ -75,9 +86,18 @@ impl VmConfig {
             field_arithmetic_enabled: false,
             field_extension_enabled: false,
             compress_poseidon2_enabled: false,
+            poseidon2_max_constraint_degree: None,
             perm_poseidon2_enabled: false,
             keccak_enabled: false,
             ..Default::default()
+        }
+    }
+
+    pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
+        VmConfig {
+            poseidon2_max_constraint_degree: Some(poseidon2_max_constraint_degree),
+            num_public_values: 4,
+            ..VmConfig::default()
         }
     }
 }

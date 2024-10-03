@@ -12,7 +12,7 @@ use afs_stark_backend::{
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
-        fri_params::{fri_params_with_100_bits_of_security, fri_params_with_80_bits_of_security},
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
     engine::StarkEngine,
@@ -34,7 +34,6 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     MultiStarkVerifyingKey<SC>,
     DummyInteractionAir,
     Proof<SC>,
-    Vec<Vec<Val<SC>>>,
     ProverBenchmarks,
 )
 where
@@ -84,9 +83,9 @@ where
     if partition {
         let fields_ptr = keygen_builder.add_cached_main_matrix(air.field_width());
         let count_ptr = keygen_builder.add_main_matrix(1);
-        keygen_builder.add_partitioned_air(&air, 0, vec![count_ptr, fields_ptr]);
+        keygen_builder.add_partitioned_air(&air, vec![count_ptr, fields_ptr]);
     } else {
-        keygen_builder.add_air(&air, 0);
+        keygen_builder.add_air(&air);
     }
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
@@ -124,7 +123,7 @@ where
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
     benchmarks.prove_time = start.elapsed().as_micros();
 
-    (vk, air, proof, pis, benchmarks)
+    (vk, air, proof, benchmarks)
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
@@ -191,9 +190,9 @@ fn compare_provers(
     let rng = StdRng::seed_from_u64(0);
     let trace = generate_random_trace(rng, field_width, 1 << log_degree);
     let engine = engine_from_perm(random_perm(), log_degree, fri_params);
-    let (_, _, _, _, without_ct) = prove(&engine, trace.clone(), false);
+    let (_, _, _, without_ct) = prove(&engine, trace.clone(), false);
 
-    let (_, _, _, _, with_ct) = prove(&engine, trace, true);
+    let (_, _, _, with_ct) = prove(&engine, trace, true);
 
     ProverStatistics {
         name: "Poseidon2Perm16".to_string(),
@@ -211,11 +210,9 @@ fn compare_provers(
 #[test]
 #[ignore = "bench"]
 fn bench_cached_trace_prover() -> eyre::Result<()> {
-    let fri_params = [
-        fri_params_with_80_bits_of_security(),
-        fri_params_with_100_bits_of_security(),
-    ]
-    .concat();
+    let fri_params = [1, 2, 3, 4]
+        .map(standard_fri_params_with_100_bits_conjectured_security)
+        .to_vec();
     let data_sizes = get_data_sizes();
 
     // Write to csv as we go

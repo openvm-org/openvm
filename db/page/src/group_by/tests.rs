@@ -221,7 +221,7 @@ impl GroupByTest {
 
         let mut challenger = engine.new_challenger();
 
-        verifier.verify(&mut challenger, &vk, &proof, &pis)
+        verifier.verify(&mut challenger, &vk, &proof)
     }
 }
 

@@ -25,8 +25,9 @@ p3-poseidon2 = { workspace = true }
 p3-uni-stark = { workspace = true }
 itertools.workspace = true
 
-rand = "0.8.5"
-num-bigint-dig = { workspace = true }
+rand.workspace = true
+num-bigint-dig.workspace = true
+num-traits.workspace = true
 serde = { workspace = true }
 snark-verifier-sdk = { workspace = true }
 zkhash = { workspace = true }

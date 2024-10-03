@@ -12,6 +12,8 @@ type ViewPair<'a, T> = VerticalPair<RowMajorMatrixView<'a, T>, RowMajorMatrixVie
 /// AIR builder that supports main trace matrix which is partitioned
 /// into sub-matrices which belong to different commitments.
 pub trait PartitionedAirBuilder: AirBuilder {
-    /// Main trace matrix, partitioned column-wise into sub-matrices
-    fn partitioned_main(&self) -> &[Self::M];
+    /// Cached main trace matrix.
+    fn cached_mains(&self) -> &[Self::M];
+    /// Common main trace matrix. Panic if there is no common main trace.
+    fn common_main(&self) -> &Self::M;
 }
