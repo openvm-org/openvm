@@ -12,7 +12,7 @@ use num_traits::Zero;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{Rng, RngCore};
-use stark_vm::{arch::InstructionExecutorVariantName, vm::config::VmConfig};
+use stark_vm::{arch::ExecutorName, vm::config::VmConfig};
 
 #[test]
 fn test_compiler_256_add_sub() {
@@ -92,7 +92,7 @@ fn test_compiler_256_mul() {
             bigint_limb_size: 8,
             ..Default::default()
         }
-        .add_default_executor(InstructionExecutorVariantName::U256Multiplication),
+        .add_default_executor(ExecutorName::U256Multiplication),
         program,
         vec![],
     );
@@ -286,7 +286,7 @@ fn test_compiler_256_sll_srl() {
             bigint_limb_size: 8,
             ..Default::default()
         }
-        .add_default_executor(InstructionExecutorVariantName::ArithmeticLogicUnit256),
+        .add_default_executor(ExecutorName::ArithmeticLogicUnit256),
         program,
         vec![],
     );
@@ -346,7 +346,7 @@ fn test_compiler_256_sra() {
             bigint_limb_size: 8,
             ..Default::default()
         }
-        .add_default_executor(InstructionExecutorVariantName::ArithmeticLogicUnit256),
+        .add_default_executor(ExecutorName::ArithmeticLogicUnit256),
         program,
         vec![],
     );

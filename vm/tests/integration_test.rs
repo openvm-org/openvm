@@ -21,7 +21,7 @@ use stark_vm::{
             CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*, Keccak256Opcode::*,
             Poseidon2Opcode::*, UsizeOpcode,
         },
-        InstructionExecutorVariantName,
+        ExecutorName,
     },
     hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     program::{Instruction, Program},
@@ -47,7 +47,7 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
         memory_config: MemoryConfig::new(29, 29, 15, 8),
         ..VmConfig::core()
     }
-    .add_default_executor(InstructionExecutorVariantName::FieldArithmetic)
+    .add_default_executor(ExecutorName::FieldArithmetic)
 }
 
 fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Vec<BabyBear>>) {
@@ -81,8 +81,8 @@ fn air_test_with_compress_poseidon2(
             false,
             8,
         )
-        .add_default_executor(InstructionExecutorVariantName::Core)
-        .add_default_executor(InstructionExecutorVariantName::Poseidon2),
+        .add_default_executor(ExecutorName::Core)
+        .add_default_executor(ExecutorName::Poseidon2),
         program,
         vec![],
     );
@@ -277,8 +277,8 @@ fn test_vm_field_extension_arithmetic() {
             memory_config: MemoryConfig::new(29, 29, 15, 8),
             ..VmConfig::core()
         }
-        .add_default_executor(InstructionExecutorVariantName::FieldArithmetic)
-        .add_default_executor(InstructionExecutorVariantName::FieldExtension),
+        .add_default_executor(ExecutorName::FieldArithmetic)
+        .add_default_executor(ExecutorName::FieldExtension),
         program,
         vec![],
     );
@@ -532,7 +532,7 @@ fn test_vm_keccak() {
     };
 
     air_test(
-        VmConfig::core().add_default_executor(InstructionExecutorVariantName::Keccak256),
+        VmConfig::core().add_default_executor(ExecutorName::Keccak256),
         program,
         vec![],
     );
@@ -564,7 +564,7 @@ fn test_vm_keccak_non_full_round() {
     };
 
     air_test(
-        VmConfig::core().add_default_executor(InstructionExecutorVariantName::Keccak256),
+        VmConfig::core().add_default_executor(ExecutorName::Keccak256),
         program,
         vec![],
     );

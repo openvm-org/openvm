@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 
 use crate::{
-    arch::{instructions::*, InstructionExecutorVariantName},
+    arch::{instructions::*, ExecutorName},
     core::CoreOptions,
 };
 
@@ -26,72 +26,72 @@ impl Default for MemoryConfig {
     }
 }
 
-fn default_executor_range(executor: InstructionExecutorVariantName) -> (Range<usize>, usize) {
+fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
     let (start, len, offset) = match executor {
-        InstructionExecutorVariantName::Core => (
+        ExecutorName::Core => (
             CoreOpcode::default_offset(),
             CoreOpcode::COUNT,
             CoreOpcode::default_offset(),
         ),
-        InstructionExecutorVariantName::FieldArithmetic => (
+        ExecutorName::FieldArithmetic => (
             FieldArithmeticOpcode::default_offset(),
             FieldArithmeticOpcode::COUNT,
             FieldArithmeticOpcode::default_offset(),
         ),
-        InstructionExecutorVariantName::FieldExtension => (
+        ExecutorName::FieldExtension => (
             FieldExtensionOpcode::default_offset(),
             FieldExtensionOpcode::COUNT,
             FieldExtensionOpcode::default_offset(),
         ),
-        InstructionExecutorVariantName::Poseidon2 => (
+        ExecutorName::Poseidon2 => (
             Poseidon2Opcode::default_offset(),
             Poseidon2Opcode::COUNT,
             Poseidon2Opcode::default_offset(),
         ),
-        InstructionExecutorVariantName::Keccak256 => (
+        ExecutorName::Keccak256 => (
             Keccak256Opcode::default_offset(),
             Keccak256Opcode::COUNT,
             Keccak256Opcode::default_offset(),
         ),
-        InstructionExecutorVariantName::ModularAddSub => (
+        ExecutorName::ModularAddSub => (
             ModularArithmeticOpcode::default_offset(),
             2,
             ModularArithmeticOpcode::default_offset(),
         ),
-        InstructionExecutorVariantName::ModularMultDiv => (
+        ExecutorName::ModularMultDiv => (
             ModularArithmeticOpcode::default_offset() + 2,
             2,
             ModularArithmeticOpcode::default_offset(),
         ),
-        InstructionExecutorVariantName::ArithmeticLogicUnit256 => (
+        ExecutorName::ArithmeticLogicUnit256 => (
             U256Opcode::default_offset(),
             7,
             U256Opcode::default_offset(),
         ),
-        InstructionExecutorVariantName::U256Multiplication => (
+        ExecutorName::U256Multiplication => (
             U256Opcode::default_offset() + 11,
             1,
             U256Opcode::default_offset(),
         ),
-        InstructionExecutorVariantName::Shift256 => (
+        ExecutorName::Shift256 => (
             U256Opcode::default_offset() + 7,
             4,
             U256Opcode::default_offset(),
         ),
-        InstructionExecutorVariantName::Ui => (
+        ExecutorName::Ui => (
             U32Opcode::default_offset(),
             U32Opcode::COUNT,
             U32Opcode::default_offset(),
         ),
-        InstructionExecutorVariantName::CastF => (
+        ExecutorName::CastF => (
             CastfOpcode::default_offset(),
             CastfOpcode::COUNT,
             CastfOpcode::default_offset(),
         ),
-        InstructionExecutorVariantName::Secp256k1AddUnequal => {
+        ExecutorName::Secp256k1AddUnequal => {
             (EccOpcode::default_offset(), 1, EccOpcode::default_offset())
         }
-        InstructionExecutorVariantName::Secp256k1Double => (
+        ExecutorName::Secp256k1Double => (
             EccOpcode::default_offset() + 1,
             1,
             EccOpcode::default_offset(),
@@ -102,7 +102,7 @@ fn default_executor_range(executor: InstructionExecutorVariantName) -> (Range<us
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmConfig {
-    pub executors: Vec<(Range<usize>, InstructionExecutorVariantName, usize)>, // (range of opcodes, who executes, offset)
+    pub executors: Vec<(Range<usize>, ExecutorName, usize)>, // (range of opcodes, who executes, offset)
 
     pub poseidon2_max_constraint_degree: Option<usize>,
     pub memory_config: MemoryConfig,
@@ -137,14 +137,14 @@ impl VmConfig {
     pub fn add_executor(
         mut self,
         range: Range<usize>,
-        executor: InstructionExecutorVariantName,
+        executor: ExecutorName,
         offset: usize,
     ) -> Self {
         self.executors.push((range, executor, offset));
         self
     }
 
-    pub fn add_default_executor(self, executor: InstructionExecutorVariantName) -> Self {
+    pub fn add_default_executor(self, executor: ExecutorName) -> Self {
         let (range, offset) = default_executor_range(executor);
         self.add_executor(range, executor, offset)
     }
@@ -160,9 +160,9 @@ impl Default for VmConfig {
             false,
             8,
         )
-        .add_default_executor(InstructionExecutorVariantName::FieldArithmetic)
-        .add_default_executor(InstructionExecutorVariantName::FieldExtension)
-        .add_default_executor(InstructionExecutorVariantName::Poseidon2)
+        .add_default_executor(ExecutorName::FieldArithmetic)
+        .add_default_executor(ExecutorName::FieldExtension)
+        .add_default_executor(ExecutorName::Poseidon2)
     }
 }
 
@@ -182,7 +182,7 @@ impl VmConfig {
             false,
             8,
         )
-        .add_default_executor(InstructionExecutorVariantName::Core)
+        .add_default_executor(ExecutorName::Core)
     }
 
     pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {

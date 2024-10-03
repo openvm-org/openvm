@@ -162,7 +162,7 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
 
 #[derive(Debug, Clone, EnumDiscriminants)]
 #[strum_discriminants(derive(Serialize, Deserialize))]
-#[strum_discriminants(name(InstructionExecutorVariantName))]
+#[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum InstructionExecutorVariant<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),

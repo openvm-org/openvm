@@ -8,7 +8,7 @@ pub const LIMB_SIZE: usize = 8;
 pub const TWO_NUM_LIMBS: usize = 2 * NUM_LIMBS;
 
 use stark_vm::{
-    arch::InstructionExecutorVariantName,
+    arch::ExecutorName,
     program::{Instruction, Program},
     vm::{config::VmConfig, VirtualMachine},
 };
@@ -44,10 +44,10 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             bigint_limb_size: 8,
             ..VmConfig::core()
         }
-        .add_default_executor(InstructionExecutorVariantName::ModularAddSub)
-        .add_default_executor(InstructionExecutorVariantName::ModularMultDiv)
-        .add_default_executor(InstructionExecutorVariantName::Secp256k1AddUnequal)
-        .add_default_executor(InstructionExecutorVariantName::Secp256k1Double),
+        .add_default_executor(ExecutorName::ModularAddSub)
+        .add_default_executor(ExecutorName::ModularMultDiv)
+        .add_default_executor(ExecutorName::Secp256k1AddUnequal)
+        .add_default_executor(ExecutorName::Secp256k1Double),
         program,
         input_stream,
     );
