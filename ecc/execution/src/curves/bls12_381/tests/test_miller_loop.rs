@@ -39,30 +39,30 @@ fn test_multi_miller_loop_bls12_381() {
     let compare_final = halo2curves_axiom::bls12_381::pairing(&P, &Q);
 
     // Run the multi-miller loop
-    // let f = multi_miller_loop::<Fq, Fq2, Fq12>(
-    // let f = multi_miller_loop_separate_double_plus_add::<Fq, Fq2, Fq12>(
-    //     &[P_ecpoint],
-    //     &[Q_ecpoint],
-    //     GNARK_BLS12_381_PBE.as_slice(),
-    //     BLS12_381_XI,
-    // );
-
-    let f = multi_miller_loop_separate_double_plus_add_custom_debug::<Fq, Fq2, Fq12>(
+    let f = multi_miller_loop::<Fq, Fq2, Fq12>(
+        // let f = multi_miller_loop_separate_double_plus_add::<Fq, Fq2, Fq12>(
         &[P_ecpoint],
         &[Q_ecpoint],
         GNARK_BLS12_381_PBE.as_slice(),
         BLS12_381_XI,
-        |label, idx, elem: EcPoint<Fq2>| {
-            let mut Q_acc_aff = G2Affine::generator();
-            Q_acc_aff.x = elem.x;
-            Q_acc_aff.y = elem.y;
-            let Q_acc_proj = G2::from(Q_acc_aff);
-            println!("{}, {}: {:?}", idx, label, Q_acc_proj.x.c0.0);
-        },
-        |label, idx, elem: Fq12| {
-            println!("{}, {}: {:?}", idx, label, elem.c0.c0.c0.0);
-        },
     );
+
+    // let f = multi_miller_loop_separate_double_plus_add_custom_debug::<Fq, Fq2, Fq12>(
+    //     &[P_ecpoint],
+    //     &[Q_ecpoint],
+    //     GNARK_BLS12_381_PBE.as_slice(),
+    //     BLS12_381_XI,
+    //     |label, idx, elem: EcPoint<Fq2>| {
+    //         let mut Q_acc_aff = G2Affine::generator();
+    //         Q_acc_aff.x = elem.x;
+    //         Q_acc_aff.y = elem.y;
+    //         let Q_acc_proj = G2::from(Q_acc_aff);
+    //         println!("{}, {}: {:?}", idx, label, Q_acc_proj.x.c0.0);
+    //     },
+    //     |label, idx, elem: Fq12| {
+    //         println!("{}, {}: {:?}", idx, label, elem.c0.c0.c0.0);
+    //     },
+    // );
 
     // let f = multi_miller_loop_gnark::<Fq, Fq2, Fq12>(
     //     &[P_ecpoint],

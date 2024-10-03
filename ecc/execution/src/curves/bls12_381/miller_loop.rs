@@ -218,6 +218,7 @@ where
     let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
     for (line_2S, x_over_y, y_inv) in lines_iter {
         let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
+        f = mul_by_023::<Fp, Fp2, Fp12>(f, line);
         lines.push(line);
     }
 
@@ -231,6 +232,7 @@ where
     let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
     for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
         let line = evaluate_line::<Fp, Fp2>(*lines_S_plus_Q, *x_over_y, *y_inv);
+        f = mul_by_023::<Fp, Fp2, Fp12>(f, line);
         lines.push(line);
     }
 
@@ -257,6 +259,7 @@ where
             let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
             for (line_2S, x_over_y, y_inv) in lines_iter {
                 let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
+                f = mul_by_023::<Fp, Fp2, Fp12>(f, line);
                 lines.push(line);
             }
 
@@ -294,6 +297,8 @@ where
             for (line_S_plus_Q, line_S_plus_Q_plus_S, x_over_y, y_inv) in lines_iter {
                 let line0 = evaluate_line::<Fp, Fp2>(*line_S_plus_Q, *x_over_y, *y_inv);
                 let line1 = evaluate_line::<Fp, Fp2>(*line_S_plus_Q_plus_S, *x_over_y, *y_inv);
+                f = mul_by_023::<Fp, Fp2, Fp12>(f, line0);
+                f = mul_by_023::<Fp, Fp2, Fp12>(f, line1);
                 lines.push(line0);
                 lines.push(line1);
             }
@@ -304,10 +309,10 @@ where
     }
     println!("miller: total double: {total_double}, total double&add: {total_double_add}");
 
-    f = evaluate_lines::<Fp, Fp2, Fp12>(f, lines, xi);
+    // f = evaluate_lines::<Fp, Fp2, Fp12>(f, lines, xi);
 
     // We conjugate here f since the x value of BLS12-381 is *negative* 0xd201000000010000
-    f.conjugate();
+    f = f.conjugate();
 
     f
 }
@@ -463,6 +468,7 @@ where
     let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
     for (line_2S, x_over_y, y_inv) in lines_iter {
         let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
+        f = mul_by_023::<Fp, Fp2, Fp12>(f, line);
         lines.push(line);
     }
 
@@ -478,6 +484,7 @@ where
     let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
     for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
         let line = evaluate_line::<Fp, Fp2>(*lines_S_plus_Q, *x_over_y, *y_inv);
+        f = mul_by_023::<Fp, Fp2, Fp12>(f, line);
         lines.push(line);
     }
 
@@ -501,6 +508,7 @@ where
         let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
         for (line_2S, x_over_y, y_inv) in lines_iter {
             let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
+            f = mul_by_023::<Fp, Fp2, Fp12>(f, line);
             lines.push(line);
         }
 
@@ -522,6 +530,7 @@ where
             );
             for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
                 let line = evaluate_line::<Fp, Fp2>(*lines_S_plus_Q, *x_over_y, *y_inv);
+                f = mul_by_023::<Fp, Fp2, Fp12>(f, line);
                 lines.push(line);
             }
 
@@ -551,9 +560,9 @@ where
 
     println!("miller: total double: {total_double}, total double&add: {total_double_add}");
 
-    f = evaluate_lines_debug::<Fp, Fp2, Fp12>(f, lines, xi, debug_fn);
+    // f = evaluate_lines_debug::<Fp, Fp2, Fp12>(f, lines, xi, debug_fn);
 
-    f.conjugate();
+    f = f.conjugate();
 
     f
 }
