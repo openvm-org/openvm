@@ -28,7 +28,6 @@ where
     let two = one + one;
     let three = one + two;
 
-    // Calculate 2S
     let x = S.x;
     let y = S.y;
     // λ = (3x^2) / (2y)
@@ -38,7 +37,7 @@ where
     let x_2S = lambda.square() - two * x;
     // y_2S = λ(x - x_2S) - y
     let y_2S = lambda * (x - x_2S) - y;
-    let res = EcPoint { x: x_2S, y: y_2S };
+    let two_s = EcPoint { x: x_2S, y: y_2S };
 
     // Tangent line
     //   1 + b' (x_P / y_P) w^-1 + c' (1 / y_P) w^-3
@@ -49,7 +48,7 @@ where
     let b = -lambda;
     let c = lambda * x - y;
 
-    (res, [b, c])
+    (two_s, [b, c])
 }
 
 #[allow(non_snake_case)]
@@ -69,7 +68,7 @@ where
     let x_s_plus_q = lambda.square() - x_s - x_q;
     let y_s_plus_q = lambda * (x_q - x_s_plus_q) - y_q;
 
-    let res = EcPoint {
+    let s_plus_q = EcPoint {
         x: x_s_plus_q,
         y: y_s_plus_q,
     };
@@ -78,7 +77,7 @@ where
     let b = -lambda;
     let c = lambda * x_s - y_s;
 
-    (res, [b, c])
+    (s_plus_q, [b, c])
 }
 
 #[allow(non_snake_case)]
@@ -107,7 +106,7 @@ where
     let x_s_plus_q_plus_s = lambda2.square() - x_s - x_s_plus_q;
     let y_s_plus_q_plus_s = lambda2 * (x_s - x_s_plus_q_plus_s) - y_s;
 
-    let res = EcPoint {
+    let s_plus_q_plus_s = EcPoint {
         x: x_s_plus_q_plus_s,
         y: y_s_plus_q_plus_s,
     };
@@ -120,7 +119,7 @@ where
     let b1 = -lambda2;
     let c1 = lambda2 * x_s - y_s;
 
-    (res, [b0, c0], [b1, c1])
+    (s_plus_q_plus_s, [b0, c0], [b1, c1])
 }
 
 #[allow(non_snake_case)]
