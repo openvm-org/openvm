@@ -396,6 +396,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let prev_trace_cells = self.current_trace_cells();
 
             // runtime only instruction handling
+            // FIXME: assumes CoreOpcode has offset 0:
             if opcode == CoreOpcode::FAIL as usize {
                 if let Some(mut backtrace) = prev_backtrace {
                     backtrace.resolve();
@@ -405,8 +406,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 return Err(ExecutionError::Fail(pc_usize));
             }
-
-            // runtime only instruction handling
             if opcode == CoreOpcode::CT_START as usize {
                 self.update_chip_metrics();
                 self.cycle_tracker

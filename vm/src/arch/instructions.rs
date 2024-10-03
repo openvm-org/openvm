@@ -42,18 +42,16 @@ pub enum CoreOpcode {
     PUBLISH,
     FAIL,
     PRINTF,
-
-    // TODO: move these to a separate class, PhantomOpcode or something
     /// Instruction to write the next hint word into memory.
     SHINTW,
 
+    // TODO: move these to a separate class, PhantomOpcode or something
     /// Phantom instruction to prepare the next input vector for hinting.
     HINT_INPUT,
     /// Phantom instruction to prepare the little-endian bit decomposition of a variable for hinting.
     HINT_BITS,
     /// Phantom instruction to prepare the little-endian byte decomposition of a variable for hinting.
     HINT_BYTES,
-
     /// Phantom instruction to start tracing
     CT_START,
     /// Phantom instruction to end tracing
@@ -244,8 +242,8 @@ pub enum U256Opcode {
     XOR,
     AND,
     OR,
-
     SLT,
+
     SLL,
     SRL,
     SRA,
@@ -254,12 +252,13 @@ pub enum U256Opcode {
 }
 
 impl U256Opcode {
+    // Excludes multiplication
     pub fn arithmetic_opcodes() -> impl Iterator<Item = U256Opcode> {
-        (0..7).map(U256Opcode::from_usize)
+        (U256Opcode::ADD as usize..=U256Opcode::SLT as usize).map(U256Opcode::from_usize)
     }
 
     pub fn shift_opcodes() -> impl Iterator<Item = U256Opcode> {
-        (7..11).map(U256Opcode::from_usize)
+        (U256Opcode::SLL as usize..=U256Opcode::SRA as usize).map(U256Opcode::from_usize)
     }
 }
 
