@@ -1,22 +1,22 @@
 use halo2curves_axiom::ff::Field;
 
-use crate::common::FieldExtension;
+use crate::common::{EvaluatedLine, FieldExtension};
 
 /// Multiplies two line functions in 023 form and outputs the product in 012345 form
 pub fn mul_023_by_023<Fp, Fp2>(
-    line_0: [Fp2; 2],
-    line_1: [Fp2; 2],
+    line_0: EvaluatedLine<Fp, Fp2>,
+    line_1: EvaluatedLine<Fp, Fp2>,
     // TODO[yj]: once this function is moved into a chip, we can use the xi property instead of passing in this argument
     xi: Fp2,
 ) -> [Fp2; 6]
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
-    let b0 = line_0[0];
-    let c0 = line_0[1];
-    let b1 = line_1[0];
-    let c1 = line_1[1];
+    let b0 = line_0.b;
+    let c0 = line_0.c;
+    let b1 = line_1.b;
+    let c1 = line_1.c;
 
     // where w⁶ = xi
     // l0 * l1 = c0c1 + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 +b1)w⁵ + w⁶
@@ -31,33 +31,37 @@ where
     [x0, x1, x2, x3, x4, x5]
 }
 
-pub fn mul_by_023<Fp, Fp2, Fp12>(f: Fp12, line: [Fp2; 2]) -> Fp12
+pub fn mul_by_023<Fp, Fp2, Fp12>(f: Fp12, line: EvaluatedLine<Fp, Fp2>) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     mul_by_02345(
         f,
-        [line[1], Fp2::ZERO, line[0], Fp2::ONE, Fp2::ZERO, Fp2::ZERO],
+        [line.c, Fp2::ZERO, line.b, Fp2::ONE, Fp2::ZERO, Fp2::ZERO],
     )
 }
 
 pub fn mul_by_02345<Fp, Fp2, Fp12>(f: Fp12, x: [Fp2; 6]) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
-    let x_fp12 = Fp12::from_coeffs(x);
+    let x_fp12 = Fp12::from_coeffs(&x);
     f * x_fp12
 }
 
-pub fn evaluate_lines_vec<Fp, Fp2, Fp12>(mut f: Fp12, mut lines: Vec<[Fp2; 2]>, xi: Fp2) -> Fp12
+pub fn evaluate_lines_vec<Fp, Fp2, Fp12>(
+    mut f: Fp12,
+    mut lines: Vec<EvaluatedLine<Fp, Fp2>>,
+    xi: Fp2,
+) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     if lines.len() % 2 == 1 {
         f = mul_by_023::<Fp, Fp2, Fp12>(f, lines.pop().unwrap());

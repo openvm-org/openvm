@@ -5,8 +5,8 @@ use crate::common::{EcPoint, FieldExtension, Fp12Constructor};
 pub fn conv_013_to_fp12<Fp, Fp2, Fp12>(line: [Fp2; 2]) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2> + Fp12Constructor<Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2> + Fp12Constructor<Fp2>,
 {
     // x0 + x1*w + x2*w^2 + x3*w^3 + x4*w^4 + x5*w^5
     // (x0 + x2*w^2 + x4*w^4) + (x1 + x3*w^2 + x5*w^4)*w
@@ -23,8 +23,8 @@ where
 pub fn conv_fp2_coeffs_to_fp12<Fp, Fp2, Fp12>(fp2_coeffs: &[Fp2]) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2> + Fp12Constructor<Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2> + Fp12Constructor<Fp2>,
 {
     assert!(
         fp2_coeffs.len() <= 6,
@@ -48,7 +48,7 @@ where
 pub fn point_to_013<Fp, Fp2>(P: EcPoint<Fp>) -> [Fp2; 2]
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     let one = Fp2::ONE;
     let two = one + one;
@@ -78,7 +78,7 @@ where
 pub fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i32) -> Vec<EcPoint<Fp2>>
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     Q.iter()
         .map(|q| match sigma_i {

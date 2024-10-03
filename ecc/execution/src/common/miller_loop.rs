@@ -1,28 +1,17 @@
 use halo2curves_axiom::ff::Field;
 use itertools::{izip, Itertools};
 
+use super::UnevaluatedLine;
 use crate::{
-    common::{fp12_multiply, fp12_square, EcPoint, FieldExtension},
+    common::{fp12_multiply, fp12_square, EcPoint, EvaluatedLine, FieldExtension},
     curves::bls12_381::evaluate_lines_vec,
 };
 
-pub fn evaluate_line<Fp, Fp2>(line: [Fp2; 2], x_over_y: Fp, y_inv: Fp) -> [Fp2; 2]
-where
-    Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-{
-    let b_prime = line[0];
-    let c_prime = line[1];
-    let b = b_prime.mul_base(&x_over_y);
-    let c = c_prime.mul_base(&y_inv);
-    [b, c]
-}
-
 #[allow(non_snake_case)]
-pub fn miller_double_step<Fp, Fp2>(S: EcPoint<Fp2>) -> (EcPoint<Fp2>, [Fp2; 2])
+pub fn miller_double_step<Fp, Fp2>(S: EcPoint<Fp2>) -> (EcPoint<Fp2>, UnevaluatedLine<Fp, Fp2>)
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     let one = Fp2::ONE;
     let two = one + one;
@@ -48,14 +37,17 @@ where
     let b = -lambda;
     let c = lambda * x - y;
 
-    (two_s, [b, c])
+    (two_s, UnevaluatedLine { b, c })
 }
 
 #[allow(non_snake_case)]
-pub fn miller_add_step<Fp, Fp2>(S: EcPoint<Fp2>, Q: EcPoint<Fp2>) -> (EcPoint<Fp2>, [Fp2; 2])
+pub fn miller_add_step<Fp, Fp2>(
+    S: EcPoint<Fp2>,
+    Q: EcPoint<Fp2>,
+) -> (EcPoint<Fp2>, UnevaluatedLine<Fp, Fp2>)
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     let x_s = S.x;
     let y_s = S.y;
@@ -77,17 +69,21 @@ where
     let b = -lambda;
     let c = lambda * x_s - y_s;
 
-    (s_plus_q, [b, c])
+    (s_plus_q, UnevaluatedLine { b, c })
 }
 
 #[allow(non_snake_case)]
 pub fn miller_double_and_add_step<Fp, Fp2>(
     S: EcPoint<Fp2>,
     Q: EcPoint<Fp2>,
-) -> (EcPoint<Fp2>, [Fp2; 2], [Fp2; 2])
+) -> (
+    EcPoint<Fp2>,
+    UnevaluatedLine<Fp, Fp2>,
+    UnevaluatedLine<Fp, Fp2>,
+)
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     let one = Fp2::ONE;
     let two = one + one;
@@ -119,14 +115,18 @@ where
     let b1 = -lambda2;
     let c1 = lambda2 * x_s - y_s;
 
-    (s_plus_q_plus_s, [b0, c0], [b1, c1])
+    (
+        s_plus_q_plus_s,
+        UnevaluatedLine { b: b0, c: c0 },
+        UnevaluatedLine { b: b1, c: c1 },
+    )
 }
 
 #[allow(non_snake_case)]
 pub fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i32) -> Vec<EcPoint<Fp2>>
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     Q.iter()
         .map(|q| match sigma_i {
@@ -146,8 +146,8 @@ pub fn multi_miller_loop<Fp, Fp2, Fp12>(
 ) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     multi_miller_loop_embedded_exp::<Fp, Fp2, Fp12>(P, Q, None, pseudo_binary_encoding, xi)
 }
@@ -162,8 +162,8 @@ pub fn multi_miller_loop_embedded_exp<Fp, Fp2, Fp12>(
 ) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     assert!(!P.is_empty());
     assert_eq!(P.len(), Q.len());
@@ -192,11 +192,12 @@ where
         .unzip::<_, _, Vec<_>, Vec<_>>();
     Q_acc = Q_out_double;
 
-    let mut initial_lines = Vec::<[Fp2; 2]>::new();
+    let mut initial_lines = Vec::<EvaluatedLine<Fp, Fp2>>::new();
 
     let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
     for (line_2S, x_over_y, y_inv) in lines_iter {
-        let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
+        // let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
+        let line = line_2S.evaluate(*x_over_y, *y_inv);
         initial_lines.push(line);
     }
 
@@ -209,7 +210,8 @@ where
 
     let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
     for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
-        let line = evaluate_line::<Fp, Fp2>(*lines_S_plus_Q, *x_over_y, *y_inv);
+        // let line = evaluate_line::<Fp, Fp2>(*lines_S_plus_Q, *x_over_y, *y_inv);
+        let line = lines_S_plus_Q.evaluate(*x_over_y, *y_inv);
         initial_lines.push(line);
     }
 
@@ -223,7 +225,7 @@ where
 
         f = fp12_square::<Fp12>(f);
 
-        let mut lines = Vec::<[Fp2; 2]>::new();
+        let mut lines = Vec::<EvaluatedLine<Fp, Fp2>>::new();
 
         if pseudo_binary_encoding[i] == 0 {
             // Run miller double step if \sigma_i == 0
@@ -235,7 +237,8 @@ where
 
             let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
             for (line_2S, x_over_y, y_inv) in lines_iter {
-                let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
+                // let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
+                let line = line_2S.evaluate(*x_over_y, *y_inv);
                 lines.push(line);
             }
         } else {
@@ -268,8 +271,10 @@ where
                 y_invs.iter()
             );
             for (line_S_plus_Q, line_S_plus_Q_plus_S, x_over_y, y_inv) in lines_iter {
-                let line0 = evaluate_line::<Fp, Fp2>(*line_S_plus_Q, *x_over_y, *y_inv);
-                let line1 = evaluate_line::<Fp, Fp2>(*line_S_plus_Q_plus_S, *x_over_y, *y_inv);
+                // let line0 = evaluate_line::<Fp, Fp2>(*line_S_plus_Q, *x_over_y, *y_inv);
+                // let line1 = evaluate_line::<Fp, Fp2>(*line_S_plus_Q_plus_S, *x_over_y, *y_inv);
+                let line0 = line_S_plus_Q.evaluate(*x_over_y, *y_inv);
+                let line1 = line_S_plus_Q_plus_S.evaluate(*x_over_y, *y_inv);
                 lines.push(line0);
                 lines.push(line1);
             }

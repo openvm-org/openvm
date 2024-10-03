@@ -5,7 +5,7 @@ use crate::common::FieldExtension;
 pub fn evaluate_line<Fp, Fp2>(line: [Fp2; 2], x_over_y: Fp, y_inv: Fp) -> [Fp2; 2]
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     let b_prime = line[0];
     let c_prime = line[1];
@@ -23,7 +23,7 @@ pub fn mul_013_by_013<Fp, Fp2>(
 ) -> [Fp2; 5]
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     let b0 = line_0[0];
     let c0 = line_0[1];
@@ -45,8 +45,8 @@ where
 pub fn mul_by_013<Fp, Fp2, Fp12>(f: Fp12, line: [Fp2; 2]) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     mul_by_01234(f, [Fp2::ONE, line[0], Fp2::ZERO, line[1], Fp2::ZERO])
 }
@@ -54,11 +54,11 @@ where
 pub fn mul_by_01234<Fp, Fp2, Fp12>(f: Fp12, x: [Fp2; 5]) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     let mut x_extend: [Fp2; 6] = [Fp2::ZERO; 6];
     x_extend[..5].clone_from_slice(&x);
-    let x_fp12 = Fp12::from_coeffs(x_extend);
+    let x_fp12 = Fp12::from_coeffs(&x_extend);
     f * x_fp12
 }

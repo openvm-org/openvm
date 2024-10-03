@@ -7,8 +7,7 @@ use subtle::ConditionallySelectable;
 
 use crate::{
     common::{
-        evaluate_line, miller_add_step, miller_double_and_add_step, miller_double_step,
-        multi_miller_loop, EcPoint,
+        miller_add_step, miller_double_and_add_step, miller_double_step, multi_miller_loop, EcPoint,
     },
     curves::bls12_381::{
         line::{mul_023_by_023, mul_by_023, mul_by_02345},
@@ -88,7 +87,7 @@ fn test_f_mul() {
 
     // Initial step: double
     let (Q_acc_init, l_init) = miller_double_step::<Fq, Fq2>(Q_ecpoint.clone());
-    let l_init = evaluate_line::<Fq, Fq2>(l_init, x_over_y, y_inv);
+    let l_init = l_init.evaluate(x_over_y, y_inv);
     f = mul_by_023::<Fq, Fq2, Fq12>(f, l_init);
 
     // Test Q_acc_init == Q + Q
@@ -104,8 +103,8 @@ fn test_f_mul() {
     // Left side test: Double and add
     let (Q_acc_daa, l_S_plus_Q, l_S_plus_Q_plus_S) =
         miller_double_and_add_step::<Fq, Fq2>(Q_acc.clone(), Q_ecpoint.clone());
-    let l_S_plus_Q_plus_S = evaluate_line::<Fq, Fq2>(l_S_plus_Q_plus_S, x_over_y, y_inv);
-    let l_S_plus_Q = evaluate_line::<Fq, Fq2>(l_S_plus_Q, x_over_y, y_inv);
+    let l_S_plus_Q_plus_S = l_S_plus_Q_plus_S.evaluate(x_over_y, y_inv);
+    let l_S_plus_Q = l_S_plus_Q.evaluate(x_over_y, y_inv);
     let l_prod0 = mul_023_by_023(l_S_plus_Q, l_S_plus_Q_plus_S, BLS12_381_XI);
     let f_mul = mul_by_02345::<Fq, Fq2, Fq12>(f, l_prod0);
 
@@ -119,8 +118,8 @@ fn test_f_mul() {
     // Right side test: Double, then add
     let (Q_acc_d, l_2S) = miller_double_step::<Fq, Fq2>(Q_acc.clone());
     let (Q_acc_a, l_2S_plus_Q) = miller_add_step::<Fq, Fq2>(Q_acc_d, Q_ecpoint.clone());
-    let l_2S = evaluate_line::<Fq, Fq2>(l_2S, x_over_y, y_inv);
-    let l_2S_plus_Q = evaluate_line::<Fq, Fq2>(l_2S_plus_Q, x_over_y, y_inv);
+    let l_2S = l_2S.evaluate(x_over_y, y_inv);
+    let l_2S_plus_Q = l_2S_plus_Q.evaluate(x_over_y, y_inv);
     let l_prod1 = mul_023_by_023(l_2S, l_2S_plus_Q, BLS12_381_XI);
     let f_prod_mul = mul_by_02345::<Fq, Fq2, Fq12>(f, l_prod1);
 

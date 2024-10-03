@@ -5,8 +5,8 @@ use crate::common::FieldExtension;
 pub fn final_exp_hint<Fp, Fp2, Fp12>(_f: Fp12) -> (Fp12, Fp12)
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     // f = c^λ * u
     unimplemented!("final_exp_hint is not implemented");
@@ -15,8 +15,8 @@ where
 pub fn final_exponentiation<Fp, Fp2, Fp12>(_f: Fp12) -> Fp12
 where
     Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     // func FinalExponentiation(z *GT, _z ...*GT) GT {
     // 	var result GT

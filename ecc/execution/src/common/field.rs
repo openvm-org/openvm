@@ -1,10 +1,10 @@
 use halo2curves_axiom::ff::Field;
 
-pub trait FieldExtension<const DEG: usize>: Field {
+pub trait FieldExtension: Field {
     type BaseField: Field;
 
     /// Generate an extension field element from its base field coefficients.
-    fn from_coeffs(coeffs: [Self::BaseField; DEG]) -> Self;
+    fn from_coeffs(coeffs: &[Self::BaseField]) -> Self;
 
     /// Embed a base field element into an extension field element.
     fn embed(base_elem: &Self::BaseField) -> Self;
@@ -23,7 +23,7 @@ pub trait Fp2Constructor<Fp: Field> {
     fn new(c0: Fp, c1: Fp) -> Self;
 }
 
-pub trait Fp12Constructor<Fp2: FieldExtension<2>> {
+pub trait Fp12Constructor<Fp2: FieldExtension> {
     fn new(c00: Fp2, c01: Fp2, c02: Fp2, c10: Fp2, c11: Fp2, c12: Fp2) -> Self;
 }
 
