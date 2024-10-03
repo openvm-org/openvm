@@ -1,13 +1,16 @@
 use std::borrow::Borrow;
 
 use afs_primitives::range_tuple::bus::RangeTupleCheckerBus;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::{
-    arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge,
+    arch::ExecutionBridge, memory::offline_checker::MemoryBridge,
     uint_multiplication::columns::UintMultiplicationCols,
 };
 
@@ -20,6 +23,10 @@ pub struct UintMultiplicationAir<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub(super) offset: usize,
 }
 
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
+    for UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>
+{
+}
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
     for UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>
 {

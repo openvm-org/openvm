@@ -7,8 +7,9 @@ use afs_primitives::{
 use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
     config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Config, fri_params::default_fri_params,
-        setup_tracing, FriParameters,
+        baby_bear_poseidon2::BabyBearPoseidon2Config,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
+        FriParameters,
     },
     engine::StarkForTest,
     interaction::dummy_interaction_air::DummyInteractionAir,
@@ -139,7 +140,7 @@ fn test_fibonacci_small() {
 
     run_recursive_test(
         fibonacci_stark_for_test::<BabyBearPoseidon2Config>(1 << 5),
-        default_fri_params(),
+        standard_fri_params_with_100_bits_conjectured_security(3),
     )
 }
 
@@ -164,7 +165,7 @@ fn test_interactions() {
 
     run_recursive_test(
         interaction_stark_for_test::<BabyBearPoseidon2Config>(),
-        default_fri_params(),
+        standard_fri_params_with_100_bits_conjectured_security(3),
     )
 }
 
@@ -174,6 +175,6 @@ fn test_unordered() {
 
     run_recursive_test(
         unordered_stark_for_test::<BabyBearPoseidon2Config>(),
-        default_fri_params(),
+        standard_fri_params_with_100_bits_conjectured_security(3),
     )
 }

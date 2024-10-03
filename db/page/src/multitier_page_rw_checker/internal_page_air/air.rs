@@ -5,8 +5,9 @@ use afs_primitives::{
     utils::implies,
 };
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
-    rap::BaseAirWithPublicValues,
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -22,7 +23,16 @@ impl<F: Field, const COMMITMENT_LEN: usize> BaseAir<F> for InternalPageAir<COMMI
         self.air_width()
     }
 }
-
+impl<F: Field, const COMMITMENT_LEN: usize> PartitionedBaseAir<F>
+    for InternalPageAir<COMMITMENT_LEN>
+{
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.cached_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.main_width()
+    }
+}
 impl<F: Field, const COMMITMENT_LEN: usize> BaseAirWithPublicValues<F>
     for InternalPageAir<COMMITMENT_LEN>
 {
@@ -44,10 +54,10 @@ where
 {
     fn eval(&self, builder: &mut AB) {
         self.eval_without_interactions(builder);
-        let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let main: &<AB as AirBuilder>::M = builder.common_main();
         let local = main.row_slice(0);
         let pi = builder.public_values().to_vec();
-        let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
+        let data: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
         let metadata = InternalPageMetadataCols::from_slice(
             &local,
             self.idx_len,
@@ -75,9 +85,9 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
     {
         // only constrain that own_commitment is accurate
         // partition is physical page data vs metadata
-        let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let main: &<AB as AirBuilder>::M = builder.common_main();
         let local = main.row_slice(0);
-        let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
+        let data: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
         let metadata = InternalPageMetadataCols::from_slice(
             &local,
             self.idx_len,

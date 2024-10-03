@@ -4,7 +4,7 @@ use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Pr
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{self, engine_from_perm},
-        fri_params::{fri_params_with_100_bits_of_security, fri_params_with_80_bits_of_security},
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::StarkEngineWithHashInstrumentation,
     interaction::dummy_interaction_air::DummyInteractionAir,
@@ -97,11 +97,9 @@ fn instrumented_verifier_comparison(
 #[test]
 #[ignore = "bench"]
 fn instrument_cached_trace_verifier() -> eyre::Result<()> {
-    let fri_params = [
-        fri_params_with_80_bits_of_security(),
-        fri_params_with_100_bits_of_security(),
-    ]
-    .concat();
+    let fri_params = [1, 2, 3, 4]
+        .map(standard_fri_params_with_100_bits_conjectured_security)
+        .to_vec();
     let data_sizes = get_data_sizes();
 
     // Write to csv as we go

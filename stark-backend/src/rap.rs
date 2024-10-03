@@ -18,6 +18,18 @@ pub trait BaseAirWithPublicValues<F>: BaseAir<F> {
     }
 }
 
+/// An AIR with 1 or more main trace partitions.
+pub trait PartitionedBaseAir<F>: BaseAir<F> {
+    /// By default, an AIR has no cached main trace.
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![]
+    }
+    /// By default, an AIR has only one private main trace.
+    fn common_main_width(&self) -> usize {
+        self.width()
+    }
+}
+
 /// An AIR that works with a particular `AirBuilder` which allows preprocessing
 /// and injected randomness.
 ///
@@ -53,6 +65,7 @@ pub trait AnyRap<SC: StarkGenericConfig>:
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
     + BaseAirWithPublicValues<Val<SC>>
+    + PartitionedBaseAir<Val<SC>>
 {
     fn as_any(&self) -> &dyn Any;
     /// Name for display purposes
@@ -66,6 +79,7 @@ where
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
         + BaseAirWithPublicValues<Val<SC>>
+        + PartitionedBaseAir<Val<SC>>
         + 'static,
 {
     fn as_any(&self) -> &dyn Any {
@@ -73,27 +87,32 @@ where
     }
 
     fn name(&self) -> String {
-        let full_name = type_name::<Self>().to_string();
-        // Split the input by the first '<' to separate the main type from its generics
-        if let Some((main_part, generics_part)) = full_name.split_once('<') {
-            // Extract the last segment of the main type
-            let main_type = main_part.split("::").last().unwrap_or("");
+        get_air_name(self)
+    }
+}
 
-            // Remove the trailing '>' from the generics part and split by ", " to handle multiple generics
-            let generics: Vec<String> = generics_part
-                .trim_end_matches('>')
-                .split(", ")
-                .map(|generic| {
-                    // For each generic type, extract the last segment after "::"
-                    generic.split("::").last().unwrap_or("").to_string()
-                })
-                .collect();
+/// Automatically derives the AIR name from the type name for pretty display purposes.
+pub fn get_air_name<T>(_rap: &T) -> String {
+    let full_name = type_name::<T>().to_string();
+    // Split the input by the first '<' to separate the main type from its generics
+    if let Some((main_part, generics_part)) = full_name.split_once('<') {
+        // Extract the last segment of the main type
+        let main_type = main_part.split("::").last().unwrap_or("");
 
-            // Join the simplified generics back together with ", " and format the result
-            format!("{}<{}>", main_type, generics.join(", "))
-        } else {
-            // If there's no generic part, just return the last segment after "::"
-            full_name.split("::").last().unwrap_or("").to_string()
-        }
+        // Remove the trailing '>' from the generics part and split by ", " to handle multiple generics
+        let generics: Vec<String> = generics_part
+            .trim_end_matches('>')
+            .split(", ")
+            .map(|generic| {
+                // For each generic type, extract the last segment after "::"
+                generic.split("::").last().unwrap_or("").to_string()
+            })
+            .collect();
+
+        // Join the simplified generics back together with ", " and format the result
+        format!("{}<{}>", main_type, generics.join(", "))
+    } else {
+        // If there's no generic part, just return the last segment after "::"
+        full_name.split("::").last().unwrap_or("").to_string()
     }
 }

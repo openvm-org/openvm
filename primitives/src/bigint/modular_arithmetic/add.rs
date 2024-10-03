@@ -1,6 +1,9 @@
 use std::{ops::Deref, sync::Arc};
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField64};
@@ -30,6 +33,7 @@ impl AirConfig for ModularAdditionAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for ModularAdditionAir {}
+impl<F: Field> PartitionedBaseAir<F> for ModularAdditionAir {}
 impl<F: Field> BaseAir<F> for ModularAdditionAir {
     fn width(&self) -> usize {
         self.arithmetic.width()

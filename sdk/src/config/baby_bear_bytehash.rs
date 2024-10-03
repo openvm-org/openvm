@@ -8,7 +8,7 @@ use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_symmetric::{CompressionFunctionFromHasher, CryptographicHasher, SerializingHasher32};
 use p3_uni_stark::StarkConfig;
 
-use super::{fri_params::default_fri_params, FriParameters};
+use super::FriParameters;
 use crate::engine::{StarkEngine, StarkFriEngine};
 
 type Val = BabyBear;
@@ -55,7 +55,7 @@ pub fn default_engine<H>(pcs_log_degree: usize, byte_hash: H) -> BabyBearByteHas
 where
     H: CryptographicHasher<u8, [u8; 32]> + Clone,
 {
-    let fri_params = default_fri_params();
+    let fri_params = FriParameters::standard_fast();
     engine_from_byte_hash(byte_hash, pcs_log_degree, fri_params)
 }
 

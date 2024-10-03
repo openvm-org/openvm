@@ -8,7 +8,7 @@ use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::fri_params_with_80_bits_of_security,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::StarkFriEngine,
     utils::{generate_fib_trace_rows, FibonacciAir},
@@ -38,7 +38,7 @@ fn main() {
             vdata,
             compiler_options,
             VmConfig::aggregation(7),
-            BabyBearPoseidon2Engine::new(fri_params_with_80_bits_of_security()[1]),
+            BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3)),
         )
         .unwrap();
     });

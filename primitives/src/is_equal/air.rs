@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::rap::BaseAirWithPublicValues;
+use afs_stark_backend::rap::{BaseAirWithPublicValues, PartitionedBaseAir};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -18,6 +18,7 @@ impl IsEqualAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsEqualAir {}
+impl<F: Field> PartitionedBaseAir<F> for IsEqualAir {}
 impl<F: Field> BaseAir<F> for IsEqualAir {
     fn width(&self) -> usize {
         NUM_COLS

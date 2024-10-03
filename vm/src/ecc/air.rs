@@ -8,13 +8,16 @@ use afs_primitives::{
     },
     sub_chip::SubAir,
 };
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::{columns::*, NUM_LIMBS};
-use crate::{arch::bridge::ExecutionBridge, memory::offline_checker::MemoryBridge};
+use crate::{arch::ExecutionBridge, memory::offline_checker::MemoryBridge};
 
 #[derive(Clone, Debug)]
 pub struct EcAddUnequalVmAir {
@@ -26,6 +29,7 @@ pub struct EcAddUnequalVmAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for EcAddUnequalVmAir {}
+impl<F: Field> PartitionedBaseAir<F> for EcAddUnequalVmAir {}
 impl<F: Field> BaseAir<F> for EcAddUnequalVmAir {
     fn width(&self) -> usize {
         EcAddUnequalCols::<F>::width(&self.air.config)
@@ -80,6 +84,7 @@ pub struct EcDoubleVmAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for EcDoubleVmAir {}
+impl<F: Field> PartitionedBaseAir<F> for EcDoubleVmAir {}
 impl<F: Field> BaseAir<F> for EcDoubleVmAir {
     fn width(&self) -> usize {
         EcDoubleCols::<F>::width(&self.air.config)

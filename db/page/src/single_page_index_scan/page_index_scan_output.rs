@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
-    rap::BaseAirWithPublicValues,
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
@@ -36,6 +37,14 @@ impl PageIndexScanOutputAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for PageIndexScanOutputAir {}
+impl<F: Field> PartitionedBaseAir<F> for PageIndexScanOutputAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.page_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.aux_width()
+    }
+}
 impl<F: Field> BaseAir<F> for PageIndexScanOutputAir {
     fn width(&self) -> usize {
         BaseAir::<F>::width(&self.inner)
@@ -47,7 +56,7 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for PageIndexScanOu
         // Making sure the page is in the proper format
         self.inner.eval(builder);
 
-        let page = &builder.partitioned_main()[0];
+        let page = &builder.cached_mains()[0];
         let page_local = page.row_slice(0);
         let page_blob = page_local.iter().skip(1).copied().collect_vec();
         let is_alloc = page_local[0];

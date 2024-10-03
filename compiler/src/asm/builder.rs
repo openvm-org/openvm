@@ -16,7 +16,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmBu
     }
 
     pub fn compile_isa_with_options(self, options: CompilerOptions) -> Program<F> {
-        let mut compiler = AsmCompiler::new(1);
+        let mut compiler = AsmCompiler::new(options.word_size);
         compiler.build(self.operations);
         let asm_code = compiler.code();
         convert_program(asm_code, options)

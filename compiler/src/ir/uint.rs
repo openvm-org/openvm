@@ -7,39 +7,97 @@ impl<C: Config> Builder<C>
 where
     C::N: PrimeField64,
 {
-    pub fn u256_add(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+    pub fn add_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
         let dst = self.dyn_array(NUM_LIMBS);
         self.operations
-            .push(DslIr::AddU256(dst.clone(), left.clone(), right.clone()));
+            .push(DslIr::Add256(dst.clone(), left.clone(), right.clone()));
         dst
     }
 
-    pub fn u256_sub(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+    pub fn sub_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
         let dst = self.dyn_array(NUM_LIMBS);
         self.operations
-            .push(DslIr::SubU256(dst.clone(), left.clone(), right.clone()));
+            .push(DslIr::Sub256(dst.clone(), left.clone(), right.clone()));
         dst
     }
 
-    pub fn u256_mul(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+    pub fn mul_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
         let dst = self.dyn_array(NUM_LIMBS);
         self.operations
-            .push(DslIr::MulU256(dst.clone(), left.clone(), right.clone()));
+            .push(DslIr::Mul256(dst.clone(), left.clone(), right.clone()));
         dst
     }
 
-    pub fn u256_lt(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> Var<C::N> {
+    pub fn sltu_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> Var<C::N> {
         let dst = self.array(1);
         self.operations
             .push(DslIr::LessThanU256(dst.ptr(), left.clone(), right.clone()));
         self.get(&dst, 0)
     }
 
-    pub fn u256_eq(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> Var<C::N> {
+    pub fn eq_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> Var<C::N> {
         // let dst = self.alloc(1, <Var<C::N> as MemVariable<C>>::size_of());
         let dst = self.array(1);
         self.operations
-            .push(DslIr::EqualToU256(dst.ptr(), left.clone(), right.clone()));
+            .push(DslIr::EqualTo256(dst.ptr(), left.clone(), right.clone()));
         self.get(&dst, 0)
+    }
+
+    pub fn xor_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+        let dst = self.dyn_array(NUM_LIMBS);
+        self.operations
+            .push(DslIr::Xor256(dst.clone(), left.clone(), right.clone()));
+        dst
+    }
+
+    pub fn and_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+        let dst = self.dyn_array(NUM_LIMBS);
+        self.operations
+            .push(DslIr::And256(dst.clone(), left.clone(), right.clone()));
+        dst
+    }
+
+    pub fn or_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+        let dst = self.dyn_array(NUM_LIMBS);
+        self.operations
+            .push(DslIr::Or256(dst.clone(), left.clone(), right.clone()));
+        dst
+    }
+
+    pub fn slt_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> Var<C::N> {
+        let dst = self.array(1);
+        self.operations
+            .push(DslIr::LessThanI256(dst.ptr(), left.clone(), right.clone()));
+        self.get(&dst, 0)
+    }
+
+    pub fn sll_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+        let dst = self.dyn_array(NUM_LIMBS);
+        self.operations.push(DslIr::ShiftLeft256(
+            dst.clone(),
+            left.clone(),
+            right.clone(),
+        ));
+        dst
+    }
+
+    pub fn srl_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+        let dst = self.dyn_array(NUM_LIMBS);
+        self.operations.push(DslIr::ShiftRightLogic256(
+            dst.clone(),
+            left.clone(),
+            right.clone(),
+        ));
+        dst
+    }
+
+    pub fn sra_256(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) -> BigUintVar<C> {
+        let dst = self.dyn_array(NUM_LIMBS);
+        self.operations.push(DslIr::ShiftRightArith256(
+            dst.clone(),
+            left.clone(),
+            right.clone(),
+        ));
+        dst
     }
 }

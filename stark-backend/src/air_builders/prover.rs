@@ -37,6 +37,7 @@ pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
     pub interactions: Vec<Interaction<PackedVal<SC>>>,
     /// Number of interactions to bundle in permutation trace
     pub interaction_chunk_size: usize,
+    pub has_common_main: bool,
 }
 
 impl<'a, SC> AirBuilder for ProverConstraintFolder<'a, SC>
@@ -154,8 +155,16 @@ impl<'a, SC> PartitionedAirBuilder for ProverConstraintFolder<'a, SC>
 where
     SC: StarkGenericConfig,
 {
-    fn partitioned_main(&self) -> &[Self::M] {
-        &self.partitioned_main
+    fn cached_mains(&self) -> &[Self::M] {
+        let mut num_cached_mains = self.partitioned_main.len();
+        if self.has_common_main {
+            num_cached_mains -= 1;
+        }
+        &self.partitioned_main[..num_cached_mains]
+    }
+    fn common_main(&self) -> &Self::M {
+        assert!(self.has_common_main, "AIR doesn't have a common main trace");
+        self.partitioned_main.last().unwrap()
     }
 }
 

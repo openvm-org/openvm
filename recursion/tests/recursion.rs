@@ -3,7 +3,7 @@ use std::cmp::Reverse;
 use afs_compiler::{asm::AsmBuilder, ir::Felt};
 use afs_recursion::testing_utils::inner::run_recursive_test;
 use ax_sdk::{
-    config::{fri_params::default_fri_params, setup_tracing},
+    config::{fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing},
     engine::StarkForTest,
 };
 use itertools::{izip, multiunzip, Itertools};
@@ -90,7 +90,10 @@ fn test_fibonacci_program_verify() {
     setup_tracing();
 
     let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
-    run_recursive_test(fib_program_stark, default_fri_params());
+    run_recursive_test(
+        fib_program_stark,
+        standard_fri_params_with_100_bits_conjectured_security(3),
+    );
 }
 
 #[cfg(feature = "static-verifier")]
@@ -100,5 +103,8 @@ fn test_fibonacci_program_halo2_verify() {
     setup_tracing();
 
     let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
-    run_static_verifier_test(&fib_program_stark, default_fri_params());
+    run_static_verifier_test(
+        &fib_program_stark,
+        standard_fri_params_with_100_bits_conjectured_security(3),
+    );
 }

@@ -7,12 +7,11 @@ use strum::IntoEnumIterator;
 use super::{timestamp_delta, CoreChip, CoreState};
 use crate::{
     arch::{
-        chips::InstructionExecutor,
-        columns::ExecutionState,
         instructions::{
             CoreOpcode::{self, *},
             UsizeOpcode,
         },
+        ExecutionState, InstructionExecutor,
     },
     core::{
         columns::{CoreAuxCols, CoreCols, CoreIoCols, CoreMemoryAccessCols},

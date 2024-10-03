@@ -1,5 +1,3 @@
-use std::iter::zip;
-
 use afs_primitives::{
     assert_less_than::{columns::AssertLessThanIoCols, AssertLessThanAir},
     is_zero::{
@@ -10,7 +8,6 @@ use afs_primitives::{
     var_range::bus::VariableRangeCheckerBus,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
-use itertools::izip;
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
@@ -170,11 +167,11 @@ impl<'a, F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperatio
 
         self.offline_checker.eval_bulk_access(
             builder,
-            &self.address,
-            &self.data.clone(),
+            self.address,
             &self.data,
-            &self.timestamp,
-            &self.aux.base.prev_timestamps,
+            &self.data,
+            self.timestamp.clone(),
+            self.aux.base.prev_timestamp,
             enabled,
         );
     }
@@ -242,11 +239,11 @@ impl<'a, F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'a,
 
         self.offline_checker.eval_bulk_access(
             builder,
-            &self.address,
+            self.address,
             &[self.data.clone()],
             &[self.data],
-            &self.timestamp,
-            &self.aux.base.prev_timestamps,
+            self.timestamp,
+            self.aux.base.prev_timestamp,
             enabled * not(self.aux.is_immediate),
         );
     }
@@ -286,11 +283,11 @@ impl<'a, T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperati
 
         self.offline_checker.eval_bulk_access(
             builder,
-            &self.address,
+            self.address,
             &self.data,
             &self.aux.prev_data.map(Into::into),
-            &self.timestamp,
-            &self.aux.base.prev_timestamps,
+            self.timestamp,
+            self.aux.base.prev_timestamp,
             enabled,
         );
     }
@@ -314,23 +311,16 @@ impl MemoryOfflineChecker {
     /// The max degree of constraints is:
     /// deg(enabled) + max(1, deg(timestamp))
     /// Note: deg(prev_timestamp) = 1 since prev_timestamp is Var
-    fn eval_timestamps<AB: InteractionBuilder, const N: usize>(
+    fn eval_timestamps<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         timestamp: AB::Expr,
-        base: &MemoryBaseAuxCols<AB::Var, N>,
+        base: &MemoryBaseAuxCols<AB::Var>,
         enabled: AB::Expr,
     ) {
-        for (prev_timestamp, clk_lt_aux) in zip(base.prev_timestamps, base.clk_lt_aux) {
-            let clk_lt_io_cols =
-                AssertLessThanIoCols::<AB::Expr>::new(prev_timestamp, timestamp.clone());
-            self.timestamp_lt_air.conditional_eval(
-                builder,
-                clk_lt_io_cols,
-                clk_lt_aux,
-                enabled.clone(),
-            );
-        }
+        let clk_lt_io_cols = AssertLessThanIoCols::new(base.prev_timestamp, timestamp.clone());
+        self.timestamp_lt_air
+            .conditional_eval(builder, clk_lt_io_cols, base.clk_lt_aux, enabled);
     }
 
     /// At the core, eval_bulk_access is a bunch of push_sends and push_receives.
@@ -341,30 +331,21 @@ impl MemoryOfflineChecker {
     fn eval_bulk_access<AB, const N: usize>(
         &self,
         builder: &mut AB,
-        address: &MemoryAddress<AB::Expr, AB::Expr>,
+        address: MemoryAddress<AB::Expr, AB::Expr>,
         data: &[AB::Expr; N],
         prev_data: &[AB::Expr; N],
-        timestamp: &AB::Expr,
-        prev_timestamps: &[AB::Var; N],
+        timestamp: AB::Expr,
+        prev_timestamp: AB::Var,
         enabled: AB::Expr,
     ) where
         AB: InteractionBuilder,
     {
-        for (i, (&prev_timestamp, prev_datum, datum)) in
-            izip!(prev_timestamps, prev_data, data).enumerate()
-        {
-            let address = MemoryAddress::new(
-                address.address_space.clone(),
-                address.pointer.clone() + AB::Expr::from_canonical_usize(i),
-            );
+        self.memory_bus
+            .receive(address.clone(), prev_data.to_vec(), prev_timestamp)
+            .eval(builder, enabled.clone());
 
-            self.memory_bus
-                .read(address.clone(), [prev_datum.clone()], prev_timestamp)
-                .eval(builder, enabled.clone());
-
-            self.memory_bus
-                .write(address, [datum.clone()], timestamp.clone())
-                .eval(builder, enabled.clone());
-        }
+        self.memory_bus
+            .send(address, data.to_vec(), timestamp)
+            .eval(builder, enabled);
     }
 }

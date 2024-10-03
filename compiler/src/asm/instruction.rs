@@ -96,20 +96,41 @@ pub enum AsmInstruction<F, EF> {
     /// Modular divide, dst = lhs / rhs.
     DivSecp256k1Scalar(i32, i32, i32),
 
-    /// uint add, dst = lhs + rhs.
-    AddU256(i32, i32, i32),
+    /// int add, dst = lhs + rhs.
+    Add256(i32, i32, i32),
 
-    /// uint subtract, dst = lhs - rhs.
-    SubU256(i32, i32, i32),
+    /// int subtract, dst = lhs - rhs.
+    Sub256(i32, i32, i32),
 
-    /// uint multiply, dst = lhs * rhs.
-    MulU256(i32, i32, i32),
+    /// int multiply, dst = lhs * rhs.
+    Mul256(i32, i32, i32),
 
     /// uint less than, dst = lhs < rhs.
     LessThanU256(i32, i32, i32),
 
-    /// uint equal to, dst = lhs == rhs.
-    EqualToU256(i32, i32, i32),
+    /// int equal to, dst = lhs == rhs.
+    EqualTo256(i32, i32, i32),
+
+    /// int bitwise XOR, dst = lhs ^ rhs
+    Xor256(i32, i32, i32),
+
+    /// int bitwise AND, dst = lhs & rhs
+    And256(i32, i32, i32),
+
+    /// int bitwise OR, dst = lhs | rhs
+    Or256(i32, i32, i32),
+
+    /// signed int less than, dst = lhs < rhs
+    LessThanI256(i32, i32, i32),
+
+    /// int shift left, dst = lhs << rhs
+    ShiftLeft256(i32, i32, i32),
+
+    /// int shift right logical, dst = lhs >> rhs
+    ShiftRightLogic256(i32, i32, i32),
+
+    /// int shift right arithmetic, dst = lhs >> rhs
+    ShiftRightArith256(i32, i32, i32),
 
     /// Jump.
     Jump(i32, F),
@@ -473,20 +494,41 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                     dst, src1, src2
                 )
             }
-            AsmInstruction::AddU256(dst, src1, src2) => {
-                write!(f, "add_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::Add256(dst, src1, src2) => {
+                write!(f, "add_256 ({})fp ({})fp ({})fp", dst, src1, src2)
             }
-            AsmInstruction::SubU256(dst, src1, src2) => {
-                write!(f, "sub_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::Sub256(dst, src1, src2) => {
+                write!(f, "sub_256 ({})fp ({})fp ({})fp", dst, src1, src2)
             }
-            AsmInstruction::MulU256(dst, src1, src2) => {
-                write!(f, "mul_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::Mul256(dst, src1, src2) => {
+                write!(f, "mul_256 ({})fp ({})fp ({})fp", dst, src1, src2)
             }
             AsmInstruction::LessThanU256(dst, src1, src2) => {
-                write!(f, "lt_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
+                write!(f, "sltu_256 ({})fp ({})fp ({})fp", dst, src1, src2)
             }
-            AsmInstruction::EqualToU256(dst, src1, src2) => {
-                write!(f, "eq_u256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::EqualTo256(dst, src1, src2) => {
+                write!(f, "eq_256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::Xor256(dst, src1, src2) => {
+                write!(f, "xor_256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::And256(dst, src1, src2) => {
+                write!(f, "and_256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::Or256(dst, src1, src2) => {
+                write!(f, "or_256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::LessThanI256(dst, src1, src2) => {
+                write!(f, "slt_256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::ShiftLeft256(dst, src1, src2) => {
+                write!(f, "sll_256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::ShiftRightLogic256(dst, src1, src2) => {
+                write!(f, "srl_256 ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::ShiftRightArith256(dst, src1, src2) => {
+                write!(f, "sra_256 ({})fp ({})fp ({})fp", dst, src1, src2)
             }
         }
     }

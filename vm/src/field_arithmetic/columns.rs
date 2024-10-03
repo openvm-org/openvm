@@ -4,7 +4,7 @@ use afs_derive::AlignedBorrow;
 use derive_new::new;
 
 use crate::{
-    arch::columns::ExecutionState,
+    arch::ExecutionState,
     memory::{
         offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
         MemoryAddress,

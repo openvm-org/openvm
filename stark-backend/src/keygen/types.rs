@@ -18,9 +18,21 @@ use crate::{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TraceWidth {
     pub preprocessed: Option<usize>,
-    pub partitioned_main: Vec<usize>,
+    pub cached_mains: Vec<usize>,
+    pub common_main: usize,
     /// Width counted by extension field elements, _not_ base field elements
     pub after_challenge: Vec<usize>,
+}
+
+impl TraceWidth {
+    /// Returns the widths of all main traces, including the common main trace if it exists.
+    pub fn main_widths(&self) -> Vec<usize> {
+        let mut ret = self.cached_mains.clone();
+        if self.common_main != 0 {
+            ret.push(self.common_main);
+        }
+        ret
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -249,10 +261,11 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
             total_preprocessed += preprocessed_width;
             let partitioned_main_width = per_air
                 .width()
-                .partitioned_main
+                .cached_mains
                 .iter()
                 .fold(0, |acc, x| acc + *x);
             total_partitioned_main += partitioned_main_width;
+            total_partitioned_main += per_air.width().common_main;
             let after_challenge_width = per_air
                 .width()
                 .after_challenge

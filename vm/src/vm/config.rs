@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 
 use crate::{
-    arch::{chips::InstructionExecutorVariantName, instructions::*},
+    arch::{instructions::*, InstructionExecutorVariantName},
     core::CoreOptions,
 };
 

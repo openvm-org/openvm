@@ -7,11 +7,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     arch::{
-        bridge::ExecutionBridge,
-        bus::ExecutionBus,
-        chips::InstructionExecutor,
-        columns::ExecutionState,
         instructions::{FieldExtensionOpcode, UsizeOpcode},
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     field_extension::air::FieldExtensionArithmeticAir,
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},

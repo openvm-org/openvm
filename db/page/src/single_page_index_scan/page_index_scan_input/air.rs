@@ -11,8 +11,9 @@ use afs_primitives::{
     var_range::bus::VariableRangeCheckerBus,
 };
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
-    rap::BaseAirWithPublicValues,
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
 use p3_field::Field;
@@ -196,6 +197,14 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
         }
     }
 }
+impl<F: Field> PartitionedBaseAir<F> for PageIndexScanInputAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.page_width()]
+    }
+    fn common_main_width(&self) -> usize {
+        self.aux_width()
+    }
+}
 impl<F: Field> BaseAirWithPublicValues<F> for PageIndexScanInputAir {
     fn num_public_values(&self) -> usize {
         self.idx_len
@@ -207,8 +216,8 @@ where
     AB: PartitionedAirBuilder + AirBuilderWithPublicValues + InteractionBuilder,
 {
     fn eval(&self, builder: &mut AB) {
-        let page_main = &builder.partitioned_main()[0];
-        let aux_main = &builder.partitioned_main()[1];
+        let page_main = &builder.cached_mains()[0];
+        let aux_main = builder.common_main();
 
         // get the public value x
         let pis = builder.public_values();

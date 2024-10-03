@@ -1,0 +1,5 @@
+[build]
+target = "riscv32im-risc0-zkvm-elf"
+
+[unstable]
+build-std = ["core", "alloc", "proc_macro", "panic_abort"]

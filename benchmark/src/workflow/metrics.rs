@@ -68,7 +68,7 @@ impl<CustomMetrics: Display> Display for BenchmarkMetrics<CustomMetrics> {
                 format_number_with_underscores(m.height),
                 format_number_with_underscores(m.total_cells),
                 m.width.preprocessed.unwrap_or(0),
-                m.width.partitioned_main,
+                m.width.main_widths(),
                 m.width.after_challenge,
             )?;
         }

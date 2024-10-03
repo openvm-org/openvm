@@ -26,6 +26,7 @@ pub struct DebugConstraintBuilder<'a, SC: StarkGenericConfig> {
     pub is_transition: Val<SC>,
     pub public_values: &'a [Val<SC>],
     pub exposed_values_after_challenge: &'a [Vec<SC::Challenge>],
+    pub has_common_main: bool,
 }
 
 impl<'a, SC> AirBuilder for DebugConstraintBuilder<'a, SC>
@@ -174,8 +175,16 @@ impl<'a, SC> PartitionedAirBuilder for DebugConstraintBuilder<'a, SC>
 where
     SC: StarkGenericConfig,
 {
-    fn partitioned_main(&self) -> &[Self::M] {
-        &self.partitioned_main
+    fn cached_mains(&self) -> &[Self::M] {
+        let mut num_cached_mains = self.partitioned_main.len();
+        if self.has_common_main {
+            num_cached_mains -= 1;
+        }
+        &self.partitioned_main[..num_cached_mains]
+    }
+    fn common_main(&self) -> &Self::M {
+        assert!(self.has_common_main, "AIR doesn't have a common main trace");
+        self.partitioned_main.last().unwrap()
     }
 }
 

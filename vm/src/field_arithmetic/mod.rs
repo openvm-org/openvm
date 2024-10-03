@@ -2,11 +2,8 @@ use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
-        bridge::ExecutionBridge,
-        bus::ExecutionBus,
-        chips::InstructionExecutor,
-        columns::ExecutionState,
         instructions::{FieldArithmeticOpcode, UsizeOpcode},
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     field_arithmetic::columns::Operand,
     program::{bridge::ProgramBus, ExecutionError, Instruction},

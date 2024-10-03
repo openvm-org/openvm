@@ -13,7 +13,7 @@ use super::{
     KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
 };
 use crate::{
-    arch::{columns::ExecutionState, instructions::Keccak256Opcode},
+    arch::{instructions::Keccak256Opcode, ExecutionState},
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,

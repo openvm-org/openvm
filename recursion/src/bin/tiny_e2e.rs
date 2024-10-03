@@ -10,7 +10,7 @@ use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::fri_params_with_80_bits_of_security,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::{StarkForTest, StarkFriEngine},
 };
@@ -68,7 +68,11 @@ fn main() {
             pvs,
         } = fib_program_stark;
         let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-        let vdata = BabyBearPoseidon2Engine::run_simple_test(&any_raps, traces, &pvs).unwrap();
+        let engine =
+            BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+        let vdata = engine
+            .run_simple_test_impl(&any_raps, traces, &pvs)
+            .unwrap();
         span.exit();
 
         let compiler_options = CompilerOptions {
@@ -89,7 +93,7 @@ fn main() {
             afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
                 &inner_verifier_sft,
                 // log_blowup = 3 because of poseidon2 chip.
-                Some(fri_params_with_80_bits_of_security()[1]),
+                Some(standard_fri_params_with_100_bits_conjectured_security(3)),
             );
         });
     });

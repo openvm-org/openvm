@@ -8,6 +8,8 @@ use crate::asm::{AsmInstruction, AssemblyCode};
 
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
+    // The compiler will ensure that the heap pointer is aligned to be a multiple of `word_size`.
+    pub word_size: usize,
     pub compile_prints: bool,
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
@@ -17,6 +19,7 @@ pub struct CompilerOptions {
 impl Default for CompilerOptions {
     fn default() -> Self {
         CompilerOptions {
+            word_size: 8,
             compile_prints: true,
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
@@ -749,27 +752,23 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::AddU256(dst, src1, src2) => vec![inst_large(
+        AsmInstruction::Add256(dst, src1, src2) => vec![inst(
             U256Opcode::ADD as usize,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
-            AS::Memory.to_field(),
-            AS::Memory.to_field(),
         )],
-        AsmInstruction::SubU256(dst, src1, src2) => vec![inst_large(
+        AsmInstruction::Sub256(dst, src1, src2) => vec![inst(
             U256Opcode::SUB as usize,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
-            AS::Memory.to_field(),
-            AS::Memory.to_field(),
         )],
-        AsmInstruction::MulU256(dst, src1, src2) => vec![inst(
+        AsmInstruction::Mul256(dst, src1, src2) => vec![inst(
             U256Opcode::MUL as usize,
             i32_f(dst),
             i32_f(src1),
@@ -777,25 +776,77 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::LessThanU256(dst, src1, src2) => vec![inst_large(
+        AsmInstruction::LessThanU256(dst, src1, src2) => vec![inst(
             U256Opcode::LT as usize,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
-            AS::Memory.to_field(),
-            AS::Memory.to_field(),
         )],
-        AsmInstruction::EqualToU256(dst, src1, src2) => vec![inst_large(
+        AsmInstruction::EqualTo256(dst, src1, src2) => vec![inst(
             U256Opcode::EQ as usize,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
-            AS::Memory.to_field(),
-            AS::Memory.to_field(),
+        )],
+        AsmInstruction::Xor256(dst, src1, src2) => vec![inst(
+            U256Opcode::XOR as usize,
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::And256(dst, src1, src2) => vec![inst(
+            U256Opcode::AND as usize,
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::Or256(dst, src1, src2) => vec![inst(
+            U256Opcode::OR as usize,
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::LessThanI256(dst, src1, src2) => vec![inst(
+            U256Opcode::SLT as usize,
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::ShiftLeft256(dst, src1, src2) => vec![inst(
+            U256Opcode::SLL as usize,
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::ShiftRightLogic256(dst, src1, src2) => vec![inst(
+            U256Opcode::SRL as usize,
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::ShiftRightArith256(dst, src1, src2) => vec![inst(
+            U256Opcode::SRA as usize,
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
         )],
         AsmInstruction::Keccak256(dst, src, len) => vec![inst_med(
             Keccak256Opcode::KECCAK256 as usize,

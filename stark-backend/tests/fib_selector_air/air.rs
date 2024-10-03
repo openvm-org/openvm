@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -26,6 +29,7 @@ impl FibonacciSelectorAir {
     }
 }
 
+impl<F: Field> PartitionedBaseAir<F> for FibonacciSelectorAir {}
 impl<F: Field> BaseAir<F> for FibonacciSelectorAir {
     fn width(&self) -> usize {
         NUM_FIBONACCI_COLS

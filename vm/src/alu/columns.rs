@@ -3,7 +3,7 @@ use std::mem::size_of;
 use afs_derive::AlignedBorrow;
 
 use crate::{
-    arch::columns::ExecutionState,
+    arch::ExecutionState,
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
     uint_multiplication::MemoryData,
 };
@@ -54,7 +54,7 @@ pub struct ArithmeticLogicAuxCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
     // Opcode flags for different operations
     pub opcode_add_flag: T,
     pub opcode_sub_flag: T,
-    pub opcode_lt_flag: T,
+    pub opcode_sltu_flag: T,
     pub opcode_eq_flag: T,
     pub opcode_xor_flag: T,
     pub opcode_and_flag: T,

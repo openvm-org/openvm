@@ -1,7 +1,7 @@
 use ax_sdk::{
     config::{
         baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
-        fri_params::default_fri_params,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
     engine::{StarkForTest, StarkFriEngine},
@@ -68,8 +68,10 @@ pub fn run_evm_verifier_e2e_test(
     stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>,
     fri_params: Option<FriParameters>,
 ) {
-    let (stark_verifier_circuit, static_verifier_snark) =
-        run_static_verifier_test(stark_for_test, fri_params.unwrap_or(default_fri_params()));
+    let (stark_verifier_circuit, static_verifier_snark) = run_static_verifier_test(
+        stark_for_test,
+        fri_params.unwrap_or(standard_fri_params_with_100_bits_conjectured_security(3)),
+    );
 
     let info_span = tracing::info_span!(
         "keygen halo2 wrapper circuit",

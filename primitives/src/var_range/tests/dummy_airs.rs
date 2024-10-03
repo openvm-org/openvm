@@ -1,4 +1,7 @@
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -17,6 +20,7 @@ impl TestSendAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for TestSendAir {}
+impl<F: Field> PartitionedBaseAir<F> for TestSendAir {}
 impl<F: Field> BaseAir<F> for TestSendAir {
     fn width(&self) -> usize {
         2
@@ -51,6 +55,7 @@ impl TestRangeCheckAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for TestRangeCheckAir {}
+impl<F: Field> PartitionedBaseAir<F> for TestRangeCheckAir {}
 impl<F: Field> BaseAir<F> for TestRangeCheckAir {
     fn width(&self) -> usize {
         1

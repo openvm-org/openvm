@@ -8,8 +8,7 @@ use afs_compiler::{
 };
 use ax_sdk::{
     config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::fri_params_with_80_bits_of_security, setup_tracing_with_log_level,
+        baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing_with_log_level, FriParameters,
     },
     engine::StarkFriEngine,
 };
@@ -17,7 +16,7 @@ use hex::FromHex;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
-    arch::chips::InstructionExecutorVariantName,
+    arch::InstructionExecutorVariantName,
     hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
     vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN, DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE},
 };
@@ -51,10 +50,8 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
     builder.halt();
 
     let program = builder.compile_isa_with_options(CompilerOptions {
-        compile_prints: false,
-        enable_cycle_tracker: false,
-        field_arithmetic_enabled: true,
         field_extension_enabled: false,
+        ..Default::default()
     });
     execute_and_prove_program(
         program,
@@ -70,7 +67,7 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
         .add_default_executor(InstructionExecutorVariantName::FieldArithmetic)
         .add_default_executor(InstructionExecutorVariantName::FieldExtension)
         .add_default_executor(InstructionExecutorVariantName::Keccak256),
-        BabyBearPoseidon2Engine::new(fri_params_with_80_bits_of_security()[1]),
+        BabyBearPoseidon2Engine::new(FriParameters::standard_fast()),
     )
     .unwrap();
 }

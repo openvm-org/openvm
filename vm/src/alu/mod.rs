@@ -6,11 +6,8 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        bridge::ExecutionBridge,
-        bus::ExecutionBus,
-        chips::InstructionExecutor,
-        columns::ExecutionState,
         instructions::{U256Opcode, UsizeOpcode},
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -32,13 +29,13 @@ pub const ALU_ARITHMETIC_INSTRUCTIONS: [U256Opcode; 2] = [U256Opcode::ADD, U256O
 pub const ALU_BITWISE_INSTRUCTIONS: [U256Opcode; 3] =
     [U256Opcode::XOR, U256Opcode::AND, U256Opcode::OR];
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum WriteRecord<T, const NUM_LIMBS: usize> {
     Long(MemoryWriteRecord<T, NUM_LIMBS>),
     Bool(MemoryWriteRecord<T, 1>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub from_state: ExecutionState<usize>,
     pub instruction: Instruction<T>,
@@ -59,7 +56,7 @@ pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
     pub cmp_buffer: Vec<T>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ArithmeticLogicChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ArithmeticLogicRecord<T, NUM_LIMBS, LIMB_BITS>>,
@@ -153,9 +150,9 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             y_sign = y[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             self.xor_lookup_chip
-                .request(x_sign * (1 << (LIMB_BITS - 1)), x[NUM_LIMBS - 1]);
+                .request(x[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
             self.xor_lookup_chip
-                .request(y_sign * (1 << (LIMB_BITS - 1)), y[NUM_LIMBS - 1]);
+                .request(y[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
         }
 
         if ALU_BITWISE_INSTRUCTIONS.contains(&opcode) {

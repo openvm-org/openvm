@@ -1,6 +1,9 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use ax_sdk::{
     any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
@@ -80,6 +83,7 @@ impl AirConfig for TestCarryAir<N> {
 }
 
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for TestCarryAir<N> {}
+impl<F: Field, const N: usize> PartitionedBaseAir<F> for TestCarryAir<N> {}
 impl<F: Field, const N: usize> BaseAir<F> for TestCarryAir<N> {
     fn width(&self) -> usize {
         TestCarryCols::<N, F>::get_width()

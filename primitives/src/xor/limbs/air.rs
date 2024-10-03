@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -22,6 +25,7 @@ impl<const N: usize, const M: usize> XorLimbsAir<N, M> {
 }
 
 impl<F: Field, const N: usize, const M: usize> BaseAirWithPublicValues<F> for XorLimbsAir<N, M> {}
+impl<F: Field, const N: usize, const M: usize> PartitionedBaseAir<F> for XorLimbsAir<N, M> {}
 impl<F: Field, const N: usize, const M: usize> BaseAir<F> for XorLimbsAir<N, M> {
     fn width(&self) -> usize {
         XorLimbsCols::<N, M, F>::get_width()

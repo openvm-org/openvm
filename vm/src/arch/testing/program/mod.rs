@@ -8,7 +8,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use crate::{
-    arch::{chips::MachineChip, columns::ExecutionState},
+    arch::{chips::MachineChip, ExecutionState},
     program::{bridge::ProgramBus, columns::ProgramPreprocessedCols, Instruction},
 };
 
@@ -68,6 +68,10 @@ impl<F: Field> MachineChip<F> for ProgramTester<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(ProgramDummyAir::new(self.bus))
+    }
+
+    fn air_name(&self) -> String {
+        "ProgramDummyAir".to_string()
     }
 
     fn current_trace_height(&self) -> usize {

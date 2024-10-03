@@ -253,6 +253,16 @@ pub enum U256Opcode {
     MUL,
 }
 
+impl U256Opcode {
+    pub fn arithmetic_opcodes() -> impl Iterator<Item = U256Opcode> {
+        (0..7).map(U256Opcode::from_usize)
+    }
+
+    pub fn shift_opcodes() -> impl Iterator<Item = U256Opcode> {
+        (7..11).map(U256Opcode::from_usize)
+    }
+}
+
 #[derive(
     Copy,
     Clone,

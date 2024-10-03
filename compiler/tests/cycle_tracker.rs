@@ -43,10 +43,8 @@ fn test_cycle_tracker() {
     builder.cycle_tracker_end("test_unclosed");
 
     let program = builder.compile_isa_with_options(CompilerOptions {
-        compile_prints: false,
         enable_cycle_tracker: true,
-        field_arithmetic_enabled: true,
-        field_extension_enabled: true,
+        ..Default::default()
     });
 
     for (i, debug_info) in program.debug_infos.iter().enumerate() {

@@ -1,4 +1,4 @@
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::rap::{get_air_name, AnyRap};
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -10,8 +10,8 @@ use super::columns::{
 };
 use crate::{
     arch::{
-        chips::MachineChip,
         instructions::{FieldExtensionOpcode, UsizeOpcode},
+        MachineChip,
     },
     field_extension::chip::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
@@ -48,6 +48,10 @@ impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air)
+    }
+
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

@@ -4,14 +4,17 @@ use afs_primitives::bigint::{
     check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
     OverflowInt,
 };
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::ModularMultDivCols;
 use crate::{
-    arch::{bridge::ExecutionBridge, instructions::ModularArithmeticOpcode},
+    arch::{instructions::ModularArithmeticOpcode, ExecutionBridge},
     memory::offline_checker::MemoryBridge,
 };
 
@@ -27,6 +30,10 @@ pub struct ModularMultDivAir<
     pub(super) offset: usize,
 }
 
+impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
+    PartitionedBaseAir<F> for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+{
+}
 impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>
     for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
 {

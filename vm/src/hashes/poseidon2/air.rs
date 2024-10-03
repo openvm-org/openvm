@@ -1,7 +1,10 @@
 use std::borrow::Borrow;
 
 use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use derive_new::new;
 use itertools::izip;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -11,7 +14,7 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{
-    arch::bridge::ExecutionBridge,
+    arch::ExecutionBridge,
     memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
@@ -34,6 +37,7 @@ impl<F> AirConfig for Poseidon2VmAir<F> {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for Poseidon2VmAir<F> {}
+impl<F: Field> PartitionedBaseAir<F> for Poseidon2VmAir<F> {}
 impl<F: Field> BaseAir<F> for Poseidon2VmAir<F> {
     fn width(&self) -> usize {
         Poseidon2VmCols::<F>::width(self)

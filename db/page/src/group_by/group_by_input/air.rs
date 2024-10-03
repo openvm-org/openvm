@@ -5,8 +5,9 @@ use afs_primitives::{
     sub_chip::{AirConfig, SubAir},
 };
 use afs_stark_backend::{
-    air_builders::PartitionedAirBuilder, interaction::InteractionBuilder,
-    rap::BaseAirWithPublicValues,
+    air_builders::PartitionedAirBuilder,
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
@@ -19,6 +20,14 @@ use super::{
 use crate::common::{page::Page, page_cols::PageCols};
 
 impl<F: Field> BaseAirWithPublicValues<F> for GroupByAir {}
+impl<F: Field> PartitionedBaseAir<F> for GroupByAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![self.page_width]
+    }
+    fn common_main_width(&self) -> usize {
+        <Self as BaseAir<F>>::width(self) - self.page_width
+    }
+}
 impl<F: Field> BaseAir<F> for GroupByAir {
     fn width(&self) -> usize {
         self.get_width()
@@ -164,8 +173,8 @@ where
     /// Re-references builder into page_trace and aux_trace, then slices into local and next rows
     /// to evaluate using SubAir::eval(GroupByAir)
     fn eval(&self, builder: &mut AB) {
-        let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
-        let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+        let page_trace: &<AB as AirBuilder>::M = &builder.cached_mains()[0];
+        let aux_trace: &<AB as AirBuilder>::M = builder.common_main();
 
         // get the current row and the next row
         let (local_page, next_page) = (page_trace.row_slice(0), page_trace.row_slice(1));

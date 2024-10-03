@@ -13,18 +13,18 @@ impl MemoryAuditAir {
         let mult = AB::Expr::one() - local.is_extra;
         // Write the initial memory values at initial timestamps
         self.memory_bus
-            .write(
+            .send(
                 MemoryAddress::new(local.addr_space, local.pointer),
-                [local.initial_data],
+                vec![local.initial_data],
                 AB::Expr::zero(),
             )
             .eval(builder, mult.clone());
 
         // Read the final memory values at last timestamps when written to
         self.memory_bus
-            .read(
+            .receive(
                 MemoryAddress::new(local.addr_space, local.pointer),
-                [local.final_data],
+                vec![local.final_data],
                 local.final_timestamp,
             )
             .eval(builder, mult);

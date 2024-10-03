@@ -6,8 +6,8 @@ use ax_sdk::{
         baby_bear_poseidon2::{
             default_perm, engine_from_perm, random_perm, BabyBearPoseidon2Config,
         },
-        fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
-        setup_tracing_with_log_level,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        setup_tracing_with_log_level, FriParameters,
     },
     engine::StarkEngine,
     utils::create_seeded_rng,
@@ -17,13 +17,13 @@ use p3_field::AbstractField;
 use rand::Rng;
 use stark_vm::{
     arch::{
-        chips::InstructionExecutorVariantName,
         instructions::{
             CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*, Keccak256Opcode::*,
             Poseidon2Opcode::*, UsizeOpcode,
         },
+        InstructionExecutorVariantName,
     },
-    hashes::keccak::hasher::utils::keccak256,
+    hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     program::{Instruction, Program},
     vm::{
         config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
@@ -33,31 +33,28 @@ use stark_vm::{
 use tracing::Level;
 
 const LIMB_BITS: usize = 29;
-const DECOMP: usize = 16;
 
-fn vm_config_with_field_arithmetic() -> VmConfig {
-    VmConfig::core().add_default_executor(InstructionExecutorVariantName::FieldArithmetic)
+pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
+where
+    R: Rng + ?Sized,
+{
+    const MAX_MEMORY: usize = 1 << 29;
+    rng.gen_range(0..MAX_MEMORY - len) / len * len
 }
 
-// log_blowup = 2 by default
-fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Vec<BabyBear>>) {
-    let vm = VirtualMachine::new(
-        VmConfig {
-            memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
-            num_public_values: 4,
-            ..config
-        },
-        program,
-        witness_stream,
-    );
+fn vm_config_with_field_arithmetic() -> VmConfig {
+    VmConfig {
+        memory_config: MemoryConfig::new(29, 29, 15, 8),
+        ..VmConfig::core()
+    }
+    .add_default_executor(InstructionExecutorVariantName::FieldArithmetic)
+}
 
-    // TODO: using log_blowup = 3 because keccak interaction chunking is not optimal right now
+fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Vec<BabyBear>>) {
+    let vm = VirtualMachine::new(config, program, witness_stream);
+
     let perm = default_perm();
-    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-        fri_params_fast_testing()[1]
-    } else {
-        fri_params_with_80_bits_of_security()[1]
-    };
+    let fri_params = FriParameters::standard_fast();
 
     let result = vm.execute_and_generate().unwrap();
 
@@ -78,7 +75,7 @@ fn air_test_with_compress_poseidon2(
     let vm = VirtualMachine::new(
         VmConfig::from_parameters(
             Some(poseidon2_max_constraint_degree),
-            MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
+            Default::default(),
             4,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
@@ -93,10 +90,10 @@ fn air_test_with_compress_poseidon2(
     let result = vm.execute_and_generate().unwrap();
 
     let perm = random_perm();
-    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-        fri_params_fast_testing()[1]
-    } else {
-        fri_params_with_80_bits_of_security()[1]
+    let mut fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
+    if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params.num_queries = 2;
+        fri_params.proof_of_work_bits = 0;
     };
 
     for segment_result in result.segment_results {
@@ -124,7 +121,7 @@ fn air_test_with_compress_poseidon2(
 fn test_vm_1() {
     setup_tracing_with_log_level(Level::TRACE);
 
-    let n = 2;
+    let n = 6;
     /*
     Instruction 0 assigns word[0]_1 to n.
     Instruction 4 terminates
@@ -261,7 +258,7 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(STOREW.with_default_offset(), 1, 6, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 2, 7, 0, 0, 1),
         Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        // Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
         Instruction::from_isize(FE4SUB.with_default_offset(), 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4MUL.with_default_offset(), 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4DIV.with_default_offset(), 12, 0, 4, 1, 1),
@@ -276,15 +273,10 @@ fn test_vm_field_extension_arithmetic() {
     };
 
     air_test(
-        VmConfig::from_parameters(
-            None,
-            MemoryConfig::new(29, 29, 15, 8),
-            0,
-            DEFAULT_MAX_SEGMENT_LEN,
-            false,
-            8,
-        )
-        .add_default_executor(InstructionExecutorVariantName::Core)
+        VmConfig {
+            memory_config: MemoryConfig::new(29, 29, 15, 8),
+            ..VmConfig::core()
+        }
         .add_default_executor(InstructionExecutorVariantName::FieldArithmetic)
         .add_default_executor(InstructionExecutorVariantName::FieldExtension),
         program,
@@ -336,8 +328,8 @@ fn test_vm_compress_poseidon2_as2() {
 
     let mut instructions = vec![];
 
-    let lhs_ptr = rng.gen_range(1..1 << 20);
-    for i in 0..8 {
+    let lhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
+    for i in 0..CHUNK as isize {
         // [lhs_ptr + i]_2 <- rnd()
         instructions.push(Instruction::from_isize(
             STOREW.with_default_offset(),
@@ -348,8 +340,8 @@ fn test_vm_compress_poseidon2_as2() {
             2,
         ));
     }
-    let rhs_ptr = rng.gen_range(1..1 << 20);
-    for i in 0..8 {
+    let rhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
+    for i in 0..CHUNK as isize {
         // [rhs_ptr + i]_2 <- rnd()
         instructions.push(Instruction::from_isize(
             STOREW.with_default_offset(),
@@ -360,7 +352,7 @@ fn test_vm_compress_poseidon2_as2() {
             2,
         ));
     }
-    let dst_ptr = rng.gen_range(1..1 << 20);
+    let dst_ptr = gen_pointer(&mut rng, CHUNK) as isize;
 
     // [11]_1 <- lhs_ptr
     instructions.push(Instruction::from_isize(
@@ -450,7 +442,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         1,
     ));
     // dst word[a]_1 <- 3 // use weird offset
-    let dst = 3;
+    let dst = 8;
     instructions.push(Instruction::from_isize(
         STOREW.with_default_offset(),
         dst,

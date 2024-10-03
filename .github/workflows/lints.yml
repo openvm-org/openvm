@@ -1,4 +1,4 @@
-name: Lints
+name: Lint Workspace
 
 on:
   push:
@@ -21,13 +21,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          override: false
-          components: rustfmt, clippy
 
       - name: Run fmt
         run: |

@@ -1,6 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
-use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap};
+use afs_stark_backend::{
+    config::StarkGenericConfig,
+    rap::{get_air_name, AnyRap},
+};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -12,8 +15,8 @@ use super::{
 };
 use crate::{
     arch::{
-        chips::MachineChip,
         instructions::{U256Opcode, UsizeOpcode},
+        MachineChip,
     },
     memory::offline_checker::MemoryWriteAuxCols,
     uint_multiplication::MemoryData,
@@ -86,7 +89,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 y_sign,
                 opcode_add_flag: F::from_bool(opcode == U256Opcode::ADD),
                 opcode_sub_flag: F::from_bool(opcode == U256Opcode::SUB),
-                opcode_lt_flag: F::from_bool(opcode == U256Opcode::LT),
+                opcode_sltu_flag: F::from_bool(opcode == U256Opcode::LT),
                 opcode_eq_flag: F::from_bool(opcode == U256Opcode::EQ),
                 opcode_xor_flag: F::from_bool(opcode == U256Opcode::XOR),
                 opcode_and_flag: F::from_bool(opcode == U256Opcode::AND),
@@ -114,6 +117,10 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         Box::new(self.air)
+    }
+
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
 
     fn current_trace_height(&self) -> usize {

@@ -1,5 +1,8 @@
 use afs_primitives::sub_chip::{AirConfig, SubAir};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -30,6 +33,7 @@ impl PageReadAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for PageReadAir {}
+impl<F: Field> PartitionedBaseAir<F> for PageReadAir {}
 impl<F: Field> BaseAir<F> for PageReadAir {
     fn width(&self) -> usize {
         self.air_width()
