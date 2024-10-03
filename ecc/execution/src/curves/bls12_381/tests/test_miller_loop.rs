@@ -7,11 +7,11 @@ use subtle::ConditionallySelectable;
 
 use crate::{
     common::{
-        miller_add_step, miller_double_and_add_step, miller_double_step, multi_miller_loop, EcPoint,
+        miller_add_step, miller_double_and_add_step, miller_double_step, EcPoint, MultiMillerLoop,
     },
     curves::bls12_381::{
         line::{mul_023_by_023, mul_by_023, mul_by_02345},
-        BLS12_381_XI, GNARK_BLS12_381_PBE,
+        BLS12_381, BLS12_381_XI, GNARK_BLS12_381_PBE,
     },
 };
 
@@ -47,7 +47,8 @@ fn test_multi_miller_loop_bls12_381() {
     let compare_final = compare_miller.final_exponentiation();
 
     // Run the multi-miller loop
-    let f = multi_miller_loop::<Fq, Fq2, Fq12>(
+    let bls12_381 = BLS12_381::new();
+    let f = bls12_381.multi_miller_loop(
         P_ecpoints.as_slice(),
         Q_ecpoints.as_slice(),
         GNARK_BLS12_381_PBE.as_slice(),
