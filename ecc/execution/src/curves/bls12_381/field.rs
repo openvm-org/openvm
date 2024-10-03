@@ -109,10 +109,7 @@ impl FieldExtension<6> for Fq12 {
     }
 
     fn conjugate(&mut self) -> Self {
-        println!("Fq12::conjugate before, {:?}", self);
         Fq12::conjugate(&self)
-        // println!("Fq12::conjugate after, {:?}", self);
-        // *self
     }
 
     fn frobenius_map(&mut self, _power: Option<usize>) {
@@ -130,20 +127,4 @@ impl FieldExtension<6> for Fq12 {
             c1: self.c1 * fq6_pt,
         }
     }
-}
-
-pub fn print_fq12_raw(label: &str, f: Fq12) {
-    println!("{}", label);
-    println!("f.c0.c0.c0: {:?}", f.c0.c0.c0.0);
-    println!("f.c0.c0.c1: {:?}", f.c0.c0.c1.0);
-    println!("f.c0.c1.c0: {:?}", f.c0.c1.c0.0);
-    println!("f.c0.c1.c1: {:?}", f.c0.c1.c1.0);
-    println!("f.c0.c2.c0: {:?}", f.c0.c2.c0.0);
-    println!("f.c0.c2.c1: {:?}", f.c0.c2.c1.0);
-    println!("f.c1.c0.c0: {:?}", f.c1.c0.c0.0);
-    println!("f.c1.c0.c1: {:?}", f.c1.c0.c1.0);
-    println!("f.c1.c1.c0: {:?}", f.c1.c1.c0.0);
-    println!("f.c1.c1.c1: {:?}", f.c1.c1.c1.0);
-    println!("f.c1.c2.c0: {:?}", f.c1.c2.c0.0);
-    println!("f.c1.c2.c1: {:?}", f.c1.c2.c1.0);
 }

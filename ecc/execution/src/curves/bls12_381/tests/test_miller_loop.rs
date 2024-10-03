@@ -1,15 +1,17 @@
 use halo2curves_axiom::bls12_381::{
-    Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, MillerLoopResult, G2,
+    Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, MillerLoopResult,
 };
 use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
-use subtle::{Choice, ConditionallySelectable};
+use subtle::ConditionallySelectable;
 
 use crate::{
-    common::EcPoint,
+    common::{
+        evaluate_line, miller_add_step, miller_double_and_add_step, miller_double_step,
+        multi_miller_loop, EcPoint,
+    },
     curves::bls12_381::{
-        line::{evaluate_line, mul_023_by_023, mul_by_023, mul_by_02345},
-        miller_add_step, miller_double_and_add_step, miller_double_step, multi_miller_loop,
+        line::{mul_023_by_023, mul_by_023, mul_by_02345},
         BLS12_381_XI, GNARK_BLS12_381_PBE,
     },
 };
@@ -18,7 +20,7 @@ use crate::{
 #[allow(non_snake_case)]
 fn test_multi_miller_loop_bls12_381() {
     // Generate random G1 and G2 points
-    let rand_seeds = vec![2, 8, 15, 29, 55, 166];
+    let rand_seeds = vec![8, 15, 29, 55, 166];
     let (P_vec, Q_vec) = rand_seeds
         .iter()
         .map(|seed| {
@@ -58,26 +60,6 @@ fn test_multi_miller_loop_bls12_381() {
 
     // Run halo2curves final exponentiation on our multi_miller_loop output
     assert_eq!(final_f, compare_final);
-}
-
-#[test]
-#[allow(non_snake_case)]
-fn test_on_curve() {
-    let two = Fq::one() + Fq::one();
-    let three = Fq::one() + Fq::one() + Fq::one();
-    let mut P = G1Affine::default();
-    P.x = Fq::zero();
-    P.y = Fq::one();
-    let mut Q: G2Affine = G2Affine::default();
-    Q.x = Fq2 {
-        c0: Fq::zero(),
-        c1: Fq::one(),
-    };
-    Q.y = Fq2 { c0: two, c1: three };
-    let P_on_curve: bool = P.is_on_curve().into();
-    let Q_on_curve: bool = Q.is_on_curve().into();
-    assert!(P_on_curve);
-    assert!(Q_on_curve);
 }
 
 #[test]

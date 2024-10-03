@@ -26,3 +26,11 @@ pub trait Fp2Constructor<Fp: Field> {
 pub trait Fp12Constructor<Fp2: FieldExtension<2>> {
     fn new(c00: Fp2, c01: Fp2, c02: Fp2, c10: Fp2, c11: Fp2, c12: Fp2) -> Self;
 }
+
+pub fn fp12_square<Fp12: Field>(x: Fp12) -> Fp12 {
+    fp12_multiply(x, x)
+}
+
+pub fn fp12_multiply<Fp12: Field>(x: Fp12, y: Fp12) -> Fp12 {
+    x * y
+}

@@ -60,41 +60,18 @@ where
     // 1 - λ(x/y)w^-1 + (λx - y)(1/y)w^-3
     // = (λx - y)(1/y) - λ(x/y)w^2 + w^3
     //
-    // x0 = (λ * x - y) / y
-    //    = 3x^3/2y^2 - 1
-    // x2 = -(λ * x / y)
-    //    = -3x^3 / 2y^2
+    // b = -(λ * x / y)
+    //   = -3x^3 / 2y^2
+    // c = (λ * x - y) / y
+    //   = 3x^3/2y^2 - 1
     let x_squared = x.square();
     let x_cubed = x_squared * x;
     let y_squared = y.square();
     let three_x_cubed = three * x_cubed;
     let over_two_y_squared = (two * y_squared).invert().unwrap();
 
-    let x0 = three_x_cubed * over_two_y_squared - Fp2::ONE;
-    let x2 = three_x_cubed.neg() * over_two_y_squared;
+    let b = three_x_cubed.neg() * over_two_y_squared;
+    let c = three_x_cubed * over_two_y_squared - Fp2::ONE;
 
-    [x0, x2]
-}
-
-#[allow(non_snake_case)]
-pub fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i32) -> Vec<EcPoint<Fp2>>
-where
-    Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-{
-    Q.iter()
-        .map(|q| match sigma_i {
-            1 => q.clone(),
-            -1 => q.neg(),
-            _ => panic!("Invalid sigma_i"),
-        })
-        .collect()
-}
-
-pub fn fp12_square<Fp12: Field>(x: Fp12) -> Fp12 {
-    fp12_multiply(x, x)
-}
-
-pub fn fp12_multiply<Fp12: Field>(x: Fp12, y: Fp12) -> Fp12 {
-    x * y
+    [b, c]
 }

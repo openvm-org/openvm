@@ -5,10 +5,10 @@ use halo2curves_axiom::{
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    common::EcPoint,
+    common::{fp12_square, EcPoint},
     curves::bls12_381::{
-        conv_023_to_fp12, conv_fp2_coeffs_to_fp12, fp12_square, mul_023_by_023, mul_by_023,
-        mul_by_02345, point_to_023, BLS12_381_XI,
+        conv_023_to_fp12, conv_fp2_coeffs_to_fp12, mul_023_by_023, mul_by_023, mul_by_02345,
+        point_to_023, BLS12_381_XI,
     },
 };
 
@@ -20,12 +20,6 @@ fn test_fp12_square() {
     let sq = fp12_square::<Fq12>(rnd);
     let sq_native = rnd.square();
     assert_eq!(sq, sq_native);
-}
-
-#[test]
-#[ignore]
-fn test_evaluate_line() {
-    // NOTE: There is probably not a simple way to test this
 }
 
 #[test]

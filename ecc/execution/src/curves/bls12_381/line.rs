@@ -2,19 +2,6 @@ use halo2curves_axiom::ff::Field;
 
 use crate::common::FieldExtension;
 
-pub fn evaluate_line<Fp, Fp2>(line: [Fp2; 2], x_over_y: Fp, y_inv: Fp) -> [Fp2; 2]
-where
-    Fp: Field,
-    Fp2: FieldExtension<2, BaseField = Fp>,
-{
-    let x0_prime = line[0];
-    let x2_prime = line[1];
-    let x0 = x0_prime.mul_base(&y_inv);
-    let x2 = x2_prime.mul_base(&x_over_y);
-
-    [x0, x2]
-}
-
 /// Multiplies two line functions in 023 form and outputs the product in 012345 form
 pub fn mul_023_by_023<Fp, Fp2>(
     line_0: [Fp2; 2],
@@ -26,10 +13,10 @@ where
     Fp: Field,
     Fp2: FieldExtension<2, BaseField = Fp>,
 {
-    let b0 = line_0[0];
-    let c0 = line_0[1];
-    let b1 = line_1[0];
-    let c1 = line_1[1];
+    let c0 = line_0[0];
+    let b0 = line_0[1];
+    let c1 = line_1[0];
+    let b1 = line_1[1];
 
     // where w⁶ = xi
     // l0 * l1 = b0b1 + (b0c1 + b1c0)w² + (b0 + b1)w³ + (c0c1)w⁴ + (c0 +c1)w⁵ + w⁶
@@ -52,7 +39,7 @@ where
 {
     mul_by_02345(
         f,
-        [line[0], Fp2::ZERO, line[1], Fp2::ONE, Fp2::ZERO, Fp2::ZERO],
+        [line[1], Fp2::ZERO, line[0], Fp2::ONE, Fp2::ZERO, Fp2::ZERO],
     )
 }
 
@@ -64,4 +51,24 @@ where
 {
     let x_fp12 = Fp12::from_coeffs(x);
     f * x_fp12
+}
+
+pub fn evaluate_lines_vec<Fp, Fp2, Fp12>(mut f: Fp12, mut lines: Vec<[Fp2; 2]>, xi: Fp2) -> Fp12
+where
+    Fp: Field,
+    Fp2: FieldExtension<2, BaseField = Fp>,
+    Fp12: FieldExtension<6, BaseField = Fp2>,
+{
+    if lines.len() % 2 == 1 {
+        f = mul_by_023::<Fp, Fp2, Fp12>(f, lines.pop().unwrap());
+    }
+    for chunk in lines.chunks(2) {
+        if let [line0, line1] = chunk {
+            let prod = mul_023_by_023(*line0, *line1, xi);
+            f = mul_by_02345(f, prod);
+        } else {
+            panic!("lines.len() % 2 should be 0 at this point");
+        }
+    }
+    f
 }

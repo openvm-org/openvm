@@ -2,12 +2,21 @@ use halo2curves_axiom::ff::Field;
 use itertools::{izip, Itertools};
 
 use crate::{
-    common::{EcPoint, FieldExtension},
-    curves::bls12_381::{
-        evaluate_line, fp12_multiply, fp12_square, mul_023_by_023, mul_by_023, mul_by_02345,
-        q_signed,
-    },
+    common::{fp12_multiply, fp12_square, EcPoint, FieldExtension},
+    curves::bls12_381::evaluate_lines_vec,
 };
+
+pub fn evaluate_line<Fp, Fp2>(line: [Fp2; 2], x_over_y: Fp, y_inv: Fp) -> [Fp2; 2]
+where
+    Fp: Field,
+    Fp2: FieldExtension<2, BaseField = Fp>,
+{
+    let b_prime = line[0];
+    let c_prime = line[1];
+    let b = b_prime.mul_base(&x_over_y);
+    let c = c_prime.mul_base(&y_inv);
+    [b, c]
+}
 
 #[allow(non_snake_case)]
 pub fn miller_double_step<Fp, Fp2>(S: EcPoint<Fp2>) -> (EcPoint<Fp2>, [Fp2; 2])
@@ -37,10 +46,10 @@ where
     //   l_{\Psi(S),\Psi(S)}(P) = (λ * x_S - y_S) (1 / y_P)  - λ (x_P / y_P) w^2 + w^3
     // x0 = λ * x_S - y_S
     // x2 = - λ
-    let x0 = lambda * x - y;
-    let x2 = -lambda;
+    let b = -lambda;
+    let c = lambda * x - y;
 
-    (res, [x0, x2])
+    (res, [b, c])
 }
 
 #[allow(non_snake_case)]
@@ -66,10 +75,10 @@ where
     };
 
     // l_{\Psi(S),\Psi(Q)}(P) = (λ_1 * x_S - y_S) (1 / y_P) - λ_1 (x_P / y_P) w^2 + w^3
-    let x0 = lambda * x_s - y_s;
-    let x2 = -lambda;
+    let b = -lambda;
+    let c = lambda * x_s - y_s;
 
-    (res, [x0, x2])
+    (res, [b, c])
 }
 
 #[allow(non_snake_case)]
@@ -89,7 +98,6 @@ where
     let x_q = Q.x;
     let y_q = Q.y;
 
-    println!("x_q, x_s,: {:?}, {:?}", x_q, x_s);
     // λ1 = (y_s - y_q) / (x_s - x_q)
     let lambda1 = (y_s - y_q) * (x_s - x_q).invert().unwrap();
     let x_s_plus_q = lambda1.square() - x_s - x_q;
@@ -105,36 +113,29 @@ where
     };
 
     // l_{\Psi(S),\Psi(Q)}(P) = (λ_1 * x_S - y_S) (1 / y_P) - λ_1 (x_P / y_P) w^2 + w^3
-    let x0_0 = lambda1 * x_s - y_s;
-    let x2_0 = -lambda1;
+    let b0 = -lambda1;
+    let c0 = lambda1 * x_s - y_s;
 
     // l_{\Psi(S+Q),\Psi(S)}(P) = (λ_2 * x_S - y_S) (1 / y_P) - λ_2 (x_P / y_P) w^2 + w^3
+    let b1 = -lambda2;
+    let c1 = lambda2 * x_s - y_s;
 
-    let x0_1 = lambda2 * x_s - y_s;
-    let x2_1 = -lambda2;
-
-    (res, [x0_0, x2_0], [x0_1, x2_1])
+    (res, [b0, c0], [b1, c1])
 }
 
-pub fn evaluate_lines<Fp, Fp2, Fp12>(mut f: Fp12, mut lines: Vec<[Fp2; 2]>, xi: Fp2) -> Fp12
+#[allow(non_snake_case)]
+pub fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i32) -> Vec<EcPoint<Fp2>>
 where
     Fp: Field,
     Fp2: FieldExtension<2, BaseField = Fp>,
-    Fp12: FieldExtension<6, BaseField = Fp2>,
 {
-    println!("final evaluate_lines len: {:?}", lines.len());
-    if lines.len() % 2 == 1 {
-        f = mul_by_023::<Fp, Fp2, Fp12>(f, lines.pop().unwrap());
-    }
-    for chunk in lines.chunks(2) {
-        if let [line0, line1] = chunk {
-            let prod = mul_023_by_023(*line0, *line1, xi);
-            f = mul_by_02345(f, prod);
-        } else {
-            panic!("lines.len() % 2 should be 0 at this point");
-        }
-    }
-    f
+    Q.iter()
+        .map(|q| match sigma_i {
+            1 => q.clone(),
+            -1 => q.neg(),
+            _ => panic!("Invalid sigma_i"),
+        })
+        .collect()
 }
 
 #[allow(non_snake_case)]
@@ -183,24 +184,21 @@ where
     let mut f = Fp12::ONE;
     let mut Q_acc = Q.to_vec();
 
-    // Debug counters
-    let mut total_double = 0;
-    let mut total_double_add = 0;
-
     // Special case the first iteration of the miller loop with pseudo_binary_encoding = 1:
     // this means that the first step is a double and add, but we need to separate the two steps since the optimized
     // `miller_double_and_add_step` will fail because Q_acc is equal to Q_signed on the first iteration
-    println!("miller first iter special case");
     let (Q_out_double, lines_2S) = Q_acc
         .into_iter()
         .map(miller_double_step::<Fp, Fp2>)
         .unzip::<_, _, Vec<_>, Vec<_>>();
     Q_acc = Q_out_double;
 
+    let mut initial_lines = Vec::<[Fp2; 2]>::new();
+
     let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
     for (line_2S, x_over_y, y_inv) in lines_iter {
         let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
-        f = mul_by_023::<Fp, Fp2, Fp12>(f, line);
+        initial_lines.push(line);
     }
 
     let (Q_out_add, lines_S_plus_Q) = Q_acc
@@ -213,11 +211,10 @@ where
     let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
     for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
         let line = evaluate_line::<Fp, Fp2>(*lines_S_plus_Q, *x_over_y, *y_inv);
-        f = mul_by_023::<Fp, Fp2, Fp12>(f, line);
+        initial_lines.push(line);
     }
 
-    // Debug counter
-    total_double_add += 1;
+    f = evaluate_lines_vec::<Fp, Fp2, Fp12>(f, initial_lines, xi);
 
     for i in (0..pseudo_binary_encoding.len() - 2).rev() {
         println!(
@@ -225,7 +222,6 @@ where
             i, pseudo_binary_encoding[i], Q_acc[0].x
         );
 
-        // Regular Miller loop iteration
         f = fp12_square::<Fp12>(f);
 
         let mut lines = Vec::<[Fp2; 2]>::new();
@@ -243,9 +239,6 @@ where
                 let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
                 lines.push(line);
             }
-
-            // Debug counter
-            total_double += 1;
         } else {
             // use embedded exponent technique if c is provided
             f = if let Some(c) = c {
@@ -281,16 +274,15 @@ where
                 lines.push(line0);
                 lines.push(line1);
             }
-
-            // Debug counter
-            total_double_add += 1;
         };
 
-        f = evaluate_lines::<Fp, Fp2, Fp12>(f, lines, xi);
+        // TODO[yj]: in order to make this miller loop more general, we can either create a new trait that will be applied to
+        // different curves or we can pass in this evaluation function as a parameter
+        f = evaluate_lines_vec::<Fp, Fp2, Fp12>(f, lines, xi);
     }
-    println!("miller: total double: {total_double}, total double&add: {total_double_add}");
 
     // We conjugate here f since the x value of BLS12-381 is *negative* 0xd201000000010000
+    // TODO[yj]: we will need to make this more general to support other curves
     f = f.conjugate();
 
     f
