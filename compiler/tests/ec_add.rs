@@ -102,7 +102,7 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
         ..Default::default()
     });
     execute_program_with_config(
-        VmConfig::core()
+        VmConfig::default()
             .add_default_executor(ExecutorName::Secp256k1AddUnequal)
             .add_default_executor(ExecutorName::Secp256k1Double)
             .add_default_executor(ExecutorName::ArithmeticLogicUnit256)

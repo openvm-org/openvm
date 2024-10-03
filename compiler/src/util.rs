@@ -42,7 +42,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
             bigint_limb_size: 8,
-            ..VmConfig::core()
+            ..Default::default()
         }
         .add_default_executor(ExecutorName::ModularAddSub)
         .add_default_executor(ExecutorName::ModularMultDiv)

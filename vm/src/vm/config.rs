@@ -160,6 +160,7 @@ impl Default for VmConfig {
             false,
             8,
         )
+        .add_default_executor(ExecutorName::Core)
         .add_default_executor(ExecutorName::FieldArithmetic)
         .add_default_executor(ExecutorName::FieldExtension)
         .add_default_executor(ExecutorName::Poseidon2)

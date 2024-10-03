@@ -1,10 +1,13 @@
 use afs_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
+static mut OPCODE_INDEX: usize = 0;
+
 pub trait UsizeOpcode {
     fn default_offset() -> usize;
     fn from_usize(value: usize) -> Self;
     fn as_usize(&self) -> usize;
+    fn class_index() -> usize;
 
     fn with_default_offset(&self) -> usize {
         self.as_usize() + Self::default_offset()

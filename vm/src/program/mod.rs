@@ -146,7 +146,7 @@ impl<T: Default> Default for Instruction<T> {
 pub enum ExecutionError {
     Fail(usize),
     PcOutOfBounds(usize, usize),
-    DisabledOperation(usize, String),
+    DisabledOperation(usize, usize),
     HintOutOfBounds(usize),
     EndOfInputStream(usize),
     PublicValueIndexOutOfBounds(usize, usize, usize),
