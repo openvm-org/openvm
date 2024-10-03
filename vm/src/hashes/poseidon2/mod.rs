@@ -261,7 +261,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         };
 
         self.records.push(Poseidon2Record {
-            instruction,
+            instruction: Instruction {
+                opcode: opcode as usize,
+                ..instruction
+            },
             from_state,
             internal_cols,
             dst_ptr_read,

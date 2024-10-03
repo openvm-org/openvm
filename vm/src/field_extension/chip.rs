@@ -86,7 +86,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
         self.records.push(FieldExtensionArithmeticRecord {
             timestamp: from_state.timestamp,
             pc: from_state.pc,
-            instruction,
+            instruction: Instruction {
+                opcode,
+                ..instruction
+            },
             x,
             y,
             z,

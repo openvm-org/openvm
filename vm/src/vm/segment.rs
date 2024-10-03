@@ -122,6 +122,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let mut modular_addsub_chips = vec![];
         let mut core_chip = None;
         for (range, executor, offset) in config.clone().executors {
+            for opcode in range.clone() {
+                if let Some(old_executor) = executors.get(&opcode) {
+                    panic!(
+                        "Attempting to override an executor for opcode {} ({:?} -> {:?})",
+                        opcode, old_executor, executor
+                    );
+                }
+            }
             match executor {
                 InstructionExecutorVariantName::Core => {
                     core_chip = Some(Rc::new(RefCell::new(CoreChip::from_state(

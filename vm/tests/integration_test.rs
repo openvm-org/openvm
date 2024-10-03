@@ -84,6 +84,7 @@ fn air_test_with_compress_poseidon2(
             false,
             8,
         )
+        .add_default_executor(InstructionExecutorVariantName::Core)
         .add_default_executor(InstructionExecutorVariantName::Poseidon2),
         program,
         vec![],
@@ -283,6 +284,7 @@ fn test_vm_field_extension_arithmetic() {
             false,
             8,
         )
+        .add_default_executor(InstructionExecutorVariantName::Core)
         .add_default_executor(InstructionExecutorVariantName::FieldArithmetic)
         .add_default_executor(InstructionExecutorVariantName::FieldExtension),
         program,
