@@ -195,7 +195,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     chips.push(MachineChipVariant::Keccak256(chip));
                 }
                 InstructionExecutorVariantName::ModularAddSub => {
-                    let new_chip = if modular_addsub_chips.len() == 1 {
+                    let new_chip = if modular_addsub_chips.is_empty() {
                         Rc::new(RefCell::new(ModularAddSubChip::new(
                             execution_bus,
                             program_bus,
@@ -218,7 +218,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                 }
                 InstructionExecutorVariantName::ModularMultDiv => {
-                    let new_chip = if modular_muldiv_chips.len() == 1 {
+                    let new_chip = if modular_muldiv_chips.is_empty() {
                         Rc::new(RefCell::new(ModularMultDivChip::new(
                             execution_bus,
                             program_bus,
