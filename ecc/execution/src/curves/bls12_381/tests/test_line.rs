@@ -63,7 +63,6 @@ fn test_mul_by_023() {
     };
     let line = point_to_023::<Fq, Fq2>(ec_point);
     let mul_by_023 = mul_by_023::<Fq, Fq2, Fq12>(f, line);
-    println!("{:#?}", mul_by_023);
 
     let check_mul_fp12 = conv_023_to_fp12::<Fq, Fq2, Fq12>(line) * f;
     assert_eq!(mul_by_023, check_mul_fp12);

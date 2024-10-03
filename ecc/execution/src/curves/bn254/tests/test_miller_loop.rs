@@ -1,10 +1,7 @@
-use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine};
+use halo2curves_axiom::bn256::{G1Affine, G2Affine};
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::{
-    common::EcPoint,
-    curves::bn254::{BN254_XI, GNARK_BN254_PBE_NAF},
-};
+use crate::common::EcPoint;
 
 #[test]
 #[allow(non_snake_case)]

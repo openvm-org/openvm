@@ -13,20 +13,20 @@ where
     Fp: Field,
     Fp2: FieldExtension<2, BaseField = Fp>,
 {
-    let c0 = line_0[0];
-    let b0 = line_0[1];
-    let c1 = line_1[0];
-    let b1 = line_1[1];
+    let b0 = line_0[0];
+    let c0 = line_0[1];
+    let b1 = line_1[0];
+    let c1 = line_1[1];
 
     // where w⁶ = xi
-    // l0 * l1 = b0b1 + (b0c1 + b1c0)w² + (b0 + b1)w³ + (c0c1)w⁴ + (c0 +c1)w⁵ + w⁶
-    //         = (b0b1 + xi) + (b0c1 + b1c0)w² + (b0 + b1)w³ + (c0c1)w⁴ + (c0 + c1)w⁵
-    let x0 = b0 * b1 + xi;
+    // l0 * l1 = c0c1 + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 +b1)w⁵ + w⁶
+    //         = (c0c1 + xi) + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 + b1)w⁵
+    let x0 = c0 * c1 + xi;
     let x1 = Fp2::ZERO;
-    let x2 = b0 * c1 + b1 * c0;
-    let x3 = b0 + b1;
-    let x4 = c0 * c1;
-    let x5 = c0 + c1;
+    let x2 = c0 * b1 + c1 * b0;
+    let x3 = c0 + c1;
+    let x4 = b0 * b1;
+    let x5 = b0 + b1;
 
     [x0, x1, x2, x3, x4, x5]
 }

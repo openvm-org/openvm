@@ -12,7 +12,7 @@ pub const BN254_XI: Fq2 = Fq2 {
 
 // from gnark implementation: https://github.com/Consensys/gnark/blob/42dcb0c3673b2394bf1fd82f5128f7a121d7d48e/std/algebra/emulated/sw_bn254/pairing.go#L356
 // loopCounter = 6x₀+2 = 29793968203157093288
-// in 2-NAF
+// in 2-NAF (nonadjacent form)
 pub const GNARK_BN254_PBE_NAF: [i32; 66] = [
     0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0,
     -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0, -1, 0,
@@ -60,19 +60,22 @@ impl FieldExtension<2> for Fq2 {
         }
     }
 
-    fn conjugate(&mut self) -> Self {
-        self.conjugate();
-        *self
+    fn conjugate(&self) -> Self {
+        let mut s = self.clone();
+        Fq2::conjugate(&mut s);
+        s
     }
 
-    fn frobenius_map(&mut self, power: Option<usize>) {
-        self.frobenius_map(power.unwrap());
+    fn frobenius_map(&self, power: Option<usize>) -> Self {
+        let mut s = self.clone();
+        Fq2::frobenius_map(&mut s, power.unwrap());
+        s
     }
 
-    fn mul_base(self, rhs: &Self::BaseField) -> Self {
+    fn mul_base(&self, rhs: &Self::BaseField) -> Self {
         Fq2 {
-            c0: self.c0 * rhs,
-            c1: self.c1 * rhs,
+            c0: &self.c0 * rhs,
+            c1: &self.c1 * rhs,
         }
     }
 }
@@ -108,24 +111,27 @@ impl FieldExtension<6> for Fq12 {
         }
     }
 
-    fn conjugate(&mut self) -> Self {
-        self.conjugate();
-        *self
+    fn conjugate(&self) -> Self {
+        let mut s = self.clone();
+        Fq12::conjugate(&mut s);
+        s
     }
 
-    fn frobenius_map(&mut self, power: Option<usize>) {
-        self.frobenius_map(power.unwrap());
+    fn frobenius_map(&self, power: Option<usize>) -> Self {
+        let mut s = self.clone();
+        Fq12::frobenius_map(&mut s, power.unwrap());
+        s
     }
 
-    fn mul_base(self, rhs: &Self::BaseField) -> Self {
+    fn mul_base(&self, rhs: &Self::BaseField) -> Self {
         let fq6_pt = Fq6 {
             c0: *rhs,
             c1: Fq2::zero(),
             c2: Fq2::zero(),
         };
         Fq12 {
-            c0: self.c0 * fq6_pt,
-            c1: self.c1 * fq6_pt,
+            c0: &self.c0 * fq6_pt,
+            c1: &self.c1 * fq6_pt,
         }
     }
 }

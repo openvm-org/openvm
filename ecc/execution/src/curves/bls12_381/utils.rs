@@ -10,9 +10,9 @@ where
 {
     // x0 + x1*w + x2*w^2 + x3*w^3 + x4*w^4 + x5*w^5
     // (x0 + x2*w^2 + x4*w^4) + (x1 + x3*w^2 + x5*w^4)*w
-    let x0 = line[0];
+    let x0 = line[1];
     let x1 = Fp2::ZERO;
-    let x2 = line[1];
+    let x2 = line[0];
     let x3 = Fp2::ONE;
     let x4 = Fp2::ZERO;
     let x5 = Fp2::ZERO;

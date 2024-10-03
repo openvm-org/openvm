@@ -10,13 +10,13 @@ pub trait FieldExtension<const DEG: usize>: Field {
     fn embed(base_elem: &Self::BaseField) -> Self;
 
     /// Conjuagte an extension field element.
-    fn conjugate(&mut self) -> Self;
+    fn conjugate(&self) -> Self;
 
     /// Frobenius map
-    fn frobenius_map(&mut self, power: Option<usize>);
+    fn frobenius_map(&self, power: Option<usize>) -> Self;
 
     /// Multiply an extension field element by an element in the base field
-    fn mul_base(self, rhs: &Self::BaseField) -> Self;
+    fn mul_base(&self, rhs: &Self::BaseField) -> Self;
 }
 
 pub trait Fp2Constructor<Fp: Field> {
