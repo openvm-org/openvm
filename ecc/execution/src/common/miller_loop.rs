@@ -165,7 +165,7 @@ where
     Fp2: FieldExtension<2, BaseField = Fp>,
     Fp12: FieldExtension<6, BaseField = Fp2>,
 {
-    assert!(P.len() > 0);
+    assert!(!P.is_empty());
     assert_eq!(P.len(), Q.len());
 
     let y_invs = P.iter().map(|P| P.y.invert().unwrap()).collect::<Vec<Fp>>();

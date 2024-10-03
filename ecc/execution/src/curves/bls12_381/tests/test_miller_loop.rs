@@ -64,6 +64,7 @@ fn test_multi_miller_loop_bls12_381() {
 
 #[test]
 #[allow(non_snake_case)]
+#[allow(unused_assignments)]
 fn test_f_mul() {
     // Generate random G1 and G2 points
     let mut rng0 = StdRng::seed_from_u64(2);

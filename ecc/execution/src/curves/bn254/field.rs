@@ -61,21 +61,21 @@ impl FieldExtension<2> for Fq2 {
     }
 
     fn conjugate(&self) -> Self {
-        let mut s = self.clone();
+        let mut s = *self;
         Fq2::conjugate(&mut s);
         s
     }
 
     fn frobenius_map(&self, power: Option<usize>) -> Self {
-        let mut s = self.clone();
+        let mut s = *self;
         Fq2::frobenius_map(&mut s, power.unwrap());
         s
     }
 
     fn mul_base(&self, rhs: &Self::BaseField) -> Self {
         Fq2 {
-            c0: &self.c0 * rhs,
-            c1: &self.c1 * rhs,
+            c0: self.c0 * rhs,
+            c1: self.c1 * rhs,
         }
     }
 }
@@ -112,13 +112,13 @@ impl FieldExtension<6> for Fq12 {
     }
 
     fn conjugate(&self) -> Self {
-        let mut s = self.clone();
+        let mut s = *self;
         Fq12::conjugate(&mut s);
         s
     }
 
     fn frobenius_map(&self, power: Option<usize>) -> Self {
-        let mut s = self.clone();
+        let mut s = *self;
         Fq12::frobenius_map(&mut s, power.unwrap());
         s
     }
@@ -130,8 +130,8 @@ impl FieldExtension<6> for Fq12 {
             c2: Fq2::zero(),
         };
         Fq12 {
-            c0: &self.c0 * fq6_pt,
-            c1: &self.c1 * fq6_pt,
+            c0: self.c0 * fq6_pt,
+            c1: self.c1 * fq6_pt,
         }
     }
 }
