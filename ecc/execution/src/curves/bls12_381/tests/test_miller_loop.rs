@@ -9,8 +9,7 @@ use crate::{
     curves::bls12_381::{
         line::{evaluate_line, mul_023_by_023, mul_by_023, mul_by_02345},
         miller_add_step, miller_double_and_add_step, miller_double_step, multi_miller_loop,
-        multi_miller_loop_separate_double_plus_add,
-        multi_miller_loop_separate_double_plus_add_custom_debug, BLS12_381_XI, GNARK_BLS12_381_PBE,
+        BLS12_381_XI, GNARK_BLS12_381_PBE,
     },
 };
 
