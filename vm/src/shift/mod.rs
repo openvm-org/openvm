@@ -162,7 +162,10 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         self.data.push(ShiftRecord {
             from_state,
-            instruction: instruction.clone(),
+            instruction: Instruction {
+                opcode,
+                ..instruction
+            },
             x_ptr_read,
             y_ptr_read,
             z_ptr_read,

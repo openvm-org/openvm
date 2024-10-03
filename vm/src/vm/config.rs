@@ -65,7 +65,7 @@ fn default_executor_range(executor: InstructionExecutorVariantName) -> (Range<us
         ),
         InstructionExecutorVariantName::ArithmeticLogicUnit256 => (
             U256Opcode::default_offset(),
-            7,
+            8,
             U256Opcode::default_offset(),
         ),
         InstructionExecutorVariantName::U256Multiplication => (
@@ -74,7 +74,7 @@ fn default_executor_range(executor: InstructionExecutorVariantName) -> (Range<us
             U256Opcode::default_offset(),
         ),
         InstructionExecutorVariantName::Shift256 => (
-            U256Opcode::default_offset() + 7,
+            U256Opcode::default_offset() + 8,
             4,
             U256Opcode::default_offset(),
         ),
