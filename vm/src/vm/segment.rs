@@ -431,7 +431,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     Err(e) => return Err(e),
                 }
             } else {
-                return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
+                return Err(ExecutionError::DisabledOperation(
+                    pc_usize,
+                    opcode.to_string(),
+                ));
             }
 
             if collect_metrics {
