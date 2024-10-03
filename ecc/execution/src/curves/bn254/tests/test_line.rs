@@ -5,12 +5,40 @@ use halo2curves_axiom::{
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    common::EcPoint,
-    curves::bn254::{
-        conv_013_to_fp12, conv_fp2_coeffs_to_fp12, fp12_square, mul_013_by_013, mul_by_01234,
-        mul_by_013, point_to_013, BN254_XI,
-    },
+    common::{fp12_square, EcPoint, EvaluatedLine, FieldExtension, LineDType},
+    curves::bn254::{mul_013_by_013, mul_by_01234, mul_by_013, BN254_XI},
 };
+
+/// Returns a line function for a tangent line at the point P
+#[allow(non_snake_case)]
+fn point_to_013<Fp, Fp2>(P: EcPoint<Fp>) -> EvaluatedLine<Fp, Fp2>
+where
+    Fp: Field,
+    Fp2: FieldExtension<BaseField = Fp>,
+{
+    let one = Fp2::ONE;
+    let two = one + one;
+    let three = one + two;
+    let x = Fp2::embed(&P.x);
+    let y = Fp2::embed(&P.y);
+
+    // λ = (3x^2) / (2y)
+    // 1 - λ(x/y)w + (λx - y)(1/y)w^3
+    // b = -(λ * x / y)
+    //   = -3x^3 / 2y^2
+    // c = (λ * x - y) / y
+    //   = 3x^3/2y^2 - 1
+    let x_squared = x.square();
+    let x_cubed = x_squared * x;
+    let y_squared = y.square();
+    let three_x_cubed = three * x_cubed;
+    let over_two_y_squared = (two * y_squared).invert().unwrap();
+
+    let b = three_x_cubed.neg() * over_two_y_squared;
+    let c = three_x_cubed * over_two_y_squared - Fp2::ONE;
+
+    EvaluatedLine { b, c }
+}
 
 #[test]
 fn test_fp12_square() {
@@ -19,12 +47,6 @@ fn test_fp12_square() {
     let sq = fp12_square::<Fq12>(rnd);
     let sq_native = rnd.square();
     assert_eq!(sq, sq_native);
-}
-
-#[test]
-#[ignore]
-fn test_evaluate_line() {
-    // NOTE: There is probably not a simple way to test this
 }
 
 #[test]
@@ -48,11 +70,11 @@ fn test_mul_013_by_013() {
 
     // Multiply the two line functions & convert to Fq12 to compare
     let mul_013_by_013 = mul_013_by_013::<Fq, Fq2>(line_0, line_1, BN254_XI);
-    let mul_013_by_013 = conv_fp2_coeffs_to_fp12::<Fq, Fq2, Fq12>(&mul_013_by_013);
+    let mul_013_by_013 = Fq12::from_coeffs(&mul_013_by_013);
 
     // Compare with the result of multiplying two Fp12 elements
-    let fp12_0 = conv_013_to_fp12::<Fq, Fq2, Fq12>(line_0);
-    let fp12_1 = conv_013_to_fp12::<Fq, Fq2, Fq12>(line_1);
+    let fp12_0 = Fq12::from_evaluated_line_d_type(line_0);
+    let fp12_1 = Fq12::from_evaluated_line_d_type(line_1);
     let check_mul_fp12 = fp12_0 * fp12_1;
     assert_eq!(mul_013_by_013, check_mul_fp12);
 }
@@ -68,9 +90,8 @@ fn test_mul_by_013() {
     };
     let line = point_to_013::<Fq, Fq2>(ec_point);
     let mul_by_013 = mul_by_013::<Fq, Fq2, Fq12>(f, line);
-    println!("{:#?}", mul_by_013);
 
-    let check_mul_fp12 = conv_013_to_fp12::<Fq, Fq2, Fq12>(line) * f;
+    let check_mul_fp12 = Fq12::from_evaluated_line_d_type(line) * f;
     assert_eq!(mul_by_013, check_mul_fp12);
 }
 
@@ -87,6 +108,6 @@ fn test_mul_by_01234() {
     ];
     let mul_by_01234 = mul_by_01234::<Fq, Fq2, Fq12>(f, x);
 
-    let x_f12 = conv_fp2_coeffs_to_fp12::<Fq, Fq2, Fq12>(&x);
+    let x_f12 = Fq12::from_coeffs(&x);
     assert_eq!(mul_by_01234, f * x_f12);
 }

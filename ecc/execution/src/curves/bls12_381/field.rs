@@ -17,6 +17,11 @@ pub const GNARK_BLS12_381_PBE: [i32; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
 ];
 
+// pub struct BLS12_381 {
+//     pub xi: Fq2,
+//     pub pseudo_binary_encoding: [i32; 64],
+// }
+
 impl Fp2Constructor<Fq> for Fq2 {
     fn new(c0: Fq, c1: Fq) -> Self {
         Fq2 { c0, c1 }

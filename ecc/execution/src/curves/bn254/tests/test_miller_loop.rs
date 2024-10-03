@@ -1,34 +1,55 @@
-use halo2curves_axiom::bn256::{G1Affine, G2Affine};
+use halo2curves_axiom::{
+    bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, Gt},
+    pairing::MillerLoopResult,
+};
+use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::common::EcPoint;
+use crate::{
+    common::{multi_miller_loop, EcPoint},
+    curves::bn254::{BN254_XI, GNARK_BN254_PBE_NAF},
+};
 
 #[test]
 #[allow(non_snake_case)]
 fn test_multi_miller_loop_bn254() {
     // Generate random G1 and G2 points
-    let mut rng0 = StdRng::seed_from_u64(8);
-    let rnd_pt0 = G1Affine::random(&mut rng0);
-    let P = EcPoint {
-        x: rnd_pt0.x,
-        y: rnd_pt0.y,
-    };
-    let mut rng1 = StdRng::seed_from_u64(8 * 2);
-    let rnd_pt1 = G2Affine::random(&mut rng1);
-    let Q = EcPoint {
-        x: rnd_pt1.x,
-        y: rnd_pt1.y,
-    };
-    println!("{:#?}", P);
-    println!("{:#?}", Q);
+    // let rand_seeds = [8, 15, 29, 55, 166];
+    let rand_seeds = [8];
+    let (P_vec, Q_vec) = rand_seeds
+        .iter()
+        .map(|seed| {
+            let mut rng0 = StdRng::seed_from_u64(*seed);
+            let p = G1Affine::random(&mut rng0);
+            let mut rng1 = StdRng::seed_from_u64(*seed * 2);
+            let q = G2Affine::random(&mut rng1);
+            (p, q)
+        })
+        .unzip::<_, _, Vec<_>, Vec<_>>();
+    let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
+        .map(|(P, Q)| (EcPoint { x: P.x, y: P.y }, EcPoint { x: Q.x, y: Q.y }))
+        .unzip::<_, _, Vec<_>, Vec<_>>();
 
-    // // halo2curves pseudo-binary encoding
-    // let pbe = SIX_U_PLUS_2_NAF
-    //     .iter()
-    //     .map(|&x| x as i32)
-    //     .collect::<Vec<i32>>();
-    // let pbe = pbe.as_slice();
-    // println!("{:?}", pbe);
+    // Compare against halo2curves implementation
+    let g2_prepareds = Q_vec
+        .iter()
+        .map(|q| G2Prepared::from(*q))
+        .collect::<Vec<_>>();
+    let terms = P_vec.iter().zip(g2_prepareds.iter()).collect::<Vec<_>>();
+    let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(terms.as_slice());
+    let compare_final = compare_miller.final_exponentiation();
 
     // Run the multi-miller loop
+    let f = multi_miller_loop::<Fq, Fq2, Fq12>(
+        P_ecpoints.as_slice(),
+        Q_ecpoints.as_slice(),
+        GNARK_BN254_PBE_NAF.as_slice(),
+        BN254_XI,
+    );
+
+    let wrapped_f = Gt(f);
+    let final_f = wrapped_f.final_exponentiation();
+
+    // Run halo2curves final exponentiation on our multi_miller_loop output
+    assert_eq!(final_f, compare_final);
 }

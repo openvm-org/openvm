@@ -2899,7 +2899,7 @@ dependencies = [
 [[package]]
 name = "halo2curves-axiom"
 version = "0.7.0"
-source = "git+https://github.com/axiom-crypto/halo2curves.git?branch=test/visibility#d29cf4baed30ccffa2eaedbda91a866d62d0323f"
+source = "git+https://github.com/axiom-crypto/halo2curves.git?branch=test/visibility#3b0fcea4778f0854b2d5d5ea4ca79396a4f93923"
 dependencies = [
  "blake2b_simd",
  "digest 0.10.7",

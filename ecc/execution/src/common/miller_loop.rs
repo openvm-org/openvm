@@ -196,7 +196,6 @@ where
 
     let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
     for (line_2S, x_over_y, y_inv) in lines_iter {
-        // let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
         let line = line_2S.evaluate(*x_over_y, *y_inv);
         initial_lines.push(line);
     }
@@ -210,7 +209,6 @@ where
 
     let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
     for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
-        // let line = evaluate_line::<Fp, Fp2>(*lines_S_plus_Q, *x_over_y, *y_inv);
         let line = lines_S_plus_Q.evaluate(*x_over_y, *y_inv);
         initial_lines.push(line);
     }
@@ -237,7 +235,6 @@ where
 
             let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
             for (line_2S, x_over_y, y_inv) in lines_iter {
-                // let line = evaluate_line::<Fp, Fp2>(*line_2S, *x_over_y, *y_inv);
                 let line = line_2S.evaluate(*x_over_y, *y_inv);
                 lines.push(line);
             }
@@ -271,8 +268,6 @@ where
                 y_invs.iter()
             );
             for (line_S_plus_Q, line_S_plus_Q_plus_S, x_over_y, y_inv) in lines_iter {
-                // let line0 = evaluate_line::<Fp, Fp2>(*line_S_plus_Q, *x_over_y, *y_inv);
-                // let line1 = evaluate_line::<Fp, Fp2>(*line_S_plus_Q_plus_S, *x_over_y, *y_inv);
                 let line0 = line_S_plus_Q.evaluate(*x_over_y, *y_inv);
                 let line1 = line_S_plus_Q_plus_S.evaluate(*x_over_y, *y_inv);
                 lines.push(line0);

@@ -5,50 +5,9 @@ use halo2curves_axiom::{
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    common::{fp12_square, EcPoint, EvaluatedLine, FieldExtension, Fp12Constructor},
+    common::{fp12_square, EcPoint, EvaluatedLine, FieldExtension, LineMType},
     curves::bls12_381::{mul_023_by_023, mul_by_023, mul_by_02345, BLS12_381_XI},
 };
-
-pub fn conv_023_to_fp12<Fp, Fp2, Fp12>(line: EvaluatedLine<Fp, Fp2>) -> Fp12
-where
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-    Fp12: FieldExtension<BaseField = Fp2> + Fp12Constructor<Fp2>,
-{
-    // x0 + x1*w + x2*w^2 + x3*w^3 + x4*w^4 + x5*w^5
-    // (x0 + x2*w^2 + x4*w^4) + (x1 + x3*w^2 + x5*w^4)*w
-    let x0 = line.c;
-    let x1 = Fp2::ZERO;
-    let x2 = line.b;
-    let x3 = Fp2::ONE;
-    let x4 = Fp2::ZERO;
-    let x5 = Fp2::ZERO;
-
-    Fp12::new(x0, x2, x4, x1, x3, x5)
-}
-
-pub fn conv_fp2_coeffs_to_fp12<Fp, Fp2, Fp12>(fp2_coeffs: &[Fp2]) -> Fp12
-where
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-    Fp12: FieldExtension<BaseField = Fp2> + Fp12Constructor<Fp2>,
-{
-    assert!(
-        fp2_coeffs.len() <= 6,
-        "fp2_coeffs must have at most 6 elements"
-    );
-    let mut coeffs = fp2_coeffs.to_vec();
-    coeffs.resize(6, Fp2::ZERO);
-
-    let x0 = coeffs[0];
-    let x1 = coeffs[1];
-    let x2 = coeffs[2];
-    let x3 = coeffs[3];
-    let x4 = coeffs[4];
-    let x5 = coeffs[5];
-
-    Fp12::new(x0, x2, x4, x1, x3, x5)
-}
 
 /// Returns a line function for a tangent line at the point P
 #[cfg(test)]
@@ -115,11 +74,11 @@ fn test_mul_023_by_023() {
 
     // Multiply the two line functions & convert to Fq12 to compare
     let mul_023_by_023 = mul_023_by_023::<Fq, Fq2>(line_0, line_1, BLS12_381_XI);
-    let mul_023_by_023 = conv_fp2_coeffs_to_fp12::<Fq, Fq2, Fq12>(&mul_023_by_023);
+    let mul_023_by_023 = Fq12::from_coeffs(&mul_023_by_023);
 
     // Compare with the result of multiplying two Fp12 elements
-    let fp12_0 = conv_023_to_fp12::<Fq, Fq2, Fq12>(line_0);
-    let fp12_1 = conv_023_to_fp12::<Fq, Fq2, Fq12>(line_1);
+    let fp12_0 = Fq12::from_evaluated_line_m_type(line_0);
+    let fp12_1 = Fq12::from_evaluated_line_m_type(line_1);
     let check_mul_fp12 = fp12_0 * fp12_1;
     assert_eq!(mul_023_by_023, check_mul_fp12);
 }
@@ -136,7 +95,7 @@ fn test_mul_by_023() {
     let line = point_to_023::<Fq, Fq2>(ec_point);
     let mul_by_023 = mul_by_023::<Fq, Fq2, Fq12>(f, line);
 
-    let check_mul_fp12 = conv_023_to_fp12::<Fq, Fq2, Fq12>(line) * f;
+    let check_mul_fp12 = Fq12::from_evaluated_line_m_type(line) * f;
     assert_eq!(mul_by_023, check_mul_fp12);
 }
 
@@ -154,6 +113,6 @@ fn test_mul_by_02345() {
     ];
     let mul_by_02345 = mul_by_02345::<Fq, Fq2, Fq12>(f, x);
 
-    let x_f12 = conv_fp2_coeffs_to_fp12::<Fq, Fq2, Fq12>(&x);
+    let x_f12 = Fq12::from_coeffs(&x);
     assert_eq!(mul_by_02345, f * x_f12);
 }
