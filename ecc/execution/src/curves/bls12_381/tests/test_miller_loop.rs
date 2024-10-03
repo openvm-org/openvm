@@ -20,7 +20,7 @@ use crate::{
 #[allow(non_snake_case)]
 fn test_multi_miller_loop_bls12_381() {
     // Generate random G1 and G2 points
-    let rand_seeds = vec![8, 15, 29, 55, 166];
+    let rand_seeds = [8, 15, 29, 55, 166];
     let (P_vec, Q_vec) = rand_seeds
         .iter()
         .map(|seed| {
@@ -41,7 +41,7 @@ fn test_multi_miller_loop_bls12_381() {
     // Compare against halo2curves implementation
     let g2_prepareds = Q_vec
         .iter()
-        .map(|q| G2Prepared::from(q.clone()))
+        .map(|q| G2Prepared::from(*q))
         .collect::<Vec<_>>();
     let terms = P_vec.iter().zip(g2_prepareds.iter()).collect::<Vec<_>>();
     let compare_miller = halo2curves_axiom::bls12_381::multi_miller_loop(terms.as_slice());
@@ -88,7 +88,7 @@ fn test_f_mul() {
 
     // Initial step: double
     let (Q_acc_init, l_init) = miller_double_step::<Fq, Fq2>(Q_ecpoint.clone());
-    let l_init = evaluate_line::<Fq, Fq2>(l_init, x_over_y.clone(), y_inv.clone());
+    let l_init = evaluate_line::<Fq, Fq2>(l_init, x_over_y, y_inv);
     f = mul_by_023::<Fq, Fq2, Fq12>(f, l_init);
 
     // Test Q_acc_init == Q + Q
@@ -104,11 +104,10 @@ fn test_f_mul() {
     // Left side test: Double and add
     let (Q_acc_daa, l_S_plus_Q, l_S_plus_Q_plus_S) =
         miller_double_and_add_step::<Fq, Fq2>(Q_acc.clone(), Q_ecpoint.clone());
-    let l_S_plus_Q_plus_S =
-        evaluate_line::<Fq, Fq2>(l_S_plus_Q_plus_S, x_over_y.clone(), y_inv.clone());
-    let l_S_plus_Q = evaluate_line::<Fq, Fq2>(l_S_plus_Q, x_over_y.clone(), y_inv.clone());
+    let l_S_plus_Q_plus_S = evaluate_line::<Fq, Fq2>(l_S_plus_Q_plus_S, x_over_y, y_inv);
+    let l_S_plus_Q = evaluate_line::<Fq, Fq2>(l_S_plus_Q, x_over_y, y_inv);
     let l_prod0 = mul_023_by_023(l_S_plus_Q, l_S_plus_Q_plus_S, BLS12_381_XI);
-    let f_mul = mul_by_02345::<Fq, Fq2, Fq12>(f.clone(), l_prod0);
+    let f_mul = mul_by_02345::<Fq, Fq2, Fq12>(f, l_prod0);
 
     // Test Q_acc_da == 2(2Q) + Q
     let Q4 = Q2 + Q2;
@@ -120,10 +119,10 @@ fn test_f_mul() {
     // Right side test: Double, then add
     let (Q_acc_d, l_2S) = miller_double_step::<Fq, Fq2>(Q_acc.clone());
     let (Q_acc_a, l_2S_plus_Q) = miller_add_step::<Fq, Fq2>(Q_acc_d, Q_ecpoint.clone());
-    let l_2S = evaluate_line::<Fq, Fq2>(l_2S, x_over_y.clone(), y_inv.clone());
-    let l_2S_plus_Q = evaluate_line::<Fq, Fq2>(l_2S_plus_Q, x_over_y.clone(), y_inv.clone());
+    let l_2S = evaluate_line::<Fq, Fq2>(l_2S, x_over_y, y_inv);
+    let l_2S_plus_Q = evaluate_line::<Fq, Fq2>(l_2S_plus_Q, x_over_y, y_inv);
     let l_prod1 = mul_023_by_023(l_2S, l_2S_plus_Q, BLS12_381_XI);
-    let f_prod_mul = mul_by_02345::<Fq, Fq2, Fq12>(f.clone(), l_prod1);
+    let f_prod_mul = mul_by_02345::<Fq, Fq2, Fq12>(f, l_prod1);
 
     // Test line functions match
     let f_line_daa = mul_by_02345::<Fq, Fq2, Fq12>(Fq12::one(), l_prod0);
