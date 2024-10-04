@@ -58,14 +58,14 @@ impl<F: Field> BaseAirWithPublicValues<F> for DummyInteractionAir {}
 impl<F: Field> PartitionedBaseAir<F> for DummyInteractionAir {
     fn cached_main_widths(&self) -> Vec<usize> {
         if self.partition {
-            vec![1]
+            vec![self.field_width]
         } else {
             vec![]
         }
     }
     fn common_main_width(&self) -> usize {
         if self.partition {
-            self.field_width
+            1
         } else {
             1 + self.field_width
         }
@@ -84,8 +84,8 @@ impl<F: Field> BaseAir<F> for DummyInteractionAir {
 impl<AB: InteractionBuilder + PartitionedAirBuilder> Air<AB> for DummyInteractionAir {
     fn eval(&self, builder: &mut AB) {
         let (fields, count) = if self.partition {
-            let local_0 = builder.cached_mains()[0].row_slice(0);
-            let local_1 = builder.common_main().row_slice(0);
+            let local_0 = builder.common_main().row_slice(0);
+            let local_1 = builder.cached_mains()[0].row_slice(0);
             let count = local_0[0];
             let fields = local_1.to_vec();
             (fields, count)

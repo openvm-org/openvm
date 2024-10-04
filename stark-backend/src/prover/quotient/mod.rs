@@ -9,12 +9,12 @@ use tracing::instrument;
 use self::single::compute_single_rap_quotient_values;
 use super::trace::SingleRapCommittedTraceView;
 use crate::{
-    air_builders::prover::ProverConstraintFolder,
+    air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicConstraints},
     config::{Com, PcsProverData},
-    keygen::types::{MultiStarkProvingKey, StarkVerifyingKey},
     rap::{AnyRap, PartitionedBaseAir, Rap},
 };
 
+pub(crate) mod helper;
 pub mod single;
 
 pub struct QuotientCommitter<'pcs, SC: StarkGenericConfig> {
@@ -58,8 +58,8 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     pub fn quotient_values<'a>(
         &self,
         raps: Vec<&'a dyn AnyRap<SC>>,
-        pk: &'a MultiStarkProvingKey<SC>,
-        traces: Vec<SingleRapCommittedTraceView<'a, SC>>,
+        qvks: &[QuotientVKData<'a, SC>],
+        traces: &[SingleRapCommittedTraceView<'a, SC>],
         public_values: &'a [Vec<Val<SC>>],
     ) -> QuotientData<SC>
     where
@@ -69,22 +69,22 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         Com<SC>: Send + Sync,
     {
         #[cfg(feature = "parallel")]
-        let inner = (raps, &pk.per_air, traces, public_values)
+        let inner = (raps, qvks, traces, public_values)
             .into_par_iter() // uses rayon multizip
-            .map(|(rap, pk, trace, pis)| self.single_rap_quotient_values(rap, &pk.vk, trace, pis))
+            .map(|(rap, qvk, trace, pis)| self.single_rap_quotient_values(rap, qvk, trace, pis))
             .collect();
         #[cfg(not(feature = "parallel"))]
-        let inner = itertools::izip!(raps, &pk.per_air, traces, public_values)
-            .map(|(rap, pk, trace, pis)| self.single_rap_quotient_values(rap, &pk.vk, trace, pis))
+        let inner = itertools::izip!(raps, qvks, traces, public_values)
+            .map(|(rap, qvk, trace, pis)| self.single_rap_quotient_values(rap, qvk, trace, pis))
             .collect();
         QuotientData { inner }
     }
 
-    pub fn single_rap_quotient_values<'a, R>(
+    pub(crate) fn single_rap_quotient_values<'a, R>(
         &self,
         rap: &'a R,
-        vk: &StarkVerifyingKey<SC>,
-        trace: SingleRapCommittedTraceView<'a, SC>,
+        qvk: &QuotientVKData<'a, SC>,
+        trace: &SingleRapCommittedTraceView<'a, SC>,
         public_values: &'a [Val<SC>],
     ) -> SingleQuotientData<SC>
     where
@@ -93,12 +93,12 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             + Sync
             + ?Sized,
     {
-        let quotient_degree = vk.quotient_degree;
+        let quotient_degree = qvk.quotient_degree;
         let trace_domain = trace.domain;
         let quotient_domain =
             trace_domain.create_disjoint_domain(trace_domain.size() * quotient_degree);
         // Empty matrix if no preprocessed trace
-        let preprocessed_lde_on_quotient_domain = if let Some(view) = trace.preprocessed {
+        let preprocessed_lde_on_quotient_domain = if let Some(view) = trace.preprocessed.as_ref() {
             self.pcs
                 .get_evaluations_on_domain(view.data, view.matrix_index, quotient_domain)
                 .to_row_major_matrix()
@@ -107,7 +107,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         };
         let partitioned_main_lde_on_quotient_domain: Vec<_> = trace
             .partitioned_main
-            .into_iter()
+            .iter()
             .map(|view| {
                 self.pcs
                     .get_evaluations_on_domain(view.data, view.matrix_index, quotient_domain)
@@ -136,7 +136,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
 
         let quotient_values = compute_single_rap_quotient_values(
             rap,
-            &vk.symbolic_constraints,
+            qvk.symbolic_constraints,
             trace_domain,
             quotient_domain,
             preprocessed_lde_on_quotient_domain,
@@ -149,7 +149,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
                 .iter()
                 .map(|v| v.as_slice())
                 .collect_vec(),
-            vk.interaction_chunk_size,
+            qvk.interaction_chunk_size,
         );
         SingleQuotientData {
             quotient_degree,
@@ -242,4 +242,13 @@ pub struct QuotientChunk<SC: StarkGenericConfig> {
     /// Matrix with number of rows equal to trace domain size,
     /// and number of columns equal to extension field degree.
     pub chunk: RowMajorMatrix<Val<SC>>,
+}
+
+/// All necessary data from VK to compute ProverQuotientData
+pub struct QuotientVKData<'a, SC: StarkGenericConfig> {
+    pub quotient_degree: usize,
+    pub interaction_chunk_size: usize,
+    /// Symbolic constraints of the AIR in all challenge phases. This is
+    /// a serialization of the constraints in the AIR.
+    pub symbolic_constraints: &'a SymbolicConstraints<Val<SC>>,
 }

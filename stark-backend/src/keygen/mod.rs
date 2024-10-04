@@ -8,6 +8,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::instrument;
 
 pub mod types;
+pub mod v2;
 
 use self::types::{
     create_commit_to_air_graph, MultiStarkProvingKey, ProverOnlySinglePreprocessedData,
@@ -242,11 +243,6 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             .push((air, partitioned_main_ptrs, interaction_chunk_size));
     }
 
-    /// Default way to add a single Interactive AIR.
-    /// DO NOT use this if the main trace needs to be partitioned.
-    /// - `degree` is height of trace matrix
-    /// - Generates preprocessed trace and creates a dedicated commitment for it.
-    /// - Adds main trace to the default shared main trace commitment.
     #[instrument(level = "debug", skip_all)]
     pub fn get_single_preprocessed_data(
         &self,
