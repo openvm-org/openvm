@@ -134,7 +134,8 @@ fn main() {
             ..Default::default()
         };
         let vdata = info_span!("Inner Verifier", group = "inner_verifier").in_scope(|| {
-            let (program, witness_stream) = build_verification_program(vdata, compiler_options);
+            let (program, witness_stream) =
+                build_verification_program(vdata, compiler_options.clone());
             let inner_verifier_stf = gen_vm_program_stark_for_test(
                 program,
                 witness_stream,
@@ -153,8 +154,7 @@ fn main() {
 
         #[cfg(feature = "static-verifier")]
         info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
-            let (program, witness_stream) =
-                build_verification_program(vdata, compiler_options.clone());
+            let (program, witness_stream) = build_verification_program(vdata, compiler_options);
             let outer_verifier_sft = gen_vm_program_stark_for_test(
                 program,
                 witness_stream,
