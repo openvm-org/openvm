@@ -67,17 +67,6 @@ fn test_compiler_modular_arithmetic_2() {
     let b_var = builder.eval_biguint(b);
     let r_var = builder.secp256k1_coord_mul(&a_var, &b_var);
     let r_check_var = builder.eval_biguint(r);
-    builder.print_debug(111);
-    builder.range(0, r_var.len()).for_each(|i, builder| {
-        let x = builder.get(&r_var, i);
-        builder.print_v(x);
-    });
-    builder.print_debug(222);
-    builder.range(0, r_check_var.len()).for_each(|i, builder| {
-        let x = builder.get(&r_check_var, i);
-        builder.print_v(x);
-    });
-    builder.print_debug(333);
     builder.assert_secp256k1_coord_eq(&r_var, &r_check_var);
     builder.halt();
 
@@ -104,23 +93,6 @@ fn test_compiler_modular_arithmetic_conditional() {
 
     let should_be_1: Var<F> = builder.uninit();
     let should_be_2: Var<F> = builder.uninit();
-
-    builder.print_debug(111);
-    builder.range(0, product_var.len()).for_each(|i, builder| {
-        let x = builder.get(&product_var, i);
-        builder.print_v(x);
-    });
-    builder.print_debug(111);
-    builder.range(0, r_var.len()).for_each(|i, builder| {
-        let x = builder.get(&r_var, i);
-        builder.print_v(x);
-    });
-    builder.print_debug(222);
-    builder.range(0, s_var.len()).for_each(|i, builder| {
-        let x = builder.get(&s_var, i);
-        builder.print_v(x);
-    });
-    builder.print_debug(333);
 
     builder
         .if_secp256k1_coord_eq(&product_var, &r_var)
@@ -153,24 +125,6 @@ fn test_compiler_modular_arithmetic_negative() {
     let one = builder.eval_biguint(BigUint::one());
     let one_times_one = builder.secp256k1_coord_mul(&one, &one);
     let zero = builder.eval_biguint(BigUint::zero());
-    builder.print_debug(111);
-    builder.range(0, one.len()).for_each(|i, builder| {
-        let x = builder.get(&one, i);
-        builder.print_v(x);
-    });
-    builder.print_debug(111);
-    builder
-        .range(0, one_times_one.len())
-        .for_each(|i, builder| {
-            let x = builder.get(&one_times_one, i);
-            builder.print_v(x);
-        });
-    builder.print_debug(222);
-    builder.range(0, zero.len()).for_each(|i, builder| {
-        let x = builder.get(&zero, i);
-        builder.print_v(x);
-    });
-    builder.print_debug(333);
 
     builder.assert_secp256k1_coord_eq(&one_times_one, &zero);
     builder.halt();

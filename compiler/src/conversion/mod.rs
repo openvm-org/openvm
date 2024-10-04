@@ -41,7 +41,7 @@ impl CompilerOptions {
         opcode: Opcode,
         modulus: Modulus,
     ) -> usize {
-        let res = opcode.as_usize();
+        let res = self.opcode_with_offset(opcode);
         let modular_shift = (modulus as usize) * ModularArithmeticOpcode::COUNT;
         res + modular_shift
     }
