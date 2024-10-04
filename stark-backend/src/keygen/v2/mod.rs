@@ -167,12 +167,12 @@ impl<'a, SC: StarkGenericConfig> AirKeygenBuilder<'a, SC> {
             params,
             symbolic_constraints,
             quotient_degree,
-            interaction_chunk_size,
         };
         StarkProvingKeyV2 {
             air_name,
             vk,
             preprocessed_data: prep_prover_data,
+            interaction_chunk_size,
         }
     }
 

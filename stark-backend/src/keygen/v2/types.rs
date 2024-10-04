@@ -31,8 +31,6 @@ pub struct StarkVerifyingKeyV2<SC: StarkGenericConfig> {
     /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
     /// This is equivalently the number of chunks the quotient polynomial is split into.
     pub quotient_degree: usize,
-    /// Number of interactions to bundle in permutation trace
-    pub interaction_chunk_size: usize,
 }
 
 /// Common verifying key for multiple AIRs.
@@ -61,6 +59,8 @@ pub struct StarkProvingKeyV2<SC: StarkGenericConfig> {
     pub vk: StarkVerifyingKeyV2<SC>,
     /// Prover only data for preprocessed trace
     pub preprocessed_data: Option<ProverOnlySinglePreprocessedData<SC>>,
+    /// Number of interactions to bundle in permutation trace
+    pub interaction_chunk_size: usize,
 }
 
 /// Common proving key for multiple AIRs.

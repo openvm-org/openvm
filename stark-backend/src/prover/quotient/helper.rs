@@ -16,7 +16,7 @@ impl<SC: StarkGenericConfig> QuotientVKDataHelper<SC> for StarkProvingKeyV2<SC> 
     fn get_quotient_vk_data(&self) -> QuotientVKData<SC> {
         QuotientVKData {
             quotient_degree: self.vk.quotient_degree,
-            interaction_chunk_size: self.vk.interaction_chunk_size,
+            interaction_chunk_size: self.interaction_chunk_size,
             symbolic_constraints: &self.vk.symbolic_constraints,
         }
     }

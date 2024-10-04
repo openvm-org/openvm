@@ -125,7 +125,7 @@ where
                 main,
                 public_values,
                 Some(perm_challenges),
-                pk.vk.interaction_chunk_size,
+                pk.interaction_chunk_size,
             )
         })
         .collect::<Vec<_>>()
