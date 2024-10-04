@@ -125,7 +125,6 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         instruction: Instruction<T>,
         from_state: ExecutionState<usize>,
     ) -> Result<ExecutionState<usize>, ExecutionError> {
-        println!("yo muldiv");
         let Instruction {
             opcode,
             op_a: z_address_ptr,
