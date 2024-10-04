@@ -73,29 +73,6 @@ pub enum AsmInstruction<F, EF> {
     /// Divide extension, dst = lhs / rhs.
     DivE(i32, i32, i32),
 
-    /// Modular add, dst = lhs + rhs.
-    AddSecp256k1Coord(i32, i32, i32),
-
-    /// Modular subtract, dst = lhs - rhs.
-    SubSecp256k1Coord(i32, i32, i32),
-
-    /// Modular multiply, dst = lhs * rhs.
-    MulSecp256k1Coord(i32, i32, i32),
-
-    /// Modular divide, dst = lhs / rhs.
-    DivSecp256k1Coord(i32, i32, i32),
-
-    /// Modular add, dst = lhs + rhs.
-    AddSecp256k1Scalar(i32, i32, i32),
-
-    /// Modular subtract, dst = lhs - rhs.
-    SubSecp256k1Scalar(i32, i32, i32),
-
-    /// Modular multiply, dst = lhs * rhs.
-    MulSecp256k1Scalar(i32, i32, i32),
-
-    /// Modular divide, dst = lhs / rhs.
-    DivSecp256k1Scalar(i32, i32, i32),
     ModularAdd(Modulus, i32, i32, i32),
     ModularSub(Modulus, i32, i32, i32),
     ModularMul(Modulus, i32, i32, i32),
@@ -443,60 +420,32 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::CycleTrackerEnd(name) => {
                 write!(f, "cycle_tracker_end {}", name)
             }
-            AsmInstruction::AddSecp256k1Coord(dst, src1, src2) => {
+            AsmInstruction::ModularAdd(modulus, dst, src1, src2) => {
                 write!(
                     f,
-                    "add_secp256k1_coord ({})fp ({})fp ({})fp",
-                    dst, src1, src2
+                    "modular_add with modulus {:?}: ({})fp ({})fp ({})fp",
+                    modulus, dst, src1, src2
                 )
             }
-            AsmInstruction::SubSecp256k1Coord(dst, src1, src2) => {
+            AsmInstruction::ModularSub(modulus, dst, src1, src2) => {
                 write!(
                     f,
-                    "subtract_secp256k1_coord ({})fp ({})fp ({})fp",
-                    dst, src1, src2
+                    "modular_sub with modulus {:?}: ({})fp ({})fp ({})fp",
+                    modulus, dst, src1, src2
                 )
             }
-            AsmInstruction::MulSecp256k1Coord(dst, src1, src2) => {
+            AsmInstruction::ModularMul(modulus, dst, src1, src2) => {
                 write!(
                     f,
-                    "multiply_secp256k1_coord ({})fp ({})fp ({})fp",
-                    dst, src1, src2
+                    "modular_mul with modulus {:?}: ({})fp ({})fp ({})fp",
+                    modulus, dst, src1, src2
                 )
             }
-            AsmInstruction::DivSecp256k1Coord(dst, src1, src2) => {
+            AsmInstruction::ModularDiv(modulus, dst, src1, src2) => {
                 write!(
                     f,
-                    "divide_secp256k1_coord ({})fp ({})fp ({})fp",
-                    dst, src1, src2
-                )
-            }
-            AsmInstruction::AddSecp256k1Scalar(dst, src1, src2) => {
-                write!(
-                    f,
-                    "add_secp256k1_scalar ({})fp ({})fp ({})fp",
-                    dst, src1, src2
-                )
-            }
-            AsmInstruction::SubSecp256k1Scalar(dst, src1, src2) => {
-                write!(
-                    f,
-                    "subtract_secp256k1_scalar ({})fp ({})fp ({})fp",
-                    dst, src1, src2
-                )
-            }
-            AsmInstruction::MulSecp256k1Scalar(dst, src1, src2) => {
-                write!(
-                    f,
-                    "multiply_secp256k1_scalar ({})fp ({})fp ({})fp",
-                    dst, src1, src2
-                )
-            }
-            AsmInstruction::DivSecp256k1Scalar(dst, src1, src2) => {
-                write!(
-                    f,
-                    "divide_secp256k1_scalar ({})fp ({})fp ({})fp",
-                    dst, src1, src2
+                    "modular_div with modulus {:?}: ({})fp ({})fp ({})fp",
+                    modulus, dst, src1, src2
                 )
             }
             AsmInstruction::Add256(dst, src1, src2) => {
@@ -535,7 +484,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::ShiftRightArith256(dst, src1, src2) => {
                 write!(f, "sra_256 ({})fp ({})fp ({})fp", dst, src1, src2)
             }
-            _ => todo!(),
         }
     }
 }
