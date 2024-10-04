@@ -739,7 +739,8 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::AddSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::ADD),
+            // FIXME: better handling of different moduli
+            options.opcode_with_offset(ModularArithmeticOpcode::ADD) + 4,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -747,7 +748,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::SubSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::SUB),
+            options.opcode_with_offset(ModularArithmeticOpcode::SUB) + 4,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -755,7 +756,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::MulSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::MUL),
+            options.opcode_with_offset(ModularArithmeticOpcode::MUL) + 4,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -763,7 +764,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::DivSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::DIV),
+            options.opcode_with_offset(ModularArithmeticOpcode::DIV) + 4,
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),

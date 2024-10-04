@@ -41,6 +41,7 @@ elliptic-curve = { workspace = true, features = ["std"] }
 afs-primitives = { path = "../../primitives" }
 hex-literal = { workspace = true }
 sha3 = "0.10.8"
+test-log.workspace = true
 
 [features]
 default = []

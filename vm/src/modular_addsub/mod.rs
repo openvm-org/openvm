@@ -190,7 +190,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
                 }
                 (x - y) % &self.modulus
             }
-            _ => unreachable!(),
+            _ => panic!("Unsupported opcode: {:?}", opcode),
         }
     }
 
