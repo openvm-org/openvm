@@ -18,7 +18,7 @@ use crate::{
         types::Commitments,
         v2::{
             trace::{commit_permutation_traces, commit_quotient_traces},
-            types::{AIRProofData, ProofInput, ProofV2},
+            types::{AirProofData, ProofInput, ProofV2},
         },
     },
 };
@@ -105,7 +105,6 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProverV2<'c, SC> {
             (trace_views, committer.commit(traces))
         };
 
-        // Generate main trace commitments on the fly.
         // Commitments order:
         // - for each air:
         //   - for each cached main trace
@@ -342,7 +341,7 @@ where
             public_values_per_air
         )
         .map(
-            |(air_id, degree, exposed_values, public_values)| AIRProofData {
+            |(air_id, degree, exposed_values, public_values)| AirProofData {
                 air_id,
                 degree,
                 public_values,

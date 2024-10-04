@@ -21,12 +21,12 @@ pub struct ProofV2<SC: StarkGenericConfig> {
     /// Opening proofs separated by partition, but this may change
     pub opening: OpeningProof<SC>,
     /// Proof data for each AIR
-    pub per_air: Vec<AIRProofData<SC>>,
+    pub per_air: Vec<AirProofData<SC>>,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct AIRProofData<SC: StarkGenericConfig> {
+pub struct AirProofData<SC: StarkGenericConfig> {
     pub air_id: usize,
     /// height of trace matrix.
     pub degree: usize,
@@ -39,7 +39,7 @@ pub struct AIRProofData<SC: StarkGenericConfig> {
 /// Proof input
 pub struct ProofInput<'a, SC: StarkGenericConfig> {
     /// (AIR id, AIR input)
-    pub per_air: Vec<(usize, AIRProofInput<'a, SC>)>,
+    pub per_air: Vec<(usize, AirProofInput<'a, SC>)>,
 }
 
 pub struct CommittedTraceData<SC: StarkGenericConfig> {
@@ -48,7 +48,7 @@ pub struct CommittedTraceData<SC: StarkGenericConfig> {
 }
 
 /// Necessary input for proving a single AIR.
-pub struct AIRProofInput<'a, SC: StarkGenericConfig> {
+pub struct AirProofInput<'a, SC: StarkGenericConfig> {
     pub air: &'a dyn AnyRap<SC>,
     /// Cached main trace matrices
     pub cached_mains: Vec<CommittedTraceData<SC>>,
@@ -59,7 +59,7 @@ pub struct AIRProofInput<'a, SC: StarkGenericConfig> {
 }
 
 pub trait AIRProofInputGenerator<SC: StarkGenericConfig> {
-    fn generate_air_proof_input<'a>() -> AIRProofInput<'a, SC>;
+    fn generate_air_proof_input<'a>() -> AirProofInput<'a, SC>;
 }
 
 impl<SC: StarkGenericConfig> ProofV2<SC> {

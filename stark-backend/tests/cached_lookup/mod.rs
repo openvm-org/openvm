@@ -5,7 +5,7 @@ use afs_stark_backend::{
     prover::{
         trace::TraceCommitter,
         v2::{
-            types::{AIRProofInput, CommittedTraceData, ProofInput},
+            types::{AirProofInput, CommittedTraceData, ProofInput},
             MultiTraceStarkProverV2,
         },
         USE_DEBUG_BUILDER,
@@ -85,7 +85,7 @@ pub fn prove_and_verify_indexless_lookups(
             per_air: vec![
                 (
                     receiver_air_id,
-                    AIRProofInput {
+                    AirProofInput {
                         air: &receiver_air,
                         cached_mains: vec![CommittedTraceData {
                             raw_data: recv_fields_trace,
@@ -97,7 +97,7 @@ pub fn prove_and_verify_indexless_lookups(
                 ),
                 (
                     sender_air_id,
-                    AIRProofInput {
+                    AirProofInput {
                         air: &sender_air,
                         cached_mains: vec![],
                         common_main: Some(sender_trace),

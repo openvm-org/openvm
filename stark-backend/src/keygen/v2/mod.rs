@@ -17,7 +17,7 @@ use crate::{
 pub mod types;
 pub(crate) mod view;
 
-struct AIRKeygenBuilder<'a, SC: StarkGenericConfig> {
+struct AirKeygenBuilder<'a, SC: StarkGenericConfig> {
     air: &'a dyn AnyRap<SC>,
     prep_keygen_data: PrepKeygenData<SC>,
     interaction_chunk_size: Option<usize>,
@@ -28,7 +28,7 @@ struct AIRKeygenBuilder<'a, SC: StarkGenericConfig> {
 pub struct MultiStarkKeygenBuilderV2<'a, SC: StarkGenericConfig> {
     pub config: &'a SC,
     /// Information for partitioned AIRs.
-    partitioned_airs: Vec<AIRKeygenBuilder<'a, SC>>,
+    partitioned_airs: Vec<AirKeygenBuilder<'a, SC>>,
 }
 
 impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilderV2<'a, SC> {
@@ -53,7 +53,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilderV2<'a, SC> {
         air: &'a dyn AnyRap<SC>,
         interaction_chunk_size: Option<usize>,
     ) -> usize {
-        self.partitioned_airs.push(AIRKeygenBuilder::new(
+        self.partitioned_airs.push(AirKeygenBuilder::new(
             self.config.pcs(),
             air,
             interaction_chunk_size,
@@ -124,10 +124,10 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilderV2<'a, SC> {
     }
 }
 
-impl<'a, SC: StarkGenericConfig> AIRKeygenBuilder<'a, SC> {
+impl<'a, SC: StarkGenericConfig> AirKeygenBuilder<'a, SC> {
     fn new(pcs: &SC::Pcs, air: &'a dyn AnyRap<SC>, interaction_chunk_size: Option<usize>) -> Self {
         let prep_keygen_data = compute_prep_data_for_air(pcs, air);
-        AIRKeygenBuilder {
+        AirKeygenBuilder {
             air,
             prep_keygen_data,
             interaction_chunk_size,
