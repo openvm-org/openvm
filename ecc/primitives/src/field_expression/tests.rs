@@ -7,7 +7,7 @@ use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{test_utils::*, ExprBuilder, FieldExprChip, SymbolicExpr};
+use super::{super::test_utils::*, ExprBuilder, FieldExprChip, SymbolicExpr};
 use crate::field_expression::FieldVariable;
 
 const LIMB_BITS: usize = 8;
