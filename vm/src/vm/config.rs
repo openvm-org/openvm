@@ -104,8 +104,8 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmConfig {
-    // Each executor handles the given range of opcode as usize, in absolute sense.
-    // offset is needed as for a given group of opcodes, they are actually mapped to different executors.
+    // Each executor handles the given range of opcode as usize (absolute, with offset).
+    // Offset is the start opcode (usize) of the Opcode class, and it's needed because some Opcode classes are handled by different executors.
     // For example, U256Opcode class has some opcodes handled by ArithmeticLogicUnit256, and some by U256Multiplication.
     // And for U256Multiplication executor to verify the opcode it gets from program, it needs to know the offset of the U256Opcode class.
     pub executors: Vec<(Range<usize>, ExecutorName, usize)>, // (range of opcodes, who executes, offset)
