@@ -2,10 +2,11 @@ use halo2curves_axiom::ff::Field;
 use itertools::{izip, Itertools};
 
 use crate::common::{
-    fp12_multiply, fp12_square, miller_add_step, miller_double_and_add_step, miller_double_step,
-    q_signed, EcPoint, EvaluatedLine, FieldExtension,
+    fp12_multiply, fp12_square, miller_double_and_add_step, miller_double_step, q_signed, EcPoint,
+    EvaluatedLine, FieldExtension,
 };
 
+#[allow(non_snake_case)]
 pub trait MultiMillerLoop<Fp, Fp2, Fp12, const BITS: usize>
 where
     Fp: Field,
@@ -13,9 +14,18 @@ where
     Fp12: FieldExtension<BaseField = Fp2>,
 {
     fn xi(&self) -> Fp2;
-    fn negative_x(&self) -> bool;
+    fn seed(&self) -> u64;
     fn pseudo_binary_encoding(&self) -> [i32; BITS];
     fn evaluate_lines_vec(&self, f: Fp12, lines: Vec<EvaluatedLine<Fp, Fp2>>) -> Fp12;
+    fn pre_loop(
+        &self,
+        f: Fp12,
+        Q_acc: Vec<EcPoint<Fp2>>,
+        Q: &[EcPoint<Fp2>],
+        x_over_ys: Vec<Fp>,
+        y_invs: Vec<Fp>,
+    ) -> (Fp12, Vec<EcPoint<Fp2>>);
+    fn post_loop(&self, f: Fp12, Q_acc: Vec<EcPoint<Fp2>>) -> (Fp12, Vec<EcPoint<Fp2>>);
 
     #[allow(non_snake_case)]
     fn multi_miller_loop(&self, P: &[EcPoint<Fp>], Q: &[EcPoint<Fp2>]) -> Fp12 {
@@ -47,37 +57,9 @@ where
         let mut f = Fp12::ONE;
         let mut Q_acc = Q.to_vec();
 
-        // Special case the first iteration of the miller loop with pseudo_binary_encoding = 1:
-        // this means that the first step is a double and add, but we need to separate the two steps since the optimized
-        // `miller_double_and_add_step` will fail because Q_acc is equal to Q_signed on the first iteration
-        let (Q_out_double, lines_2S) = Q_acc
-            .into_iter()
-            .map(miller_double_step::<Fp, Fp2>)
-            .unzip::<_, _, Vec<_>, Vec<_>>();
-        Q_acc = Q_out_double;
-
-        let mut initial_lines = Vec::<EvaluatedLine<Fp, Fp2>>::new();
-
-        let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
-        for (line_2S, x_over_y, y_inv) in lines_iter {
-            let line = line_2S.evaluate(*x_over_y, *y_inv);
-            initial_lines.push(line);
-        }
-
-        let (Q_out_add, lines_S_plus_Q) = Q_acc
-            .iter()
-            .zip(Q.iter())
-            .map(|(Q_acc, Q)| miller_add_step::<Fp, Fp2>(Q_acc.clone(), Q.clone()))
-            .unzip::<_, _, Vec<_>, Vec<_>>();
-        Q_acc = Q_out_add;
-
-        let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
-        for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
-            let line = lines_S_plus_Q.evaluate(*x_over_y, *y_inv);
-            initial_lines.push(line);
-        }
-
-        f = self.evaluate_lines_vec(f, initial_lines);
+        let (f_out, Q_acc_out) = self.pre_loop(f, Q_acc, Q, x_over_ys.clone(), y_invs.clone());
+        f = f_out;
+        Q_acc = Q_acc_out;
 
         let pseudo_binary_encoding = self.pseudo_binary_encoding();
         for i in (0..pseudo_binary_encoding.len() - 2).rev() {
@@ -144,9 +126,8 @@ where
             f = self.evaluate_lines_vec(f, lines);
         }
 
-        if self.negative_x() {
-            f = f.conjugate();
-        }
+        let (f_out, _) = self.post_loop(f, Q_acc);
+        f = f_out;
 
         f
     }

@@ -1,8 +1,9 @@
 use halo2curves_axiom::ff::Field;
 
 use super::{mul_013_by_013, mul_by_01234, mul_by_013, BN254, BN254_PBE_BITS};
-use crate::common::{EvaluatedLine, FieldExtension, MultiMillerLoop};
+use crate::common::{EcPoint, EvaluatedLine, FieldExtension, MultiMillerLoop};
 
+#[allow(non_snake_case)]
 impl<Fp, Fp2, Fp12> MultiMillerLoop<Fp, Fp2, Fp12, BN254_PBE_BITS>
     for BN254<Fp, Fp2, BN254_PBE_BITS>
 where
@@ -14,8 +15,8 @@ where
         self.xi
     }
 
-    fn negative_x(&self) -> bool {
-        self.negative_x
+    fn seed(&self) -> u64 {
+        self.seed
     }
 
     fn pseudo_binary_encoding(&self) -> [i32; BN254_PBE_BITS] {
@@ -37,5 +38,23 @@ where
             }
         }
         f
+    }
+
+    fn pre_loop(
+        &self,
+        f: Fp12,
+        Q_acc: Vec<EcPoint<Fp2>>,
+        Q: &[EcPoint<Fp2>],
+        x_over_ys: Vec<Fp>,
+        y_invs: Vec<Fp>,
+    ) -> (Fp12, Vec<EcPoint<Fp2>>) {
+        let mut f = f;
+        let mut Q_acc = Q_acc;
+
+        (f, Q_acc)
+    }
+
+    fn post_loop(&self, f: Fp12, Q_acc: Vec<EcPoint<Fp2>>) -> (Fp12, Vec<EcPoint<Fp2>>) {
+        (f, Q_acc)
     }
 }
