@@ -23,7 +23,9 @@ use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::{program::Program, sdk::gen_vm_program_stark_for_test, vm::config::VmConfig};
+use stark_vm::{
+    arch::ExecutorName, program::Program, sdk::gen_vm_program_stark_for_test, vm::config::VmConfig,
+};
 use tracing::info_span;
 
 /// A simple benchmark program to run most operations: keccak256, field arithmetic, field extension,
@@ -63,13 +65,10 @@ where
 {
     let fib_program = bench_program();
 
-    let vm_config = VmConfig {
-        compress_poseidon2_enabled: false,
-        perm_poseidon2_enabled: false,
-        keccak_enabled: true,
-        field_arithmetic_enabled: true,
-        ..Default::default()
-    };
+    let vm_config = VmConfig::default_with_no_executors()
+        .add_default_executor(ExecutorName::Keccak256)
+        .add_default_executor(ExecutorName::FieldArithmetic)
+        .add_default_executor(ExecutorName::FieldExtension);
     gen_vm_program_stark_for_test(fib_program, vec![], vm_config)
 }
 

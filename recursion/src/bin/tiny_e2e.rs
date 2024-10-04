@@ -18,7 +18,9 @@ use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::{program::Program, sdk::gen_vm_program_stark_for_test, vm::config::VmConfig};
+use stark_vm::{
+    arch::ExecutorName, program::Program, sdk::gen_vm_program_stark_for_test, vm::config::VmConfig,
+};
 use tracing::info_span;
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
@@ -52,8 +54,7 @@ where
 {
     let fib_program = fibonacci_program(a, b, n);
 
-    let mut vm_config = VmConfig::core();
-    vm_config.field_arithmetic_enabled = true;
+    let vm_config = VmConfig::core().add_default_executor(ExecutorName::FieldArithmetic);
     gen_vm_program_stark_for_test(fib_program, vec![], vm_config)
 }
 

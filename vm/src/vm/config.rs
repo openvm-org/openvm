@@ -152,6 +152,16 @@ impl VmConfig {
 
 impl Default for VmConfig {
     fn default() -> Self {
+        Self::default_with_no_executors()
+            .add_default_executor(ExecutorName::Core)
+            .add_default_executor(ExecutorName::FieldArithmetic)
+            .add_default_executor(ExecutorName::FieldExtension)
+            .add_default_executor(ExecutorName::Poseidon2)
+    }
+}
+
+impl VmConfig {
+    pub fn default_with_no_executors() -> Self {
         Self::from_parameters(
             Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
             Default::default(),
@@ -160,14 +170,8 @@ impl Default for VmConfig {
             false,
             8,
         )
-        .add_default_executor(ExecutorName::Core)
-        .add_default_executor(ExecutorName::FieldArithmetic)
-        .add_default_executor(ExecutorName::FieldExtension)
-        .add_default_executor(ExecutorName::Poseidon2)
     }
-}
 
-impl VmConfig {
     pub fn core_options(&self) -> CoreOptions {
         CoreOptions {
             num_public_values: self.num_public_values,

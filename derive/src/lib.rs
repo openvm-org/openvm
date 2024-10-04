@@ -253,7 +253,8 @@ pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
             }
 
             fn from_usize(value: usize) -> Self {
-                Self::from_repr(value.try_into().unwrap()).unwrap()
+                Self::from_repr(value.try_into().unwrap())
+                    .unwrap_or_else(|| panic!("Failed to convert usize {} to opcode {}", value, stringify!(#name)))
             }
 
             fn as_usize(&self) -> usize {

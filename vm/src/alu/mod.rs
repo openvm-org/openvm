@@ -168,7 +168,10 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         self.data
             .push(ArithmeticLogicRecord::<T, NUM_LIMBS, LIMB_BITS> {
                 from_state,
-                instruction: instruction.clone(),
+                instruction: Instruction {
+                    opcode: opcode as usize,
+                    ..instruction
+                },
                 x_ptr_read,
                 y_ptr_read,
                 z_ptr_read,
