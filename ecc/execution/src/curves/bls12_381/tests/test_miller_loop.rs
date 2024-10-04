@@ -11,7 +11,7 @@ use crate::{
     },
     curves::bls12_381::{
         line::{mul_023_by_023, mul_by_023, mul_by_02345},
-        BLS12_381, BLS12_381_XI, GNARK_BLS12_381_PBE,
+        BLS12_381, BLS12_381_PBE_BITS,
     },
 };
 
@@ -47,13 +47,8 @@ fn test_multi_miller_loop_bls12_381() {
     let compare_final = compare_miller.final_exponentiation();
 
     // Run the multi-miller loop
-    let bls12_381 = BLS12_381::new();
-    let f = bls12_381.multi_miller_loop(
-        P_ecpoints.as_slice(),
-        Q_ecpoints.as_slice(),
-        GNARK_BLS12_381_PBE.as_slice(),
-        BLS12_381_XI,
-    );
+    let bls12_381 = BLS12_381::<Fq, Fq2, BLS12_381_PBE_BITS>::new();
+    let f = bls12_381.multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
 
     let wrapped_f = MillerLoopResult(f);
     let final_f = wrapped_f.final_exponentiation();
@@ -106,7 +101,7 @@ fn test_f_mul() {
         miller_double_and_add_step::<Fq, Fq2>(Q_acc.clone(), Q_ecpoint.clone());
     let l_S_plus_Q_plus_S = l_S_plus_Q_plus_S.evaluate(x_over_y, y_inv);
     let l_S_plus_Q = l_S_plus_Q.evaluate(x_over_y, y_inv);
-    let l_prod0 = mul_023_by_023(l_S_plus_Q, l_S_plus_Q_plus_S, BLS12_381_XI);
+    let l_prod0 = mul_023_by_023(l_S_plus_Q, l_S_plus_Q_plus_S, BLS12_381::xi());
     let f_mul = mul_by_02345::<Fq, Fq2, Fq12>(f, l_prod0);
 
     // Test Q_acc_da == 2(2Q) + Q
@@ -121,7 +116,7 @@ fn test_f_mul() {
     let (Q_acc_a, l_2S_plus_Q) = miller_add_step::<Fq, Fq2>(Q_acc_d, Q_ecpoint.clone());
     let l_2S = l_2S.evaluate(x_over_y, y_inv);
     let l_2S_plus_Q = l_2S_plus_Q.evaluate(x_over_y, y_inv);
-    let l_prod1 = mul_023_by_023(l_2S, l_2S_plus_Q, BLS12_381_XI);
+    let l_prod1 = mul_023_by_023(l_2S, l_2S_plus_Q, BLS12_381::xi());
     let f_prod_mul = mul_by_02345::<Fq, Fq2, Fq12>(f, l_prod1);
 
     // Test line functions match

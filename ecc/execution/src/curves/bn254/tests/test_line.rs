@@ -6,7 +6,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     common::{fp12_square, EcPoint, EvaluatedLine, FieldExtension, LineDType},
-    curves::bn254::{mul_013_by_013, mul_by_01234, mul_by_013, BN254_XI},
+    curves::bn254::{mul_013_by_013, mul_by_01234, mul_by_013, BN254},
 };
 
 /// Returns a line function for a tangent line at the point P
@@ -69,7 +69,7 @@ fn test_mul_013_by_013() {
     let line_1 = point_to_013::<Fq, Fq2>(ec_point_1);
 
     // Multiply the two line functions & convert to Fq12 to compare
-    let mul_013_by_013 = mul_013_by_013::<Fq, Fq2>(line_0, line_1, BN254_XI);
+    let mul_013_by_013 = mul_013_by_013::<Fq, Fq2>(line_0, line_1, BN254::xi());
     let mul_013_by_013 = Fq12::from_coeffs(&mul_013_by_013);
 
     // Compare with the result of multiplying two Fp12 elements

@@ -1,29 +1,47 @@
-use halo2curves_axiom::bls12_381::{Fq, Fq2};
+use std::marker::PhantomData;
 
-pub const BLS12_381_XI: Fq2 = Fq2 {
-    c0: Fq::one(),
-    c1: Fq::one(),
-};
+use halo2curves_axiom::ff::Field;
+
+use crate::common::FieldExtension;
 
 // BLS12-381 pseudo-binary encoding
 // from gnark implementation: https://github.com/Consensys/gnark/blob/42dcb0c3673b2394bf1fd82f5128f7a121d7d48e/std/algebra/emulated/sw_bls12381/pairing.go#L322
-pub const GNARK_BLS12_381_PBE: [i32; 64] = [
+pub const BLS12_381_PBE_BITS: usize = 64;
+pub const GNARK_BLS12_381_PBE: [i32; BLS12_381_PBE_BITS] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
 ];
 
-pub struct BLS12_381 {
-    pub xi: Fq2,
+pub struct BLS12_381<Fp, Fp2, const BITS: usize> {
+    pub xi: Fp2,
     pub negative_x: bool,
-    pub pseudo_binary_encoding: [i32; 64],
+    pub pseudo_binary_encoding: [i32; BITS],
+    _marker: PhantomData<Fp>,
 }
 
-impl BLS12_381 {
+impl<Fp, Fp2> BLS12_381<Fp, Fp2, BLS12_381_PBE_BITS>
+where
+    Fp: Field,
+    Fp2: FieldExtension<BaseField = Fp>,
+{
     pub fn new() -> Self {
         Self {
-            xi: BLS12_381_XI,
-            pseudo_binary_encoding: GNARK_BLS12_381_PBE,
-            negative_x: true,
+            xi: Self::xi(),
+            negative_x: Self::negative_x(),
+            pseudo_binary_encoding: Self::pseudo_binary_encoding(),
+            _marker: PhantomData::<Fp>,
         }
+    }
+
+    pub fn xi() -> Fp2 {
+        Fp2::from_coeffs(&[Fp::ONE, Fp::ONE])
+    }
+
+    pub fn negative_x() -> bool {
+        true
+    }
+
+    pub fn pseudo_binary_encoding() -> [i32; BLS12_381_PBE_BITS] {
+        GNARK_BLS12_381_PBE
     }
 }
