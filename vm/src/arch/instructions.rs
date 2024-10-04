@@ -5,6 +5,8 @@ static mut OPCODE_INDEX: usize = 0;
 
 pub trait UsizeOpcode {
     fn default_offset() -> usize;
+    /// Convert from the discriminant of the enum to the typed enum variant.
+    /// Default implementation uses `from_repr`.
     fn from_usize(value: usize) -> Self;
     fn as_usize(&self) -> usize;
     fn class_index() -> usize;
