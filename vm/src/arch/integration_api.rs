@@ -26,7 +26,8 @@ pub trait MachineAdapterInterface<T> {
 /// The adapter owns all memory accesses and timestamp changes.
 /// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
 pub trait MachineAdapter<F: PrimeField32> {
-    type Record;
+    type ReadRecord;
+    type WriteRecord;
     type Air: BaseAir<F>;
     type Cols<T>;
     type Interface<T: AbstractField>: MachineAdapterInterface<T>;
@@ -36,23 +37,33 @@ pub trait MachineAdapter<F: PrimeField32> {
     ///
     /// The implementor may choose to store data in this struct, for example in an [Option], which will later be taken
     /// when `postprocess` is called.
+    #[allow(clippy::type_complexity)]
     fn preprocess(
         &mut self,
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<<Self::Interface<F> as MachineAdapterInterface<F>>::Reads>;
+    ) -> Result<(
+        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        Self::ReadRecord,
+    )>;
 
     /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)` of the full
     /// adapter record for this instruction. This **must** be called after `preprocess`.
     fn postprocess(
         &mut self,
         memory: &mut MemoryChip<F>,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<usize>,
         output: InstructionOutput<F, Self::Interface<F>>,
-    ) -> Result<(ExecutionState<usize>, Self::Record)>;
+    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)>;
 
     /// Should mutate `row_slice` to populate with values corresponding to `record`.
-    fn generate_trace_row(&self, row_slice: &mut Self::Cols<F>, record: Self::Record);
+    fn generate_trace_row(
+        &self,
+        row_slice: &mut Self::Cols<F>,
+        read_record: Self::ReadRecord,
+        write_record: Self::WriteRecord,
+    );
 
     /// [Air](p3_air::Air) constraints owned by the adapter.
     /// The `interface` is given as abstract expressions so it can be directly used in other AIR constraints.
@@ -83,7 +94,7 @@ pub trait MachineIntegration<F: PrimeField32, A: MachineAdapter<F>> {
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         from_pc: F,
         reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)>;
@@ -118,7 +129,7 @@ pub struct IntegrationInterface<T, I: MachineAdapterInterface<T>> {
 pub struct MachineChipWrapper<F: PrimeField32, A: MachineAdapter<F>, M: MachineIntegration<F, A>> {
     pub adapter: A,
     pub inner: M,
-    pub records: Vec<(A::Record, M::Record)>,
+    pub records: Vec<(A::ReadRecord, A::WriteRecord, M::Record)>,
     memory: MemoryChipRef<F>,
 }
 
@@ -172,15 +183,15 @@ where
         from_state: ExecutionState<usize>,
     ) -> Result<ExecutionState<usize>> {
         let mut memory = self.memory.borrow_mut();
-        let reads = self
-            .adapter
-            .preprocess(&mut memory, &instruction, from_state)?;
+        let (reads, read_record) = self.adapter.preprocess(&mut memory, &instruction)?;
         let from_pc = F::from_canonical_usize(from_state.pc);
-        let (output, inner_record) = self
-            .inner
-            .execute_instruction(instruction, from_pc, reads)?;
-        let (to_state, adapter_record) = self.adapter.postprocess(&mut memory, output)?;
-        self.records.push((adapter_record, inner_record));
+        let (output, inner_record) =
+            self.inner
+                .execute_instruction(&instruction, from_pc, reads)?;
+        let (to_state, write_record) =
+            self.adapter
+                .postprocess(&mut memory, &instruction, from_state, output)?;
+        self.records.push((read_record, write_record, inner_record));
         Ok(to_state)
     }
 }
