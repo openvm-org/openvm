@@ -2,7 +2,9 @@ use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use stark_vm::{
     arch::instructions::*,
     program::{DebugInfo, Instruction, Program},
+    vm::config::Modulus,
 };
+use strum::EnumCount;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
@@ -14,7 +16,6 @@ pub struct CompilerOptions {
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
-    pub opcode_offsets: Vec<Option<usize>>,
 }
 
 impl Default for CompilerOptions {
@@ -25,20 +26,24 @@ impl Default for CompilerOptions {
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
-            opcode_offsets: vec![],
         }
     }
 }
 
 impl CompilerOptions {
     pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> usize {
-        let index = Opcode::class_index();
-        let offset = self
-            .opcode_offsets
-            .get(index)
-            .unwrap_or(&None)
-            .unwrap_or(Opcode::default_offset());
+        let offset = Opcode::default_offset();
         offset + opcode.as_usize()
+    }
+
+    pub fn modular_opcode_with_offset<Opcode: UsizeOpcode>(
+        &self,
+        opcode: Opcode,
+        modulus: Modulus,
+    ) -> usize {
+        let res = opcode.as_usize();
+        let modular_shift = (modulus as usize) * ModularArithmeticOpcode::COUNT;
+        res + modular_shift
     }
 }
 
@@ -706,6 +711,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
+        // remove
         AsmInstruction::AddSecp256k1Coord(dst, src1, src2) => vec![inst(
             options.opcode_with_offset(ModularArithmeticOpcode::ADD),
             i32_f(dst),
@@ -738,6 +744,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
+        // Fix below "+4" hacks, and the ones above.
         AsmInstruction::AddSecp256k1Scalar(dst, src1, src2) => vec![inst(
             // FIXME: better handling of different moduli
             options.opcode_with_offset(ModularArithmeticOpcode::ADD) + 4,
@@ -765,6 +772,38 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::DivSecp256k1Scalar(dst, src1, src2) => vec![inst(
             options.opcode_with_offset(ModularArithmeticOpcode::DIV) + 4,
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::ModularAdd(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::ADD, modulus),
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::ModularSub(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::SUB, modulus),
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::ModularMul(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::MUL, modulus),
+            i32_f(dst),
+            i32_f(src1),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::ModularDiv(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::DIV, modulus),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),

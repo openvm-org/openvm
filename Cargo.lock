@@ -118,6 +118,7 @@ dependencies = [
  "serde_json",
  "snark-verifier-sdk",
  "stark-vm",
+ "strum",
  "strum_macros",
  "tracing",
  "zkhash",

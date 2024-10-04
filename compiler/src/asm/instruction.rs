@@ -2,6 +2,7 @@ use alloc::{collections::BTreeMap, format};
 use core::fmt;
 
 use p3_field::{ExtensionField, PrimeField32};
+use stark_vm::vm::config::Modulus;
 
 use super::A0;
 
@@ -95,6 +96,10 @@ pub enum AsmInstruction<F, EF> {
 
     /// Modular divide, dst = lhs / rhs.
     DivSecp256k1Scalar(i32, i32, i32),
+    ModularAdd(Modulus, i32, i32, i32),
+    ModularSub(Modulus, i32, i32, i32),
+    ModularMul(Modulus, i32, i32, i32),
+    ModularDiv(Modulus, i32, i32, i32),
 
     /// int add, dst = lhs + rhs.
     Add256(i32, i32, i32),
@@ -530,6 +535,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::ShiftRightArith256(dst, src1, src2) => {
                 write!(f, "sra_256 ({})fp ({})fp ({})fp", dst, src1, src2)
             }
+            _ => todo!(),
         }
     }
 }

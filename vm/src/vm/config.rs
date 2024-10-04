@@ -1,12 +1,14 @@
 use std::ops::Range;
 
 use derive_new::new;
+use num_bigint_dig::BigUint;
 use serde::{Deserialize, Serialize};
-use strum::EnumCount;
+use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 use crate::{
     arch::{instructions::*, ExecutorName},
     core::CoreOptions,
+    modular_addsub::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
 };
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
@@ -102,7 +104,12 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmConfig {
+    // Each executor handles the given range of opcode as usize, in absolute sense.
+    // offset is needed as for a given group of opcodes, they are actually mapped to different executors.
+    // For example, U256Opcode class has some opcodes handled by ArithmeticLogicUnit256, and some by U256Multiplication.
+    // And for U256Multiplication executor to verify the opcode it gets from program, it needs to know the offset of the U256Opcode class.
     pub executors: Vec<(Range<usize>, ExecutorName, usize)>, // (range of opcodes, who executes, offset)
+    pub modular_executors: Vec<(Range<usize>, ExecutorName, usize, BigUint)>, // (range of opcodes, who executes, offset, modulus)
 
     pub poseidon2_max_constraint_degree: Option<usize>,
     pub memory_config: MemoryConfig,
@@ -131,6 +138,7 @@ impl VmConfig {
             max_segment_len,
             collect_metrics,
             bigint_limb_size,
+            modular_executors: Vec::new(),
         }
     }
 
@@ -140,6 +148,11 @@ impl VmConfig {
         executor: ExecutorName,
         offset: usize,
     ) -> Self {
+        // Some executors need to be handled in a special way, and cannot be added like other executors.
+        let not_allowed_executors = [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
+        if not_allowed_executors.contains(&executor) {
+            panic!("Cannot add executor for {:?}", executor);
+        }
         self.executors.push((range, executor, offset));
         self
     }
@@ -147,6 +160,36 @@ impl VmConfig {
     pub fn add_default_executor(self, executor: ExecutorName) -> Self {
         let (range, offset) = default_executor_range(executor);
         self.add_executor(range, executor, offset)
+    }
+
+    // I think adding "opcode class" support is better than adding "executor".
+    // The api should be saying: I want to be able to do this set of operations, and doesn't care about what executor is doing it.
+    pub fn add_modular_support(self) -> Self {
+        let add_sub_range = default_executor_range(ExecutorName::ModularAddSub);
+        let mult_div_range = default_executor_range(ExecutorName::ModularMultDiv);
+        let num_ops_per_modulus = ModularArithmeticOpcode::COUNT;
+        let mut res = self;
+        for modulus in Modulus::iter() {
+            let modulus_usize = modulus.clone() as usize;
+            let shift = modulus_usize * num_ops_per_modulus;
+            res.modular_executors.push((
+                shift_range(&add_sub_range.0, shift),
+                ExecutorName::ModularAddSub,
+                add_sub_range.1 + shift,
+                modulus.prime(),
+            ));
+            res.modular_executors.push((
+                shift_range(&mult_div_range.0, shift),
+                ExecutorName::ModularMultDiv,
+                mult_div_range.1 + shift,
+                modulus.prime(),
+            ));
+        }
+        res
+    }
+
+    pub fn add_ecc_support(self) -> Self {
+        todo!()
     }
 }
 
@@ -207,4 +250,26 @@ impl VmConfig {
             .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
         Ok(config)
     }
+}
+
+#[derive(EnumCount, EnumIter, FromRepr, Clone, Debug)]
+#[repr(usize)]
+pub enum Modulus {
+    Secp256k1Coord = 0,
+    Secp256k1Scalar = 1,
+}
+
+impl Modulus {
+    pub fn prime(&self) -> BigUint {
+        match self {
+            Modulus::Secp256k1Coord => SECP256K1_COORD_PRIME.clone(),
+            Modulus::Secp256k1Scalar => SECP256K1_SCALAR_PRIME.clone(),
+        }
+    }
+}
+
+fn shift_range(r: &Range<usize>, x: usize) -> Range<usize> {
+    let start = r.start + x;
+    let end = r.end + x;
+    start..end
 }
