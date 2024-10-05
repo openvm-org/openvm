@@ -1,6 +1,7 @@
 # Modular zkVM ISA
 
-This design is adapted from [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with changes to the instruction format suggested by Max Gillet to enable easier compatibility with other existing ISAs.
+This design is adapted from [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with changes to the
+instruction format suggested by Max Gillet to enable easier compatibility with other existing ISAs.
 
 ## Architecture
 
@@ -20,17 +21,24 @@ graph TD;
 
 \* Part of the core (non-optional) configuration
 
-Communication buses are implemented using the logarithmic derivative lookup argument, and are multiplexed for efficiency (i.e. CPU interactions with multiple chips may share the same bus).
+Communication buses are implemented using the logarithmic derivative lookup argument, and are multiplexed for
+efficiency (i.e. CPU interactions with multiple chips may share the same bus).
 
-There are multiple VM configurations. The "Core" configuration is always present, and provides instructions for basic control flow and memory access. Additional configurations, such as "Field Arithmetic" or "Additional Jump" build upon the core configuration and offer additional instructions.
+There are multiple VM configurations. The "Core" configuration is always present, and provides instructions for basic
+control flow and memory access. Additional configurations, such as "Field Arithmetic" or "Additional Jump" build upon
+the core configuration and offer additional instructions.
 
 ### Instruction format
 
-Instructions are encoded in groups of 6 field elements. The first element in the group contains the opcode, followed by three elements representing the operands and two address space delimiters: $\text{opcode}, \text{op}_a$, $\text{op}_b$, $\text{op}_c$, $\text{as}_b$, $\text{as}_c$.
+Instructions are encoded in groups of 6 field elements. The first element in the group contains the opcode, followed by
+three elements representing the operands and two address space delimiters: $\text{opcode}, \text{op}_a$, $\text{op}_b$,
+$\text{op}_c$, $\text{as}_b$, $\text{as}_c$.
 
 ### Program ROM
 
-Our VM operates under the Harvard architecture, where program code is stored in a separate address space from main memory. Code is addressed by any field element, starting from $0$. The program counter `pc` stores the location (a field element) of the instruction that is being executed.
+Our VM operates under the Harvard architecture, where program code is stored in a separate address space from main
+memory. Code is addressed by any field element, starting from $0$. The program counter `pc` stores the location (a field
+element) of the instruction that is being executed.
 
 Each instruction is stored at a multiple of `INST_WIDTH`.
 
@@ -77,13 +85,14 @@ The following notation is used throughout this document:
 
 **Addressing**: we support different address spaces via `as_b, as_c`.
 
-- We use `[a]_{as}` to denote the single-cell value at pointer location `a` in address space `as`. This is a single field element.
+- We use `[a]_{as}` to denote the single-cell value at pointer location `a` in address space `as`. This is a single
+  field element.
 - We use `[a:N]_{as}` to denote the slice `[a..a + N]_{as}` -- this is an length-`N` array of field elements.
 
 We will always have the following fixed address spaces:
 
 | Address Space | Name         |
-| ------------- | ------------ |
+|---------------|--------------|
 | `0`           | Immediates   |
 | `1`           | Registers    |
 | `2`           | Memory       |
@@ -109,6 +118,17 @@ Each instruction contains 5 field element operands, $a, b, c, d, e$. We omit $d,
 they are used in the description to specify which address space to reference. Each of $a,b,c,d,e$ is a field element. We
 sometimes replace an operand with `offset` simply to emphasize its purpose.
 
+All instruction types are divided into classes, mostly based on purpose and nature of the operation (e.g., Core
+instructions, U256 instructions, Modular instructions, etc).
+Instructions within each class are usually handled by the same chip, but this is not always the case (for example, if
+one of the operations requires much more trace columns than all others).
+Internally, certain non-intersecting ranges of opcodes (which are internally just a `usize`) are distributed among the
+enabled operation classes, so that there is no collision between the classes.
+But the operations from different classes may have the same mnemonic. For instance, `ADD` instruction may denote field
+addition, u256 addition or addition modulo a long prime, depending on the class this operation is in.
+This allows a more flexible and independent workflow in different chips, and, unlike the conventional opcode lists, we
+do not have to introduce names like `ADD256`, `FADD` and `SECP256K1_COORD_ADD` just to specify what operation we mean.
+
 Listed below are the instructions offered in each configuration.
 
 ### Core
@@ -116,7 +136,7 @@ Listed below are the instructions offered in each configuration.
 This instruction set is always enabled.
 
 | Mnemonic            | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                              |
-| ------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | **L** / **LOAD**    | `a, offset, c`                                | Set `[a]_d <- [[c]_d + offset]_e`. Loads a cell from one address space to another.                                                    |
 | **S** / **STORE**   | `a, offset, c`                                | Set `[[c]_d + offset]_e <- [a]_d`.                                                                                                    |
 | **L2** / **LOAD2**  | `a, offset, c, size`                          | Set `[a]_d <- [[c]_d + [f]_g * size + offset]_e`. Loads cell a from one address space to another using a variable multiple of `size`. |
@@ -137,19 +157,21 @@ decomposition of a given variable, with a length known at compile time), and `HI
 
 :::info
 Core instructions were chosen so a subset of RISC-V instructions can be directly transpiled to the core instructions,
-where x0-31 registers are mapped to address space `1` and each register is represented as `4` memory cells, with each cell a byte.
+where x0-31 registers are mapped to address space `1` and each register is represented as `4` memory cells, with each
+cell a byte.
 :::
 
 ### Field arithmetic
 
-This instruction set does native field operations. Some operations may be infeasible if the address space imposes additional bit size constraints.
+This instruction set does native field operations. Some operations may be infeasible if the address space imposes
+additional bit size constraints.
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                            |
-| -------- | --------------------------------------------- | ---------------------------------------------------------------------- |
-| **FADD** | `a, b, c`                                     | Set `[a]_d <- [b]_e + [c]_f`.                                          |
-| **FSUB** | `a, b, c`                                     | Set `[a]_d <- [b]_e - [c]_f`.                                          |
-| **FMUL** | `a, b, c`                                     | Set `[a]_d <- [b]_e * [c]_f`.                                          |
-| **FDIV** | `a, b, c`                                     | Set `[a]_d <- [b]_e / [c]_f`. Division by zero causes a runtime error. |
+|----------|-----------------------------------------------|------------------------------------------------------------------------|
+| **ADD**  | `a, b, c`                                     | Set `[a]_d <- [b]_e + [c]_f`.                                          |
+| **SUB**  | `a, b, c`                                     | Set `[a]_d <- [b]_e - [c]_f`.                                          |
+| **MUL**  | `a, b, c`                                     | Set `[a]_d <- [b]_e * [c]_f`.                                          |
+| **DIV**  | `a, b, c`                                     | Set `[a]_d <- [b]_e / [c]_f`. Division by zero causes a runtime error. |
 
 ### Extension field arithmetic
 
@@ -164,7 +186,7 @@ All elements in the field extension can be represented as a vector `[a_0, a_1, a
 polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ over `BabyBear`.
 
 | Mnemonic    | <div style="width:170px">Operands (asm)</div> | Description                                                                                                |
-| ----------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+|-------------|-----------------------------------------------|------------------------------------------------------------------------------------------------------------|
 | **FE4ADD**  | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d + [c:4]_e` with extension field addition.                                          |
 | **FE4SUB**  | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d - [c:4]_e` with extension field subtraction.                                       |
 | **BBE4MUL** | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d * [c:4]_e` with extension field multiplication.                                    |
@@ -172,7 +194,8 @@ polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ over `BabyBear`.
 
 Below we explain the specific implementation of these operations.
 
-For **BBE4MUL**, let the first element represent the polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ and the second represent the polynomial $b_0 + b_1x + b_2x^2 + b_3x^3$. Then, multiplying we find
+For **BBE4MUL**, let the first element represent the polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ and the second represent
+the polynomial $b_0 + b_1x + b_2x^2 + b_3x^3$. Then, multiplying we find
 
 $$
 \begin{align*}
@@ -189,10 +212,12 @@ and let the denominator $aa' = b$. By construction, $b$ will have coefficients o
 Specifically, we find
 $$b = (a_0^2 - 11(2a_1a_3 - a_2^2)) + (2a_0a_2 - a_1^2 - 11a_3^2)x^2.$$
 
-Let $b_0 = a_0^2 - 11(2a_1a_3 - a_2^2)$ and $b_2 = (2a_0a_2 - a_1^2 - 11a_3^2)$, so that $b = b_0 + b_2x^2$. We want to compute $a'/b$. Now, define $b' = b_0 - b_2x^2$, and we may write $1/a = a'/b = a'b'/(bb')$. But
+Let $b_0 = a_0^2 - 11(2a_1a_3 - a_2^2)$ and $b_2 = (2a_0a_2 - a_1^2 - 11a_3^2)$, so that $b = b_0 + b_2x^2$. We want to
+compute $a'/b$. Now, define $b' = b_0 - b_2x^2$, and we may write $1/a = a'/b = a'b'/(bb')$. But
 $$bb' = (b_0 + b_2x^2)(b_0 - b_2x^2) = b_0^2 - 11b_2^2,$$
 
-which is an element of the original field which we define as $c$. So, we may simply invert $c$ and we find $1/a = a'/b = a'b'/c = a'b'c^{-1}$. This will give the correct result except when $c^{-1}$ is undefined, which is when $a = 0$.
+which is an element of the original field which we define as $c$. So, we may simply invert $c$ and we find $1/a = a'/b =
+a'b'/c = a'b'c^{-1}$. This will give the correct result except when $c^{-1}$ is undefined, which is when $a = 0$.
 
 ### Unsigned 32-bit integer instructions
 
@@ -218,17 +243,19 @@ A note on CASTF below: support for casting arbitrary field elements can also be 
 -->
 
 | Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                                                                 |
-| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-----------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **CASTF** | `a, b, _`                                     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
-| **SLTU**  | `a, b, c`                                     | Set `[a]_d <- compose([b; 4]_e) < compose([c; 4]_f) ? decompose(1) : decompose(0)`. The address space `d` is not allowed to be zero.    |
-| **LUI**   | `a, b, _`                                     | Set `[a:4]_1 <- decompose([b]_0 << 12)`. The immediate `[b]_0` is constrained to be at most 20 bits.                                                                                |
-| **AUIPC** | `a, b, _`                                     | Set `[a:4]_1 <- decompose(pc + ([b]_0 << 12))`. The immediate `[b]_0` is constrained to be at most 20 bits, where addition is mod `2^32`.                                                                                |
+| **SLTU**  | `a, b, c`                                     | Set `[a]_d <- compose([b; 4]_e) < compose([c; 4]_f) ? decompose(1) : decompose(0)`. The address space `d` is not allowed to be zero.                                                                                                                                                        |
+| **LUI**   | `a, b, _`                                     | Set `[a:4]_1 <- decompose([b]_0 << 12)`. The immediate `[b]_0` is constrained to be at most 20 bits.                                                                                                                                                                                        |
+| **AUIPC** | `a, b, _`                                     | Set `[a:4]_1 <- decompose(pc + ([b]_0 << 12))`. The immediate `[b]_0` is constrained to be at most 20 bits, where addition is mod `2^32`.                                                                                                                                                   |
 
 ### U256 Arithmetic and Logical Operations
 
-We name these opcodes `ADD`, etc, below for brevity but in the code they must distinguish between `ADD` for `u32` and `ADD` for `u256`.
+We name these opcodes `ADD`, etc, below for brevity but in the code they must distinguish between `ADD` for `u32`
+and `ADD` for `u256`.
 
-Let `Word256 = [u8; 32]`. Although we work over a 31-bit field, and we can in theory represent `u256` as larger limbs (e.g. 16bits), we choose to operate on bytes because
+Let `Word256 = [u8; 32]`. Although we work over a 31-bit field, and we can in theory represent `u256` as larger limbs (
+e.g. 16bits), we choose to operate on bytes because
 (1): a lot of data we work with are naturally in bytes and
 (2): to be consistent with modular arithmetic below.
 Explicitly, the conversion between the limb representation and the actual unsigned integer is given by
@@ -249,7 +276,7 @@ The address spaces `d, e` are not allowed to be zero in any instructions below u
 #### Arithmetic Operations
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                          |
-| -------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+|----------|-----------------------------------------------|------------------------------------------------------------------------------------------------------|
 | **ADD**  | `a, b, c`                                     | Set `[a:32]_d <- decompose(u256[b]_d + u256[c]_e)` where addition is mod `2^256`.                    |
 | **SUB**  | `a, b, c`                                     | Set `[a:32]_d <- decompose(u256[b]_d - u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
 | **MUL**  | `a, b, c`                                     | Set `[a:32]_d <- decompose(u256[b]_d * u256[c]_e)` where multiplication is mod `2^256`.              |
@@ -262,32 +289,31 @@ We don't need this yet:
 #### Comparison Operations
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                          |
-| -------- | --------------------------------------------- | -------------------------------------------------------------------- |
+|----------|-----------------------------------------------|----------------------------------------------------------------------|
 | **LT**   | `a, b, c`                                     | Set `[a]_d <- u256[b]_d < u256[c]_e ? decompose(1) : decompose(0)`.  |
 | **EQ**   | `a, b, c`                                     | Set `[a]_d <- u256[b]_d == u256[c]_e ? decompose(1) : decompose(0)`. |
 
 ### Modular arithmetic
 
-For some technical reasons we cannot have limb bits greater than 12 (it will overflow the field element in intermediate computations), so the big uints are represented as `BigUint = [u8; 32]`.
+For some technical reasons we cannot have limb bits greater than 12 (it will overflow the field element in intermediate
+computations), so the big uints are represented as `BigUint = [u8; 32]`.
 
 We will have similar notation as `u256` and let `bigu[a]_d: BigUint` denote the array of limbs `bigu[a:32]_d`. The
 conversion between limbs and the big uint is the same as for `u256` above.
 The modulus we will use for now are the coordinate field and scalar field of `secp256k1`.
 
-| Mnemonic                 | <div style="width:170px">Operands (asm)</div> | Description                                                                                             |
-| ------------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **SECP256K1_COORD_ADD**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e + bigu[[c]_d]_e)` where addition is mod coordinate field. |
-| **SECP256K1_COORD_SUB**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e - bigu[[c]_d]_e)` where addition is mod coordinate field. |
-| **SECP256K1_COORD_MUL**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e * bigu[[c]_d]_e)` where addition is mod coordinate field. |
-| **SECP256K1_COORD_DIV**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e / bigu[[c]_d]_e)` where addition is mod coordinate field. |
-| **SECP256K1_SCALAR_ADD** | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e + bigu[[c]_d]_e)` where addition is mod scalar field.     |
-| **SECP256K1_SCALAR_SUB** | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e - bigu[[c]_d]_e)` where addition is mod scalar field.     |
-| **SECP256K1_SCALAR_MUL** | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e * bigu[[c]_d]_e)` where addition is mod scalar field.     |
-| **SECP256K1_SCALAR_DIV** | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e / bigu[[c]_d]_e)` where addition is mod scalar field.     |
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                     |
+|----------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| **ADD**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e + bigu[[c]_d]_e)` where addition is in the given (coordinate/scalar) field.       |
+| **SUB**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e - bigu[[c]_d]_e)` where subtraction is in the given (coordinate/scalar) field.    |
+| **MUL**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e * bigu[[c]_d]_e)` where multiplication is in the given (coordinate/scalar) field. |
+| **DIV**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e / bigu[[c]_d]_e)` where division is in the given (coordinate/scalar) field.       |
 
 ### Elliptic curve operations
 
-An elliptic curve point `EcPoint(x, y)` is a pair of big uint in a prime field (secp256k1). `x` and `y` will be represented as `BigUint` with 32 8-bit limbs, and thus an `EcPoint` needs 64 elements in total. Let `EcArray = [u8; 64]`.
+An elliptic curve point `EcPoint(x, y)` is a pair of big uint in a prime field (secp256k1). `x` and `y` will be
+represented as `BigUint` with 32 8-bit limbs, and thus an `EcPoint` needs 64 elements in total.
+Let `EcArray = [u8; 64]`.
 
 ```
 compose_ec(w: EcArray) -> EcPoint {
@@ -297,10 +323,11 @@ compose_ec(w: EcArray) -> EcPoint {
 }
 ```
 
-where `compose` is the one in modular arithmetic above. And let `decompose_ec(p: EcPoint) -> EcArray ` be the inverse of `compose_ec`.
+where `compose` is the one in modular arithmetic above. And let `decompose_ec(p: EcPoint) -> EcArray ` be the inverse
+of `compose_ec`.
 
 | Mnemonic                | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                   |
-| ----------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **SECP256K1_EC_ADD_NE** | `a, b, c`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e + EcArray[[c]_d]_e)` where `+` is group operation on secp256k1. Assume the x coordinate of two inputs are distinct, the result is undefined otherwise. |
 | **SECP256K1_EC_DOUBLE** | `a, b, _`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e + EcArray[[b]_d]_e)` where `+` is group operation on secp256k1. This double the input point.                                                           |
 
@@ -311,15 +338,16 @@ We have special opcodes to enable different precompiled hash functions.
 Only subsets of these opcodes will be turned on depending on the VM use case.
 
 | Mnemonic                                                                                                                                                                                                                           | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a, b, c`                                     | Applies the Poseidon2 compression function to the inputs `[[b]_d:CHUNK]_e` and `[[c]_d:CHUNK]_e`, writing the result to `[[a]_d:CHUNK]_e`.<br/><br/>The address space `d` is **not** allowed to be `0`.                                                                                                                                                                                                                                                                                                                               |
 | **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a, b, 0`                                     | Applies the Poseidon2 permutation function to `[[b]_d:WIDTH]_e` and writes the result to `[[a]_d:WIDTH]_e`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. The address space `d` is **not** allowed to be `0`. This is nearly the same as `COMPRESS_POSEIDON2` except that the whole input state is contiguous in memory, and the full output state is written to memory.                                                                                                                  |
 | **KECCAK256**                                                                                                                                                                                                                      | `a, b, c, d, e, f`                            | Let `input` be the **variable length** byte array of length `len <- [c]_f` loaded from memory via `input[i] <- [[b]_d + i]_e` for `i = 0..len`. Let `output = keccak256(input)` as `[u8; 32]`. This opcode sets `[[a]_d + i]_e <- output[i]` for `i = 0..32`. This opcode assumes that the input memory cells are **bytes** and currently **does** range check them. **Safety:** The output is currently **not** range checked to be bytes. <!--ATTENTION: THIS MAY CHANGE IN FUTURE--> The output is written to memory as **bytes**. |
 
-For Poseidon2, the `PID` is just some identifier to provide domain separation between different Poseidon2 constants. For now we can set:
+For Poseidon2, the `PID` is just some identifier to provide domain separation between different Poseidon2 constants. For
+now we can set:
 
 | `PID` | Description                                                                                                                                                                                                                                                         |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 0     | [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48) but the Mat4 used is Plonky3's with a Monty reduction |
 
 and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above. For this setting, the input (of size `WIDTH`)
@@ -331,16 +359,22 @@ size `CHUNK`, depending on the output size of the corresponding opcode.
 These instructions are never enabled. Any program that actually executes them cannot be verified.
 
 | Mnemonic   | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode  |
-| ---------- | --------------------------------------------- | ------------------------- |
+|------------|-----------------------------------------------|---------------------------|
 | **FAIL**   | `_, _, _`                                     | Causes execution to fail. |
 | **PRINTF** | `a, _, _`                                     | Prints `[a]_d`.           |
 
-The **FAIL** instruction is meant to allow programs to clearly signal that something has gone wrong, and will cause trace generation to fail. **TERMINATE** and **FAIL** can be seen as analogues of acceptance and rejection in the context of Turing machines.
+The **FAIL** instruction is meant to allow programs to clearly signal that something has gone wrong, and will cause
+trace generation to fail. **TERMINATE** and **FAIL** can be seen as analogues of acceptance and rejection in the context
+of Turing machines.
 
-The **PRINTF** instruction is used for debugging purposes, and will print the relevant field element during trace generation. However, though **PRINTF** will not cause trace generation to fail, the resulting trace cannot be verified, just as with **FAIL**.
+The **PRINTF** instruction is used for debugging purposes, and will print the relevant field element during trace
+generation. However, though **PRINTF** will not cause trace generation to fail, the resulting trace cannot be verified,
+just as with **FAIL**.
 
 ### More coming soon
 
 Other instruction set extensions (for example to support RISC-V) coming soon.
 
-We will closely follow RISC-V assembly, making modifications as necessary. The most important difference between our zkVM assembly and RV32IM is that instead of registers `x0-31`, we only have a special-purpose register `pc` and the address space `1[]` for general purpose registers.
+We will closely follow RISC-V assembly, making modifications as necessary. The most important difference between our
+zkVM assembly and RV32IM is that instead of registers `x0-31`, we only have a special-purpose register `pc` and the
+address space `1[]` for general purpose registers.
