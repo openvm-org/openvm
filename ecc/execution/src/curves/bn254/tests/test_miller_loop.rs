@@ -1,5 +1,5 @@
 use halo2curves_axiom::{
-    bn256::{Fq, Fq2, G1Affine, G2Affine, G2Prepared, Gt},
+    bn256::{G1Affine, G2Affine, G2Prepared, Gt},
     pairing::MillerLoopResult,
 };
 use itertools::izip;
@@ -7,15 +7,11 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     common::{EcPoint, MultiMillerLoop},
-    curves::bn254::{BN254, BN254_PBE_BITS},
+    curves::bn254::Bn254,
 };
 
-#[test]
 #[allow(non_snake_case)]
-fn test_multi_miller_loop_bn254() {
-    // Generate random G1 and G2 points
-    // let rand_seeds = [8, 15, 29, 55, 166];
-    let rand_seeds = [8];
+fn run_miller_loop_test(rand_seeds: &[u64]) {
     let (P_vec, Q_vec) = rand_seeds
         .iter()
         .map(|seed| {
@@ -40,7 +36,7 @@ fn test_multi_miller_loop_bn254() {
     let compare_final = compare_miller.final_exponentiation();
 
     // Run the multi-miller loop
-    let bn254 = BN254::<Fq, Fq2, BN254_PBE_BITS>::new();
+    let bn254 = Bn254;
     let f = bn254.multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
 
     let wrapped_f = Gt(f);
@@ -48,4 +44,18 @@ fn test_multi_miller_loop_bn254() {
 
     // Run halo2curves final exponentiation on our multi_miller_loop output
     assert_eq!(final_f, compare_final);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_single_miller_loop_bn254() {
+    let rand_seeds = [925];
+    run_miller_loop_test(&rand_seeds);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_multi_miller_loop_bn254() {
+    let rand_seeds = [8, 15, 29, 55, 166];
+    run_miller_loop_test(&rand_seeds);
 }

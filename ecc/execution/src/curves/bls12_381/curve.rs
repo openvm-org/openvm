@@ -1,6 +1,4 @@
-use std::marker::PhantomData;
-
-use halo2curves_axiom::ff::Field;
+use halo2curves_axiom::bls12_381::{Fq, Fq2};
 
 use crate::common::FieldExtension;
 
@@ -9,41 +7,23 @@ use crate::common::FieldExtension;
 pub const BLS12_381_SEED: u64 = 0xd201000000010000;
 pub const BLS12_381_SEED_NEG: bool = true;
 pub const BLS12_381_PBE_BITS: usize = 64;
-pub const BLS12_381_PBE: [i32; BLS12_381_PBE_BITS] = [
+pub const BLS12_381_PBE: [i8; BLS12_381_PBE_BITS] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
 ];
 
-pub struct BLS12_381<Fp, Fp2, const BITS: usize> {
-    pub xi: Fp2,
-    pub seed: u64,
-    pub pseudo_binary_encoding: [i32; BITS],
-    _marker: PhantomData<Fp>,
-}
+pub struct Bls12_381;
 
-impl<Fp, Fp2> BLS12_381<Fp, Fp2, BLS12_381_PBE_BITS>
-where
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-{
-    pub fn new() -> Self {
-        Self {
-            xi: Self::xi(),
-            seed: Self::seed(),
-            pseudo_binary_encoding: Self::pseudo_binary_encoding(),
-            _marker: PhantomData::<Fp>,
-        }
-    }
-
-    pub fn xi() -> Fp2 {
-        Fp2::from_coeffs(&[Fp::ONE, Fp::ONE])
+impl Bls12_381 {
+    pub fn xi() -> Fq2 {
+        Fq2::from_coeffs(&[Fq::one(), Fq::one()])
     }
 
     pub fn seed() -> u64 {
         BLS12_381_SEED
     }
 
-    pub fn pseudo_binary_encoding() -> [i32; BLS12_381_PBE_BITS] {
+    pub fn pseudo_binary_encoding() -> [i8; BLS12_381_PBE_BITS] {
         BLS12_381_PBE
     }
 }

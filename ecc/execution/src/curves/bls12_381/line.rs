@@ -52,27 +52,3 @@ where
     let x_fp12 = Fp12::from_coeffs(&x);
     f * x_fp12
 }
-
-pub fn evaluate_lines_vec<Fp, Fp2, Fp12>(
-    mut f: Fp12,
-    mut lines: Vec<EvaluatedLine<Fp, Fp2>>,
-    xi: Fp2,
-) -> Fp12
-where
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-    Fp12: FieldExtension<BaseField = Fp2>,
-{
-    if lines.len() % 2 == 1 {
-        f = mul_by_023::<Fp, Fp2, Fp12>(f, lines.pop().unwrap());
-    }
-    for chunk in lines.chunks(2) {
-        if let [line0, line1] = chunk {
-            let prod = mul_023_by_023(*line0, *line1, xi);
-            f = mul_by_02345(f, prod);
-        } else {
-            panic!("lines.len() % 2 should be 0 at this point");
-        }
-    }
-    f
-}

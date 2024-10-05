@@ -11,15 +11,12 @@ use crate::{
     },
     curves::bls12_381::{
         line::{mul_023_by_023, mul_by_023, mul_by_02345},
-        BLS12_381, BLS12_381_PBE_BITS,
+        Bls12_381,
     },
 };
 
-#[test]
 #[allow(non_snake_case)]
-fn test_multi_miller_loop_bls12_381() {
-    // Generate random G1 and G2 points
-    let rand_seeds = [8, 15, 29, 55, 166];
+fn run_miller_loop_test(rand_seeds: &[u64]) {
     let (P_vec, Q_vec) = rand_seeds
         .iter()
         .map(|seed| {
@@ -47,7 +44,7 @@ fn test_multi_miller_loop_bls12_381() {
     let compare_final = compare_miller.final_exponentiation();
 
     // Run the multi-miller loop
-    let bls12_381 = BLS12_381::<Fq, Fq2, BLS12_381_PBE_BITS>::new();
+    let bls12_381 = Bls12_381;
     let f = bls12_381.multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
 
     let wrapped_f = MillerLoopResult(f);
@@ -55,6 +52,20 @@ fn test_multi_miller_loop_bls12_381() {
 
     // Run halo2curves final exponentiation on our multi_miller_loop output
     assert_eq!(final_f, compare_final);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_single_miller_loop_bls12_381() {
+    let rand_seeds = [888];
+    run_miller_loop_test(&rand_seeds);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_multi_miller_loop_bls12_381() {
+    let rand_seeds = [8, 15, 29, 55, 166];
+    run_miller_loop_test(&rand_seeds);
 }
 
 #[test]
@@ -101,7 +112,7 @@ fn test_f_mul() {
         miller_double_and_add_step::<Fq, Fq2>(Q_acc.clone(), Q_ecpoint.clone());
     let l_S_plus_Q_plus_S = l_S_plus_Q_plus_S.evaluate(x_over_y, y_inv);
     let l_S_plus_Q = l_S_plus_Q.evaluate(x_over_y, y_inv);
-    let l_prod0 = mul_023_by_023(l_S_plus_Q, l_S_plus_Q_plus_S, BLS12_381::xi());
+    let l_prod0 = mul_023_by_023(l_S_plus_Q, l_S_plus_Q_plus_S, Bls12_381::xi());
     let f_mul = mul_by_02345::<Fq, Fq2, Fq12>(f, l_prod0);
 
     // Test Q_acc_da == 2(2Q) + Q
@@ -116,7 +127,7 @@ fn test_f_mul() {
     let (Q_acc_a, l_2S_plus_Q) = miller_add_step::<Fq, Fq2>(Q_acc_d, Q_ecpoint.clone());
     let l_2S = l_2S.evaluate(x_over_y, y_inv);
     let l_2S_plus_Q = l_2S_plus_Q.evaluate(x_over_y, y_inv);
-    let l_prod1 = mul_023_by_023(l_2S, l_2S_plus_Q, BLS12_381::xi());
+    let l_prod1 = mul_023_by_023(l_2S, l_2S_plus_Q, Bls12_381::xi());
     let f_prod_mul = mul_by_02345::<Fq, Fq2, Fq12>(f, l_prod1);
 
     // Test line functions match

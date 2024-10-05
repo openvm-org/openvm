@@ -1,6 +1,4 @@
-use std::marker::PhantomData;
-
-use halo2curves_axiom::ff::Field;
+use halo2curves_axiom::bn256::{Fq, Fq2};
 
 use crate::common::FieldExtension;
 
@@ -10,46 +8,24 @@ use crate::common::FieldExtension;
 pub const BN254_SEED: u64 = 0x44e992b44a6909f1;
 pub const BN254_SEED_NEG: bool = false;
 pub const BN254_PBE_BITS: usize = 66;
-pub const GNARK_BN254_PBE_NAF: [i32; BN254_PBE_BITS] = [
+pub const GNARK_BN254_PBE_NAF: [i8; BN254_PBE_BITS] = [
     0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0,
     -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0, -1, 0,
     0, 0, 1, 0, -1, 0, 1,
 ];
 
-pub struct BN254<Fp, Fp2, const BITS: usize> {
-    pub xi: Fp2,
-    pub seed: u64,
-    pub pseudo_binary_encoding: [i32; BITS],
-    _marker: PhantomData<Fp>,
-}
+pub struct Bn254;
 
-impl<Fp, Fp2> BN254<Fp, Fp2, BN254_PBE_BITS>
-where
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-{
-    pub fn new() -> Self {
-        Self {
-            xi: Self::xi(),
-            seed: Self::seed(),
-            pseudo_binary_encoding: Self::pseudo_binary_encoding(),
-            _marker: PhantomData::<Fp>,
-        }
-    }
-
-    pub fn xi() -> Fp2 {
-        let one = Fp::ONE;
-        let two = one + one;
-        let three = one + two;
-        let nine = three * three;
-        Fp2::from_coeffs(&[nine, one])
+impl Bn254 {
+    pub fn xi() -> Fq2 {
+        Fq2::from_coeffs(&[Fq::from_raw([9, 0, 0, 0]), Fq::one()])
     }
 
     pub fn seed() -> u64 {
         BN254_SEED
     }
 
-    pub fn pseudo_binary_encoding() -> [i32; BN254_PBE_BITS] {
+    pub fn pseudo_binary_encoding() -> [i8; BN254_PBE_BITS] {
         GNARK_BN254_PBE_NAF
     }
 }

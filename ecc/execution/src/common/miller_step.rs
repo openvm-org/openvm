@@ -119,7 +119,7 @@ where
 }
 
 #[allow(non_snake_case)]
-pub fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i32) -> Vec<EcPoint<Fp2>>
+pub fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i8) -> Vec<EcPoint<Fp2>>
 where
     Fp: Field,
     Fp2: FieldExtension<BaseField = Fp>,

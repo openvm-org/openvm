@@ -13,9 +13,9 @@ where
     Fp2: FieldExtension<BaseField = Fp>,
     Fp12: FieldExtension<BaseField = Fp2>,
 {
-    fn xi(&self) -> Fp2;
-    fn seed(&self) -> u64;
-    fn pseudo_binary_encoding(&self) -> [i32; BITS];
+    fn xi() -> Fp2;
+    fn seed() -> u64;
+    fn pseudo_binary_encoding() -> [i8; BITS];
     fn evaluate_lines_vec(&self, f: Fp12, lines: Vec<EvaluatedLine<Fp, Fp2>>) -> Fp12;
     fn pre_loop(
         &self,
@@ -25,7 +25,14 @@ where
         x_over_ys: Vec<Fp>,
         y_invs: Vec<Fp>,
     ) -> (Fp12, Vec<EcPoint<Fp2>>);
-    fn post_loop(&self, f: Fp12, Q_acc: Vec<EcPoint<Fp2>>) -> (Fp12, Vec<EcPoint<Fp2>>);
+    fn post_loop(
+        &self,
+        f: Fp12,
+        Q_acc: Vec<EcPoint<Fp2>>,
+        Q: &[EcPoint<Fp2>],
+        x_over_ys: Vec<Fp>,
+        y_invs: Vec<Fp>,
+    ) -> (Fp12, Vec<EcPoint<Fp2>>);
 
     #[allow(non_snake_case)]
     fn multi_miller_loop(&self, P: &[EcPoint<Fp>], Q: &[EcPoint<Fp2>]) -> Fp12 {
@@ -61,7 +68,7 @@ where
         f = f_out;
         Q_acc = Q_acc_out;
 
-        let pseudo_binary_encoding = self.pseudo_binary_encoding();
+        let pseudo_binary_encoding = Self::pseudo_binary_encoding();
         for i in (0..pseudo_binary_encoding.len() - 2).rev() {
             println!(
                 "miller i: {} = {}; Q_acc.x: {:?}",
@@ -126,7 +133,7 @@ where
             f = self.evaluate_lines_vec(f, lines);
         }
 
-        let (f_out, _) = self.post_loop(f, Q_acc);
+        let (f_out, _) = self.post_loop(f, Q_acc, Q, x_over_ys, y_invs);
         f = f_out;
 
         f
