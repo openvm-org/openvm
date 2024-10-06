@@ -6,14 +6,14 @@ use tracing::instrument;
 use crate::{prover::USE_DEBUG_BUILDER, rap::AnyRap};
 
 // TODO[osama]: consider moving this to another file
-pub struct AirTrace<SC: StarkGenericConfig> {
+pub struct AirInfo<SC: StarkGenericConfig> {
     pub air: Box<dyn AnyRap<SC>>,
     pub cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
     pub common_trace: RowMajorMatrix<Val<SC>>,
     pub public_values: Vec<Val<SC>>,
 }
 
-impl<SC: StarkGenericConfig> AirTrace<SC> {
+impl<SC: StarkGenericConfig> AirInfo<SC> {
     pub fn new(
         air: Box<dyn AnyRap<SC>>,
         cached_traces: Vec<RowMajorMatrix<Val<SC>>>,

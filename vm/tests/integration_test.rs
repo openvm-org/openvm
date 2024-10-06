@@ -50,7 +50,7 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
 
     for segment_result in result.segment_results {
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        test_segment(&engine, segment_result.get_air_traces()).expect("Verification failed");
+        test_segment(&engine, segment_result.get_air_infos()).expect("Verification failed");
     }
 }
 
@@ -84,17 +84,17 @@ fn air_test_with_compress_poseidon2(
 
     for segment_result in result.segment_results {
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        let air_traces = segment_result.get_air_traces();
+        let air_infos = segment_result.get_air_infos();
 
         // Checking maximum constraint degree across all AIRs
         let mut keygen_builder = engine.keygen_builder();
-        for air_trace in &air_traces {
-            keygen_builder.add_air(air_trace.air.as_ref());
+        for air_info in &air_infos {
+            keygen_builder.add_air(air_info.air.as_ref());
         }
         let pk = keygen_builder.generate_pk();
         assert!(pk.max_constraint_degree == poseidon2_max_constraint_degree);
 
-        test_segment(&engine, air_traces).expect("Verification failed");
+        test_segment(&engine, air_infos).expect("Verification failed");
     }
 }
 

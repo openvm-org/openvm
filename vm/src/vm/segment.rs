@@ -11,7 +11,7 @@ use afs_primitives::{
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::lookup::XorLookupChip,
 };
-use afs_stark_backend::{rap::AnyRap, utils::AirTrace};
+use afs_stark_backend::{rap::AnyRap, utils::AirInfo};
 use backtrace::Backtrace;
 use itertools::{izip, Itertools};
 use p3_commit::PolynomialSpace;
@@ -86,9 +86,9 @@ pub struct SegmentResult<SC: StarkGenericConfig> {
 }
 
 impl<SC: StarkGenericConfig> SegmentResult<SC> {
-    pub fn get_air_traces(self) -> Vec<AirTrace<SC>> {
-        let mut air_traces = vec![];
-        air_traces.push(AirTrace {
+    pub fn get_air_infos(self) -> Vec<AirInfo<SC>> {
+        let mut air_infos = vec![];
+        air_infos.push(AirInfo {
             air: self.program_air,
             cached_traces: vec![self.program_cached_trace],
             common_trace: self.program_common_trace,
@@ -96,7 +96,7 @@ impl<SC: StarkGenericConfig> SegmentResult<SC> {
         });
 
         for (air, trace, pis) in izip!(self.airs, self.traces, self.public_values) {
-            air_traces.push(AirTrace {
+            air_infos.push(AirInfo {
                 air,
                 cached_traces: vec![],
                 common_trace: trace,
@@ -104,7 +104,7 @@ impl<SC: StarkGenericConfig> SegmentResult<SC> {
             });
         }
 
-        air_traces
+        air_infos
     }
 
     pub fn max_log_degree(&self) -> usize {

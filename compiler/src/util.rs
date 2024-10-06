@@ -141,7 +141,7 @@ mod sdk {
         let span = tracing::info_span!("execute_and_prove_program").entered();
         let stark_for_test = gen_vm_program_stark_for_test(program, input_stream, config);
         let pvs = stark_for_test
-            .air_traces
+            .air_infos
             .iter()
             .map(|air| air.public_values.clone())
             .collect();

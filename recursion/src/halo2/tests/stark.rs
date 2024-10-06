@@ -31,7 +31,7 @@ fn test_interactions() {
 
 fn run_recursive_test(stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>) {
     let vparams =
-        <BabyBearPoseidon2OuterEngine as StarkFriEngine<BabyBearPoseidon2OuterConfig>>::run_test_with_air_traces(stark_for_test.air_traces).unwrap();
+        <BabyBearPoseidon2OuterEngine as StarkFriEngine<BabyBearPoseidon2OuterConfig>>::run_test_with_air_infos(stark_for_test.air_infos).unwrap();
     let advice = new_from_outer_multi_vk(&vparams.data.vk);
     let log_degree_per_air = vparams.data.proof.log_degrees();
 

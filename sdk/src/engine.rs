@@ -3,7 +3,7 @@ use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::{test_segment, VerificationData},
     rap::AnyRap,
-    utils::AirTrace,
+    utils::AirInfo,
     verifier::VerificationError,
 };
 use p3_matrix::dense::DenseMatrix;
@@ -29,7 +29,7 @@ pub struct StarkForTest<SC: StarkGenericConfig> {
     // pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
     // pub traces: Vec<RowMajorMatrix<Val<SC>>>,
     // pub pvs: Vec<Vec<Val<SC>>>,
-    pub air_traces: Vec<AirTrace<SC>>,
+    pub air_infos: Vec<AirInfo<SC>>,
 }
 
 impl<SC: StarkGenericConfig> StarkForTest<SC> {
@@ -45,9 +45,9 @@ impl<SC: StarkGenericConfig> StarkForTest<SC> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        let StarkForTest { air_traces } = self;
+        let StarkForTest { air_infos } = self;
         Ok(VerificationDataWithFriParams {
-            data: test_segment(engine, air_traces)?,
+            data: test_segment(engine, air_infos)?,
             fri_params: engine.fri_params(),
         })
     }
@@ -108,12 +108,12 @@ where
         let engine = Self::new(FriParameters::standard_fast());
         StarkFriEngine::<_>::run_test_with_trace_partitions(&engine, chips, traces, public_values)
     }
-    fn run_test_with_air_traces(
-        air_traces: Vec<AirTrace<SC>>,
+    fn run_test_with_air_infos(
+        air_infos: Vec<AirInfo<SC>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         let engine = Self::new(FriParameters::standard_fast());
         Ok(VerificationDataWithFriParams {
-            data: test_segment(&engine, air_traces)?,
+            data: test_segment(&engine, air_infos)?,
             fri_params: engine.fri_params(),
         })
     }

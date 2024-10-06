@@ -114,7 +114,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                 let perm_traces = pk
                     .per_air
                     .par_iter()
-                    .zip_eq(main_trace_data.air_traces.par_iter())
+                    .zip_eq(main_trace_data.air_infos.par_iter())
                     .zip_eq(public_values.par_iter())
                     .map(|((pk, main), public_values)| {
                         let interactions = &pk.vk.symbolic_constraints.interactions;
@@ -162,7 +162,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                 for (preprocessed_trace, main_data, perm_trace, cumulative_sum_and_index, pis) in
                     izip!(
                         pk.preprocessed_traces(),
-                        &main_trace_data.air_traces,
+                        &main_trace_data.air_infos,
                         &perm_traces,
                         &cumulative_sums_and_indices,
                         public_values
@@ -205,7 +205,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         let perm_pcs_data = tracing::info_span!("commit to permutation traces").in_scope(|| {
             let flattened_traces_with_domains: Vec<_> = perm_traces
                 .into_iter()
-                .zip_eq(&main_trace_data.air_traces)
+                .zip_eq(&main_trace_data.air_infos)
                 .flat_map(|(perm_trace, data)| {
                     perm_trace.map(|trace| (data.domain, trace.flatten_to_base()))
                 })
@@ -227,7 +227,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         // Prepare the proven RAP trace views
         // Abstraction boundary: after this, we consider InteractiveAIR as a RAP with virtual columns included in the trace.
         let (raps, trace_views): (Vec<_>, Vec<_>) = izip!(
-            main_trace_data.air_traces,
+            main_trace_data.air_infos,
             &pk.per_air,
             cumulative_sums_and_indices
         )

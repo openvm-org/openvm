@@ -4,7 +4,7 @@ use afs_primitives::{
     sum::SumChip,
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use afs_stark_backend::utils::AirTrace;
+use afs_stark_backend::utils::AirInfo;
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Config,
@@ -35,7 +35,7 @@ where
         trace.get(n - 1, 1),
     ];
     StarkForTest {
-        air_traces: vec![AirTrace::simple(fib_air, trace, pvs)],
+        air_infos: vec![AirInfo::simple(fib_air, trace, pvs)],
     }
 }
 
@@ -89,17 +89,17 @@ where
     let receiver_air = Box::new(receiver_air);
     let range_checker_air = Box::new(sum_chip.range_checker.air);
 
-    let range_checker_air_trace = AirTrace::simple_no_pis(range_checker_air, range_checker_trace);
-    let sum_air_trace = AirTrace::simple_no_pis(sum_air, sum_trace);
-    let sender_air_trace = AirTrace::simple_no_pis(sender_air, sender_trace);
-    let receiver_air_trace = AirTrace::simple_no_pis(receiver_air, receiver_trace);
+    let range_checker_air_info = AirInfo::simple_no_pis(range_checker_air, range_checker_trace);
+    let sum_air_info = AirInfo::simple_no_pis(sum_air, sum_trace);
+    let sender_air_info = AirInfo::simple_no_pis(sender_air, sender_trace);
+    let receiver_air_info = AirInfo::simple_no_pis(receiver_air, receiver_trace);
 
     StarkForTest {
-        air_traces: vec![
-            range_checker_air_trace,
-            sum_air_trace,
-            sender_air_trace,
-            receiver_air_trace,
+        air_infos: vec![
+            range_checker_air_info,
+            sum_air_info,
+            sender_air_info,
+            receiver_air_info,
         ],
     }
 }
@@ -122,11 +122,11 @@ where
         receiver_air.field_width() + 1,
     );
 
-    let sender_air_trace = AirTrace::simple_no_pis(Box::new(sender_air), sender_trace);
-    let receiver_air_trace = AirTrace::simple_no_pis(Box::new(receiver_air), receiver_trace);
+    let sender_air_info = AirInfo::simple_no_pis(Box::new(sender_air), sender_trace);
+    let receiver_air_info = AirInfo::simple_no_pis(Box::new(receiver_air), receiver_trace);
 
     StarkForTest {
-        air_traces: vec![sender_air_trace, receiver_air_trace],
+        air_infos: vec![sender_air_info, receiver_air_info],
     }
 }
 

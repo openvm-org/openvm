@@ -24,7 +24,7 @@ pub fn run_static_verifier_test(
     fri_params: FriParameters,
 ) -> (Halo2VerifierCircuit, Snark) {
     let stark_for_test = StarkForTest {
-        air_traces: sort_chips(stark_for_test.air_traces),
+        air_infos: sort_chips(stark_for_test.air_infos),
     };
     let info_span =
         tracing::info_span!("prove outer stark to verify", step = "outer_stark_prove").entered();

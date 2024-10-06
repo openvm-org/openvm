@@ -239,7 +239,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
             b.iter(|| {
                 let idx = 2;
                 let pk = &pk.per_air[idx];
-                let main = &main_trace_data.air_traces[idx];
+                let main = &main_trace_data.air_infos[idx];
                 let public_values = &public_values[idx];
                 let interactions = &pk.vk.symbolic_constraints.interactions;
                 let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
@@ -259,7 +259,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
             b.iter(|| {
                 let idx = 0;
                 let pk = &pk.per_air[idx];
-                let main = &main_trace_data.air_traces[idx];
+                let main = &main_trace_data.air_infos[idx];
                 let public_values = &public_values[idx];
                 let interactions = &pk.vk.symbolic_constraints.interactions;
                 let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
@@ -279,7 +279,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
             b.iter(|| {
                 let idx = 1;
                 let pk = &pk.per_air[idx];
-                let main = &main_trace_data.air_traces[idx];
+                let main = &main_trace_data.air_infos[idx];
                 let public_values = &public_values[idx];
                 let interactions = &pk.vk.symbolic_constraints.interactions;
                 let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
@@ -301,7 +301,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
             let perm_traces = pk
                 .per_air
                 .iter()
-                .zip_eq(main_trace_data.air_traces.iter())
+                .zip_eq(main_trace_data.air_infos.iter())
                 .zip_eq(public_values.iter())
                 .map(|((pk, main), public_values)| {
                     let interactions = &pk.vk.symbolic_constraints.interactions;
@@ -344,7 +344,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
     let perm_pcs_data = tracing::info_span!("commit to permutation traces").in_scope(|| {
         let flattened_traces_with_domains: Vec<_> = perm_traces
             .into_iter()
-            .zip_eq(&main_trace_data.air_traces)
+            .zip_eq(&main_trace_data.air_infos)
             .flat_map(|(perm_trace, data)| {
                 perm_trace.map(|trace| (data.domain, trace.flatten_to_base()))
             })
@@ -366,7 +366,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
     // Prepare the proven RAP trace views
     // Abstraction boundary: after this, we consider InteractiveAIR as a RAP with virtual columns included in the trace.
     let (raps, trace_views): (Vec<_>, Vec<_>) = izip!(
-        main_trace_data.air_traces,
+        main_trace_data.air_infos,
         &pk.per_air,
         cumulative_sums_and_indices
     )

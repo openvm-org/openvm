@@ -19,12 +19,12 @@ pub struct MultiAirCommittedTraceData<'a, SC: StarkGenericConfig> {
     pub pcs_data: Vec<(Com<SC>, &'a PcsProverData<SC>)>,
     // main trace, for each air, list of trace matrices and pointer to prover data for each
     /// Proven trace data for each AIR.
-    pub air_traces: Vec<SingleAirCommittedTrace<'a, SC>>,
+    pub air_infos: Vec<SingleAirCommittedTrace<'a, SC>>,
 }
 
 impl<'a, SC: StarkGenericConfig> MultiAirCommittedTraceData<'a, SC> {
     pub fn get_domain(&self, air_index: usize) -> Domain<SC> {
-        self.air_traces[air_index].domain
+        self.air_infos[air_index].domain
     }
 
     pub fn get_commit(&self, commit_index: usize) -> Option<&Com<SC>> {

@@ -1,6 +1,6 @@
 use std::{cmp::Reverse, sync::Arc};
 
-use afs_stark_backend::utils::AirTrace;
+use afs_stark_backend::utils::AirInfo;
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use p3_matrix::Matrix;
@@ -96,7 +96,7 @@ pub(crate) fn read_params(k: u32) -> Arc<ParamsKZG<Bn256>> {
 /// static-verifier because a dynamic verifier should support any AIR order.
 /// This is related to an implementation detail of FieldMerkleTreeMMCS which is used in most configs.
 /// Reference: https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53
-pub fn sort_chips<SC: StarkGenericConfig>(mut air_traces: Vec<AirTrace<SC>>) -> Vec<AirTrace<SC>> {
-    air_traces.sort_by_key(|air_trace| Reverse(air_trace.common_trace.height()));
-    air_traces
+pub fn sort_chips<SC: StarkGenericConfig>(mut air_infos: Vec<AirInfo<SC>>) -> Vec<AirInfo<SC>> {
+    air_infos.sort_by_key(|air_info| Reverse(air_info.common_trace.height()));
+    air_infos
 }
