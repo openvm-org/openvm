@@ -19,29 +19,19 @@ use crate::{
 #[test]
 fn test_fibonacci() {
     setup_tracing();
-    run_recursive_test(&fibonacci_stark_for_test::<BabyBearPoseidon2OuterConfig>(
-        16,
-    ))
+    run_recursive_test(fibonacci_stark_for_test::<BabyBearPoseidon2OuterConfig>(16))
 }
 
 #[test]
 fn test_interactions() {
     // Please make sure kzg trusted params are downloaded before running the test.
     setup_tracing();
-    run_recursive_test(&interaction_stark_for_test::<BabyBearPoseidon2OuterConfig>())
+    run_recursive_test(interaction_stark_for_test::<BabyBearPoseidon2OuterConfig>())
 }
 
-fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>) {
-    let StarkForTest {
-        any_raps,
-        traces,
-        pvs,
-    } = stark_for_test;
-    let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-
+fn run_recursive_test(stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>) {
     let vparams =
-        BabyBearPoseidon2OuterEngine::run_simple_test(&any_raps, traces.clone(), pvs).unwrap();
-
+        <BabyBearPoseidon2OuterEngine as StarkFriEngine<BabyBearPoseidon2OuterConfig>>::run_test_with_air_traces(stark_for_test.air_traces).unwrap();
     let advice = new_from_outer_multi_vk(&vparams.data.vk);
     let log_degree_per_air = vparams.data.proof.log_degrees();
 

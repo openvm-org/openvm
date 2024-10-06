@@ -8,6 +8,7 @@ use crate::{
     keygen::{types::MultiStarkVerifyingKey, MultiStarkKeygenBuilder},
     prover::{trace::TraceCommitmentBuilder, types::Proof, MultiTraceStarkProver},
     rap::AnyRap,
+    utils::AirTrace,
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
 
@@ -178,4 +179,35 @@ where
     let verifier = engine.verifier();
     verifier.verify(&mut challenger, &vk, &proof)?;
     Ok(VerificationData { vk, proof })
+}
+
+pub fn test_segment<SC: StarkGenericConfig>(
+    engine: &impl StarkEngine<SC>,
+    air_traces: Vec<AirTrace<SC>>,
+) -> Result<VerificationData<SC>, VerificationError>
+where
+    SC::Pcs: Sync,
+    Domain<SC>: Send + Sync,
+    PcsProverData<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Challenge: Send + Sync,
+    PcsProof<SC>: Send + Sync,
+{
+    let mut airs = vec![];
+    let mut traces = vec![];
+    let mut pis = vec![];
+    for air_trace in air_traces {
+        airs.push(air_trace.air);
+        traces.push(
+            air_trace
+                .cached_traces
+                .into_iter()
+                .chain(vec![air_trace.common_trace])
+                .collect(),
+        );
+        pis.push(air_trace.public_values);
+    }
+
+    let airs: Vec<&dyn AnyRap<SC>> = airs.iter().map(AsRef::as_ref).collect();
+    engine.run_test(&airs, traces, &pis)
 }

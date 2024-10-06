@@ -1,8 +1,9 @@
 use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder,
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, BaseAir, PairBuilder};
+use p3_air::{Air, BaseAir};
 use p3_field::Field;
 
 use super::{columns::ProgramCols, ProgramAir};
@@ -23,7 +24,7 @@ impl<F: Field> BaseAir<F> for ProgramAir<F> {
     }
 }
 
-impl<AB: PairBuilder + InteractionBuilder> Air<AB> for ProgramAir<AB::F> {
+impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for ProgramAir<AB::F> {
     fn eval(&self, builder: &mut AB) {
         self.eval_interactions(builder);
     }

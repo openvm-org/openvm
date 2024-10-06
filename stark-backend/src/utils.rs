@@ -1,7 +1,45 @@
 use p3_field::Field;
+use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::instrument;
 
-use crate::prover::USE_DEBUG_BUILDER;
+use crate::{prover::USE_DEBUG_BUILDER, rap::AnyRap};
+
+// TODO[osama]: consider moving this to another file
+pub struct AirTrace<SC: StarkGenericConfig> {
+    pub air: Box<dyn AnyRap<SC>>,
+    pub cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
+    pub common_trace: RowMajorMatrix<Val<SC>>,
+    pub public_values: Vec<Val<SC>>,
+}
+
+impl<SC: StarkGenericConfig> AirTrace<SC> {
+    pub fn new(
+        air: Box<dyn AnyRap<SC>>,
+        cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
+        common_trace: RowMajorMatrix<Val<SC>>,
+        public_values: Vec<Val<SC>>,
+    ) -> Self {
+        Self {
+            air,
+            cached_traces,
+            common_trace,
+            public_values,
+        }
+    }
+
+    pub fn simple(
+        air: Box<dyn AnyRap<SC>>,
+        trace: RowMajorMatrix<Val<SC>>,
+        public_values: Vec<Val<SC>>,
+    ) -> Self {
+        Self::new(air, vec![], trace, public_values)
+    }
+
+    pub fn simple_no_pis(air: Box<dyn AnyRap<SC>>, trace: RowMajorMatrix<Val<SC>>) -> Self {
+        Self::simple(air, trace, vec![])
+    }
+}
 
 // Copied from valida-util
 /// Calculates and returns the multiplicative inverses of each field element, with zero

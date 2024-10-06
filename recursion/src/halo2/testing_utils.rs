@@ -20,21 +20,17 @@ use crate::{
 };
 
 pub fn run_static_verifier_test(
-    stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>,
+    stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>,
     fri_params: FriParameters,
 ) -> (Halo2VerifierCircuit, Snark) {
-    let StarkForTest {
-        any_raps,
-        traces,
-        pvs,
-    } = stark_for_test;
-    let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-    let (any_raps, traces, pvs) = sort_chips(any_raps, traces.clone(), pvs.clone());
+    let stark_for_test = StarkForTest {
+        air_traces: sort_chips(stark_for_test.air_traces),
+    };
     let info_span =
         tracing::info_span!("prove outer stark to verify", step = "outer_stark_prove").entered();
-    let vparams = BabyBearPoseidon2OuterEngine::new(fri_params)
-        .run_simple_test_impl(&any_raps, traces.clone(), &pvs)
-        .unwrap();
+    let engine = BabyBearPoseidon2OuterEngine::new(fri_params);
+    let vparams = stark_for_test.run_test(&engine).unwrap();
+
     info_span.exit();
 
     // Build verification program in eDSL.
@@ -65,7 +61,7 @@ pub fn run_static_verifier_test(
 }
 
 pub fn run_evm_verifier_e2e_test(
-    stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>,
+    stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>,
     fri_params: Option<FriParameters>,
 ) {
     let (stark_verifier_circuit, static_verifier_snark) = run_static_verifier_test(

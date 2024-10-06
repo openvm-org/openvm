@@ -9,7 +9,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use crate::{
     arch::{chips::MachineChip, ExecutionState},
-    program::{bridge::ProgramBus, columns::ProgramPreprocessedCols, Instruction},
+    program::{bridge::ProgramBus, columns::ProgramExecutionCols, Instruction},
 };
 
 mod air;

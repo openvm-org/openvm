@@ -6,10 +6,10 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{columns::ProgramExecutionCols, ProgramChip};
-use crate::arch::chips::MachineChip;
+use crate::arch::MachineChip;
 
 impl<F: PrimeField64> ProgramChip<F> {
-    fn generate_cached_trace(&self) -> RowMajorMatrix<F> {
+    pub fn generate_cached_trace(&self) -> RowMajorMatrix<F> {
         let mut rows = vec![];
         for (pc, instruction) in self.air.program.instructions.iter().enumerate() {
             let exec_cols = ProgramExecutionCols {

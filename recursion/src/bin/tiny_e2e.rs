@@ -62,17 +62,9 @@ fn main() {
         let span =
             info_span!("Fibonacci Program Inner", group = "fibonacci_program_inner").entered();
         let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
-        let StarkForTest {
-            any_raps,
-            traces,
-            pvs,
-        } = fib_program_stark;
-        let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
         let engine =
             BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-        let vdata = engine
-            .run_simple_test_impl(&any_raps, traces, &pvs)
-            .unwrap();
+        let vdata = fib_program_stark.run_test(&engine).unwrap();
         span.exit();
 
         let compiler_options = CompilerOptions {

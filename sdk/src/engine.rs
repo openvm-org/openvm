@@ -1,13 +1,12 @@
-use std::rc::Rc;
-
 pub use afs_stark_backend::engine::StarkEngine;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    engine::VerificationData,
+    engine::{test_segment, VerificationData},
     rap::AnyRap,
+    utils::AirTrace,
     verifier::VerificationError,
 };
-use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
+use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::config::{instrument::StarkHashStatistics, FriParameters};
@@ -27,13 +26,14 @@ pub struct VerificationDataWithFriParams<SC: StarkGenericConfig> {
 /// - generate proving and verifying keys for AIRs,
 /// - commit to trace matrices and generate STARK proofs
 pub struct StarkForTest<SC: StarkGenericConfig> {
-    pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
-    pub traces: Vec<RowMajorMatrix<Val<SC>>>,
-    pub pvs: Vec<Vec<Val<SC>>>,
+    // pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
+    // pub traces: Vec<RowMajorMatrix<Val<SC>>>,
+    // pub pvs: Vec<Vec<Val<SC>>>,
+    pub air_traces: Vec<AirTrace<SC>>,
 }
 
 impl<SC: StarkGenericConfig> StarkForTest<SC> {
-    pub fn run_simple_test(
+    pub fn run_test(
         self,
         engine: &impl StarkFriEngine<SC>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError>
@@ -45,13 +45,11 @@ impl<SC: StarkGenericConfig> StarkForTest<SC> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        let StarkForTest {
-            any_raps,
-            traces,
-            pvs,
-        } = self;
-        let chips: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-        engine.run_simple_test_impl(&chips, traces, &pvs)
+        let StarkForTest { air_traces } = self;
+        Ok(VerificationDataWithFriParams {
+            data: test_segment(engine, air_traces)?,
+            fri_params: engine.fri_params(),
+        })
     }
 }
 
@@ -109,6 +107,15 @@ where
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         let engine = Self::new(FriParameters::standard_fast());
         StarkFriEngine::<_>::run_test_with_trace_partitions(&engine, chips, traces, public_values)
+    }
+    fn run_test_with_air_traces(
+        air_traces: Vec<AirTrace<SC>>,
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
+        let engine = Self::new(FriParameters::standard_fast());
+        Ok(VerificationDataWithFriParams {
+            data: test_segment(&engine, air_traces)?,
+            fri_params: engine.fri_params(),
+        })
     }
     fn run_test_no_pis(
         chips: &[&dyn AnyRap<SC>],

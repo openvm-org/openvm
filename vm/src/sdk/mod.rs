@@ -54,8 +54,6 @@ where
     }
 
     StarkForTest {
-        any_raps: result.airs.into_iter().map(|x| x.into()).collect(),
-        traces: result.traces,
-        pvs: result.public_values,
+        air_traces: result.get_air_traces(),
     }
 }

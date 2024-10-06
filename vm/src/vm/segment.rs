@@ -11,7 +11,7 @@ use afs_primitives::{
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::lookup::XorLookupChip,
 };
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::{rap::AnyRap, utils::AirTrace};
 use backtrace::Backtrace;
 use itertools::{izip, Itertools};
 use p3_commit::PolynomialSpace;
@@ -74,6 +74,10 @@ pub struct ExecutionSegment<F: PrimeField32> {
 }
 
 pub struct SegmentResult<SC: StarkGenericConfig> {
+    pub program_air: Box<dyn AnyRap<SC>>,
+    pub program_cached_trace: RowMajorMatrix<Val<SC>>,
+    pub program_common_trace: RowMajorMatrix<Val<SC>>,
+
     pub airs: Vec<Box<dyn AnyRap<SC>>>,
     pub traces: Vec<RowMajorMatrix<Val<SC>>>,
     pub public_values: Vec<Vec<Val<SC>>>,
@@ -82,6 +86,27 @@ pub struct SegmentResult<SC: StarkGenericConfig> {
 }
 
 impl<SC: StarkGenericConfig> SegmentResult<SC> {
+    pub fn get_air_traces(self) -> Vec<AirTrace<SC>> {
+        let mut air_traces = vec![];
+        air_traces.push(AirTrace {
+            air: self.program_air,
+            cached_traces: vec![self.program_cached_trace],
+            common_trace: self.program_common_trace,
+            public_values: vec![],
+        });
+
+        for (air, trace, pis) in izip!(self.airs, self.traces, self.public_values) {
+            air_traces.push(AirTrace {
+                air,
+                cached_traces: vec![],
+                common_trace: trace,
+                public_values: pis,
+            });
+        }
+
+        air_traces
+    }
+
     pub fn max_log_degree(&self) -> usize {
         self.traces
             .iter()
@@ -129,10 +154,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         // NOTE: The order of entries in `chips` must be a linear extension of the dependency DAG.
         // That is, if chip A holds a strong reference to chip B, then A must precede B in `chips`.
 
-        let mut chips = vec![
-            MachineChipVariant::Core(core_chip.clone()),
-            MachineChipVariant::Program(program_chip.clone()),
-        ];
+        let mut chips = vec![MachineChipVariant::Core(core_chip.clone())];
 
         for opcode in CORE_INSTRUCTIONS {
             executors.insert(opcode, core_chip.clone().into());
@@ -452,18 +474,27 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
+        let program_chip = self.program_chip.clone();
+        let program_air = program_chip.borrow().air.clone();
+
+        // Drop all strong references to chips other than self.chips, which will be consumed next.
+        drop(self.program_chip);
+        drop(self.executors);
+        drop(self.core_chip);
+        drop(self.memory_chip);
+
+        let program_cached_trace = program_chip.borrow().generate_cached_trace();
+        let program_common_trace = program_chip.generate_trace();
+
         let mut result = SegmentResult {
+            program_air: Box::new(program_air),
+            program_cached_trace,
+            program_common_trace,
             airs: vec![],
             traces: vec![],
             public_values: vec![],
             metrics: self.collected_metrics,
         };
-
-        // Drop all strong references to chips other than self.chips, which will be consumed next.
-        drop(self.executors);
-        drop(self.core_chip);
-        drop(self.program_chip);
-        drop(self.memory_chip);
 
         for mut chip in self.chips {
             let heights = chip.current_trace_heights();

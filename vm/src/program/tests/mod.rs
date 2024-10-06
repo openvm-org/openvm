@@ -13,10 +13,7 @@ use super::Program;
 use crate::{
     arch::{instructions::Opcode::*, MachineChip},
     core::READ_INSTRUCTION_BUS,
-    program::{
-        columns::{ProgramCols, ProgramExecutionCols},
-        Instruction, ProgramChip,
-    },
+    program::{columns::ProgramCols, Instruction, ProgramChip},
 };
 
 #[test]
@@ -43,7 +40,8 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
         chip.get_instruction(pc).unwrap();
     }
     let air = chip.air.clone();
-    let traces = chip.generate_traces();
+    let cached_trace = chip.generate_cached_trace();
+    let main_trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(9, true, READ_INSTRUCTION_BUS);
     let mut program_cells = vec![];
@@ -69,12 +67,12 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
 
     let counter_trace = RowMajorMatrix::new(program_cells, 10);
-    println!("trace height = {}", traces[0].height());
+    println!("trace height = {}", main_trace.height());
     println!("counter trace height = {}", counter_trace.height());
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(
+    BabyBearPoseidon2Engine::run_test_no_pis(
         &any_rap_vec![&air, &counter_air],
-        vec![main_trace, counter_trace],
+        vec![vec![cached_trace, main_trace], vec![counter_trace]],
     )
     .expect("Verification failed");
 }
@@ -131,47 +129,48 @@ fn test_program_without_field_arithmetic() {
     interaction_test(program, vec![0, 2, 4, 1]);
 }
 
-// #[test]
-// #[should_panic(expected = "assertion `left == right` failed")]
-// fn test_program_negative() {
-//     let instructions = vec![
-//         Instruction::large_from_isize(STOREW, -1, 0, 0, 0, 1, 0, 1),
-//         Instruction::large_from_isize(LOADW, -1, 0, 0, 1, 1, 0, 1),
-//         Instruction::large_from_isize(TERMINATE, 0, 0, 0, 0, 0, 0, 0),
-//     ];
-//     let program = Program {
-//         instructions: instructions.clone(),
-//         debug_infos: vec![None; 3],
-//     };
+#[test]
+#[should_panic(expected = "assertion `left == right` failed")]
+fn test_program_negative() {
+    let instructions = vec![
+        Instruction::large_from_isize(STOREW, -1, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(LOADW, -1, 0, 0, 1, 1, 0, 1),
+        Instruction::large_from_isize(TERMINATE, 0, 0, 0, 0, 0, 0, 0),
+    ];
+    let program = Program {
+        instructions: instructions.clone(),
+        debug_infos: vec![None; 3],
+    };
 
-//     let mut chip = ProgramChip::new(program);
-//     let execution_frequencies = vec![1; instructions.len()];
-//     for pc in 0..instructions.len() {
-//         chip.get_instruction(pc).unwrap();
-//     }
-//     let air = chip.air.clone();
-//     let trace = chip.generate_trace();
+    let mut chip = ProgramChip::new(program);
+    let execution_frequencies = vec![1; instructions.len()];
+    for pc in 0..instructions.len() {
+        chip.get_instruction(pc).unwrap();
+    }
+    let air = chip.air.clone();
+    let cached_trace = chip.generate_cached_trace();
+    let common_trace = chip.generate_trace();
 
-//     let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
-//     let mut program_rows = vec![];
-//     for (pc, instruction) in instructions.iter().enumerate() {
-//         program_rows.extend(vec![
-//             BabyBear::from_canonical_usize(execution_frequencies[pc]),
-//             BabyBear::from_canonical_usize(pc),
-//             BabyBear::from_canonical_usize(instruction.opcode as usize),
-//             instruction.op_a,
-//             instruction.op_b,
-//             instruction.op_c,
-//             instruction.d,
-//             instruction.e,
-//         ]);
-//     }
-//     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
-//     counter_trace.row_mut(1)[1] = BabyBear::zero();
+    let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
+    let mut program_rows = vec![];
+    for (pc, instruction) in instructions.iter().enumerate() {
+        program_rows.extend(vec![
+            BabyBear::from_canonical_usize(execution_frequencies[pc]),
+            BabyBear::from_canonical_usize(pc),
+            BabyBear::from_canonical_usize(instruction.opcode as usize),
+            instruction.op_a,
+            instruction.op_b,
+            instruction.op_c,
+            instruction.d,
+            instruction.e,
+        ]);
+    }
+    let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
+    counter_trace.row_mut(1)[1] = BabyBear::zero();
 
-//     BabyBearPoseidon2Engine::run_simple_test_no_pis(
-//         &any_rap_vec![&air, &counter_air],
-//         vec![trace, counter_trace],
-//     )
-//     .expect("Incorrect failure mode");
-// }
+    BabyBearPoseidon2Engine::run_test_no_pis(
+        &any_rap_vec![&air, &counter_air],
+        vec![vec![cached_trace, common_trace], vec![counter_trace]],
+    )
+    .expect("Incorrect failure mode");
+}

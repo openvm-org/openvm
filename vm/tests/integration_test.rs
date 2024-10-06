@@ -1,11 +1,7 @@
-use std::ops::Deref;
-
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::engine::test_segment;
 use ax_sdk::{
     config::{
-        baby_bear_poseidon2::{
-            default_perm, engine_from_perm, random_perm, BabyBearPoseidon2Config,
-        },
+        baby_bear_poseidon2::{default_perm, engine_from_perm, random_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
         setup_tracing_with_log_level, FriParameters,
     },
@@ -54,10 +50,7 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
 
     for segment_result in result.segment_results {
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        let airs: Vec<_> = segment_result.airs.iter().map(Box::deref).collect();
-        engine
-            .run_simple_test(&airs, segment_result.traces, &segment_result.public_values)
-            .expect("Verification failed");
+        test_segment(&engine, segment_result.get_air_traces()).expect("Verification failed");
     }
 }
 
@@ -90,23 +83,18 @@ fn air_test_with_compress_poseidon2(
     };
 
     for segment_result in result.segment_results {
-        let airs = segment_result
-            .airs
-            .iter()
-            .map(Box::deref)
-            .collect::<Vec<_>>();
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        engine
-            .run_simple_test(&airs, segment_result.traces, &segment_result.public_values)
-            .expect("Verification failed");
+        let air_traces = segment_result.get_air_traces();
 
         // Checking maximum constraint degree across all AIRs
         let mut keygen_builder = engine.keygen_builder();
-        for air in airs {
-            keygen_builder.add_air(air as &dyn AnyRap<BabyBearPoseidon2Config>);
+        for air_trace in &air_traces {
+            keygen_builder.add_air(air_trace.air.as_ref());
         }
         let pk = keygen_builder.generate_pk();
         assert!(pk.max_constraint_degree == poseidon2_max_constraint_degree);
+
+        test_segment(&engine, air_traces).expect("Verification failed");
     }
 }
 
