@@ -1,6 +1,5 @@
 use std::{
     fs::{self},
-    ops::Deref,
     path::Path,
     time::Instant,
 };
@@ -72,9 +71,7 @@ impl KeygenCommand {
         let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree());
         let mut keygen_builder = engine.keygen_builder();
 
-        for air in &result.airs {
-            keygen_builder.add_air(air.deref());
-        }
+        engine.set_up_keygen_builder(&mut keygen_builder, &result.air_infos);
 
         let pk = keygen_builder.generate_pk();
         let vk = pk.vk();

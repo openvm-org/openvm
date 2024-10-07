@@ -7,7 +7,7 @@ use afs_primitives::{
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use ax_sdk::{
-    any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use num_bigint_dig::BigUint;
@@ -79,8 +79,8 @@ fn test_add() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(
-        &any_rap_vec![&chip, &range_checker.air],
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -119,8 +119,8 @@ fn test_div() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(
-        &any_rap_vec![&chip, &range_checker.air],
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -168,8 +168,8 @@ fn test_ec_add() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(
-        &any_rap_vec![&chip, &range_checker.air],
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -214,8 +214,8 @@ fn test_ec_double() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(
-        &any_rap_vec![&chip, &range_checker.air],
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");

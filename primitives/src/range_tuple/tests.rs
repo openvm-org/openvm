@@ -2,7 +2,7 @@ use std::iter;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -47,10 +47,10 @@ fn test_range_tuple_chip() {
         .collect::<Vec<DummyInteractionAir>>();
 
     let mut all_chips = lists_airs
-        .iter()
-        .map(|list| list as &dyn AnyRap<_>)
+        .into_iter()
+        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
-    all_chips.push(&range_checker.air);
+    all_chips.push(Box::new(range_checker.air.clone()));
 
     // generate traces for each list
     let lists_traces = lists_vals
@@ -77,7 +77,7 @@ fn test_range_tuple_chip() {
         .chain(iter::once(range_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -112,8 +112,8 @@ fn negative_test_range_tuple_chip() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis(
-            &any_rap_vec![&range_checker.air],
+        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+            any_rap_box_vec![range_checker.air],
             vec![range_trace]
         )
         .err(),

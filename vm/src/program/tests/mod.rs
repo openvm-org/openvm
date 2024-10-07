@@ -1,7 +1,8 @@
 use std::iter;
 
+use afs_stark_backend::utils::AirInfo;
 use ax_sdk::{
-    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
 use p3_air::BaseAir;
@@ -70,10 +71,10 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     println!("trace height = {}", main_trace.height());
     println!("counter trace height = {}", counter_trace.height());
 
-    BabyBearPoseidon2Engine::run_test_no_pis(
-        &any_rap_vec![&air, &counter_air],
-        vec![vec![cached_trace, main_trace], vec![counter_trace]],
-    )
+    BabyBearPoseidon2Engine::run_test_fast(&[
+        AirInfo::no_pis(Box::new(air), vec![cached_trace], main_trace),
+        AirInfo::simple_no_pis(Box::new(counter_air), counter_trace),
+    ])
     .expect("Verification failed");
 }
 
@@ -168,9 +169,9 @@ fn test_program_negative() {
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
-    BabyBearPoseidon2Engine::run_test_no_pis(
-        &any_rap_vec![&air, &counter_air],
-        vec![vec![cached_trace, common_trace], vec![counter_trace]],
-    )
-    .expect("Incorrect failure mode");
+    BabyBearPoseidon2Engine::run_test_fast(&[
+        AirInfo::no_pis(Box::new(air), vec![cached_trace], common_trace),
+        AirInfo::simple_no_pis(Box::new(counter_air), counter_trace),
+    ])
+    .expect("Verification failed");
 }

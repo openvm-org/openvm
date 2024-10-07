@@ -23,6 +23,7 @@ impl DummyInteractionCols {
     }
 }
 
+#[derive(Clone)]
 pub struct DummyInteractionAir {
     field_width: usize,
     /// Send if true. Receive if false.

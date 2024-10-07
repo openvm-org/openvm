@@ -54,6 +54,6 @@ where
     }
 
     StarkForTest {
-        air_infos: result.get_air_infos(),
+        air_infos: result.air_infos,
     }
 }

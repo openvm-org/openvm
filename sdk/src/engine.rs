@@ -1,7 +1,7 @@
 pub use afs_stark_backend::engine::StarkEngine;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    engine::{test_segment, VerificationData},
+    engine::VerificationData,
     rap::AnyRap,
     utils::AirInfo,
     verifier::VerificationError,
@@ -26,9 +26,6 @@ pub struct VerificationDataWithFriParams<SC: StarkGenericConfig> {
 /// - generate proving and verifying keys for AIRs,
 /// - commit to trace matrices and generate STARK proofs
 pub struct StarkForTest<SC: StarkGenericConfig> {
-    // pub any_raps: Vec<Rc<dyn AnyRap<SC>>>,
-    // pub traces: Vec<RowMajorMatrix<Val<SC>>>,
-    // pub pvs: Vec<Vec<Val<SC>>>,
     pub air_infos: Vec<AirInfo<SC>>,
 }
 
@@ -45,11 +42,7 @@ impl<SC: StarkGenericConfig> StarkForTest<SC> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        let StarkForTest { air_infos } = self;
-        Ok(VerificationDataWithFriParams {
-            data: test_segment(engine, air_infos)?,
-            fri_params: engine.fri_params(),
-        })
+        engine.run_test(&self.air_infos)
     }
 }
 
@@ -65,62 +58,43 @@ where
 {
     fn new(fri_parameters: FriParameters) -> Self;
     fn fri_params(&self) -> FriParameters;
-    fn run_test_with_trace_partitions(
+    fn run_test(
         &self,
-        chips: &[&dyn AnyRap<SC>],
-        traces: Vec<Vec<DenseMatrix<Val<SC>>>>,
-        public_values: &[Vec<Val<SC>>],
+        air_infos: &[AirInfo<SC>],
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        let data = <Self as StarkEngine<_>>::run_test(self, chips, traces, public_values)?;
+        let data = <Self as StarkEngine<_>>::run_test_impl(self, air_infos)?;
         Ok(VerificationDataWithFriParams {
             data,
             fri_params: self.fri_params(),
         })
     }
+    fn run_test_fast(
+        air_infos: &[AirInfo<SC>],
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
+        let engine = Self::new(FriParameters::standard_fast());
+        engine.run_test(air_infos)
+    }
     fn run_simple_test_impl(
         &self,
-        chips: &[&dyn AnyRap<SC>],
+        chips: Vec<Box<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
-        public_values: &[Vec<Val<SC>>],
+        public_values: Vec<Vec<Val<SC>>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        let trace_partitions = traces.into_iter().map(|t| vec![t]).collect();
-        self.run_test_with_trace_partitions(chips, trace_partitions, public_values)
+        self.run_test(&AirInfo::multiple_simple(chips, traces, public_values))
     }
-    fn run_simple_test(
-        chips: &[&dyn AnyRap<SC>],
+    fn run_simple_test_fast(
+        chips: Vec<Box<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
-        public_values: &[Vec<Val<SC>>],
+        public_values: Vec<Vec<Val<SC>>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         let engine = Self::new(FriParameters::standard_fast());
         StarkFriEngine::<_>::run_simple_test_impl(&engine, chips, traces, public_values)
     }
-    fn run_simple_test_no_pis(
-        chips: &[&dyn AnyRap<SC>],
+    fn run_simple_test_no_pis_fast(
+        chips: Vec<Box<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        <Self as StarkFriEngine<SC>>::run_simple_test(chips, traces, &vec![vec![]; chips.len()])
-    }
-    fn run_test(
-        chips: &[&dyn AnyRap<SC>],
-        traces: Vec<Vec<DenseMatrix<Val<SC>>>>,
-        public_values: &[Vec<Val<SC>>],
-    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        let engine = Self::new(FriParameters::standard_fast());
-        StarkFriEngine::<_>::run_test_with_trace_partitions(&engine, chips, traces, public_values)
-    }
-    fn run_test_with_air_infos(
-        air_infos: Vec<AirInfo<SC>>,
-    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        let engine = Self::new(FriParameters::standard_fast());
-        Ok(VerificationDataWithFriParams {
-            data: test_segment(&engine, air_infos)?,
-            fri_params: engine.fri_params(),
-        })
-    }
-    fn run_test_no_pis(
-        chips: &[&dyn AnyRap<SC>],
-        traces: Vec<Vec<DenseMatrix<Val<SC>>>>,
-    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        <Self as StarkFriEngine<SC>>::run_test(chips, traces, &vec![vec![]; chips.len()])
+        let pis = vec![vec![]; chips.len()];
+        <Self as StarkFriEngine<SC>>::run_simple_test_fast(chips, traces, pis)
     }
 }

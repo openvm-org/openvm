@@ -2,7 +2,7 @@ use std::iter;
 
 use afs_stark_backend::{rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -60,17 +60,17 @@ fn test_range_gate_chip() {
     let range_trace = range_checker.generate_trace();
 
     let mut all_chips = lists
-        .iter()
-        .map(|list| list as &dyn AnyRap<_>)
+        .into_iter()
+        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
-    all_chips.push(&range_checker.air);
+    all_chips.push(Box::new(range_checker.air));
 
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(range_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -98,8 +98,8 @@ fn negative_test_range_gate_chip() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis(
-            &any_rap_vec![&range_checker.air],
+        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+            any_rap_box_vec![range_checker.air],
             vec![range_trace]
         )
         .err(),

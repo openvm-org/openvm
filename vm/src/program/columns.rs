@@ -25,8 +25,6 @@ pub struct ProgramExecutionCols<T> {
 // Straightforward implementation for from_slice, flatten, and width functions.
 
 impl<T: Clone> ProgramCols<T> {
-    // TODO[osama]: implement from_partitioned_slice
-
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             exec: ProgramExecutionCols::from_slice(&slc[0..slc.len() - 1]),

@@ -50,10 +50,10 @@ fn test_variable_range_checker_chip_send() {
         .collect::<Vec<TestSendAir>>();
 
     let mut all_chips = lists_airs
-        .iter()
-        .map(|list| list as &dyn AnyRap<_>)
+        .into_iter()
+        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
-    all_chips.push(&var_range_checker.air);
+    all_chips.push(Box::new(var_range_checker.air));
 
     // generate traces for each list
     let lists_traces = lists_vals
@@ -79,7 +79,7 @@ fn test_variable_range_checker_chip_send() {
         .chain(iter::once(var_range_checker_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -107,7 +107,10 @@ fn negative_test_variable_range_checker_chip_send() {
 
     // generate dummy AIR chip
     let list_chip = TestSendAir::new(bus);
-    let all_chips = vec![&list_chip as &dyn AnyRap<_>, &var_range_checker.air];
+    let all_chips = vec![
+        Box::new(list_chip) as Box<dyn AnyRap<_>>,
+        Box::new(var_range_checker.air),
+    ];
 
     // generate trace with a [val, bits] pair such that val >= 2^bits (i.e. [4, 2])
     let list_trace = RowMajorMatrix::new(
@@ -128,7 +131,7 @@ fn negative_test_variable_range_checker_chip_send() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces).err(),
+        BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
         Some(VerificationError::NonZeroCumulativeSum),
         "Expected constraint to fail"
     );
@@ -163,10 +166,10 @@ fn test_variable_range_checker_chip_range_check() {
         .collect::<Vec<TestRangeCheckAir>>();
 
     let mut all_chips = lists_airs
-        .iter()
-        .map(|list| list as &dyn AnyRap<_>)
+        .into_iter()
+        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
-    all_chips.push(&var_range_checker.air);
+    all_chips.push(Box::new(var_range_checker.air));
 
     // generate traces for each list
     let lists_traces = lists_vals
@@ -192,7 +195,7 @@ fn test_variable_range_checker_chip_range_check() {
         .chain(iter::once(var_range_checker_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -218,7 +221,10 @@ fn negative_test_variable_range_checker_chip_range_check() {
 
     // generate dummy AIR chip
     let list_chip = TestRangeCheckAir::new(bus, MAX_BITS);
-    let all_chips = vec![&list_chip as &dyn AnyRap<_>, &var_range_checker.air];
+    let all_chips = vec![
+        Box::new(list_chip) as Box<dyn AnyRap<_>>,
+        Box::new(var_range_checker.air),
+    ];
 
     // generate trace with one value >= 2^max_bits (i.e. MAX_VAL)
     let list_trace = RowMajorMatrix::new(
@@ -239,7 +245,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces).err(),
+        BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
         Some(VerificationError::NonZeroCumulativeSum),
         "Expected constraint to fail"
     );

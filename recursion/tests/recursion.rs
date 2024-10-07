@@ -63,7 +63,7 @@ where
 
     let mut result = vm.execute_and_generate().unwrap();
     assert_eq!(result.segment_results.len(), 1, "unexpected continuation");
-    let air_infos = result.segment_results.remove(0).get_air_infos();
+    let air_infos = result.segment_results.remove(0).air_infos;
     StarkForTest { air_infos }
 }
 

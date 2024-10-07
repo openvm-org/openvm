@@ -1,7 +1,7 @@
-use std::{cell::RefCell, ops::Deref, rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{engine::VerificationData, rap::AnyRap, verifier::VerificationError};
+use afs_stark_backend::{engine::VerificationData, utils::AirInfo, verifier::VerificationError};
 use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
@@ -147,9 +147,7 @@ impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
 #[derive(Default)]
 pub struct MachineChipTester {
     pub memory: Option<MemoryTester<BabyBear>>,
-    pub airs: Vec<Box<dyn AnyRap<BabyBearPoseidon2Config>>>,
-    pub traces: Vec<RowMajorMatrix<BabyBear>>,
-    pub public_values: Vec<Vec<BabyBear>>,
+    pub air_infos: Vec<AirInfo<BabyBearPoseidon2Config>>,
 }
 
 impl MachineChipTester {
@@ -160,9 +158,8 @@ impl MachineChipTester {
 
         for (public_value, air, trace) in izip!(public_values, airs, traces) {
             if trace.height() > 0 {
-                self.public_values.push(public_value);
-                self.airs.push(air);
-                self.traces.push(trace);
+                self.air_infos
+                    .push(AirInfo::simple(air, trace, public_value));
             }
         }
 
@@ -185,9 +182,11 @@ impl MachineChipTester {
         mut chip: C,
         trace: RowMajorMatrix<BabyBear>,
     ) -> Self {
-        self.traces.push(trace);
-        self.public_values.push(chip.generate_public_values());
-        self.airs.push(chip.air());
+        self.air_infos.push(AirInfo::simple(
+            chip.air(),
+            trace,
+            chip.generate_public_values(),
+        ));
         self
     }
 
@@ -198,9 +197,9 @@ impl MachineChipTester {
     }
 
     fn max_trace_height(&self) -> usize {
-        self.traces
+        self.air_infos
             .iter()
-            .map(RowMajorMatrix::height)
+            .map(|air_info| air_info.common_trace.height())
             .max()
             .unwrap()
     }
@@ -211,11 +210,6 @@ impl MachineChipTester {
         engine_provider: P,
     ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
-        let chips: Vec<_> = self.airs.iter().map(|x| x.deref()).collect();
-        engine_provider(self.max_trace_height()).run_simple_test(
-            &chips,
-            self.traces.clone(),
-            &self.public_values,
-        )
+        engine_provider(self.max_trace_height()).run_test_impl(&self.air_infos)
     }
 }

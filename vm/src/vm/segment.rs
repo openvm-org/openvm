@@ -11,13 +11,13 @@ use afs_primitives::{
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::lookup::XorLookupChip,
 };
-use afs_stark_backend::{rap::AnyRap, utils::AirInfo};
+use afs_stark_backend::utils::AirInfo;
 use backtrace::Backtrace;
 use itertools::{izip, Itertools};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_matrix::Matrix;
+use p3_uni_stark::{Domain, StarkGenericConfig};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
@@ -74,43 +74,15 @@ pub struct ExecutionSegment<F: PrimeField32> {
 }
 
 pub struct SegmentResult<SC: StarkGenericConfig> {
-    pub program_air: Box<dyn AnyRap<SC>>,
-    pub program_cached_trace: RowMajorMatrix<Val<SC>>,
-    pub program_common_trace: RowMajorMatrix<Val<SC>>,
-
-    pub airs: Vec<Box<dyn AnyRap<SC>>>,
-    pub traces: Vec<RowMajorMatrix<Val<SC>>>,
-    pub public_values: Vec<Vec<Val<SC>>>,
-
+    pub air_infos: Vec<AirInfo<SC>>,
     pub metrics: VmMetrics,
 }
 
 impl<SC: StarkGenericConfig> SegmentResult<SC> {
-    pub fn get_air_infos(self) -> Vec<AirInfo<SC>> {
-        let mut air_infos = vec![];
-        air_infos.push(AirInfo {
-            air: self.program_air,
-            cached_traces: vec![self.program_cached_trace],
-            common_trace: self.program_common_trace,
-            public_values: vec![],
-        });
-
-        for (air, trace, pis) in izip!(self.airs, self.traces, self.public_values) {
-            air_infos.push(AirInfo {
-                air,
-                cached_traces: vec![],
-                common_trace: trace,
-                public_values: pis,
-            });
-        }
-
-        air_infos
-    }
-
     pub fn max_log_degree(&self) -> usize {
-        self.traces
+        self.air_infos
             .iter()
-            .map(RowMajorMatrix::height)
+            .map(|air_info| air_info.common_trace.height())
             .map(log2_strict_usize)
             .max()
             .unwrap()
@@ -487,12 +459,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let program_common_trace = program_chip.generate_trace();
 
         let mut result = SegmentResult {
-            program_air: Box::new(program_air),
-            program_cached_trace,
-            program_common_trace,
-            airs: vec![],
-            traces: vec![],
-            public_values: vec![],
+            air_infos: vec![AirInfo::no_pis(
+                Box::new(program_air),
+                vec![program_cached_trace],
+                program_common_trace,
+            )],
             metrics: self.collected_metrics,
         };
 
@@ -504,16 +475,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
             for (height, air, public_values, trace) in izip!(heights, airs, public_values, traces) {
                 if height != 0 {
-                    result.airs.push(air);
-                    result.public_values.push(public_values);
-                    result.traces.push(trace);
+                    result
+                        .air_infos
+                        .push(AirInfo::simple(air, trace, public_values));
                 }
             }
         }
         let trace = self.connector_chip.generate_trace();
-        result.airs.push(Box::new(self.connector_chip.air));
-        result.public_values.push(vec![]);
-        result.traces.push(trace);
+        result.air_infos.push(AirInfo::simple_no_pis(
+            Box::new(self.connector_chip.air),
+            trace,
+        ));
 
         result
     }

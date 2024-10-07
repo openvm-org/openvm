@@ -1,8 +1,6 @@
-use std::{ops::Deref, path::Path, time::Instant};
+use std::{path::Path, time::Instant};
 
-use afs_stark_backend::{
-    keygen::types::MultiStarkProvingKey, prover::trace::TraceCommitmentBuilder,
-};
+use afs_stark_backend::keygen::types::MultiStarkProvingKey;
 use ax_sdk::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     engine::StarkEngine,
@@ -75,24 +73,7 @@ impl ProveCommand {
         let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree());
         let encoded_pk = read_from_path(&Path::new(&self.keys_folder.clone()).join("pk"))?;
         let pk: MultiStarkProvingKey<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_pk)?;
-
-        let vk = pk.vk();
-
-        let prover = engine.prover();
-        let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-
-        for trace in result.traces {
-            trace_builder.load_trace(trace);
-        }
-        trace_builder.commit_current();
-
-        let airs = result.airs.iter().map(Box::deref).collect();
-
-        let main_trace_data = trace_builder.view(&vk, airs);
-
-        let mut challenger = engine.new_challenger();
-        let proof = prover.prove(&mut challenger, &pk, main_trace_data, &result.public_values);
-
+        let proof = engine.prove(&pk, &result.air_infos);
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
         let proof_path = Path::new(&self.asm_file_path.clone()).with_extension("prove.bin");
         write_bytes(&encoded_proof, &proof_path)?;

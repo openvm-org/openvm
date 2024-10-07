@@ -2,10 +2,10 @@ use std::{collections::HashSet, iter, sync::Arc};
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
-    keygen::MultiStarkKeygenBuilder, prover::USE_DEBUG_BUILDER, verifier::VerificationError,
+    keygen::MultiStarkKeygenBuilder, prover::USE_DEBUG_BUILDER, utils::AirInfo,
+    verifier::VerificationError,
 };
 use ax_sdk::{
-    any_rap_vec,
     config::{
         self,
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -27,13 +27,14 @@ fn test_single_page(
         final_page_chip.gen_aux_trace::<BabyBearPoseidon2Config>(page, range_checker.clone());
     let range_checker_trace = range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_test_no_pis(
-        &any_rap_vec![final_page_chip, &range_checker.air],
-        vec![
-            vec![page_trace.clone(), aux_trace.clone()],
-            vec![range_checker_trace.clone()],
-        ],
-    )
+    BabyBearPoseidon2Engine::run_test_fast(&[
+        AirInfo::no_pis(
+            Box::new(final_page_chip.clone()),
+            vec![page_trace.clone()],
+            aux_trace,
+        ),
+        AirInfo::simple_no_pis(Box::new(range_checker.air), range_checker_trace),
+    ])
 }
 
 #[test]

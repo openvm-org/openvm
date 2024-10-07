@@ -61,10 +61,10 @@ fn test_bitwise_operation_lookup() {
         .collect::<Vec<_>>();
 
     let chips = dummies
-        .iter()
-        .map(|list| list as &dyn AnyRap<_>)
-        .chain(iter::once(&lookup.air as &dyn AnyRap<_>))
-        .collect::<Vec<_>>();
+        .into_iter()
+        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
+        .chain(iter::once(Box::new(lookup.air) as Box<dyn AnyRap<_>>))
+        .collect::<Vec<Box<dyn AnyRap<_>>>>();
 
     let mut traces = lists
         .par_iter()
@@ -83,7 +83,8 @@ fn test_bitwise_operation_lookup() {
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
     traces.push(lookup.generate_trace());
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(&chips, traces).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces)
+        .expect("Verification failed");
 }
 
 fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperationLookupOpcode)) {
@@ -94,7 +95,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperationLookupOpcode)) {
     list.push(bad_row);
 
     let dummy = DummyAir::new(bus);
-    let chips = vec![&dummy as &dyn AnyRap<_>, &lookup.air];
+    let chips = vec![Box::new(dummy) as Box<dyn AnyRap<_>>, Box::new(lookup.air)];
 
     let traces = vec![
         RowMajorMatrix::new(
@@ -114,7 +115,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperationLookupOpcode)) {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(&chips, traces).err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces).err(),
         Some(VerificationError::NonZeroCumulativeSum),
         "Expected constraint to fail"
     );

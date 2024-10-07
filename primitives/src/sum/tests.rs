@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::to_field_vec,
 };
 use p3_air::BaseAir;
@@ -82,12 +82,12 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
 
     let range_checker_trace = sum_chip.range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(
-        &any_rap_vec![
-            &sum_chip.air,
-            &sum_chip.range_checker.air,
-            &sender_air,
-            &receiver_air
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![
+            sum_chip.air,
+            sum_chip.range_checker.air,
+            sender_air,
+            receiver_air
         ],
         vec![sum_trace, range_checker_trace, sender_trace, receiver_trace],
     )

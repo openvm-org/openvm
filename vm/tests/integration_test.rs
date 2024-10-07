@@ -1,4 +1,3 @@
-use afs_stark_backend::engine::test_segment;
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{default_perm, engine_from_perm, random_perm},
@@ -50,7 +49,9 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
 
     for segment_result in result.segment_results {
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        test_segment(&engine, segment_result.get_air_infos()).expect("Verification failed");
+        engine
+            .run_test_impl(&segment_result.air_infos)
+            .expect("Verification failed");
     }
 }
 
@@ -84,7 +85,7 @@ fn air_test_with_compress_poseidon2(
 
     for segment_result in result.segment_results {
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        let air_infos = segment_result.get_air_infos();
+        let air_infos = segment_result.air_infos;
 
         // Checking maximum constraint degree across all AIRs
         let mut keygen_builder = engine.keygen_builder();
@@ -94,7 +95,9 @@ fn air_test_with_compress_poseidon2(
         let pk = keygen_builder.generate_pk();
         assert!(pk.max_constraint_degree == poseidon2_max_constraint_degree);
 
-        test_segment(&engine, air_infos).expect("Verification failed");
+        engine
+            .run_test_impl(&air_infos)
+            .expect("Verification failed");
     }
 }
 

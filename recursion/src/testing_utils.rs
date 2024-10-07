@@ -78,8 +78,8 @@ pub mod inner {
     ) {
         let StarkForTest { air_infos } = stark_for_test;
         let vparams =
-            <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_test_with_air_infos(
-                air_infos
+            <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_test_fast(
+                &air_infos,
             )
             .unwrap();
 
