@@ -2,6 +2,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{PrimeField, PrimeField32};
 #[cfg(feature = "sdk")]
 pub use sdk::*;
+use stark_vm::vm::config::Modulus;
 
 pub const NUM_LIMBS: usize = 32;
 pub const LIMB_SIZE: usize = 8;
@@ -45,7 +46,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             ..Default::default()
         }
         .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
-        .add_modular_support()
+        .add_modular_support(Modulus::all())
         .add_default_executor(ExecutorName::Secp256k1AddUnequal)
         .add_default_executor(ExecutorName::Secp256k1Double),
         program,
