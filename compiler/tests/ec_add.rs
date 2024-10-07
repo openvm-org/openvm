@@ -14,7 +14,7 @@ use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     arch::ExecutorName,
     modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
-    vm::config::{Modulus, VmConfig},
+    vm::config::VmConfig,
 };
 
 struct Fraction {
@@ -106,7 +106,7 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
             .add_default_executor(ExecutorName::Secp256k1AddUnequal)
             .add_default_executor(ExecutorName::Secp256k1Double)
             .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
-            .add_modular_support(Modulus::all()),
+            .add_canonical_modulus(),
         program,
         vec![],
     );

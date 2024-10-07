@@ -130,7 +130,7 @@ impl VmConfig {
         collect_metrics: bool,
         bigint_limb_size: usize,
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
-        enabled_modulus: Vec<Modulus>,
+        enabled_modulus: Vec<BigUint>,
     ) -> Self {
         let config = VmConfig {
             executors: Vec::new(),
@@ -167,18 +167,22 @@ impl VmConfig {
 
     // I think adding "opcode class" support is better than adding "executor".
     // The api should be saying: I want to be able to do this set of operations, and doesn't care about what executor is doing it.
-    pub fn add_modular_support(self, enabled_modulus: Vec<Modulus>) -> Self {
+    pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
         let mut res = self;
         let num_ops_per_modulus = ModularArithmeticOpcode::COUNT;
-        for modulus in enabled_modulus {
-            let modulus_usize = modulus.clone() as usize;
-            let shift = modulus_usize * num_ops_per_modulus;
-            res = res.add_modular_prime(modulus.prime(), shift);
+        for (i, modulus) in enabled_modulus.iter().enumerate() {
+            let shift = i * num_ops_per_modulus;
+            res = res.add_modular_prime(modulus, shift);
         }
         res
     }
 
-    pub fn add_modular_prime(self, prime: BigUint, shift: usize) -> Self {
+    pub fn add_canonical_modulus(self) -> Self {
+        let primes = Modulus::all().iter().map(|m| m.prime()).collect();
+        self.add_modular_support(primes)
+    }
+
+    pub fn add_modular_prime(self, prime: &BigUint, shift: usize) -> Self {
         let add_sub_range = default_executor_range(ExecutorName::ModularAddSub);
         let mult_div_range = default_executor_range(ExecutorName::ModularMultDiv);
         let mut res = self;
@@ -192,7 +196,7 @@ impl VmConfig {
             shift_range(&mult_div_range.0, shift),
             ExecutorName::ModularMultDiv,
             mult_div_range.1 + shift,
-            prime,
+            prime.clone(),
         ));
         res
     }
@@ -209,7 +213,6 @@ impl Default for VmConfig {
             .add_default_executor(ExecutorName::FieldArithmetic)
             .add_default_executor(ExecutorName::FieldExtension)
             .add_default_executor(ExecutorName::Poseidon2)
-            .add_modular_support(Modulus::all())
     }
 }
 
