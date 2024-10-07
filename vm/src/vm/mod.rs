@@ -10,7 +10,7 @@ pub use segment::ExecutionSegment;
 use crate::{
     core::{CoreOptions, CoreState},
     program::{ExecutionError, Program},
-    vm::{config::VmConfig, cycle_tracker::CanPrint, segment::SegmentResult},
+    vm::{config::VmConfig, segment::SegmentResult},
 };
 
 pub mod config;
@@ -19,8 +19,6 @@ pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
 pub mod segment;
-
-pub type VmCycleTracker = CycleTracker<VmMetrics>;
 
 /// Parent struct that holds all execution segments, program, config.
 pub struct VirtualMachine<F: PrimeField32> {
@@ -43,7 +41,6 @@ pub struct VirtualMachineState<F: PrimeField32> {
 
 pub struct VirtualMachineResult<SC: StarkGenericConfig> {
     pub segment_results: Vec<SegmentResult<SC>>,
-    pub cycle_tracker: VmCycleTracker,
 }
 
 impl<F: PrimeField32> VirtualMachine<F> {
@@ -62,7 +59,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 input_stream: VecDeque::from(input_stream),
                 hint_stream: VecDeque::new(),
             },
-            VmCycleTracker::new(),
+            CycleTracker::new(),
         );
         vm
     }
@@ -70,7 +67,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
     /// Create a new segment with a given state.
     ///
     /// The segment will be created from the given state and the program.
-    fn segment(&mut self, state: VirtualMachineState<F>, cycle_tracker: VmCycleTracker) {
+    fn segment(&mut self, state: VirtualMachineState<F>, cycle_tracker: CycleTracker) {
         tracing::debug!(
             "Creating new continuation segment for {} total segments",
             self.segments.len() + 1
@@ -119,7 +116,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
     pub fn execute(mut self) -> Result<(), ExecutionError> {
         loop {
             let last_seg = self.segments.last_mut().unwrap();
-            last_seg.cycle_tracker.print();
             last_seg.execute()?;
             if last_seg.core_chip.borrow().state.is_done {
                 break;
@@ -128,8 +124,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
             self.segment(self.current_state(), cycle_tracker);
         }
         tracing::debug!("Number of continuation segments: {}", self.segments.len());
-        let cycle_tracker = take(&mut self.segments.last_mut().unwrap().cycle_tracker);
-        cycle_tracker.print();
 
         Ok(())
     }
@@ -142,7 +136,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
     {
         loop {
             let last_seg = self.segments.last_mut().unwrap();
-            last_seg.cycle_tracker.print();
             last_seg.execute()?;
             if last_seg.core_chip.borrow().state.is_done {
                 break;
@@ -151,8 +144,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
             self.segment(self.current_state(), cycle_tracker);
         }
         tracing::debug!("Number of continuation segments: {}", self.segments.len());
-        let cycle_tracker = take(&mut self.segments.last_mut().unwrap().cycle_tracker);
-        cycle_tracker.print();
 
         Ok(VirtualMachineResult {
             segment_results: self
@@ -160,7 +151,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 .into_iter()
                 .map(ExecutionSegment::produce_result)
                 .collect(),
-            cycle_tracker,
         })
     }
 }

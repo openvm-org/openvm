@@ -28,7 +28,6 @@ where
             let vm = VirtualMachine::new(config.clone(), program.clone(), input_stream.clone());
 
             let mut result = vm.execute_and_generate::<SC>().unwrap();
-            result.cycle_tracker.emit();
             let result = result.segment_results.pop().unwrap();
             result.metrics.emit();
 
