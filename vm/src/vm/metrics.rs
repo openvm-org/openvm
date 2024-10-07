@@ -2,8 +2,6 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::vm::cycle_tracker::CanDiff;
-
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct VmMetrics {
     pub chip_heights: BTreeMap<String, usize>,
@@ -44,26 +42,4 @@ mod emit {
             }
         }
     }
-}
-
-impl CanDiff for VmMetrics {
-    fn diff(&mut self, start: &Self) {
-        *self = Self {
-            chip_heights: count_diff(&start.chip_heights, &self.chip_heights),
-            counts: count_diff(&start.counts, &self.counts),
-            trace_cells: count_diff(&start.trace_cells, &self.trace_cells),
-        };
-    }
-}
-
-fn count_diff<T: Ord + Clone>(
-    start: &BTreeMap<T, usize>,
-    end: &BTreeMap<T, usize>,
-) -> BTreeMap<T, usize> {
-    let mut ret = BTreeMap::new();
-    for (key, value) in end {
-        let diff = value - start.get(key).unwrap_or(&0);
-        ret.insert(key.clone(), diff);
-    }
-    ret
 }

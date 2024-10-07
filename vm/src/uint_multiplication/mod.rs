@@ -156,6 +156,10 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}<{NUM_LIMBS},{LIMB_BITS}>", U256Opcode::MUL)
+    }
 }
 
 fn solve_uint_multiplication<const NUM_LIMBS: usize, const LIMB_BITS: usize>(

@@ -72,7 +72,6 @@ def create_custom_flamegraphs(metrics_file):
     for reverse in [False, True]:
         create_flamegraph(metrics_file, ["cycle_tracker_span", "dsl_ir", "opcode"], "frequency", reverse=reverse)
         create_flamegraph(metrics_file, ["cycle_tracker_span", "dsl_ir", "opcode", "air_name"], "cells_used", reverse=reverse)
-        create_flamegraph(metrics_file, ["cycle_tracker_span", "chip_name"], "rows_used", reverse=reverse)
 
 
 def main():

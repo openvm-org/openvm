@@ -24,7 +24,7 @@ use strum::EnumCount;
 
 use super::{
     connector::VmConnectorChip, cycle_tracker::CycleTracker, VirtualMachineState, VmConfig,
-    VmCycleTracker, VmMetrics,
+    VmMetrics,
 };
 use crate::{
     alu::ArithmeticLogicChip,
@@ -64,7 +64,7 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
 
-    pub cycle_tracker: VmCycleTracker,
+    pub cycle_tracker: CycleTracker,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,
@@ -432,16 +432,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
             if opcode == CoreOpcode::CT_START as usize {
                 self.update_chip_metrics();
-                self.cycle_tracker
-                    .start(instruction.debug.clone(), self.collected_metrics.clone())
+                self.cycle_tracker.start(instruction.debug.clone())
             }
             if opcode == CoreOpcode::CT_END as usize {
                 self.update_chip_metrics();
-                self.cycle_tracker
-                    .end(instruction.debug.clone(), self.collected_metrics.clone())
+                self.cycle_tracker.end(instruction.debug.clone())
             }
             prev_backtrace = trace;
 
+            let mut opcode_name = None;
             if self.executors.contains_key(&opcode) {
                 let executor = self.executors.get_mut(&opcode).unwrap();
                 match InstructionExecutor::execute(
@@ -455,6 +454,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     Err(e) => return Err(e),
                 }
+                if collect_metrics {
+                    opcode_name = Some(executor.get_opcode_name(opcode));
+                }
             } else {
                 return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
             }
@@ -462,13 +464,19 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             if collect_metrics {
                 let now_trace_cells = self.current_trace_cells();
 
-                let key = (dsl_instr.clone(), opcode.to_string());
+                let opcode_name = opcode_name.unwrap_or(opcode.to_string());
+                let key = (dsl_instr.clone(), opcode_name.clone());
+                #[cfg(feature = "bench-metrics")]
+                self.cycle_tracker.increment_opcode(&key);
                 *self.collected_metrics.counts.entry(key).or_insert(0) += 1;
 
                 for (air_name, now_value) in &now_trace_cells {
                     let prev_value = prev_trace_cells.get(air_name).unwrap_or(&0);
                     if prev_value != now_value {
-                        let key = (dsl_instr.clone(), opcode.to_string(), air_name.to_owned());
+                        let key = (dsl_instr.clone(), opcode_name.clone(), air_name.to_owned());
+                        #[cfg(feature = "bench-metrics")]
+                        self.cycle_tracker
+                            .increment_cells_used(&key, now_value - prev_value);
                         *self.collected_metrics.trace_cells.entry(key).or_insert(0) +=
                             now_value - prev_value;
                     }

@@ -126,6 +126,9 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", CastfOpcode::CASTF)
+    }
 }
 impl<T: PrimeField32> CastFChip<T> {
     fn solve(y: u32) -> [u32; 4] {

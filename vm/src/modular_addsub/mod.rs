@@ -176,6 +176,11 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        let opcode = ModularArithmeticOpcode::from_usize(opcode - self.offset);
+        format!("{opcode:?}<{:?},{NUM_LIMBS},{LIMB_SIZE}>", self.modulus)
+    }
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>

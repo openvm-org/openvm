@@ -301,4 +301,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             timestamp,
         ))
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        let opcode = CoreOpcode::from_usize(opcode - self.offset);
+        format!("{opcode:?}")
+    }
 }
