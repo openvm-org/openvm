@@ -176,7 +176,7 @@ jobs:
         run: |
           if [[ -f $METRIC_PATH ]]; then
             python3 sdk/scripts/metric_unify/flamegraph.py $METRIC_PATH
-            s5cmd cp .bench_metrics/flamegraphs/*.svg "${PUBLIC_S3_PATH}/${current_sha}/"
+            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
 
