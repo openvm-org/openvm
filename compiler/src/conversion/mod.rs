@@ -16,6 +16,7 @@ pub struct CompilerOptions {
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+    pub enabled_modulus: Vec<Modulus>,
 }
 
 impl Default for CompilerOptions {
@@ -26,6 +27,7 @@ impl Default for CompilerOptions {
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
+            enabled_modulus: Modulus::all(),
         }
     }
 }

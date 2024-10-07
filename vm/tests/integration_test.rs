@@ -80,6 +80,7 @@ fn air_test_with_compress_poseidon2(
             DEFAULT_MAX_SEGMENT_LEN,
             false,
             8,
+            vec![],
         )
         .add_default_executor(ExecutorName::Poseidon2),
         program,

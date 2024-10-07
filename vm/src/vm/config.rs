@@ -129,8 +129,10 @@ impl VmConfig {
         max_segment_len: usize,
         collect_metrics: bool,
         bigint_limb_size: usize,
+        // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
+        enabled_modulus: Vec<Modulus>,
     ) -> Self {
-        VmConfig {
+        let config = VmConfig {
             executors: Vec::new(),
             poseidon2_max_constraint_degree,
             memory_config,
@@ -139,7 +141,8 @@ impl VmConfig {
             collect_metrics,
             bigint_limb_size,
             modular_executors: Vec::new(),
-        }
+        };
+        config.add_modular_support(enabled_modulus)
     }
 
     pub fn add_executor(
@@ -164,27 +167,33 @@ impl VmConfig {
 
     // I think adding "opcode class" support is better than adding "executor".
     // The api should be saying: I want to be able to do this set of operations, and doesn't care about what executor is doing it.
-    pub fn add_modular_support(self) -> Self {
-        let add_sub_range = default_executor_range(ExecutorName::ModularAddSub);
-        let mult_div_range = default_executor_range(ExecutorName::ModularMultDiv);
-        let num_ops_per_modulus = ModularArithmeticOpcode::COUNT;
+    pub fn add_modular_support(self, enabled_modulus: Vec<Modulus>) -> Self {
         let mut res = self;
-        for modulus in Modulus::iter() {
+        let num_ops_per_modulus = ModularArithmeticOpcode::COUNT;
+        for modulus in enabled_modulus {
             let modulus_usize = modulus.clone() as usize;
             let shift = modulus_usize * num_ops_per_modulus;
-            res.modular_executors.push((
-                shift_range(&add_sub_range.0, shift),
-                ExecutorName::ModularAddSub,
-                add_sub_range.1 + shift,
-                modulus.prime(),
-            ));
-            res.modular_executors.push((
-                shift_range(&mult_div_range.0, shift),
-                ExecutorName::ModularMultDiv,
-                mult_div_range.1 + shift,
-                modulus.prime(),
-            ));
+            res = res.add_modular_prime(modulus.prime(), shift);
         }
+        res
+    }
+
+    pub fn add_modular_prime(self, prime: BigUint, shift: usize) -> Self {
+        let add_sub_range = default_executor_range(ExecutorName::ModularAddSub);
+        let mult_div_range = default_executor_range(ExecutorName::ModularMultDiv);
+        let mut res = self;
+        res.modular_executors.push((
+            shift_range(&add_sub_range.0, shift),
+            ExecutorName::ModularAddSub,
+            add_sub_range.1 + shift,
+            prime.clone(),
+        ));
+        res.modular_executors.push((
+            shift_range(&mult_div_range.0, shift),
+            ExecutorName::ModularMultDiv,
+            mult_div_range.1 + shift,
+            prime,
+        ));
         res
     }
 
@@ -200,6 +209,7 @@ impl Default for VmConfig {
             .add_default_executor(ExecutorName::FieldArithmetic)
             .add_default_executor(ExecutorName::FieldExtension)
             .add_default_executor(ExecutorName::Poseidon2)
+            .add_modular_support(Modulus::all())
     }
 }
 
@@ -212,6 +222,7 @@ impl VmConfig {
             DEFAULT_MAX_SEGMENT_LEN,
             false,
             8,
+            vec![],
         )
     }
 
@@ -229,6 +240,7 @@ impl VmConfig {
             DEFAULT_MAX_SEGMENT_LEN,
             false,
             8,
+            vec![],
         )
         .add_default_executor(ExecutorName::Core)
     }
@@ -265,6 +277,10 @@ impl Modulus {
             Modulus::Secp256k1Coord => SECP256K1_COORD_PRIME.clone(),
             Modulus::Secp256k1Scalar => SECP256K1_SCALAR_PRIME.clone(),
         }
+    }
+
+    pub fn all() -> Vec<Self> {
+        Self::iter().collect()
     }
 }
 
