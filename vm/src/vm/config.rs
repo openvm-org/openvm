@@ -63,20 +63,30 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             2,
             ModularArithmeticOpcode::default_offset(),
         ),
-        ExecutorName::ArithmeticLogicUnit256 => (
-            U256Opcode::default_offset(),
-            8,
-            U256Opcode::default_offset(),
-        ),
         ExecutorName::ArithmeticLogicUnitRv32 => (
             AluOpcode::default_offset(),
             AluOpcode::COUNT,
             AluOpcode::default_offset(),
         ),
+        ExecutorName::ArithmeticLogicUnit256 => (
+            U256Opcode::default_offset(),
+            8,
+            U256Opcode::default_offset(),
+        ),
+        ExecutorName::LessThanRv32 => (
+            LessThanOpcode::default_offset(),
+            LessThanOpcode::COUNT,
+            LessThanOpcode::default_offset(),
+        ),
         ExecutorName::U256Multiplication => (
             U256Opcode::default_offset() + 11,
             1,
             U256Opcode::default_offset(),
+        ),
+        ExecutorName::ShiftRv32 => (
+            ShiftOpcode::default_offset(),
+            ShiftOpcode::COUNT,
+            ShiftOpcode::default_offset(),
         ),
         ExecutorName::Shift256 => (
             U256Opcode::default_offset() + 8,

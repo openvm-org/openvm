@@ -45,6 +45,8 @@ use crate::{
     modular_addsub::{ModularAddSubChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     modular_multdiv::ModularMultDivChip,
     new_alu::{ArithmeticLogicIntegration, Rv32ArithmeticLogicChip},
+    new_lt::{LessThanIntegration, Rv32LessThanChip},
+    new_shift::{Rv32ShiftChip, ShiftIntegration},
     program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
@@ -291,6 +293,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::ArithmeticLogicUnit256(chip));
                 }
+                ExecutorName::LessThanRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32LessThanChip::new(
+                        Rv32AluAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        LessThanIntegration::new(byte_xor_chip.clone(), offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::LessThanRv32(chip));
+                }
                 ExecutorName::U256Multiplication => {
                     let range_tuple_bus = RangeTupleCheckerBus::new(
                         RANGE_TUPLE_CHECKER_BUS,
@@ -308,6 +321,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(MachineChipVariant::U256Multiplication(chip));
+                }
+                ExecutorName::ShiftRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32ShiftChip::new(
+                        Rv32AluAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        ShiftIntegration::new(byte_xor_chip.clone(), range_checker.clone(), offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::ShiftRv32(chip));
                 }
                 ExecutorName::Shift256 => {
                     let chip = Rc::new(RefCell::new(ShiftChip::new(
