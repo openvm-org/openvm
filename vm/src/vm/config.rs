@@ -14,17 +14,24 @@ use crate::{
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
 pub const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 7; // the sbox degree used for Poseidon2
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum PersistenceType {
+    Persistent,
+    Volatile,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, new)]
 pub struct MemoryConfig {
     pub addr_space_max_bits: usize,
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
     pub decomp: usize,
+    pub persistence_type: PersistenceType,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 29, 29, 16)
+        Self::new(29, 29, 29, 15, PersistenceType::Volatile)
     }
 }
 
@@ -116,7 +123,7 @@ pub struct VmConfig {
     pub executors: Vec<(Range<usize>, ExecutorName, usize)>, // (range of opcodes, who executes, offset)
     pub modular_executors: Vec<(Range<usize>, ExecutorName, usize, BigUint)>, // (range of opcodes, who executes, offset, modulus)
 
-    pub poseidon2_max_constraint_degree: Option<usize>,
+    pub poseidon2_max_constraint_degree: usize,
     pub memory_config: MemoryConfig,
     pub num_public_values: usize,
     pub max_segment_len: usize,
@@ -128,7 +135,7 @@ pub struct VmConfig {
 
 impl VmConfig {
     pub fn from_parameters(
-        poseidon2_max_constraint_degree: Option<usize>,
+        poseidon2_max_constraint_degree: usize,
         memory_config: MemoryConfig,
         num_public_values: usize,
         max_segment_len: usize,
@@ -224,7 +231,7 @@ impl Default for VmConfig {
 impl VmConfig {
     pub fn default_with_no_executors() -> Self {
         Self::from_parameters(
-            Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
+            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
             Default::default(),
             0,
             DEFAULT_MAX_SEGMENT_LEN,
@@ -242,7 +249,7 @@ impl VmConfig {
 
     pub fn core() -> Self {
         Self::from_parameters(
-            None,
+            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
             Default::default(),
             0,
             DEFAULT_MAX_SEGMENT_LEN,
@@ -255,7 +262,7 @@ impl VmConfig {
 
     pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
         VmConfig {
-            poseidon2_max_constraint_degree: Some(poseidon2_max_constraint_degree),
+            poseidon2_max_constraint_degree,
             num_public_values: 4,
             ..VmConfig::default()
         }

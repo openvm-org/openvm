@@ -18,7 +18,7 @@ use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     arch::ExecutorName,
     hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
-    vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN, DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE},
+    vm::config::VmConfig,
 };
 use tracing::Level;
 
@@ -56,18 +56,10 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
     execute_and_prove_program(
         program,
         vec![],
-        VmConfig::from_parameters(
-            Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
-            Default::default(),
-            4,
-            DEFAULT_MAX_SEGMENT_LEN,
-            false,
-            8,
-            vec![],
-        )
-        .add_default_executor(ExecutorName::FieldArithmetic)
-        .add_default_executor(ExecutorName::FieldExtension)
-        .add_default_executor(ExecutorName::Keccak256),
+        VmConfig::default_with_no_executors()
+            .add_default_executor(ExecutorName::FieldArithmetic)
+            .add_default_executor(ExecutorName::FieldExtension)
+            .add_default_executor(ExecutorName::Keccak256),
         BabyBearPoseidon2Engine::new(FriParameters::standard_fast()),
     )
     .unwrap();

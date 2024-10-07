@@ -25,10 +25,7 @@ use stark_vm::{
     },
     hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     program::{Instruction, Program},
-    vm::{
-        config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
-        VirtualMachine,
-    },
+    vm::{config::VmConfig, VirtualMachine},
 };
 use tracing::Level;
 
@@ -43,11 +40,7 @@ where
 }
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
-    VmConfig {
-        memory_config: MemoryConfig::new(29, 29, 15, 8),
-        ..VmConfig::core()
-    }
-    .add_default_executor(ExecutorName::FieldArithmetic)
+    VmConfig::core().add_default_executor(ExecutorName::FieldArithmetic)
 }
 
 fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Vec<BabyBear>>) {
@@ -73,15 +66,10 @@ fn air_test_with_compress_poseidon2(
     program: Program<BabyBear>,
 ) {
     let vm = VirtualMachine::new(
-        VmConfig::from_parameters(
-            Some(poseidon2_max_constraint_degree),
-            Default::default(),
-            4,
-            DEFAULT_MAX_SEGMENT_LEN,
-            false,
-            8,
-            vec![],
-        )
+        VmConfig {
+            poseidon2_max_constraint_degree,
+            ..VmConfig::core()
+        }
         .add_default_executor(ExecutorName::Poseidon2),
         program,
         vec![],
@@ -90,10 +78,14 @@ fn air_test_with_compress_poseidon2(
     let result = vm.execute_and_generate().unwrap();
 
     let perm = random_perm();
-    let mut fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
-    if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-        fri_params.num_queries = 2;
-        fri_params.proof_of_work_bits = 0;
+    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        FriParameters {
+            log_blowup: 3,
+            num_queries: 2,
+            proof_of_work_bits: 0,
+        }
+    } else {
+        standard_fri_params_with_100_bits_conjectured_security(3)
     };
 
     for segment_result in result.segment_results {
@@ -273,12 +265,9 @@ fn test_vm_field_extension_arithmetic() {
     };
 
     air_test(
-        VmConfig {
-            memory_config: MemoryConfig::new(29, 29, 15, 8),
-            ..VmConfig::core()
-        }
-        .add_default_executor(ExecutorName::FieldArithmetic)
-        .add_default_executor(ExecutorName::FieldExtension),
+        VmConfig::core()
+            .add_default_executor(ExecutorName::FieldArithmetic)
+            .add_default_executor(ExecutorName::FieldExtension),
         program,
         vec![],
     );

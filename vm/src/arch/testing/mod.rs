@@ -29,7 +29,7 @@ pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
 
 use super::{ExecutionBus, InstructionExecutor};
-use crate::memory::MemoryChipRef;
+use crate::{hashes::poseidon2::Poseidon2Chip, memory::MemoryChipRef, vm::config::PersistenceType};
 
 #[derive(Clone, Debug)]
 pub struct MachineChipTestBuilder<F: PrimeField32> {
@@ -117,6 +117,10 @@ impl<F: PrimeField32> MachineChipTestBuilder<F> {
 
 impl MachineChipTestBuilder<BabyBear> {
     pub fn build(self) -> MachineChipTester {
+        self.memory
+            .chip
+            .borrow_mut()
+            .finalize(None::<&mut Poseidon2Chip<BabyBear>>);
         let tester = MachineChipTester {
             memory: Some(self.memory),
             ..Default::default()
@@ -128,12 +132,12 @@ impl MachineChipTestBuilder<BabyBear> {
 
 impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
     fn default() -> Self {
-        let mem_config = MemoryConfig::new(2, 29, 29, 17); // smaller testing config with smaller decomp_bits
+        let mem_config = MemoryConfig::new(2, 29, 29, 17, PersistenceType::Volatile);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let memory_chip = MemoryChip::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
+        let memory_chip = MemoryChip::new(MemoryBus(1), mem_config, range_checker);
         Self {
             memory: MemoryTester::new(Rc::new(RefCell::new(memory_chip))),
             execution: ExecutionTester::new(ExecutionBus(0)),
