@@ -10,6 +10,7 @@ pub mod memory;
 pub mod modular_addsub;
 pub mod modular_multdiv;
 pub mod program;
+pub mod rv32_alu;
 /// SDK functions for running and proving programs in the VM.
 #[cfg(feature = "sdk")]
 pub mod sdk;
