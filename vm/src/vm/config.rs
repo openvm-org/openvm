@@ -69,9 +69,9 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             U256Opcode::default_offset(),
         ),
         ExecutorName::ArithmeticLogicUnitRv32 => (
-            RV32AluOpcode::default_offset(),
-            RV32AluOpcode::COUNT,
-            RV32AluOpcode::default_offset(),
+            AluOpcode::default_offset(),
+            AluOpcode::COUNT,
+            AluOpcode::default_offset(),
         ),
         ExecutorName::U256Multiplication => (
             U256Opcode::default_offset() + 11,

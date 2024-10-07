@@ -8,7 +8,7 @@ use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
-        instructions::{RV32AluOpcode, UsizeOpcode},
+        instructions::{AluOpcode, UsizeOpcode},
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
         MachineIntegration, Result,
     },
@@ -101,13 +101,14 @@ where
         reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let opcode = RV32AluOpcode::from_usize(opcode - self.offset);
+        let opcode = AluOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
         let z = solve_alu::<NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
 
+        // Integration doesn't modify PC directly, so we let Adapter handle the increment
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
             to_pc: from_pc,
             writes: z.map(F::from_canonical_u32).into(),
@@ -143,16 +144,16 @@ where
 }
 
 pub(super) fn solve_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    opcode: RV32AluOpcode,
+    opcode: AluOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {
     match opcode {
-        RV32AluOpcode::ADD => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        RV32AluOpcode::SUB => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
-        RV32AluOpcode::XOR => solve_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
-        RV32AluOpcode::OR => solve_or::<NUM_LIMBS, LIMB_BITS>(x, y),
-        RV32AluOpcode::AND => solve_and::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::ADD => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::SUB => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::XOR => solve_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::OR => solve_or::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::AND => solve_and::<NUM_LIMBS, LIMB_BITS>(x, y),
     }
 }
 
