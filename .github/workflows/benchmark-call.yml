@@ -188,7 +188,8 @@ jobs:
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
             for file in .bench_metrics/flamegraphs/*.svg; do
               filename=$(basename "$file")
-              echo "![](https://axiom-public-data-staging-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename})" >> $RESULT_PATH
+              flamegraph_url=https://axiom-public-data-staging-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
+              echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
             done
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
