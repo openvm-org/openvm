@@ -1,8 +1,8 @@
 use alloc::{collections::BTreeMap, format};
 use core::fmt;
 
+use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32};
-use stark_vm::vm::config::Modulus;
 
 use super::A0;
 
@@ -73,10 +73,10 @@ pub enum AsmInstruction<F, EF> {
     /// Divide extension, dst = lhs / rhs.
     DivE(i32, i32, i32),
 
-    ModularAdd(Modulus, i32, i32, i32),
-    ModularSub(Modulus, i32, i32, i32),
-    ModularMul(Modulus, i32, i32, i32),
-    ModularDiv(Modulus, i32, i32, i32),
+    ModularAdd(BigUint, i32, i32, i32),
+    ModularSub(BigUint, i32, i32, i32),
+    ModularMul(BigUint, i32, i32, i32),
+    ModularDiv(BigUint, i32, i32, i32),
 
     /// int add, dst = lhs + rhs.
     Add256(i32, i32, i32),

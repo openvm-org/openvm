@@ -46,8 +46,8 @@ where
         &mut self,
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
-        modulus: Modulus,
-        operation: impl Fn(Modulus, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>) -> DslIr<C>,
+        modulus: BigUint,
+        operation: impl Fn(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>) -> DslIr<C>,
     ) -> BigUintVar<C> {
         let dst = self.dyn_array(NUM_LIMBS);
         self.operations
@@ -60,7 +60,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, Modulus::Secp256k1Coord, DslIr::ModularAdd)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Coord.prime(),
+            DslIr::ModularAdd,
+        )
     }
 
     pub fn secp256k1_coord_sub(
@@ -68,7 +73,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, Modulus::Secp256k1Coord, DslIr::ModularSub)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Coord.prime(),
+            DslIr::ModularSub,
+        )
     }
 
     pub fn secp256k1_coord_mul(
@@ -76,7 +86,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, Modulus::Secp256k1Coord, DslIr::ModularMul)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Coord.prime(),
+            DslIr::ModularMul,
+        )
     }
 
     pub fn secp256k1_coord_div(
@@ -84,7 +99,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, Modulus::Secp256k1Coord, DslIr::ModularDiv)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Coord.prime(),
+            DslIr::ModularDiv,
+        )
     }
 
     pub fn assert_secp256k1_coord_eq(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) {
@@ -137,7 +157,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, Modulus::Secp256k1Scalar, DslIr::ModularAdd)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Scalar.prime(),
+            DslIr::ModularAdd,
+        )
     }
 
     pub fn secp256k1_scalar_sub(
@@ -145,7 +170,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, Modulus::Secp256k1Scalar, DslIr::ModularSub)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Scalar.prime(),
+            DslIr::ModularSub,
+        )
     }
 
     pub fn secp256k1_scalar_mul(
@@ -153,7 +183,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, Modulus::Secp256k1Scalar, DslIr::ModularMul)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Scalar.prime(),
+            DslIr::ModularMul,
+        )
     }
 
     pub fn secp256k1_scalar_div(
@@ -161,7 +196,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, Modulus::Secp256k1Scalar, DslIr::ModularDiv)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Scalar.prime(),
+            DslIr::ModularDiv,
+        )
     }
 
     pub fn assert_secp256k1_scalar_eq(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) {

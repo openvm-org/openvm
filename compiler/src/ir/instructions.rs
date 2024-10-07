@@ -1,4 +1,4 @@
-use stark_vm::vm::config::Modulus;
+use num_bigint_dig::BigUint;
 
 use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
 use crate::ir::modular_arithmetic::BigUintVar;
@@ -37,7 +37,7 @@ pub enum DslIr<C: Config> {
     /// Add a field element and an ext field immediate (ext = felt + ext field imm).
     AddEFFI(Ext<C::F, C::EF>, Felt<C::F>, C::EF),
     /// Add two modular BigInts over some field.
-    ModularAdd(Modulus, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    ModularAdd(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Add two 256-bit integers
     Add256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
@@ -65,7 +65,7 @@ pub enum DslIr<C: Config> {
     /// Subtracts an extension field element and a field element (ext = ext - felt).
     SubEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
     /// Subtract two modular BigInts over some field.
-    ModularSub(Modulus, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    ModularSub(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Subtract two 256-bit integers
     Sub256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
@@ -87,7 +87,7 @@ pub enum DslIr<C: Config> {
     /// Multiplies an extension field element and a field element (ext = ext * felt).
     MulEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
     /// Multiply two modular BigInts over some field.
-    ModularMul(Modulus, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    ModularMul(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Multiply two 256-bit integers
     Mul256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
@@ -109,7 +109,7 @@ pub enum DslIr<C: Config> {
     /// Divides an extension field element and a field element (ext = ext / felt).
     DivEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
     /// Divide two modular BigInts over some field.
-    ModularDiv(Modulus, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    ModularDiv(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Negations.
     /// Negates a variable (var = -var).

@@ -1,3 +1,4 @@
+use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use stark_vm::{
     arch::instructions::*,
@@ -16,7 +17,7 @@ pub struct CompilerOptions {
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
-    pub enabled_modulus: Vec<Modulus>,
+    pub enabled_modulus: Vec<BigUint>,
 }
 
 impl Default for CompilerOptions {
@@ -27,7 +28,7 @@ impl Default for CompilerOptions {
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
-            enabled_modulus: Modulus::all(),
+            enabled_modulus: Modulus::all().iter().map(|m| m.prime()).collect(),
         }
     }
 }
@@ -41,10 +42,15 @@ impl CompilerOptions {
     pub fn modular_opcode_with_offset<Opcode: UsizeOpcode>(
         &self,
         opcode: Opcode,
-        modulus: Modulus,
+        modulus: BigUint,
     ) -> usize {
         let res = self.opcode_with_offset(opcode);
-        let modular_shift = (modulus as usize) * ModularArithmeticOpcode::COUNT;
+        let modulus_id = self
+            .enabled_modulus
+            .iter()
+            .position(|m| m == &modulus)
+            .unwrap_or_else(|| panic!("unsupported modulus: {}", modulus));
+        let modular_shift = modulus_id * ModularArithmeticOpcode::COUNT;
         res + modular_shift
     }
 }
