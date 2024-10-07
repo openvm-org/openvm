@@ -22,9 +22,8 @@ impl CycleTracker {
         assert_eq!(stack_top.unwrap(), name, "Stack top does not match name");
     }
 
-    #[allow(dead_code)]
     /// Get full name of span with all parent names separated by ";" in flamegraph format
-    fn get_full_name(&self) -> String {
+    pub fn get_full_name(&self) -> String {
         self.stack.join(";")
     }
 }
