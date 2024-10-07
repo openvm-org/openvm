@@ -198,6 +198,10 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
+    fn get_opcode_name(&self, _: usize) -> String {
+        "SECP256K1_ADD_NE".to_string()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -294,5 +298,9 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcDoubleChip<T> {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
+    }
+
+    fn get_opcode_name(&self, _: usize) -> String {
+        "SECP256K1_DOUBLE".to_string()
     }
 }

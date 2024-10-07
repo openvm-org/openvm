@@ -100,6 +100,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            FieldExtensionOpcode::from_usize(opcode - self.offset)
+        )
+    }
 }
 
 impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {

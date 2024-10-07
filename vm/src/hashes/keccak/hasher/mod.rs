@@ -237,6 +237,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             timestamp: to_timestamp,
         })
     }
+
+    fn get_opcode_name(&self, _: usize) -> String {
+        "KECCAK256".to_string()
+    }
 }
 
 impl<F: PrimeField32> Default for KeccakInputBlock<F> {

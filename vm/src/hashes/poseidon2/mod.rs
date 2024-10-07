@@ -279,6 +279,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        let opcode = Poseidon2Opcode::from_usize(opcode - self.offset);
+        format!("{opcode:?}")
+    }
 }
 
 impl<F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<F> {

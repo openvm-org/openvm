@@ -36,11 +36,17 @@ use crate::{
 
 #[enum_dispatch]
 pub trait InstructionExecutor<F> {
+    /// Runtime execution of the instruction, if the instruction is owned by the
+    /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> Result<ExecutionState<usize>, ExecutionError>;
+
+    /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
+    /// if it is a supported opcode by the present executor.
+    fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
 #[enum_dispatch]
@@ -100,6 +106,10 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
         prev_state: ExecutionState<usize>,
     ) -> Result<ExecutionState<usize>, ExecutionError> {
         self.borrow_mut().execute(instruction, prev_state)
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.borrow().get_opcode_name(opcode)
     }
 }
 

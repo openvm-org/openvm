@@ -115,6 +115,11 @@ impl<T: PrimeField32> InstructionExecutor<T> for UiChip<T> {
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        let opcode = U32Opcode::from_usize(opcode - self.offset);
+        format!("{opcode:?}")
+    }
 }
 
 impl<T: PrimeField32> UiChip<T> {

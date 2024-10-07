@@ -110,6 +110,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             timestamp: from_state.timestamp + FieldArithmeticAir::TIMESTAMP_DELTA,
         })
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            FieldArithmeticOpcode::from_usize(opcode - self.offset)
+        )
+    }
 }
 
 pub struct FieldArithmetic;
