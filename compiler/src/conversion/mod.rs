@@ -1,8 +1,11 @@
+use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use stark_vm::{
     arch::instructions::*,
     program::{DebugInfo, Instruction, Program},
+    vm::config::Modulus,
 };
+use strum::EnumCount;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
@@ -14,7 +17,7 @@ pub struct CompilerOptions {
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
-    pub opcode_offsets: Vec<Option<usize>>,
+    pub enabled_modulus: Vec<BigUint>,
 }
 
 impl Default for CompilerOptions {
@@ -25,20 +28,30 @@ impl Default for CompilerOptions {
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
-            opcode_offsets: vec![],
+            enabled_modulus: Modulus::all().iter().map(|m| m.prime()).collect(),
         }
     }
 }
 
 impl CompilerOptions {
     pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> usize {
-        let index = Opcode::class_index();
-        let offset = self
-            .opcode_offsets
-            .get(index)
-            .unwrap_or(&None)
-            .unwrap_or(Opcode::default_offset());
+        let offset = Opcode::default_offset();
         offset + opcode.as_usize()
+    }
+
+    pub fn modular_opcode_with_offset<Opcode: UsizeOpcode>(
+        &self,
+        opcode: Opcode,
+        modulus: BigUint,
+    ) -> usize {
+        let res = self.opcode_with_offset(opcode);
+        let modulus_id = self
+            .enabled_modulus
+            .iter()
+            .position(|m| m == &modulus)
+            .unwrap_or_else(|| panic!("unsupported modulus: {}", modulus));
+        let modular_shift = modulus_id * ModularArithmeticOpcode::COUNT;
+        res + modular_shift
     }
 }
 
@@ -706,65 +719,32 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::AddSecp256k1Coord(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::ADD),
+        AsmInstruction::ModularAdd(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::ADD, modulus),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::SubSecp256k1Coord(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::SUB),
+        AsmInstruction::ModularSub(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::SUB, modulus),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::MulSecp256k1Coord(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::MUL),
+        AsmInstruction::ModularMul(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::MUL, modulus),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::DivSecp256k1Coord(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::DIV),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::AddSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            // FIXME: better handling of different moduli
-            options.opcode_with_offset(ModularArithmeticOpcode::ADD) + 4,
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::SubSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::SUB) + 4,
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::MulSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::MUL) + 4,
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::DivSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(ModularArithmeticOpcode::DIV) + 4,
+        AsmInstruction::ModularDiv(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::DIV, modulus),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),

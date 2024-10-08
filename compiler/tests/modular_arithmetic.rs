@@ -125,6 +125,7 @@ fn test_compiler_modular_arithmetic_negative() {
     let one = builder.eval_biguint(BigUint::one());
     let one_times_one = builder.secp256k1_coord_mul(&one, &one);
     let zero = builder.eval_biguint(BigUint::zero());
+
     builder.assert_secp256k1_coord_eq(&one_times_one, &zero);
     builder.halt();
 

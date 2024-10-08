@@ -285,33 +285,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::MulEFI(dst, lhs, rhs) => {
                     self.mul_ext_felti(dst, lhs, rhs, debug_info);
                 }
-                DslIr::AddSecp256k1Coord(dst, lhs, rhs) => {
+                DslIr::ModularAdd(modulus, dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::AddSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
-                        debug_info,
-                    );
-                }
-                DslIr::SubSecp256k1Coord(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::SubSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
-                        debug_info,
-                    );
-                }
-                DslIr::MulSecp256k1Coord(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::MulSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
-                        debug_info,
-                    );
-                }
-                DslIr::DivSecp256k1Coord(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::DivSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
-                        debug_info,
-                    );
-                }
-                DslIr::AddSecp256k1Scalar(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::AddSecp256k1Scalar(
+                        AsmInstruction::ModularAdd(
+                            modulus,
                             dst.ptr_fp(),
                             lhs.ptr_fp(),
                             rhs.ptr_fp(),
@@ -319,9 +296,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
-                DslIr::SubSecp256k1Scalar(dst, lhs, rhs) => {
+                DslIr::ModularSub(modulus, dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::SubSecp256k1Scalar(
+                        AsmInstruction::ModularSub(
+                            modulus,
                             dst.ptr_fp(),
                             lhs.ptr_fp(),
                             rhs.ptr_fp(),
@@ -329,9 +307,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
-                DslIr::MulSecp256k1Scalar(dst, lhs, rhs) => {
+                DslIr::ModularMul(modulus, dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::MulSecp256k1Scalar(
+                        AsmInstruction::ModularMul(
+                            modulus,
                             dst.ptr_fp(),
                             lhs.ptr_fp(),
                             rhs.ptr_fp(),
@@ -339,9 +318,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
-                DslIr::DivSecp256k1Scalar(dst, lhs, rhs) => {
+                DslIr::ModularDiv(modulus, dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::DivSecp256k1Scalar(
+                        AsmInstruction::ModularDiv(
+                            modulus,
                             dst.ptr_fp(),
                             lhs.ptr_fp(),
                             rhs.ptr_fp(),

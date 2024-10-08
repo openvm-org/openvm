@@ -13,8 +13,6 @@ on:
           - tiny_e2e
           - alu256_e2e
           - small_e2e
-          - single_rw
-          - single_filter
       aws_instance_type:
         type: string
         required: false
@@ -35,6 +33,7 @@ on:
 env:
   S3_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmark/github/results
   S3_METRICS_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmark/github/metrics
+  PUBLIC_S3_PATH: s3://axiom-public-data-staging-us-east-1/benchmark/github/flamegraphs
   FEATURE_FLAGS: "bench-metrics,parallel,mimalloc"
   CMD_ARGS: ""
 
@@ -97,16 +96,6 @@ jobs:
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
-        if: inputs.benchmark_name == 'halo2_static_verify_fibair'
-        working-directory: recursion
-        run: |
-          FEATURE_FLAGS="$FEATURE_FLAGS,static-verifier"
-          bash trusted_setup_s3.sh
-          mkdir -p ../benchmark/tmp
-          RUSTFLAGS="-Ctarget-cpu=native" cargo test --release -p afs-recursion --test recursion --features $FEATURE_FLAGS -- test_fibonacci_program_halo2_verify > ../benchmark/tmp/_result.middle.md
-          sed -n "/prove halo2 verifier circuit/,\$p" ../benchmark/tmp/_result.middle.md > ../benchmark/tmp/_result.md
-
-      - name: Run benchmark
         if: inputs.benchmark_name == 'tiny_e2e'
         working-directory: recursion
         run: |
@@ -130,15 +119,6 @@ jobs:
           python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'single_rw'
-        run: |
-          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
-
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'single_filter'
-        run: |
-          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- predicate --config-folder benchmark/config/single_filter -f benchmark/config/olap/filter_0xfade.afo
       ######################################################
       - name: Store metric json and compute diff with previous
         run: |
@@ -175,19 +155,9 @@ jobs:
         run: |
           if [[ -f $METRIC_PATH ]]; then
             python3 sdk/scripts/metric_unify/flamegraph.py $METRIC_PATH
-            FLAMEGRAPH_PREFIX=".bench_metrics/flamegraphs/${BIN_NAME}"
+            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
-
-      - name: Upload flamegraphs
-        id: flamegraphs-upload-step
-        if: env.UPLOAD_FLAMEGRAPHS == '1'
-        uses: actions/upload-artifact@v4
-        with:
-          name: flamegraphs
-          path: .bench_metrics/flamegraphs/*.svg
-          retention-days: 7
-          overwrite: true
 
       - name: Add benchmark metadata
         run: |
@@ -195,7 +165,11 @@ jobs:
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
-            echo "Flamegraphs: [link](${{ steps.flamegraphs-upload-step.outputs.artifact-url }})" >> $RESULT_PATH
+            for file in .bench_metrics/flamegraphs/*.svg; do
+              filename=$(basename "$file")
+              flamegraph_url=https://axiom-public-data-staging-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
+              echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
+            done
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
           echo "AWS Instance Type: [${{ inputs.aws_instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.aws_instance_type }})" >> $RESULT_PATH

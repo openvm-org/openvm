@@ -106,8 +106,7 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
             .add_default_executor(ExecutorName::Secp256k1AddUnequal)
             .add_default_executor(ExecutorName::Secp256k1Double)
             .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
-            .add_default_executor(ExecutorName::ModularMultDiv)
-            .add_default_executor(ExecutorName::ModularAddSub),
+            .add_canonical_modulus(),
         program,
         vec![],
     );

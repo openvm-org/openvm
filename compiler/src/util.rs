@@ -8,10 +8,7 @@ pub const LIMB_SIZE: usize = 8;
 pub const TWO_NUM_LIMBS: usize = 2 * NUM_LIMBS;
 
 use stark_vm::{
-    arch::{
-        instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        ExecutorName,
-    },
+    arch::ExecutorName,
     program::{Instruction, Program},
     vm::{config::VmConfig, VirtualMachine},
 };
@@ -40,7 +37,6 @@ pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
 }
 
 pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
-    let mod_arith_offset = ModularArithmeticOpcode::default_offset();
     let vm = VirtualMachine::new(
         VmConfig {
             num_public_values: 4,
@@ -49,18 +45,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             ..Default::default()
         }
         .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
-        .add_default_executor(ExecutorName::ModularAddSub) // Secp256k1Coord
-        .add_default_executor(ExecutorName::ModularMultDiv) // Secp256k1Coord
-        .add_executor(
-            mod_arith_offset + 4..mod_arith_offset + 6,
-            ExecutorName::ModularAddSub,
-            mod_arith_offset + 4,
-        )
-        .add_executor(
-            mod_arith_offset + 6..mod_arith_offset + 8,
-            ExecutorName::ModularMultDiv,
-            mod_arith_offset + 4,
-        )
+        .add_canonical_modulus()
         .add_default_executor(ExecutorName::Secp256k1AddUnequal)
         .add_default_executor(ExecutorName::Secp256k1Double),
         program,

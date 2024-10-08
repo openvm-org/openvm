@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
     mem,
+    ops::DerefMut,
     rc::Rc,
     sync::Arc,
 };
@@ -30,7 +31,7 @@ use crate::{
     alu::ArithmeticLogicChip,
     arch::{
         instructions::*, ExecutionBus, ExecutionState, ExecutorName, InstructionExecutor,
-        InstructionExecutorVariant, MachineChip, MachineChipVariant,
+        InstructionExecutorVariant, MachineChip, MachineChipVariant, Rv32AluAdapter,
     },
     castf::CastFChip,
     core::{
@@ -42,12 +43,16 @@ use crate::{
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
-    modular_addsub::{ModularAddSubChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    modular_addsub::ModularAddSubChip,
     modular_multdiv::ModularMultDivChip,
+    new_alu::{ArithmeticLogicIntegration, Rv32ArithmeticLogicChip},
+    new_lt::{LessThanIntegration, Rv32LessThanChip},
+    new_shift::{Rv32ShiftChip, ShiftIntegration},
     program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
     uint_multiplication::UintMultiplicationChip,
+    vm::config::PersistenceType,
 };
 
 #[derive(Debug)]
@@ -60,6 +65,8 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub program_chip: Rc<RefCell<ProgramChip<F>>>,
     pub memory_chip: MemoryChipRef<F>,
     pub connector_chip: VmConnectorChip<F>,
+
+    pub persistent_memory_hasher: Option<Rc<RefCell<Poseidon2Chip<F>>>>,
 
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
@@ -100,9 +107,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
 
-        let memory_chip = Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
+        let memory_chip = Rc::new(RefCell::new(MemoryChip::new(
             memory_bus,
-            config.memory_config,
+            config.memory_config.clone(),
             range_checker.clone(),
         )));
         let program_chip = Rc::new(RefCell::new(ProgramChip::new(program)));
@@ -138,6 +145,25 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
             chips.push(MachineChipVariant::Core(chip.clone()));
             Some(chip)
+        };
+
+        // We may not use this chip if the memory kind is volatile and there is no executor for Poseidon2.
+        let poseidon_chip = {
+            let offset = config
+                .executors
+                .iter()
+                .find(|(_, name, _)| *name == ExecutorName::Poseidon2)
+                .map(|(_, _, offset)| *offset)
+                .unwrap_or(0); // If no Poseidon2 executor, offset doesn't matter.
+
+            Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
+                Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
+                config.poseidon2_max_constraint_degree,
+                execution_bus,
+                program_bus,
+                memory_chip.clone(),
+                offset,
+            )))
         };
 
         for (range, executor, offset) in config.clone().executors {
@@ -190,20 +216,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     chips.push(MachineChipVariant::FieldExtension(chip));
                 }
                 ExecutorName::Poseidon2 => {
-                    let chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
-                        Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
-                        config
-                            .poseidon2_max_constraint_degree
-                            .expect("Poseidon2 is enabled but no max_constraint_degree provided"),
-                        execution_bus,
-                        program_bus,
-                        memory_chip.clone(),
-                        offset,
-                    )));
                     for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
+                        executors.insert(opcode, poseidon_chip.clone().into());
                     }
-                    chips.push(MachineChipVariant::Poseidon2(chip));
+                    chips.push(MachineChipVariant::Poseidon2(poseidon_chip.clone()));
                 }
                 ExecutorName::Keccak256 => {
                     let chip = Rc::new(RefCell::new(KeccakVmChip::new(
@@ -218,51 +234,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::Keccak256(chip));
                 }
-                ExecutorName::ModularAddSub => {
-                    let new_chip = if modular_addsub_chips.is_empty() {
-                        Rc::new(RefCell::new(ModularAddSubChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_chip.clone(),
-                            SECP256K1_COORD_PRIME.clone(),
-                            offset,
-                        )))
-                    } else {
-                        Rc::new(RefCell::new(ModularAddSubChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_chip.clone(),
-                            SECP256K1_SCALAR_PRIME.clone(),
-                            offset,
-                        )))
-                    };
-                    modular_addsub_chips.push(new_chip.clone());
+                ExecutorName::ArithmeticLogicUnitRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32ArithmeticLogicChip::new(
+                        Rv32AluAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        ArithmeticLogicIntegration::new(byte_xor_chip.clone(), offset),
+                        memory_chip.clone(),
+                    )));
                     for opcode in range {
-                        executors.insert(opcode, new_chip.clone().into());
+                        executors.insert(opcode, chip.clone().into());
                     }
-                }
-                ExecutorName::ModularMultDiv => {
-                    let new_chip = if modular_muldiv_chips.is_empty() {
-                        Rc::new(RefCell::new(ModularMultDivChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_chip.clone(),
-                            SECP256K1_COORD_PRIME.clone(),
-                            offset,
-                        )))
-                    } else {
-                        Rc::new(RefCell::new(ModularMultDivChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_chip.clone(),
-                            SECP256K1_SCALAR_PRIME.clone(),
-                            offset,
-                        )))
-                    };
-                    modular_muldiv_chips.push(new_chip.clone());
-                    for opcode in range {
-                        executors.insert(opcode, new_chip.clone().into());
-                    }
+                    chips.push(MachineChipVariant::ArithmeticLogicUnitRv32(chip));
                 }
                 ExecutorName::ArithmeticLogicUnit256 => {
                     // We probably must include this chip if we include any modular arithmetic,
@@ -278,6 +259,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(MachineChipVariant::ArithmeticLogicUnit256(chip));
+                }
+                ExecutorName::LessThanRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32LessThanChip::new(
+                        Rv32AluAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        LessThanIntegration::new(byte_xor_chip.clone(), offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::LessThanRv32(chip));
                 }
                 ExecutorName::U256Multiplication => {
                     let range_tuple_bus = RangeTupleCheckerBus::new(
@@ -296,6 +288,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(MachineChipVariant::U256Multiplication(chip));
+                }
+                ExecutorName::ShiftRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32ShiftChip::new(
+                        Rv32AluAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        ShiftIntegration::new(byte_xor_chip.clone(), range_checker.clone(), offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::ShiftRv32(chip));
                 }
                 ExecutorName::Shift256 => {
                     let chip = Rc::new(RefCell::new(ShiftChip::new(
@@ -358,6 +361,51 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::Secp256k1Double(chip));
                 }
+                ExecutorName::ModularAddSub | ExecutorName::ModularMultDiv => {
+                    unreachable!("Modular executors should be handled differently")
+                }
+            }
+        }
+
+        for (range, executor, offset, modulus) in config.clone().modular_executors {
+            for opcode in range.clone() {
+                if let Some(old_executor) = executors.get(&opcode) {
+                    panic!(
+                        "Attempting to override an executor for opcode {} ({:?} -> {:?})",
+                        opcode, old_executor, executor
+                    );
+                }
+            }
+            match executor {
+                ExecutorName::ModularAddSub => {
+                    let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
+                        execution_bus,
+                        program_bus,
+                        memory_chip.clone(),
+                        modulus,
+                        offset,
+                    )));
+                    modular_addsub_chips.push(new_chip.clone());
+                    for opcode in range {
+                        executors.insert(opcode, new_chip.clone().into());
+                    }
+                }
+                ExecutorName::ModularMultDiv => {
+                    let new_chip = Rc::new(RefCell::new(ModularMultDivChip::new(
+                        execution_bus,
+                        program_bus,
+                        memory_chip.clone(),
+                        modulus,
+                        offset,
+                    )));
+                    modular_muldiv_chips.push(new_chip.clone());
+                    for opcode in range {
+                        executors.insert(opcode, new_chip.clone().into());
+                    }
+                }
+                _ => unreachable!(
+                    "modular_executors should only contain ModularAddSub and ModularMultDiv"
+                ),
             }
         }
 
@@ -369,6 +417,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         let connector_chip = VmConnectorChip::new(execution_bus);
 
+        let persistent_memory_hasher = match config.memory_config.persistence_type {
+            PersistenceType::Persistent => Some(poseidon_chip),
+            PersistenceType::Volatile => None,
+        };
+
         Self {
             config,
             executors,
@@ -376,6 +429,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             core_chip: core_chip.unwrap(),
             program_chip,
             memory_chip,
+            persistent_memory_hasher,
             connector_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream.clone(),
@@ -525,10 +579,23 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             metrics: self.collected_metrics,
         };
 
+        // Finalize memory.
+        if let Some(hasher) = &self.persistent_memory_hasher {
+            let mut hasher = hasher.borrow_mut();
+            self.memory_chip
+                .borrow_mut()
+                .finalize(Some(hasher.deref_mut()));
+        } else {
+            self.memory_chip
+                .borrow_mut()
+                .finalize(None::<&mut Poseidon2Chip<F>>);
+        }
+
         // Drop all strong references to chips other than self.chips, which will be consumed next.
         drop(self.executors);
         drop(self.core_chip);
         drop(self.program_chip);
+        drop(self.persistent_memory_hasher);
         drop(self.memory_chip);
 
         for mut chip in self.chips {
