@@ -23,6 +23,7 @@ pub struct AirProofDataVariable<C: Config> {
     /// height of trace matrix.
     pub log_degree: Usize<C::N>,
     /// For each challenge phase with trace, the values to expose to the verifier in that phase
+    #[allow(clippy::type_complexity)]
     pub exposed_values_after_challenge: Array<C, Array<C, Ext<C::F, C::EF>>>,
     // The public values to expose to the verifier
     pub public_values: Array<C, Felt<C::F>>,

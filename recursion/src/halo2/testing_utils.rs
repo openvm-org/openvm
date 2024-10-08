@@ -9,14 +9,13 @@ use ax_sdk::{
 use snark_verifier_sdk::Snark;
 
 use crate::{
-    config::outer::new_from_outer_multi_vk,
+    config::outer::new_from_outer_multi_vkv2,
     halo2::{
         utils::sort_chips,
         verifier::{
             gen_wrapper_circuit_evm_proof, generate_halo2_verifier_circuit, Halo2VerifierCircuit,
         },
     },
-    types::VerifierInput,
 };
 
 pub fn run_static_verifier_test(
@@ -38,12 +37,7 @@ pub fn run_static_verifier_test(
     info_span.exit();
 
     // Build verification program in eDSL.
-    let advice = new_from_outer_multi_vk(&vparams.data.vk);
-    let log_degree_per_air = vparams.data.proof.log_degrees();
-    let input = VerifierInput {
-        proof: vparams.data.proof,
-        log_degree_per_air,
-    };
+    let advice = new_from_outer_multi_vkv2(&vparams.data.vk);
 
     let info_span = tracing::info_span!(
         "keygen halo2 verifier circuit",
@@ -51,7 +45,7 @@ pub fn run_static_verifier_test(
     )
     .entered();
     let stark_verifier_circuit =
-        generate_halo2_verifier_circuit(21, advice, &vparams.fri_params, &input);
+        generate_halo2_verifier_circuit(21, advice, &vparams.fri_params, &vparams.data.proof);
     info_span.exit();
 
     let info_span = tracing::info_span!(
@@ -59,7 +53,7 @@ pub fn run_static_verifier_test(
         step = "static_verifier_prove"
     )
     .entered();
-    let static_verifier_snark = stark_verifier_circuit.prove(input);
+    let static_verifier_snark = stark_verifier_circuit.prove(vparams.data.proof);
     info_span.exit();
     (stark_verifier_circuit, static_verifier_snark)
 }

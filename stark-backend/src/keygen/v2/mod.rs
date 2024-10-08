@@ -120,6 +120,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilderV2<'a, SC> {
 
         MultiStarkProvingKeyV2 {
             per_air: pk_per_air,
+            max_constraint_degree: global_max_constraint_degree,
         }
     }
 }

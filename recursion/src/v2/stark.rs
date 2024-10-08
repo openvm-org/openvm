@@ -132,7 +132,7 @@ where
         let num_challenges_to_sample = m_advice_var.num_challenges_to_sample(builder);
         // Currently only support 0 or 1 phase is supported.
         let num_phases = RVar::from(num_challenges_to_sample.len());
-        assert_cumulative_sums(builder, &air_proofs, &num_challenges_to_sample);
+        assert_cumulative_sums(builder, air_proofs, &num_challenges_to_sample);
 
         let air_perm_by_height = if builder.flags.static_only {
             let num_airs = num_airs.value();
@@ -143,7 +143,7 @@ where
         };
 
         builder.range(0, num_airs).for_each(|i, builder| {
-            let air_proof_data = builder.get(&air_proofs, i);
+            let air_proof_data = builder.get(air_proofs, i);
             let pvs = air_proof_data.public_values;
             let air_advice = builder.get(&m_advice_var.per_air, i);
             builder.assert_eq::<Usize<_>>(air_advice.num_public_values, pvs.len());
@@ -243,7 +243,7 @@ where
         let quotient_chunk_domains = builder.array(num_airs);
         let num_quotient_mats: Usize<_> = builder.eval(RVar::zero());
         builder.range(0, num_airs).for_each(|i, builder| {
-            let air_proof = builder.get(&air_proofs, i);
+            let air_proof = builder.get(air_proofs, i);
             let log_degree: RVar<_> = air_proof.log_degree.clone().into();
             let advice = builder.get(&m_advice_var.per_air, i);
 
@@ -262,11 +262,8 @@ where
                 domain.create_disjoint_domain(builder, log_quotient_size, Some(pcs.config.clone()));
             builder.set_value(&quotient_domains, i, quotient_domain.clone());
 
-            let qc_domains = quotient_domain.split_domains(
-                builder,
-                log_quotient_degree,
-                quotient_degree.clone(),
-            );
+            let qc_domains =
+                quotient_domain.split_domains(builder, log_quotient_degree, quotient_degree);
             builder.assign(
                 &num_quotient_mats,
                 num_quotient_mats.clone() + quotient_degree,
@@ -505,7 +502,7 @@ where
                     values: qc_values,
                     points: qc_points.clone(),
                 };
-                let qc_offset = builder.eval_expr(air_offset.clone() + RVar::from(j));
+                let qc_offset = builder.eval_expr(air_offset.clone() + j);
                 builder.set_value(&quotient_mats, qc_index.clone(), qc_mat);
                 builder.set(&quotient_perm, qc_offset, RVar::from(qc_index.clone()));
                 builder.assign(&qc_index, qc_index.clone() + RVar::one());
@@ -891,7 +888,7 @@ fn assert_cumulative_sums<C: Config>(
     let num_phase = num_challenges_to_sample.len();
     builder.if_eq(num_phase, RVar::one()).then(|builder| {
         builder.range(0, air_proofs.len()).for_each(|i, builder| {
-            let air_proof_input = builder.get(&air_proofs, i);
+            let air_proof_input = builder.get(air_proofs, i);
             let exposed_values = air_proof_input.exposed_values_after_challenge;
 
             // Verifier does not support more than 1 challenge phase

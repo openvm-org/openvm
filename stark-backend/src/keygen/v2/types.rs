@@ -74,6 +74,8 @@ pub struct StarkProvingKeyV2<SC: StarkGenericConfig> {
 ))]
 pub struct MultiStarkProvingKeyV2<SC: StarkGenericConfig> {
     pub per_air: Vec<StarkProvingKeyV2<SC>>,
+    /// Maximum degree of constraints (excluding logup constraints) across all AIRs
+    pub max_constraint_degree: usize,
 }
 
 impl<SC: StarkGenericConfig> StarkVerifyingKeyV2<SC> {

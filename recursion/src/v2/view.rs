@@ -47,7 +47,7 @@ pub fn get_advice_per_air<C: Config>(
 fn constant_advice_and_update_mask<C: Config>(
     builder: &mut Builder<C>,
     advice: &StarkVerificationAdviceV2<C>,
-    num_challenges_to_sample_mask: &Vec<Vec<Usize<C::N>>>,
+    num_challenges_to_sample_mask: &[Vec<Usize<C::N>>],
 ) -> StarkVerificationAdviceV2Variable<C> {
     let preprocessed_data = if let Some(preprocessed_data) = advice.preprocessed_data.as_ref() {
         let commit = builder.constant(preprocessed_data.commit.clone());

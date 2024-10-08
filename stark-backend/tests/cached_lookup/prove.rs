@@ -79,7 +79,7 @@ where
         air.field_width(),
     );
 
-    let mut keygen_builder = engine.keygen_builder();
+    let mut keygen_builder = engine.keygen_builder_v1();
     if partition {
         let fields_ptr = keygen_builder.add_cached_main_matrix(air.field_width());
         let count_ptr = keygen_builder.add_main_matrix(1);
@@ -91,7 +91,7 @@ where
     let vk = pk.vk();
 
     let mut benchmarks = ProverBenchmarks::default();
-    let prover = engine.prover();
+    let prover = engine.prover_v1();
     // Must add trace matrices in the same order as above
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     let mut start;

@@ -1,22 +1,31 @@
 use afs_compiler::prelude::*;
+use itertools::Itertools;
 
 use crate::v2::vars::{MultiStarkVerificationAdviceV2Variable, StarkProofV2Variable};
 
 impl<C: Config> StarkProofV2Variable<C> {
     pub fn get_air_ids(&self, builder: &mut Builder<C>) -> Array<C, Usize<C::N>> {
-        let air_ids = builder.array(self.per_air.len());
-        builder.range(0, self.per_air.len()).for_each(|i, builder| {
-            let air_proof_data = builder.get(&self.per_air, i);
-            builder.set_value(&air_ids, i, air_proof_data.air_id);
-        });
-        air_ids
+        if builder.flags.static_only {
+            builder.vec(
+                (0..self.per_air.len().value())
+                    .map(Usize::from)
+                    .collect_vec(),
+            )
+        } else {
+            let air_ids = builder.array(self.per_air.len());
+            builder.range(0, self.per_air.len()).for_each(|i, builder| {
+                let air_proof_data = builder.get(&self.per_air, i);
+                builder.set_value(&air_ids, i, air_proof_data.air_id);
+            });
+            air_ids
+        }
     }
 }
 
 impl<C: Config> MultiStarkVerificationAdviceV2Variable<C> {
+    /// Assumption: at most 1 phase is supported.
     pub fn num_challenges_to_sample(&self, builder: &mut Builder<C>) -> Array<C, Usize<C::N>> {
-        // Assumption: at most 1 phase is supported.
-        if self.num_challenges_to_sample_mask.len() == 0 {
+        if self.num_challenges_to_sample_mask.is_empty() {
             return builder.array(0);
         }
         // If all 0s, no phase 1.

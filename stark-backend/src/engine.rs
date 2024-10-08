@@ -5,17 +5,21 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::v2::{types::MultiStarkVerifyingKeyV2, MultiStarkKeygenBuilderV2},
+    keygen::{
+        v2::{types::MultiStarkVerifyingKeyV2, MultiStarkKeygenBuilderV2},
+        MultiStarkKeygenBuilder,
+    },
     parizip,
     prover::{
-        trace::TraceCommitter,
+        trace::{TraceCommitmentBuilder, TraceCommitter},
         v2::{
             types::{AirProofInput, CommittedTraceData, ProofInput, ProofV2},
             MultiTraceStarkProverV2,
         },
+        MultiTraceStarkProver,
     },
     rap::AnyRap,
-    verifier::{v2::MultiTraceStarkVerifierV2, VerificationError},
+    verifier::{v2::MultiTraceStarkVerifierV2, MultiTraceStarkVerifier, VerificationError},
 };
 
 /// Data for verifying a Stark proof.
@@ -37,19 +41,31 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         MultiStarkKeygenBuilderV2::new(self.config())
     }
 
-    // fn trace_commitment_builder<'a>(&'a self) -> TraceCommitmentBuilder<'a, SC>
-    // where
-    //     SC: 'a,
-    // {
-    //     TraceCommitmentBuilder::new(self.config().pcs())
-    // }
+    fn keygen_builder_v1(&self) -> MultiStarkKeygenBuilder<SC> {
+        MultiStarkKeygenBuilder::new(self.config())
+    }
+
+    fn trace_commitment_builder<'a>(&'a self) -> TraceCommitmentBuilder<'a, SC>
+    where
+        SC: 'a,
+    {
+        TraceCommitmentBuilder::new(self.config().pcs())
+    }
 
     fn prover(&self) -> MultiTraceStarkProverV2<SC> {
         MultiTraceStarkProverV2::new(self.config())
     }
 
+    fn prover_v1(&self) -> MultiTraceStarkProver<SC> {
+        MultiTraceStarkProver::new(self.config())
+    }
+
     fn verifier(&self) -> MultiTraceStarkVerifierV2<SC> {
         MultiTraceStarkVerifierV2::new(self.config())
+    }
+
+    fn verifier_v1(&self) -> MultiTraceStarkVerifier<SC> {
+        MultiTraceStarkVerifier::new(self.config())
     }
 
     /// Runs a single end-to-end test for a given set of chips and traces.
