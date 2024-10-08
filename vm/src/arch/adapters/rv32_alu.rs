@@ -180,11 +180,6 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
         from_state: ExecutionState<usize>,
         output: InstructionOutput<F, Self::Interface<F>>,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
-        debug_assert_eq!(
-            output.to_pc,
-            F::from_canonical_usize(from_state.pc + 4),
-            "ALU always advances PC by 4"
-        );
         // TODO: timestamp delta debug check
 
         let Instruction { op_a: a, d, .. } = *instruction;

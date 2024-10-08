@@ -25,6 +25,9 @@ pub trait MachineAdapterInterface<T> {
     type ProcessedInstruction;
 }
 
+pub type Reads<T, I> = <I as MachineAdapterInterface<T>>::Reads;
+pub type Writes<T, I> = <I as MachineAdapterInterface<T>>::Writes;
+
 /// The adapter owns all memory accesses and timestamp changes.
 /// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
 pub trait MachineAdapter<F: PrimeField32> {
@@ -121,12 +124,14 @@ pub trait MachineIntegration<F: PrimeField32, A: MachineAdapter<F>> {
 }
 
 pub struct InstructionOutput<T, I: MachineAdapterInterface<T>> {
-    pub to_pc: T,
+    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
+    pub to_pc: Option<T>,
     pub writes: I::Writes,
 }
 
 pub struct IntegrationInterface<T, I: MachineAdapterInterface<T>> {
-    pub to_pc: T,
+    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
+    pub to_pc: Option<T>,
     pub reads: I::Reads,
     pub writes: I::Writes,
     pub instruction: I::ProcessedInstruction,
