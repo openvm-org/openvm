@@ -21,7 +21,7 @@ members = [
     "vm",
     "vm/bin",
     "riscv/zkvm/lib",
-    "riscv/zkvm/platform",
+    "riscv/zkvm/platform", "transpiler",
 ]
 resolver = "2"
 
