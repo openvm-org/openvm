@@ -191,6 +191,11 @@ impl<C: Config> Builder<C> {
         }
     }
 
+    /// Increments Usize by one.
+    pub fn inc(&mut self, u: &Usize<C::N>) {
+        self.assign(u, u.clone() + RVar::one());
+    }
+
     /// Evaluates a constant expression and returns a variable.
     pub fn constant<V: FromConstant<C>>(&mut self, value: V::Constant) -> V {
         V::constant(value, self)
@@ -294,15 +299,25 @@ impl<C: Config> Builder<C> {
         &mut self,
         lhs: LhsExpr,
         rhs: RhsExpr,
-    ) -> Var<C::N> {
+    ) -> RVar<C::N> {
         let lhs = lhs.into();
         let rhs = rhs.into();
-
-        let result = self.uninit();
-        let lhs = self.eval(lhs);
-        let rhs = self.eval(rhs);
-        self.operations.push(DslIr::LessThanV(result, lhs, rhs));
-        result
+        match (&lhs, &rhs) {
+            (SymbolicVar::Const(lhs, _), SymbolicVar::Const(rhs, _)) => {
+                if rhs < lhs {
+                    RVar::one()
+                } else {
+                    RVar::zero()
+                }
+            }
+            _ => {
+                let result = self.uninit();
+                let lhs = self.eval(lhs);
+                let rhs = self.eval(rhs);
+                self.operations.push(DslIr::LessThanV(result, lhs, rhs));
+                RVar::Val(result)
+            }
+        }
     }
 
     /// Evaluate a block of operations if two expressions are equal.

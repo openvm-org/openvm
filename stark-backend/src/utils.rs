@@ -38,3 +38,21 @@ pub fn disable_debug_builder() {
         *debug.lock().unwrap() = false;
     });
 }
+
+#[macro_export]
+#[cfg(feature = "parallel")]
+macro_rules! parizip {
+    ( $first:expr $( , $rest:expr )* $(,)* ) => {
+        {
+            use rayon::iter::*;
+            (( $first $( , $rest)* )).into_par_iter()
+        }
+    };
+}
+#[macro_export]
+#[cfg(not(feature = "parallel"))]
+macro_rules! parizip {
+    ( $first:expr $( , $rest:expr )* $(,)* ) => {
+        itertools::izip!( $first $( , $rest)* )
+    };
+}

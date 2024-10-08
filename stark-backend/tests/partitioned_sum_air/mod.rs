@@ -1,6 +1,6 @@
 use afs_stark_backend::{
     prover::{trace::TraceCommitmentBuilder, USE_DEBUG_BUILDER},
-    verifier::{MultiTraceStarkVerifier, VerificationError},
+    verifier::{v2::MultiTraceStarkVerifierV2, MultiTraceStarkVerifier, VerificationError},
 };
 use ax_sdk::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
 use itertools::Itertools;
@@ -53,12 +53,12 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let pis = vec![vec![]];
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data);
 
     // Verify the proof:
     // Start from clean challenger
     let mut challenger = engine.new_challenger();
-    let verifier = MultiTraceStarkVerifier::new(prover.config);
+    let verifier = MultiTraceStarkVerifierV2::new(prover.config);
     verifier.verify(&mut challenger, &vk, &proof)
 }
 

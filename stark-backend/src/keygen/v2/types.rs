@@ -97,3 +97,8 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKeyV2<SC> {
         }
     }
 }
+impl<SC: StarkGenericConfig> MultiStarkVerifyingKeyV2<SC> {
+    pub fn num_challenges_to_sample(&self) -> Vec<usize> {
+        self.full_view().num_challenges_to_sample()
+    }
+}

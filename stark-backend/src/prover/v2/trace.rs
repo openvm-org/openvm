@@ -107,10 +107,7 @@ where
     StarkProvingKeyV2<SC>: Send + Sync,
 {
     // Generate permutation traces
-    let perm_challenges = challenges
-        .first()
-        .map(|c| [c[0], c[1]])
-        .expect("Need 2 challenges"); // must have 2 challenges
+    let perm_challenges = challenges.first().map(|c| [c[0], c[1]]); // must have 2 challenges
 
     mpk.per_air
         .par_iter()
@@ -124,7 +121,7 @@ where
                 &preprocessed_trace,
                 main,
                 public_values,
-                Some(perm_challenges),
+                perm_challenges,
                 pk.interaction_chunk_size,
             )
         })

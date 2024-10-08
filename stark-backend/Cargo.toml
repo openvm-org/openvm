@@ -24,6 +24,7 @@ serde = { workspace = true, default-features = false, features = [
 ] }
 derivative = "2.2.0"
 metrics = { workspace = true, optional = true }
+cfg-if = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 tikv-jemallocator = { version = "0.6", optional = true }
