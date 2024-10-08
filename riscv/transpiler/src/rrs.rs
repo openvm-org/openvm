@@ -275,6 +275,10 @@ pub(crate) fn transpile(instructions_u32: &[u32]) -> Vec<Instruction<u32>> {
     let mut instructions = Vec::new();
     let mut transpiler = InstructionTranspiler;
     for instruction_u32 in instructions_u32 {
+        // TODO: we probably want to forbid such instructions, but for now we just skip them
+        if *instruction_u32 == 115 {
+            continue;
+        }
         let instruction = process_instruction(&mut transpiler, *instruction_u32).unwrap();
         instructions.push(instruction);
     }

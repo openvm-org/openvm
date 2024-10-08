@@ -179,7 +179,6 @@ mod tests {
         Ok(())
     }
 
-    // Doesn't work because of 1110011 instruction
     #[test]
     fn test_generate_program() -> Result<()> {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
