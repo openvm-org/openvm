@@ -96,6 +96,7 @@ impl ExprBuilder {
     }
 }
 
+#[derive(Clone)]
 pub struct FieldExprChip {
     pub builder: ExprBuilder,
 

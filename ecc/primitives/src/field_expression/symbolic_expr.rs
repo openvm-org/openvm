@@ -1,12 +1,11 @@
 use std::cmp::max;
 
-use afs_primitives::bigint::OverflowInt;
+use afs_primitives::bigint::{utils::big_uint_mod_inverse, OverflowInt};
 use num_bigint_dig::{BigInt, BigUint};
 use num_traits::{FromPrimitive, One, Zero};
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 use p3_util::log2_ceil_usize;
-use stark_vm::modular_addsub::big_uint_mod_inverse;
 
 /// Example: If there are 4 inputs (x1, y1, x2, y2), and one intermediate variable lambda,
 /// Mul(Var(0), Var(0)) - Input(0) - Input(2) =>

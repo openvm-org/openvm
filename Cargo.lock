@@ -529,7 +529,6 @@ dependencies = [
 name = "ax-ecc-primitives"
 version = "0.1.0"
 dependencies = [
- "afs-compiler",
  "afs-primitives",
  "afs-stark-backend",
  "ax-sdk",
@@ -559,7 +558,6 @@ dependencies = [
  "serde_json",
  "sha3",
  "snark-verifier-sdk",
- "stark-vm",
  "tracing",
  "zkhash",
 ]
@@ -3539,6 +3537,7 @@ dependencies = [
  "afs-primitives",
  "afs-stark-backend",
  "ark-ff 0.4.2",
+ "ax-ecc-primitives",
  "ax-sdk",
  "backtrace",
  "cfg-if",

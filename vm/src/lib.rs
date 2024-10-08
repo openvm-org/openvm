@@ -10,6 +10,7 @@ pub mod loadstore;
 pub mod memory;
 pub mod modular_addsub;
 pub mod modular_multdiv;
+pub mod modular_v2;
 pub mod new_alu;
 pub mod new_divrem;
 pub mod new_lt;
@@ -24,3 +25,5 @@ pub mod shift;
 pub mod ui;
 pub mod uint_multiplication;
 pub mod vm;
+
+mod utils;
