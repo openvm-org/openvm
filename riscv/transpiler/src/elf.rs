@@ -1,3 +1,4 @@
+// Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT license
 use std::{cmp::min, collections::BTreeMap};
 
 use color_eyre::eyre;
