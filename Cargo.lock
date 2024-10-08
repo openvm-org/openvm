@@ -884,6 +884,8 @@ version = "0.1.0"
 dependencies = [
  "halo2curves-axiom 0.7.0",
  "itertools 0.13.0",
+ "lazy_static",
+ "num",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rng",

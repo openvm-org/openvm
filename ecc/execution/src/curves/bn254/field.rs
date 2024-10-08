@@ -2,8 +2,11 @@ use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, Fq6},
     ff::Field,
 };
+use num::BigInt;
 
-use crate::common::{EvaluatedLine, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType};
+use crate::common::{
+    BigIntExp, EvaluatedLine, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType,
+};
 
 impl Fp2Constructor<Fq> for Fq2 {
     fn new(c0: Fq, c1: Fq) -> Self {
@@ -133,5 +136,43 @@ impl FieldExtension for Fq12 {
 impl LineDType<Fq, Fq2, Fq12> for Fq12 {
     fn from_evaluated_line_d_type(line: EvaluatedLine<Fq, Fq2>) -> Fq12 {
         Fq12::from_coeffs(&[Fq2::ONE, line.b, Fq2::ZERO, line.c, Fq2::ZERO, Fq2::ZERO])
+    }
+}
+
+impl BigIntExp<Fq12> for Fq12 {
+    fn exp(&self, k: BigInt) -> Fq12 {
+        if k == BigInt::from(0) {
+            return Fq12::one();
+        }
+
+        let mut e = k.clone();
+        let mut x = self.clone();
+
+        if k < BigInt::from(0) {
+            x = x.invert().unwrap();
+            e = -k;
+        }
+
+        let mut res = Fq12::one();
+        let mut ops = [Fq12::default(), Fq12::default(), Fq12::default()];
+
+        ops[0] = x;
+        ops[1] = ops[0].square();
+        ops[2] = ops[0] * ops[1];
+
+        let bytes = e.to_bytes_be();
+        for &b in bytes.1.iter() {
+            let mut mask = 0xc0;
+            for j in 0..4 {
+                res = res.square().square();
+                let c = (b & mask) >> (6 - 2 * j);
+                if c != 0 {
+                    res = res * &ops[(c - 1) as usize];
+                }
+                mask >>= 2;
+            }
+        }
+
+        res
     }
 }

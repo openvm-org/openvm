@@ -1,4 +1,5 @@
 use halo2curves_axiom::ff::Field;
+use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct EcPoint<F> {
@@ -17,4 +18,10 @@ impl<F: Field> EcPoint<F> {
             y: self.y.neg(),
         }
     }
+}
+
+pub trait AffineCoords<F: Field>: Clone {
+    fn x(&self) -> F;
+    fn y(&self) -> F;
+    fn random(rng: &mut impl Rng) -> Self;
 }

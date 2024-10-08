@@ -1,30 +1,14 @@
 use halo2curves_axiom::{
-    bn256::{G1Affine, G2Affine, G2Prepared, Gt},
+    bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, Gt},
     pairing::MillerLoopResult,
 };
-use itertools::izip;
-use rand::{rngs::StdRng, SeedableRng};
 
-use crate::{
-    common::{EcPoint, MultiMillerLoop},
-    curves::bn254::Bn254,
-};
+use crate::{common::MultiMillerLoop, curves::bn254::Bn254, tests::utils::generate_test_points};
 
 #[allow(non_snake_case)]
 fn run_miller_loop_test(rand_seeds: &[u64]) {
-    let (P_vec, Q_vec) = rand_seeds
-        .iter()
-        .map(|seed| {
-            let mut rng0 = StdRng::seed_from_u64(*seed);
-            let p = G1Affine::random(&mut rng0);
-            let mut rng1 = StdRng::seed_from_u64(*seed * 2);
-            let q = G2Affine::random(&mut rng1);
-            (p, q)
-        })
-        .unzip::<_, _, Vec<_>, Vec<_>>();
-    let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
-        .map(|(P, Q)| (EcPoint { x: P.x, y: P.y }, EcPoint { x: Q.x, y: Q.y }))
-        .unzip::<_, _, Vec<_>, Vec<_>>();
+    let (P_vec, Q_vec, P_ecpoints, Q_ecpoints) =
+        generate_test_points::<G1Affine, G2Affine, Fq, Fq2>(rand_seeds);
 
     // Compare against halo2curves implementation
     let g2_prepareds = Q_vec
@@ -58,4 +42,28 @@ fn test_single_miller_loop_bn254() {
 fn test_multi_miller_loop_bn254() {
     let rand_seeds = [8, 15, 29, 55, 166];
     run_miller_loop_test(&rand_seeds);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_miller_loop_final_exp() {
+    let rand_seeds = [619];
+    let (P_vec, Q_vec, P_ecpoints, Q_ecpoints) =
+        generate_test_points::<G1Affine, G2Affine, Fq, Fq2>(&rand_seeds);
+
+    // Run the multi-miller loop with embedded exponents
+    let bn254 = Bn254;
+    let f = bn254.multi_miller_loop_embedded_exp(
+        P_ecpoints.as_slice(),
+        Q_ecpoints.as_slice(),
+        Some(Fq12::one()),
+    );
+    // f.assert_final_exp_is_one();
+
+    // // Compare against miller loop with final exp
+    // let f_compare = bn254.multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
+    // let wrapped_f_compare = Gt(f_compare);
+    // let final_f_compare = wrapped_f_compare.final_exponentiation();
+
+    // assert_eq!(f, final_f_compare);
 }

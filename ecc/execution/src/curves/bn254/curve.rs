@@ -1,6 +1,7 @@
-use halo2curves_axiom::bn256::{Fq, Fq2};
+use halo2curves_axiom::bn256::{Fq, Fq2, G1Affine, G2Affine};
+use rand::Rng;
 
-use crate::common::FieldExtension;
+use crate::common::{AffineCoords, FieldExtension};
 
 // from gnark implementation: https://github.com/Consensys/gnark/blob/42dcb0c3673b2394bf1fd82f5128f7a121d7d48e/std/algebra/emulated/sw_bn254/pairing.go#L356
 // loopCounter = 6x₀+2 = 29793968203157093288 in 2-NAF (nonadjacent form)
@@ -27,5 +28,33 @@ impl Bn254 {
 
     pub fn pseudo_binary_encoding() -> [i8; BN254_PBE_BITS] {
         GNARK_BN254_PBE_NAF
+    }
+}
+
+impl AffineCoords<Fq> for G1Affine {
+    fn x(&self) -> Fq {
+        self.x
+    }
+
+    fn y(&self) -> Fq {
+        self.y
+    }
+
+    fn random(rng: &mut impl Rng) -> Self {
+        G1Affine::random(rng)
+    }
+}
+
+impl AffineCoords<Fq2> for G2Affine {
+    fn x(&self) -> Fq2 {
+        self.x
+    }
+
+    fn y(&self) -> Fq2 {
+        self.y
+    }
+
+    fn random(rng: &mut impl Rng) -> Self {
+        G2Affine::random(rng)
     }
 }
