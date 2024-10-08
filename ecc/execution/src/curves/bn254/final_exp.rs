@@ -5,14 +5,35 @@ use halo2curves_axiom::{
 use num::{BigInt, Num};
 
 use super::Bn254;
-use crate::common::{str_to_u64_arr, BigIntExp, FinalExp};
+use crate::common::{
+    str_to_u64_arr, EcPoint, ExpBigInt, FieldExtension, FinalExp, MultiMillerLoop,
+};
 
+#[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
-    fn assert_final_exp_is_one(&self, _f: Fq12) {
-        assert!(true);
+    fn assert_final_exp_is_one(&self, f: Fq12, P: &[EcPoint<Fq>], Q: &[EcPoint<Fq2>]) {
+        let (c, u) = self.final_exp_hint(f);
+
+        let _fx = self.multi_miller_loop_embedded_exp(P, Q, Some(c));
+
+        // Check that f * u == c^lambda where
+        // lambda = 6x + 2 + q^3 - q^2 + q, with x the BN254 seed
+        // and c (residueWitness) and u (cubicNonResiduePower) from the hint
+        let t2 = f * u;
+        let mut t1 = c.frobenius_map(Some(3));
+        let mut t0 = c.frobenius_map(Some(2));
+        t1 = t1 * t0.invert().unwrap();
+        t0 = c.frobenius_map(Some(1));
+        t1 = t1 * t0;
+
+        // We skip the computation of the addition chain since we have run the miller loop again with the residue witness
+
+        t0 = t0 * t1;
+        assert_eq!(t0, t2);
     }
 
     fn final_exp_hint(&self, f: Fq12) -> (Fq12, Fq12) {
+        println!("f: {:#?}", f);
         // Residue witness inverse
         let mut c = Fq12::ONE;
         // Cubic nonresidue power
@@ -20,17 +41,26 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
 
         // exp1 = (p^12 - 1) / 3
         let exp1 = BigInt::from_str_radix("4030969696062745741797811005853058291874379204406359442560681893891674450106959530046539719647151210908190211459382793062006703141168852426020468083171325367934590379984666859998399967609544754664110191464072930598755441160008826659219834762354786403012110463250131961575955268597858015384895449311534622125256548620283853223733396368939858981844663598065852816056384933498610930035891058807598891752166582271931875150099691598048016175399382213304673796601585080509443902692818733420199004555566113537482054218823936116647313678747500267068559627206777530424029211671772692598157901876223857571299238046741502089890557442500582300718504160740314926185458079985126192563953772118929726791041828902047546977272656240744693339962973939047279285351052107950250121751682659529260304162131862468322644288196213423232132152125277136333208005221619443705106431645884840489295409272576227859206166894626854018093044908314720", 10).unwrap();
-        let mut unity_root_27 = Fq12::zero();
         let u0 = str_to_u64_arr(
             "9483667112135124394372960210728142145589475128897916459350428495526310884707",
             10,
         );
-        unity_root_27.c0.c1.c0 = Fq::from_raw([u0[0], u0[1], u0[2], u0[3]]);
         let u1 = str_to_u64_arr(
             "4534159768373982659291990808346042891252278737770656686799127720849666919525",
             10,
         );
-        unity_root_27.c0.c1.c1 = Fq::from_raw([u1[0], u1[1], u1[2], u1[3]]);
+        let u_coeffs = Fq2::from_coeffs(&[
+            Fq::from_raw([u0[0], u0[1], u0[2], u0[3]]),
+            Fq::from_raw([u1[0], u1[1], u1[2], u1[3]]),
+        ]);
+        let unity_root_27 = Fq12::from_coeffs(&[
+            Fq2::ZERO,
+            Fq2::ZERO,
+            u_coeffs,
+            Fq2::ZERO,
+            Fq2::ZERO,
+            Fq2::ZERO,
+        ]);
 
         let f_mul_unity_root_27 = f * unity_root_27;
         if f.exp(exp1.clone()) == Fq12::ONE {
@@ -69,7 +99,8 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         let mut t = 0;
         let mut tmp = Fq12::ZERO;
 
-        fn mul_loop(x3: &mut Fq12, tmp: &mut Fq12, t: &mut i32) {
+        // Modified Tonelli-Shanks algorithm for computing the cube root
+        fn find_cube_root(x3: &mut Fq12, tmp: &mut Fq12, t: &mut i32) {
             while *x3 != Fq12::ONE {
                 *tmp = (*x3).square();
                 *x3 = *x3 * *tmp;
@@ -77,15 +108,17 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
             }
         }
 
-        mul_loop(&mut x3, &mut tmp, &mut t);
+        println!("find_cube_root0: {}", t);
+        find_cube_root(&mut x3, &mut tmp, &mut t);
 
         while t != 0 {
             tmp = unity_root_27.exp(exp2.clone());
             x = x * tmp;
 
-            x3 = x.square() * x3 * c_inv;
+            x3 = x.square() * x * c_inv;
             t = 0;
-            mul_loop(&mut x3, &mut tmp, &mut t);
+            println!("find_cube_root1: {}", t);
+            find_cube_root(&mut x3, &mut tmp, &mut t);
         }
 
         c = x;

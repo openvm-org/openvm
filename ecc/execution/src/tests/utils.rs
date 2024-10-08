@@ -1,4 +1,4 @@
-use halo2curves_axiom::{ff::Field, group::Group};
+use halo2curves_axiom::ff::Field;
 use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -24,6 +24,31 @@ where
             (p, q)
         })
         .unzip::<_, _, Vec<_>, Vec<_>>();
+    let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
+        .map(|(P, Q)| {
+            (
+                EcPoint { x: P.x(), y: P.y() },
+                EcPoint { x: Q.x(), y: Q.y() },
+            )
+        })
+        .unzip::<_, _, Vec<_>, Vec<_>>();
+    (P_vec, Q_vec, P_ecpoints, Q_ecpoints)
+}
+
+#[allow(non_snake_case)]
+pub fn generate_test_points_generator<A1, A2, Fp, Fp2>(
+) -> (Vec<A1>, Vec<A2>, Vec<EcPoint<Fp>>, Vec<EcPoint<Fp2>>)
+where
+    A1: AffineCoords<Fp>,
+    A2: AffineCoords<Fp2>,
+    Fp: Field,
+    Fp2: FieldExtension<BaseField = Fp>,
+{
+    let (P_vec, Q_vec) = {
+        let p = A1::generator();
+        let q = A2::generator();
+        (vec![p], vec![q])
+    };
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {
             (

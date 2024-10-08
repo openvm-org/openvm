@@ -43,6 +43,10 @@ impl AffineCoords<Fq> for G1Affine {
     fn random(rng: &mut impl Rng) -> Self {
         G1Affine::random(rng)
     }
+
+    fn generator() -> Self {
+        G1Affine::generator()
+    }
 }
 
 impl AffineCoords<Fq2> for G2Affine {
@@ -56,5 +60,9 @@ impl AffineCoords<Fq2> for G2Affine {
 
     fn random(rng: &mut impl Rng) -> Self {
         G2Affine::random(rng)
+    }
+
+    fn generator() -> Self {
+        G2Affine::generator()
     }
 }

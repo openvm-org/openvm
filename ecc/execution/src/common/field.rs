@@ -28,7 +28,7 @@ pub trait Fp12Constructor<Fp2: FieldExtension> {
     fn new(c00: Fp2, c01: Fp2, c02: Fp2, c10: Fp2, c11: Fp2, c12: Fp2) -> Self;
 }
 
-pub trait BigIntExp<Fp: Field> {
+pub trait ExpBigInt<Fp: Field> {
     /// Exponentiates a field element by a BigInt
     fn exp(&self, k: BigInt) -> Fp;
 }

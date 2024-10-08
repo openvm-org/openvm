@@ -5,7 +5,7 @@ use halo2curves_axiom::{
 use num::BigInt;
 
 use crate::common::{
-    BigIntExp, EvaluatedLine, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType,
+    EvaluatedLine, ExpBigInt, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType,
 };
 
 impl Fp2Constructor<Fq> for Fq2 {
@@ -139,14 +139,14 @@ impl LineDType<Fq, Fq2, Fq12> for Fq12 {
     }
 }
 
-impl BigIntExp<Fq12> for Fq12 {
+impl ExpBigInt<Fq12> for Fq12 {
     fn exp(&self, k: BigInt) -> Fq12 {
         if k == BigInt::from(0) {
             return Fq12::one();
         }
 
         let mut e = k.clone();
-        let mut x = self.clone();
+        let mut x = *self;
 
         if k < BigInt::from(0) {
             x = x.invert().unwrap();
@@ -154,11 +154,9 @@ impl BigIntExp<Fq12> for Fq12 {
         }
 
         let mut res = Fq12::one();
-        let mut ops = [Fq12::default(), Fq12::default(), Fq12::default()];
 
-        ops[0] = x;
-        ops[1] = ops[0].square();
-        ops[2] = ops[0] * ops[1];
+        let x_sq = x.square();
+        let ops = [x, x_sq, x_sq * x];
 
         let bytes = e.to_bytes_be();
         for &b in bytes.1.iter() {
@@ -167,12 +165,12 @@ impl BigIntExp<Fq12> for Fq12 {
                 res = res.square().square();
                 let c = (b & mask) >> (6 - 2 * j);
                 if c != 0 {
-                    res = res * &ops[(c - 1) as usize];
+                    res *= &ops[(c - 1) as usize];
                 }
                 mask >>= 2;
             }
         }
-
+        println!("bigint exp: {:?}", res);
         res
     }
 }

@@ -24,4 +24,5 @@ pub trait AffineCoords<F: Field>: Clone {
     fn x(&self) -> F;
     fn y(&self) -> F;
     fn random(rng: &mut impl Rng) -> Self;
+    fn generator() -> Self;
 }
