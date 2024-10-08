@@ -12,7 +12,8 @@ members = [
     "sdk",
     "vm",
     "riscv/zkvm/lib",
-    "riscv/zkvm/platform", "transpiler",
+    "riscv/zkvm/platform",
+    "riscv/transpiler",
 ]
 resolver = "2"
 
