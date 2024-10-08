@@ -13,8 +13,6 @@ on:
           - tiny_e2e
           - alu256_e2e
           - small_e2e
-          - single_rw
-          - single_filter
       aws_instance_type:
         type: string
         required: false
@@ -98,16 +96,6 @@ jobs:
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
-        if: inputs.benchmark_name == 'halo2_static_verify_fibair'
-        working-directory: recursion
-        run: |
-          FEATURE_FLAGS="$FEATURE_FLAGS,static-verifier"
-          bash trusted_setup_s3.sh
-          mkdir -p ../benchmark/tmp
-          RUSTFLAGS="-Ctarget-cpu=native" cargo test --release -p afs-recursion --test recursion --features $FEATURE_FLAGS -- test_fibonacci_program_halo2_verify > ../benchmark/tmp/_result.middle.md
-          sed -n "/prove halo2 verifier circuit/,\$p" ../benchmark/tmp/_result.middle.md > ../benchmark/tmp/_result.md
-
-      - name: Run benchmark
         if: inputs.benchmark_name == 'tiny_e2e'
         working-directory: recursion
         run: |
@@ -131,15 +119,6 @@ jobs:
           python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'single_rw'
-        run: |
-          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
-
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'single_filter'
-        run: |
-          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- predicate --config-folder benchmark/config/single_filter -f benchmark/config/olap/filter_0xfade.afo
       ######################################################
       - name: Store metric json and compute diff with previous
         run: |
