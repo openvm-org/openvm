@@ -6,6 +6,7 @@ pub mod ecc;
 pub mod field_arithmetic;
 pub mod field_extension;
 pub mod hashes;
+pub mod loadstore;
 pub mod memory;
 pub mod modular_addsub;
 pub mod modular_multdiv;

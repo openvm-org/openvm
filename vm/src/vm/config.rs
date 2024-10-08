@@ -77,6 +77,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             AluOpcode::COUNT,
             AluOpcode::default_offset(),
         ),
+        ExecutorName::LoadStoreRv32 => (
+            LoadStoreOpcode::default_offset(),
+            LoadStoreOpcode::COUNT,
+            LoadStoreOpcode::default_offset(),
+        ),
         ExecutorName::ArithmeticLogicUnit256 => (
             U256Opcode::default_offset(),
             8,

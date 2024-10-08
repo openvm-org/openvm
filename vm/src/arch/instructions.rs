@@ -215,3 +215,19 @@ pub enum LessThanOpcode {
     SLT,
     SLTU,
 }
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x320]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum LoadStoreOpcode {
+    LOADW,
+    // TODO: Should we add these now?
+    // LOADB_NOEXTEND,
+    // LOADH_NOEXTEND,
+    STOREW,
+    STOREH,
+    STOREB,
+}

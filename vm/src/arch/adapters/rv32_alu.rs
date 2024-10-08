@@ -179,6 +179,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: InstructionOutput<F, Self::Interface<F>>,
+        _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check
 

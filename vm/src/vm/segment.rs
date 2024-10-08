@@ -32,6 +32,7 @@ use crate::{
     arch::{
         instructions::*, ExecutionBus, ExecutionState, ExecutorName, InstructionExecutor,
         InstructionExecutorVariant, MachineChip, MachineChipVariant, Rv32AluAdapter,
+        Rv32LoadStoreAdapter,
     },
     castf::CastFChip,
     core::{
@@ -42,6 +43,7 @@ use crate::{
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
+    loadstore::{LoadStoreIntegration, Rv32LoadStoreChip},
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
     modular_addsub::ModularAddSubChip,
     modular_multdiv::ModularMultDivChip,
@@ -312,6 +314,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(MachineChipVariant::Shift256(chip));
+                }
+                ExecutorName::LoadStoreRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32LoadStoreChip::new(
+                        Rv32LoadStoreAdapter::new(range_checker.clone(), offset),
+                        LoadStoreIntegration::new(offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::LoadStoreRv32(chip));
                 }
                 ExecutorName::Ui => {
                     let chip = Rc::new(RefCell::new(UiChip::new(
