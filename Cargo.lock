@@ -628,6 +628,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-platform",
+ "color-eyre",
+ "elf",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-commit",
+ "p3-field",
+ "p3-keccak-air",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-uni-stark",
+ "p3-util",
+ "rrs-lib",
+ "stark-vm",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3985,31 +4005,6 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "transpiler"
-version = "0.1.0"
-dependencies = [
- "afs-compiler",
- "afs-derive",
- "afs-primitives",
- "afs-stark-backend",
- "ax-sdk",
- "color-eyre",
- "elf",
- "p3-air",
- "p3-baby-bear",
- "p3-commit",
- "p3-field",
- "p3-keccak-air",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-uni-stark",
- "p3-util",
- "poseidon2-air",
- "rrs-lib",
- "stark-vm",
 ]
 
 [[package]]

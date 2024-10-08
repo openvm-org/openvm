@@ -1,9 +1,5 @@
-//! A disassembler for RISC-V ELFs.
+//! A transpiler from custom RISC-V ELFs to axVM machine code.
 
-mod elf;
-mod rrs;
-mod util;
-
-pub(crate) use elf;
-pub(crate) use rrs;
-pub(crate) use util;
+pub mod elf;
+pub mod rrs;
+pub mod util;

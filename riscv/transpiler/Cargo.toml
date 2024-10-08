@@ -1,5 +1,5 @@
 [package]
-name = "transpiler"
+name = "axvm-transpiler"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -17,13 +17,8 @@ p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
 
-poseidon2-air = { path = "../poseidon2-air", default-features = false }
-afs-compiler = { path = "../compiler", default-features = false }
-afs-primitives = { path = "../primitives", default-features = false }
-afs-stark-backend = { path = "../stark-backend", default-features = false }
-afs-derive = { path = "../derive" }
-ax-sdk = { path = "../sdk", default-features = false, optional = true }
-stark-vm = { path = "../vm" }
+axvm-platform = { workspace = true }
+stark-vm = { workspace = true }
 
 color-eyre = "0.6.3"
 elf = "0.7.4"

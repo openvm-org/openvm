@@ -1,16 +1,15 @@
-// Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT license
+// Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT License
+// and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
 use std::{cmp::min, collections::BTreeMap};
 
-use color_eyre::eyre;
+use axvm_platform::WORD_SIZE;
+use color_eyre::eyre::{self, bail, ContextCompat};
 use elf::{
     abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
     endian::LittleEndian,
     file::Class,
     ElfBytes,
 };
-
-const MAXIMUM_MEMORY_SIZE: u32 = 1 << 27;
-const WORD_SIZE: usize = 4;
 
 /// RISC-V 32IM ELF (Executable and Linkable Format) File.
 ///
@@ -58,35 +57,40 @@ impl Elf {
     /// This function may return an error if the ELF is not valid.
     ///
     /// Reference: [Executable and Linkable Format](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
-    pub(crate) fn decode(input: &[u8]) -> eyre::Result<Self> {
+    pub(crate) fn decode(input: &[u8], max_mem: u32) -> eyre::Result<Self> {
         let mut image: BTreeMap<u32, u32> = BTreeMap::new();
 
         // Parse the ELF file assuming that it is little-endian..
-        let elf = ElfBytes::<LittleEndian>::minimal_parse(input)?;
+        let elf = ElfBytes::<LittleEndian>::minimal_parse(input)
+            .map_err(|err| eyre::eyre!("Elf parse error: {err}"))?;
 
         // Some sanity checks to make sure that the ELF file is valid.
         if elf.ehdr.class != Class::ELF32 {
-            eyre::bail!("must be a 32-bit elf");
+            bail!("Not a 32-bit ELF");
         } else if elf.ehdr.e_machine != EM_RISCV {
-            eyre::bail!("must be a riscv machine");
+            bail!("Invalid machine type, must be RISC-V");
         } else if elf.ehdr.e_type != ET_EXEC {
-            eyre::bail!("must be executable");
+            bail!("Invalid ELF type, must be executable");
         }
 
         // Get the entrypoint of the ELF file as an u32.
-        let entry: u32 = elf.ehdr.e_entry.try_into()?;
+        let entry: u32 = elf
+            .ehdr
+            .e_entry
+            .try_into()
+            .map_err(|err| eyre::eyre!("e_entry was larger than 32 bits. {err}"))?;
 
         // Make sure the entrypoint is valid.
-        if entry == MAXIMUM_MEMORY_SIZE || entry % WORD_SIZE as u32 != 0 {
-            eyre::bail!("invalid entrypoint");
+        if entry >= max_mem || entry % WORD_SIZE as u32 != 0 {
+            bail!("Invalid entrypoint");
         }
 
         // Get the segments of the ELF file.
         let segments = elf
             .segments()
-            .ok_or_else(|| eyre::eyre!("failed to get segments"))?;
+            .ok_or_else(|| eyre::eyre!("Missing segment table"))?;
         if segments.len() > 256 {
-            eyre::bail!("too many program headers");
+            bail!("Too many program headers");
         }
 
         let mut instructions: Vec<u32> = Vec::new();
@@ -96,20 +100,20 @@ impl Elf {
         for segment in segments.iter().filter(|x| x.p_type == PT_LOAD) {
             // Get the file size of the segment as an u32.
             let file_size: u32 = segment.p_filesz.try_into()?;
-            if file_size == MAXIMUM_MEMORY_SIZE {
-                eyre::bail!("invalid segment file_size");
+            if file_size >= max_mem {
+                bail!("invalid segment file_size");
             }
 
             // Get the memory size of the segment as an u32.
             let mem_size: u32 = segment.p_memsz.try_into()?;
-            if mem_size == MAXIMUM_MEMORY_SIZE {
-                eyre::bail!("Invalid segment mem_size");
+            if mem_size >= max_mem {
+                bail!("Invalid segment mem_size");
             }
 
             // Get the virtual address of the segment as an u32.
             let vaddr: u32 = segment.p_vaddr.try_into()?;
             if vaddr % WORD_SIZE as u32 != 0 {
-                eyre::bail!("vaddr {vaddr:08x} is unaligned");
+                bail!("vaddr {vaddr:08x} is unaligned");
             }
 
             // If the virtual address is less than the first memory address, then update the first
@@ -126,9 +130,9 @@ impl Elf {
                 let addr = vaddr
                     .checked_add(i)
                     .ok_or_else(|| eyre::eyre!("vaddr overflow"))?;
-                if addr == MAXIMUM_MEMORY_SIZE {
-                    eyre::bail!(
-                        "address [0x{addr:08x}] exceeds maximum address for guest programs [0x{MAXIMUM_MEMORY_SIZE:08x}]"
+                if addr >= max_mem {
+                    bail!(
+                        "address [0x{addr:08x}] exceeds maximum address for guest programs [0x{max_mem:08x}]"
                     );
                 }
 
@@ -138,14 +142,12 @@ impl Elf {
                     continue;
                 }
 
-                // Get the word as an u32 but make sure we don't read past the end of the file.
+                // Get the word as an u32 but make sure we don't read pass the end of the file.
                 let mut word = 0;
                 let len = min(file_size - i, WORD_SIZE as u32);
                 for j in 0..len {
                     let offset = (offset + i + j) as usize;
-                    let byte = input
-                        .get(offset)
-                        .ok_or_else(|| eyre::eyre!("failed to read segment offset"))?;
+                    let byte = input.get(offset).context("Invalid segment offset")?;
                     word |= u32::from(*byte) << (j * 8);
                 }
                 image.insert(addr, word);
