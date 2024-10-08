@@ -168,12 +168,25 @@ mod tests {
     use axvm_platform::memory::MEM_SIZE;
     use color_eyre::eyre::Result;
 
+    use crate::rrs::transpile;
+
     #[test]
     fn test_decode_elf() -> Result<()> {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let data = read(dir.join("data/rv32im-empty-program-elf"))?;
         let elf = super::Elf::decode(&data, MEM_SIZE as u32)?;
         dbg!(elf);
+        Ok(())
+    }
+
+    // Doesn't work because of 1110011 instruction
+    #[test]
+    fn test_generate_program() -> Result<()> {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let data = read(dir.join("data/rv32im-empty-program-elf"))?;
+        let elf = super::Elf::decode(&data, MEM_SIZE as u32)?;
+        let program = transpile(&elf.instructions);
+        dbg!(program);
         Ok(())
     }
 }

@@ -1,5 +1,10 @@
-use rrs_lib::instruction_formats::{IType, RType};
+use rrs_lib::instruction_formats::{IType, ITypeShamt, RType};
 use stark_vm::{arch::instructions::CoreOpcode, program::Instruction};
+
+fn i12_to_u24(imm: i32) -> u32 {
+    let imm_u = imm as u32;
+    imm_u | ((imm_u & 0x80) * 0x17e)
+}
 
 /// Create a new [`Instruction`] from an R-type instruction.
 pub fn from_r_type(opcode: usize, dec_insn: &RType) -> Instruction<u32> {
@@ -22,7 +27,7 @@ pub fn from_i_type(opcode: usize, dec_insn: &IType) -> Instruction<u32> {
         opcode,
         dec_insn.rd as u32,
         dec_insn.rs1 as u32,
-        dec_insn.imm as u32,
+        i12_to_u24(dec_insn.imm),
         0,
         1,
         0,
@@ -31,18 +36,21 @@ pub fn from_i_type(opcode: usize, dec_insn: &IType) -> Instruction<u32> {
     )
 }
 
-// /// Create a new [`Instruction`] from an I-type instruction with a shamt.
-// #[must_use]
-// pub const fn from_i_type_shamt(opcode: Opcode, dec_insn: &ITypeShamt) -> Self {
-//     Self::new(
-//         opcode,
-//         dec_insn.rd as u32,
-//         dec_insn.rs1 as u32,
-//         dec_insn.shamt,
-//         false,
-//         true,
-//     )
-// }
+/// Create a new [`Instruction`] from an I-type instruction with a shamt.
+/// It seems that shamt can only occur in SLLI, SRLI, SRAI.
+pub fn from_i_type_shamt(opcode: usize, dec_insn: &ITypeShamt) -> Instruction<u32> {
+    Instruction::new(
+        opcode,
+        dec_insn.rd as u32,
+        dec_insn.rs1 as u32,
+        i12_to_u24(dec_insn.shamt as i32),
+        0,
+        1,
+        0,
+        0,
+        String::new(),
+    )
+}
 
 // /// Create a new [`Instruction`] from an S-type instruction.
 // #[must_use]

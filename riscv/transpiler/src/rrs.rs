@@ -3,7 +3,7 @@ use rrs_lib::{
     process_instruction, InstructionProcessor,
 };
 use stark_vm::{
-    arch::instructions::{U256Opcode, UsizeOpcode},
+    arch::instructions::{CoreOpcode, U256Opcode, UsizeOpcode},
     program::Instruction,
 };
 
@@ -11,6 +11,20 @@ use crate::util::*;
 
 /// A transpiler that converts the 32-bit encoded instructions into instructions.
 pub(crate) struct InstructionTranspiler;
+
+fn unimp() -> Instruction<u32> {
+    Instruction::new(
+        CoreOpcode::NOP.with_default_offset(),
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        String::new(),
+    )
+}
 
 impl InstructionProcessor for InstructionTranspiler {
     type InstructionResult = Instruction<u32>;
@@ -56,7 +70,7 @@ impl InstructionProcessor for InstructionTranspiler {
     }
 
     fn process_slli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        unimplemented!()
+        from_i_type_shamt(U256Opcode::SLL.with_default_offset(), &dec_insn)
     }
 
     fn process_srl(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -64,7 +78,7 @@ impl InstructionProcessor for InstructionTranspiler {
     }
 
     fn process_srli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        unimplemented!()
+        from_i_type_shamt(U256Opcode::SRL.with_default_offset(), &dec_insn)
     }
 
     fn process_sra(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -72,7 +86,7 @@ impl InstructionProcessor for InstructionTranspiler {
     }
 
     fn process_srai(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        unimplemented!()
+        from_i_type_shamt(U256Opcode::SRA.with_default_offset(), &dec_insn)
     }
 
     fn process_slt(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -80,7 +94,7 @@ impl InstructionProcessor for InstructionTranspiler {
     }
 
     fn process_slti(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        unimplemented!()
+        from_i_type(U256Opcode::SLT.with_default_offset(), &dec_insn)
     }
 
     fn process_sltu(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -92,75 +106,111 @@ impl InstructionProcessor for InstructionTranspiler {
     }
 
     fn process_lb(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_lh(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_lw(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_lbu(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_lhu(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_sb(&mut self, dec_insn: SType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_sh(&mut self, dec_insn: SType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_sw(&mut self, dec_insn: SType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_beq(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_bne(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_blt(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_bge(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_bltu(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_bgeu(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_jal(&mut self, dec_insn: JType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_lui(&mut self, dec_insn: UType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_auipc(&mut self, dec_insn: UType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_mul(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -168,35 +218,50 @@ impl InstructionProcessor for InstructionTranspiler {
     }
 
     fn process_mulh(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_mulhu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_mulhsu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_div(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_divu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_rem(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_remu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        unimplemented!()
+        let _ = dec_insn;
+        // unimplemented!()
+        unimp()
     }
 
     fn process_fence(&mut self, _: IType) -> Self::InstructionResult {
-        unimplemented!()
+        // unimplemented!()
+        unimp()
     }
 }
 
