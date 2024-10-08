@@ -199,7 +199,7 @@ pub enum AluOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x310]
+#[opcode_offset = 0x305]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum ShiftOpcode {
@@ -211,7 +211,7 @@ pub enum ShiftOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x320]
+#[opcode_offset = 0x310]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum LessThanOpcode {
