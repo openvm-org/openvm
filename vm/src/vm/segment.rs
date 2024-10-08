@@ -30,7 +30,7 @@ use crate::{
     alu::ArithmeticLogicChip,
     arch::{
         instructions::*, ExecutionBus, ExecutionState, ExecutorName, InstructionExecutor,
-        InstructionExecutorVariant, MachineChip, MachineChipVariant,
+        InstructionExecutorVariant, MachineChip, MachineChipVariant, Rv32AluAdapter,
     },
     castf::CastFChip,
     core::{
@@ -44,6 +44,7 @@ use crate::{
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
     modular_addsub::ModularAddSubChip,
     modular_multdiv::ModularMultDivChip,
+    new_alu::{ArithmeticLogicIntegration, Rv32ArithmeticLogicChip},
     program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
@@ -217,6 +218,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(MachineChipVariant::Keccak256(chip));
+                }
+                ExecutorName::ArithmeticLogicUnitRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32ArithmeticLogicChip::new(
+                        Rv32AluAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        ArithmeticLogicIntegration::new(byte_xor_chip.clone(), offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::ArithmeticLogicUnitRv32(chip));
                 }
                 ExecutorName::ArithmeticLogicUnit256 => {
                     // We probably must include this chip if we include any modular arithmetic,

@@ -13,6 +13,10 @@ pub trait UsizeOpcode {
     }
 }
 
+pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
+    Opcode::default_offset() + opcode.as_usize()
+}
+
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
@@ -175,6 +179,16 @@ pub enum U32Opcode {
     AUIPC,
 }
 
-pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
-    Opcode::default_offset() + opcode.as_usize()
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x300]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum AluOpcode {
+    ADD,
+    SUB,
+    XOR,
+    OR,
+    AND,
 }

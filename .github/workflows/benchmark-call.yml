@@ -35,6 +35,7 @@ on:
 env:
   S3_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmark/github/results
   S3_METRICS_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmark/github/metrics
+  PUBLIC_S3_PATH: s3://axiom-public-data-staging-us-east-1/benchmark/github/flamegraphs
   FEATURE_FLAGS: "bench-metrics,parallel,mimalloc"
   CMD_ARGS: ""
 
@@ -175,19 +176,9 @@ jobs:
         run: |
           if [[ -f $METRIC_PATH ]]; then
             python3 sdk/scripts/metric_unify/flamegraph.py $METRIC_PATH
-            FLAMEGRAPH_PREFIX=".bench_metrics/flamegraphs/${BIN_NAME}"
+            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
-
-      - name: Upload flamegraphs
-        id: flamegraphs-upload-step
-        if: env.UPLOAD_FLAMEGRAPHS == '1'
-        uses: actions/upload-artifact@v4
-        with:
-          name: flamegraphs
-          path: .bench_metrics/flamegraphs/*.svg
-          retention-days: 7
-          overwrite: true
 
       - name: Add benchmark metadata
         run: |
@@ -195,7 +186,11 @@ jobs:
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
-            echo "Flamegraphs: [link](${{ steps.flamegraphs-upload-step.outputs.artifact-url }})" >> $RESULT_PATH
+            for file in .bench_metrics/flamegraphs/*.svg; do
+              filename=$(basename "$file")
+              flamegraph_url=https://axiom-public-data-staging-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
+              echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
+            done
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
           echo "AWS Instance Type: [${{ inputs.aws_instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.aws_instance_type }})" >> $RESULT_PATH

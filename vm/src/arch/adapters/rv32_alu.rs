@@ -8,24 +8,43 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter,
-        MachineAdapterInterface, Result,
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
+        MachineAdapter, MachineAdapterInterface, Result,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        MemoryChip, MemoryReadRecord, MemoryWriteRecord,
+        MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
     },
-    program::Instruction,
+    program::{bridge::ProgramBus, Instruction},
 };
 
 /// Reads instructions of the form OP a, b, c, d, e where [a:4]_d = [b:4]_d op [c:4]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
+#[derive(Debug)]
 pub struct Rv32AluAdapter<F: Field> {
     _marker: std::marker::PhantomData<F>,
     pub air: Rv32AluAdapterAir,
 }
 
+impl<F: PrimeField32> Rv32AluAdapter<F> {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory_chip: MemoryChipRef<F>,
+    ) -> Self {
+        let memory_bridge = memory_chip.borrow().memory_bridge();
+        Self {
+            _marker: std::marker::PhantomData,
+            air: Rv32AluAdapterAir {
+                _execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
+                _memory_bridge: memory_bridge,
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Rv32AluReadRecord<F: Field> {
     /// Read register value from address space d=1
     pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
@@ -36,6 +55,7 @@ pub struct Rv32AluReadRecord<F: Field> {
     pub rs2_is_imm: bool,
 }
 
+#[derive(Debug)]
 pub struct Rv32AluWriteRecord<F: Field> {
     pub from_state: ExecutionState<usize>,
     /// Write to destination register
