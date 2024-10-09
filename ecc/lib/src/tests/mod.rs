@@ -1,9 +1,12 @@
-use std::str::FromStr;
+use std::{ops::Mul, str::FromStr};
 
 use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, util::execute_program};
+use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
+use num_traits::Num;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
+use rand::Rng;
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
         halo2_proofs::halo2curves::secp256k1::{self, Secp256k1Affine},
@@ -148,6 +151,40 @@ fn test_fixed_ec_mul(
     execute_program(program, vec![]);
 }
 
+fn test_fixed_ec_mul_loop(base: (BigUint, BigUint), window_bits: usize) {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+    type Fp = secp256k1::Fp;
+    type Fq = secp256k1::Fq;
+    let mut builder = AsmBuilder::<F, EF>::bigint_builder();
+    let base = Secp256k1Affine::from_xy(
+        Fp::from_bytes_le(&base.0.to_bytes_le()),
+        Fp::from_bytes_le(&base.1.to_bytes_le()),
+    )
+    .unwrap();
+    let mut rng = create_seeded_rng();
+    for _ in 0..4 {
+        let val = rng.gen_range(100..10000);
+        let scalar = Fq::from(val);
+        let expected = base.mul(scalar);
+        let expected = ECPoint {
+            x: BigUint::from_bytes_le(&expected.x.to_bytes_le()),
+            y: BigUint::from_bytes_le(&expected.y.to_bytes_le()),
+        }
+        .load_const(&mut builder, SECP256K1_COORD_BITS);
+
+        let s = builder.eval_biguint(BigUint::from(val));
+        let cached_points =
+            CachedPoints::new(&mut builder, base, window_bits, SECP256K1_COORD_BITS);
+        let res = fixed_scalar_multiply_secp256k1(&mut builder, &cached_points, s);
+        builder.assert_var_array_eq(&res.affine, &expected.affine);
+        builder.halt();
+
+        let program = builder.clone().compile_isa();
+        execute_program(program, vec![]);
+    }
+}
+
 #[test]
 fn test_compiler_fixed_ec_mul_simple() {
     test_fixed_ec_mul(
@@ -178,27 +215,24 @@ fn test_compiler_fixed_ec_mul_simple() {
 
 #[test]
 fn test_compiler_fixed_ec_mul_double() {
+    let x_str = "55066263022277343669578718895168534326250603453777594175500187360389116729240";
+    let x = BigUint::from_str(x_str).unwrap();
+    let y_str = "32670510020758816978083085130507043184471273380659243275938904335757337482424";
+    let y = BigUint::from_str(y_str).unwrap();
+    type Fp = secp256k1::Fp;
+    let base = Secp256k1Affine::from_xy(
+        Fp::from_bytes_le(&x.to_bytes_le()),
+        Fp::from_bytes_le(&y.to_bytes_le()),
+    )
+    .unwrap();
+    let double = base + base;
+    print!("{:?}", double.x);
     test_fixed_ec_mul(
-        (
-            BigUint::from_str(
-                "55066263022277343669578718895168534326250603453777594175500187360389116729240",
-            )
-            .unwrap(),
-            BigUint::from_str(
-                "32670510020758816978083085130507043184471273380659243275938904335757337482424",
-            )
-            .unwrap(),
-        ),
+        (x, y),
         BigUint::from(2u64),
         (
-            BigUint::from_str(
-                "89565891926547004231252920425935692360644145829622209833684329913297188986597",
-            )
-            .unwrap(),
-            BigUint::from_str(
-                "12158399299693830322967808612713398636155367887041628176798871954788371653930",
-            )
-            .unwrap(),
+            BigUint::from_str_radix(&format!("{:?}", double.x)[2..], 16).unwrap(),
+            BigUint::from_str_radix(&format!("{:?}", double.y)[2..], 16).unwrap(),
         ),
         4,
     );
@@ -242,6 +276,23 @@ fn test_compiler_fixed_ec_mul_zero() {
         ),
         BigUint::from(0u64),
         (BigUint::from(0u64), BigUint::from(0u64)),
+        4,
+    );
+}
+
+#[test]
+fn test_compiler_fixed_ec_mul_loop() {
+    test_fixed_ec_mul_loop(
+        (
+            BigUint::from_str(
+                "55066263022277343669578718895168534326250603453777594175500187360389116729240",
+            )
+            .unwrap(),
+            BigUint::from_str(
+                "32670510020758816978083085130507043184471273380659243275938904335757337482424",
+            )
+            .unwrap(),
+        ),
         4,
     );
 }

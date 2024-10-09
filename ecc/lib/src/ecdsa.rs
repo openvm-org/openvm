@@ -1,10 +1,11 @@
 use afs_compiler::ir::{Builder, Config, Var};
-use elliptic_curve::sec1::ToEncodedPoint;
 use p3_field::{AbstractField, PrimeField64};
+use snark_verifier_sdk::snark_verifier::halo2_base::halo2_proofs::halo2curves::secp256k1::Secp256k1Affine;
 
 use crate::{
+    ec_fixed_scalar_multiply::{fixed_scalar_multiply_secp256k1, CachedPoints},
     ec_mul::scalar_multiply_secp256k1,
-    types::{ECDSAInputVariable, ECPoint, ECPointVariable},
+    types::{ECDSAInputVariable, ECPointVariable},
 };
 
 /// Return 1 if the ECDSA verification succeeds. Otherwise, return 0.
@@ -26,8 +27,8 @@ where
     let u1 = builder.secp256k1_scalar_div(z, &input.sig.s);
     let u2 = builder.secp256k1_scalar_div(&input.sig.r, &input.sig.s);
     // TODO: do we need to enforce u1, u2 are < modulus of scalar field?
-    let generator = load_generator_secp256k1(builder);
-    let u1_g = scalar_multiply_secp256k1(builder, &generator, u1, window_bits);
+    let cached_points = load_generator_secp256k1(builder);
+    let u1_g = fixed_scalar_multiply_secp256k1(builder, &cached_points, u1);
     let u2_qa = scalar_multiply_secp256k1(builder, &input.pubkey, u2, window_bits);
     let sum_affine = builder.secp256k1_add(u1_g.affine, u2_qa.affine);
     let sum = ECPointVariable { affine: sum_affine };
@@ -50,13 +51,15 @@ where
     ret
 }
 
-pub fn load_generator_secp256k1<C: Config>(builder: &mut Builder<C>) -> ECPointVariable<C>
+pub fn load_generator_secp256k1<C: Config>(
+    builder: &mut Builder<C>,
+) -> CachedPoints<C, Secp256k1Affine>
 where
     C::N: PrimeField64,
 {
-    let g = k256::AffinePoint::GENERATOR.to_encoded_point(false);
-    let g: ECPoint = g.into();
+    let g = Secp256k1Affine::generator();
+    // let g: ECPoint = g.into();
     // Gx = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798
     // Gy = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8
-    g.load_const(builder, 256)
+    CachedPoints::new(builder, g, 4, 256)
 }

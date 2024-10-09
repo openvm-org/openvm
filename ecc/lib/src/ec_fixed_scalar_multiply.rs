@@ -15,6 +15,7 @@ where
 {
     pub original_point: P,
     pub window_bits: usize,
+    /// This uses a vec of arrays because we always traverse/access the vect deterministically
     pub points: Vec<Array<C, ECPointVariable<C>>>,
 }
 
