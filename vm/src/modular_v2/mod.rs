@@ -20,8 +20,6 @@ mod tests;
 
 pub const FIELD_ELEMENT_BITS: usize = 30;
 const LIMB_BITS: usize = 8;
-// is this ok?
-const RANGE_BITS: usize = 17;
 
 #[derive(Clone)]
 pub struct ModularConfig<const NUM_LIMBS: usize> {}
@@ -36,10 +34,6 @@ impl<const NUM_LIMBS: usize> FieldVariableConfig for ModularConfig<NUM_LIMBS> {
 
     fn num_limbs_per_field_element() -> usize {
         NUM_LIMBS
-    }
-
-    fn range_checker_bits() -> usize {
-        RANGE_BITS
     }
 }
 
@@ -60,7 +54,12 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2Chip<NUM_LIM
             bus.range_max_bits,
             FIELD_ELEMENT_BITS,
         );
-        let builder = ExprBuilder::new(modulus.clone(), LIMB_SIZE, NUM_LIMBS);
+        let builder = ExprBuilder::new(
+            modulus.clone(),
+            LIMB_SIZE,
+            NUM_LIMBS,
+            range_checker.range_max_bits(),
+        );
         let builder = Rc::new(RefCell::new(builder));
         let x1 = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
         let x2 = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
@@ -88,7 +87,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     fn execute_instruction(
         &self,
         _instruction: &crate::program::Instruction<F>,
-        from_pc: F,
+        _from_pc: F,
         reads: <Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS> as crate::arch::MachineAdapterInterface<F>>::Reads,
     ) -> crate::arch::Result<(
         InstructionOutput<F, Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS>>,
@@ -106,7 +105,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
 
         Ok((
             InstructionOutput {
-                to_pc: from_pc, // does this field matter?
+                to_pc: None,
                 writes: z_limbs.map(|x| F::from_canonical_u32(x)),
             },
             (),
