@@ -3,7 +3,6 @@ use std::{ops::Mul, str::FromStr};
 use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, util::execute_program};
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
-use num_traits::Num;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use rand::Rng;
@@ -147,7 +146,10 @@ fn test_fixed_ec_mul(
     builder.assert_var_array_eq(&res.affine, &expected.affine);
     builder.halt();
 
-    let program = builder.clone().compile_isa();
+    let program = builder.clone().compile_isa_with_options(CompilerOptions {
+        word_size: 64,
+        ..Default::default()
+    });
     execute_program(program, vec![]);
 }
 
@@ -166,7 +168,7 @@ fn test_fixed_ec_mul_loop(base: (BigUint, BigUint), window_bits: usize) {
     for _ in 0..4 {
         let val = rng.gen_range(100..10000);
         let scalar = Fq::from(val);
-        let expected = base.mul(scalar);
+        let expected: Secp256k1Affine = base.mul(scalar).into();
         let expected = ECPoint {
             x: BigUint::from_bytes_le(&expected.x.to_bytes_le()),
             y: BigUint::from_bytes_le(&expected.y.to_bytes_le()),
@@ -180,7 +182,10 @@ fn test_fixed_ec_mul_loop(base: (BigUint, BigUint), window_bits: usize) {
         builder.assert_var_array_eq(&res.affine, &expected.affine);
         builder.halt();
 
-        let program = builder.clone().compile_isa();
+        let program = builder.clone().compile_isa_with_options(CompilerOptions {
+            word_size: 64,
+            ..Default::default()
+        });
         execute_program(program, vec![]);
     }
 }
@@ -225,14 +230,13 @@ fn test_compiler_fixed_ec_mul_double() {
         Fp::from_bytes_le(&y.to_bytes_le()),
     )
     .unwrap();
-    let double = base + base;
-    print!("{:?}", double.x);
+    let double: Secp256k1Affine = (base + base).into();
     test_fixed_ec_mul(
         (x, y),
         BigUint::from(2u64),
         (
-            BigUint::from_str_radix(&format!("{:?}", double.x)[2..], 16).unwrap(),
-            BigUint::from_str_radix(&format!("{:?}", double.y)[2..], 16).unwrap(),
+            BigUint::from_bytes_le(&double.x.to_bytes_le()),
+            BigUint::from_bytes_le(&double.y.to_bytes_le()),
         ),
         4,
     );
