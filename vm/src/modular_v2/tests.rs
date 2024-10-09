@@ -84,8 +84,8 @@ fn test_modular_add() {
         // The write of result r is done in the chip.
         let ptr_as = 1;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 10;
-        let addr_ptr3 = 20;
+        let addr_ptr2 = 12;
+        let addr_ptr3 = 24;
 
         let data_as = 2;
         let address1 = 0;
