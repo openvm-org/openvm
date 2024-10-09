@@ -103,6 +103,14 @@ impl ExprBuilder {
         self.num_flags += 1;
         self.num_flags - 1
     }
+
+    pub fn add_constraint(&mut self, constraint: SymbolicExpr) {
+        let (q_limbs, carry_limbs) =
+            constraint.constraint_limbs(&self.prime, self.limb_bits, self.num_limbs);
+        self.constraints.push(constraint);
+        self.q_limbs.push(q_limbs);
+        self.carry_limbs.push(carry_limbs);
+    }
 }
 
 #[derive(Clone)]

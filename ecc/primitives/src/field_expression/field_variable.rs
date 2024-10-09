@@ -203,24 +203,22 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         let new_constraint = SymbolicExpr::Sub(
             Box::new(SymbolicExpr::Mul(
                 Box::new(other.expr.clone()),
-                Box::new(new_var.clone()),
+                Box::new(new_var),
             )),
             Box::new(self.expr.clone()),
         );
-        // limbs information.
-        let (q_limbs, carry_limbs) =
-            new_constraint.constraint_limbs(&builder.prime, builder.limb_bits, builder.num_limbs);
-        builder.constraints.push(new_constraint);
-        builder.q_limbs.push(q_limbs);
-        builder.carry_limbs.push(carry_limbs);
-
+        builder.add_constraint(new_constraint);
         // Only compute can have division.
         let compute = SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));
         builder.computes.push(compute);
 
+        FieldVariable::from_var(self.builder.clone(), builder.num_variables - 1)
+    }
+
+    pub fn from_var(builder: Rc<RefCell<ExprBuilder>>, var_id: usize) -> FieldVariable<C> {
         FieldVariable {
-            expr: new_var,
-            builder: self.builder.clone(),
+            expr: SymbolicExpr::Var(var_id),
+            builder,
             limb_max_abs: (1 << C::canonical_limb_bits()) - 1,
             max_overflow_bits: C::canonical_limb_bits(),
             expr_limbs: C::num_limbs_per_field_element(),

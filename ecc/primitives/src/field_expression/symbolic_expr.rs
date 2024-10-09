@@ -26,6 +26,20 @@ pub enum SymbolicExpr {
     Select(usize, Box<SymbolicExpr>, Box<SymbolicExpr>),
 }
 
+impl std::fmt::Display for SymbolicExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            SymbolicExpr::Input(i) => write!(f, "Input({})", i),
+            SymbolicExpr::Var(i) => write!(f, "Var({})", i),
+            SymbolicExpr::Add(lhs, rhs) => write!(f, "({} + {})", lhs, rhs),
+            SymbolicExpr::Sub(lhs, rhs) => write!(f, "({} - {})", lhs, rhs),
+            SymbolicExpr::Mul(lhs, rhs) => write!(f, "({} * {})", lhs, rhs),
+            SymbolicExpr::Div(lhs, rhs) => write!(f, "({} / {})", lhs, rhs),
+            SymbolicExpr::IntMul(lhs, s) => write!(f, "({} x {})", lhs, s),
+        }
+    }
+}
+
 impl SymbolicExpr {
     // Maximum absolute positive and negative value of the expression.
     fn max_abs(&self, prime: &BigUint) -> (BigUint, BigUint) {
