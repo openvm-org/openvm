@@ -8,7 +8,7 @@ use std::{
 };
 
 use afs_primitives::{
-    range_tuple::{bus::RangeTupleCheckerBus, RangeTupleCheckerChip},
+    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::lookup::XorLookupChip,
 };
@@ -32,7 +32,7 @@ use crate::{
     arch::{
         instructions::*, ExecutionBus, ExecutionState, ExecutorName, InstructionExecutor,
         InstructionExecutorVariant, MachineChip, MachineChipVariant, Rv32AluAdapter,
-        Rv32LoadStoreAdapter,
+        Rv32LoadStoreAdapter, Rv32MultAdapter,
     },
     castf::CastFChip,
     core::{
@@ -48,7 +48,10 @@ use crate::{
     modular_addsub::ModularAddSubChip,
     modular_multdiv::ModularMultDivChip,
     new_alu::{ArithmeticLogicIntegration, Rv32ArithmeticLogicChip},
+    new_divrem::{DivRemIntegration, Rv32DivRemChip},
     new_lt::{LessThanIntegration, Rv32LessThanChip},
+    new_mul::{MultiplicationIntegration, Rv32MultiplicationChip},
+    new_mulh::{MulHIntegration, Rv32MulHChip},
     new_shift::{Rv32ShiftChip, ShiftIntegration},
     program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
     shift::ShiftChip,
@@ -108,6 +111,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
+        let range_tuple_bus =
+            RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, [(1 << 8), 32 * (1 << 8)]);
+        let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
         let memory_chip = Rc::new(RefCell::new(MemoryChip::new(
             memory_bus,
@@ -273,12 +279,29 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     chips.push(MachineChipVariant::LessThanRv32(chip));
                 }
+                ExecutorName::MultiplicationRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32MultiplicationChip::new(
+                        Rv32MultAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        MultiplicationIntegration::new(range_tuple_checker.clone(), offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::MultiplicationRv32(chip));
+                }
+                ExecutorName::MultiplicationHighRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32MulHChip::new(
+                        Rv32MultAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        MulHIntegration::new(range_tuple_checker.clone(), offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::MultiplicationHighRv32(chip));
+                }
                 ExecutorName::U256Multiplication => {
-                    let range_tuple_bus = RangeTupleCheckerBus::new(
-                        RANGE_TUPLE_CHECKER_BUS,
-                        vec![(1 << 8), 32 * (1 << 8)],
-                    );
-                    let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
                     let chip = Rc::new(RefCell::new(UintMultiplicationChip::new(
                         execution_bus,
                         program_bus,
@@ -290,6 +313,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(MachineChipVariant::U256Multiplication(chip));
+                }
+                ExecutorName::DivRemRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32DivRemChip::new(
+                        Rv32MultAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        DivRemIntegration::new(range_tuple_checker.clone(), offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::DivRemRv32(chip));
                 }
                 ExecutorName::ShiftRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32ShiftChip::new(
@@ -423,6 +457,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
 
         chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
+        chips.push(MachineChipVariant::RangeTupleChecker(range_tuple_checker));
         // Most chips have a reference to the memory chip, and the memory chip has a reference to
         // the range checker chip.
         chips.push(MachineChipVariant::Memory(memory_chip.clone()));

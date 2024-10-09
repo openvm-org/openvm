@@ -1,4 +1,4 @@
-use std::iter;
+use std::{array, iter};
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
@@ -20,11 +20,9 @@ fn test_range_tuple_chip() {
     const LIST_LEN: usize = 64;
 
     let bus_index = 0;
-    let sizes = (0..3)
-        .map(|_| 1 << rng.gen_range(1..5))
-        .collect::<Vec<u32>>();
+    let sizes: [u32; 3] = array::from_fn(|_| 1 << rng.gen_range(1..5));
 
-    let bus = RangeTupleCheckerBus::new(bus_index, sizes.clone());
+    let bus = RangeTupleCheckerBus::new(bus_index, sizes);
     let range_checker = RangeTupleCheckerChip::new(bus);
 
     // generates a valid random tuple given sizes
@@ -84,9 +82,9 @@ fn test_range_tuple_chip() {
 #[test]
 fn negative_test_range_tuple_chip() {
     let bus_index = 0;
-    let sizes = vec![2, 2, 8];
+    let sizes = [2, 2, 8];
 
-    let bus = RangeTupleCheckerBus::new(bus_index, sizes.clone());
+    let bus = RangeTupleCheckerBus::new(bus_index, sizes);
     let range_checker = RangeTupleCheckerChip::new(bus);
 
     let height = sizes.iter().product();

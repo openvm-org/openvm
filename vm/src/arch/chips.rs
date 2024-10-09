@@ -30,7 +30,10 @@ use crate::{
     modular_addsub::ModularAddSubChip,
     modular_multdiv::ModularMultDivChip,
     new_alu::Rv32ArithmeticLogicChip,
+    new_divrem::Rv32DivRemChip,
     new_lt::Rv32LessThanChip,
+    new_mul::Rv32MultiplicationChip,
+    new_mulh::Rv32MulHChip,
     new_shift::Rv32ShiftChip,
     program::{ExecutionError, Instruction, ProgramChip},
     shift::ShiftChip,
@@ -189,7 +192,10 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32ArithmeticLogicChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
+    MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
+    MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
@@ -209,13 +215,16 @@ pub enum MachineChipVariant<F: PrimeField32> {
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<VariableRangeCheckerChip>),
-    RangeTupleChecker(Arc<RangeTupleCheckerChip>),
+    RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32ArithmeticLogicChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
+    MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
+    MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     Ui(Rc<RefCell<UiChip<F>>>),
@@ -250,7 +259,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for Arc<RangeTupleCheckerChip> {
+impl<F: PrimeField32, const N: usize> MachineChip<F> for Arc<RangeTupleCheckerChip<N>> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         RangeTupleCheckerChip::generate_trace(&self)
     }
@@ -259,7 +268,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeTupleCheckerChip> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air.clone())
+        Box::new(self.air)
     }
 
     fn air_name(&self) -> String {

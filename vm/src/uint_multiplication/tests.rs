@@ -1,6 +1,6 @@
 use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
-use afs_primitives::range_tuple::{bus::RangeTupleCheckerBus, RangeTupleCheckerChip};
+use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
@@ -88,9 +88,9 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
 ) {
     let bus = RangeTupleCheckerBus::new(
         RANGE_TUPLE_CHECKER_BUS,
-        vec![1 << LIMB_BITS, (NUM_LIMBS * (1 << LIMB_BITS)) as u32],
+        [1 << LIMB_BITS, (NUM_LIMBS * (1 << LIMB_BITS)) as u32],
     );
-    let range_tuple_chip: Arc<RangeTupleCheckerChip> = Arc::new(RangeTupleCheckerChip::new(bus));
+    let range_tuple_chip: Arc<RangeTupleCheckerChip<2>> = Arc::new(RangeTupleCheckerChip::new(bus));
 
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(
@@ -138,9 +138,9 @@ fn uint_multiplication_rand_air_test() {
 
     let bus = RangeTupleCheckerBus::new(
         RANGE_TUPLE_CHECKER_BUS,
-        vec![1 << LIMB_BITS, (NUM_LIMBS * (1 << LIMB_BITS)) as u32],
+        [1 << LIMB_BITS, (NUM_LIMBS * (1 << LIMB_BITS)) as u32],
     );
-    let range_tuple_chip: Arc<RangeTupleCheckerChip> = Arc::new(RangeTupleCheckerChip::new(bus));
+    let range_tuple_chip: Arc<RangeTupleCheckerChip<2>> = Arc::new(RangeTupleCheckerChip::new(bus));
 
     let mut tester = MachineChipTestBuilder::default();
     let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(

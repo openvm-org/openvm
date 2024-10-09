@@ -11,7 +11,10 @@ pub mod memory;
 pub mod modular_addsub;
 pub mod modular_multdiv;
 pub mod new_alu;
+pub mod new_divrem;
 pub mod new_lt;
+pub mod new_mul;
+pub mod new_mulh;
 pub mod new_shift;
 pub mod program;
 /// SDK functions for running and proving programs in the VM.
