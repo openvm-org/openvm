@@ -5,7 +5,7 @@ use halo2curves_axiom::{
 use num::BigInt;
 
 use crate::common::{
-    EvaluatedLine, ExpBigInt, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType,
+    EvaluatedLine, ExpBigInt, FeltPrint, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType,
 };
 
 impl Fp2Constructor<Fq> for Fq2 {
@@ -170,7 +170,48 @@ impl ExpBigInt<Fq12> for Fq12 {
                 mask >>= 2;
             }
         }
-        println!("bigint exp: {:?}", res);
+
         res
+    }
+}
+
+impl FeltPrint<Fq> for Fq {
+    fn felt_print(&self, _label: &str) {
+        println!("{:?}", self.0);
+        // print!("[{:x} ", self.0[0]);
+        // print!("{:x} ", self.0[1]);
+        // print!("{:x} ", self.0[2]);
+        // print!("{:x}]\n", self.0[3]);
+    }
+}
+
+impl FeltPrint<Fq12> for Fq12 {
+    fn felt_print(&self, label: &str) {
+        println!("felt_print - {}", label);
+        print!("c0.c0.c0: ");
+        self.c0.c0.c0.felt_print("");
+        print!("c0.c0.c1: ");
+        self.c0.c0.c1.felt_print("");
+        print!("c0.c1.c0: ");
+        self.c0.c1.c0.felt_print("");
+        print!("c0.c1.c1: ");
+        self.c0.c1.c1.felt_print("");
+        print!("c0.c2.c0: ");
+        self.c0.c2.c0.felt_print("");
+        print!("c0.c2.c1: ");
+        self.c0.c2.c1.felt_print("");
+        print!("c1.c0.c0: ");
+        self.c1.c0.c0.felt_print("");
+        print!("c1.c0.c1: ");
+        self.c1.c0.c1.felt_print("");
+        print!("c1.c1.c0: ");
+        self.c1.c1.c0.felt_print("");
+        print!("c1.c1.c1: ");
+        self.c1.c1.c1.felt_print("");
+        print!("c1.c2.c0: ");
+        self.c1.c2.c0.felt_print("");
+        print!("c1.c2.c1: ");
+        self.c1.c2.c1.felt_print("");
+        println!("");
     }
 }

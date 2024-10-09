@@ -33,6 +33,10 @@ pub trait ExpBigInt<Fp: Field> {
     fn exp(&self, k: BigInt) -> Fp;
 }
 
+pub trait FeltPrint<Fp: Field> {
+    fn felt_print(&self, label: &str);
+}
+
 pub fn fp12_square<Fp12: Field>(x: Fp12) -> Fp12 {
     fp12_multiply(x, x)
 }

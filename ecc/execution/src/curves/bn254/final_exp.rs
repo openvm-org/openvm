@@ -6,41 +6,51 @@ use num::{BigInt, Num};
 
 use super::Bn254;
 use crate::common::{
-    str_to_u64_arr, EcPoint, ExpBigInt, FieldExtension, FinalExp, MultiMillerLoop,
+    str_to_u64_arr, EcPoint, ExpBigInt, FeltPrint, FieldExtension, FinalExp, MultiMillerLoop,
 };
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
     fn assert_final_exp_is_one(&self, f: Fq12, P: &[EcPoint<Fq>], Q: &[EcPoint<Fq2>]) {
         let (c, u) = self.final_exp_hint(f);
+        let c_inv = c.invert().unwrap();
 
-        let _fx = self.multi_miller_loop_embedded_exp(P, Q, Some(c));
+        // c_mul = c^{q^3 - q^2 + q}
+        let c_f3 = c.frobenius_map(Some(3));
+        let c_f2 = c.frobenius_map(Some(2));
+        let c_f2_inv = c_f2.invert().unwrap();
+        let c_f = c.frobenius_map(Some(1));
+        let c_mul = c_f3 * c_f2_inv * c_f;
+        let c_mul_inv = c_mul.invert().unwrap();
+        c_mul.felt_print("c_mul");
 
-        // Check that f * u == c^lambda where
-        // lambda = 6x + 2 + q^3 - q^2 + q, with x the BN254 seed
-        // and c (residueWitness) and u (cubicNonResiduePower) from the hint
-        let t2 = f * u;
-        let mut t1 = c.frobenius_map(Some(3));
-        let mut t0 = c.frobenius_map(Some(2));
-        t1 = t1 * t0.invert().unwrap();
-        t0 = c.frobenius_map(Some(1));
-        t1 = t1 * t0;
+        // Compute miller loop with c_inv
+        let fx = self.multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
+        fx.felt_print("fx");
 
-        // We skip the computation of the addition chain since we have run the miller loop again with the residue witness
+        // We want f_{-(6x+2)} * c^{-(q^3 - q^2 + q)} = u
+        let cmp = fx * c_mul_inv;
+        cmp.felt_print("cmp (fx * c_mul_inv) output");
 
-        t0 = t0 * t1;
-        assert_eq!(t0, t2);
+        u.felt_print("u output");
+
+        assert_eq!(cmp, u)
     }
 
     fn final_exp_hint(&self, f: Fq12) -> (Fq12, Fq12) {
         println!("f: {:#?}", f);
+        let mut f = f;
         // Residue witness inverse
-        let mut c = Fq12::ONE;
+        let mut c;
         // Cubic nonresidue power
-        let mut u = Fq12::ONE;
+        let u;
 
         // exp1 = (p^12 - 1) / 3
-        let exp1 = BigInt::from_str_radix("4030969696062745741797811005853058291874379204406359442560681893891674450106959530046539719647151210908190211459382793062006703141168852426020468083171325367934590379984666859998399967609544754664110191464072930598755441160008826659219834762354786403012110463250131961575955268597858015384895449311534622125256548620283853223733396368939858981844663598065852816056384933498610930035891058807598891752166582271931875150099691598048016175399382213304673796601585080509443902692818733420199004555566113537482054218823936116647313678747500267068559627206777530424029211671772692598157901876223857571299238046741502089890557442500582300718504160740314926185458079985126192563953772118929726791041828902047546977272656240744693339962973939047279285351052107950250121751682659529260304162131862468322644288196213423232132152125277136333208005221619443705106431645884840489295409272576227859206166894626854018093044908314720", 10).unwrap();
+        let exp1 = BigInt::from_str_radix(
+            "4030969696062745741797811005853058291874379204406359442560681893891674450106959530046539719647151210908190211459382793062006703141168852426020468083171325367934590379984666859998399967609544754664110191464072930598755441160008826659219834762354786403012110463250131961575955268597858015384895449311534622125256548620283853223733396368939858981844663598065852816056384933498610930035891058807598891752166582271931875150099691598048016175399382213304673796601585080509443902692818733420199004555566113537482054218823936116647313678747500267068559627206777530424029211671772692598157901876223857571299238046741502089890557442500582300718504160740314926185458079985126192563953772118929726791041828902047546977272656240744693339962973939047279285351052107950250121751682659529260304162131862468322644288196213423232132152125277136333208005221619443705106431645884840489295409272576227859206166894626854018093044908314720",
+            10
+        ).unwrap();
+
         let u0 = str_to_u64_arr(
             "9483667112135124394372960210728142145589475128897916459350428495526310884707",
             10,
@@ -53,6 +63,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
             Fq::from_raw([u0[0], u0[1], u0[2], u0[3]]),
             Fq::from_raw([u1[0], u1[1], u1[2], u1[3]]),
         ]);
+        // 27th root of unity
         let unity_root_27 = Fq12::from_coeffs(&[
             Fq2::ZERO,
             Fq2::ZERO,
@@ -61,21 +72,31 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
             Fq2::ZERO,
             Fq2::ZERO,
         ]);
+        unity_root_27.felt_print("27th root of unity");
 
         let f_mul_unity_root_27 = f * unity_root_27;
+        // let f_mul_unity_root_27_exp1 = f_mul_unity_root_27.exp(exp1.clone());
         if f.exp(exp1.clone()) == Fq12::ONE {
             c = f;
-        } else if f_mul_unity_root_27.exp(exp1) == Fq12::ONE {
+            u = Fq12::ONE;
+        } else if f_mul_unity_root_27.exp(exp1.clone()) == Fq12::ONE {
             c = f;
             u = unity_root_27;
         } else {
-            c = f_mul_unity_root_27;
+            f = f_mul_unity_root_27;
+            c = f * unity_root_27;
             u = unity_root_27.square();
         }
 
+        c.felt_print("c");
+        u.felt_print("u");
+
         // 1. Compute r-th root and exponentiate to rInv where
         //   rInv = 1/r mod (p^12-1)/r
-        let r_inv = BigInt::from_str_radix("495819184011867778744231927046742333492451180917315223017345540833046880485481720031136878341141903241966521818658471092566752321606779256340158678675679238405722886654128392203338228575623261160538734808887996935946888297414610216445334190959815200956855428635568184508263913274453942864817234480763055154719338281461936129150171789463489422401982681230261920147923652438266934726901346095892093443898852488218812468761027620988447655860644584419583586883569984588067403598284748297179498734419889699245081714359110559679136004228878808158639412436468707589339209058958785568729925402190575720856279605832146553573981587948304340677613460685405477047119496887534881410757668344088436651291444274840864486870663164657544390995506448087189408281061890434467956047582679858345583941396130713046072603335601764495918026585155498301896749919393", 10).unwrap();
+        let r_inv = BigInt::from_str_radix(
+            "495819184011867778744231927046742333492451180917315223017345540833046880485481720031136878341141903241966521818658471092566752321606779256340158678675679238405722886654128392203338228575623261160538734808887996935946888297414610216445334190959815200956855428635568184508263913274453942864817234480763055154719338281461936129150171789463489422401982681230261920147923652438266934726901346095892093443898852488218812468761027620988447655860644584419583586883569984588067403598284748297179498734419889699245081714359110559679136004228878808158639412436468707589339209058958785568729925402190575720856279605832146553573981587948304340677613460685405477047119496887534881410757668344088436651291444274840864486870663164657544390995506448087189408281061890434467956047582679858345583941396130713046072603335601764495918026585155498301896749919393",
+            10
+        ).unwrap();
         c = c.exp(r_inv);
 
         // 2. Compute m-th root where
@@ -97,31 +118,33 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         let c_inv = c.invert().unwrap();
         let mut x3 = x.square() * x * c_inv;
         let mut t = 0;
-        let mut tmp = Fq12::ZERO;
+        let mut tmp = x3.square();
 
         // Modified Tonelli-Shanks algorithm for computing the cube root
-        fn find_cube_root(x3: &mut Fq12, tmp: &mut Fq12, t: &mut i32) {
+        fn tonelli_shanks_loop(x3: &mut Fq12, tmp: &mut Fq12, t: &mut i32) {
             while *x3 != Fq12::ONE {
                 *tmp = (*x3).square();
-                *x3 = *x3 * *tmp;
+                *x3 *= *tmp;
                 *t += 1;
             }
         }
 
-        println!("find_cube_root0: {}", t);
-        find_cube_root(&mut x3, &mut tmp, &mut t);
+        tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
 
         while t != 0 {
             tmp = unity_root_27.exp(exp2.clone());
-            x = x * tmp;
+            x *= tmp;
 
             x3 = x.square() * x * c_inv;
             t = 0;
-            println!("find_cube_root1: {}", t);
-            find_cube_root(&mut x3, &mut tmp, &mut t);
+            tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
         }
 
+        // x is the cube root of the residue witness c
         c = x;
+
+        c.felt_print("c output");
+        u.felt_print("u output");
 
         (c, u)
     }
