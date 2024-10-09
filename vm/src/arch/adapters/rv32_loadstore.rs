@@ -6,6 +6,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field, PrimeField32};
 
+use super::compose;
 use crate::{
     arch::{
         instructions::{
@@ -133,7 +134,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         debug_assert!(addr_bits >= (RV32_REGISTER_NUM_LANES - 1) * 8);
 
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
-        let rs1_val = compose(rs1_record.data.map(|x| x.as_canonical_u32()));
+        let rs1_val = compose(rs1_record.data);
 
         // Note: c is a field element and immediate is a signed integer
         let imm = (c + F::from_canonical_u32(1 << (RV_IS_TYPE_IMM_BITS - 1))).as_canonical_u32();
@@ -207,7 +208,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
 
         let write_record = match opcode {
             STOREW | STOREH | STOREB => {
-                let ptr = compose(read_record.rs1.data.map(|x| x.as_canonical_u32()));
+                let ptr = compose(read_record.rs1.data);
                 let imm =
                     (c + F::from_canonical_u32(1 << (RV_IS_TYPE_IMM_BITS - 1))).as_canonical_u32();
                 let ptr = ptr + imm - (1 << (RV_IS_TYPE_IMM_BITS - 1));
@@ -256,13 +257,4 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
     fn air(&self) -> Self::Air {
         todo!()
     }
-}
-
-// TODO[arayi]: make it more general and usable for other structs as well
-pub fn compose<const N: usize>(ptr_data: [u32; N]) -> u32 {
-    let mut val = 0;
-    for (i, limb) in ptr_data.iter().enumerate() {
-        val += limb << (i * 8);
-    }
-    val
 }

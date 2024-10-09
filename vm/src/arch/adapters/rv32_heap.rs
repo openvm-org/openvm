@@ -4,8 +4,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use crate::{
     arch::{ExecutionBridge, MachineAdapter, MachineAdapterInterface},
     memory::{
-        offline_checker::{MemoryBridge, MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
-        MemoryHeapReadRecord, MemoryHeapWriteRecord,
+        offline_checker::{MemoryBridge, RegisterHeapReadAuxCols, RegisterHeapWriteAuxCols},
+        HeapAddress, RegisterHeapReadRecord, RegisterHeapWriteRecord,
     },
     program::Instruction,
 };
@@ -79,23 +79,11 @@ impl<T: AbstractField, const READ_SIZE: usize, const WRITE_SIZE: usize> MachineA
     type ProcessedInstruction = ();
 }
 
-pub struct AddressAndSpace<T> {
-    pub address: T,
-    pub address_space: T,
-}
-
-pub struct HeapAddresses<T> {
-    pub address_address: AddressAndSpace<T>,
-    pub data_address: AddressAndSpace<T>,
-}
-
 pub struct Rv32HeapAdapterCols<T, const READ_SIZE: usize, const WRITE_SIZE: usize> {
-    pub x_read_aux: MemoryHeapReadAuxCols<T, READ_SIZE>,
-    pub y_read_aux: MemoryHeapReadAuxCols<T, READ_SIZE>,
-    pub z_write_aux: MemoryHeapWriteAuxCols<T, WRITE_SIZE>,
-    pub x_addresses: HeapAddresses<T>,
-    pub y_addresses: HeapAddresses<T>,
-    pub z_addresses: HeapAddresses<T>,
+    pub read_aux: [RegisterHeapReadAuxCols<T, READ_SIZE>; 2],
+    pub write_aux: RegisterHeapWriteAuxCols<T, WRITE_SIZE>,
+    pub read_addresses: [HeapAddress<T, T>; 2],
+    pub write_addresses: HeapAddress<T, T>,
 }
 
 impl<
@@ -106,8 +94,8 @@ impl<
         const WRITE_SIZE: usize,
     > MachineAdapter<F> for Rv32HeapAdapter<F, READ_SIZE, WRITE_SIZE>
 {
-    type ReadRecord = [MemoryHeapReadRecord<F, READ_SIZE>; 2];
-    type WriteRecord = [MemoryHeapWriteRecord<F, WRITE_SIZE>; 1];
+    type ReadRecord = [RegisterHeapReadRecord<F, READ_SIZE>; 2];
+    type WriteRecord = [RegisterHeapWriteRecord<F, WRITE_SIZE>; 1];
     type Cols<T> = Rv32HeapAdapterCols<T, READ_SIZE, WRITE_SIZE>;
     type Interface<T: AbstractField> = Rv32HeapAdapterInterface<T, READ_SIZE, WRITE_SIZE>;
     type Air = Rv32HeapAdapterAir<READ_SIZE, WRITE_SIZE>;
@@ -129,8 +117,9 @@ impl<
             e,
             ..
         } = instruction.clone();
-        let x_read = memory.read_heap::<READ_SIZE>(d, e, x_address_ptr);
-        let y_read = memory.read_heap::<READ_SIZE>(d, e, y_address_ptr);
+        debug_assert_eq!(d.as_canonical_u32(), 1);
+        let x_read = memory.read_heap_from_register::<READ_SIZE>(d, e, x_address_ptr);
+        let y_read = memory.read_heap_from_register::<READ_SIZE>(d, e, y_address_ptr);
 
         Ok((
             (x_read.data_read.data, y_read.data_read.data),
@@ -143,8 +132,8 @@ impl<
         memory: &mut crate::memory::MemoryChip<F>,
         instruction: &crate::program::Instruction<F>,
         from_state: crate::arch::ExecutionState<usize>,
-        // we aren't really using output.to_pc?
         output: crate::arch::InstructionOutput<F, Self::Interface<F>>,
+        _read_record: &Self::ReadRecord,
     ) -> crate::arch::Result<(crate::arch::ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction {
             opcode: _,
@@ -155,7 +144,8 @@ impl<
             e,
             ..
         } = instruction.clone();
-        let z_write = memory.write_heap::<WRITE_SIZE>(d, e, z_address_ptr, output.writes);
+        let z_write =
+            memory.write_heap_from_register::<WRITE_SIZE>(d, e, z_address_ptr, output.writes);
         Ok((
             crate::arch::ExecutionState {
                 pc: from_state.pc + 4,
