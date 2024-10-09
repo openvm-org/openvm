@@ -180,13 +180,18 @@ mod tests {
         Ok(())
     }
 
+    // this test doesn't belong here, but I guess we keep them in one place until we put them in a separate file
     #[test]
     fn test_generate_program() -> Result<()> {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let data = read(dir.join("data/rv32im-empty-program-elf"))?;
+        let data = read(dir.join("data/rv32im-fib-from-as"))?;
         let elf = super::Elf::decode(&data, MEM_SIZE as u32)?;
+        dbg!(elf.pc_start / 4 - elf.pc_base / 4, elf.instructions.len());
         let program = transpile::<BabyBear>(&elf.instructions);
-        dbg!(program);
+        // dbg!(program);
+        for instruction in program {
+            println!("{:?}", instruction);
+        }
         Ok(())
     }
 }

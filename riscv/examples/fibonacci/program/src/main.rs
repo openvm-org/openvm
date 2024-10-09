@@ -1,15 +1,30 @@
 #![no_main]
 #![no_std]
 
-axvm::entry!(main);
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
 
-pub fn main() {
-    let n = 16;
-    let mut a: u32 = 0;
-    let mut b: u32 = 1;
-    for _ in 1..n {
-        let sum = a + b;
-        a = b;
-        b = sum;
-    }
+core::arch::global_asm! {
+    "
+.text
+main:
+        li a0, 15
+        li a1, 0
+        li a2, 1
+        j loop
+loop:
+        beq a0, zero, exit
+        addi a0, a0, -1
+        add a3, a1, a2
+        add a1, zero, a2
+        add a2, zero, a3
+        j loop
+
+exit:
+        # Exit program
+        li a7, 10
+        ecall
+    "
 }

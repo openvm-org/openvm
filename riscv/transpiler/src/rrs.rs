@@ -101,49 +101,73 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_lb(&mut self, dec_insn: IType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("lb({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_lh(&mut self, dec_insn: IType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("lh({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_lw(&mut self, dec_insn: IType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("lw({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_lbu(&mut self, dec_insn: IType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("lbu({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_lhu(&mut self, dec_insn: IType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("lhu({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_sb(&mut self, dec_insn: SType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("sb({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_sh(&mut self, dec_insn: SType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("sh({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_sw(&mut self, dec_insn: SType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("sw({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_beq(&mut self, dec_insn: BType) -> Self::InstructionResult {
@@ -157,49 +181,73 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_blt(&mut self, dec_insn: BType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("blt({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_bge(&mut self, dec_insn: BType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("bge({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_bltu(&mut self, dec_insn: BType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("bltu({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_bgeu(&mut self, dec_insn: BType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("bgeu({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_jal(&mut self, dec_insn: JType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("jal({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("jalr({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_lui(&mut self, dec_insn: UType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("lui({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_auipc(&mut self, dec_insn: UType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("auipc({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_mul(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -209,48 +257,73 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_mulh(&mut self, dec_insn: RType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("mulh({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_mulhu(&mut self, dec_insn: RType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("mulhu({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_mulhsu(&mut self, dec_insn: RType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("mulhsu({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_div(&mut self, dec_insn: RType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("div({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_divu(&mut self, dec_insn: RType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("divu({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_rem(&mut self, dec_insn: RType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("rem({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
     fn process_remu(&mut self, dec_insn: RType) -> Self::InstructionResult {
         let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("remu({:?})", dec_insn),
+            ..unimp()
+        }
     }
 
-    fn process_fence(&mut self, _: IType) -> Self::InstructionResult {
+    fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        let _ = dec_insn;
         // unimplemented!()
-        unimp()
+        Instruction {
+            debug: format!("fence({:?})", dec_insn),
+            ..unimp()
+        }
     }
 }
 
@@ -266,8 +339,10 @@ pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instru
     for instruction_u32 in instructions_u32 {
         // TODO: we probably want to forbid such instructions, but for now we just skip them
         if *instruction_u32 == 115 {
+            instructions.push(unimp());
             continue;
         }
+        println!("instruction_u32: {:032b}", instruction_u32);
         let instruction = process_instruction(&mut transpiler, *instruction_u32).unwrap();
         instructions.push(instruction);
     }
