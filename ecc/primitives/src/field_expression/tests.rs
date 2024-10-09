@@ -262,7 +262,7 @@ fn test_auto_carry_add() {
     // Should overflow as this is 10 * x1 * x2.
     let mut x5 = x4.clone() + x4.clone();
     // cannot verify x4 as above is cloned.
-    x5.save();
+    let x5_id = x5.save();
     // But x5 is var(1) implies x4 was saved as var(0).
     assert_eq!(x5.expr, SymbolicExpr::Var(1));
 
@@ -282,7 +282,7 @@ fn test_auto_carry_add() {
     let row = chip.generate_trace_row((inputs, range_checker.clone()));
     let (_, _, vars, _, _) = chip.load_vars(&row);
     assert_eq!(vars.len(), 2);
-    let generated = evaluate_biguint(&vars[1], LIMB_BITS);
+    let generated = evaluate_biguint(&vars[x5_id], LIMB_BITS);
     assert_eq!(generated, expected);
 
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));

@@ -247,6 +247,15 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
 }
 
 impl FieldExprChip {
+    pub fn execute(&self, inputs: Vec<BigUint>) -> Vec<BigUint> {
+        let mut vars = vec![BigUint::zero(); self.num_variables];
+        for i in 0..self.constraints.len() {
+            let r = self.computes[i].compute(&inputs, &vars, &self.prime);
+            vars[i] = r.clone();
+        }
+        vars
+    }
+
     pub fn load_vars<T: Clone>(&self, arr: &[T]) -> (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>) {
         let is_valid = arr[0].clone();
         let mut idx = 1;

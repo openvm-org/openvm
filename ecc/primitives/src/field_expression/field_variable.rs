@@ -47,8 +47,9 @@ pub struct FieldVariable<C: FieldVariableConfig> {
 }
 
 impl<C: FieldVariableConfig> FieldVariable<C> {
+    // Returns the index of the new variable.
     // There should be no division in the expression.
-    pub fn save(&mut self) {
+    pub fn save(&mut self) -> usize {
         let mut builder = self.builder.borrow_mut();
         builder.num_variables += 1;
 
@@ -70,6 +71,8 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         self.limb_max_abs = (1 << C::canonical_limb_bits()) - 1;
         self.max_overflow_bits = C::canonical_limb_bits();
         self.expr_limbs = C::num_limbs_per_field_element();
+
+        builder.num_variables - 1
     }
 
     fn save_if_overflow(
