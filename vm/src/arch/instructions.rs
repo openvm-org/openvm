@@ -222,12 +222,10 @@ pub enum LessThanOpcode {
 #[opcode_offset = 0x320]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum LoadStoreOpcode {
+pub enum Rv32LoadStoreOpcode {
     LOADW,
-    // TODO: Should we add these now?
-    // LOADB_NOEXTEND,
-    // LOADH_NOEXTEND,
     STOREW,
     STOREH,
     STOREB,
 }
+// TODO[arayi]: add opcodes lb, lbu, lh, lhu, LOADB_NOEXTEND, LOADH_NOEXTEND

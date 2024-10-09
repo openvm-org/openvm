@@ -6,7 +6,10 @@ use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
-        instructions::{LoadStoreOpcode, UsizeOpcode},
+        instructions::{
+            Rv32LoadStoreOpcode::{self, *},
+            UsizeOpcode,
+        },
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
         MachineIntegration, Result,
     },
@@ -39,7 +42,6 @@ impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreAir<F, NUM_CELLS>
 #[derive(Debug, Clone)]
 pub struct LoadStoreIntegration<F: Field, const NUM_CELLS: usize> {
     pub air: LoadStoreAir<F, NUM_CELLS>,
-    pub offset: usize,
 }
 
 impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
@@ -49,7 +51,6 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
                 _marker: std::marker::PhantomData,
                 offset,
             },
-            offset,
         }
     }
 }
@@ -68,23 +69,26 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
+        _from_pc: F,
         reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
-        let opcode = LoadStoreOpcode::from_usize(instruction.opcode - self.offset);
+        let opcode = Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
         let data: [[F; NUM_CELLS]; 2] = reads.into();
         let write_data = solve_write_data(opcode, data[0], data[1]);
 
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
-            to_pc: from_pc,
+            to_pc: None,
             writes: write_data.into(),
         };
 
         Ok((output, std::marker::PhantomData))
     }
 
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        todo!()
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
+        )
     }
 
     fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
@@ -106,15 +110,15 @@ where
 }
 
 pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
-    opcode: LoadStoreOpcode,
+    opcode: Rv32LoadStoreOpcode,
     read_data: [F; NUM_CELLS],
     prev_data: [F; NUM_CELLS],
 ) -> [F; NUM_CELLS] {
     let mut write_data = read_data;
     match opcode {
-        LoadStoreOpcode::LOADW => (),
-        LoadStoreOpcode::STOREW => (),
-        LoadStoreOpcode::STOREH => {
+        LOADW => (),
+        STOREW => (),
+        STOREH => {
             for (i, cell) in write_data
                 .iter_mut()
                 .enumerate()
@@ -124,7 +128,7 @@ pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
                 *cell = prev_data[i];
             }
         }
-        LoadStoreOpcode::STOREB => {
+        STOREB => {
             for (i, cell) in write_data.iter_mut().enumerate().take(NUM_CELLS).skip(1) {
                 *cell = prev_data[i];
             }

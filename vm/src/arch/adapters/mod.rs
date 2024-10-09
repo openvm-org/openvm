@@ -10,4 +10,4 @@ pub use rv32_loadstore::*;
 pub const RV32_REGISTER_NUM_LANES: usize = 4;
 
 // For soundness, should be <= 16
-pub const RV32_IMM_BITS: usize = 12;
+pub const RV_IS_TYPE_IMM_BITS: usize = 12;

@@ -9,7 +9,7 @@ use super::{solve_write_data, LoadStoreIntegration, Rv32LoadStoreChip};
 use crate::{
     arch::{
         instructions::{
-            LoadStoreOpcode::{self, *},
+            Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
         testing::{memory::gen_pointer, MachineChipTestBuilder},
@@ -32,7 +32,7 @@ fn set_and_execute(
     tester: &mut MachineChipTestBuilder<F>,
     chip: &mut Rv32LoadStoreChip<F>,
     rng: &mut StdRng,
-    opcode: LoadStoreOpcode,
+    opcode: Rv32LoadStoreOpcode,
     is_load: bool,
 ) {
     let imm: i32 = rng.gen_range(0..(1 << IMM_BITS)) - (1 << (IMM_BITS - 1));
@@ -69,7 +69,7 @@ fn set_and_execute(
     tester.execute(
         chip,
         Instruction::from_isize(
-            opcode as usize + LoadStoreOpcode::default_offset(),
+            opcode as usize + Rv32LoadStoreOpcode::default_offset(),
             a as isize,
             b as isize,
             imm as isize,
@@ -92,7 +92,7 @@ fn simple_execute_roundtrip_test() {
     let mut tester = MachineChipTestBuilder::default();
     let adapter = Rv32LoadStoreAdapter::<F, RV32_NUM_CELLS>::new(
         tester.memory_chip().borrow().range_checker.clone(),
-        LoadStoreOpcode::default_offset(),
+        Rv32LoadStoreOpcode::default_offset(),
     );
     let inner = LoadStoreIntegration::<F, RV32_NUM_CELLS>::new(adapter.offset);
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_chip());

@@ -9,11 +9,11 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{
-            LoadStoreOpcode::{self, *},
+            Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
         ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter,
-        MachineAdapterInterface, Result, RV32_IMM_BITS, RV32_REGISTER_NUM_LANES,
+        MachineAdapterInterface, Result, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -25,11 +25,11 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Debug)]
 pub struct Rv32LoadStoreAdapterCols<T, const NUM_CELLS: usize> {
-    pub a: usize,
-    pub b: usize,
-    pub c: usize,
-    pub d: usize, // will fix to 1 to save a column
-    pub e: usize,
+    pub a: T,
+    pub b: T,
+    pub c: T,
+    pub d: T, // will fix to 1 to save a column
+    pub e: T,
     pub ptr: [T; RV32_REGISTER_NUM_LANES],
     // pub read: [T; NUM_CELLS],
     // pub write: [T; NUM_CELLS],
@@ -51,12 +51,15 @@ impl<F: Field> BaseAir<F> for Rv32LoadStoreAdapterAir<F> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreAdapterReadRecord<F: Field, const NUM_CELLS: usize> {
-    pub ptr: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+
+    // This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads
     pub read: MemoryReadRecord<F, NUM_CELLS>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreAdapterWriteRecord<F: Field, const NUM_CELLS: usize> {
+    // This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores
     pub write: MemoryWriteRecord<F, NUM_CELLS>,
 }
 
@@ -68,6 +71,7 @@ pub struct Rv32LoadStoreAdapterInterface<T, const NUM_CELLS: usize> {
 impl<T, const NUM_CELLS: usize> MachineAdapterInterface<T>
     for Rv32LoadStoreAdapterInterface<T, NUM_CELLS>
 {
+    /// `[read_data, prev_data]` where `prev_data` is currenlty only used when this is a STORE instruction.
     type Reads = [[T; NUM_CELLS]; 2];
     type Writes = [T; NUM_CELLS];
     type ProcessedInstruction = Instruction<T>;
@@ -121,7 +125,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
             ..
         } = *instruction;
 
-        // TODO: add comment here
+        // TODO[arayi]: add comment here
         let addr_bits = memory.mem_config.pointer_max_bits;
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 2); // not sure if this is needed
@@ -129,24 +133,19 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
 
         let ptr_record = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
         let ptr_data = ptr_record.data.map(|x| x.as_canonical_u32());
-
-        for limb in ptr_data {
-            debug_assert!(limb < (1 << 8));
-        }
         debug_assert!(
             ptr_data[RV32_REGISTER_NUM_LANES - 1]
                 < (1 << (addr_bits - (RV32_REGISTER_NUM_LANES - 1) * 8))
         );
 
-        // TODO: add comment here
-        let ptr_val = compose(ptr_data);
-        let imm = (c + F::from_canonical_u32(1 << (RV32_IMM_BITS - 1))).as_canonical_u32();
-        let ptr_val = ptr_val + imm - (1 << (RV32_IMM_BITS - 1));
+        // TODO[arayi]: add comment here
+        let imm = (c + F::from_canonical_u32(1 << (RV_IS_TYPE_IMM_BITS - 1))).as_canonical_u32();
+        let ptr_val = compose(ptr_data) + imm - (1 << (RV_IS_TYPE_IMM_BITS - 1));
 
-        assert!(imm < (1 << RV32_IMM_BITS));
+        assert!(imm < (1 << RV_IS_TYPE_IMM_BITS));
         assert!(ptr_val < (1 << addr_bits));
 
-        let opcode = LoadStoreOpcode::from_usize(opcode - self.offset);
+        let opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
         let read_record = match opcode {
             LOADW => memory.read::<NUM_CELLS>(e, F::from_canonical_u32(ptr_val)),
@@ -178,11 +177,11 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
             _ => (),
         }
 
-        // TODO: send VariableRangeChecker requests
+        // TODO[arayi]: send VariableRangeChecker requests
         Ok((
             [read_data, prev_data],
             Self::ReadRecord {
-                ptr: ptr_record,
+                rs1: ptr_record,
                 read: read_record,
             },
         ))
@@ -205,13 +204,14 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
             ..
         } = *instruction;
 
-        let opcode = LoadStoreOpcode::from_usize(opcode - self.offset);
+        let opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
         let write_record = match opcode {
             STOREW | STOREH | STOREB => {
-                let ptr = compose(read_record.ptr.data.map(|x| x.as_canonical_u32()));
-                let imm = (c + F::from_canonical_u32(1 << (RV32_IMM_BITS - 1))).as_canonical_u32();
-                let ptr = ptr + imm - (1 << (RV32_IMM_BITS - 1));
+                let ptr = compose(read_record.rs1.data.map(|x| x.as_canonical_u32()));
+                let imm =
+                    (c + F::from_canonical_u32(1 << (RV_IS_TYPE_IMM_BITS - 1))).as_canonical_u32();
+                let ptr = ptr + imm - (1 << (RV_IS_TYPE_IMM_BITS - 1));
                 memory.write(e, F::from_canonical_u32(ptr), output.writes)
             }
             LOADW => {
