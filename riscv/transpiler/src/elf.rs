@@ -167,6 +167,7 @@ mod tests {
 
     use axvm_platform::memory::MEM_SIZE;
     use color_eyre::eyre::Result;
+    use p3_baby_bear::BabyBear;
 
     use crate::rrs::transpile;
 
@@ -184,7 +185,7 @@ mod tests {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let data = read(dir.join("data/rv32im-empty-program-elf"))?;
         let elf = super::Elf::decode(&data, MEM_SIZE as u32)?;
-        let program = transpile(&elf.instructions);
+        let program = transpile::<BabyBear>(&elf.instructions);
         dbg!(program);
         Ok(())
     }

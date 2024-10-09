@@ -1,3 +1,6 @@
+use std::marker::PhantomData;
+
+use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
     process_instruction, InstructionProcessor,
@@ -10,24 +13,14 @@ use stark_vm::{
 use crate::util::*;
 
 /// A transpiler that converts the 32-bit encoded instructions into instructions.
-pub(crate) struct InstructionTranspiler;
+pub(crate) struct InstructionTranspiler<F>(PhantomData<F>);
 
-fn unimp() -> Instruction<u32> {
-    Instruction::new(
-        CoreOpcode::NOP.with_default_offset(),
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        String::new(),
-    )
+fn unimp<F: PrimeField32>() -> Instruction<F> {
+    Default::default()
 }
 
-impl InstructionProcessor for InstructionTranspiler {
-    type InstructionResult = Instruction<u32>;
+impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
+    type InstructionResult = Instruction<F>;
 
     fn process_add(&mut self, dec_insn: RType) -> Self::InstructionResult {
         from_r_type(U256Opcode::ADD.with_default_offset(), &dec_insn)
@@ -154,15 +147,11 @@ impl InstructionProcessor for InstructionTranspiler {
     }
 
     fn process_beq(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        unimp()
+        from_b_type(CoreOpcode::BEQ.with_default_offset(), &dec_insn)
     }
 
     fn process_bne(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        unimp()
+        from_b_type(CoreOpcode::BNE.with_default_offset(), &dec_insn)
     }
 
     fn process_blt(&mut self, dec_insn: BType) -> Self::InstructionResult {
@@ -271,9 +260,9 @@ impl InstructionProcessor for InstructionTranspiler {
 ///
 /// This function will return an error if the [`Instruction`] cannot be processed.
 #[must_use]
-pub(crate) fn transpile(instructions_u32: &[u32]) -> Vec<Instruction<u32>> {
+pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instruction<F>> {
     let mut instructions = Vec::new();
-    let mut transpiler = InstructionTranspiler;
+    let mut transpiler = InstructionTranspiler::<F>(PhantomData);
     for instruction_u32 in instructions_u32 {
         // TODO: we probably want to forbid such instructions, but for now we just skip them
         if *instruction_u32 == 115 {

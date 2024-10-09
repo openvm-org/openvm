@@ -1,53 +1,57 @@
-use rrs_lib::instruction_formats::{IType, ITypeShamt, RType};
-use stark_vm::{arch::instructions::CoreOpcode, program::Instruction};
+use p3_field::PrimeField32;
+use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, RType};
+use stark_vm::{
+    arch::instructions::CoreOpcode,
+    program::{isize_to_field, Instruction},
+};
 
 fn i12_to_u24(imm: i32) -> u32 {
-    let imm_u = imm as u32;
+    let imm_u = (imm as u32) & 0xfff;
     imm_u | ((imm_u & 0x80) * 0x17e)
 }
 
 /// Create a new [`Instruction`] from an R-type instruction.
-pub fn from_r_type(opcode: usize, dec_insn: &RType) -> Instruction<u32> {
+pub fn from_r_type<F: PrimeField32>(opcode: usize, dec_insn: &RType) -> Instruction<F> {
     Instruction::new(
         opcode,
-        dec_insn.rd as u32,
-        dec_insn.rs1 as u32,
-        dec_insn.rs2 as u32,
-        0,
-        0,
-        0,
-        0,
+        F::from_canonical_u32(dec_insn.rd as u32),
+        F::from_canonical_u32(dec_insn.rs1 as u32),
+        F::from_canonical_u32(dec_insn.rs2 as u32),
+        F::zero(),
+        F::zero(),
+        F::zero(),
+        F::zero(),
         String::new(),
     )
 }
 
 /// Create a new [`Instruction`] from an I-type instruction.
-pub fn from_i_type(opcode: usize, dec_insn: &IType) -> Instruction<u32> {
+pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
     Instruction::new(
         opcode,
-        dec_insn.rd as u32,
-        dec_insn.rs1 as u32,
-        i12_to_u24(dec_insn.imm),
-        0,
-        1,
-        0,
-        0,
+        F::from_canonical_u32(dec_insn.rd as u32),
+        F::from_canonical_u32(dec_insn.rs1 as u32),
+        F::from_canonical_u32(i12_to_u24(dec_insn.imm)),
+        F::zero(),
+        F::one(),
+        F::zero(),
+        F::zero(),
         String::new(),
     )
 }
 
 /// Create a new [`Instruction`] from an I-type instruction with a shamt.
 /// It seems that shamt can only occur in SLLI, SRLI, SRAI.
-pub fn from_i_type_shamt(opcode: usize, dec_insn: &ITypeShamt) -> Instruction<u32> {
+pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) -> Instruction<F> {
     Instruction::new(
         opcode,
-        dec_insn.rd as u32,
-        dec_insn.rs1 as u32,
-        i12_to_u24(dec_insn.shamt as i32),
-        0,
-        1,
-        0,
-        0,
+        F::from_canonical_u32(dec_insn.rd as u32),
+        F::from_canonical_u32(dec_insn.rs1 as u32),
+        F::from_canonical_u32(i12_to_u24(dec_insn.shamt as i32)),
+        F::zero(),
+        F::one(),
+        F::zero(),
+        F::zero(),
         String::new(),
     )
 }
@@ -65,18 +69,20 @@ pub fn from_i_type_shamt(opcode: usize, dec_insn: &ITypeShamt) -> Instruction<u3
 //     )
 // }
 
-// /// Create a new [`Instruction`] from a B-type instruction.
-// #[must_use]
-// pub const fn from_b_type(opcode: Opcode, dec_insn: &BType) -> Self {
-//     Self::new(
-//         opcode,
-//         dec_insn.rs1 as u32,
-//         dec_insn.rs2 as u32,
-//         dec_insn.imm as u32,
-//         false,
-//         true,
-//     )
-// }
+/// Create a new [`Instruction`] from a B-type instruction.
+pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruction<F> {
+    Instruction::new(
+        opcode,
+        F::from_canonical_u32(dec_insn.rs1 as u32),
+        F::from_canonical_u32(dec_insn.rs2 as u32),
+        isize_to_field(dec_insn.imm as isize / 2),
+        F::one(),
+        F::one(),
+        F::zero(),
+        F::zero(),
+        String::new(),
+    )
+}
 
 /// Create a new [`Instruction`] that is not implemented.
 pub fn unimp() -> Instruction<u32> {

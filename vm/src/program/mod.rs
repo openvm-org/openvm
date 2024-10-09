@@ -35,7 +35,7 @@ pub struct Instruction<F> {
     pub debug: String,
 }
 
-fn isize_to_field<F: Field>(value: isize) -> F {
+pub fn isize_to_field<F: Field>(value: isize) -> F {
     if value < 0 {
         return F::neg_one() * F::from_canonical_usize(value.unsigned_abs());
     }
