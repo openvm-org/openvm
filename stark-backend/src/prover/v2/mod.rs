@@ -178,12 +178,12 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProverV2<'c, SC> {
             cumulative_sum_per_air.clone(),
         );
 
-        let (_, mut main_prover_data): (Vec<_>, Vec<_>) = cached_mains_per_air
+        let main_prover_data: Vec<_> = cached_mains_per_air
             .into_iter()
             .flatten()
-            .map(|cm| (cm.raw_data, cm.prover_data))
-            .unzip();
-        main_prover_data.push(common_main_prover_data);
+            .map(|cm| cm.prover_data)
+            .chain(iter::once(common_main_prover_data))
+            .collect();
         prove_raps_with_committed_traces(
             pcs,
             challenger,

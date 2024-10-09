@@ -3,9 +3,16 @@
 
 /// Test utils
 use ax_sdk::{any_rap_vec, config, utils};
-use ax_sdk::{config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine};
+use ax_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
+    engine::StarkFriEngine,
+    interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
+use p3_uni_stark::StarkGenericConfig;
+
+use crate::fib_air::chip::FibonacciChip;
 
 mod cached_lookup;
 mod fib_air;
@@ -121,6 +128,108 @@ fn test_double_fib_starks() {
         &[pis1, pis2],
     )
     .expect("Verification failed");
+}
+
+#[test]
+fn test_optional_air() {
+    use afs_stark_backend::{
+        engine::StarkEngine,
+        prover::v2::types::{Chip, ProofInput},
+    };
+    setup_tracing();
+
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let fib_chip = FibonacciChip::new(0, 1, 8);
+    let mut send_chip1 = DummyInteractionChip::new_without_partition(1, true, 0);
+    let mut send_chip2 =
+        DummyInteractionChip::new_with_partition(engine.config().pcs(), 1, true, 0);
+    let mut recv_chip1 = DummyInteractionChip::new_without_partition(1, false, 0);
+    let mut keygen_builder = engine.keygen_builder();
+    let fib_chip_id = keygen_builder.add_air(fib_chip.air());
+    let send_chip1_id = keygen_builder.add_air(send_chip1.air());
+    let send_chip2_id = keygen_builder.add_air(send_chip2.air());
+    let recv_chip1_id = keygen_builder.add_air(recv_chip1.air());
+    let pk = keygen_builder.generate_pk();
+    let prover = engine.prover();
+    let verifier = engine.verifier();
+
+    // Case 1: All AIRs are present.
+    {
+        let mut challenger = engine.new_challenger();
+        send_chip1.load_data(DummyInteractionData {
+            count: vec![1, 2, 4],
+            fields: vec![vec![1], vec![2], vec![3]],
+        });
+        send_chip2.load_data(DummyInteractionData {
+            count: vec![1, 2, 8],
+            fields: vec![vec![1], vec![2], vec![3]],
+        });
+        recv_chip1.load_data(DummyInteractionData {
+            count: vec![2, 4, 12],
+            fields: vec![vec![1], vec![2], vec![3]],
+        });
+        let proof = prover.prove(
+            &mut challenger,
+            &pk,
+            ProofInput {
+                per_air: vec![
+                    fib_chip.generate_air_proof_input_with_id(fib_chip_id),
+                    send_chip1.generate_air_proof_input_with_id(send_chip1_id),
+                    send_chip2.generate_air_proof_input_with_id(send_chip2_id),
+                    recv_chip1.generate_air_proof_input_with_id(recv_chip1_id),
+                ],
+            },
+        );
+        let mut challenger = engine.new_challenger();
+        verifier
+            .verify(&mut challenger, &pk.get_vk(), &proof)
+            .expect("Verification failed");
+    }
+    // Case 2: The second AIR is not presented.
+    {
+        let mut challenger = engine.new_challenger();
+        send_chip1.load_data(DummyInteractionData {
+            count: vec![1, 2, 4],
+            fields: vec![vec![1], vec![2], vec![3]],
+        });
+        recv_chip1.load_data(DummyInteractionData {
+            count: vec![1, 2, 4],
+            fields: vec![vec![1], vec![2], vec![3]],
+        });
+        let proof = prover.prove(
+            &mut challenger,
+            &pk,
+            ProofInput {
+                per_air: vec![
+                    send_chip1.generate_air_proof_input_with_id(send_chip1_id),
+                    recv_chip1.generate_air_proof_input_with_id(recv_chip1_id),
+                ],
+            },
+        );
+        let mut challenger = engine.new_challenger();
+        verifier
+            .verify(&mut challenger, &pk.get_vk(), &proof)
+            .expect("Verification failed");
+    }
+    // Case 3: Negative - unbalanced interactions.
+    {
+        let mut challenger = engine.new_challenger();
+        recv_chip1.load_data(DummyInteractionData {
+            count: vec![1, 2, 4],
+            fields: vec![vec![1], vec![2], vec![3]],
+        });
+        let proof = prover.prove(
+            &mut challenger,
+            &pk,
+            ProofInput {
+                per_air: vec![recv_chip1.generate_air_proof_input_with_id(recv_chip1_id)],
+            },
+        );
+        let mut challenger = engine.new_challenger();
+        assert!(verifier
+            .verify(&mut challenger, &pk.get_vk(), &proof)
+            .is_err());
+    }
 }
 
 fn get_fib_number(n: usize) -> u32 {

@@ -1,9 +1,11 @@
+use derivative::Derivative;
 use itertools::Itertools;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    config::Com,
     keygen::v2::types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
     prover::{opener::OpeningProof, trace::ProverTraceData, types::Commitments},
     rap::AnyRap,
@@ -42,12 +44,16 @@ pub struct ProofInput<'a, SC: StarkGenericConfig> {
     pub per_air: Vec<(usize, AirProofInput<'a, SC>)>,
 }
 
+#[derive(Derivative)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct CommittedTraceData<SC: StarkGenericConfig> {
     pub raw_data: RowMajorMatrix<Val<SC>>,
     pub prover_data: ProverTraceData<SC>,
 }
 
 /// Necessary input for proving a single AIR.
+#[derive(Derivative)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct AirProofInput<'a, SC: StarkGenericConfig> {
     pub air: &'a dyn AnyRap<SC>,
     /// Cached main trace matrices
@@ -58,8 +64,13 @@ pub struct AirProofInput<'a, SC: StarkGenericConfig> {
     pub public_values: Vec<Val<SC>>,
 }
 
-pub trait AIRProofInputGenerator<SC: StarkGenericConfig> {
-    fn generate_air_proof_input<'a>() -> AirProofInput<'a, SC>;
+pub trait Chip<SC: StarkGenericConfig> {
+    fn air(&self) -> &dyn AnyRap<SC>;
+    /// Generate all necessary input for proving a single AIR.
+    fn generate_air_proof_input(&self) -> AirProofInput<SC>;
+    fn generate_air_proof_input_with_id(&self, air_id: usize) -> (usize, AirProofInput<SC>) {
+        (air_id, self.generate_air_proof_input())
+    }
 }
 
 impl<SC: StarkGenericConfig> ProofV2<SC> {

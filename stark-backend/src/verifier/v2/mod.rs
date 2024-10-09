@@ -172,40 +172,40 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifierV2<'c, SC> {
             .collect();
 
         // 2. Then the main trace openings
-        let mut air_idx = 0;
+
         let num_main_commits = opened_values.main.len();
         assert_eq!(num_main_commits, proof.commitments.main_trace.len());
-        izip!(&opened_values.main, &proof.commitments.main_trace)
-            .enumerate()
-            .for_each(|(commit_idx, (values_per_mat, commit))| {
-                // All commits except the last one are cached main traces.
-                let domains_and_openings = if commit_idx + 1 < num_main_commits {
-                    assert_eq!(
-                        values_per_mat.len(),
-                        1,
-                        "Cached main trace should have only 1 matrix"
-                    );
-                    let domain = domains[air_idx];
-                    air_idx += 1;
-                    vec![trace_domain_and_openings(domain, zeta, &values_per_mat[0])]
-                } else {
-                    // Each matrix corresponds to an AIR with a common main trace.
-                    mvk.per_air
-                        .iter()
-                        .zip_eq(&domains)
-                        .flat_map(|(vk, domain)| {
-                            if vk.has_common_main() {
-                                Some(*domain)
-                            } else {
-                                None
-                            }
-                        })
-                        .zip_eq(values_per_mat)
-                        .map(|(domain, values)| trace_domain_and_openings(domain, zeta, values))
-                        .collect_vec()
-                };
+        let mut main_commit_idx = 0;
+        // All commits except the last one are cached main traces.
+        izip!(&mvk.per_air, &domains).for_each(|(vk, domain)| {
+            for _ in 0..vk.num_cached_mains() {
+                let commit = proof.commitments.main_trace[main_commit_idx].clone();
+                let value = &opened_values.main[main_commit_idx][0];
+                let domains_and_openings = vec![trace_domain_and_openings(*domain, zeta, value)];
                 rounds.push((commit.clone(), domains_and_openings));
-            });
+                main_commit_idx += 1;
+            }
+        });
+        // In the last commit, each matrix corresponds to an AIR with a common main trace.
+        {
+            let values_per_mat = &opened_values.main[main_commit_idx];
+            let commit = proof.commitments.main_trace[main_commit_idx].clone();
+            let domains_and_openings = mvk
+                .per_air
+                .iter()
+                .zip_eq(&domains)
+                .filter_map(|(vk, domain)| {
+                    if vk.has_common_main() {
+                        Some(*domain)
+                    } else {
+                        None
+                    }
+                })
+                .zip_eq(values_per_mat)
+                .map(|(domain, values)| trace_domain_and_openings(domain, zeta, values))
+                .collect_vec();
+            rounds.push((commit.clone(), domains_and_openings));
+        }
 
         // 3. Then after_challenge trace openings, at most 1 phase for now.
         // All AIRs with interactions should an after challenge trace.
@@ -283,13 +283,17 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifierV2<'c, SC> {
                 common_main_matrix_idx += 1;
             }
             // loop through challenge phases of this single RAP
-            let after_challenge_values = (0..num_phases)
-                .map(|phase_idx| {
-                    let matrix_idx = after_challenge_idx[phase_idx];
-                    after_challenge_idx[phase_idx] += 1;
-                    &opened_values.after_challenge[phase_idx][matrix_idx]
-                })
-                .collect_vec();
+            let after_challenge_values = if vk.has_interaction() {
+                (0..num_phases)
+                    .map(|phase_idx| {
+                        let matrix_idx = after_challenge_idx[phase_idx];
+                        after_challenge_idx[phase_idx] += 1;
+                        &opened_values.after_challenge[phase_idx][matrix_idx]
+                    })
+                    .collect_vec()
+            } else {
+                vec![]
+            };
             verify_single_rap_constraints::<SC>(
                 &vk.symbolic_constraints.constraints,
                 preprocessed_values,
