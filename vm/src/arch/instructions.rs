@@ -227,10 +227,8 @@ pub enum Rv32LoadStoreOpcode {
     STOREW,
     STOREH,
     STOREB,
-
     LOADB,
     LOADH,
     LOADBU,
     LOADHU,
 }
-// TODO[arayi]: add opcodes lb, lbu, lh, lhu, LOADB_NOEXTEND, LOADH_NOEXTEND
