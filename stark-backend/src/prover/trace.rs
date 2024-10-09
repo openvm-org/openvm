@@ -72,7 +72,7 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
             .iter()
             .map(|td| (td.commit.clone(), td.data.as_ref()))
             .collect_vec();
-        let air_infos = airs
+        let air_traces = airs
             .into_iter()
             .zip_eq(&vk.per_air)
             .map(|(air, vk)| {
@@ -93,7 +93,7 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
             .collect();
         MultiAirCommittedTraceData {
             pcs_data,
-            air_infos,
+            air_traces,
         }
     }
 }

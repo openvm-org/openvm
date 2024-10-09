@@ -184,8 +184,8 @@ fn test_auto_carry_mul() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(
-        &any_rap_vec![&chip, &range_checker.air],
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -232,8 +232,8 @@ fn test_auto_carry_intmul() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(
-        &any_rap_vec![&chip, &range_checker.air],
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -288,8 +288,8 @@ fn test_auto_carry_add() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
     let range_trace = range_checker.generate_trace();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(
-        &any_rap_vec![&chip, &range_checker.air],
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
