@@ -100,6 +100,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         let x_biguint = limbs_to_biguint(&x, LIMB_SIZE);
         let y_biguint = limbs_to_biguint(&y, LIMB_SIZE);
 
+        // TODO: chip (expr builder) should be able to handle this.
         let z_biguint = (x_biguint + y_biguint) % &self.modulus;
         let z_limbs = biguint_to_limbs::<NUM_LIMBS>(z_biguint, LIMB_SIZE);
 
