@@ -4,7 +4,9 @@ use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
 
-use crate::program::{bridge::ProgramBus, Instruction};
+use crate::program::{bridge::ProgramBus, ExecutionError, Instruction};
+
+pub type Result<T> = std::result::Result<T, ExecutionError>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow)]
 #[repr(C)]
@@ -112,7 +114,7 @@ impl<F: Field> InstructionCols<F> {
             ..
         } = instruction;
         Self {
-            opcode: F::from_canonical_usize(*opcode as usize),
+            opcode: F::from_canonical_usize(*opcode),
             operands: [op_a, op_b, op_c, d, e, op_f, op_g].map(|&f| f),
         }
     }

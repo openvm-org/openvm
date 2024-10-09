@@ -5,7 +5,8 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        instructions::Opcode, ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
+        instructions::CastfOpcode, ExecutionBridge, ExecutionBus, ExecutionState,
+        InstructionExecutor,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -37,6 +38,8 @@ pub struct CastFChip<T: PrimeField32> {
     data: Vec<CastFRecord<T>>,
     memory_chip: MemoryChipRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+
+    offset: usize,
 }
 
 impl<T: PrimeField32> CastFChip<T> {
@@ -44,6 +47,7 @@ impl<T: PrimeField32> CastFChip<T> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
+        offset: usize,
     ) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
@@ -61,10 +65,12 @@ impl<T: PrimeField32> CastFChip<T> {
                 execution_bridge,
                 memory_bridge,
                 bus,
+                offset,
             },
             data: vec![],
             memory_chip,
             range_checker_chip,
+            offset,
         }
     }
 }
@@ -83,7 +89,8 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
             e,
             ..
         } = instruction.clone();
-        assert_eq!(opcode, Opcode::CASTF);
+        let opcode = opcode - self.offset;
+        assert_eq!(opcode, CastfOpcode::CASTF as usize);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
 
@@ -118,6 +125,9 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
+    }
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", CastfOpcode::CASTF)
     }
 }
 impl<T: PrimeField32> CastFChip<T> {

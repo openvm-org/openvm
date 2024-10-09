@@ -11,7 +11,7 @@ use stark_vm::modular_addsub::big_uint_mod_inverse;
 /// Example: If there are 4 inputs (x1, y1, x2, y2), and one intermediate variable lambda,
 /// Mul(Var(0), Var(0)) - Input(0) - Input(2) =>
 /// lambda * lambda - x1 - x2
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SymbolicExpr {
     Input(usize),
     Var(usize),
@@ -26,7 +26,7 @@ pub enum SymbolicExpr {
 
 impl SymbolicExpr {
     // Maximum absolute positive and negative value of the expression.
-    pub fn max_abs(&self, prime: &BigUint) -> (BigUint, BigUint) {
+    fn max_abs(&self, prime: &BigUint) -> (BigUint, BigUint) {
         match self {
             SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => {
                 // Input and variable are field elements so are in [0, p)
@@ -62,7 +62,9 @@ impl SymbolicExpr {
         }
     }
 
-    fn expr_limbs(&self, num_limbs: usize) -> usize {
+    // Number of limbs to represent the expression.
+    // num_limbs is the number of limbs of a canonical field element.
+    pub fn expr_limbs(&self, num_limbs: usize) -> usize {
         match self {
             SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => num_limbs,
             SymbolicExpr::Add(lhs, rhs) | SymbolicExpr::Sub(lhs, rhs) => {

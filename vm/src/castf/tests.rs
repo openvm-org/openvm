@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     arch::{
-        instructions::Opcode,
+        instructions::CastfOpcode,
         testing::{memory::gen_pointer, MachineChipTestBuilder},
         MachineChip,
     },
@@ -51,7 +51,10 @@ fn prepare_castf_rand_write_execute(
 
     tester.execute(
         chip,
-        Instruction::from_usize(Opcode::CASTF, [address_x, address_y, 0, as_x, as_y]),
+        Instruction::from_usize(
+            CastfOpcode::CASTF as usize,
+            [address_x, address_y, 0, as_x, as_y],
+        ),
     );
     assert_eq!(
         x.map(F::from_canonical_u32),
@@ -67,6 +70,7 @@ fn castf_rand_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
     let num_tests: usize = 10;
 
@@ -86,6 +90,7 @@ fn negative_castf_overflow_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -120,6 +125,7 @@ fn negative_castf_memread_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -154,6 +160,7 @@ fn negative_castf_memwrite_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -188,6 +195,7 @@ fn negative_castf_as_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();

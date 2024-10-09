@@ -1,0 +1,15 @@
+[package]
+name = "ax-ecc-execution"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", branch = "test/visibility" }
+itertools.workspace = true
+rand_core = "0.6.4"
+
+[dev-dependencies]
+rand.workspace = true
+rng = "0.1.0"
+subtle = "2.6.1"

@@ -63,7 +63,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubAir<NUM_LIMBS,
 
         self.execution_bridge
             .execute_and_increment_pc(
-                expected_opcode,
+                expected_opcode + AB::Expr::from_canonical_usize(self.offset),
                 [
                     io.z.address.address,
                     io.x.address.address,

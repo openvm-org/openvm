@@ -8,7 +8,7 @@ use rand::Rng;
 use super::{ModularAddSubChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME};
 use crate::{
     arch::{
-        instructions::{Opcode::*, MODULAR_ADDSUB_INSTRUCTIONS},
+        instructions::{ModularArithmeticOpcode, UsizeOpcode},
         testing::MachineChipTestBuilder,
     },
     program::Instruction,
@@ -28,12 +28,14 @@ fn test_modular_addsub() {
         tester.program_bus(),
         tester.memory_chip(),
         secp256k1_coord_prime(),
+        0,
     );
     let mut scalar_chip: ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE> = ModularAddSubChip::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
         secp256k1_scalar_prime(),
+        4,
     );
     let mut rng = create_seeded_rng();
     let num_tests = 100;
@@ -48,12 +50,12 @@ fn test_modular_addsub() {
             .collect();
         let mut b = BigUint::new(b_digits);
 
-        let opcode = MODULAR_ADDSUB_INSTRUCTIONS[rng.gen_range(0..4)];
-
-        let (is_scalar, modulus) = match opcode {
-            SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB => (true, SECP256K1_SCALAR_PRIME.clone()),
-            SECP256K1_COORD_ADD | SECP256K1_COORD_SUB => (false, SECP256K1_COORD_PRIME.clone()),
-            _ => unreachable!(),
+        let opcode = rng.gen_range(0..2);
+        let is_scalar = rng.gen_bool(0.5);
+        let modulus = if is_scalar {
+            SECP256K1_SCALAR_PRIME.clone()
+        } else {
+            SECP256K1_COORD_PRIME.clone()
         };
 
         a %= modulus.clone();
@@ -61,7 +63,19 @@ fn test_modular_addsub() {
         assert!(a < modulus);
         assert!(b < modulus);
 
-        let r = ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::solve(opcode, a.clone(), b.clone());
+        let r = if is_scalar {
+            scalar_chip.solve(
+                ModularArithmeticOpcode::from_usize(opcode),
+                a.clone(),
+                b.clone(),
+            )
+        } else {
+            coord_chip.solve(
+                ModularArithmeticOpcode::from_usize(opcode),
+                a.clone(),
+                b.clone(),
+            )
+        };
 
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:
@@ -92,7 +106,7 @@ fn test_modular_addsub() {
         tester.write(data_as, address2, b_limbs);
 
         let instruction = Instruction::from_isize(
-            opcode,
+            opcode + if is_scalar { 4 } else { 0 },
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,

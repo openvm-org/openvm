@@ -5,7 +5,7 @@ use super::{
     air::{CastFAir, FINAL_LIMB_SIZE, LIMB_SIZE},
     columns::{CastFAuxCols, CastFIoCols},
 };
-use crate::{arch::instructions::Opcode, memory::MemoryAddress};
+use crate::{arch::instructions::CastfOpcode, memory::MemoryAddress};
 
 impl CastFAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -61,7 +61,7 @@ impl CastFAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_u8(Opcode::CASTF as u8),
+                AB::Expr::from_canonical_usize(CastfOpcode::CASTF as usize + self.offset),
                 [
                     io.op_a.into(),
                     io.op_b.into(),

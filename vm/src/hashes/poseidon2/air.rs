@@ -28,6 +28,8 @@ pub struct Poseidon2VmAir<T> {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub direct: bool, // Whether direct interactions are enabled.
+
+    pub(super) offset: usize,
 }
 
 impl<F> AirConfig for Poseidon2VmAir<F> {

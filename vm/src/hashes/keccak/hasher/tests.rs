@@ -19,7 +19,7 @@ use tiny_keccak::Hasher;
 use super::{utils::num_keccak_f, KeccakVmChip};
 use crate::{
     arch::{
-        instructions::Opcode,
+        instructions::Keccak256Opcode,
         testing::{MachineChipTestBuilder, MachineChipTester},
     },
     core::BYTE_XOR_BUS,
@@ -44,6 +44,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
         tester.program_bus(),
         tester.memory_chip(),
         xor_chip.clone(),
+        0,
     );
 
     let mut dst = 0;
@@ -63,7 +64,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
         tester.execute(
             &mut chip,
             Instruction::large_from_isize(
-                Opcode::KECCAK256,
+                Keccak256Opcode::KECCAK256 as usize,
                 a as isize,
                 b as isize,
                 c as isize,

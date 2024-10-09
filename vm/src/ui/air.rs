@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 
 use super::columns::UiCols;
 use crate::{
-    arch::{instructions::Opcode, ExecutionBridge},
+    arch::{instructions::U32Opcode, ExecutionBridge},
     memory::offline_checker::MemoryBridge,
 };
 
@@ -21,6 +21,8 @@ pub struct UiAir {
     pub(super) memory_bridge: MemoryBridge,
 
     pub bus: VariableRangeCheckerBus,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for UiAir {}
@@ -45,7 +47,7 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for UiAir {
                 + local_cols.aux.imm_lo_hex,
         );
 
-        let expected_opcode = AB::Expr::from_canonical_u32(Opcode::LUI as u32);
+        let expected_opcode = AB::Expr::from_canonical_u32(U32Opcode::LUI as u32);
 
         self.eval_interactions(builder, &local_cols.io, &local_cols.aux, expected_opcode);
     }

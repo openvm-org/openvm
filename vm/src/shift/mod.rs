@@ -6,7 +6,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        instructions::{Opcode, SHIFT_256_INSTRUCTIONS},
+        instructions::{U256Opcode, UsizeOpcode},
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
@@ -44,6 +44,8 @@ pub struct ShiftChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: u
     memory_chip: MemoryChipRef<T>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+
+    offset: usize,
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
@@ -54,6 +56,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+        offset: usize,
     ) -> Self {
         // (1 << (2 * LIMB_BITS)) fits within a u32
         assert!(LIMB_BITS < 16, "LIMB_BITS {} >= 16", LIMB_BITS);
@@ -78,11 +81,13 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
                 memory_bridge,
                 range_bus: range_checker_chip.bus(),
                 xor_bus: xor_lookup_chip.bus(),
+                offset,
             },
             data: vec![],
             memory_chip,
             range_checker_chip,
             xor_lookup_chip,
+            offset,
         }
     }
 }
@@ -104,7 +109,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        assert!(SHIFT_256_INSTRUCTIONS.contains(&opcode));
+        let opcode = opcode - self.offset;
+        assert!(U256Opcode::shift_opcodes().any(|op| op as usize == opcode));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -119,18 +125,19 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|y| y.as_canonical_u32());
-        let (z, limb_shift, bit_shift) = solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, opcode);
+        let (z, limb_shift, bit_shift) =
+            solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, U256Opcode::from_usize(opcode));
 
         let carry = x
             .into_iter()
-            .map(|val: u32| match opcode {
-                Opcode::SLL256 => val >> (LIMB_BITS - bit_shift),
+            .map(|val: u32| match U256Opcode::from_usize(opcode) {
+                U256Opcode::SLL => val >> (LIMB_BITS - bit_shift),
                 _ => val % (1 << bit_shift),
             })
             .collect::<Vec<_>>();
 
         let mut x_sign = 0;
-        if opcode == Opcode::SRA256 {
+        if opcode == U256Opcode::SRA as usize {
             x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             self.xor_lookup_chip
                 .request(x[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
@@ -155,7 +162,10 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         self.data.push(ShiftRecord {
             from_state,
-            instruction: instruction.clone(),
+            instruction: Instruction {
+                opcode,
+                ..instruction
+            },
             x_ptr_read,
             y_ptr_read,
             z_ptr_read,
@@ -173,17 +183,22 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        let opcode = U256Opcode::from_usize(opcode - self.offset);
+        format!("{opcode:?}<{NUM_LIMBS},{LIMB_BITS}>")
+    }
 }
 
 fn solve_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
-    op: Opcode,
+    op: U256Opcode,
 ) -> (Vec<u32>, usize, usize) {
     match op {
-        Opcode::SLL256 => solve_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
-        Opcode::SRL256 => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
-        Opcode::SRA256 => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, false),
+        U256Opcode::SLL => solve_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::SRL => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
+        U256Opcode::SRA => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, false),
         _ => unreachable!(),
     }
 }

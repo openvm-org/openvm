@@ -12,6 +12,8 @@ use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
+use serde::{Deserialize, Serialize};
+use strum::EnumDiscriminants;
 use strum_macros::IntoStaticStr;
 
 use crate::{
@@ -26,6 +28,9 @@ use crate::{
     memory::MemoryChipRef,
     modular_addsub::ModularAddSubChip,
     modular_multdiv::ModularMultDivChip,
+    new_alu::Rv32ArithmeticLogicChip,
+    new_lt::Rv32LessThanChip,
+    new_shift::Rv32ShiftChip,
     program::{ExecutionError, Instruction, ProgramChip},
     shift::ShiftChip,
     ui::UiChip,
@@ -34,11 +39,17 @@ use crate::{
 
 #[enum_dispatch]
 pub trait InstructionExecutor<F> {
+    /// Runtime execution of the instruction, if the instruction is owned by the
+    /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> Result<ExecutionState<usize>, ExecutionError>;
+
+    /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
+    /// if it is a supported opcode by the present executor.
+    fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
 #[enum_dispatch]
@@ -99,6 +110,10 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     ) -> Result<ExecutionState<usize>, ExecutionError> {
         self.borrow_mut().execute(instruction, prev_state)
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.borrow().get_opcode_name(opcode)
+    }
 }
 
 impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
@@ -158,7 +173,9 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, EnumDiscriminants)]
+#[strum_discriminants(derive(Serialize, Deserialize))]
+#[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum InstructionExecutorVariant<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
@@ -168,8 +185,11 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
     ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    ArithmeticLogicUnitRv32(Rc<RefCell<Rv32ArithmeticLogicChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
+    LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     Ui(Rc<RefCell<UiChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
@@ -177,7 +197,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
-#[derive(Debug, IntoStaticStr)]
+#[derive(Debug, Clone, IntoStaticStr)]
 #[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
@@ -190,8 +210,11 @@ pub enum MachineChipVariant<F: PrimeField32> {
     RangeTupleChecker(Arc<RangeTupleCheckerChip>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
+    ArithmeticLogicUnitRv32(Rc<RefCell<Rv32ArithmeticLogicChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
+    LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     Ui(Rc<RefCell<UiChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),

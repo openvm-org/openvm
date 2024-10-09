@@ -5,7 +5,7 @@ use super::{
     EcAddUnequalAuxCols, EcAddUnequalIoCols, EcAddUnequalVmAir, EcDoubleAuxCols, EcDoubleIoCols,
     EcDoubleVmAir,
 };
-use crate::arch::instructions::Opcode;
+use crate::arch::instructions::EccOpcode;
 
 impl EcAddUnequalVmAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -70,7 +70,7 @@ impl EcAddUnequalVmAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_ADD_NE as u8),
+                AB::Expr::from_canonical_usize(EccOpcode::EC_ADD_NE as usize + self.offset),
                 [
                     io.p3.address.address,
                     io.p1.address.address,
@@ -131,7 +131,7 @@ impl EcDoubleVmAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_u8(Opcode::SECP256K1_EC_DOUBLE as u8),
+                AB::Expr::from_canonical_usize(EccOpcode::EC_DOUBLE as usize + self.offset),
                 [
                     io.p2.address.address.into(),
                     io.p1.address.address.into(),

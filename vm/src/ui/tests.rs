@@ -7,7 +7,7 @@ use rand::{rngs::StdRng, Rng};
 use super::UiChip;
 use crate::{
     arch::{
-        instructions::Opcode,
+        instructions::U32Opcode,
         testing::{memory::gen_pointer, MachineChipTestBuilder},
     },
     program::Instruction,
@@ -30,7 +30,10 @@ fn prepare_lui_write_execute(
 ) {
     let x = UiChip::<F>::solve_lui(b as u32);
 
-    tester.execute(chip, Instruction::from_usize(Opcode::LUI, [a, b]));
+    tester.execute(
+        chip,
+        Instruction::from_usize(U32Opcode::LUI as usize, [a, b]),
+    );
     assert_eq!(x.map(F::from_canonical_u32), tester.read::<4>(1usize, a));
 }
 
@@ -52,6 +55,7 @@ fn lui_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
     let num_tests: usize = 10;
 
@@ -71,6 +75,7 @@ fn negative_lui_invalid_imm_test() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     // (1 << 20) + 1 exceeds the 20-bit bound

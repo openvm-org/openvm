@@ -4,7 +4,7 @@ use poseidon2_air::poseidon2::columns::Poseidon2IoCols;
 
 use super::{air::Poseidon2VmAir, columns::Poseidon2VmIoCols, WIDTH};
 use crate::{
-    arch::{instructions::Opcode::PERM_POS2, ExecutionState},
+    arch::{instructions::Poseidon2Opcode::PERM_POS2, ExecutionState},
     core::POSEIDON2_DIRECT_BUS,
 };
 
@@ -25,7 +25,7 @@ impl<F: Field> Poseidon2VmAir<F> {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                opcode,
+                opcode + AB::Expr::from_canonical_usize(self.offset),
                 [io.a, io.b, io.c, io.d, io.e],
                 ExecutionState::new(io.pc, io.timestamp),
                 timestamp_delta,

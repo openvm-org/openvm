@@ -25,8 +25,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
 
       - name: Run tests
         working-directory: stark-backend
         run: |
-          cargo test --features parallel
+          cargo nextest run --features parallel

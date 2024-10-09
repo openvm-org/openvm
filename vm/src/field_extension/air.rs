@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 use super::columns::FieldExtensionArithmeticCols;
 use crate::{
     arch::{
-        instructions::Opcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
+        instructions::FieldExtensionOpcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
         ExecutionBridge,
     },
     field_extension::chip::FieldExtensionArithmetic,
@@ -25,6 +25,8 @@ use crate::{
 pub struct FieldExtensionArithmeticAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
+
+    pub(super) offset: usize,
 }
 
 impl AirConfig for FieldExtensionArithmeticAir {
@@ -76,7 +78,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
             builder.assert_bool(flag);
 
             flag_sum += flag.into();
-            expected_opcode += flag * AB::F::from_canonical_u32(opcode as u32);
+            expected_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
 
             for (j, result_part) in result.into_iter().enumerate() {
                 expected_result[j] += flag * result_part;

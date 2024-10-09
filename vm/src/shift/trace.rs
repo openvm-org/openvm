@@ -14,7 +14,10 @@ use super::{
     ShiftChip, ShiftRecord,
 };
 use crate::{
-    arch::{instructions::Opcode, MachineChip},
+    arch::{
+        instructions::{U256Opcode, UsizeOpcode},
+        MachineChip,
+    },
     uint_multiplication::MemoryData,
 };
 
@@ -71,23 +74,27 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
             row.aux = ShiftAuxCols {
                 is_valid: F::one(),
                 bit_shift: F::from_canonical_usize(bit_shift),
-                bit_multiplier_left: F::from_canonical_usize(match instruction.opcode {
-                    Opcode::SLL256 => 1 << bit_shift,
-                    Opcode::SRL256 | Opcode::SRA256 => 0,
-                    _ => unreachable!(),
-                }),
-                bit_multiplier_right: F::from_canonical_usize(match instruction.opcode {
-                    Opcode::SLL256 => 0,
-                    Opcode::SRL256 | Opcode::SRA256 => 1 << bit_shift,
-                    _ => unreachable!(),
-                }),
+                bit_multiplier_left: F::from_canonical_usize(
+                    match U256Opcode::from_usize(instruction.opcode) {
+                        U256Opcode::SLL => 1 << bit_shift,
+                        U256Opcode::SRL | U256Opcode::SRA => 0,
+                        _ => unreachable!(),
+                    },
+                ),
+                bit_multiplier_right: F::from_canonical_usize(
+                    match U256Opcode::from_usize(instruction.opcode) {
+                        U256Opcode::SLL => 0,
+                        U256Opcode::SRL | U256Opcode::SRA => 1 << bit_shift,
+                        _ => unreachable!(),
+                    },
+                ),
                 x_sign,
                 bit_shift_marker: array::from_fn(|val| F::from_bool(val == bit_shift)),
                 limb_shift_marker: array::from_fn(|val| F::from_bool(val == limb_shift)),
                 bit_shift_carry,
-                opcode_sll_flag: F::from_bool(instruction.opcode == Opcode::SLL256),
-                opcode_srl_flag: F::from_bool(instruction.opcode == Opcode::SRL256),
-                opcode_sra_flag: F::from_bool(instruction.opcode == Opcode::SRA256),
+                opcode_sll_flag: F::from_bool(instruction.opcode == U256Opcode::SLL as usize),
+                opcode_srl_flag: F::from_bool(instruction.opcode == U256Opcode::SRL as usize),
+                opcode_sra_flag: F::from_bool(instruction.opcode == U256Opcode::SRA as usize),
                 read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
                     .map(|read| aux_cols_factory.make_read_aux_cols(read.clone())),
                 read_x_aux_cols: aux_cols_factory.make_read_aux_cols(x_read.clone()),

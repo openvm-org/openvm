@@ -14,7 +14,10 @@ use super::{
     ArithmeticLogicChip, ArithmeticLogicRecord, WriteRecord,
 };
 use crate::{
-    arch::{instructions::Opcode, MachineChip},
+    arch::{
+        instructions::{U256Opcode, UsizeOpcode},
+        MachineChip,
+    },
     memory::offline_checker::MemoryWriteAuxCols,
     uint_multiplication::MemoryData,
 };
@@ -79,18 +82,19 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
                 address_as: instruction.e,
             };
 
+            let opcode = U256Opcode::from_usize(instruction.opcode);
             row.aux = ArithmeticLogicAuxCols {
                 is_valid: F::one(),
                 x_sign,
                 y_sign,
-                opcode_add_flag: F::from_bool(instruction.opcode == Opcode::ADD256),
-                opcode_sub_flag: F::from_bool(instruction.opcode == Opcode::SUB256),
-                opcode_sltu_flag: F::from_bool(instruction.opcode == Opcode::SLTU256),
-                opcode_eq_flag: F::from_bool(instruction.opcode == Opcode::EQ256),
-                opcode_xor_flag: F::from_bool(instruction.opcode == Opcode::XOR256),
-                opcode_and_flag: F::from_bool(instruction.opcode == Opcode::AND256),
-                opcode_or_flag: F::from_bool(instruction.opcode == Opcode::OR256),
-                opcode_slt_flag: F::from_bool(instruction.opcode == Opcode::SLT256),
+                opcode_add_flag: F::from_bool(opcode == U256Opcode::ADD),
+                opcode_sub_flag: F::from_bool(opcode == U256Opcode::SUB),
+                opcode_sltu_flag: F::from_bool(opcode == U256Opcode::LT),
+                opcode_eq_flag: F::from_bool(opcode == U256Opcode::EQ),
+                opcode_xor_flag: F::from_bool(opcode == U256Opcode::XOR),
+                opcode_and_flag: F::from_bool(opcode == U256Opcode::AND),
+                opcode_or_flag: F::from_bool(opcode == U256Opcode::OR),
+                opcode_slt_flag: F::from_bool(opcode == U256Opcode::SLT),
                 read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
                     .map(|read| aux_cols_factory.make_read_aux_cols(read.clone())),
                 read_x_aux_cols: aux_cols_factory.make_read_aux_cols(x_read.clone()),

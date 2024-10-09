@@ -13,7 +13,7 @@ use super::{
     KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
 };
 use crate::{
-    arch::{instructions::Opcode, ExecutionState},
+    arch::{instructions::Keccak256Opcode, ExecutionState},
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
@@ -131,7 +131,7 @@ impl KeccakVmAir {
         let timestamp_change: AB::Expr = Self::timestamp_change(opcode.len);
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_usize(Opcode::KECCAK256 as usize),
+                AB::Expr::from_canonical_usize(Keccak256Opcode::KECCAK256 as usize + self.offset),
                 [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
                 ExecutionState::new(opcode.pc, opcode.start_timestamp),
                 timestamp_change,

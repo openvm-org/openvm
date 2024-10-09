@@ -62,7 +62,7 @@ impl<const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
 
         self.execution_bridge
             .execute_and_increment_pc(
-                expected_opcode,
+                expected_opcode + AB::Expr::from_canonical_usize(self.offset),
                 [
                     io.z.address.address,
                     io.x.address.address,

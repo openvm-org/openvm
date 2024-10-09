@@ -8,10 +8,11 @@ use afs_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
+use strum::IntoEnumIterator;
 
 use super::columns::ArithmeticLogicCols;
 use crate::{
-    arch::{instructions::ALU_256_INSTRUCTIONS, ExecutionBridge},
+    arch::{instructions::U256Opcode, ExecutionBridge},
     memory::offline_checker::MemoryBridge,
 };
 
@@ -20,6 +21,8 @@ pub struct ArithmeticLogicAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub bus: XorBus,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
@@ -145,7 +148,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 
         let expected_opcode = flags
             .iter()
-            .zip(ALU_256_INSTRUCTIONS)
+            .zip(U256Opcode::iter())
             .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
             });

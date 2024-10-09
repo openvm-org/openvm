@@ -2,7 +2,7 @@ use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
-        instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
+        instructions::{FieldArithmeticOpcode, UsizeOpcode},
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     field_arithmetic::columns::Operand,
@@ -23,7 +23,7 @@ use crate::memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord};
 
 #[derive(Clone, Debug)]
 pub struct FieldArithmeticRecord<F> {
-    pub opcode: Opcode,
+    pub opcode: usize,
     pub from_state: ExecutionState<usize>,
     pub x_read: MemoryReadRecord<F, 1>,
     pub y_read: MemoryReadRecord<F, 1>,
@@ -36,6 +36,8 @@ pub struct FieldArithmeticChip<F: PrimeField32> {
     pub records: Vec<FieldArithmeticRecord<F>>,
 
     pub memory_chip: MemoryChipRef<F>,
+
+    offset: usize,
 }
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
@@ -44,15 +46,18 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
+        offset: usize,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
             air: FieldArithmeticAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                offset,
             },
             records: vec![],
             memory_chip,
+            offset,
         }
     }
 }
@@ -73,7 +78,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             op_f: y_as,
             ..
         } = instruction;
-        assert!(FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
+        let opcode = opcode - self.offset;
 
         let mut memory_chip = self.memory_chip.borrow_mut();
 
@@ -87,7 +92,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
 
         let x = x_read.value();
         let y = y_read.value();
-        let z = FieldArithmetic::solve(opcode, (x, y)).unwrap();
+        let z = FieldArithmetic::solve(FieldArithmeticOpcode::from_usize(opcode), (x, y)).unwrap();
 
         let z_write = memory_chip.write_cell(z_as, z_address, z);
 
@@ -105,6 +110,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             timestamp: from_state.timestamp + FieldArithmeticAir::TIMESTAMP_DELTA,
         })
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            FieldArithmeticOpcode::from_usize(opcode - self.offset)
+        )
+    }
 }
 
 pub struct FieldArithmetic;
@@ -112,19 +124,18 @@ impl FieldArithmetic {
     /// Evaluates given opcode using given operands.
     ///
     /// Returns None for non-arithmetic operations.
-    fn solve<T: Field>(op: Opcode, operands: (T, T)) -> Option<T> {
+    fn solve<T: Field>(op: FieldArithmeticOpcode, operands: (T, T)) -> Option<T> {
         match op {
-            Opcode::FADD => Some(operands.0 + operands.1),
-            Opcode::FSUB => Some(operands.0 - operands.1),
-            Opcode::FMUL => Some(operands.0 * operands.1),
-            Opcode::FDIV => {
+            FieldArithmeticOpcode::ADD => Some(operands.0 + operands.1),
+            FieldArithmeticOpcode::SUB => Some(operands.0 - operands.1),
+            FieldArithmeticOpcode::MUL => Some(operands.0 * operands.1),
+            FieldArithmeticOpcode::DIV => {
                 if operands.1 == T::zero() {
                     None
                 } else {
                     Some(operands.0 / operands.1)
                 }
             }
-            _ => unreachable!(),
         }
     }
 }

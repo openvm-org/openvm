@@ -7,11 +7,12 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
+use test_log::test;
 
 use super::{solve_shift, ShiftChip};
 use crate::{
     arch::{
-        instructions::Opcode,
+        instructions::U256Opcode,
         testing::{memory::gen_pointer, MachineChipTestBuilder},
         MachineChip,
     },
@@ -43,7 +44,7 @@ fn generate_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(rng: &mut StdR
 fn run_shift_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     tester: &mut MachineChipTestBuilder<F>,
     chip: &mut ShiftChip<F, NUM_LIMBS, LIMB_BITS>,
-    opcode: Opcode,
+    opcode: U256Opcode,
     x: Vec<u32>,
     y: Vec<u32>,
     rng: &mut StdRng,
@@ -81,7 +82,7 @@ fn run_shift_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     tester.execute(
         chip,
         Instruction::from_usize(
-            opcode,
+            opcode as usize,
             [res_ptr_to_address, x_ptr_to_address, y_ptr_to_address, d, e],
         ),
     );
@@ -94,7 +95,7 @@ fn run_shift_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 
 #[allow(clippy::too_many_arguments)]
 fn run_shift_negative_test(
-    opcode: Opcode,
+    opcode: U256Opcode,
     x: Vec<u32>,
     y: Vec<u32>,
     z: Vec<u32>,
@@ -112,6 +113,7 @@ fn run_shift_negative_test(
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
@@ -178,12 +180,13 @@ fn shift_sll_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
         let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         let y = generate_shift::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        run_shift_rand_write_execute(&mut tester, &mut chip, Opcode::SLL256, x, y, &mut rng);
+        run_shift_rand_write_execute(&mut tester, &mut chip, U256Opcode::SLL, x, y, &mut rng);
     }
 
     let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
@@ -193,7 +196,7 @@ fn shift_sll_rand_test() {
 #[test]
 fn shift_sll_wrong_answer_negative_test() {
     run_shift_negative_test(
-        Opcode::SLL256,
+        U256Opcode::SLL,
         iter::once(1)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -218,7 +221,7 @@ fn shift_sll_wrong_answer_negative_test() {
 #[test]
 fn shift_sll_wrong_bit_shift_negative_test() {
     run_shift_negative_test(
-        Opcode::SLL256,
+        U256Opcode::SLL,
         iter::once(1)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -243,7 +246,7 @@ fn shift_sll_wrong_bit_shift_negative_test() {
 #[test]
 fn shift_sll_wrong_bit_mult_negative_test() {
     run_shift_negative_test(
-        Opcode::SLL256,
+        U256Opcode::SLL,
         iter::once(1)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -268,7 +271,7 @@ fn shift_sll_wrong_bit_mult_negative_test() {
 #[test]
 fn shift_sll_nonzero_bit_mult_right_negative_test() {
     run_shift_negative_test(
-        Opcode::SLL256,
+        U256Opcode::SLL,
         iter::once(1)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -293,7 +296,7 @@ fn shift_sll_nonzero_bit_mult_right_negative_test() {
 #[test]
 fn shift_sll_nonzero_sign_negative_test() {
     run_shift_negative_test(
-        Opcode::SLL256,
+        U256Opcode::SLL,
         iter::once(1)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -318,7 +321,7 @@ fn shift_sll_nonzero_sign_negative_test() {
 #[test]
 fn shift_sll_out_of_range_carry_negative_test() {
     run_shift_negative_test(
-        Opcode::SLL256,
+        U256Opcode::SLL,
         iter::once(1 << LIMB_BITS)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -356,12 +359,13 @@ fn shift_srl_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
         let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         let y = generate_shift::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        run_shift_rand_write_execute(&mut tester, &mut chip, Opcode::SRL256, x, y, &mut rng);
+        run_shift_rand_write_execute(&mut tester, &mut chip, U256Opcode::SRL, x, y, &mut rng);
     }
 
     let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
@@ -371,7 +375,7 @@ fn shift_srl_rand_test() {
 #[test]
 fn shift_srl_wrong_answer_negative_test() {
     run_shift_negative_test(
-        Opcode::SRL256,
+        U256Opcode::SRL,
         iter::once(4)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -396,7 +400,7 @@ fn shift_srl_wrong_answer_negative_test() {
 #[test]
 fn shift_srl_wrong_extension_negative_test() {
     run_shift_negative_test(
-        Opcode::SRL256,
+        U256Opcode::SRL,
         iter::once(4)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -421,7 +425,7 @@ fn shift_srl_wrong_extension_negative_test() {
 #[test]
 fn shift_srl_nonzero_bit_mult_left_negative_test() {
     run_shift_negative_test(
-        Opcode::SRL256,
+        U256Opcode::SRL,
         iter::once(4)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -446,7 +450,7 @@ fn shift_srl_nonzero_bit_mult_left_negative_test() {
 #[test]
 fn shift_srl_nonzero_sign_negative_test() {
     run_shift_negative_test(
-        Opcode::SRL256,
+        U256Opcode::SRL,
         iter::once(4)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -480,12 +484,13 @@ fn shift_sra_rand_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     for _ in 0..num_ops {
         let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
         let y = generate_shift::<NUM_LIMBS, LIMB_BITS>(&mut rng);
-        run_shift_rand_write_execute(&mut tester, &mut chip, Opcode::SRA256, x, y, &mut rng);
+        run_shift_rand_write_execute(&mut tester, &mut chip, U256Opcode::SRA, x, y, &mut rng);
     }
 
     let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
@@ -495,7 +500,7 @@ fn shift_sra_rand_test() {
 #[test]
 fn shift_sra_wrong_answer_negative_test() {
     run_shift_negative_test(
-        Opcode::SRA256,
+        U256Opcode::SRA,
         iter::once(4)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -520,7 +525,7 @@ fn shift_sra_wrong_answer_negative_test() {
 #[test]
 fn shift_sra_wrong_extension_negative_test() {
     run_shift_negative_test(
-        Opcode::SRA256,
+        U256Opcode::SRA,
         iter::once(4)
             .chain(iter::repeat(0))
             .take(NUM_LIMBS)
@@ -545,7 +550,7 @@ fn shift_sra_wrong_extension_negative_test() {
 #[test]
 fn shift_sra_wrong_sign_negative_test() {
     run_shift_negative_test(
-        Opcode::SRA256,
+        U256Opcode::SRA,
         vec![(1 << LIMB_BITS) - 1; NUM_LIMBS],
         iter::once(1)
             .chain(iter::repeat(0))
@@ -574,6 +579,7 @@ fn shift_overflow_test() {
         tester.program_bus(),
         tester.memory_chip(),
         xor_lookup_chip.clone(),
+        0,
     );
 
     let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(&mut rng);
@@ -583,7 +589,7 @@ fn shift_overflow_test() {
     run_shift_rand_write_execute(
         &mut tester,
         &mut chip,
-        Opcode::SLL256,
+        U256Opcode::SLL,
         x.clone(),
         y.clone(),
         &mut rng,
@@ -591,7 +597,7 @@ fn shift_overflow_test() {
     run_shift_rand_write_execute(
         &mut tester,
         &mut chip,
-        Opcode::SRL256,
+        U256Opcode::SRL,
         x.clone(),
         y.clone(),
         &mut rng,
@@ -599,7 +605,7 @@ fn shift_overflow_test() {
     run_shift_rand_write_execute(
         &mut tester,
         &mut chip,
-        Opcode::SRA256,
+        U256Opcode::SRA,
         x.clone(),
         y.clone(),
         &mut rng,
@@ -623,7 +629,7 @@ fn solve_sll_sanity_test() {
         0, 0, 0, 104, 57, 232, 209, 141, 169, 185, 35, 138, 188, 49, 243, 75, 24, 190, 208, 40,
         198, 222, 255, 80, 106, 111, 228, 18, 195, 133, 85, 3,
     ];
-    let sll_result = solve_shift::<32, 8>(&x, &y, Opcode::SLL256).0;
+    let sll_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SLL).0;
     for i in 0..32 {
         assert_eq!(z[i], sll_result[i])
     }
@@ -643,8 +649,8 @@ fn solve_srl_sanity_test() {
         104, 211, 236, 126, 23, 149, 98, 132, 16, 68, 72, 202, 178, 225, 86, 75, 141, 235, 116,
         173, 234, 220, 187, 127, 119, 215, 15, 223, 110, 36, 0, 0,
     ];
-    let srl_result = solve_shift::<32, 8>(&x, &y, Opcode::SRL256).0;
-    let sra_result = solve_shift::<32, 8>(&x, &y, Opcode::SRA256).0;
+    let srl_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SRL).0;
+    let sra_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SRA).0;
     for i in 0..32 {
         assert_eq!(z[i], srl_result[i]);
         assert_eq!(z[i], sra_result[i]);
@@ -665,7 +671,7 @@ fn solve_sra_sanity_test() {
         104, 211, 236, 126, 23, 149, 98, 132, 16, 68, 72, 202, 178, 225, 86, 75, 141, 235, 116,
         173, 234, 220, 187, 127, 119, 215, 15, 223, 110, 228, 255, 255,
     ];
-    let sra_result = solve_shift::<32, 8>(&x, &y, Opcode::SRA256).0;
+    let sra_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SRA).0;
     for i in 0..32 {
         assert_eq!(z[i], sra_result[i])
     }

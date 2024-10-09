@@ -33,8 +33,9 @@ use crate::{
             MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
             MemoryWriteAuxCols, AUX_LEN,
         },
+        tree::Hasher,
     },
-    vm::config::MemoryConfig,
+    vm::config::{MemoryConfig, PersistenceType},
 };
 
 pub mod dimensions;
@@ -43,6 +44,7 @@ mod memory;
 mod trace;
 
 const NUM_WORDS: usize = 16;
+pub const CHUNK: usize = 8;
 
 #[derive(Clone, Copy, Debug)]
 pub struct TimestampedValue<T> {
@@ -160,27 +162,14 @@ pub struct MemoryChip<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> MemoryChip<F> {
-    // pub fn with_persistent_memory(
-    //     memory_dimensions: MemoryDimensions,
-    //     memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
-    // ) -> Self {
-    //     Self {
-    //         interface_chip: MemoryInterface::Persistent(MemoryExpandInterfaceChip::new(
-    //             memory_dimensions,
-    //         )),
-    //         clk: F::one(),
-    //         memory,
-    //     }
-    // }
-
-    pub fn with_volatile_memory(
+    pub fn new(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
             memory_bus,
-            mem_config,
+            mem_config: mem_config.clone(),
             interface_chip: MemoryInterface::Volatile(MemoryAuditChip::new(
                 memory_bus,
                 mem_config.addr_space_max_bits,
@@ -379,19 +368,29 @@ impl<F: PrimeField32> MemoryChip<F> {
         }
     }
 
-    fn finalize(&mut self) {
-        let all_addresses = self.interface_chip.all_addresses();
-        for (address_space, pointer) in all_addresses {
-            let records = self.memory.access(
-                AddressSpace(address_space.as_canonical_u32()),
-                pointer.as_canonical_u32() as usize,
-                1,
+    pub fn finalize(&mut self, hasher: Option<&mut impl Hasher<CHUNK, F>>) {
+        if let Some(_hasher) = hasher {
+            assert_eq!(
+                self.mem_config.persistence_type,
+                PersistenceType::Persistent
             );
-            for record in records {
-                self.adapter_records
-                    .entry(record.data.len())
-                    .or_default()
-                    .push(record);
+            todo!("finalize persistent memory");
+        } else {
+            assert_eq!(self.mem_config.persistence_type, PersistenceType::Volatile);
+
+            let all_addresses = self.interface_chip.all_addresses();
+            for (address_space, pointer) in all_addresses {
+                let records = self.memory.access(
+                    AddressSpace(address_space.as_canonical_u32()),
+                    pointer.as_canonical_u32() as usize,
+                    1,
+                );
+                for record in records {
+                    self.adapter_records
+                        .entry(record.data.len())
+                        .or_default()
+                        .push(record);
+                }
             }
         }
     }
@@ -401,9 +400,7 @@ impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         panic!("cannot call generate_trace on MemoryChip, which has more than one trace");
     }
-    fn generate_traces(mut self) -> Vec<RowMajorMatrix<F>> {
-        self.finalize();
-
+    fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
         vec![
             self.generate_memory_interface_trace(),
             self.generate_access_adapter_trace::<2>(),
@@ -612,7 +609,7 @@ mod tests {
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
         let mut memory_chip =
-            MemoryChip::with_volatile_memory(memory_bus, memory_config, range_checker.clone());
+            MemoryChip::new(memory_bus, memory_config.clone(), range_checker.clone());
 
         let mut rng = thread_rng();
         for _ in 0..1000 {

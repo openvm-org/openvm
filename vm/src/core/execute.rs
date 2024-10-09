@@ -2,11 +2,15 @@ use std::{array, collections::BTreeMap};
 
 use afs_primitives::{is_equal::IsEqualAir, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
+use strum::IntoEnumIterator;
 
 use super::{timestamp_delta, CoreChip, CoreState};
 use crate::{
     arch::{
-        instructions::{Opcode::*, CORE_INSTRUCTIONS},
+        instructions::{
+            CoreOpcode::{self, *},
+            UsizeOpcode,
+        },
         ExecutionState, InstructionExecutor,
     },
     core::{
@@ -31,7 +35,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let pc_usize = pc.as_canonical_u64() as usize;
 
-        let opcode = instruction.opcode;
+        let opcode = instruction.opcode - self.offset;
         let a = instruction.op_a;
         let b = instruction.op_b;
         let c = instruction.op_c;
@@ -43,7 +47,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         let io = CoreIoCols {
             timestamp: F::from_canonical_usize(timestamp),
             pc,
-            opcode: F::from_canonical_usize(opcode as usize),
+            opcode: F::from_canonical_usize(opcode),
             op_a: a,
             op_b: b,
             op_c: c,
@@ -85,6 +89,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let hint_stream = &mut self.streams.hint_stream;
 
+        let opcode = CoreOpcode::from_usize(opcode);
         match opcode {
             // d[a] <- e[d[c] + b]
             LOADW => {
@@ -255,7 +260,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             });
 
             let mut operation_flags = BTreeMap::new();
-            for other_opcode in CORE_INSTRUCTIONS {
+            for other_opcode in CoreOpcode::iter() {
                 operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
             }
 
@@ -295,5 +300,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             next_pc.as_canonical_u64() as usize,
             timestamp,
         ))
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        let opcode = CoreOpcode::from_usize(opcode - self.offset);
+        format!("{opcode:?}")
     }
 }

@@ -18,7 +18,7 @@ use super::{
     CoreOptions, INST_WIDTH,
 };
 use crate::{
-    arch::{instructions::Opcode::*, ExecutionBridge},
+    arch::{instructions::CoreOpcode::*, ExecutionBridge},
     memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 
@@ -28,6 +28,8 @@ pub struct CoreAir {
     pub options: CoreOptions,
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field> PartitionedBaseAir<F> for CoreAir {}

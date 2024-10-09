@@ -7,7 +7,7 @@ use p3_field::{Field, PrimeField64};
 
 use crate::{
     arch::{
-        instructions::Opcode::{self, FAIL, NOP},
+        instructions::CoreOpcode::{FAIL, NOP},
         NUM_OPERANDS,
     },
     core::READ_INSTRUCTION_BUS,
@@ -24,7 +24,7 @@ pub mod trace;
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
-    pub opcode: Opcode,
+    pub opcode: usize,
     pub op_a: F,
     pub op_b: F,
     pub op_c: F,
@@ -45,7 +45,7 @@ fn isize_to_field<F: Field>(value: isize) -> F {
 impl<F: Field> Instruction<F> {
     #[allow(clippy::too_many_arguments)]
     pub fn from_isize(
-        opcode: Opcode,
+        opcode: usize,
         op_a: isize,
         op_b: isize,
         op_c: isize,
@@ -65,7 +65,7 @@ impl<F: Field> Instruction<F> {
         }
     }
 
-    pub fn from_usize<const N: usize>(opcode: Opcode, operands: [usize; N]) -> Self {
+    pub fn from_usize<const N: usize>(opcode: usize, operands: [usize; N]) -> Self {
         let mut operands = operands.to_vec();
         while operands.len() < NUM_OPERANDS {
             operands.push(0);
@@ -89,7 +89,7 @@ impl<F: Field> Instruction<F> {
 
     #[allow(clippy::too_many_arguments)]
     pub fn large_from_isize(
-        opcode: Opcode,
+        opcode: usize,
         op_a: isize,
         op_b: isize,
         op_c: isize,
@@ -111,7 +111,7 @@ impl<F: Field> Instruction<F> {
         }
     }
 
-    pub fn debug(opcode: Opcode, debug: &str) -> Self {
+    pub fn debug(opcode: usize, debug: &str) -> Self {
         Self {
             opcode,
             op_a: F::zero(),
@@ -129,7 +129,7 @@ impl<F: Field> Instruction<F> {
 impl<T: Default> Default for Instruction<T> {
     fn default() -> Self {
         Self {
-            opcode: NOP,
+            opcode: NOP as usize,
             op_a: T::default(),
             op_b: T::default(),
             op_c: T::default(),
@@ -146,7 +146,7 @@ impl<T: Default> Default for Instruction<T> {
 pub enum ExecutionError {
     Fail(usize),
     PcOutOfBounds(usize, usize),
-    DisabledOperation(usize, Opcode),
+    DisabledOperation(usize, usize),
     HintOutOfBounds(usize),
     EndOfInputStream(usize),
     PublicValueIndexOutOfBounds(usize, usize, usize),
@@ -242,7 +242,7 @@ impl<F: PrimeField64> ProgramChip<F> {
         while !program.len().is_power_of_two() {
             program
                 .instructions
-                .push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
+                .push(Instruction::from_isize(FAIL as usize, 0, 0, 0, 0, 0));
             program.debug_infos.push(None);
         }
         Self {

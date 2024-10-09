@@ -1,4 +1,3 @@
-use core::panic;
 use std::collections::VecDeque;
 
 use afs_primitives::xor::bus::XorBus;
@@ -7,7 +6,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        instructions::Opcode::{self, *},
+        instructions::CoreOpcode::{self, *},
         ExecutionBridge, ExecutionBus,
     },
     memory::MemoryChipRef,
@@ -34,7 +33,7 @@ pub const CORE_MAX_READS_PER_CYCLE: usize = 3;
 pub const CORE_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CORE_MAX_ACCESSES_PER_CYCLE: usize = CORE_MAX_READS_PER_CYCLE + CORE_MAX_WRITES_PER_CYCLE;
 
-fn timestamp_delta(opcode: Opcode) -> usize {
+fn timestamp_delta(opcode: CoreOpcode) -> usize {
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,
@@ -48,7 +47,6 @@ fn timestamp_delta(opcode: Opcode) -> usize {
         HINT_INPUT | HINT_BITS | HINT_BYTES => 0,
         CT_START | CT_END => 0,
         NOP => 0,
-        _ => panic!("Non-Core opcode: {:?}", opcode),
     }
 }
 
@@ -95,6 +93,8 @@ pub struct CoreChip<F: PrimeField32> {
 
     // TODO[jpw] Unclear Core should own this
     pub streams: Streams<F>,
+
+    offset: usize,
 }
 
 impl<F: PrimeField32> CoreChip<F> {
@@ -103,6 +103,7 @@ impl<F: PrimeField32> CoreChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
+        offset: usize,
     ) -> Self {
         Self::from_state(
             options,
@@ -110,6 +111,7 @@ impl<F: PrimeField32> CoreChip<F> {
             program_bus,
             memory_chip,
             CoreState::initial(),
+            offset,
         )
     }
 
@@ -125,6 +127,7 @@ impl<F: PrimeField32> CoreChip<F> {
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
         state: CoreState,
+        offset: usize,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
@@ -132,6 +135,7 @@ impl<F: PrimeField32> CoreChip<F> {
                 options,
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                offset,
             },
             rows: vec![],
             state,
@@ -139,6 +143,7 @@ impl<F: PrimeField32> CoreChip<F> {
             public_values: vec![None; options.num_public_values],
             memory_chip,
             streams: Default::default(),
+            offset,
         }
     }
 }

@@ -5,7 +5,7 @@ use p3_field::AbstractField;
 
 use super::{EcAddUnequalChip, EcDoubleChip, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS};
 use crate::{
-    arch::{instructions, testing::MachineChipTestBuilder},
+    arch::{instructions::EccOpcode, testing::MachineChipTestBuilder},
     modular_addsub::ModularAddSubChip,
     program::Instruction,
 };
@@ -20,6 +20,7 @@ fn test_ec_add() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
@@ -59,9 +60,9 @@ fn test_ec_add() {
     );
     tester.write(data_as, address2, p2_limbs);
 
-    let add_opcode = instructions::Opcode::SECP256K1_EC_ADD_NE;
+    let add_opcode = EccOpcode::EC_ADD_NE;
     let instructions = Instruction::from_isize(
-        add_opcode,
+        add_opcode as usize,
         addr_ptr3 as isize,
         addr_ptr1 as isize,
         addr_ptr2 as isize,
@@ -101,6 +102,7 @@ fn test_ec_double() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let (p1_x, p1_y) = SampleEcPoints[1].clone();
@@ -126,9 +128,9 @@ fn test_ec_double() {
     );
     tester.write(data_as, address1, p1_limbs);
 
-    let double_opcode = instructions::Opcode::SECP256K1_EC_DOUBLE;
+    let double_opcode = EccOpcode::EC_DOUBLE;
     let instructions = Instruction::from_isize(
-        double_opcode,
+        double_opcode as usize,
         addr_ptr2 as isize,
         addr_ptr1 as isize,
         0, // unused c

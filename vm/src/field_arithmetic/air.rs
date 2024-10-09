@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 use super::columns::FieldArithmeticCols;
 use crate::{
     arch::{
-        instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
+        instructions::FieldArithmeticOpcode::{ADD, DIV, MUL, SUB},
         ExecutionBridge,
     },
     memory::offline_checker::MemoryBridge,
@@ -21,6 +21,8 @@ use crate::{
 pub struct FieldArithmeticAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
+
+    pub(super) offset: usize,
 }
 
 impl FieldArithmeticAir {
@@ -52,7 +54,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         let z = io.z.value;
 
         let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_div];
-        let opcodes = [FADD, FSUB, FMUL, FDIV];
+        let opcodes = [ADD, SUB, MUL, DIV];
         let results = [x + y, x - y, x * y, x * aux.divisor_inv];
 
         // Imposing the following constraints:

@@ -79,7 +79,7 @@ impl FieldExtensionArithmeticAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                expected_opcode,
+                expected_opcode + AB::Expr::from_canonical_usize(self.offset),
                 [op_a, op_b, op_c, d, e],
                 ExecutionState::new(pc, timestamp),
                 AB::F::from_canonical_usize(timestamp_delta),

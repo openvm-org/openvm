@@ -24,6 +24,8 @@ pub struct CastFAir {
     pub(super) memory_bridge: MemoryBridge,
 
     pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for CastFAir {}

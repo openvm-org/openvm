@@ -12,7 +12,7 @@ use num_traits::Zero;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{Rng, RngCore};
-use stark_vm::vm::config::VmConfig;
+use stark_vm::{arch::ExecutorName, vm::config::VmConfig};
 
 #[test]
 fn test_compiler_256_add_sub() {
@@ -89,10 +89,10 @@ fn test_compiler_256_mul() {
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            u256_multiplication_enabled: true,
             bigint_limb_size: 8,
             ..Default::default()
-        },
+        }
+        .add_default_executor(ExecutorName::U256Multiplication),
         program,
         vec![],
     );
@@ -283,10 +283,10 @@ fn test_compiler_256_sll_srl() {
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            shift_256_enabled: true,
             bigint_limb_size: 8,
             ..Default::default()
-        },
+        }
+        .add_default_executor(ExecutorName::Shift256),
         program,
         vec![],
     );
@@ -343,10 +343,10 @@ fn test_compiler_256_sra() {
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            shift_256_enabled: true,
             bigint_limb_size: 8,
             ..Default::default()
-        },
+        }
+        .add_default_executor(ExecutorName::Shift256),
         program,
         vec![],
     );

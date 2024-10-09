@@ -9,7 +9,10 @@ use super::{
     FieldArithmeticChip, FieldArithmeticRecord, Operand,
 };
 use crate::{
-    arch::{instructions::Opcode, MachineChip},
+    arch::{
+        instructions::{FieldArithmeticOpcode, UsizeOpcode},
+        MachineChip,
+    },
     memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
 };
 
@@ -39,16 +42,17 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             y_read,
             z_write,
         } = record;
+        let opcode = FieldArithmeticOpcode::from_usize(opcode);
 
         let x = x_read.value();
         let y = y_read.value();
         let z = z_write.value();
 
-        let is_add = F::from_bool(opcode == Opcode::FADD);
-        let is_sub = F::from_bool(opcode == Opcode::FSUB);
-        let is_div = F::from_bool(opcode == Opcode::FDIV);
-        let is_mul = F::from_bool(opcode == Opcode::FMUL);
-        let divisor_inv = if opcode == Opcode::FDIV {
+        let is_add = F::from_bool(opcode == FieldArithmeticOpcode::ADD);
+        let is_sub = F::from_bool(opcode == FieldArithmeticOpcode::SUB);
+        let is_div = F::from_bool(opcode == FieldArithmeticOpcode::DIV);
+        let is_mul = F::from_bool(opcode == FieldArithmeticOpcode::MUL);
+        let divisor_inv = if opcode == FieldArithmeticOpcode::DIV {
             y.inverse()
         } else {
             F::zero()

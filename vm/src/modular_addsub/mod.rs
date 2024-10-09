@@ -13,7 +13,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        instructions::{Opcode, MODULAR_ADDSUB_INSTRUCTIONS},
+        instructions::{ModularArithmeticOpcode, UsizeOpcode},
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
@@ -65,6 +65,8 @@ pub struct ModularAddSubChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB
     memory_chip: MemoryChipRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     modulus: BigUint,
+
+    offset: usize,
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
@@ -75,6 +77,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         modulus: BigUint,
+        offset: usize,
     ) -> Self {
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         let memory_bridge = memory_chip.borrow().memory_bridge();
@@ -97,11 +100,13 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 subair,
+                offset,
             },
             data: vec![],
             memory_chip,
             range_checker_chip,
             modulus,
+            offset,
         }
     }
 }
@@ -122,18 +127,9 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
             d,
             e,
             ..
-        } = instruction.clone();
+        } = instruction;
+        let opcode = opcode - self.offset;
         assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
-        assert!(MODULAR_ADDSUB_INSTRUCTIONS.contains(&opcode));
-        match opcode {
-            Opcode::SECP256K1_COORD_ADD | Opcode::SECP256K1_COORD_SUB => {
-                assert_eq!(self.modulus, SECP256K1_COORD_PRIME.clone());
-            }
-            Opcode::SECP256K1_SCALAR_ADD | Opcode::SECP256K1_SCALAR_SUB => {
-                assert_eq!(self.modulus, SECP256K1_SCALAR_PRIME.clone());
-            }
-            _ => unreachable!(),
-        }
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -150,7 +146,11 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
         let x_biguint = Self::limbs_to_biguint(&x);
         let y_biguint = Self::limbs_to_biguint(&y);
 
-        let z_biguint = Self::solve(opcode, x_biguint, y_biguint);
+        let z_biguint = self.solve(
+            ModularArithmeticOpcode::from_usize(opcode),
+            x_biguint,
+            y_biguint,
+        );
         let z_limbs = Self::biguint_to_limbs(z_biguint);
 
         let z_array_write = memory_chip.write_heap::<NUM_LIMBS>(
@@ -162,7 +162,10 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
 
         self.data.push(ModularAddSubRecord {
             from_state,
-            instruction,
+            instruction: Instruction {
+                opcode,
+                ..instruction
+            },
             x_array_read,
             y_array_read,
             z_array_write,
@@ -173,30 +176,26 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        let opcode = ModularArithmeticOpcode::from_usize(opcode - self.offset);
+        format!("{opcode:?}<{:?},{NUM_LIMBS},{LIMB_SIZE}>", self.modulus)
+    }
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     ModularAddSubChip<T, NUM_LIMBS, LIMB_SIZE>
 {
-    pub fn solve(opcode: Opcode, mut x: BigUint, y: BigUint) -> BigUint {
+    pub fn solve(&self, opcode: ModularArithmeticOpcode, mut x: BigUint, y: BigUint) -> BigUint {
         match opcode {
-            Opcode::SECP256K1_COORD_ADD => (x + y) % SECP256K1_COORD_PRIME.clone(),
-            Opcode::SECP256K1_SCALAR_ADD => (x + y) % SECP256K1_SCALAR_PRIME.clone(),
-            Opcode::SECP256K1_COORD_SUB => {
-                let tmp = SECP256K1_COORD_PRIME.clone();
+            ModularArithmeticOpcode::ADD => (x + y) % self.modulus.clone(),
+            ModularArithmeticOpcode::SUB => {
                 while x < y {
-                    x += &tmp;
+                    x += &self.modulus;
                 }
-                (x - y) % &tmp
+                (x - y) % &self.modulus
             }
-            Opcode::SECP256K1_SCALAR_SUB => {
-                let tmp = SECP256K1_SCALAR_PRIME.clone();
-                while x < y {
-                    x += &tmp;
-                }
-                (x - y) % &tmp
-            }
-            _ => unreachable!(),
+            _ => panic!("Unsupported opcode: {:?}", opcode),
         }
     }
 

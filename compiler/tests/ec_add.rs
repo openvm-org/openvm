@@ -12,6 +12,7 @@ use num_traits::{abs, signum, FromPrimitive};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
+    arch::ExecutorName,
     modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
     vm::config::VmConfig,
 };
@@ -101,13 +102,11 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
         ..Default::default()
     });
     execute_program_with_config(
-        VmConfig {
-            secp256k1_enabled: true,
-            u256_arithmetic_enabled: true,
-            modular_addsub_enabled: true,
-            modular_multdiv_enabled: true,
-            ..Default::default()
-        },
+        VmConfig::default()
+            .add_default_executor(ExecutorName::Secp256k1AddUnequal)
+            .add_default_executor(ExecutorName::Secp256k1Double)
+            .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
+            .add_canonical_modulus(),
         program,
         vec![],
     );

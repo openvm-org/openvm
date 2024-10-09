@@ -95,7 +95,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicAir<NUM_LIMB
 
         self.execution_bridge
             .execute_and_increment_pc(
-                expected_opcode,
+                expected_opcode + AB::Expr::from_canonical_usize(self.offset),
                 [
                     io.z.ptr_to_address,
                     io.x.ptr_to_address,

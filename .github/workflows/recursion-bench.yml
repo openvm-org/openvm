@@ -36,18 +36,6 @@ jobs:
       benchmark_name: vm_verify_fibair
     secrets: inherit
 
-  benchmark_static:
-    uses: ./.github/workflows/benchmark-call.yml
-    # run on pull request with label 'run-benchmark-e2e'
-    # and always run on push to main
-    if: |
-      (github.event_name == 'pull_request' &&
-      contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e')) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    with:
-      benchmark_name: halo2_static_verify_fibair
-    secrets: inherit
-
   benchmark_tiny_e2e:
     uses: ./.github/workflows/benchmark-call.yml
     # run on pull request with label 'run-benchmark' or 'run-benchmark-e2e'

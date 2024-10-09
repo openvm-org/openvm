@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ops::Deref, rc::Rc, sync::Arc};
+use std::{cell::RefCell, marker::PhantomData, ops::Deref, rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::{
@@ -20,7 +20,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeField64};
 use p3_matrix::Matrix;
 
-use super::{FieldVariable, SymbolicExpr};
+use super::{FieldVariable, FieldVariableConfig, SymbolicExpr};
 
 #[derive(Clone)]
 pub struct ExprBuilder {
@@ -68,15 +68,23 @@ impl ExprBuilder {
         }
     }
 
-    pub fn new_input(builder: Rc<RefCell<ExprBuilder>>) -> FieldVariable {
+    pub fn new_input<C: FieldVariableConfig>(
+        builder: Rc<RefCell<ExprBuilder>>,
+    ) -> FieldVariable<C> {
         let num_input = {
             let mut borrowed = builder.borrow_mut();
+            assert_eq!(borrowed.num_limbs, C::num_limbs_per_field_element());
+            assert_eq!(borrowed.limb_bits, C::canonical_limb_bits());
             borrowed.num_input += 1;
             borrowed.num_input
         };
         FieldVariable {
             expr: SymbolicExpr::Input(num_input - 1),
             builder: builder.clone(),
+            limb_max_abs: (1 << C::canonical_limb_bits()) - 1,
+            max_overflow_bits: C::canonical_limb_bits(),
+            expr_limbs: C::num_limbs_per_field_element(),
+            _marker: PhantomData,
         }
     }
 }

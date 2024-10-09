@@ -10,7 +10,7 @@ use super::{
     EcDoubleRecord, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS,
 };
 use crate::{
-    arch::{instructions::Opcode, MachineChip},
+    arch::{instructions::EccOpcode, MachineChip},
     memory::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols, MemoryHeapReadRecord,
@@ -70,7 +70,7 @@ impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
                     p2_array_read,
                     p3_array_write,
                 } = record;
-                assert_eq!(instruction.opcode, Opcode::SECP256K1_EC_ADD_NE);
+                assert_eq!(instruction.opcode, EccOpcode::EC_ADD_NE as usize);
 
                 let io = EcAddUnequalIoCols {
                     from_state: from_state.map(F::from_canonical_usize),
@@ -161,7 +161,7 @@ impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
                     p1_array_read,
                     p2_array_write,
                 } = record;
-                assert_eq!(instruction.opcode, Opcode::SECP256K1_EC_DOUBLE);
+                assert_eq!(instruction.opcode, EccOpcode::EC_DOUBLE as usize);
 
                 let io = EcDoubleIoCols {
                     from_state: from_state.map(F::from_canonical_usize),

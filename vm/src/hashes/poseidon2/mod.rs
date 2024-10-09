@@ -8,7 +8,11 @@ use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
 use self::air::Poseidon2VmAir;
 use crate::{
     arch::{
-        instructions::Opcode::*, ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
+        instructions::{
+            Poseidon2Opcode::{self, *},
+            UsizeOpcode,
+        },
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -38,6 +42,8 @@ pub struct Poseidon2Chip<F: PrimeField32> {
     pub memory_chip: MemoryChipRef<F>,
 
     records: Vec<Poseidon2Record<F>>,
+
+    offset: usize,
 }
 
 impl<F: PrimeField32> Poseidon2VmAir<F> {
@@ -48,6 +54,7 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
+        offset: usize,
     ) -> Self {
         let inner = Poseidon2Air::<WIDTH, F>::from_config(config, max_constraint_degree, 0);
         Self {
@@ -55,6 +62,7 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             direct: true,
+            offset,
         }
     }
 
@@ -87,6 +95,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
+        offset: usize,
     ) -> Self {
         let air = Poseidon2VmAir::<F>::from_poseidon2_config(
             p2_config,
@@ -94,11 +103,13 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
             execution_bus,
             program_bus,
             memory_chip.borrow().memory_bridge(),
+            offset,
         );
         Self {
             air,
             records: vec![],
             memory_chip,
+            offset,
         }
     }
 
@@ -141,7 +152,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
                 c: record.instruction.op_c,
                 d: record.instruction.d,
                 e: record.instruction.e,
-                cmp: F::from_bool(record.instruction.opcode == COMP_POS2),
+                cmp: F::from_bool(record.instruction.opcode == COMP_POS2 as usize),
             },
             aux: Poseidon2VmAuxCols {
                 dst_ptr,
@@ -195,6 +206,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             e,
             ..
         } = instruction;
+        let opcode = opcode - self.offset;
+
+        let opcode = Poseidon2Opcode::from_usize(opcode);
 
         assert!(matches!(opcode, COMP_POS2 | PERM_POS2));
         debug_assert_eq!(WIDTH, CHUNK * 2);
@@ -216,7 +230,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
                 memory_chip.increment_timestamp();
                 (lhs_ptr + chunk_f, None)
             }
-            _ => panic!("unrecognized Poseidon2Chip opcode"),
         };
 
         let lhs_read = memory_chip.read(e, lhs_ptr);
@@ -242,11 +255,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
                 None
             }
             PERM_POS2 => Some(memory_chip.write(e, dst_ptr + chunk_f, output2)),
-            _ => unreachable!(),
         };
 
         self.records.push(Poseidon2Record {
-            instruction,
+            instruction: Instruction {
+                opcode: opcode as usize,
+                ..instruction
+            },
             from_state,
             internal_cols,
             dst_ptr_read,
@@ -263,6 +278,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        let opcode = Poseidon2Opcode::from_usize(opcode - self.offset);
+        format!("{opcode:?}")
     }
 }
 

@@ -18,8 +18,9 @@ rustc-*
 # This directory is used by RustRover (and any other JetBrains IDE)
 .idea/
 
-# Directory used by VSCode for debugging
+# IDE directories
 .vscode/
+.zed/
 
 # Axiom intermediate files
 .axiom/

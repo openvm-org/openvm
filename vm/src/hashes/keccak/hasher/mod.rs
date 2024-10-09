@@ -18,7 +18,8 @@ pub use air::KeccakVmAir;
 
 use crate::{
     arch::{
-        instructions::Opcode, ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
+        instructions::{Keccak256Opcode, UsizeOpcode},
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -60,6 +61,8 @@ pub struct KeccakVmChip<F: PrimeField32> {
     pub records: Vec<KeccakRecord<F>>,
     pub memory_chip: MemoryChipRef<F>,
     pub byte_xor_chip: Arc<XorLookupChip<8>>,
+
+    offset: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -90,6 +93,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
         byte_xor_chip: Arc<XorLookupChip<8>>,
+        offset: usize,
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
@@ -97,10 +101,12 @@ impl<F: PrimeField32> KeccakVmChip<F> {
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 byte_xor_chip.bus(),
+                offset,
             ),
             memory_chip,
             byte_xor_chip,
             records: Vec::new(),
+            offset,
         }
     }
 }
@@ -121,7 +127,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             op_f: f,
             ..
         } = instruction;
-        debug_assert_eq!(opcode, Opcode::KECCAK256);
+        let opcode = opcode - self.offset;
+        debug_assert_eq!(
+            Keccak256Opcode::from_usize(opcode),
+            Keccak256Opcode::KECCAK256
+        );
 
         let mut memory = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -226,6 +236,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             pc: from_state.pc + 1,
             timestamp: to_timestamp,
         })
+    }
+
+    fn get_opcode_name(&self, _: usize) -> String {
+        "KECCAK256".to_string()
     }
 }
 

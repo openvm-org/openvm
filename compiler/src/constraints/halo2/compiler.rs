@@ -14,8 +14,9 @@ use snark_verifier_sdk::snark_verifier::{
     },
     util::arithmetic::PrimeField as _,
 };
-use stark_vm::vm::cycle_tracker::CanDiff;
+use stark_vm::vm::cycle_tracker::CycleTracker;
 
+use super::stats::Halo2Stats;
 use crate::{
     constraints::{
         halo2::{
@@ -24,7 +25,6 @@ use crate::{
                 BabyBearExt4Chip,
             },
             poseidon2_perm::{Poseidon2Params, Poseidon2State},
-            stats::{print, Halo2CellTracker, Halo2Stats},
         },
         ConstraintCompiler,
     },
@@ -63,7 +63,7 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
     where
         C: Config<N = Bn254Fr, F = BabyBear, EF = BabyBearExt4>,
     {
-        let mut cell_tracker = Halo2CellTracker::new();
+        let mut cell_tracker = CycleTracker::new();
         let range = Arc::new(halo2_state.builder.range_chip());
         let f_chip = Arc::new(BabyBearChip::new(range.clone()));
         let ext_chip = BabyBearExt4Chip::new(Arc::clone(&f_chip));
@@ -77,13 +77,10 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
 
         let mut vkey_hash = None;
         let mut committed_values_digest = None;
-        let mut babybear_metrics: Halo2Stats = Default::default();
-        let mut num2bits_metrics: Halo2Stats = Default::default();
 
         for (instruction, _) in operations {
+            #[cfg(feature = "bench-metrics")]
             let old_stats = stats_snapshot(ctx, range.clone());
-            let is_babybear = is_babybear_ir(&instruction);
-            let is_num2bits = is_num2bits_ir(&instruction);
             match instruction {
                 DslIr::ImmV(a, b) => {
                     let x = ctx.load_constant(convert_fr(&b));
@@ -382,28 +379,23 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     exts.insert(b.0, x);
                 }
                 DslIr::CycleTrackerStart(name) => {
-                    cell_tracker.start(name, old_stats.clone());
+                    cell_tracker.start(name);
                 }
                 DslIr::CycleTrackerEnd(name) => {
-                    cell_tracker.end(name, old_stats.clone());
+                    cell_tracker.end(name);
                 }
                 _ => panic!("unsupported {:?}", instruction),
             };
-            if is_babybear {
+            #[cfg(feature = "bench-metrics")]
+            {
                 let mut new_stats = stats_snapshot(ctx, range.clone());
                 new_stats.diff(&old_stats);
-                babybear_metrics.add_assign(&new_stats);
-            }
-            if is_num2bits {
-                let mut new_stats = stats_snapshot(ctx, range.clone());
-                new_stats.diff(&old_stats);
-                num2bits_metrics.add_assign(&new_stats);
+                new_stats.increment(cell_tracker.get_full_name());
             }
         }
         let vkey_hash = vkey_hash.unwrap_or_else(|| ctx.load_zero());
         let committed_values_digest = committed_values_digest.unwrap_or_else(|| ctx.load_zero());
         halo2_state.builder.assigned_instances = vec![vec![vkey_hash, committed_values_digest]];
-        print(&cell_tracker, &babybear_metrics, &num2bits_metrics);
     }
 }
 
@@ -421,6 +413,7 @@ pub fn convert_efr<F: PrimeField, EF: ExtensionField<F>>(a: &EF) -> Vec<Fr> {
 }
 
 // Unfortunately `builder.statistics()` cannot be called when `ctx` exists.
+#[allow(dead_code)] // used only in bench-metrics
 fn stats_snapshot(ctx: &Context<Fr>, range_chip: Arc<RangeChip<Fr>>) -> Halo2Stats {
     Halo2Stats {
         total_gate_cell: ctx.advice.len(),
@@ -431,6 +424,7 @@ fn stats_snapshot(ctx: &Context<Fr>, range_chip: Arc<RangeChip<Fr>>) -> Halo2Sta
     }
 }
 
+#[allow(dead_code)]
 fn is_babybear_ir<C: Config>(ir: &DslIr<C>) -> bool {
     matches!(
         ir,
@@ -471,6 +465,7 @@ fn is_babybear_ir<C: Config>(ir: &DslIr<C>) -> bool {
     )
 }
 
+#[allow(dead_code)]
 fn is_num2bits_ir<C: Config>(ir: &DslIr<C>) -> bool {
     matches!(
         ir,

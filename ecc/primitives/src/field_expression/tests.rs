@@ -16,7 +16,7 @@ use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use super::{super::utils::*, ExprBuilder, FieldExprChip, SymbolicExpr};
+use super::{super::utils::*, ExprBuilder, FieldExprChip, FieldVariableConfig, SymbolicExpr};
 
 const LIMB_BITS: usize = 8;
 
@@ -46,6 +46,26 @@ fn get_sub_air(prime: &BigUint) -> (CheckCarryModToZeroSubAir, Arc<VariableRange
     (subair, range_checker)
 }
 
+#[derive(Clone)]
+pub struct TestConfig;
+impl FieldVariableConfig for TestConfig {
+    fn canonical_limb_bits() -> usize {
+        LIMB_BITS
+    }
+
+    fn max_limb_bits() -> usize {
+        29
+    }
+
+    fn num_limbs_per_field_element() -> usize {
+        32
+    }
+
+    fn range_checker_bits() -> usize {
+        17
+    }
+}
+
 #[test]
 fn test_add() {
     let prime = secp256k1_coord_prime();
@@ -53,8 +73,8 @@ fn test_add() {
 
     let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
+    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut x3 = x1 + x2;
     x3.save();
     let builder = builder.borrow().clone();
@@ -93,8 +113,8 @@ fn test_div() {
 
     let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
+    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let _x3 = x1 / x2; // auto save on division.
     let builder = builder.borrow().clone();
 
@@ -127,16 +147,165 @@ fn test_div() {
 }
 
 #[test]
+fn test_auto_carry_mul() {
+    let prime = secp256k1_coord_prime();
+    let (subair, range_checker) = get_sub_air(&prime);
+
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
+    let builder = Rc::new(RefCell::new(builder));
+    let mut x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut x3 = &mut x1 * &mut x2;
+    // The multiplication below will overflow, so it triggers x3 to be saved first.
+    let mut x4 = &mut x3 * &mut x1;
+    assert_eq!(x3.expr, SymbolicExpr::Var(0));
+    x4.save();
+    assert_eq!(x4.expr, SymbolicExpr::Var(1));
+
+    let builder = builder.borrow().clone();
+
+    let chip = FieldExprChip {
+        builder,
+        check_carry_mod_to_zero: subair,
+        range_checker: range_checker.clone(),
+    };
+
+    let x = generate_random_biguint(&prime);
+    let y = generate_random_biguint(&prime);
+    let expected = (&x * &x * &y) % prime; // x4 = x3 * x1 = (x1 * x2) * x1
+    let inputs = vec![x, y];
+
+    let row = chip.generate_trace_row((inputs, range_checker.clone()));
+    let (_, _, vars, _, _) = chip.load_vars(&row);
+    assert_eq!(vars.len(), 2);
+    let generated = evaluate_biguint(&vars[1], LIMB_BITS);
+    assert_eq!(generated, expected);
+
+    let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
+    let range_trace = range_checker.generate_trace();
+
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&chip, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
+}
+
+#[test]
+fn test_auto_carry_intmul() {
+    let prime = secp256k1_coord_prime();
+    let (subair, range_checker) = get_sub_air(&prime);
+
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
+    let builder = Rc::new(RefCell::new(builder));
+    let mut x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut x3 = &mut x1 * &mut x2;
+    // The int_mul below will overflow:
+    // x3 should have max_overflow_bits = 8 + 8 + log2(32) = 21
+    // The carry bits = "max_overflow_bits - limb_bits + 1" will exceed 17 if it exceeds 17 + 8 - 1 = 24.
+    // So it triggers x3 to be saved first.
+    let mut x4 = x3.int_mul(9);
+    assert_eq!(x3.expr, SymbolicExpr::Var(0));
+    x4.save();
+    assert_eq!(x4.expr, SymbolicExpr::Var(1));
+
+    let builder = builder.borrow().clone();
+
+    let chip = FieldExprChip {
+        builder,
+        check_carry_mod_to_zero: subair,
+        range_checker: range_checker.clone(),
+    };
+
+    let x = generate_random_biguint(&prime);
+    let y = generate_random_biguint(&prime);
+    let expected = (&x * &x * BigUint::from(9u32)) % prime;
+    let inputs = vec![x, y];
+
+    let row = chip.generate_trace_row((inputs, range_checker.clone()));
+    let (_, _, vars, _, _) = chip.load_vars(&row);
+    assert_eq!(vars.len(), 2);
+    let generated = evaluate_biguint(&vars[1], LIMB_BITS);
+    assert_eq!(generated, expected);
+
+    let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
+    let range_trace = range_checker.generate_trace();
+
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&chip, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
+}
+
+#[test]
+fn test_auto_carry_add() {
+    let prime = secp256k1_coord_prime();
+    let (subair, range_checker) = get_sub_air(&prime);
+
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
+    let builder = Rc::new(RefCell::new(builder));
+    let mut x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut x3 = &mut x1 * &mut x2;
+    let x4 = x3.int_mul(5);
+    // Should not overflow, so x3 is not saved.
+    assert_eq!(
+        x3.expr,
+        SymbolicExpr::Mul(
+            Box::new(SymbolicExpr::Input(0)),
+            Box::new(SymbolicExpr::Input(1))
+        )
+    );
+
+    // Should overflow as this is 10 * x1 * x2.
+    let mut x5 = x4.clone() + x4.clone();
+    // cannot verify x4 as above is cloned.
+    x5.save();
+    // But x5 is var(1) implies x4 was saved as var(0).
+    assert_eq!(x5.expr, SymbolicExpr::Var(1));
+
+    let builder = builder.borrow().clone();
+
+    let chip = FieldExprChip {
+        builder,
+        check_carry_mod_to_zero: subair,
+        range_checker: range_checker.clone(),
+    };
+
+    let x = generate_random_biguint(&prime);
+    let y = generate_random_biguint(&prime);
+    let expected = (&x * &x * BigUint::from(10u32)) % prime;
+    let inputs = vec![x, y];
+
+    let row = chip.generate_trace_row((inputs, range_checker.clone()));
+    let (_, _, vars, _, _) = chip.load_vars(&row);
+    assert_eq!(vars.len(), 2);
+    let generated = evaluate_biguint(&vars[1], LIMB_BITS);
+    assert_eq!(generated, expected);
+
+    let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
+    let range_trace = range_checker.generate_trace();
+
+    BabyBearBlake3Engine::run_simple_test_no_pis(
+        &any_rap_vec![&chip, &range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
+}
+
+#[test]
 fn test_ec_add() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker) = get_sub_air(&prime);
 
     let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let y1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
-    let y2 = ExprBuilder::new_input(builder.clone());
+    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let y1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let y2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let dx = x2.clone() - x1.clone();
     let dy = y2.clone() - y1.clone();
     let lambda = dy / dx; // auto save on division.
@@ -182,8 +351,8 @@ fn test_ec_double() {
 
     let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
     let builder = Rc::new(RefCell::new(builder));
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let y1 = ExprBuilder::new_input(builder.clone());
+    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut y1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let nom = (x1.clone() * x1.clone()).int_mul(3);
     let denom = y1.int_mul(2);
     let lambda = nom / denom;

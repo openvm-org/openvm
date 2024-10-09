@@ -2,7 +2,6 @@ use std::borrow::Borrow;
 
 use afs_primitives::bigint::{
     check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
-    utils::{big_uint_to_limbs, secp256k1_coord_prime},
     OverflowInt,
 };
 use afs_stark_backend::{
@@ -15,7 +14,7 @@ use p3_matrix::Matrix;
 
 use super::columns::ModularAddSubCols;
 use crate::{
-    arch::{instructions::Opcode, ExecutionBridge},
+    arch::{instructions::ModularArithmeticOpcode, ExecutionBridge},
     memory::offline_checker::MemoryBridge,
 };
 
@@ -24,6 +23,8 @@ pub struct ModularAddSubAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub(super) subair: CheckCarryModToZeroSubAir,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> PartitionedBaseAir<F>
@@ -55,19 +56,10 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air
         // we assume aux.is_sub is represented aux.is_valid - aux.is_add
         builder.assert_bool(aux.is_add);
         builder.assert_bool(aux.is_valid - aux.is_add);
-        let expected_opcode = if self.subair.modulus_limbs
-            == big_uint_to_limbs(&secp256k1_coord_prime(), LIMB_SIZE)
-        {
-            AB::Expr::from_canonical_u8(Opcode::SECP256K1_COORD_SUB as u8)
-                + aux.is_add
-                    * (AB::Expr::from_canonical_u8(Opcode::SECP256K1_COORD_ADD as u8)
-                        - AB::Expr::from_canonical_u8(Opcode::SECP256K1_COORD_SUB as u8))
-        } else {
-            AB::Expr::from_canonical_u8(Opcode::SECP256K1_SCALAR_SUB as u8)
-                + aux.is_add
-                    * (AB::Expr::from_canonical_u8(Opcode::SECP256K1_SCALAR_ADD as u8)
-                        - AB::Expr::from_canonical_u8(Opcode::SECP256K1_SCALAR_SUB as u8))
-        };
+        let expected_opcode = AB::Expr::from_canonical_u8(ModularArithmeticOpcode::SUB as u8)
+            + aux.is_add
+                * (AB::Expr::from_canonical_u8(ModularArithmeticOpcode::ADD as u8)
+                    - AB::Expr::from_canonical_u8(ModularArithmeticOpcode::SUB as u8));
 
         let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
             io.x.data.data.to_vec(),

@@ -5,7 +5,8 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        instructions::Opcode, ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
+        instructions::U256Opcode, ExecutionBridge, ExecutionBus, ExecutionState,
+        InstructionExecutor,
     },
     memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
@@ -41,6 +42,8 @@ pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const
     data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip>,
+
+    offset: usize,
 }
 
 impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
@@ -51,6 +54,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
         range_tuple_chip: Arc<RangeTupleCheckerChip>,
+        offset: usize,
     ) -> Self {
         assert!(LIMB_BITS < 16, "LIMB_BITS {} >= 16", LIMB_BITS);
 
@@ -76,10 +80,12 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus: bus.clone(),
+                offset,
             },
             data: vec![],
             memory_chip,
             range_tuple_chip,
+            offset,
         }
     }
 }
@@ -100,8 +106,9 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             d,
             e,
             ..
-        } = instruction.clone();
-        assert!(opcode == Opcode::MUL256);
+        } = instruction;
+        let opcode = opcode - self.offset;
+        assert!(opcode == U256Opcode::MUL as usize);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -148,6 +155,10 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             pc: from_state.pc + 1,
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
+    }
+
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}<{NUM_LIMBS},{LIMB_BITS}>", U256Opcode::MUL)
     }
 }
 

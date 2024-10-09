@@ -23,7 +23,7 @@ impl FieldArithmeticAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                expected_opcode,
+                expected_opcode + AB::Expr::from_canonical_usize(self.offset),
                 [
                     result.address,
                     operand1.address,

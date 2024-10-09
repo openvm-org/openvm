@@ -1,12 +1,15 @@
+use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use stark_vm::{
-    arch::instructions::Opcode::{self, *},
+    arch::instructions::*,
     program::{DebugInfo, Instruction, Program},
+    vm::config::Modulus,
 };
+use strum::EnumCount;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct CompilerOptions {
     // The compiler will ensure that the heap pointer is aligned to be a multiple of `word_size`.
     pub word_size: usize,
@@ -14,6 +17,7 @@ pub struct CompilerOptions {
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+    pub enabled_modulus: Vec<BigUint>,
 }
 
 impl Default for CompilerOptions {
@@ -24,18 +28,34 @@ impl Default for CompilerOptions {
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
+            enabled_modulus: Modulus::all().iter().map(|m| m.prime()).collect(),
         }
     }
 }
 
-fn inst<F: PrimeField64>(
-    opcode: Opcode,
-    op_a: F,
-    op_b: F,
-    op_c: F,
-    d: AS,
-    e: AS,
-) -> Instruction<F> {
+impl CompilerOptions {
+    pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> usize {
+        let offset = Opcode::default_offset();
+        offset + opcode.as_usize()
+    }
+
+    pub fn modular_opcode_with_offset<Opcode: UsizeOpcode>(
+        &self,
+        opcode: Opcode,
+        modulus: BigUint,
+    ) -> usize {
+        let res = self.opcode_with_offset(opcode);
+        let modulus_id = self
+            .enabled_modulus
+            .iter()
+            .position(|m| m == &modulus)
+            .unwrap_or_else(|| panic!("unsupported modulus: {}", modulus));
+        let modular_shift = modulus_id * ModularArithmeticOpcode::COUNT;
+        res + modular_shift
+    }
+}
+
+fn inst<F: PrimeField64>(opcode: usize, op_a: F, op_b: F, op_c: F, d: AS, e: AS) -> Instruction<F> {
     Instruction {
         opcode,
         op_a,
@@ -51,7 +71,7 @@ fn inst<F: PrimeField64>(
 
 #[allow(clippy::too_many_arguments)]
 fn inst_med<F: PrimeField64>(
-    opcode: Opcode,
+    opcode: usize,
     op_a: F,
     op_b: F,
     op_c: F,
@@ -74,7 +94,7 @@ fn inst_med<F: PrimeField64>(
 
 #[allow(clippy::too_many_arguments)]
 fn inst_large<F: PrimeField64>(
-    opcode: Opcode,
+    opcode: usize,
     op_a: F,
     op_b: F,
     op_c: F,
@@ -96,7 +116,7 @@ fn inst_large<F: PrimeField64>(
     }
 }
 
-fn dbg<F: PrimeField64>(opcode: Opcode, debug: String) -> Instruction<F> {
+fn dbg<F: PrimeField64>(opcode: usize, debug: String) -> Instruction<F> {
     Instruction {
         opcode,
         op_a: F::zero(),
@@ -141,10 +161,11 @@ fn i32_f<F: PrimeField32>(x: i32) -> F {
 
 fn convert_comparison_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
+    options: &CompilerOptions,
 ) -> Vec<Instruction<F>> {
     match instruction {
         AsmInstruction::EqU256(a, b, c) => vec![inst_large(
-            EQ256,
+            options.opcode_with_offset(U256Opcode::EQ),
             i32_f(a),
             i32_f(b),
             i32_f(c),
@@ -162,12 +183,13 @@ fn convert_comparison_instruction<F: PrimeField32, EF: ExtensionField<F>>(
 
 fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
+    options: &CompilerOptions,
 ) -> Vec<Instruction<F>> {
     match instruction {
         AsmInstruction::AddF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] + mem[rhs]
             inst_med(
-                FADD,
+                options.opcode_with_offset(FieldArithmeticOpcode::ADD),
                 i32_f(dst),
                 i32_f(lhs),
                 i32_f(rhs),
@@ -179,7 +201,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::AddFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] + rhs
             inst_med(
-                FADD,
+                options.opcode_with_offset(FieldArithmeticOpcode::ADD),
                 i32_f(dst),
                 i32_f(lhs),
                 rhs,
@@ -191,7 +213,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::SubF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] - mem[rhs]
             inst_med(
-                FSUB,
+                options.opcode_with_offset(FieldArithmeticOpcode::SUB),
                 i32_f(dst),
                 i32_f(lhs),
                 i32_f(rhs),
@@ -203,7 +225,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::SubFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] - rhs
             inst_med(
-                FSUB,
+                options.opcode_with_offset(FieldArithmeticOpcode::SUB),
                 i32_f(dst),
                 i32_f(lhs),
                 rhs,
@@ -215,7 +237,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::SubFIN(dst, lhs, rhs) => vec![
             // mem[dst] <- lhs - mem[rhs]
             inst_med(
-                FSUB,
+                options.opcode_with_offset(FieldArithmeticOpcode::SUB),
                 i32_f(dst),
                 lhs,
                 i32_f(rhs),
@@ -227,7 +249,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::MulF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] * mem[rhs]
             inst_med(
-                FMUL,
+                options.opcode_with_offset(FieldArithmeticOpcode::MUL),
                 i32_f(dst),
                 i32_f(lhs),
                 i32_f(rhs),
@@ -239,7 +261,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::MulFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] * rhs
             inst_med(
-                FMUL,
+                options.opcode_with_offset(FieldArithmeticOpcode::MUL),
                 i32_f(dst),
                 i32_f(lhs),
                 rhs,
@@ -251,7 +273,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::DivF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] / mem[rhs]
             inst_med(
-                FDIV,
+                options.opcode_with_offset(FieldArithmeticOpcode::DIV),
                 i32_f(dst),
                 i32_f(lhs),
                 i32_f(rhs),
@@ -263,7 +285,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::DivFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] / rhs
             inst_med(
-                FDIV,
+                options.opcode_with_offset(FieldArithmeticOpcode::DIV),
                 i32_f(dst),
                 i32_f(lhs),
                 rhs,
@@ -275,7 +297,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::DivFIN(dst, lhs, rhs) => vec![
             // mem[dst] <- lhs / mem[rhs]
             inst_med(
-                FDIV,
+                options.opcode_with_offset(FieldArithmeticOpcode::DIV),
                 i32_f(dst),
                 lhs,
                 i32_f(rhs),
@@ -293,10 +315,11 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
 
 pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
+    options: &CompilerOptions,
 ) -> Vec<Instruction<F>> {
     match instruction {
         AsmInstruction::AddE(dst, lhs, rhs) => vec![inst(
-            FE4ADD,
+            options.opcode_with_offset(FieldExtensionOpcode::FE4ADD),
             i32_f(dst),
             i32_f(lhs),
             i32_f(rhs),
@@ -304,7 +327,7 @@ pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
-            FE4SUB,
+            options.opcode_with_offset(FieldExtensionOpcode::FE4SUB),
             i32_f(dst),
             i32_f(lhs),
             i32_f(rhs),
@@ -312,7 +335,7 @@ pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::MulE(dst, lhs, rhs) => vec![inst(
-            BBE4MUL,
+            options.opcode_with_offset(FieldExtensionOpcode::BBE4MUL),
             i32_f(dst),
             i32_f(lhs),
             i32_f(rhs),
@@ -320,7 +343,7 @@ pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::DivE(dst, lhs, rhs) => vec![inst(
-            BBE4DIV,
+            options.opcode_with_offset(FieldExtensionOpcode::BBE4DIV),
             i32_f(dst),
             i32_f(lhs),
             i32_f(rhs),
@@ -336,12 +359,13 @@ pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
 
 fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
+    options: &CompilerOptions,
 ) -> Vec<Instruction<F>> {
     let word_size_i32 = 1;
 
     match instruction {
         AsmInstruction::PrintV(src) => vec![inst(
-            PRINTF,
+            options.opcode_with_offset(CoreOpcode::PRINTF),
             i32_f(src),
             F::zero(),
             F::zero(),
@@ -349,7 +373,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Immediate,
         )],
         AsmInstruction::PrintF(src) => vec![inst(
-            PRINTF,
+            options.opcode_with_offset(CoreOpcode::PRINTF),
             i32_f(src),
             F::zero(),
             F::zero(),
@@ -358,7 +382,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::PrintE(src) => vec![
             inst(
-                PRINTF,
+                options.opcode_with_offset(CoreOpcode::PRINTF),
                 i32_f(src),
                 F::zero(),
                 F::zero(),
@@ -366,7 +390,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
             inst(
-                PRINTF,
+                options.opcode_with_offset(CoreOpcode::PRINTF),
                 i32_f(src + word_size_i32),
                 F::zero(),
                 F::zero(),
@@ -374,7 +398,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
             inst(
-                PRINTF,
+                options.opcode_with_offset(CoreOpcode::PRINTF),
                 i32_f(src + 2 * word_size_i32),
                 F::zero(),
                 F::zero(),
@@ -382,7 +406,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
             inst(
-                PRINTF,
+                options.opcode_with_offset(CoreOpcode::PRINTF),
                 i32_f(src + 3 * word_size_i32),
                 F::zero(),
                 F::zero(),
@@ -402,14 +426,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     debug_info: Option<DebugInfo>,
     pc: F,
     labels: impl Fn(F) -> F,
-    options: CompilerOptions,
+    options: &CompilerOptions,
 ) -> Program<F> {
     let instructions = match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadF(dst, src, index, size, offset) => vec![
             // mem[dst] <- mem[mem[src] + mem[index] * size + offset]
             inst_large(
-                LOADW2,
+                options.opcode_with_offset(CoreOpcode::LOADW2),
                 i32_f(dst),
                 offset,
                 i32_f(src),
@@ -422,7 +446,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::LoadFI(dst, src, index, size, offset) => vec![
             // mem[dst] <- mem[mem[src] + index * size + offset]
             inst(
-                LOADW,
+                options.opcode_with_offset(CoreOpcode::LOADW),
                 i32_f(dst),
                 index * size + offset,
                 i32_f(src),
@@ -433,7 +457,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::StoreF(val, addr, index, size, offset) => vec![
             // mem[mem[addr] + mem[index] * size + offset] <- mem[val]
             inst_large(
-                STOREW2,
+                options.opcode_with_offset(CoreOpcode::STOREW2),
                 i32_f(val),
                 offset,
                 i32_f(addr),
@@ -446,7 +470,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::StoreFI(val, addr, index, size, offset) => vec![
             // mem[mem[addr] + index * size + offset] <- mem[val]
             inst(
-                STOREW,
+                options.opcode_with_offset(CoreOpcode::STOREW),
                 i32_f(val),
                 index * size + offset,
                 i32_f(addr),
@@ -458,7 +482,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             vec![
                 // pc <- labels[label], mem[dst] <- pc
                 inst(
-                    JAL,
+                    options.opcode_with_offset(CoreOpcode::JAL),
                     i32_f(dst),
                     labels(label) - pc,
                     F::zero(),
@@ -470,7 +494,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Bne(label, lhs, rhs) => vec![
             // if mem[lhs] != mem[rhs], pc <- labels[label]
             inst(
-                BNE,
+                options.opcode_with_offset(CoreOpcode::BNE),
                 i32_f(lhs),
                 i32_f(rhs),
                 labels(label) - pc,
@@ -481,7 +505,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::BneI(label, lhs, rhs) => vec![
             // if mem[lhs] != rhs, pc <- labels[label]
             inst(
-                BNE,
+                options.opcode_with_offset(CoreOpcode::BNE),
                 i32_f(lhs),
                 rhs,
                 labels(label) - pc,
@@ -492,7 +516,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Beq(label, lhs, rhs) => vec![
             // if mem[lhs] == mem[rhs], pc <- labels[label]
             inst(
-                BEQ,
+                options.opcode_with_offset(CoreOpcode::BEQ),
                 i32_f(lhs),
                 i32_f(rhs),
                 labels(label) - pc,
@@ -503,7 +527,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::BeqI(label, lhs, rhs) => vec![
             // if mem[lhs] == rhs, pc <- labels[label]
             inst(
-                BEQ,
+                options.opcode_with_offset(CoreOpcode::BEQ),
                 i32_f(lhs),
                 rhs,
                 labels(label) - pc,
@@ -515,7 +539,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .map(|i|
             // if mem[lhs + i] != mem[rhs +i] for i = 0..4, pc <- labels[label]
             inst(
-                BNE,
+                options.opcode_with_offset(CoreOpcode::BNE),
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
                 labels(label) - (pc + F::from_canonical_usize(i)),
@@ -527,7 +551,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .map(|i|
             // if mem[lhs + i] != rhs[i] for i = 0..4, pc <- labels[label]
             inst(
-                BNE,
+                options.opcode_with_offset(CoreOpcode::BNE),
                 i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
                 labels(label) - (pc + F::from_canonical_usize(i)),
@@ -540,7 +564,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .map(|i|
             // if mem[lhs + i] == mem[rhs + i] for i = 0..4, pc <- labels[label]
             inst(
-                if i == 0 { BEQ } else { BNE },
+                if i == 0 { options.opcode_with_offset(CoreOpcode::BEQ) } else { options.opcode_with_offset(CoreOpcode::BNE) },
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
                 if i == 0 {
@@ -557,7 +581,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .map(|i|
             // if mem[lhs + i] == rhs[i] for i = 0..4, pc <- labels[label]
             inst(
-                if i == 0 { BEQ } else { BNE },
+                if i == 0 { options.opcode_with_offset(CoreOpcode::BEQ) } else { options.opcode_with_offset(CoreOpcode::BNE) },
                 i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
                 if i == 0 {
@@ -572,7 +596,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Trap => vec![
             // pc <- -1 (causes trace generation to fail)
             inst(
-                FAIL,
+                options.opcode_with_offset(CoreOpcode::FAIL),
                 F::zero(),
                 F::zero(),
                 F::zero(),
@@ -583,7 +607,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Halt => vec![
             // terminate
             inst(
-                TERMINATE,
+                options.opcode_with_offset(CoreOpcode::TERMINATE),
                 F::zero(),
                 F::zero(),
                 F::zero(),
@@ -592,7 +616,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             ),
         ],
         AsmInstruction::HintInputVec() => vec![inst(
-            HINT_INPUT,
+            options.opcode_with_offset(CoreOpcode::HINT_INPUT),
             F::zero(),
             F::zero(),
             F::zero(),
@@ -600,7 +624,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::HintBits(src, len) => vec![inst(
-            HINT_BITS,
+            options.opcode_with_offset(CoreOpcode::HINT_BITS),
             i32_f(src),
             F::zero(),
             F::from_canonical_u32(len),
@@ -608,7 +632,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::HintBytes(src, len) => vec![inst(
-            HINT_BYTES,
+            options.opcode_with_offset(CoreOpcode::HINT_BYTES),
             i32_f(src),
             F::zero(),
             F::from_canonical_u32(len),
@@ -616,7 +640,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
-            SHINTW,
+            options.opcode_with_offset(CoreOpcode::SHINTW),
             i32_f(val),
             offset,
             F::zero(),
@@ -625,13 +649,13 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::PrintV(..) | AsmInstruction::PrintF(..) | AsmInstruction::PrintE(..) => {
             if options.compile_prints {
-                convert_print_instruction(instruction)
+                convert_print_instruction(instruction, options)
             } else {
                 vec![]
             }
         }
         AsmInstruction::ImmF(dst, val) => vec![inst(
-            STOREW,
+            options.opcode_with_offset(CoreOpcode::STOREW),
             val,
             F::zero(),
             i32_f(dst),
@@ -639,7 +663,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::CopyF(dst, src) => vec![inst(
-            LOADW,
+            options.opcode_with_offset(CoreOpcode::LOADW),
             i32_f(dst),
             F::zero(),
             i32_f(src),
@@ -657,7 +681,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         | AsmInstruction::SubFIN(..)
         | AsmInstruction::DivFIN(..) => {
             if options.field_arithmetic_enabled {
-                convert_base_arithmetic_instruction(instruction)
+                convert_base_arithmetic_instruction(instruction, options)
             } else {
                 panic!(
                     "Unsupported instruction {:?}, field arithmetic is disabled",
@@ -665,13 +689,13 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 )
             }
         }
-        AsmInstruction::EqU256(..) => convert_comparison_instruction(instruction),
+        AsmInstruction::EqU256(..) => convert_comparison_instruction(instruction, options),
         AsmInstruction::AddE(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::MulE(..)
         | AsmInstruction::DivE(..) => {
             if options.field_extension_enabled {
-                convert_field_extension(instruction)
+                convert_field_extension(instruction, options)
             } else {
                 panic!(
                     "Unsupported instruction {:?}, field extension arithmetic is disabled",
@@ -680,7 +704,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             }
         }
         AsmInstruction::Poseidon2Compress(dst, src1, src2) => vec![inst(
-            COMP_POS2,
+            options.opcode_with_offset(Poseidon2Opcode::COMP_POS2),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -688,71 +712,39 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::Poseidon2Permute(dst, src) => vec![inst(
-            PERM_POS2,
+            options.opcode_with_offset(Poseidon2Opcode::PERM_POS2),
             i32_f(dst),
             i32_f(src),
             F::zero(),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::AddSecp256k1Coord(dst, src1, src2) => vec![inst(
-            SECP256K1_COORD_ADD,
+        AsmInstruction::ModularAdd(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::ADD, modulus),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::SubSecp256k1Coord(dst, src1, src2) => vec![inst(
-            SECP256K1_COORD_SUB,
+        AsmInstruction::ModularSub(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::SUB, modulus),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::MulSecp256k1Coord(dst, src1, src2) => vec![inst(
-            SECP256K1_COORD_MUL,
+        AsmInstruction::ModularMul(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::MUL, modulus),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::DivSecp256k1Coord(dst, src1, src2) => vec![inst(
-            SECP256K1_COORD_DIV,
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::AddSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            SECP256K1_SCALAR_ADD,
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::SubSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            SECP256K1_SCALAR_SUB,
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::MulSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            SECP256K1_SCALAR_MUL,
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::DivSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            SECP256K1_SCALAR_DIV,
+        AsmInstruction::ModularDiv(modulus, dst, src1, src2) => vec![inst(
+            options.modular_opcode_with_offset(ModularArithmeticOpcode::DIV, modulus),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -760,7 +752,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::Add256(dst, src1, src2) => vec![inst(
-            ADD256,
+            options.opcode_with_offset(U256Opcode::ADD),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -768,7 +760,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::Sub256(dst, src1, src2) => vec![inst(
-            SUB256,
+            options.opcode_with_offset(U256Opcode::SUB),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -776,7 +768,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::Mul256(dst, src1, src2) => vec![inst(
-            MUL256,
+            options.opcode_with_offset(U256Opcode::MUL),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -784,7 +776,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::LessThanU256(dst, src1, src2) => vec![inst(
-            SLTU256,
+            options.opcode_with_offset(U256Opcode::LT),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -792,7 +784,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::EqualTo256(dst, src1, src2) => vec![inst(
-            EQ256,
+            options.opcode_with_offset(U256Opcode::EQ),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -800,7 +792,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::Xor256(dst, src1, src2) => vec![inst(
-            XOR256,
+            options.opcode_with_offset(U256Opcode::XOR),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -808,7 +800,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::And256(dst, src1, src2) => vec![inst(
-            AND256,
+            options.opcode_with_offset(U256Opcode::AND),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -816,7 +808,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::Or256(dst, src1, src2) => vec![inst(
-            OR256,
+            options.opcode_with_offset(U256Opcode::OR),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -824,7 +816,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::LessThanI256(dst, src1, src2) => vec![inst(
-            SLT256,
+            options.opcode_with_offset(U256Opcode::SLT),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -832,7 +824,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::ShiftLeft256(dst, src1, src2) => vec![inst(
-            SLL256,
+            options.opcode_with_offset(U256Opcode::SLL),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -840,7 +832,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::ShiftRightLogic256(dst, src1, src2) => vec![inst(
-            SRL256,
+            options.opcode_with_offset(U256Opcode::SRL),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -848,7 +840,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::ShiftRightArith256(dst, src1, src2) => vec![inst(
-            SRA256,
+            options.opcode_with_offset(U256Opcode::SRA),
             i32_f(dst),
             i32_f(src1),
             i32_f(src2),
@@ -856,7 +848,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::Keccak256(dst, src, len) => vec![inst_med(
-            KECCAK256,
+            options.opcode_with_offset(Keccak256Opcode::KECCAK256),
             i32_f(dst),
             i32_f(src),
             i32_f(len),
@@ -877,7 +869,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             // )
         }
         AsmInstruction::Secp256k1AddUnequal(dst_ptr_ptr, p_ptr_ptr, q_ptr_ptr) => vec![inst_med(
-            SECP256K1_EC_ADD_NE,
+            options.opcode_with_offset(EccOpcode::EC_ADD_NE),
             i32_f(dst_ptr_ptr),
             i32_f(p_ptr_ptr),
             i32_f(q_ptr_ptr),
@@ -886,7 +878,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::Secp256k1Double(dst_ptr_ptr, p_ptr_ptr) => vec![inst(
-            SECP256K1_EC_DOUBLE,
+            options.opcode_with_offset(EccOpcode::EC_DOUBLE),
             i32_f(dst_ptr_ptr),
             i32_f(p_ptr_ptr),
             F::zero(),
@@ -895,20 +887,20 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::CycleTrackerStart(name) => {
             if options.enable_cycle_tracker {
-                vec![dbg(CT_START, name)]
+                vec![dbg(options.opcode_with_offset(CoreOpcode::CT_START), name)]
             } else {
                 vec![]
             }
         }
         AsmInstruction::CycleTrackerEnd(name) => {
             if options.enable_cycle_tracker {
-                vec![dbg(CT_END, name)]
+                vec![dbg(options.opcode_with_offset(CoreOpcode::CT_END), name)]
             } else {
                 vec![]
             }
         }
         AsmInstruction::Publish(val, index) => vec![inst(
-            PUBLISH,
+            options.opcode_with_offset(CoreOpcode::PUBLISH),
             i32_f(index),
             i32_f(val),
             F::zero(),
@@ -930,7 +922,7 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
 ) -> Program<F> {
     // mem[0] <- 0
     let init_register_0 = inst(
-        STOREW,
+        options.opcode_with_offset(CoreOpcode::STOREW),
         F::zero(),
         F::zero(),
         i32_f(0),
@@ -950,7 +942,7 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
                 debug_info.clone(),
                 F::from_canonical_usize(pc),
                 |label| label,
-                options,
+                &options,
             );
             pc += instructions.len();
         }
@@ -967,7 +959,7 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
                 debug_info.clone(),
                 F::from_canonical_usize(instructions.len()),
                 labels,
-                options,
+                &options,
             );
             instructions.extend(result.instructions);
             debug_infos.extend(result.debug_infos);

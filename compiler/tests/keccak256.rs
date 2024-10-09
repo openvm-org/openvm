@@ -16,6 +16,7 @@ use hex::FromHex;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
+    arch::ExecutorName,
     hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
     vm::config::VmConfig,
 };
@@ -55,13 +56,10 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
     execute_and_prove_program(
         program,
         vec![],
-        VmConfig {
-            num_public_values: 4,
-            perm_poseidon2_enabled: false,
-            compress_poseidon2_enabled: false,
-            keccak_enabled: true,
-            ..Default::default()
-        },
+        VmConfig::default_with_no_executors()
+            .add_default_executor(ExecutorName::FieldArithmetic)
+            .add_default_executor(ExecutorName::FieldExtension)
+            .add_default_executor(ExecutorName::Keccak256),
         BabyBearPoseidon2Engine::new(FriParameters::standard_fast()),
     )
     .unwrap();

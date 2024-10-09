@@ -1,8 +1,3 @@
-use stark_vm::vm::cycle_tracker::{CanDiff, CycleTracker};
-use tracing::info;
-
-pub(crate) type Halo2CellTracker = CycleTracker<Halo2Stats>;
-
 #[derive(Default, Clone)]
 pub(crate) struct Halo2Stats {
     pub total_gate_cell: usize,
@@ -11,6 +6,7 @@ pub(crate) struct Halo2Stats {
 }
 
 impl Halo2Stats {
+    #[allow(dead_code)]
     pub fn add_assign(&mut self, b: &Self) {
         self.total_gate_cell += b.total_gate_cell;
         self.total_fixed += b.total_fixed;
@@ -18,54 +14,25 @@ impl Halo2Stats {
     }
 }
 
-impl CanDiff for Halo2Stats {
-    fn diff(&mut self, another: &Self) {
-        *self = Self {
-            total_gate_cell: self.total_gate_cell - another.total_gate_cell,
-            total_fixed: self.total_fixed - another.total_fixed,
-            total_lookup_cell: self.total_lookup_cell - another.total_lookup_cell,
-        };
-    }
-}
+#[cfg(feature = "bench-metrics")]
+mod emit {
+    use metrics::counter;
 
-pub(crate) fn print(
-    cell_tracker: &Halo2CellTracker,
-    babybear_stats: &Halo2Stats,
-    num2bits_metrics: &Halo2Stats,
-) {
-    if cell_tracker.instances.is_empty() {
-        return;
-    }
-    for name in &cell_tracker.order {
-        let spans = cell_tracker.instances.get(name).unwrap();
-        let num_spans = spans.len();
+    use super::Halo2Stats;
 
-        if num_spans == 0 {
-            continue;
+    impl Halo2Stats {
+        pub fn diff(&mut self, another: &Self) {
+            *self = Self {
+                total_gate_cell: self.total_gate_cell - another.total_gate_cell,
+                total_fixed: self.total_fixed - another.total_fixed,
+                total_lookup_cell: self.total_lookup_cell - another.total_lookup_cell,
+            };
         }
-
-        let agg_stats = spans.iter().fold(Halo2Stats::default(), |mut total, span| {
-            total.add_assign(&span.metrics);
-            total
-        });
-
-        info!("span [{}] ({}):", name, num_spans);
-        info!("  - total_gate_cell: {}", agg_stats.total_gate_cell);
-        info!("  - total_fixed: {}", agg_stats.total_fixed);
-        info!("  - total_lookup_cell: {}", agg_stats.total_lookup_cell);
+        pub fn increment(&self, span_name: String) {
+            let labels = [("cell_tracker_span", span_name)];
+            counter!("simple_advice_cells", &labels).increment(self.total_gate_cell as u64);
+            counter!("fixed_cells", &labels).increment(self.total_fixed as u64);
+            counter!("lookup_advice_cells", &labels).increment(self.total_lookup_cell as u64);
+        }
     }
-    info!("Babybear:");
-    info!("  - total_gate_cell: {}", babybear_stats.total_gate_cell);
-    info!("  - total_fixed: {}", babybear_stats.total_fixed);
-    info!(
-        "  - total_lookup_cell: {}",
-        babybear_stats.total_lookup_cell
-    );
-    info!("Num2Bits:");
-    info!("  - total_gate_cell: {}", num2bits_metrics.total_gate_cell);
-    info!("  - total_fixed: {}", num2bits_metrics.total_fixed);
-    info!(
-        "  - total_lookup_cell: {}",
-        num2bits_metrics.total_lookup_cell
-    );
 }

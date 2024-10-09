@@ -1,134 +1,217 @@
-use std::fmt;
+use afs_derive::UsizeOpcode;
+use strum_macros::{EnumCount, EnumIter, FromRepr};
 
-use enum_utils::FromStr;
-use Opcode::*;
+pub trait UsizeOpcode {
+    fn default_offset() -> usize;
+    /// Convert from the discriminant of the enum to the typed enum variant.
+    /// Default implementation uses `from_repr`.
+    fn from_usize(value: usize) -> Self;
+    fn as_usize(&self) -> usize;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr, PartialOrd, Ord)]
+    fn with_default_offset(&self) -> usize {
+        self.as_usize() + Self::default_offset()
+    }
+}
+
+pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
+    Opcode::default_offset() + opcode.as_usize()
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Opcode {
-    LOADW = 0,
-    STOREW = 1,
-    LOADW2 = 2,
-    STOREW2 = 3,
-    JAL = 4,
-    BEQ = 5,
-    BNE = 6,
-    TERMINATE = 7,
-    PUBLISH = 8,
-
-    FADD = 10,
-    FSUB = 11,
-    FMUL = 12,
-    FDIV = 13,
-
-    CASTF = 14,
-
-    FAIL = 20,
-    PRINTF = 21,
-
-    FE4ADD = 30,
-    FE4SUB = 31,
-    BBE4MUL = 32,
-    BBE4DIV = 33,
-
-    PERM_POS2 = 40,
-    COMP_POS2 = 41,
-    KECCAK256 = 42,
-
+pub enum CoreOpcode {
+    NOP,
+    LOADW,
+    STOREW,
+    LOADW2,
+    STOREW2,
+    JAL,
+    BEQ,
+    BNE,
+    TERMINATE,
+    PUBLISH,
+    FAIL,
+    PRINTF,
     /// Instruction to write the next hint word into memory.
-    SHINTW = 50,
+    SHINTW,
 
+    // TODO: move these to a separate class, PhantomOpcode or something
     /// Phantom instruction to prepare the next input vector for hinting.
-    HINT_INPUT = 51,
+    HINT_INPUT,
     /// Phantom instruction to prepare the little-endian bit decomposition of a variable for hinting.
-    HINT_BITS = 52,
+    HINT_BITS,
     /// Phantom instruction to prepare the little-endian byte decomposition of a variable for hinting.
-    HINT_BYTES = 53,
-
+    HINT_BYTES,
     /// Phantom instruction to start tracing
-    CT_START = 60,
+    CT_START,
     /// Phantom instruction to end tracing
-    CT_END = 61,
-
-    SECP256K1_COORD_ADD = 70,
-    SECP256K1_COORD_SUB = 71,
-    SECP256K1_COORD_MUL = 72,
-    SECP256K1_COORD_DIV = 73,
-
-    SECP256K1_SCALAR_ADD = 74,
-    SECP256K1_SCALAR_SUB = 75,
-    SECP256K1_SCALAR_MUL = 76,
-    SECP256K1_SCALAR_DIV = 77,
-
-    ADD256 = 80,
-    SUB256 = 81,
-    MUL256 = 82,
-    SLTU256 = 83,
-    EQ256 = 84,
-    XOR256 = 85,
-    AND256 = 86,
-    OR256 = 87,
-    SLT256 = 88,
-    SLL256 = 89,
-    SRL256 = 90,
-    SRA256 = 91,
-
-    LUI = 98,
-    AUIPC = 99,
-
-    NOP = 100,
-
-    SECP256K1_EC_ADD_NE = 101,
-    SECP256K1_EC_DOUBLE = 102,
+    CT_END,
 }
 
-impl fmt::Display for Opcode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x100]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum FieldArithmeticOpcode {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x110]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum FieldExtensionOpcode {
+    FE4ADD,
+    FE4SUB,
+    BBE4MUL,
+    BBE4DIV,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x170]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum CastfOpcode {
+    CASTF,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x120]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Poseidon2Opcode {
+    PERM_POS2,
+    COMP_POS2,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x130]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Keccak256Opcode {
+    KECCAK256,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x140]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum ModularArithmeticOpcode {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x180]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum EccOpcode {
+    EC_ADD_NE,
+    EC_DOUBLE,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x150]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum U256Opcode {
+    // maybe later we will make it uint and specify the parameters in the config
+    ADD,
+    SUB,
+    LT,
+    EQ,
+    XOR,
+    AND,
+    OR,
+    SLT,
+
+    SLL,
+    SRL,
+    SRA,
+
+    MUL,
+}
+
+impl U256Opcode {
+    // Excludes multiplication
+    pub fn arithmetic_opcodes() -> impl Iterator<Item = U256Opcode> {
+        (U256Opcode::ADD as usize..=U256Opcode::SLT as usize).map(U256Opcode::from_usize)
+    }
+
+    pub fn shift_opcodes() -> impl Iterator<Item = U256Opcode> {
+        (U256Opcode::SLL as usize..=U256Opcode::SRA as usize).map(U256Opcode::from_usize)
     }
 }
 
-pub const CORE_INSTRUCTIONS: [Opcode; 17] = [
-    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, PRINTF, SHINTW, HINT_INPUT, HINT_BITS, HINT_BYTES,
-    PUBLISH, CT_START, CT_END, NOP, LOADW2, STOREW2,
-];
-pub const FIELD_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [FADD, FSUB, FMUL, FDIV];
-pub const FIELD_EXTENSION_INSTRUCTIONS: [Opcode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4DIV];
-pub const ALU_256_INSTRUCTIONS: [Opcode; 8] = [
-    ADD256, SUB256, SLTU256, EQ256, XOR256, AND256, OR256, SLT256,
-];
-pub const SHIFT_256_INSTRUCTIONS: [Opcode; 3] = [SLL256, SRL256, SRA256];
-pub const UI_32_INSTRUCTIONS: [Opcode; 2] = [LUI, AUIPC];
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x160]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum U32Opcode {
+    LUI,
+    AUIPC,
+}
 
-pub const MODULAR_ADDSUB_INSTRUCTIONS: [Opcode; 4] = [
-    SECP256K1_COORD_ADD,
-    SECP256K1_COORD_SUB,
-    SECP256K1_SCALAR_ADD,
-    SECP256K1_SCALAR_SUB,
-];
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x300]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum AluOpcode {
+    ADD,
+    SUB,
+    XOR,
+    OR,
+    AND,
+}
 
-pub const MODULAR_MULTDIV_INSTRUCTIONS: [Opcode; 4] = [
-    SECP256K1_COORD_MUL,
-    SECP256K1_COORD_DIV,
-    SECP256K1_SCALAR_MUL,
-    SECP256K1_SCALAR_DIV,
-];
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x305]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum ShiftOpcode {
+    SLL,
+    SRL,
+    SRA,
+}
 
-impl Opcode {
-    pub fn all_opcodes() -> Vec<Opcode> {
-        let mut all_opcodes = vec![];
-        all_opcodes.extend(CORE_INSTRUCTIONS);
-        all_opcodes.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
-        all_opcodes.extend(FIELD_EXTENSION_INSTRUCTIONS);
-        all_opcodes.extend([FAIL]);
-        all_opcodes.extend([PERM_POS2, COMP_POS2]);
-        all_opcodes
-    }
-
-    pub fn from_u8(value: u8) -> Option<Self> {
-        Self::all_opcodes()
-            .into_iter()
-            .find(|&opcode| value == opcode as u8)
-    }
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x310]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum LessThanOpcode {
+    SLT,
+    SLTU,
 }

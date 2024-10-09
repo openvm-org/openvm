@@ -1,4 +1,4 @@
-name: Lint and Build Workspace
+name: Lint Workspace
 
 on:
   push:
@@ -28,6 +28,3 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --all-targets --all -- -D warnings
-
-      - name: Build
-        run: cargo build

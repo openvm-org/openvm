@@ -24,6 +24,7 @@ pub struct KeccakVmAir {
     /// Bus to send 8-bit XOR requests to.
     pub xor_bus: XorBus,
     // TODO: add configuration for enabling direct non-memory interactions
+    pub(super) offset: usize,
 }
 
 impl<F> BaseAirWithPublicValues<F> for KeccakVmAir {}

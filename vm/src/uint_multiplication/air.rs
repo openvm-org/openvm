@@ -19,6 +19,8 @@ pub struct UintMultiplicationAir<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub bus: RangeTupleCheckerBus,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>

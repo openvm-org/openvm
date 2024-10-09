@@ -15,6 +15,7 @@ impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
             air,
             memory_chip,
             records,
+            offset: _,
         } = self;
 
         let row_len = records.len();

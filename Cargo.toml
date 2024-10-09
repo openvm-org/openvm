@@ -1,24 +1,16 @@
 [workspace]
 members = [
-    "bin/common",
-    "bin/afs",
-    "bin/afs-1b",
-    "bin/olap",
-    "benchmark",
-    "db/page",
-    "db/interface",
     "primitives",
     "compiler",
     "derive",
-    "logical-interface",
     "poseidon2-air",
     "recursion",
     "ecc/lib",
+    "ecc/execution",
     "ecc/primitives",
     "stark-backend",
     "sdk",
     "vm",
-    "vm/bin",
     "riscv/zkvm/lib",
     "riscv/zkvm/platform",
 ]
@@ -55,10 +47,10 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 
-# For O3 optimization but still fast(ish) compile times
+# For O1 optimization but still fast(ish) compile times
 [profile.fast]
 inherits = "dev"
-opt-level = 3
+opt-level = 1
 debug-assertions = true
 # better recompile times
 incremental = true
@@ -109,6 +101,7 @@ lazy_static = "1.5.0"
 once_cell = "1.19.0"
 derive-new = "0.5.1"
 strum_macros = "0.26.4"
+strum = { version = "0.26.3", features = ["derive"] }
 backtrace = "0.3.71"
 rand = "0.8.5"
 k256 = "0.13.3"
@@ -121,6 +114,8 @@ hex-literal = "0.4.1"
 metrics = "0.23.0"
 cfg-if = "1.0.0"
 inferno = "0.11.21"
+test-case = "3.3.1"
+test-log = "0.2.16"
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

@@ -1,8 +1,9 @@
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_field::{AbstractField, PrimeField64};
-use stark_vm::modular_addsub::{
-    big_uint_to_num_limbs, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
+use stark_vm::{
+    modular_addsub::{big_uint_to_num_limbs, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    vm::config::Modulus,
 };
 
 use super::{LIMB_SIZE, NUM_LIMBS};
@@ -45,11 +46,12 @@ where
         &mut self,
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
-        operation: impl Fn(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>) -> DslIr<C>,
+        modulus: BigUint,
+        operation: impl Fn(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>) -> DslIr<C>,
     ) -> BigUintVar<C> {
         let dst = self.dyn_array(NUM_LIMBS);
         self.operations
-            .push(operation(dst.clone(), left.clone(), right.clone()));
+            .push(operation(modulus, dst.clone(), left.clone(), right.clone()));
         dst
     }
 
@@ -58,7 +60,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, DslIr::AddSecp256k1Coord)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Coord.prime(),
+            DslIr::ModularAdd,
+        )
     }
 
     pub fn secp256k1_coord_sub(
@@ -66,7 +73,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, DslIr::SubSecp256k1Coord)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Coord.prime(),
+            DslIr::ModularSub,
+        )
     }
 
     pub fn secp256k1_coord_mul(
@@ -74,7 +86,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, DslIr::MulSecp256k1Coord)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Coord.prime(),
+            DslIr::ModularMul,
+        )
     }
 
     pub fn secp256k1_coord_div(
@@ -82,7 +99,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, DslIr::DivSecp256k1Coord)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Coord.prime(),
+            DslIr::ModularDiv,
+        )
     }
 
     pub fn assert_secp256k1_coord_eq(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) {
@@ -135,7 +157,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, DslIr::AddSecp256k1Scalar)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Scalar.prime(),
+            DslIr::ModularAdd,
+        )
     }
 
     pub fn secp256k1_scalar_sub(
@@ -143,7 +170,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, DslIr::SubSecp256k1Scalar)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Scalar.prime(),
+            DslIr::ModularSub,
+        )
     }
 
     pub fn secp256k1_scalar_mul(
@@ -151,7 +183,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, DslIr::MulSecp256k1Scalar)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Scalar.prime(),
+            DslIr::ModularMul,
+        )
     }
 
     pub fn secp256k1_scalar_div(
@@ -159,7 +196,12 @@ where
         left: &BigUintVar<C>,
         right: &BigUintVar<C>,
     ) -> BigUintVar<C> {
-        self.mod_operation(left, right, DslIr::DivSecp256k1Scalar)
+        self.mod_operation(
+            left,
+            right,
+            Modulus::Secp256k1Scalar.prime(),
+            DslIr::ModularDiv,
+        )
     }
 
     pub fn assert_secp256k1_scalar_eq(&mut self, left: &BigUintVar<C>, right: &BigUintVar<C>) {

@@ -17,7 +17,10 @@ use super::{
     ModularMultDivChip,
 };
 use crate::{
-    arch::{instructions::Opcode, MachineChip},
+    arch::{
+        instructions::{ModularArithmeticOpcode, UsizeOpcode},
+        MachineChip,
+    },
     memory::MemoryHeapDataIoCols,
 };
 
@@ -63,9 +66,9 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
                     .data
                     .map(|x| x.as_canonical_u32()),
             );
-            let is_mult = match record.instruction.opcode {
-                Opcode::SECP256K1_SCALAR_MUL | Opcode::SECP256K1_COORD_MUL => true,
-                Opcode::SECP256K1_SCALAR_DIV | Opcode::SECP256K1_COORD_DIV => false,
+            let is_mult = match ModularArithmeticOpcode::from_usize(record.instruction.opcode) {
+                ModularArithmeticOpcode::MUL => true,
+                ModularArithmeticOpcode::DIV => false,
                 _ => unreachable!(),
             };
 

@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, iter::zip};
 
 use afs_primitives::{utils, var_range::bus::VariableRangeCheckerBus, xor::bus::XorBus};
 use afs_stark_backend::{
@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 
 use super::columns::ShiftCols;
 use crate::{
-    arch::{instructions::SHIFT_256_INSTRUCTIONS, ExecutionBridge},
+    arch::{instructions::U256Opcode, ExecutionBridge},
     memory::offline_checker::MemoryBridge,
 };
 
@@ -21,6 +21,8 @@ pub struct ShiftAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub(super) memory_bridge: MemoryBridge,
     pub xor_bus: XorBus,
     pub range_bus: VariableRangeCheckerBus,
+
+    pub(super) offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
@@ -165,11 +167,9 @@ impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BIT
                 );
         }
 
-        let expected_opcode = flags
-            .iter()
-            .zip(SHIFT_256_INSTRUCTIONS)
+        let expected_opcode = zip(flags, U256Opcode::shift_opcodes())
             .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+                acc + flag * AB::Expr::from_canonical_u8(opcode as u8)
             });
 
         self.eval_interactions(builder, io, aux, expected_opcode);

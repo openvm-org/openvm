@@ -7,7 +7,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     arch::{
-        instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
+        instructions::{FieldExtensionOpcode, UsizeOpcode},
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     field_extension::air::FieldExtensionArithmeticAir,
@@ -44,6 +44,8 @@ pub struct FieldExtensionArithmeticChip<F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir,
     pub(crate) memory_chip: MemoryChipRef<F>,
     pub(crate) records: Vec<FieldExtensionArithmeticRecord<F>>,
+
+    offset: usize,
 }
 
 impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F> {
@@ -61,8 +63,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
             e,
             ..
         } = instruction;
-
-        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
+        let opcode = opcode - self.offset;
 
         assert_ne!(d, F::zero());
         assert_ne!(e, F::zero());
@@ -75,13 +76,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
         let y_read = memory_chip.read(e, op_c);
         let y: [F; EXT_DEG] = y_read.data;
 
-        let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
+        let z = FieldExtensionArithmetic::solve(FieldExtensionOpcode::from_usize(opcode), x, y)
+            .unwrap();
         let z_write = memory_chip.write(d, op_a, z);
 
         self.records.push(FieldExtensionArithmeticRecord {
             timestamp: from_state.timestamp,
             pc: from_state.pc,
-            instruction,
+            instruction: Instruction {
+                opcode,
+                ..instruction
+            },
             x,
             y,
             z,
@@ -95,6 +100,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            FieldExtensionOpcode::from_usize(opcode - self.offset)
+        )
+    }
 }
 
 impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
@@ -102,15 +114,18 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory: MemoryChipRef<F>,
+        offset: usize,
     ) -> Self {
         let air = FieldExtensionArithmeticAir::new(
             ExecutionBridge::new(execution_bus, program_bus),
             memory.borrow().memory_bridge(),
+            offset,
         );
         Self {
             air,
             records: vec![],
             memory_chip: memory,
+            offset,
         }
     }
 
@@ -126,16 +141,15 @@ impl FieldExtensionArithmetic {
     ///
     /// Returns None for opcodes not in core::FIELD_EXTENSION_INSTRUCTIONS.
     pub(crate) fn solve<T: Field>(
-        op: Opcode,
+        op: FieldExtensionOpcode,
         x: [T; EXT_DEG],
         y: [T; EXT_DEG],
     ) -> Option<[T; EXT_DEG]> {
         match op {
-            Opcode::FE4ADD => Some(Self::add(x, y)),
-            Opcode::FE4SUB => Some(Self::subtract(x, y)),
-            Opcode::BBE4MUL => Some(Self::multiply(x, y)),
-            Opcode::BBE4DIV => Some(Self::divide(x, y)),
-            _ => None,
+            FieldExtensionOpcode::FE4ADD => Some(Self::add(x, y)),
+            FieldExtensionOpcode::FE4SUB => Some(Self::subtract(x, y)),
+            FieldExtensionOpcode::BBE4MUL => Some(Self::multiply(x, y)),
+            FieldExtensionOpcode::BBE4DIV => Some(Self::divide(x, y)),
         }
     }
 

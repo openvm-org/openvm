@@ -6,7 +6,7 @@ use super::{
     air::UintMultiplicationAir,
     columns::{UintMultiplicationAuxCols, UintMultiplicationIoCols},
 };
-use crate::{arch::instructions::Opcode, memory::MemoryAddress};
+use crate::{arch::instructions::U256Opcode, memory::MemoryAddress};
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_LIMBS, LIMB_BITS> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -70,7 +70,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> UintMultiplicationAir<NUM_L
 
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_u8(Opcode::MUL256 as u8),
+                AB::Expr::from_canonical_usize(U256Opcode::MUL as usize + self.offset),
                 [
                     io.z.ptr_to_address,
                     io.x.ptr_to_address,

@@ -16,7 +16,10 @@ use rand::Rng;
 use super::{Poseidon2Chip, CHUNK, WIDTH};
 use crate::{
     arch::{
-        instructions::Opcode::*,
+        instructions::{
+            Poseidon2Opcode::{self, *},
+            UsizeOpcode,
+        },
         testing::{memory::gen_pointer, MachineChipTestBuilder, MachineChipTester},
     },
     hashes::poseidon2::Poseidon2VmIoCols,
@@ -39,9 +42,9 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
             Instruction {
                 opcode: if rng.gen_bool(0.5) {
-                    PERM_POS2
+                    PERM_POS2 as usize
                 } else {
-                    COMP_POS2
+                    COMP_POS2 as usize
                 },
                 op_a: a,
                 op_b: b,
@@ -66,12 +69,13 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_chip(),
+        0,
     );
 
     let mut rng = create_seeded_rng();
 
     for instruction in random_instructions(num_ops) {
-        let opcode = instruction.opcode;
+        let opcode = Poseidon2Opcode::from_usize(instruction.opcode);
         let [a, b, c, d, e] = [
             instruction.op_a,
             instruction.op_b,
@@ -108,7 +112,6 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
             PERM_POS2 => {
                 tester.write(e, lhs, data);
             }
-            _ => panic!(),
         }
 
         tester.execute(&mut chip, instruction);
@@ -123,7 +126,6 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
                 let actual = tester.read::<WIDTH>(e, dst);
                 assert_eq!(hash, actual);
             }
-            _ => panic!(),
         }
     }
     tester.build().load(chip).finalize()
@@ -146,7 +148,8 @@ fn poseidon2_negative_test() {
     tester.test(get_engine).expect("Verification failed");
 
     disable_debug_builder();
-    for _ in 0..10 {
+    // test is slow, avoid too many repetitions
+    for _ in 0..5 {
         // TODO: better way to modify existing traces in tester
         let trace = &mut tester.air_infos[2].common_trace;
         let original_trace = trace.clone();
