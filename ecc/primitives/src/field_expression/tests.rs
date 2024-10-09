@@ -29,7 +29,13 @@ pub fn generate_random_biguint(prime: &BigUint) -> BigUint {
     x % prime
 }
 
-fn get_sub_air(prime: &BigUint) -> (CheckCarryModToZeroSubAir, Arc<VariableRangeCheckerChip>) {
+fn setup(
+    prime: &BigUint,
+) -> (
+    CheckCarryModToZeroSubAir,
+    Arc<VariableRangeCheckerChip>,
+    Rc<RefCell<ExprBuilder>>,
+) {
     let field_element_bits = 30;
     let range_bus = 1;
     let range_decomp = 17; // double needs 17, rests need 16.
@@ -44,7 +50,8 @@ fn get_sub_air(prime: &BigUint) -> (CheckCarryModToZeroSubAir, Arc<VariableRange
         range_decomp,
         field_element_bits,
     );
-    (subair, range_checker)
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32, range_checker.range_max_bits());
+    (subair, range_checker, Rc::new(RefCell::new(builder)))
 }
 
 #[derive(Clone)]
@@ -61,19 +68,13 @@ impl FieldVariableConfig for TestConfig {
     fn num_limbs_per_field_element() -> usize {
         32
     }
-
-    fn range_checker_bits() -> usize {
-        17
-    }
 }
 
 #[test]
 fn test_add() {
     let prime = secp256k1_coord_prime();
-    let (subair, range_checker) = get_sub_air(&prime);
+    let (subair, range_checker, builder) = setup(&prime);
 
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
-    let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut x3 = x1 + x2;
@@ -110,10 +111,8 @@ fn test_add() {
 #[test]
 fn test_div() {
     let prime = secp256k1_coord_prime();
-    let (subair, range_checker) = get_sub_air(&prime);
+    let (subair, range_checker, builder) = setup(&prime);
 
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
-    let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let _x3 = x1 / x2; // auto save on division.
@@ -150,10 +149,8 @@ fn test_div() {
 #[test]
 fn test_auto_carry_mul() {
     let prime = secp256k1_coord_prime();
-    let (subair, range_checker) = get_sub_air(&prime);
+    let (subair, range_checker, builder) = setup(&prime);
 
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
-    let builder = Rc::new(RefCell::new(builder));
     let mut x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut x3 = &mut x1 * &mut x2;
@@ -195,10 +192,7 @@ fn test_auto_carry_mul() {
 #[test]
 fn test_auto_carry_intmul() {
     let prime = secp256k1_coord_prime();
-    let (subair, range_checker) = get_sub_air(&prime);
-
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
-    let builder = Rc::new(RefCell::new(builder));
+    let (subair, range_checker, builder) = setup(&prime);
     let mut x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut x3 = &mut x1 * &mut x2;
@@ -243,10 +237,8 @@ fn test_auto_carry_intmul() {
 #[test]
 fn test_auto_carry_add() {
     let prime = secp256k1_coord_prime();
-    let (subair, range_checker) = get_sub_air(&prime);
+    let (subair, range_checker, builder) = setup(&prime);
 
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
-    let builder = Rc::new(RefCell::new(builder));
     let mut x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut x3 = &mut x1 * &mut x2;
@@ -299,10 +291,8 @@ fn test_auto_carry_add() {
 #[test]
 fn test_ec_add() {
     let prime = secp256k1_coord_prime();
-    let (subair, range_checker) = get_sub_air(&prime);
+    let (subair, range_checker, builder) = setup(&prime);
 
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
-    let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let y1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
@@ -348,10 +338,8 @@ fn test_ec_add() {
 #[test]
 fn test_ec_double() {
     let prime = secp256k1_coord_prime();
-    let (subair, range_checker) = get_sub_air(&prime);
+    let (subair, range_checker, builder) = setup(&prime);
 
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
-    let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let mut y1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let nom = (x1.clone() * x1.clone()).int_mul(3);
