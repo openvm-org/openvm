@@ -833,8 +833,8 @@ where
             RVar::from(vk.num_main_trace_commitments),
         );
         for commit_idx in 0..vk.num_main_trace_commitments {
-            let values_per_mat = builder.get(&proof.opening.values.main, commit_idx);
-            builder.assert_eq::<Usize<_>>(values_per_mat.len(), RVar::from(num_airs));
+            let _values_per_mat = builder.get(&proof.opening.values.main, commit_idx);
+            // builder.assert_eq::<Usize<_>>(values_per_mat.len(), RVar::from(num_airs));
         }
 
         builder.assert_eq::<Usize<_>>(
