@@ -103,5 +103,9 @@ fn simple_execute_roundtrip_test() {
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, false);
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, false);
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, false);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, true);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, true);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, true);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, true);
     }
 }

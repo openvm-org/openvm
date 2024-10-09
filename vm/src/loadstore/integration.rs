@@ -117,6 +117,30 @@ pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
     let mut write_data = read_data;
     match opcode {
         LOADW => (),
+        LOADH => {
+            let ext = read_data[NUM_CELLS / 2 - 1].as_canonical_u32();
+            let ext = (ext >> 7) * 255;
+            for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
+                *cell = F::from_canonical_u32(ext);
+            }
+        }
+        LOADB => {
+            let ext = read_data[0].as_canonical_u32();
+            let ext = (ext >> 7) * 255;
+            for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
+                *cell = F::from_canonical_u32(ext);
+            }
+        }
+        LOADHU => {
+            for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
+                *cell = F::zero();
+            }
+        }
+        LOADBU => {
+            for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
+                *cell = F::zero();
+            }
+        }
         STOREW => (),
         STOREH => {
             for (i, cell) in write_data

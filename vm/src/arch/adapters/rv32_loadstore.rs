@@ -125,22 +125,19 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
             ..
         } = *instruction;
 
-        // TODO[arayi]: add comment here
-        let addr_bits = memory.mem_config.pointer_max_bits;
         debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert_eq!(e.as_canonical_u32(), 2); // not sure if this is needed
+        debug_assert_eq!(e.as_canonical_u32(), 2);
+
+        // We constrain that the pointer to the memory has ar most addr_bits
+        let addr_bits = memory.mem_config.pointer_max_bits;
         debug_assert!(addr_bits >= (RV32_REGISTER_NUM_LANES - 1) * 8);
 
-        let ptr_record = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
-        let ptr_data = ptr_record.data.map(|x| x.as_canonical_u32());
-        debug_assert!(
-            ptr_data[RV32_REGISTER_NUM_LANES - 1]
-                < (1 << (addr_bits - (RV32_REGISTER_NUM_LANES - 1) * 8))
-        );
+        let rs1_record = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
+        let rs1_val = compose(rs1_record.data.map(|x| x.as_canonical_u32()));
 
-        // TODO[arayi]: add comment here
+        // Note: c is a field element and immediate is a signed integer
         let imm = (c + F::from_canonical_u32(1 << (RV_IS_TYPE_IMM_BITS - 1))).as_canonical_u32();
-        let ptr_val = compose(ptr_data) + imm - (1 << (RV_IS_TYPE_IMM_BITS - 1));
+        let ptr_val = rs1_val + imm - (1 << (RV_IS_TYPE_IMM_BITS - 1));
 
         assert!(imm < (1 << RV_IS_TYPE_IMM_BITS));
         assert!(ptr_val < (1 << addr_bits));
@@ -148,14 +145,14 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         let opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
         let read_record = match opcode {
-            LOADW => memory.read::<NUM_CELLS>(e, F::from_canonical_u32(ptr_val)),
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                memory.read::<NUM_CELLS>(e, F::from_canonical_u32(ptr_val))
+            }
             STOREW | STOREH | STOREB => memory.read::<NUM_CELLS>(d, a),
         };
-        let read_data = read_record.data;
 
+        // We need to keep values of some cells to keep them unchanged when writing to those cells
         let mut prev_data = [F::zero(); NUM_CELLS];
-
-        // TODO: add comment here
         match opcode {
             STOREH => {
                 for (i, cell) in prev_data
@@ -178,10 +175,12 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         }
 
         // TODO[arayi]: send VariableRangeChecker requests
+
+        let read_data = read_record.data;
         Ok((
             [read_data, prev_data],
             Self::ReadRecord {
-                rs1: ptr_record,
+                rs1: rs1_record,
                 read: read_record,
             },
         ))
@@ -214,7 +213,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
                 let ptr = ptr + imm - (1 << (RV_IS_TYPE_IMM_BITS - 1));
                 memory.write(e, F::from_canonical_u32(ptr), output.writes)
             }
-            LOADW => {
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                 if a.as_canonical_u32() != 0 {
                     memory.write(d, a, output.writes)
                 } else {
