@@ -27,11 +27,12 @@ use super::{MemoryChip, MemoryReadRecord};
 use crate::{
     arch::MachineChip,
     core::RANGE_CHECKER_BUS,
+    hashes::poseidon2::Poseidon2Chip,
     memory::{
         offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryWriteRecord,
     },
-    vm::config::MemoryConfig,
+    vm::config::{MemoryConfig, PersistenceType},
 };
 
 const MAX: usize = 64;
@@ -151,12 +152,12 @@ fn test_memory_chip() {
         pointer_max_bits: 15,
         clk_max_bits: 15,
         decomp: 8,
+        persistence_type: PersistenceType::Volatile,
     };
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-    let mut memory_chip =
-        MemoryChip::with_volatile_memory(memory_bus, memory_config, range_checker.clone());
+    let mut memory_chip = MemoryChip::new(memory_bus, memory_config.clone(), range_checker.clone());
     let aux_factory = memory_chip.aux_cols_factory();
 
     #[allow(clippy::large_enum_variant)]
@@ -275,6 +276,8 @@ fn test_memory_chip() {
             range_checker_air.deref() as &dyn AnyRap<BabyBearPoseidon2Config>
         ))
         .collect();
+
+    memory_chip.finalize(None::<&mut Poseidon2Chip<BabyBear>>);
 
     let traces = memory_chip
         .generate_traces()

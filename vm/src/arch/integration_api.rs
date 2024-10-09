@@ -1,11 +1,13 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::AnyRap};
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_commit::PolynomialSpace;
 use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use super::{ExecutionState, InstructionExecutor, Result};
+use super::{ExecutionState, InstructionExecutor, MachineChip, Result};
 use crate::{
     memory::{MemoryChip, MemoryChipRef},
     program::Instruction,
@@ -22,6 +24,9 @@ pub trait MachineAdapterInterface<T> {
     /// Typically this should not include address spaces.
     type ProcessedInstruction;
 }
+
+pub type Reads<T, I> = <I as MachineAdapterInterface<T>>::Reads;
+pub type Writes<T, I> = <I as MachineAdapterInterface<T>>::Writes;
 
 /// The adapter owns all memory accesses and timestamp changes.
 /// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
@@ -57,6 +62,7 @@ pub trait MachineAdapter<F: PrimeField32> {
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: InstructionOutput<F, Self::Interface<F>>,
+        read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)>;
 
     /// Should mutate `row_slice` to populate with values corresponding to `record`.
@@ -119,17 +125,20 @@ pub trait MachineIntegration<F: PrimeField32, A: MachineAdapter<F>> {
 }
 
 pub struct InstructionOutput<T, I: MachineAdapterInterface<T>> {
-    pub to_pc: T,
+    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
+    pub to_pc: Option<T>,
     pub writes: I::Writes,
 }
 
 pub struct IntegrationInterface<T, I: MachineAdapterInterface<T>> {
-    pub to_pc: T,
+    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
+    pub to_pc: Option<T>,
     pub reads: I::Reads,
     pub writes: I::Writes,
     pub instruction: I::ProcessedInstruction,
 }
 
+#[derive(Debug)]
 pub struct MachineChipWrapper<F: PrimeField32, A: MachineAdapter<F>, M: MachineIntegration<F, A>> {
     pub adapter: A,
     pub inner: M,
@@ -175,6 +184,22 @@ where
     }
 }
 
+impl<F, A, M> MachineChipWrapper<F, A, M>
+where
+    F: PrimeField32,
+    A: MachineAdapter<F>,
+    M: MachineIntegration<F, A>,
+{
+    pub fn new(adapter: A, inner: M, memory: MemoryChipRef<F>) -> Self {
+        Self {
+            adapter,
+            inner,
+            records: vec![],
+            memory,
+        }
+    }
+}
+
 impl<F, A, M> InstructionExecutor<F> for MachineChipWrapper<F, A, M>
 where
     F: PrimeField32,
@@ -192,9 +217,13 @@ where
         let (output, inner_record) =
             self.inner
                 .execute_instruction(&instruction, from_pc, reads)?;
-        let (to_state, write_record) =
-            self.adapter
-                .postprocess(&mut memory, &instruction, from_state, output)?;
+        let (to_state, write_record) = self.adapter.postprocess(
+            &mut memory,
+            &instruction,
+            from_state,
+            output,
+            &read_record,
+        )?;
         self.records.push((read_record, write_record, inner_record));
         Ok(to_state)
     }
@@ -204,14 +233,13 @@ where
     }
 }
 
-/*TODO
 impl<F, A, M> MachineChip<F> for MachineChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: MachineAdapter<F>,
     M: MachineIntegration<F, A>,
-    [F]: BorrowMut<A::Cols<F>>,
-    [F]: BorrowMut<M::Cols<F>>,
+    // [F]: BorrowMut<A::Cols<F>>,
+    // [F]: BorrowMut<M::Cols<F>>,
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
@@ -221,10 +249,28 @@ where
         let mut values = vec![F::zero(); height * width];
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros.
-        for (row, record) in values.chunks_exact_mut(width).zip(self.records) {
+        for (_row, _record) in values.chunks_exact_mut(width).zip(self.records) {
             todo!()
         }
         RowMajorMatrix::new(values, width)
     }
+
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        todo!()
+    }
+
+    fn air_name(&self) -> String {
+        todo!()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        todo!()
+    }
+
+    fn trace_width(&self) -> usize {
+        todo!()
+    }
 }
-*/

@@ -260,14 +260,6 @@ pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
             fn as_usize(&self) -> usize {
                 *self as usize
             }
-
-            fn class_index() -> usize {
-                unsafe {
-                    let current = OPCODE_INDEX;
-                    OPCODE_INDEX += 1;
-                    current
-                }
-            }
         }
     };
 

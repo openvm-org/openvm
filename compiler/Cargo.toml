@@ -28,6 +28,7 @@ snark-verifier-sdk = { workspace = true, optional = true }
 zkhash = { workspace = true }
 metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
+strum = { workspace = true }
 
 [dev-dependencies]
 hex = "0.4.3"

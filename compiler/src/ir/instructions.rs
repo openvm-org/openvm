@@ -1,3 +1,5 @@
+use num_bigint_dig::BigUint;
+
 use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
 use crate::ir::modular_arithmetic::BigUintVar;
 
@@ -34,10 +36,8 @@ pub enum DslIr<C: Config> {
     AddEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Add a field element and an ext field immediate (ext = felt + ext field imm).
     AddEFFI(Ext<C::F, C::EF>, Felt<C::F>, C::EF),
-    /// Add two modular BigInts over coordinate field.
-    AddSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Add two modular BigInts over scalar field.
-    AddSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Add two modular BigInts over some field.
+    ModularAdd(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Add two 256-bit integers
     Add256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
@@ -64,10 +64,8 @@ pub enum DslIr<C: Config> {
     SubEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Subtracts an extension field element and a field element (ext = ext - felt).
     SubEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
-    /// Subtracts two modular BigInts over coordinate field.
-    SubSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Subtracts two modular BigInts over scalar field.
-    SubSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Subtract two modular BigInts over some field.
+    ModularSub(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Subtract two 256-bit integers
     Sub256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
@@ -88,10 +86,8 @@ pub enum DslIr<C: Config> {
     MulEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Multiplies an extension field element and a field element (ext = ext * felt).
     MulEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
-    /// Multiplies two modular BigInts over coordinate field.
-    MulSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Multiplies two modular BigInts over scalar field.
-    MulSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Multiply two modular BigInts over some field.
+    ModularMul(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
     /// Multiply two 256-bit integers
     Mul256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
@@ -112,10 +108,8 @@ pub enum DslIr<C: Config> {
     DivEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Divides an extension field element and a field element (ext = ext / felt).
     DivEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
-    /// Subtracts two modular BigInts over coordinate field.
-    DivSecp256k1Coord(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Multiplies two modular BigInts over scalar field.
-    DivSecp256k1Scalar(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
+    /// Divide two modular BigInts over some field.
+    ModularDiv(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Negations.
     /// Negates a variable (var = -var).

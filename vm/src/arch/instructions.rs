@@ -1,19 +1,20 @@
 use afs_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
-static mut OPCODE_INDEX: usize = 0;
-
 pub trait UsizeOpcode {
     fn default_offset() -> usize;
     /// Convert from the discriminant of the enum to the typed enum variant.
     /// Default implementation uses `from_repr`.
     fn from_usize(value: usize) -> Self;
     fn as_usize(&self) -> usize;
-    fn class_index() -> usize;
 
     fn with_default_offset(&self) -> usize {
         self.as_usize() + Self::default_offset()
     }
+}
+
+pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
+    Opcode::default_offset() + opcode.as_usize()
 }
 
 #[derive(
@@ -178,6 +179,56 @@ pub enum U32Opcode {
     AUIPC,
 }
 
-pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
-    Opcode::default_offset() + opcode.as_usize()
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x300]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum AluOpcode {
+    ADD,
+    SUB,
+    XOR,
+    OR,
+    AND,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x305]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum ShiftOpcode {
+    SLL,
+    SRL,
+    SRA,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x310]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum LessThanOpcode {
+    SLT,
+    SLTU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x320]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32LoadStoreOpcode {
+    LOADW,
+    STOREW,
+    STOREH,
+    STOREB,
+    LOADB,
+    LOADH,
+    LOADBU,
+    LOADHU,
 }

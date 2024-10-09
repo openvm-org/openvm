@@ -24,7 +24,7 @@ ax-sdk = { path = "../sdk", default-features = false, optional = true }
 
 toml = "0.8.14"
 enum-utils = "0.1.1"
-strum = { version = "0.26.3", features = ["derive"] }
+strum = { workspace = true }
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 num-bigint-dig = "0.8.4"
 num-traits = "0.2.19"

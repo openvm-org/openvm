@@ -1,28 +1,37 @@
 use std::ops::Range;
 
 use derive_new::new;
+use num_bigint_dig::BigUint;
 use serde::{Deserialize, Serialize};
-use strum::EnumCount;
+use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 use crate::{
     arch::{instructions::*, ExecutorName},
     core::CoreOptions,
+    modular_addsub::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
 };
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
 pub const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 7; // the sbox degree used for Poseidon2
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum PersistenceType {
+    Persistent,
+    Volatile,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, new)]
 pub struct MemoryConfig {
     pub addr_space_max_bits: usize,
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
     pub decomp: usize,
+    pub persistence_type: PersistenceType,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 29, 29, 16)
+        Self::new(29, 29, 29, 15, PersistenceType::Volatile)
     }
 }
 
@@ -63,15 +72,35 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             2,
             ModularArithmeticOpcode::default_offset(),
         ),
+        ExecutorName::ArithmeticLogicUnitRv32 => (
+            AluOpcode::default_offset(),
+            AluOpcode::COUNT,
+            AluOpcode::default_offset(),
+        ),
+        ExecutorName::LoadStoreRv32 => (
+            Rv32LoadStoreOpcode::default_offset(),
+            Rv32LoadStoreOpcode::COUNT,
+            Rv32LoadStoreOpcode::default_offset(),
+        ),
         ExecutorName::ArithmeticLogicUnit256 => (
             U256Opcode::default_offset(),
             8,
             U256Opcode::default_offset(),
         ),
+        ExecutorName::LessThanRv32 => (
+            LessThanOpcode::default_offset(),
+            LessThanOpcode::COUNT,
+            LessThanOpcode::default_offset(),
+        ),
         ExecutorName::U256Multiplication => (
             U256Opcode::default_offset() + 11,
             1,
             U256Opcode::default_offset(),
+        ),
+        ExecutorName::ShiftRv32 => (
+            ShiftOpcode::default_offset(),
+            ShiftOpcode::COUNT,
+            ShiftOpcode::default_offset(),
         ),
         ExecutorName::Shift256 => (
             U256Opcode::default_offset() + 8,
@@ -102,9 +131,14 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmConfig {
+    // Each executor handles the given range of opcode as usize (absolute, with offset).
+    // Offset is the start opcode (usize) of the Opcode class, and it's needed because some Opcode classes are handled by different executors.
+    // For example, U256Opcode class has some opcodes handled by ArithmeticLogicUnit256, and some by U256Multiplication.
+    // And for U256Multiplication executor to verify the opcode it gets from program, it needs to know the offset of the U256Opcode class.
     pub executors: Vec<(Range<usize>, ExecutorName, usize)>, // (range of opcodes, who executes, offset)
+    pub modular_executors: Vec<(Range<usize>, ExecutorName, usize, BigUint)>, // (range of opcodes, who executes, offset, modulus)
 
-    pub poseidon2_max_constraint_degree: Option<usize>,
+    pub poseidon2_max_constraint_degree: usize,
     pub memory_config: MemoryConfig,
     pub num_public_values: usize,
     pub max_segment_len: usize,
@@ -116,14 +150,16 @@ pub struct VmConfig {
 
 impl VmConfig {
     pub fn from_parameters(
-        poseidon2_max_constraint_degree: Option<usize>,
+        poseidon2_max_constraint_degree: usize,
         memory_config: MemoryConfig,
         num_public_values: usize,
         max_segment_len: usize,
         collect_metrics: bool,
         bigint_limb_size: usize,
+        // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
+        enabled_modulus: Vec<BigUint>,
     ) -> Self {
-        VmConfig {
+        let config = VmConfig {
             executors: Vec::new(),
             poseidon2_max_constraint_degree,
             memory_config,
@@ -131,7 +167,9 @@ impl VmConfig {
             max_segment_len,
             collect_metrics,
             bigint_limb_size,
-        }
+            modular_executors: Vec::new(),
+        };
+        config.add_modular_support(enabled_modulus)
     }
 
     pub fn add_executor(
@@ -140,6 +178,11 @@ impl VmConfig {
         executor: ExecutorName,
         offset: usize,
     ) -> Self {
+        // Some executors need to be handled in a special way, and cannot be added like other executors.
+        let not_allowed_executors = [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
+        if not_allowed_executors.contains(&executor) {
+            panic!("Cannot add executor for {:?}", executor);
+        }
         self.executors.push((range, executor, offset));
         self
     }
@@ -147,6 +190,46 @@ impl VmConfig {
     pub fn add_default_executor(self, executor: ExecutorName) -> Self {
         let (range, offset) = default_executor_range(executor);
         self.add_executor(range, executor, offset)
+    }
+
+    // I think adding "opcode class" support is better than adding "executor".
+    // The api should be saying: I want to be able to do this set of operations, and doesn't care about what executor is doing it.
+    pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
+        let mut res = self;
+        let num_ops_per_modulus = ModularArithmeticOpcode::COUNT;
+        for (i, modulus) in enabled_modulus.iter().enumerate() {
+            let shift = i * num_ops_per_modulus;
+            res = res.add_modular_prime(modulus, shift);
+        }
+        res
+    }
+
+    pub fn add_canonical_modulus(self) -> Self {
+        let primes = Modulus::all().iter().map(|m| m.prime()).collect();
+        self.add_modular_support(primes)
+    }
+
+    pub fn add_modular_prime(self, prime: &BigUint, shift: usize) -> Self {
+        let add_sub_range = default_executor_range(ExecutorName::ModularAddSub);
+        let mult_div_range = default_executor_range(ExecutorName::ModularMultDiv);
+        let mut res = self;
+        res.modular_executors.push((
+            shift_range(&add_sub_range.0, shift),
+            ExecutorName::ModularAddSub,
+            add_sub_range.1 + shift,
+            prime.clone(),
+        ));
+        res.modular_executors.push((
+            shift_range(&mult_div_range.0, shift),
+            ExecutorName::ModularMultDiv,
+            mult_div_range.1 + shift,
+            prime.clone(),
+        ));
+        res
+    }
+
+    pub fn add_ecc_support(self) -> Self {
+        todo!()
     }
 }
 
@@ -163,12 +246,13 @@ impl Default for VmConfig {
 impl VmConfig {
     pub fn default_with_no_executors() -> Self {
         Self::from_parameters(
-            Some(DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE),
+            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
             Default::default(),
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
             8,
+            vec![],
         )
     }
 
@@ -180,19 +264,20 @@ impl VmConfig {
 
     pub fn core() -> Self {
         Self::from_parameters(
-            None,
+            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
             Default::default(),
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
             8,
+            vec![],
         )
         .add_default_executor(ExecutorName::Core)
     }
 
     pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
         VmConfig {
-            poseidon2_max_constraint_degree: Some(poseidon2_max_constraint_degree),
+            poseidon2_max_constraint_degree,
             num_public_values: 4,
             ..VmConfig::default()
         }
@@ -207,4 +292,30 @@ impl VmConfig {
             .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
         Ok(config)
     }
+}
+
+#[derive(EnumCount, EnumIter, FromRepr, Clone, Debug)]
+#[repr(usize)]
+pub enum Modulus {
+    Secp256k1Coord = 0,
+    Secp256k1Scalar = 1,
+}
+
+impl Modulus {
+    pub fn prime(&self) -> BigUint {
+        match self {
+            Modulus::Secp256k1Coord => SECP256K1_COORD_PRIME.clone(),
+            Modulus::Secp256k1Scalar => SECP256K1_SCALAR_PRIME.clone(),
+        }
+    }
+
+    pub fn all() -> Vec<Self> {
+        Self::iter().collect()
+    }
+}
+
+fn shift_range(r: &Range<usize>, x: usize) -> Range<usize> {
+    let start = r.start + x;
+    let end = r.end + x;
+    start..end
 }
