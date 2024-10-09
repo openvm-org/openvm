@@ -1,7 +1,7 @@
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::fib_air::columns::NUM_FIBONACCI_COLS;
+use super::columns::NUM_FIBONACCI_COLS;
 
 /// n is number of rows in the trace
 pub fn generate_trace_rows<F: PrimeField32>(a: u32, b: u32, n: usize) -> RowMajorMatrix<F> {

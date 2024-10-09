@@ -568,6 +568,7 @@ dependencies = [
 name = "ax-sdk"
 version = "0.1.0"
 dependencies = [
+ "afs-derive",
  "afs-stark-backend",
  "derive_more",
  "ff 0.13.0",

@@ -12,7 +12,7 @@ use afs_stark_backend::{
     },
     verifier::{v2::MultiTraceStarkVerifierV2, VerificationError},
 };
-use ax_sdk::interaction::dummy_interaction_air::DummyInteractionAir;
+use ax_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;

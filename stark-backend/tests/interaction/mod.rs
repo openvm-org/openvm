@@ -1,5 +1,7 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use ax_sdk::interaction::{dummy_interaction_air::DummyInteractionAir, verify_interactions};
+use ax_sdk::dummy_airs::interaction::{
+    dummy_interaction_air::DummyInteractionAir, verify_interactions,
+};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
