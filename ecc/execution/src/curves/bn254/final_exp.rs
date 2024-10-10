@@ -34,7 +34,32 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
 
         u.felt_print("u output");
 
-        assert_eq!(cmp, u)
+        // ------ native exponentiation ------
+        let q = BigInt::from_str_radix(
+            "21888242871839275222246405745257275088696311157297823662689037894645226208583",
+            10,
+        )
+        .unwrap();
+        let six_x_plus_2: BigInt = BigInt::from_str_radix("29793968203157093288", 10).unwrap();
+        let q_pows = q.clone() + q.clone().pow(2) + q.pow(3);
+        let lambda = six_x_plus_2.clone() + q_pows.clone();
+
+        let c_to_six = c.exp(six_x_plus_2);
+        let c_to_q = c.exp(q_pows);
+        c_mul.felt_print("c_mul");
+        c_to_q.felt_print("c_to_q");
+
+        let c_lambda = c.exp(lambda);
+        let res = f.invert().unwrap() * c_lambda * u;
+        res.felt_print("res");
+        f.felt_print("f");
+
+        let res2 = f * c_lambda.invert().unwrap() * u.invert().unwrap();
+        res2.felt_print("res2");
+
+        // ------ end ------
+
+        assert_eq!(res, Fq12::ONE)
     }
 
     fn final_exp_hint(&self, f: Fq12) -> (Fq12, Fq12) {
