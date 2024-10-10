@@ -235,7 +235,6 @@ mod tests {
         test_fp2(Fp2::div, |x, y| x * y.invert().unwrap(), false);
     }
 
-    #[ignore = "This currently fails, need to fix."]
     #[test]
     fn test_fp2_div2() {
         let prime = bn254_prime();

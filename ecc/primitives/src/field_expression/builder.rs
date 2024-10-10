@@ -224,10 +224,15 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
             vars[i] = r.clone();
             vars_bigint[i] = BigInt::from_biguint(Sign::Plus, r);
             vars_overflow[i] = to_overflow_int(&vars_bigint[i], self.num_limbs, self.limb_bits);
+        }
+        // We need to have all variables computed first because, e.g. constraints[2] might need variables[3].
+        for i in 0..self.constraints.len() {
             // expr = q * p
             let expr_bigint =
                 self.constraints[i].evaluate_bigint(&input_bigint, &vars_bigint, &flags);
-            let q = expr_bigint / &self.prime_bigint;
+            let q = &expr_bigint / &self.prime_bigint;
+            // If this is not true then the evaluated constraint is not divisible by p.
+            debug_assert_eq!(expr_bigint, &q * &self.prime_bigint);
             let q_limbs = big_int_to_num_limbs(&q, limb_bits, self.q_limbs[i]);
             assert_eq!(q_limbs.len(), self.q_limbs[i]); // If this fails, the q_limbs estimate is wrong.
             for &q in q_limbs.iter() {
