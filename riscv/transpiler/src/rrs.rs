@@ -6,7 +6,7 @@ use rrs_lib::{
     process_instruction, InstructionProcessor,
 };
 use stark_vm::{
-    arch::instructions::{CoreOpcode, U256Opcode, UsizeOpcode},
+    arch::instructions::{CoreOpcode, UnimplementedOpcode, UsizeOpcode},
     program::Instruction,
 };
 
@@ -23,151 +23,192 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     type InstructionResult = Instruction<F>;
 
     fn process_add(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::ADD.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::ADD_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_addi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(U256Opcode::ADD.with_default_offset(), &dec_insn)
+        from_i_type(
+            UnimplementedOpcode::ADD_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_sub(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::SUB.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::SUB_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_xor(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::XOR.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::XOR_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_xori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(U256Opcode::XOR.with_default_offset(), &dec_insn)
+        from_i_type(
+            UnimplementedOpcode::XOR_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_or(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::OR.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::OR_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_ori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(U256Opcode::OR.with_default_offset(), &dec_insn)
+        from_i_type(
+            UnimplementedOpcode::OR_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_and(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::AND.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::AND_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_andi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(U256Opcode::AND.with_default_offset(), &dec_insn)
+        from_i_type(
+            UnimplementedOpcode::AND_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_sll(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::SLL.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::SLL_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_slli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        from_i_type_shamt(U256Opcode::SLL.with_default_offset(), &dec_insn)
+        from_i_type_shamt(
+            UnimplementedOpcode::SLL_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_srl(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::SRL.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::SRL_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_srli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        from_i_type_shamt(U256Opcode::SRL.with_default_offset(), &dec_insn)
+        from_i_type_shamt(
+            UnimplementedOpcode::SRL_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_sra(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::SRA.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::SRA_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_srai(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        from_i_type_shamt(U256Opcode::SRA.with_default_offset(), &dec_insn)
+        from_i_type_shamt(
+            UnimplementedOpcode::SRA_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_slt(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::SLT.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::SLT_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_slti(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(U256Opcode::SLT.with_default_offset(), &dec_insn)
+        from_i_type(
+            UnimplementedOpcode::SLT_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_sltu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::LT.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::SLTU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_sltui(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(U256Opcode::LT.with_default_offset(), &dec_insn)
+        from_i_type(
+            UnimplementedOpcode::SLTU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_lb(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("lb({:?})", dec_insn),
-            ..unimp()
-        }
+        from_i_type(
+            UnimplementedOpcode::LOADB_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_lh(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("lh({:?})", dec_insn),
-            ..unimp()
-        }
+        from_i_type(
+            UnimplementedOpcode::LOADH_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_lw(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("lw({:?})", dec_insn),
-            ..unimp()
-        }
+        from_i_type(
+            UnimplementedOpcode::LOADW_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_lbu(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("lbu({:?})", dec_insn),
-            ..unimp()
-        }
+        from_i_type(
+            UnimplementedOpcode::LOADBU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_lhu(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("lhu({:?})", dec_insn),
-            ..unimp()
-        }
+        from_i_type(
+            UnimplementedOpcode::LOADHU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_sb(&mut self, dec_insn: SType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("sb({:?})", dec_insn),
-            ..unimp()
-        }
+        from_s_type(
+            UnimplementedOpcode::STOREB_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_sh(&mut self, dec_insn: SType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("sh({:?})", dec_insn),
-            ..unimp()
-        }
+        from_s_type(
+            UnimplementedOpcode::STOREH_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_sw(&mut self, dec_insn: SType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("sw({:?})", dec_insn),
-            ..unimp()
-        }
+        from_s_type(
+            UnimplementedOpcode::STOREW_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_beq(&mut self, dec_insn: BType) -> Self::InstructionResult {
@@ -179,142 +220,115 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_blt(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("blt({:?})", dec_insn),
-            ..unimp()
-        }
+        from_b_type(
+            UnimplementedOpcode::BLT_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_bge(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("bge({:?})", dec_insn),
-            ..unimp()
-        }
+        from_b_type(
+            UnimplementedOpcode::BGE_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_bltu(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("bltu({:?})", dec_insn),
-            ..unimp()
-        }
+        from_b_type(
+            UnimplementedOpcode::BLTU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_bgeu(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("bgeu({:?})", dec_insn),
-            ..unimp()
-        }
+        from_b_type(
+            UnimplementedOpcode::BGEU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_jal(&mut self, dec_insn: JType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("jal({:?})", dec_insn),
-            ..unimp()
-        }
+        from_j_type(
+            UnimplementedOpcode::JAL_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("jalr({:?})", dec_insn),
-            ..unimp()
-        }
+        from_j_type(
+            UnimplementedOpcode::JALR_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_lui(&mut self, dec_insn: UType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("lui({:?})", dec_insn),
-            ..unimp()
-        }
+        from_u_type(
+            UnimplementedOpcode::LUI_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_auipc(&mut self, dec_insn: UType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("auipc({:?})", dec_insn),
-            ..unimp()
-        }
+        from_u_type(
+            UnimplementedOpcode::AUIPC_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_mul(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(U256Opcode::MUL.with_default_offset(), &dec_insn)
+        from_r_type(
+            UnimplementedOpcode::MUL_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_mulh(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("mulh({:?})", dec_insn),
-            ..unimp()
-        }
+        from_r_type(
+            UnimplementedOpcode::MULH_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_mulhu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("mulhu({:?})", dec_insn),
-            ..unimp()
-        }
+        from_r_type(
+            UnimplementedOpcode::MULHU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_mulhsu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("mulhsu({:?})", dec_insn),
-            ..unimp()
-        }
+        from_r_type(
+            UnimplementedOpcode::MULHSU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_div(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("div({:?})", dec_insn),
-            ..unimp()
-        }
+        from_r_type(
+            UnimplementedOpcode::DIV_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_divu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("divu({:?})", dec_insn),
-            ..unimp()
-        }
+        from_r_type(
+            UnimplementedOpcode::DIVU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_rem(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("rem({:?})", dec_insn),
-            ..unimp()
-        }
+        from_r_type(
+            UnimplementedOpcode::REM_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_remu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        let _ = dec_insn;
-        // unimplemented!()
-        Instruction {
-            debug: format!("remu({:?})", dec_insn),
-            ..unimp()
-        }
+        from_r_type(
+            UnimplementedOpcode::REMU_RV32.with_default_offset(),
+            &dec_insn,
+        )
     }
 
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {

@@ -1,5 +1,5 @@
 use p3_field::PrimeField32;
-use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, RType};
+use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, RType, SType};
 use stark_vm::{
     arch::instructions::CoreOpcode,
     program::{isize_to_field, Instruction},
@@ -56,18 +56,22 @@ pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) 
     )
 }
 
-// /// Create a new [`Instruction`] from an S-type instruction.
-// #[must_use]
-// pub const fn from_s_type(opcode: Opcode, dec_insn: &SType) -> Self {
-//     Self::new(
-//         opcode,
-//         dec_insn.rs2 as u32,
-//         dec_insn.rs1 as u32,
-//         dec_insn.imm as u32,
-//         false,
-//         true,
-//     )
-// }
+/// Create a new [`Instruction`] from an S-type instruction.
+pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruction<F> {
+    Instruction::new(
+        opcode,
+        F::from_canonical_u32(dec_insn.rs2 as u32),
+        F::from_canonical_u32(dec_insn.rs1 as u32),
+        F::from_canonical_u32(dec_insn.imm as u32),
+        F::zero(),
+        F::one(),
+        F::zero(),
+        F::zero(),
+        String::new(),
+    )
+}
+
+// TODO: implement J and U, prove or disprove that the address spaces are currently correct
 
 /// Create a new [`Instruction`] from a B-type instruction.
 pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruction<F> {
