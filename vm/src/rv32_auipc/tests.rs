@@ -66,7 +66,7 @@ fn simple_execute_roundtrip_test() {
 }
 
 #[test]
-fn solve_auipc_test() {
+fn solve_auipc_sanity_test() {
     let opcode = AUIPC;
     let initial_pc = 234567890;
     let imm = 11302451;

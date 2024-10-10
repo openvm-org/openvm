@@ -84,7 +84,7 @@ fn simple_execute_roundtrip_test() {
 }
 
 #[test]
-fn solve_jal_test() {
+fn solve_jal_sanity_test() {
     let opcode = JAL;
     let initial_pc = 28120;
     let imm = -2048;
@@ -94,7 +94,7 @@ fn solve_jal_test() {
 }
 
 #[test]
-fn solve_lui_test() {
+fn solve_lui_sanity_test() {
     let opcode = LUI;
     let initial_pc = 456789120;
     let imm = 853679;
