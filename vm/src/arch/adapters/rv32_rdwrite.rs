@@ -17,23 +17,17 @@ use crate::{
 // This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
 #[derive(Debug, Clone, Default)]
 pub struct Rv32RdWriteAdapter<F: Field> {
-    _marker: std::marker::PhantomData<F>,
+    _marker: PhantomData<F>,
     pub air: Rv32RdWriteAdapterAir,
 }
 
 impl<F: PrimeField32> Rv32RdWriteAdapter<F> {
     pub fn new() -> Self {
         Self {
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
             air: Rv32RdWriteAdapterAir {},
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct Rv32RdWriteReadRecord<F: Field> {
-    // this adapter doesn't read anything
-    pub _marker: std::marker::PhantomData<F>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,12 +37,12 @@ pub struct Rv32RdWriteWriteRecord<F: Field> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32RdWriteProcessedInstruction<T> {
-    pub _marker: std::marker::PhantomData<T>,
+    pub _marker: PhantomData<T>,
 }
 
 pub struct Rv32RdWriteAdapterInterface<T>(PhantomData<T>);
 impl<T: AbstractField> MachineAdapterInterface<T> for Rv32RdWriteAdapterInterface<T> {
-    type Reads = std::marker::PhantomData<T>;
+    type Reads = ();
     type Writes = [T; RV32_REGISTER_NUM_LANES];
     type ProcessedInstruction = Rv32RdWriteProcessedInstruction<T>;
 }
@@ -56,7 +50,7 @@ impl<T: AbstractField> MachineAdapterInterface<T> for Rv32RdWriteAdapterInterfac
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Rv32RdWriteAdapterCols<T> {
-    pub _marker: std::marker::PhantomData<T>,
+    pub _marker: PhantomData<T>,
 }
 
 impl<T> Rv32RdWriteAdapterCols<T> {
@@ -81,7 +75,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32RdWriteAdapterAir {
 }
 
 impl<F: PrimeField32> MachineAdapter<F> for Rv32RdWriteAdapter<F> {
-    type ReadRecord = Rv32RdWriteReadRecord<F>;
+    type ReadRecord = ();
     type WriteRecord = Rv32RdWriteWriteRecord<F>;
     type Air = Rv32RdWriteAdapterAir;
     type Cols<T> = Rv32RdWriteAdapterCols<T>;
@@ -98,12 +92,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32RdWriteAdapter<F> {
         let d = instruction.d;
         debug_assert_eq!(d.as_canonical_u32(), 1);
 
-        Ok((
-            std::marker::PhantomData,
-            Self::ReadRecord {
-                _marker: std::marker::PhantomData,
-            },
-        ))
+        Ok(((), ()))
     }
 
     fn postprocess(

@@ -82,3 +82,23 @@ fn simple_execute_roundtrip_test() {
         set_and_execute(&mut tester, &mut chip, &mut rng, LUI);
     }
 }
+
+#[test]
+fn solve_jal_test() {
+    let opcode = JAL;
+    let initial_pc = 28120;
+    let imm = -2048;
+    let (next_pc, rd_data) = solve_jal_lui(opcode, initial_pc, imm);
+    assert_eq!(next_pc, 26072);
+    assert_eq!(rd_data, [220, 109, 0, 0]);
+}
+
+#[test]
+fn solve_lui_test() {
+    let opcode = LUI;
+    let initial_pc = 456789120;
+    let imm = 853679;
+    let (next_pc, rd_data) = solve_jal_lui(opcode, initial_pc, imm);
+    assert_eq!(next_pc, 456789124);
+    assert_eq!(rd_data, [0, 240, 106, 208]);
+}

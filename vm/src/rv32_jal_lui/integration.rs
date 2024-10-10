@@ -1,4 +1,4 @@
-use std::{array, mem::size_of};
+use std::{array, marker::PhantomData, mem::size_of};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
@@ -18,7 +18,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Rv32JalLuiCols<T> {
-    pub _marker: std::marker::PhantomData<T>,
+    pub _marker: PhantomData<T>,
 }
 
 impl<T> Rv32JalLuiCols<T> {
@@ -29,7 +29,7 @@ impl<T> Rv32JalLuiCols<T> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32JalLuiAir<F: Field> {
-    pub _marker: std::marker::PhantomData<F>,
+    pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
@@ -48,7 +48,7 @@ impl<F: Field> Rv32JalLuiIntegration<F> {
     pub fn new(offset: usize) -> Self {
         Self {
             air: Rv32JalLuiAir::<F> {
-                _marker: std::marker::PhantomData,
+                _marker: PhantomData,
                 offset,
             },
         }
@@ -59,7 +59,7 @@ impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32Jal
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
-    type Record = std::marker::PhantomData<F>;
+    type Record = PhantomData<F>;
     type Air = Rv32JalLuiAir<F>;
     type Cols<T> = Rv32JalLuiCols<T>;
 
@@ -89,7 +89,7 @@ where
             writes: rd_data.into(),
         };
 
-        Ok((output, std::marker::PhantomData))
+        Ok((output, PhantomData))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
