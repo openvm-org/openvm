@@ -17,12 +17,15 @@ use crate::{
         trace::{ProverTraceData, TraceCommitter},
         types::Commitments,
         v2::{
+            metrics::trace_metrics,
             trace::{commit_permutation_traces, commit_quotient_traces},
             types::{AirProofData, ProofInput, ProofV2},
         },
     },
 };
 
+/// Metrics about trace and other statistics related to prover performance
+pub mod metrics;
 mod trace;
 pub mod types;
 
@@ -327,9 +330,9 @@ where
         })
         .collect_vec();
 
-    // tracing::info!("{}", trace_metrics(&pk.per_air, &degrees));
-    // #[cfg(feature = "bench-metrics")]
-    // trace_metrics(&pk.per_air, &degrees).emit();
+    tracing::info!("{}", trace_metrics(&mpk.per_air, &degrees));
+    #[cfg(feature = "bench-metrics")]
+    trace_metrics(&mpk.per_air, &degrees).emit();
 
     ProofV2 {
         commitments,

@@ -53,7 +53,7 @@ csv = "1.3.0"
 eyre = "0.6.12"
 
 [features]
-default = []
+default = ["bench-metrics"]
 parallel = ["p3-maybe-rayon/parallel", "dep:rayon"]
 jemalloc = ["dep:tikv-jemallocator"]
 jemalloc-prof = ["jemalloc", "tikv-jemallocator?/profiling"]
