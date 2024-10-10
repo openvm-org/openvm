@@ -60,7 +60,7 @@ impl<F: Field> MachineChip<F> for ProgramTester<F> {
             *(row[..width - 1]).borrow_mut() = *record;
             row[width - 1] = F::one();
         }
-        RowMajorMatrix::new(values, self.trace_width())
+        RowMajorMatrix::new(values, width)
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>

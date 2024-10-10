@@ -162,6 +162,8 @@ impl MachineChipTester {
 
         for (public_value, air, trace) in izip!(public_values, airs, traces) {
             if trace.height() > 0 {
+                dbg!(air.name());
+                dbg!(trace.width);
                 self.air_infos
                     .push(AirInfo::simple(air, trace, public_value));
             }

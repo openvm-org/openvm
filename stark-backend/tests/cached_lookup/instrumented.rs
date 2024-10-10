@@ -34,7 +34,7 @@ fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumenta
 
     engine.clear_instruments();
     let mut challenger = engine.new_challenger();
-    let verifier = engine.verifier();
+    let verifier = engine.verifier_v1();
     // Do not check cumulative sum
     verifier.verify_raps(&mut challenger, &vk, &proof).unwrap();
 

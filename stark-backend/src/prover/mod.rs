@@ -5,7 +5,7 @@ use metrics::trace_metrics;
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractExtensionField;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
@@ -22,7 +22,7 @@ use crate::{
     config::{Com, PcsProof, PcsProverData},
     interaction::trace::generate_permutation_trace,
     keygen::types::MultiStarkProvingKey,
-    prover::trace::SingleRapCommittedTraceView,
+    prover::trace::{ProverTraceData, SingleRapCommittedTraceView},
     rap::AnyRap,
 };
 
@@ -35,6 +35,7 @@ pub mod quotient;
 /// Trace commitment computation
 pub mod trace;
 pub mod types;
+pub mod v2;
 
 thread_local! {
    pub static USE_DEBUG_BUILDER: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
@@ -203,23 +204,21 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         // Commit to permutation traces: this means only 1 challenge round right now
         // One shared commit for all permutation traces
         let perm_pcs_data = tracing::info_span!("commit to permutation traces").in_scope(|| {
-            let flattened_traces_with_domains: Vec<_> = perm_traces
-                .into_iter()
-                .zip_eq(&main_trace_data.air_traces)
-                .flat_map(|(perm_trace, data)| {
-                    perm_trace.map(|trace| (data.domain, trace.flatten_to_base()))
-                })
-                .collect();
-            // Only commit if there are permutation traces
-            if !flattened_traces_with_domains.is_empty() {
-                let (commit, data) = pcs.commit(flattened_traces_with_domains);
-                // Challenger observes commitment
-                challenger.observe(commit.clone());
-                Some((commit, data))
-            } else {
-                None
-            }
+            commit_perm_traces::<SC>(
+                pcs,
+                perm_traces,
+                &main_trace_data
+                    .air_traces
+                    .iter()
+                    .map(|t| t.domain)
+                    .collect_vec(),
+            )
         });
+        // Challenger observes commitment if exists
+        if let Some(data) = &perm_pcs_data {
+            challenger.observe(data.commit.clone());
+        }
+
         // Either 0 or 1 after_challenge commits, depending on if there are any permutation traces
         let after_challenge_pcs_data: Vec<_> = perm_pcs_data.into_iter().collect();
         let main_pcs_data = &main_trace_data.pcs_data;
@@ -253,7 +252,10 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
 
             // There will be either 0 or 1 after_challenge traces
             let after_challenge = if let Some((cumulative_sum, index)) = cumulative_sum_and_index {
-                let matrix = CommittedSingleMatrixView::new(&after_challenge_pcs_data[0].1, index);
+                let matrix = CommittedSingleMatrixView::new(
+                    after_challenge_pcs_data[0].data.as_ref(),
+                    index,
+                );
                 let exposed_values = vec![cumulative_sum];
                 vec![(matrix, exposed_values)]
             } else {
@@ -270,7 +272,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         .unzip();
         // === END of logic specific to Interactions/permutations, we can now deal with general RAP ===
 
-        self.prove_raps_with_committed_traces(
+        Self::prove_raps_with_committed_traces(
+            pcs,
             challenger,
             pk,
             raps,
@@ -281,7 +284,6 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             public_values,
         )
     }
-
     /// Proves general RAPs after all traces have been committed.
     /// Soundness depends on `challenger` having already observed
     /// public values, exposed values after challenge, and all
@@ -296,13 +298,13 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
     #[allow(clippy::too_many_arguments)]
     #[instrument(level = "info", skip_all)]
     pub fn prove_raps_with_committed_traces<'a>(
-        &self,
+        pcs: &SC::Pcs,
         challenger: &mut SC::Challenger,
         pk: &'a MultiStarkProvingKey<SC>,
         raps: Vec<&'a dyn AnyRap<SC>>,
         trace_views: Vec<SingleRapCommittedTraceView<'a, SC>>,
         main_pcs_data: &[(Com<SC>, &PcsProverData<SC>)],
-        after_challenge_pcs_data: &[(Com<SC>, PcsProverData<SC>)],
+        after_challenge_pcs_data: &[ProverTraceData<SC>],
         challenges: &[Vec<SC::Challenge>],
         public_values: &'a [Vec<Val<SC>>],
     ) -> Proof<SC>
@@ -314,10 +316,9 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        let pcs = self.config.pcs();
         let after_challenge_commitments: Vec<_> = after_challenge_pcs_data
             .iter()
-            .map(|(commit, _)| commit.clone())
+            .map(|data| data.commit.clone())
             .collect();
 
         // Generate `alpha` challenge
@@ -328,14 +329,11 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .iter()
             .map(|view| view.domain.size())
             .collect_vec();
-        let quotient_degrees = pk
-            .per_air
-            .iter()
-            .map(|pk| pk.vk.quotient_degree)
-            .collect_vec();
+        let qvks = pk.get_quotient_vk_data_per_air();
+        let quotient_degrees = qvks.iter().map(|qvk| qvk.quotient_degree).collect_vec();
         let quotient_committer = QuotientCommitter::new(pcs, challenges, alpha);
         let quotient_values =
-            quotient_committer.quotient_values(raps, pk, trace_views.clone(), public_values);
+            quotient_committer.quotient_values(raps, &qvks, &trace_views, public_values);
         // Commit to quotient polynomias. One shared commit for all quotient polynomials
         let quotient_data = quotient_committer.commit(quotient_values);
 
@@ -383,12 +381,12 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         let after_challenge_data: Vec<_> = after_challenge_pcs_data
             .iter()
             .enumerate()
-            .map(|(round, (_, data))| {
+            .map(|(round, data)| {
                 let domains = trace_views
                     .iter()
                     .flat_map(|view| (view.after_challenge.len() > round).then_some(view.domain))
                     .collect_vec();
-                (data, domains)
+                (data.data.as_ref(), domains)
             })
             .collect();
 
@@ -422,5 +420,27 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             exposed_values_after_challenge,
             public_values: public_values.to_vec(),
         }
+    }
+}
+
+fn commit_perm_traces<SC: StarkGenericConfig>(
+    pcs: &SC::Pcs,
+    perm_traces: Vec<Option<RowMajorMatrix<SC::Challenge>>>,
+    domain_per_air: &[Domain<SC>],
+) -> Option<ProverTraceData<SC>> {
+    let flattened_traces_with_domains: Vec<_> = perm_traces
+        .into_iter()
+        .zip_eq(domain_per_air)
+        .flat_map(|(perm_trace, domain)| perm_trace.map(|trace| (*domain, trace.flatten_to_base())))
+        .collect();
+    // Only commit if there are permutation traces
+    if !flattened_traces_with_domains.is_empty() {
+        let (commit, data) = pcs.commit(flattened_traces_with_domains);
+        Some(ProverTraceData {
+            commit,
+            data: data.into(),
+        })
+    } else {
+        None
     }
 }

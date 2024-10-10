@@ -9,31 +9,30 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use super::columns::{RangeTupleCols, RangeTuplePreprocessedCols, NUM_RANGE_TUPLE_COLS};
 use crate::range_tuple::bus::RangeTupleCheckerBus;
 
-#[derive(Clone, Default, Debug)]
-pub struct RangeTupleCheckerAir {
-    pub bus: RangeTupleCheckerBus,
+#[derive(Clone, Copy, Debug)]
+pub struct RangeTupleCheckerAir<const N: usize> {
+    pub bus: RangeTupleCheckerBus<N>,
 }
 
-impl RangeTupleCheckerAir {
+impl<const N: usize> RangeTupleCheckerAir<N> {
     pub fn height(&self) -> u32 {
         self.bus.sizes.iter().product()
     }
 }
+impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for RangeTupleCheckerAir<N> {}
+impl<F: Field, const N: usize> PartitionedBaseAir<F> for RangeTupleCheckerAir<N> {}
 
-impl<F: Field> BaseAirWithPublicValues<F> for RangeTupleCheckerAir {}
-impl<F: Field> PartitionedBaseAir<F> for RangeTupleCheckerAir {}
-impl<F: Field> BaseAir<F> for RangeTupleCheckerAir {
+impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
     fn width(&self) -> usize {
         NUM_RANGE_TUPLE_COLS
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let mut unrolled_matrix =
-            Vec::with_capacity((self.height() as usize) * self.bus.sizes.len());
-        let mut row = vec![0u32; self.bus.sizes.len()];
+        let mut unrolled_matrix = Vec::with_capacity((self.height() as usize) * N);
+        let mut row = [0u32; N];
         for _ in 0..self.height() {
-            unrolled_matrix.extend(row.clone());
-            for i in (0..self.bus.sizes.len()).rev() {
+            unrolled_matrix.extend(row);
+            for i in (0..N).rev() {
                 if row[i] < self.bus.sizes[i] - 1 {
                     row[i] += 1;
                     break;
@@ -46,12 +45,12 @@ impl<F: Field> BaseAir<F> for RangeTupleCheckerAir {
                 .iter()
                 .map(|&v| F::from_canonical_u32(v))
                 .collect(),
-            self.bus.sizes.len(),
+            N,
         ))
     }
 }
 
-impl<AB: InteractionBuilder + PairBuilder> Air<AB> for RangeTupleCheckerAir {
+impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupleCheckerAir<N> {
     fn eval(&self, builder: &mut AB) {
         let preprocessed = builder.preprocessed();
         let prep_local = preprocessed.row_slice(0);

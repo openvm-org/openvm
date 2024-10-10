@@ -7,7 +7,7 @@ pub mod sub;
 pub mod symbolic;
 pub mod verifier;
 
-type ViewPair<'a, T> = VerticalPair<RowMajorMatrixView<'a, T>, RowMajorMatrixView<'a, T>>;
+pub type ViewPair<'a, T> = VerticalPair<RowMajorMatrixView<'a, T>, RowMajorMatrixView<'a, T>>;
 
 /// AIR builder that supports main trace matrix which is partitioned
 /// into sub-matrices which belong to different commitments.

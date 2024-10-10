@@ -88,7 +88,7 @@ fn field_extension_air_test() {
             Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
-        tester.air_infos[1].common_trace = original_trace;
+        tester.air_infos[2].common_trace = original_trace;
     }
 }
 

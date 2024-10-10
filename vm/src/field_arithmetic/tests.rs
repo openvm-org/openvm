@@ -1,4 +1,6 @@
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{
+    prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError,
+};
 use ax_sdk::{
     any_rap_box_vec,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing},
@@ -97,10 +99,7 @@ fn field_arithmetic_air_test() {
 
     tester.simple_test().expect("Verification failed");
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-
+    disable_debug_builder();
     // negative test pranking each IO value
     for height in 0..num_ops {
         // TODO: better way to modify existing traces in tester
@@ -118,7 +117,7 @@ fn field_arithmetic_air_test() {
             "Expected constraint to fail"
         );
 
-        tester.air_infos[1].common_trace = old_trace;
+        tester.air_infos[2].common_trace = old_trace;
     }
 }
 

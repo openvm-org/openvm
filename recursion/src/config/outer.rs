@@ -1,5 +1,5 @@
 use afs_compiler::ir::Config;
-use afs_stark_backend::keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey};
+use afs_stark_backend::keygen::v2::types::{MultiStarkVerifyingKeyV2, StarkVerifyingKeyV2};
 use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254};
@@ -16,10 +16,8 @@ use p3_symmetric::{MultiField32PaddingFreeSponge, TruncatedPermutation};
 
 use crate::{
     digest::DigestVal,
-    types::{
-        MultiStarkVerificationAdvice, StarkVerificationAdvice,
-        VerifierSinglePreprocessedDataInProgram,
-    },
+    types::VerifierSinglePreprocessedDataInProgram,
+    v2::types::{MultiStarkVerificationAdviceV2, StarkVerificationAdviceV2},
 };
 
 const WIDTH: usize = 3;
@@ -57,24 +55,23 @@ pub type OuterBatchOpening = BatchOpening<OuterVal, OuterValMmcs>;
 pub type OuterPcsProof =
     TwoAdicFriPcsProof<OuterVal, OuterChallenge, OuterValMmcs, OuterChallengeMmcs>;
 
-pub(crate) fn new_from_outer_vk(
-    vk: StarkVerifyingKey<BabyBearPoseidon2OuterConfig>,
-) -> StarkVerificationAdvice<OuterConfig> {
-    let StarkVerifyingKey {
+pub(crate) fn new_from_outer_vkv2(
+    vk: StarkVerifyingKeyV2<BabyBearPoseidon2OuterConfig>,
+) -> StarkVerificationAdviceV2<OuterConfig> {
+    let StarkVerifyingKeyV2 {
         preprocessed_data,
         params,
-        main_graph,
         quotient_degree,
         symbolic_constraints,
-        ..
     } = vk;
-
-    StarkVerificationAdvice {
-        preprocessed_data: preprocessed_data.map(|data| VerifierSinglePreprocessedDataInProgram {
-            commit: DigestVal::N(data.commit.as_ref().to_vec()),
+    StarkVerificationAdviceV2 {
+        preprocessed_data: preprocessed_data.map(|data| {
+            let commit: [Bn254Fr; DIGEST_WIDTH] = data.commit.into();
+            VerifierSinglePreprocessedDataInProgram {
+                commit: DigestVal::N(commit.to_vec()),
+            }
         }),
         width: params.width,
-        main_graph,
         quotient_degree,
         num_public_values: params.num_public_values,
         num_challenges_to_sample: params.num_challenges_to_sample,
@@ -84,20 +81,17 @@ pub(crate) fn new_from_outer_vk(
 }
 
 /// Create MultiStarkVerificationAdvice for the outer config.
-pub fn new_from_outer_multi_vk(
-    vk: &MultiStarkVerifyingKey<BabyBearPoseidon2OuterConfig>,
-) -> MultiStarkVerificationAdvice<OuterConfig> {
-    let MultiStarkVerifyingKey {
-        per_air,
-        num_main_trace_commitments,
-        main_commit_to_air_graph,
+pub fn new_from_outer_multi_vkv2(
+    vk: &MultiStarkVerifyingKeyV2<BabyBearPoseidon2OuterConfig>,
+) -> MultiStarkVerificationAdviceV2<OuterConfig> {
+    let num_challenges_to_sample = vk.num_challenges_to_sample();
+    let MultiStarkVerifyingKeyV2::<BabyBearPoseidon2OuterConfig> { per_air } = vk;
+    MultiStarkVerificationAdviceV2 {
+        per_air: per_air
+            .clone()
+            .into_iter()
+            .map(new_from_outer_vkv2)
+            .collect(),
         num_challenges_to_sample,
-        ..
-    } = vk;
-    MultiStarkVerificationAdvice {
-        per_air: per_air.clone().into_iter().map(new_from_outer_vk).collect(),
-        num_main_trace_commitments: *num_main_trace_commitments,
-        main_commit_to_air_graph: main_commit_to_air_graph.clone(),
-        num_challenges_to_sample: num_challenges_to_sample.clone(),
     }
 }

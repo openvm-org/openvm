@@ -9,15 +9,17 @@ use tracing::instrument;
 
 use super::error::VerificationError;
 use crate::{
-    air_builders::verifier::{GenericVerifierConstraintFolder, VerifierConstraintFolder},
-    keygen::types::StarkVerifyingKey,
+    air_builders::{
+        symbolic::symbolic_expression::SymbolicExpression,
+        verifier::{GenericVerifierConstraintFolder, VerifierConstraintFolder},
+    },
     prover::opener::AdjacentOpenedValues,
 };
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 pub fn verify_single_rap_constraints<SC>(
-    vk: &StarkVerifyingKey<SC>,
+    constraints: &[SymbolicExpression<Val<SC>>],
     preprocessed_values: Option<&AdjacentOpenedValues<SC::Challenge>>,
     partitioned_main_values: Vec<&AdjacentOpenedValues<SC::Challenge>>,
     after_challenge_values: Vec<&AdjacentOpenedValues<SC::Challenge>>,
@@ -125,7 +127,7 @@ where
         exposed_values_after_challenge,
         _marker: PhantomData,
     };
-    folder.eval_constraints(&vk.symbolic_constraints.constraints);
+    folder.eval_constraints(constraints);
 
     let folded_constraints = folder.accumulator;
     // Finally, check that

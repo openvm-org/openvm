@@ -3,7 +3,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use super::RangeTupleCheckerChip;
 
-impl RangeTupleCheckerChip {
+impl<const N: usize> RangeTupleCheckerChip<N> {
     pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
         let rows = self
             .count

@@ -1,6 +1,6 @@
 use afs_stark_backend::{
     prover::{trace::TraceCommitmentBuilder, USE_DEBUG_BUILDER},
-    verifier::{MultiTraceStarkVerifier, VerificationError},
+    verifier::VerificationError,
 };
 use ax_sdk::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
 use itertools::Itertools;
@@ -32,14 +32,14 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
 
     let air = SumAir(y_width);
 
-    let mut keygen_builder = engine.keygen_builder();
+    let mut keygen_builder = engine.keygen_builder_v1();
     let y_ptr = keygen_builder.add_cached_main_matrix(y_width);
     let x_ptr = keygen_builder.add_main_matrix(1);
     keygen_builder.add_partitioned_air(&air, vec![y_ptr, x_ptr]);
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 
-    let prover = engine.prover();
+    let prover = engine.prover_v1();
     // Must add trace matrices in the same order as above
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     // Demonstrate y is cached
@@ -58,7 +58,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     // Verify the proof:
     // Start from clean challenger
     let mut challenger = engine.new_challenger();
-    let verifier = MultiTraceStarkVerifier::new(prover.config);
+    let verifier = engine.verifier_v1();
     verifier.verify(&mut challenger, &vk, &proof)
 }
 

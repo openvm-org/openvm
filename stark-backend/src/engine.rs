@@ -1,24 +1,34 @@
-use itertools::izip;
 use p3_matrix::dense::DenseMatrix;
+use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::{
-    commit::SingleMatrixCommitPtr,
     config::{Com, PcsProof, PcsProverData},
     keygen::{
-        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+        v2::{
+            types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
+            MultiStarkKeygenBuilderV2,
+        },
         MultiStarkKeygenBuilder,
     },
-    prover::{trace::TraceCommitmentBuilder, types::Proof, MultiTraceStarkProver},
+    parizip,
+    prover::{
+        trace::{TraceCommitmentBuilder, TraceCommitter},
+        v2::{
+            types::{AirProofInput, CommittedTraceData, ProofInput, ProofV2},
+            MultiTraceStarkProverV2,
+        },
+        MultiTraceStarkProver,
+    },
     rap::AnyRap,
     utils::AirInfo,
-    verifier::{MultiTraceStarkVerifier, VerificationError},
+    verifier::{v2::MultiTraceStarkVerifierV2, MultiTraceStarkVerifier, VerificationError},
 };
 
 /// Data for verifying a Stark proof.
 pub struct VerificationData<SC: StarkGenericConfig> {
-    pub vk: MultiStarkVerifyingKey<SC>,
-    pub proof: Proof<SC>,
+    pub vk: MultiStarkVerifyingKeyV2<SC>,
+    pub proof: ProofV2<SC>,
 }
 
 /// Testing engine
@@ -30,7 +40,11 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
     /// them having the same starting state.
     fn new_challenger(&self) -> SC::Challenger;
 
-    fn keygen_builder(&self) -> MultiStarkKeygenBuilder<SC> {
+    fn keygen_builder(&self) -> MultiStarkKeygenBuilderV2<SC> {
+        MultiStarkKeygenBuilderV2::new(self.config())
+    }
+
+    fn keygen_builder_v1(&self) -> MultiStarkKeygenBuilder<SC> {
         MultiStarkKeygenBuilder::new(self.config())
     }
 
@@ -41,11 +55,19 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         TraceCommitmentBuilder::new(self.config().pcs())
     }
 
-    fn prover(&self) -> MultiTraceStarkProver<SC> {
+    fn prover(&self) -> MultiTraceStarkProverV2<SC> {
+        MultiTraceStarkProverV2::new(self.config())
+    }
+
+    fn prover_v1(&self) -> MultiTraceStarkProver<SC> {
         MultiTraceStarkProver::new(self.config())
     }
 
-    fn verifier(&self) -> MultiTraceStarkVerifier<SC> {
+    fn verifier(&self) -> MultiTraceStarkVerifierV2<SC> {
+        MultiTraceStarkVerifierV2::new(self.config())
+    }
+
+    fn verifier_v1(&self) -> MultiTraceStarkVerifier<SC> {
         MultiTraceStarkVerifier::new(self.config())
     }
 
@@ -84,47 +106,37 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         PcsProof<SC>: Send + Sync,
     {
         let mut keygen_builder = self.keygen_builder();
-        self.set_up_keygen_builder(&mut keygen_builder, air_infos);
+        let air_ids = self.set_up_keygen_builder(&mut keygen_builder, air_infos);
         let pk = keygen_builder.generate_pk();
-        let vk = pk.vk();
-        let proof = self.prove(&pk, air_infos);
+        let vk = pk.get_vk();
+        let proof = self.prove(&pk, air_infos, air_ids);
         self.verify(&vk, &proof)?;
         Ok(VerificationData { vk, proof })
     }
 
+    /// Add AIRs and get AIR IDs
     fn set_up_keygen_builder<'a>(
         &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
+        keygen_builder: &mut MultiStarkKeygenBuilderV2<'a, SC>,
         air_infos: &'a [AirInfo<SC>],
-    ) {
-        for air_info in air_infos {
-            // Note: we count the common main trace always even when its width is 0
-            assert_eq!(
-                air_info.air.cached_main_widths().len(),
-                air_info.cached_traces.len()
-            );
-        }
-
-        let mut trace_ptrs: Vec<Vec<SingleMatrixCommitPtr>> = vec![vec![]; air_infos.len()];
-        // First, create pointers for cached traces
-        for (air_info, air_trace_ptrs) in izip!(air_infos, trace_ptrs.iter_mut()) {
-            let cached_trace_widths = air_info.air.cached_main_widths();
-            for width in cached_trace_widths {
-                air_trace_ptrs.push(keygen_builder.add_cached_main_matrix(width));
-            }
-        }
-        // Second, create pointer for common traces
-        for (air_info, air_trace_ptrs) in izip!(air_infos, trace_ptrs.iter_mut()) {
-            let common_trace_width = air_info.air.common_main_width();
-            air_trace_ptrs.push(keygen_builder.add_main_matrix(common_trace_width));
-        }
-        // Third, register all AIRs using the trace pointers
-        for (air_info, air_trace_ptrs) in izip!(air_infos, trace_ptrs) {
-            keygen_builder.add_partitioned_air(air_info.air.as_ref(), air_trace_ptrs);
-        }
+    ) -> Vec<usize> {
+        air_infos
+            .iter()
+            .map(|air_info| {
+                let air = &air_info.air;
+                assert_eq!(air_info.cached_traces.len(), air.cached_main_widths().len());
+                assert_eq!(air_info.common_trace.width, air.common_main_width());
+                keygen_builder.add_air(air.as_ref())
+            })
+            .collect()
     }
 
-    fn prove(&self, pk: &MultiStarkProvingKey<SC>, air_infos: &[AirInfo<SC>]) -> Proof<SC>
+    fn prove(
+        &self,
+        pk: &MultiStarkProvingKeyV2<SC>,
+        air_infos: &[AirInfo<SC>],
+        air_ids: Vec<usize>,
+    ) -> ProofV2<SC>
     where
         SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
@@ -133,56 +145,50 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        let vk = pk.vk();
-
         let prover = self.prover();
-        let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+        let committer = TraceCommitter::new(prover.pcs());
 
-        // First, load all cached traces
-        for air_info in air_infos {
-            let cached_traces = air_info.cached_traces.clone();
-            for cached_trace in cached_traces {
-                let pdata = trace_builder.committer.commit(vec![cached_trace.clone()]);
-                trace_builder.load_cached_trace(cached_trace, pdata);
-            }
-        }
-        // Second, load the single common trace for each chip
-        for air_info in air_infos {
-            trace_builder.load_trace(air_info.common_trace.clone());
-        }
-
-        trace_builder.commit_current();
-
-        let main_trace_data = trace_builder.view(
-            &vk,
-            air_infos
-                .iter()
-                .map(|air_info| air_info.air.as_ref())
-                .collect(),
-        );
+        // Commit to the cached traces
+        let air_proof_inputs = parizip!(air_ids, air_infos)
+            .map(|(air_id, air_info)| {
+                let cached_mains = parizip!(air_info.cached_traces.clone())
+                    .map(|trace| CommittedTraceData {
+                        raw_data: trace.clone(),
+                        prover_data: committer.commit(vec![trace]),
+                    })
+                    .collect();
+                (
+                    air_id,
+                    AirProofInput {
+                        air: air_info.air.as_ref(),
+                        cached_mains,
+                        common_main: Some(air_info.common_trace.clone()),
+                        public_values: air_info.public_values.clone(),
+                    },
+                )
+            })
+            .collect();
+        let proof_input = ProofInput {
+            per_air: air_proof_inputs,
+        };
 
         let mut challenger = self.new_challenger();
 
         #[cfg(feature = "bench-metrics")]
         let prove_start = std::time::Instant::now();
-
-        let public_values: Vec<Vec<Val<SC>>> = air_infos
-            .iter()
-            .map(|air_info| air_info.public_values.clone())
-            .collect();
-
-        prover.prove(&mut challenger, pk, main_trace_data, &public_values)
-    }
-
-    fn verify(
-        &self,
-        vk: &MultiStarkVerifyingKey<SC>,
-        proof: &Proof<SC>,
-    ) -> Result<(), VerificationError> {
+        let _proof = prover.prove(&mut challenger, pk, proof_input);
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("stark_prove_excluding_trace_time_ms")
             .set(prove_start.elapsed().as_millis() as f64);
 
+        _proof
+    }
+
+    fn verify(
+        &self,
+        vk: &MultiStarkVerifyingKeyV2<SC>,
+        proof: &ProofV2<SC>,
+    ) -> Result<(), VerificationError> {
         let mut challenger = self.new_challenger();
         let verifier = self.verifier();
         verifier.verify(&mut challenger, vk, proof)

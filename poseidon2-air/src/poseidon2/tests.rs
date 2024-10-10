@@ -104,7 +104,7 @@ fn test_poseidon2_default() {
     // positive test
     engine
         .run_simple_test_impl(
-            any_rap_box_vec![poseidon2_air.clone(), page_requester.clone()],
+            any_rap_box_vec![poseidon2_air.clone(), page_requester],
             traces,
             vec![vec![]; 2],
         )
@@ -120,7 +120,7 @@ fn test_poseidon2_default() {
         assert_eq!(
             engine
                 .run_simple_test_impl(
-                    any_rap_box_vec![poseidon2_air.clone(), page_requester.clone()],
+                    any_rap_box_vec![poseidon2_air.clone(), page_requester],
                     vec![poseidon2_trace.clone(), dummy_trace.clone()],
                     vec![vec![]; 2],
                 )
@@ -220,7 +220,7 @@ fn test_poseidon2() {
     // positive test
     engine
         .run_simple_test_impl(
-            any_rap_box_vec![poseidon2_air.clone(), page_requester.clone()],
+            any_rap_box_vec![poseidon2_air.clone(), page_requester],
             traces,
             vec![vec![]; 2],
         )
@@ -236,7 +236,7 @@ fn test_poseidon2() {
         assert_eq!(
             engine
                 .run_simple_test_impl(
-                    any_rap_box_vec![poseidon2_air.clone(), page_requester.clone()],
+                    any_rap_box_vec![poseidon2_air.clone(), page_requester],
                     vec![poseidon2_trace.clone(), dummy_trace.clone()],
                     vec![vec![]; 2],
                 )

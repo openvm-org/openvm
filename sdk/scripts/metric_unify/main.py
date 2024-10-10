@@ -1,6 +1,5 @@
 import json
 import argparse
-# import yaml
 # import sys
 
 # labels is a list of (key, value) strings
@@ -23,6 +22,24 @@ def custom_sort_label_keys(label_key):
         return (0, label_key)  # Lowest priority for 'group'
     else:
         return (1, label_key)  # Normal priority for other keys
+
+class Aggregation:
+    name = ""
+    labels = []
+    metrics = []
+    operation = ""
+
+    def __init__(self, name, labels, metrics, operation):
+        self.name = name
+        self.labels = labels
+        self.metrics = metrics
+        self.operation = operation
+
+    def __str__(self):
+        return f"Aggregation(name={self.name}, labels={self.labels}, metrics={self.metrics}, operation={self.operation})"
+    
+    def __repr__(self):
+        return self.__str__()
 
 class Metric:
     name = ""
@@ -82,6 +99,15 @@ class MetricDb:
                 self.dict_by_label_types[label_keys] = {}
             self.dict_by_label_types[label_keys][label_values] = metrics
 
+    def add_sum(self, labels, name, metrics):
+        existing_metrics = self.flat_dict[labels]
+        new_value = 0
+        for metric in existing_metrics:
+            if metric.name in metrics:
+                new_value += metric.value
+        new_metric = Metric(name, new_value)
+        self.flat_dict[labels].append(new_metric)
+
 # mutates db so metric dict has fields "diff_value" and "diff_percent"
 def diff_metrics(db: MetricDb, db_old: MetricDb):
     for (labels, metrics) in db.flat_dict.items():
@@ -129,11 +155,11 @@ def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_spa
                 metric = next((m for m in metrics if m.name == metric_name), None)
                 metric_str = ""
                 if metric:
-                    metric_str += f"{metric.value:,}"
                     if metric.diff_percent is not None and metric.diff_value != 0:
                         color = "red" if metric.diff_percent > 0 else "green"
                         # Format the percentage with the color styling
-                        metric_str += f' <span style="color: {color}">({metric.diff_value:+,} [{metric.diff_percent:+.1%}])</span>'
+                        metric_str += f'<span style="color: {color}">({metric.diff_value:+,} [{metric.diff_percent:+.1%}])</span> '
+                    metric_str += "<div style='text-align: right'>" + f"{metric.value:,}" + "</div> "
                 row_metrics.append(metric_str)
             markdown_output += "| " + " | ".join(row_values + row_metrics) + " |\n"
         markdown_output += "\n"
@@ -142,11 +168,46 @@ def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_spa
 
     return markdown_output
 
+def read_aggregations(aggregation_json):
+    with open(aggregation_json, 'r') as f:
+        aggregation_data = json.load(f)
+    aggregations = []
+    for aggregation in aggregation_data['aggregations']:
+        aggregations.append(Aggregation(aggregation['name'], aggregation['labels'], aggregation['metrics'], aggregation['operation']))
+    return aggregations
+
+def apply_aggregations(db: MetricDb, aggregations):
+    for tuple_keys, metrics_dict in db.dict_by_label_types.items():
+        for tuple_values, metrics in metrics_dict.items():
+            metric_row = list(zip(tuple_keys, tuple_values))
+            metric_row = [[x[0], x[1]] for x in metric_row]
+            for aggregation in aggregations:
+                if aggregation.labels == metric_row:
+                    if aggregation.operation == "sum":
+                        db.add_sum(labels_to_tuple(aggregation.labels), aggregation.name, aggregation.metrics)
+                    else:
+                        raise ValueError(f"Unknown operation: {aggregation.operation}")
+
 # old_metrics_json is optional
-def generate_displayable_metrics(metrics_json, old_metrics_json, excluded_labels=["cycle_tracker_span"], summary_labels=["dsl_ir"]):
+def generate_displayable_metrics(
+        metrics_json, 
+        old_metrics_json, 
+        excluded_labels=["cycle_tracker_span"], 
+        summary_labels=["dsl_ir"], 
+        aggregation_json=None
+    ):
     db = MetricDb(metrics_json)
+
+    if aggregation_json:
+        aggregations = read_aggregations(aggregation_json)
+        apply_aggregations(db, aggregations)
+
     if old_metrics_json:
         db_old = MetricDb(old_metrics_json)
+        if aggregation_json:
+            aggregations = read_aggregations(aggregation_json)
+            apply_aggregations(db_old, aggregations)
+
         diff_metrics(db, db_old)
 
     markdown_output = generate_markdown_tables(db.dict_by_label_types, excluded_labels, summary_labels)
@@ -158,9 +219,16 @@ def main():
     argparser.add_argument('--prev', type=str, required=False, help="Path to the previous metrics JSON for diff generation")
     argparser.add_argument('--excluded-labels', type=str, required=False, help="Comma-separated list of labels to exclude from the table")
     argparser.add_argument('--summary-labels', type=str, required=False, help="Comma-separated list of labels to include in summary rows")
+    argparser.add_argument('--aggregation-json', type=str, required=False, help="Path to a JSON file with metrics to aggregate")
     args = argparser.parse_args()
 
-    markdown_output = generate_displayable_metrics(args.metrics_json, args.prev, args.excluded_labels.split(",") if args.excluded_labels else ["cycle_tracker_span"], args.summary_labels.split(",") if args.summary_labels else ["dsl_ir"])
+    markdown_output = generate_displayable_metrics(
+        args.metrics_json, 
+        args.prev, 
+        excluded_labels=args.excluded_labels.split(",") if args.excluded_labels else ["cycle_tracker_span"], 
+        summary_labels=args.summary_labels.split(",") if args.summary_labels else ["dsl_ir"], 
+        aggregation_json=args.aggregation_json
+    )
     print(markdown_output)
 
 

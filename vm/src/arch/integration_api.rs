@@ -62,6 +62,7 @@ pub trait MachineAdapter<F: PrimeField32> {
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: InstructionOutput<F, Self::Interface<F>>,
+        read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)>;
 
     /// Should mutate `row_slice` to populate with values corresponding to `record`.
@@ -216,9 +217,13 @@ where
         let (output, inner_record) =
             self.inner
                 .execute_instruction(&instruction, from_pc, reads)?;
-        let (to_state, write_record) =
-            self.adapter
-                .postprocess(&mut memory, &instruction, from_state, output)?;
+        let (to_state, write_record) = self.adapter.postprocess(
+            &mut memory,
+            &instruction,
+            from_state,
+            output,
+            &read_record,
+        )?;
         self.records.push((read_record, write_record, inner_record));
         Ok(to_state)
     }

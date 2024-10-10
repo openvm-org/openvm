@@ -69,10 +69,10 @@ where
         })
     }
     fn run_test_fast(
-        air_infos: &[AirInfo<SC>],
+        air_infos: Vec<AirInfo<SC>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         let engine = Self::new(FriParameters::standard_fast());
-        engine.run_test(air_infos)
+        engine.run_test(&air_infos)
     }
     fn run_simple_test_impl(
         &self,

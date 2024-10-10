@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 use afs_derive::AlignedBorrow;
 
 #[derive(Copy, Clone, Debug, AlignedBorrow, PartialEq, Eq)]
@@ -75,6 +77,6 @@ impl<T: Clone> ProgramExecutionCols<T> {
     }
 
     pub fn width() -> usize {
-        9
+        size_of::<ProgramExecutionCols<u8>>()
     }
 }

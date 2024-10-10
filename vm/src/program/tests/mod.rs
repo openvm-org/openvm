@@ -71,7 +71,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     println!("trace height = {}", main_trace.height());
     println!("counter trace height = {}", counter_trace.height());
 
-    BabyBearPoseidon2Engine::run_test_fast(&[
+    BabyBearPoseidon2Engine::run_test_fast(vec![
         AirInfo::no_pis(Box::new(air), vec![cached_trace], main_trace),
         AirInfo::simple_no_pis(Box::new(counter_air), counter_trace),
     ])
@@ -169,7 +169,7 @@ fn test_program_negative() {
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
-    BabyBearPoseidon2Engine::run_test_fast(&[
+    BabyBearPoseidon2Engine::run_test_fast(vec![
         AirInfo::no_pis(Box::new(air), vec![cached_trace], common_trace),
         AirInfo::simple_no_pis(Box::new(counter_air), counter_trace),
     ])

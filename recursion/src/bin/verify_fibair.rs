@@ -5,6 +5,7 @@
 use afs_compiler::conversion::CompilerOptions;
 use afs_recursion::testing_utils::recursive_stark_test;
 use ax_sdk::{
+    any_rap_box_vec,
     bench::run_with_metric_collection,
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -27,7 +28,9 @@ fn main() {
         BabyBear::from_canonical_u32(1),
         trace.get(n - 1, 1),
     ]];
-    let vdata = BabyBearPoseidon2Engine::run_simple_test(&[&fib_air], vec![trace], &pvs).unwrap();
+    let vdata =
+        BabyBearPoseidon2Engine::run_simple_test_fast(any_rap_box_vec![fib_air], vec![trace], pvs)
+            .unwrap();
 
     run_with_metric_collection("OUTPUT_PATH", || {
         let compiler_options = CompilerOptions {
