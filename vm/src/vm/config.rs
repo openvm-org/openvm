@@ -87,6 +87,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Rv32JalLuiOpcode::COUNT,
             Rv32JalLuiOpcode::default_offset(),
         ),
+        ExecutorName::AuipcRv32 => (
+            Rv32AuipcOpcode::default_offset(),
+            Rv32AuipcOpcode::COUNT,
+            Rv32AuipcOpcode::default_offset(),
+        ),
         ExecutorName::ArithmeticLogicUnit256 => (
             U256Opcode::default_offset(),
             8,

@@ -33,7 +33,7 @@ fn set_and_execute(
     };
 
     let a = gen_pointer(rng, 32);
-    // let pc = tester.get_pc();
+
     tester.execute(
         chip,
         Instruction::from_isize(

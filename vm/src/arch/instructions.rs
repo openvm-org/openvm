@@ -271,7 +271,27 @@ pub enum Rv32JalLuiOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x345]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32JalrOpcode {
+    JALR,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0x350]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32AuipcOpcode {
+    AUIPC,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x360]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum MulOpcode {
@@ -281,7 +301,7 @@ pub enum MulOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x355]
+#[opcode_offset = 0x365]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum MulHOpcode {
@@ -293,7 +313,7 @@ pub enum MulHOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x360]
+#[opcode_offset = 0x370]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum DivRemOpcode {
