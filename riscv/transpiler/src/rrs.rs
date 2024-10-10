@@ -156,35 +156,35 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_lb(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(
+        from_load(
             UnimplementedOpcode::LOADB_RV32.with_default_offset(),
             &dec_insn,
         )
     }
 
     fn process_lh(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(
+        from_load(
             UnimplementedOpcode::LOADH_RV32.with_default_offset(),
             &dec_insn,
         )
     }
 
     fn process_lw(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(
+        from_load(
             UnimplementedOpcode::LOADW_RV32.with_default_offset(),
             &dec_insn,
         )
     }
 
     fn process_lbu(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(
+        from_load(
             UnimplementedOpcode::LOADBU_RV32.with_default_offset(),
             &dec_insn,
         )
     }
 
     fn process_lhu(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(
+        from_load(
             UnimplementedOpcode::LOADHU_RV32.with_default_offset(),
             &dec_insn,
         )
@@ -255,9 +255,21 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_j_type(
+        let imm = dec_insn.imm / 2;
+        Instruction::new(
             UnimplementedOpcode::JALR_RV32.with_default_offset(),
-            &dec_insn,
+            F::from_canonical_usize(dec_insn.rd),
+            F::from_canonical_usize(dec_insn.rs1),
+            if imm < 0 {
+                -F::from_canonical_u32((-imm) as u32)
+            } else {
+                F::from_canonical_u32(imm as u32)
+            },
+            F::one(),
+            F::zero(),
+            F::zero(),
+            F::zero(),
+            String::new(),
         )
     }
 
