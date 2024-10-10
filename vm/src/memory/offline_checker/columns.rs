@@ -7,7 +7,7 @@ use afs_derive::AlignedBorrow;
 use afs_primitives::assert_less_than::columns::AssertLessThanAuxCols;
 use p3_field::AbstractField;
 
-use crate::{arch::RV32_REGISTER_NUM_LANES, memory::offline_checker::bridge::AUX_LEN};
+use crate::memory::offline_checker::bridge::AUX_LEN;
 
 // repr(C) is needed to make sure that the compiler does not reorder the fields
 // we assume the order of the fields when using borrow or borrow_mut
@@ -194,13 +194,6 @@ impl<const N: usize, F: AbstractField + Copy> MemoryHeapReadAuxCols<F, N> {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, AlignedBorrow)]
-pub struct RegisterHeapReadAuxCols<T, const N: usize> {
-    pub address: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
-    pub data: MemoryReadAuxCols<T, N>,
-}
-
-#[repr(C)]
 #[derive(Clone, Debug)]
 pub struct MemoryHeapWriteAuxCols<T, const N: usize> {
     pub address: MemoryReadAuxCols<T, 1>,
@@ -225,13 +218,6 @@ impl<const N: usize, T: Clone> MemoryHeapWriteAuxCols<T, N> {
     pub const fn width() -> usize {
         MemoryReadAuxCols::<T, 1>::width() + MemoryWriteAuxCols::<T, N>::width()
     }
-}
-
-#[repr(C)]
-#[derive(Clone, Debug)]
-pub struct RegisterHeapWriteAuxCols<T, const N: usize> {
-    pub address: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
-    pub data: MemoryWriteAuxCols<T, N>,
 }
 
 impl<const N: usize, F: AbstractField + Copy> MemoryHeapWriteAuxCols<F, N> {

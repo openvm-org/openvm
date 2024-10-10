@@ -24,7 +24,7 @@ use super::{
     offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
 };
 use crate::{
-    arch::{compose, MachineChip, RV32_REGISTER_NUM_LANES},
+    arch::MachineChip,
     core::RANGE_CHECKER_BUS,
     memory::{
         adapter::AccessAdapterAir,
@@ -59,24 +59,10 @@ pub struct MemoryHeapReadRecord<T, const N: usize> {
     pub data_read: MemoryReadRecord<T, N>,
 }
 
-/// Represents first reads a RV register, and then a batch read at the pointer.
-#[derive(Clone, Debug)]
-pub struct RegisterHeapReadRecord<T, const N: usize> {
-    pub address_read: MemoryReadRecord<T, RV32_REGISTER_NUM_LANES>,
-    pub data_read: MemoryReadRecord<T, N>,
-}
-
 /// Represents first reads a pointer, and then a batch write at the pointer.
 #[derive(Clone, Debug)]
 pub struct MemoryHeapWriteRecord<T, const N: usize> {
     pub address_read: MemoryReadRecord<T, 1>,
-    pub data_write: MemoryWriteRecord<T, N>,
-}
-
-/// Represents first reads a RV register, and then a batch write at the pointer.
-#[derive(Clone, Debug)]
-pub struct RegisterHeapWriteRecord<T, const N: usize> {
-    pub address_read: MemoryReadRecord<T, RV32_REGISTER_NUM_LANES>,
     pub data_write: MemoryWriteRecord<T, N>,
 }
 
@@ -268,33 +254,6 @@ impl<F: PrimeField32> MemoryChip<F> {
         }
     }
 
-    pub fn read_register(
-        &mut self,
-        address_space: F,
-        pointer: F,
-    ) -> (MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>, u32) {
-        debug_assert_eq!(address_space, F::one());
-        let record = self.read::<RV32_REGISTER_NUM_LANES>(address_space, pointer);
-        let val = compose(record.data);
-        (record, val)
-    }
-
-    /// First lookup the heap pointer from register, and then read the data at the pointer.
-    pub fn read_heap_from_register<const N: usize>(
-        &mut self,
-        ptr_address_space: F,
-        data_address_space: F,
-        ptr_pointer: F,
-    ) -> RegisterHeapReadRecord<F, N> {
-        let (address_read, val) = self.read_register(ptr_address_space, ptr_pointer);
-        let data_read = self.read(data_address_space, F::from_canonical_u32(val));
-
-        RegisterHeapReadRecord {
-            address_read,
-            data_read,
-        }
-    }
-
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
@@ -359,23 +318,6 @@ impl<F: PrimeField32> MemoryChip<F> {
         let data_write = self.write(data_address_space, address_read.value(), data);
 
         MemoryHeapWriteRecord {
-            address_read,
-            data_write,
-        }
-    }
-
-    /// First lookup the heap pointer from register, and then write the data at the pointer.
-    pub fn write_heap_from_register<const N: usize>(
-        &mut self,
-        ptr_address_space: F,
-        data_address_space: F,
-        ptr_pointer: F,
-        data: [F; N],
-    ) -> RegisterHeapWriteRecord<F, N> {
-        let (address_read, val) = self.read_register(ptr_address_space, ptr_pointer);
-        let data_write = self.write(data_address_space, F::from_canonical_u32(val), data);
-
-        RegisterHeapWriteRecord {
             address_read,
             data_write,
         }

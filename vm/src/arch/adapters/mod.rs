@@ -15,6 +15,9 @@ pub const RV32_REGISTER_NUM_LANES: usize = 4;
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 
 use p3_field::PrimeField32;
+
+use crate::memory::{MemoryChip, MemoryReadRecord};
+
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.
 pub fn compose<F: PrimeField32>(ptr_data: [F; 4]) -> u32 {
@@ -23,4 +26,15 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; 4]) -> u32 {
         val += limb << (i * 8);
     }
     val
+}
+
+pub fn read_rv32_register<F: PrimeField32>(
+    memory: &mut MemoryChip<F>,
+    address_space: F,
+    pointer: F,
+) -> (MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>, u32) {
+    debug_assert_eq!(address_space, F::one());
+    let record = memory.read::<RV32_REGISTER_NUM_LANES>(address_space, pointer);
+    let val = compose(record.data);
+    (record, val)
 }
