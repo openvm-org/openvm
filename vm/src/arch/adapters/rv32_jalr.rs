@@ -14,7 +14,7 @@ use crate::{
     program::Instruction,
 };
 
-// This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
+// This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
 #[derive(Debug, Clone, Default)]
 pub struct Rv32JalrAdapter<F: Field> {
     _marker: PhantomData<F>,
