@@ -58,15 +58,15 @@ use crate::{
 #[derive(Debug)]
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
+    pub program_chip: ProgramChip<F>,
+    pub memory_chip: MemoryChipRef<F>,
+    pub connector_chip: VmConnectorChip<F>,
+    pub persistent_memory_hasher: Option<Rc<RefCell<Poseidon2Chip<F>>>>,
 
     pub executors: BTreeMap<usize, InstructionExecutorVariant<F>>,
     pub chips: Vec<MachineChipVariant<F>>,
+    // FIXME: remove this
     pub core_chip: Rc<RefCell<CoreChip<F>>>,
-    pub program_chip: Rc<RefCell<ProgramChip<F>>>,
-    pub memory_chip: MemoryChipRef<F>,
-    pub connector_chip: VmConnectorChip<F>,
-
-    pub persistent_memory_hasher: Option<Rc<RefCell<Poseidon2Chip<F>>>>,
 
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
@@ -109,7 +109,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             config.memory_config.clone(),
             range_checker.clone(),
         )));
-        let program_chip = Rc::new(RefCell::new(ProgramChip::new(program)));
+        let program_chip = ProgramChip::new(program);
 
         let mut executors: BTreeMap<usize, InstructionExecutorVariant<F>> = BTreeMap::new();
 
@@ -455,8 +455,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let (instruction, debug_info) =
-                RefCell::borrow_mut(&self.program_chip).get_instruction(pc_usize)?;
+            let (instruction, debug_info) = self.program_chip.get_instruction(pc_usize)?;
             tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
 
             let (dsl_instr, trace) = debug_info.map_or(
@@ -569,9 +568,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let program_chip = self.program_chip.clone();
-        let program_air = program_chip.borrow().air.clone();
-
         // Finalize memory.
         if let Some(hasher) = &self.persistent_memory_hasher {
             let mut hasher = hasher.borrow_mut();
@@ -585,21 +581,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
 
         // Drop all strong references to chips other than self.chips, which will be consumed next.
-        drop(self.program_chip);
         drop(self.executors);
         drop(self.core_chip);
         drop(self.persistent_memory_hasher);
         drop(self.memory_chip);
 
-        let program_cached_trace = program_chip.borrow().generate_cached_trace();
-        let program_common_trace = program_chip.generate_trace();
-
         let mut result = SegmentResult {
-            air_infos: vec![AirInfo::no_pis(
-                Box::new(program_air),
-                vec![program_cached_trace],
-                program_common_trace,
-            )],
+            air_infos: vec![self.program_chip.into()],
             metrics: self.collected_metrics,
         };
 
@@ -654,6 +642,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
     fn chip_heights(&self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
+        metrics.insert("ProgramChip".into(), self.program_chip.true_program_length);
         for chip in self.chips.iter() {
             let chip_name: &'static str = chip.into();
             for (i, height) in chip.current_trace_heights().iter().enumerate() {

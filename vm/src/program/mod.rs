@@ -1,9 +1,11 @@
 use std::{error::Error, fmt::Display};
 
+use afs_stark_backend::utils::AirInfo;
 use backtrace::Backtrace;
 use bridge::ProgramBus;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
+use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
     arch::{
@@ -267,5 +269,17 @@ impl<F: PrimeField64> ProgramChip<F> {
             self.air.program.instructions[pc].clone(),
             self.air.program.debug_infos[pc].clone(),
         ))
+    }
+}
+
+impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirInfo<SC>
+where
+    Val<SC>: PrimeField64,
+{
+    fn from(program_chip: ProgramChip<Val<SC>>) -> Self {
+        let air = program_chip.air.clone();
+        let cached_trace = program_chip.generate_cached_trace();
+        let common_trace = program_chip.generate_trace();
+        AirInfo::no_pis(Box::new(air), vec![cached_trace], common_trace)
     }
 }
