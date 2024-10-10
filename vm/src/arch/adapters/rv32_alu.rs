@@ -23,7 +23,7 @@ use crate::{
 /// is an immediate).
 #[derive(Debug)]
 pub struct Rv32AluAdapter<F: Field> {
-    _marker: std::marker::PhantomData<F>,
+    _marker: PhantomData<F>,
     pub air: Rv32AluAdapterAir,
 }
 
@@ -35,7 +35,7 @@ impl<F: PrimeField32> Rv32AluAdapter<F> {
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
             air: Rv32AluAdapterAir {
                 _execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 _memory_bridge: memory_bridge,

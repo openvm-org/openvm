@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::VariableRangeCheckerChip;
@@ -41,7 +41,7 @@ pub struct Rv32LoadStoreAdapterCols<T, const NUM_CELLS: usize> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rv32LoadStoreAdapterAir<F: Field> {
-    marker: std::marker::PhantomData<F>,
+    marker: PhantomData<F>,
 }
 
 impl<F: Field> BaseAir<F> for Rv32LoadStoreAdapterAir<F> {
@@ -66,7 +66,7 @@ pub struct Rv32LoadStoreAdapterWriteRecord<F: Field, const NUM_CELLS: usize> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreAdapterInterface<T, const NUM_CELLS: usize> {
-    _marker: std::marker::PhantomData<T>,
+    _marker: PhantomData<T>,
 }
 
 impl<T, const NUM_CELLS: usize> MachineAdapterInterface<T>
@@ -89,7 +89,7 @@ impl<F: Field, const NUM_CELLS: usize> Rv32LoadStoreAdapter<F, NUM_CELLS> {
     pub fn new(range_checker_chip: Arc<VariableRangeCheckerChip>, offset: usize) -> Self {
         Self {
             air: Rv32LoadStoreAdapterAir::<F> {
-                marker: std::marker::PhantomData,
+                marker: PhantomData,
             },
             offset,
             range_checker_chip,

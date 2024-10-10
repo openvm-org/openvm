@@ -236,6 +236,30 @@ pub enum Rv32LoadStoreOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x330]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum BranchEqualOpcode {
+    BEQ,
+    BNE,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x335]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum BranchLessThanOpcode {
+    BLT,
+    BLTU,
+    BGE,
+    BGEU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0x340]
 #[repr(usize)]
 #[allow(non_camel_case_types)]

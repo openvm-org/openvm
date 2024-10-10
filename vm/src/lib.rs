@@ -1,5 +1,7 @@
 pub mod alu;
 pub mod arch;
+pub mod branch_eq;
+pub mod branch_lt;
 pub mod castf;
 pub mod core;
 pub mod ecc;

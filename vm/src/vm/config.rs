@@ -127,6 +127,16 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             3,
             U256Opcode::default_offset(),
         ),
+        ExecutorName::BranchEqualRv32 => (
+            BranchEqualOpcode::default_offset(),
+            BranchEqualOpcode::COUNT,
+            BranchEqualOpcode::default_offset(),
+        ),
+        ExecutorName::BranchLessThanRv32 => (
+            BranchLessThanOpcode::default_offset(),
+            BranchLessThanOpcode::COUNT,
+            BranchLessThanOpcode::default_offset(),
+        ),
         ExecutorName::Ui => (
             U32Opcode::default_offset(),
             U32Opcode::COUNT,
