@@ -6,8 +6,9 @@ use std::{
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
+    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+    utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

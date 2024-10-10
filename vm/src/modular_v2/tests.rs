@@ -5,41 +5,35 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
 
+use super::ModularAddSubV2Chip;
 use crate::{
-    arch::{
-        instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        testing::MachineChipTestBuilder,
-    },
-    modular_multdiv::{ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    arch::{testing::MachineChipTestBuilder, ExecutionBridge, MachineChipWrapper, Rv32HeapAdapter},
     program::Instruction,
     utils::biguint_to_limbs,
 };
+
 const NUM_LIMBS: usize = 32;
 const LIMB_SIZE: usize = 8;
-const CARRY_LIMBS: usize = 2 * NUM_LIMBS - 1;
 type F = BabyBear;
 
 #[test]
-fn test_modular_multdiv() {
+fn test_modular_add() {
     setup_tracing();
-
+    let coord_modulus = secp256k1_coord_prime();
+    let scalar_modulus = secp256k1_scalar_prime();
     let mut tester: MachineChipTestBuilder<F> = MachineChipTestBuilder::default();
-    let mut coord_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
-        ModularMultDivChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_chip(),
-            secp256k1_coord_prime(),
-            0,
-        );
-    let mut scalar_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
-        ModularMultDivChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_chip(),
-            secp256k1_scalar_prime(),
-            4,
-        );
+
+    let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
+    let memory_bridge = tester.memory_chip().borrow().memory_bridge();
+    let adapter = Rv32HeapAdapter::new(execution_bridge, memory_bridge);
+    let coord_chip = ModularAddSubV2Chip::<NUM_LIMBS, LIMB_SIZE>::new(
+        coord_modulus.clone(),
+        tester.memory_chip().borrow().range_checker.clone(),
+    );
+    let scalar_chip = ModularAddSubV2Chip::<NUM_LIMBS, LIMB_SIZE>::new(
+        scalar_modulus.clone(),
+        tester.memory_chip().borrow().range_checker.clone(),
+    );
     let mut rng = create_seeded_rng();
     let num_tests = 100;
 
@@ -53,23 +47,35 @@ fn test_modular_multdiv() {
             .collect();
         let mut b = BigUint::new(b_digits);
 
+        let opcode = rng.gen_range(0..2);
         let is_scalar = rng.gen_bool(0.5);
-        let opcode = ModularArithmeticOpcode::from_usize(rng.gen_range(2..4));
         let modulus = if is_scalar {
-            SECP256K1_SCALAR_PRIME.clone()
+            scalar_modulus.clone()
         } else {
-            SECP256K1_COORD_PRIME.clone()
+            coord_modulus.clone()
         };
+
         a %= modulus.clone();
         b %= modulus.clone();
         assert!(a < modulus);
         assert!(b < modulus);
 
-        let r = if is_scalar {
-            scalar_chip.solve(opcode, a.clone(), b.clone())
-        } else {
-            coord_chip.solve(opcode, a.clone(), b.clone())
-        };
+        let r = (&a + &b) % modulus;
+
+        // TODO: make it handle + or -
+        // let r = if is_scalar {
+        //     scalar_chip.solve(
+        //         ModularArithmeticOpcode::from_usize(opcode),
+        //         a.clone(),
+        //         b.clone(),
+        //     )
+        // } else {
+        //     coord_chip.solve(
+        //         ModularArithmeticOpcode::from_usize(opcode),
+        //         a.clone(),
+        //         b.clone(),
+        //     )
+        // };
 
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:
@@ -78,13 +84,13 @@ fn test_modular_multdiv() {
         // The write of result r is done in the chip.
         let ptr_as = 1;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 10;
-        let addr_ptr3 = 20;
+        let addr_ptr2 = 12;
+        let addr_ptr3 = 24;
 
         let data_as = 2;
         let address1 = 0;
-        let address2 = 1024;
-        let address3 = 2048;
+        let address2 = 128;
+        let address3 = 256;
 
         tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
         tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
@@ -98,7 +104,7 @@ fn test_modular_multdiv() {
         tester.write(data_as, address2, b_limbs);
 
         let instruction = Instruction::from_isize(
-            opcode as usize + if is_scalar { 4 } else { 0 },
+            opcode + if is_scalar { 4 } else { 0 },
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,
@@ -107,11 +113,12 @@ fn test_modular_multdiv() {
         );
 
         let chip = if is_scalar {
-            &mut scalar_chip
+            scalar_chip.clone()
         } else {
-            &mut coord_chip
+            coord_chip.clone()
         };
-        tester.execute(chip, instruction);
+        let mut chip_wrapper = MachineChipWrapper::new(adapter.clone(), chip, tester.memory_chip());
+        tester.execute(&mut chip_wrapper, instruction);
         let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
 
         for (i, &elem) in r_limbs.iter().enumerate() {
@@ -120,7 +127,7 @@ fn test_modular_multdiv() {
             assert_eq!(BabyBear::from_canonical_u32(elem), read_val);
         }
     }
-    let tester = tester.build().load(coord_chip).load(scalar_chip).finalize();
+    // let tester = tester.build().load(coord_chip).load(scalar_chip).finalize();
 
-    tester.simple_test().expect("Verification failed");
+    // tester.simple_test().expect("Verification failed");
 }

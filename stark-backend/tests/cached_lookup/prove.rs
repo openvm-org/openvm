@@ -15,8 +15,8 @@ use ax_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir,
 };
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;

@@ -5,7 +5,7 @@ use afs_stark_backend::{
 use p3_field::{AbstractField, PrimeField32};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::fib_air::{air::FibonacciAir, trace::generate_trace_rows};
+use super::{air::FibonacciAir, trace::generate_trace_rows};
 
 pub struct FibonacciChip {
     /// The 0th number in the fibonacci sequence.

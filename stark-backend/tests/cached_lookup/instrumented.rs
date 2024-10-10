@@ -6,8 +6,8 @@ use ax_sdk::{
         baby_bear_poseidon2::{self, engine_from_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkEngineWithHashInstrumentation,
-    interaction::dummy_interaction_air::DummyInteractionAir,
 };
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_ceil_usize;

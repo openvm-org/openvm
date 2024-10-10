@@ -39,6 +39,8 @@ pub struct ExprBuilder {
     pub limb_bits: usize,
     // Number of limbs of a field element.
     pub num_limbs: usize,
+    // The max bits to range check.
+    pub range_checker_bits: usize,
 
     // The number of limbs of the quotient for each constraint.
     pub q_limbs: Vec<usize>,
@@ -53,7 +55,12 @@ pub struct ExprBuilder {
 }
 
 impl ExprBuilder {
-    pub fn new(prime: BigUint, limb_bits: usize, num_limbs: usize) -> Self {
+    pub fn new(
+        prime: BigUint,
+        limb_bits: usize,
+        num_limbs: usize,
+        range_checker_bits: usize,
+    ) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, prime.clone());
         Self {
             prime,
@@ -62,6 +69,7 @@ impl ExprBuilder {
             num_flags: 0,
             limb_bits,
             num_limbs,
+            range_checker_bits,
             num_variables: 0,
             q_limbs: vec![],
             carry_limbs: vec![],
@@ -73,12 +81,12 @@ impl ExprBuilder {
     pub fn new_input<C: FieldVariableConfig>(
         builder: Rc<RefCell<ExprBuilder>>,
     ) -> FieldVariable<C> {
-        let num_input = {
+        let (num_input, range_checker_bits) = {
             let mut borrowed = builder.borrow_mut();
             assert_eq!(borrowed.num_limbs, C::num_limbs_per_field_element());
             assert_eq!(borrowed.limb_bits, C::canonical_limb_bits());
             borrowed.num_input += 1;
-            borrowed.num_input
+            (borrowed.num_input, borrowed.range_checker_bits)
         };
         FieldVariable {
             expr: SymbolicExpr::Input(num_input - 1),
@@ -86,6 +94,7 @@ impl ExprBuilder {
             limb_max_abs: (1 << C::canonical_limb_bits()) - 1,
             max_overflow_bits: C::canonical_limb_bits(),
             expr_limbs: C::num_limbs_per_field_element(),
+            range_checker_bits,
             _marker: PhantomData,
         }
     }
@@ -96,6 +105,7 @@ impl ExprBuilder {
     }
 }
 
+#[derive(Clone)]
 pub struct FieldExprChip {
     pub builder: ExprBuilder,
 

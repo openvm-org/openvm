@@ -84,7 +84,7 @@ fn main() {
                 },
             );
             afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
-                &inner_verifier_sft,
+                inner_verifier_sft,
                 // log_blowup = 3 because of poseidon2 chip.
                 Some(standard_fri_params_with_100_bits_conjectured_security(3)),
             );
