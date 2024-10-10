@@ -45,8 +45,6 @@ impl<F: Field> BaseAirWithPublicValues<F> for CoreAir {
     }
 }
 
-// TODO[osama]: here, there should be some relation enforced between the timestamp for the cpu and the memory timestamp
-// TODO[osama]: also, rename to clk
 impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
     // TODO: continuation verification checks program counters match up [INT-1732]
     fn eval(&self, builder: &mut AB) {

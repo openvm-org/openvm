@@ -2,8 +2,9 @@ use std::iter;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
+    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+    utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -69,12 +70,12 @@ fn test_xor_limbs_chip() {
     let xor_limbs_chip_trace = xor_chip.generate_trace();
     let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
 
-    let mut all_chips: Vec<&dyn AnyRap<_>> = vec![];
-    for requester in &requesters {
-        all_chips.push(requester);
+    let mut all_chips: Vec<Box<dyn AnyRap<_>>> = vec![];
+    for requester in requesters {
+        all_chips.push(Box::new(requester));
     }
-    all_chips.push(&xor_chip.air);
-    all_chips.push(&xor_chip.xor_lookup_chip.air);
+    all_chips.push(Box::new(xor_chip.air));
+    all_chips.push(Box::new(xor_chip.xor_lookup_chip.air));
 
     let all_traces = requesters_traces
         .into_iter()
@@ -82,7 +83,7 @@ fn test_xor_limbs_chip() {
         .chain(iter::once(xor_lookup_chip_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -140,8 +141,8 @@ fn negative_test_xor_limbs_chip() {
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
-    let result = BabyBearBlake3Engine::run_simple_test_no_pis(
-        &any_rap_vec![&requester, &xor_chip.air, &xor_chip.xor_lookup_chip.air],
+    let result = BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![requester, xor_chip.air, xor_chip.xor_lookup_chip.air],
         vec![requester_trace, xor_limbs_chip_trace, xor_lookup_chip_trace],
     );
     assert_eq!(

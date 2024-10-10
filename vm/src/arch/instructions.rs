@@ -219,6 +219,58 @@ pub enum LessThanOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x320]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32LoadStoreOpcode {
+    LOADW,
+    STOREW,
+    STOREH,
+    STOREB,
+    LOADB,
+    LOADH,
+    LOADBU,
+    LOADHU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x350]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum MulOpcode {
+    MUL,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x355]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum MulHOpcode {
+    MULH,
+    MULHSU,
+    MULHU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x360]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum DivRemOpcode {
+    DIV,
+    DIVU,
+    REM,
+    REMU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0xdeadaf]
 #[repr(usize)]
 #[allow(non_camel_case_types)]

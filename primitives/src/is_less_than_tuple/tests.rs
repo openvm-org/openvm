@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use p3_field::AbstractField;
 
@@ -56,8 +56,8 @@ fn test_is_less_than_tuple_chip() {
         (vec![26678, 233], vec![14321, 244]),
     ]);
     let range_checker_trace = range_checker.generate_trace();
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(
-        &any_rap_vec![&chip.air, &range_checker.air],
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+        any_rap_box_vec![chip.air, range_checker.air],
         vec![trace, range_checker_trace],
     )
     .expect("Verification failed");
@@ -77,8 +77,8 @@ fn test_is_less_than_tuple_chip_negative() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(
-            &any_rap_vec![&chip.air, &range_checker.air],
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+            any_rap_box_vec![chip.air, range_checker.air],
             vec![trace, range_checker_trace]
         )
         .err(),

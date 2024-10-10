@@ -1,6 +1,6 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -41,7 +41,7 @@ fn test_vec_is_equal_vec(x: [u32; 3], y: [u32; 3], is_equal: u32, expected_prods
         );
     }
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace])
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![chip], vec![trace])
         .expect("Verification failed");
 }
 
@@ -77,7 +77,7 @@ fn test_all_is_equal_vec() {
             .collect(),
     );
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&chip], vec![trace])
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![chip], vec![trace])
         .expect("Verification failed");
 }
 
@@ -107,8 +107,8 @@ fn test_single_is_equal_vec_fail(x: [u32; 3], y: [u32; 3], expected: [u32; 3]) {
             *debug.lock().unwrap() = false;
         });
         assert_eq!(
-            BabyBearPoseidon2Engine::run_simple_test_no_pis(
-                &any_rap_vec![&chip],
+            BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+                any_rap_box_vec![chip],
                 vec![trace.clone()]
             )
             .err(),
@@ -142,8 +142,8 @@ fn test_vec_is_equal_vec_fail() {
                 *debug.lock().unwrap() = false;
             });
             assert_eq!(
-                BabyBearPoseidon2Engine::run_simple_test_no_pis(
-                    &any_rap_vec![&chip],
+                BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+                    any_rap_box_vec![chip],
                     vec![trace.clone()]
                 )
                 .err(),
@@ -155,8 +155,8 @@ fn test_vec_is_equal_vec_fail() {
                 *debug.lock().unwrap() = false;
             });
             assert_eq!(
-                BabyBearPoseidon2Engine::run_simple_test_no_pis(
-                    &any_rap_vec![&chip],
+                BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+                    any_rap_box_vec![chip],
                     vec![trace.clone()]
                 )
                 .err(),

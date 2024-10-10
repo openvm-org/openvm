@@ -77,6 +77,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             AluOpcode::COUNT,
             AluOpcode::default_offset(),
         ),
+        ExecutorName::LoadStoreRv32 => (
+            Rv32LoadStoreOpcode::default_offset(),
+            Rv32LoadStoreOpcode::COUNT,
+            Rv32LoadStoreOpcode::default_offset(),
+        ),
         ExecutorName::ArithmeticLogicUnit256 => (
             U256Opcode::default_offset(),
             8,
@@ -87,10 +92,25 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             LessThanOpcode::COUNT,
             LessThanOpcode::default_offset(),
         ),
+        ExecutorName::MultiplicationRv32 => (
+            MulOpcode::default_offset(),
+            MulOpcode::COUNT,
+            MulOpcode::default_offset(),
+        ),
+        ExecutorName::MultiplicationHighRv32 => (
+            MulHOpcode::default_offset(),
+            MulHOpcode::COUNT,
+            MulHOpcode::default_offset(),
+        ),
         ExecutorName::U256Multiplication => (
             U256Opcode::default_offset() + 11,
             1,
             U256Opcode::default_offset(),
+        ),
+        ExecutorName::DivRemRv32 => (
+            DivRemOpcode::default_offset(),
+            DivRemOpcode::COUNT,
+            DivRemOpcode::default_offset(),
         ),
         ExecutorName::ShiftRv32 => (
             ShiftOpcode::default_offset(),

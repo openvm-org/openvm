@@ -25,6 +25,9 @@ pub trait MachineAdapterInterface<T> {
     type ProcessedInstruction;
 }
 
+pub type Reads<T, I> = <I as MachineAdapterInterface<T>>::Reads;
+pub type Writes<T, I> = <I as MachineAdapterInterface<T>>::Writes;
+
 /// The adapter owns all memory accesses and timestamp changes.
 /// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
 pub trait MachineAdapter<F: PrimeField32> {
@@ -59,6 +62,7 @@ pub trait MachineAdapter<F: PrimeField32> {
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: InstructionOutput<F, Self::Interface<F>>,
+        read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)>;
 
     /// Should mutate `row_slice` to populate with values corresponding to `record`.
@@ -121,12 +125,14 @@ pub trait MachineIntegration<F: PrimeField32, A: MachineAdapter<F>> {
 }
 
 pub struct InstructionOutput<T, I: MachineAdapterInterface<T>> {
-    pub to_pc: T,
+    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
+    pub to_pc: Option<T>,
     pub writes: I::Writes,
 }
 
 pub struct IntegrationInterface<T, I: MachineAdapterInterface<T>> {
-    pub to_pc: T,
+    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
+    pub to_pc: Option<T>,
     pub reads: I::Reads,
     pub writes: I::Writes,
     pub instruction: I::ProcessedInstruction,
@@ -211,9 +217,13 @@ where
         let (output, inner_record) =
             self.inner
                 .execute_instruction(&instruction, from_pc, reads)?;
-        let (to_state, write_record) =
-            self.adapter
-                .postprocess(&mut memory, &instruction, from_state, output)?;
+        let (to_state, write_record) = self.adapter.postprocess(
+            &mut memory,
+            &instruction,
+            from_state,
+            output,
+            &read_record,
+        )?;
         self.records.push((read_record, write_record, inner_record));
         Ok(to_state)
     }

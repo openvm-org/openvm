@@ -1,11 +1,6 @@
-use std::ops::Deref;
-
-use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
     config::{
-        baby_bear_poseidon2::{
-            default_perm, engine_from_perm, random_perm, BabyBearPoseidon2Config,
-        },
+        baby_bear_poseidon2::{default_perm, engine_from_perm, random_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
         setup_tracing_with_log_level, FriParameters,
     },
@@ -53,9 +48,8 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
 
     for segment_result in result.segment_results {
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        let airs: Vec<_> = segment_result.airs.iter().map(Box::deref).collect();
         engine
-            .run_simple_test(&airs, segment_result.traces, &segment_result.public_values)
+            .run_test_impl(&segment_result.air_infos)
             .expect("Verification failed");
     }
 }
@@ -89,23 +83,20 @@ fn air_test_with_compress_poseidon2(
     };
 
     for segment_result in result.segment_results {
-        let airs = segment_result
-            .airs
-            .iter()
-            .map(Box::deref)
-            .collect::<Vec<_>>();
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        engine
-            .run_simple_test(&airs, segment_result.traces, &segment_result.public_values)
-            .expect("Verification failed");
+        let air_infos = segment_result.air_infos;
 
         // Checking maximum constraint degree across all AIRs
         let mut keygen_builder = engine.keygen_builder();
-        for air in airs {
-            keygen_builder.add_air(air as &dyn AnyRap<BabyBearPoseidon2Config>);
+        for air_info in &air_infos {
+            keygen_builder.add_air(air_info.air.as_ref());
         }
         let pk = keygen_builder.generate_pk();
         assert!(pk.max_constraint_degree == poseidon2_max_constraint_degree);
+
+        engine
+            .run_test_impl(&air_infos)
+            .expect("Verification failed");
     }
 }
 

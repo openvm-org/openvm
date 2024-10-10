@@ -1,6 +1,8 @@
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_stark_backend::{
+    prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError,
+};
 use ax_sdk::{
-    any_rap_vec,
+    any_rap_box_vec,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing},
     engine::StarkFriEngine,
     utils::create_seeded_rng,
@@ -97,14 +99,11 @@ fn field_arithmetic_air_test() {
 
     tester.simple_test().expect("Verification failed");
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-
+    disable_debug_builder();
     // negative test pranking each IO value
     for height in 0..num_ops {
         // TODO: better way to modify existing traces in tester
-        let arith_trace = &mut tester.traces[2];
+        let arith_trace = &mut tester.air_infos[2].common_trace;
         let old_trace = arith_trace.clone();
         for width in 0..FieldArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
@@ -118,7 +117,7 @@ fn field_arithmetic_air_test() {
             "Expected constraint to fail"
         );
 
-        tester.traces[1] = old_trace;
+        tester.air_infos[2].common_trace = old_trace;
     }
 }
 
@@ -151,7 +150,8 @@ fn field_arithmetic_air_zero_div_zero() {
     });
 
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis(&any_rap_vec![&air], vec![trace]).err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![air], vec![trace])
+            .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );

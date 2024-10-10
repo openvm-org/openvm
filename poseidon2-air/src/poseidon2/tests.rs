@@ -1,13 +1,13 @@
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ark_ff::PrimeField as _;
 use ax_sdk::{
-    any_rap_vec,
+    any_rap_box_vec,
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::{
@@ -103,10 +103,10 @@ fn test_poseidon2_default() {
 
     // positive test
     engine
-        .run_simple_test(
-            &any_rap_vec![&poseidon2_air, &page_requester],
+        .run_simple_test_impl(
+            any_rap_box_vec![poseidon2_air.clone(), page_requester],
             traces,
-            &vec![vec![]; 2],
+            vec![vec![]; 2],
         )
         .expect("Verification failed");
 
@@ -119,10 +119,10 @@ fn test_poseidon2_default() {
         poseidon2_trace.row_mut(height)[width] += rand;
         assert_eq!(
             engine
-                .run_simple_test(
-                    &any_rap_vec![&poseidon2_air, &page_requester],
+                .run_simple_test_impl(
+                    any_rap_box_vec![poseidon2_air.clone(), page_requester],
                     vec![poseidon2_trace.clone(), dummy_trace.clone()],
-                    &vec![vec![]; 2],
+                    vec![vec![]; 2],
                 )
                 .err(),
             Some(VerificationError::OodEvaluationMismatch),
@@ -219,10 +219,10 @@ fn test_poseidon2() {
 
     // positive test
     engine
-        .run_simple_test(
-            &any_rap_vec![&poseidon2_air, &page_requester],
+        .run_simple_test_impl(
+            any_rap_box_vec![poseidon2_air.clone(), page_requester],
             traces,
-            &vec![vec![]; 2],
+            vec![vec![]; 2],
         )
         .expect("Verification failed");
 
@@ -235,10 +235,10 @@ fn test_poseidon2() {
         poseidon2_trace.row_mut(height)[width] += rand;
         assert_eq!(
             engine
-                .run_simple_test(
-                    &any_rap_vec![&poseidon2_air, &page_requester],
+                .run_simple_test_impl(
+                    any_rap_box_vec![poseidon2_air.clone(), page_requester],
                     vec![poseidon2_trace.clone(), dummy_trace.clone()],
-                    &vec![vec![]; 2],
+                    vec![vec![]; 2],
                 )
                 .err(),
             Some(VerificationError::OodEvaluationMismatch),

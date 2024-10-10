@@ -10,7 +10,7 @@ use crate::{
     arch::{
         instructions::{AluOpcode, UsizeOpcode},
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Result,
+        MachineIntegration, Reads, Result, Writes,
     },
     program::Instruction,
 };
@@ -84,9 +84,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
 impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     MachineIntegration<F, A> for ArithmeticLogicIntegration<NUM_LIMBS, LIMB_BITS>
 where
-    A::Interface<F>: MachineAdapterInterface<F>,
-    <A::Interface<F> as MachineAdapterInterface<F>>::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    <A::Interface<F> as MachineAdapterInterface<F>>::Writes: From<[F; NUM_LIMBS]>,
+    Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
+    Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
 {
     // TODO: update for trace generation
     type Record = u32;
@@ -97,7 +96,7 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
+        _from_pc: F,
         reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
@@ -110,7 +109,7 @@ where
 
         // Integration doesn't modify PC directly, so we let Adapter handle the increment
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
-            to_pc: from_pc,
+            to_pc: None,
             writes: z.map(F::from_canonical_u32).into(),
         };
 

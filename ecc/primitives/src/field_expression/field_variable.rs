@@ -47,8 +47,9 @@ pub struct FieldVariable<C: FieldVariableConfig> {
 }
 
 impl<C: FieldVariableConfig> FieldVariable<C> {
+    // Returns the index of the new variable.
     // There should be no division in the expression.
-    pub fn save(&mut self) {
+    pub fn save(&mut self) -> usize {
         let mut builder = self.builder.borrow_mut();
         builder.num_variables += 1;
 
@@ -70,6 +71,8 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         self.limb_max_abs = (1 << C::canonical_limb_bits()) - 1;
         self.max_overflow_bits = C::canonical_limb_bits();
         self.expr_limbs = C::num_limbs_per_field_element();
+
+        builder.num_variables - 1
     }
 
     fn save_if_overflow(
@@ -215,6 +218,27 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs: (1 << C::canonical_limb_bits()) - 1,
             max_overflow_bits: C::canonical_limb_bits(),
             expr_limbs: C::num_limbs_per_field_element(),
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn select(flag_id: usize, a: &FieldVariable<C>, b: &FieldVariable<C>) -> FieldVariable<C> {
+        assert!(Rc::ptr_eq(&a.builder, &b.builder));
+        let left_limb_max_abs = max(a.limb_max_abs, b.limb_max_abs);
+        let left_max_overflow_bits = max(a.max_overflow_bits, b.max_overflow_bits);
+        let left_expr_limbs = max(a.expr_limbs, b.expr_limbs);
+        let right_limb_max_abs = left_limb_max_abs;
+        let right_max_overflow_bits = left_max_overflow_bits;
+        let right_expr_limbs = left_expr_limbs;
+        assert_eq!(left_limb_max_abs, right_limb_max_abs);
+        assert_eq!(left_max_overflow_bits, right_max_overflow_bits);
+        assert_eq!(left_expr_limbs, right_expr_limbs);
+        FieldVariable {
+            expr: SymbolicExpr::Select(flag_id, Box::new(a.expr.clone()), Box::new(b.expr.clone())),
+            builder: a.builder.clone(),
+            limb_max_abs: left_limb_max_abs,
+            max_overflow_bits: left_max_overflow_bits,
+            expr_limbs: left_expr_limbs,
             _marker: PhantomData,
         }
     }

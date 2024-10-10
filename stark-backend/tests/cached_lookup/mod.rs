@@ -1,14 +1,22 @@
 use std::iter;
 
 use afs_stark_backend::{
-    keygen::MultiStarkKeygenBuilder,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
-    verifier::{MultiTraceStarkVerifier, VerificationError},
+    keygen::v2::MultiStarkKeygenBuilderV2,
+    prover::{
+        trace::TraceCommitter,
+        v2::{
+            types::{AirProofInput, CommittedTraceData, ProofInput},
+            MultiTraceStarkProverV2,
+        },
+        USE_DEBUG_BUILDER,
+    },
+    verifier::{v2::MultiTraceStarkVerifierV2, VerificationError},
 };
-use ax_sdk::interaction::dummy_interaction_air::DummyInteractionAir;
+use ax_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_ceil_usize;
 
 use crate::config;
@@ -65,42 +73,51 @@ pub fn prove_and_verify_indexless_lookups(
             .collect(),
         receiver_air.field_width(),
     );
+    {
+        let mut keygen_builder = MultiStarkKeygenBuilderV2::new(&config);
+        let receiver_air_id = keygen_builder.add_air(&receiver_air);
+        // Auto-adds sender matrix
+        let sender_air_id = keygen_builder.add_air(&sender_air);
+        let pk = keygen_builder.generate_pk();
+        let committer = TraceCommitter::new(config.pcs());
+        let cached_trace_data = committer.commit(vec![recv_fields_trace.clone()]);
+        let proof_input = ProofInput {
+            per_air: vec![
+                (
+                    receiver_air_id,
+                    AirProofInput {
+                        air: &receiver_air,
+                        cached_mains: vec![CommittedTraceData {
+                            raw_data: recv_fields_trace,
+                            prover_data: cached_trace_data,
+                        }],
+                        common_main: Some(recv_count_trace),
+                        public_values: vec![],
+                    },
+                ),
+                (
+                    sender_air_id,
+                    AirProofInput {
+                        air: &sender_air,
+                        cached_mains: vec![],
+                        common_main: Some(sender_trace),
+                        public_values: vec![],
+                    },
+                ),
+            ],
+        };
 
-    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
-    // Cached table pointer:
-    let recv_fields_ptr = keygen_builder.add_cached_main_matrix(receiver_air.field_width());
-    // Everything else together
-    let recv_count_ptr = keygen_builder.add_main_matrix(1);
-    keygen_builder.add_partitioned_air(&receiver_air, vec![recv_count_ptr, recv_fields_ptr]);
-    // Auto-adds sender matrix
-    keygen_builder.add_air(&sender_air);
-    let pk = keygen_builder.generate_pk();
-    let vk = pk.vk();
+        let prover = MultiTraceStarkProverV2::new(&config);
 
-    let prover = MultiTraceStarkProver::new(&config);
-    // Must add trace matrices in the same order as above
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-    // Receiver fields table is cached
-    let cached_trace_data = trace_builder
-        .committer
-        .commit(vec![recv_fields_trace.clone()]);
-    trace_builder.load_cached_trace(recv_fields_trace, cached_trace_data);
-    // Load x normally
-    trace_builder.load_trace(recv_count_trace);
-    trace_builder.load_trace(sender_trace);
-    trace_builder.commit_current();
+        let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
+        let proof = prover.prove(&mut challenger, &pk, proof_input);
 
-    let main_trace_data = trace_builder.view(&vk, vec![&receiver_air, &sender_air]);
-    let pis = vec![vec![]; 2];
-
-    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
-
-    // Verify the proof:
-    // Start from clean challenger
-    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
-    let verifier = MultiTraceStarkVerifier::new(prover.config);
-    verifier.verify(&mut challenger, &vk, &proof)
+        // Verify the proof:
+        // Start from clean challenger
+        let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
+        let verifier = MultiTraceStarkVerifierV2::new(prover.config);
+        verifier.verify(&mut challenger, &pk.get_vk(), &proof)
+    }
 }
 
 /// tests for cached_lookup

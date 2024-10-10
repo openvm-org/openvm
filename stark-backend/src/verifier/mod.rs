@@ -7,6 +7,7 @@ use tracing::instrument;
 
 pub mod constraints;
 mod error;
+pub mod v2;
 
 pub use error::*;
 
@@ -272,8 +273,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                     &opened_values.after_challenge[phase_idx][matrix_idx]
                 })
                 .collect_vec();
-            verify_single_rap_constraints(
-                vk,
+            verify_single_rap_constraints::<SC>(
+                &vk.symbolic_constraints.constraints,
                 preprocessed_values,
                 partitioned_main_values,
                 after_challenge_values,

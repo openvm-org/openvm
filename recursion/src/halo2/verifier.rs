@@ -1,4 +1,5 @@
 use afs_compiler::ir::{DslIr, TracedVec, Witness};
+use afs_stark_backend::prover::v2::types::ProofV2;
 use ax_sdk::config::{baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters};
 use itertools::Itertools;
 use snark_verifier_sdk::{
@@ -24,7 +25,7 @@ use crate::{
         Halo2Prover, Halo2ProvingPinning,
     },
     stark::outer::build_circuit_verify_operations,
-    types::{MultiStarkVerificationAdvice, VerifierInput},
+    v2::types::MultiStarkVerificationAdviceV2,
     witness::Witnessable,
 };
 
@@ -37,13 +38,13 @@ pub struct Halo2VerifierCircuit {
 /// Generate a Halo2 verifier circuit for a given stark.
 pub fn generate_halo2_verifier_circuit(
     halo2_k: usize,
-    advice: MultiStarkVerificationAdvice<OuterConfig>,
+    advice: MultiStarkVerificationAdviceV2<OuterConfig>,
     fri_params: &FriParameters,
-    input: &VerifierInput<BabyBearPoseidon2OuterConfig>,
+    proof: &ProofV2<BabyBearPoseidon2OuterConfig>,
 ) -> Halo2VerifierCircuit {
     let mut witness = Witness::default();
-    input.write(&mut witness);
-    let operations = build_circuit_verify_operations(advice, fri_params, input);
+    proof.write(&mut witness);
+    let operations = build_circuit_verify_operations(advice, fri_params, proof);
     Halo2VerifierCircuit {
         pinning: Halo2Prover::keygen(halo2_k, operations.clone(), witness),
         dsl_ops: operations,
@@ -51,7 +52,7 @@ pub fn generate_halo2_verifier_circuit(
 }
 
 impl Halo2VerifierCircuit {
-    pub fn prove(&self, input: VerifierInput<BabyBearPoseidon2OuterConfig>) -> Snark {
+    pub fn prove(&self, input: ProofV2<BabyBearPoseidon2OuterConfig>) -> Snark {
         let mut witness = Witness::default();
         input.write(&mut witness);
         Halo2Prover::prove(

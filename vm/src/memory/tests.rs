@@ -203,13 +203,13 @@ fn test_memory_chip() {
         })
         .collect_vec();
 
-    let memory_requester_air = MemoryRequesterAir {
+    let memory_requester_air = Box::new(MemoryRequesterAir {
         memory_bridge: memory_chip.memory_bridge(),
-    };
+    });
 
     let memory_requester_trace = {
         let height = records.len().next_power_of_two();
-        let width = BaseAir::<F>::width(&memory_requester_air);
+        let width = BaseAir::<F>::width(memory_requester_air.deref());
         let mut values = vec![F::zero(); height * width];
         for (row, record) in values.chunks_mut(width).zip(records) {
             let row: &mut MemoryRequesterCols<F> = row.borrow_mut();
@@ -266,15 +266,10 @@ fn test_memory_chip() {
 
     let memory_airs = memory_chip.airs();
     let range_checker_air = range_checker.air();
-    let airs: Vec<&dyn AnyRap<BabyBearPoseidon2Config>> = memory_airs
-        .iter()
-        .map(Deref::deref)
-        .chain(iter::once(
-            &memory_requester_air as &dyn AnyRap<BabyBearPoseidon2Config>,
-        ))
-        .chain(iter::once(
-            range_checker_air.deref() as &dyn AnyRap<BabyBearPoseidon2Config>
-        ))
+    let airs: Vec<Box<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_airs
+        .into_iter()
+        .chain(iter::once(memory_requester_air as Box<dyn AnyRap<_>>))
+        .chain(iter::once(range_checker_air))
         .collect();
 
     memory_chip.finalize(None::<&mut Poseidon2Chip<BabyBear>>);
@@ -286,5 +281,6 @@ fn test_memory_chip() {
         .chain(iter::once(range_checker.generate_trace()))
         .collect();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(&airs, traces).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, traces)
+        .expect("Verification failed");
 }

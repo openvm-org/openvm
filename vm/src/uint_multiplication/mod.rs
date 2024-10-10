@@ -41,7 +41,7 @@ pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const
     pub air: UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
-    pub range_tuple_chip: Arc<RangeTupleCheckerChip>,
+    pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
 
     offset: usize,
 }
@@ -53,7 +53,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<T>,
-        range_tuple_chip: Arc<RangeTupleCheckerChip>,
+        range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
         offset: usize,
     ) -> Self {
         assert!(LIMB_BITS < 16, "LIMB_BITS {} >= 16", LIMB_BITS);
@@ -79,7 +79,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             air: UintMultiplicationAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
-                bus: bus.clone(),
+                bus: *bus,
                 offset,
             },
             data: vec![],

@@ -9,7 +9,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use crate::{
     arch::{chips::MachineChip, ExecutionState},
-    program::{bridge::ProgramBus, columns::ProgramPreprocessedCols, Instruction},
+    program::{bridge::ProgramBus, columns::ProgramExecutionCols, Instruction},
 };
 
 mod air;
@@ -17,7 +17,7 @@ mod air;
 #[derive(Clone, Debug)]
 pub struct ProgramTester<F: Field> {
     pub bus: ProgramBus,
-    pub records: Vec<ProgramPreprocessedCols<F>>,
+    pub records: Vec<ProgramExecutionCols<F>>,
 }
 
 impl<F: PrimeField32> ProgramTester<F> {
@@ -29,7 +29,7 @@ impl<F: PrimeField32> ProgramTester<F> {
     }
 
     pub fn execute(&mut self, instruction: Instruction<F>, initial_state: &ExecutionState<F>) {
-        self.records.push(ProgramPreprocessedCols {
+        self.records.push(ProgramExecutionCols {
             pc: initial_state.pc,
             opcode: F::from_canonical_u8(instruction.opcode as u8),
             op_a: instruction.op_a,
@@ -45,7 +45,7 @@ impl<F: PrimeField32> ProgramTester<F> {
 
 impl<F: Field> ProgramTester<F> {
     fn width() -> usize {
-        size_of::<ProgramPreprocessedCols<u8>>() + 1
+        size_of::<ProgramExecutionCols<u8>>() + 1
     }
 }
 
@@ -60,7 +60,7 @@ impl<F: Field> MachineChip<F> for ProgramTester<F> {
             *(row[..width - 1]).borrow_mut() = *record;
             row[width - 1] = F::one();
         }
-        RowMajorMatrix::new(values, self.trace_width())
+        RowMajorMatrix::new(values, width)
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
