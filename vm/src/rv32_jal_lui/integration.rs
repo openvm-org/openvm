@@ -59,7 +59,7 @@ impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32Jal
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
-    type Record = PhantomData<F>;
+    type Record = ();
     type Air = Rv32JalLuiAir<F>;
     type Cols<T> = Rv32JalLuiCols<T>;
 
@@ -89,7 +89,7 @@ where
             writes: rd_data.into(),
         };
 
-        Ok((output, PhantomData))
+        Ok((output, ()))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

@@ -225,7 +225,10 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
 
         Ok((
             ExecutionState {
-                pc: from_state.pc + 4,
+                pc: output
+                    .to_pc
+                    .unwrap_or(F::from_canonical_usize(from_state.pc + 4))
+                    .as_canonical_u32() as usize,
                 timestamp: memory.timestamp().as_canonical_u32() as usize,
             },
             Self::WriteRecord {
