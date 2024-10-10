@@ -32,7 +32,7 @@ use crate::{
     arch::{
         instructions::*, ExecutionBus, ExecutionState, ExecutorName, InstructionExecutor,
         InstructionExecutorVariant, MachineChip, MachineChipVariant, Rv32AluAdapter,
-        Rv32LoadStoreAdapter, Rv32MultAdapter,
+        Rv32LoadStoreAdapter, Rv32MultAdapter, Rv32RdWriteAdapter,
     },
     castf::CastFChip,
     core::{
@@ -54,6 +54,7 @@ use crate::{
     new_mulh::{MulHIntegration, Rv32MulHChip},
     new_shift::{Rv32ShiftChip, ShiftIntegration},
     program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
+    rv32_jal_lui::{Rv32JalLuiChip, Rv32JalLuiIntegration},
     shift::ShiftChip,
     ui::UiChip,
     uint_multiplication::UintMultiplicationChip,
@@ -356,6 +357,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(MachineChipVariant::LoadStoreRv32(chip));
+                }
+                ExecutorName::JalLuiRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32JalLuiChip::new(
+                        Rv32RdWriteAdapter::new(),
+                        Rv32JalLuiIntegration::new(offset),
+                        memory_chip.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::JalLuiRv32(chip));
                 }
                 ExecutorName::Ui => {
                     let chip = Rc::new(RefCell::new(UiChip::new(

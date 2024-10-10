@@ -236,6 +236,17 @@ pub enum Rv32LoadStoreOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x340]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32JalLuiOpcode {
+    JAL,
+    LUI,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0x350]
 #[repr(usize)]
 #[allow(non_camel_case_types)]

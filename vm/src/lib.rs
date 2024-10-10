@@ -17,6 +17,7 @@ pub mod new_mul;
 pub mod new_mulh;
 pub mod new_shift;
 pub mod program;
+pub mod rv32_jal_lui;
 /// SDK functions for running and proving programs in the VM.
 #[cfg(feature = "sdk")]
 pub mod sdk;

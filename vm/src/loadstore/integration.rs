@@ -11,7 +11,7 @@ use crate::{
             UsizeOpcode,
         },
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Result,
+        MachineIntegration, Reads, Result, Writes,
     },
     program::Instruction,
 };
@@ -58,8 +58,8 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
 impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_CELLS: usize> MachineIntegration<F, A>
     for LoadStoreIntegration<F, NUM_CELLS>
 where
-    <A::Interface<F> as MachineAdapterInterface<F>>::Reads: Into<[[F; NUM_CELLS]; 2]>,
-    <A::Interface<F> as MachineAdapterInterface<F>>::Writes: From<[F; NUM_CELLS]>,
+    Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,
+    Writes<F, A::Interface<F>>: From<[F; NUM_CELLS]>,
 {
     type Record = std::marker::PhantomData<F>;
     type Air = LoadStoreAir<F, NUM_CELLS>;
