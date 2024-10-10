@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir, utils::to_field_vec,
+    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+    utils::to_field_vec,
 };
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;

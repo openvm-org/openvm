@@ -6,8 +6,8 @@ use ax_sdk::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::{

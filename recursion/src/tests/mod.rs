@@ -11,8 +11,8 @@ use ax_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
         FriParameters,
     },
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkForTest,
-    interaction::dummy_interaction_air::DummyInteractionAir,
     utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
 };
 use p3_field::{AbstractField, PrimeField32};

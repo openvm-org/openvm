@@ -4,12 +4,12 @@ use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
+use ax_sdk::dummy_airs::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::columns::FibonacciSelectorCols;
-use crate::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 
 pub struct FibonacciSelectorAir {
     sels: Vec<bool>,

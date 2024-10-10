@@ -5,17 +5,17 @@
 use ax_sdk::{any_rap_box_vec, config, utils};
 use ax_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
+    dummy_airs::{
+        fib_air::chip::FibonacciChip,
+        interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
+    },
     engine::StarkFriEngine,
-    interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_uni_stark::StarkGenericConfig;
 
-use crate::fib_air::chip::FibonacciChip;
-
 mod cached_lookup;
-mod fib_air;
 mod fib_selector_air;
 mod fib_triples_air;
 pub mod interaction;
@@ -23,7 +23,7 @@ mod partitioned_sum_air;
 
 #[test]
 fn test_single_fib_stark() {
-    use fib_air::{air::FibonacciAir, trace::generate_trace_rows};
+    use ax_sdk::dummy_airs::fib_air::{air::FibonacciAir, trace::generate_trace_rows};
 
     let log_trace_degree = 3;
 
@@ -95,7 +95,7 @@ fn test_single_fib_selector_stark() {
 
 #[test]
 fn test_double_fib_starks() {
-    use fib_air::air::FibonacciAir;
+    use ax_sdk::dummy_airs::{fib_air, fib_air::air::FibonacciAir};
     use fib_selector_air::air::FibonacciSelectorAir;
 
     let log_n1 = 3;

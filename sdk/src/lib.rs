@@ -2,7 +2,7 @@ pub use afs_stark_backend;
 
 pub mod bench;
 pub mod config;
+pub mod dummy_airs;
 pub mod engine;
-pub mod interaction;
 pub mod page_config;
 pub mod utils;

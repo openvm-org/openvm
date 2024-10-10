@@ -2,8 +2,9 @@ use std::{iter, sync::Arc};
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
+    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+    utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

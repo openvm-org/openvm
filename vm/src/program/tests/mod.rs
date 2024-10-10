@@ -2,8 +2,8 @@ use std::iter;
 
 use afs_stark_backend::utils::AirInfo;
 use ax_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
 };
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
