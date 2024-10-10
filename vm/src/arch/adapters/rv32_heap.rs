@@ -102,6 +102,7 @@ impl<T: AbstractField, const READ_SIZE: usize, const WRITE_SIZE: usize> MachineA
 }
 
 pub struct Rv32HeapAdapterCols<T, const READ_SIZE: usize, const WRITE_SIZE: usize> {
+    // TODO: we should save on address space as register is 1, and the data is fixed for all (e = 2).
     pub read_aux: [Rv32RegisterHeapReadAuxCols<T, READ_SIZE>; 2],
     pub write_aux: Rv32RegisterHeapWriteAuxCols<T, WRITE_SIZE>,
     pub read_addresses: [HeapAddress<T, T>; 2],
