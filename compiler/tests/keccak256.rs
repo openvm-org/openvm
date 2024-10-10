@@ -60,7 +60,7 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
             .add_default_executor(ExecutorName::FieldArithmetic)
             .add_default_executor(ExecutorName::FieldExtension)
             .add_default_executor(ExecutorName::Keccak256),
-        BabyBearPoseidon2Engine::new(FriParameters::standard_fast()),
+        &BabyBearPoseidon2Engine::new(FriParameters::standard_fast()),
     )
     .unwrap();
 }

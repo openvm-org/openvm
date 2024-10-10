@@ -129,7 +129,7 @@ mod sdk {
         program: Program<Val<SC>>,
         input_stream: Vec<Vec<Val<SC>>>,
         config: VmConfig,
-        engine: E,
+        engine: &E,
     ) -> Result<(VerificationDataWithFriParams<SC>, Vec<Vec<Val<SC>>>), VerificationError>
     where
         Val<SC>: PrimeField32,
@@ -147,7 +147,7 @@ mod sdk {
             .iter()
             .map(|air| air.public_values.clone())
             .collect();
-        let vparams = stark_for_test.run_test(&engine)?;
+        let vparams = stark_for_test.run_test(engine)?;
         span.exit();
         Ok((vparams, pvs))
     }
