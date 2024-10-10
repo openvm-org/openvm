@@ -142,18 +142,11 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
 }
 
 /// Create a new [`Instruction`] that is not implemented.
-pub fn unimp() -> Instruction<u32> {
-    Instruction::new(
-        CoreOpcode::FAIL as usize,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        String::new(),
-    )
+pub fn unimp<F: PrimeField32>() -> Instruction<F> {
+    Instruction {
+        opcode: CoreOpcode::FAIL as usize,
+        ..Default::default()
+    }
 }
 
 // /// Returns if the [`Instruction`] is an R-type instruction.

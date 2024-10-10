@@ -1,6 +1,6 @@
 // Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT License
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
-use std::{cmp::min, collections::BTreeMap, io::SeekFrom};
+use std::{cmp::min, collections::BTreeMap};
 
 use axvm_platform::WORD_SIZE;
 use color_eyre::eyre::{self, bail, ContextCompat};
@@ -21,6 +21,7 @@ use elf::{
 ///
 /// This format is commonly used in embedded systems and is supported by many compilers.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct Elf {
     /// The instructions of the program encoded as 32-bits.
     pub(crate) instructions: Vec<u32>,
@@ -34,7 +35,6 @@ pub(crate) struct Elf {
 
 impl Elf {
     /// Create a new [Elf].
-    #[must_use]
     pub(crate) const fn new(
         instructions: Vec<u32>,
         pc_start: u32,
@@ -57,6 +57,7 @@ impl Elf {
     /// This function may return an error if the ELF is not valid.
     ///
     /// Reference: [Executable and Linkable Format](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
+    #[allow(dead_code)]
     pub(crate) fn decode(input: &[u8], max_mem: u32) -> eyre::Result<Self> {
         let mut image: BTreeMap<u32, u32> = BTreeMap::new();
 
@@ -158,40 +159,5 @@ impl Elf {
         }
 
         Ok(Elf::new(instructions, entry, base_address, image))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{fs::read, path::PathBuf};
-
-    use axvm_platform::memory::MEM_SIZE;
-    use color_eyre::eyre::Result;
-    use p3_baby_bear::BabyBear;
-
-    use crate::rrs::transpile;
-
-    #[test]
-    fn test_decode_elf() -> Result<()> {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let data = read(dir.join("data/rv32im-empty-program-elf"))?;
-        let elf = super::Elf::decode(&data, MEM_SIZE as u32)?;
-        dbg!(elf);
-        Ok(())
-    }
-
-    // this test doesn't belong here, but I guess we keep them in one place until we put them in a separate file
-    #[test]
-    fn test_generate_program() -> Result<()> {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let data = read(dir.join("data/rv32im-fib-from-as"))?;
-        let elf = super::Elf::decode(&data, MEM_SIZE as u32)?;
-        dbg!(elf.pc_start / 4 - elf.pc_base / 4, elf.instructions.len());
-        let program = transpile::<BabyBear>(&elf.instructions);
-        // dbg!(program);
-        for instruction in program {
-            println!("{:?}", instruction);
-        }
-        Ok(())
     }
 }

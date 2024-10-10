@@ -3,3 +3,6 @@
 pub mod elf;
 pub mod rrs;
 pub mod util;
+
+#[cfg(test)]
+mod tests;
