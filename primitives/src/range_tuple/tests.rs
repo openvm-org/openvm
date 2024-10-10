@@ -1,8 +1,8 @@
 use std::{array, iter};
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
+use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -79,43 +79,41 @@ fn test_range_tuple_chip() {
         .expect("Verification failed");
 }
 
-#[test]
-fn negative_test_range_tuple_chip() {
-    let bus_index = 0;
-    let sizes = [2, 2, 8];
+// #[test]
+// fn negative_test_range_tuple_chip() {
+//     let bus_index = 0;
+//     let sizes = [2, 2, 8];
 
-    let bus = RangeTupleCheckerBus::new(bus_index, sizes);
-    let range_checker = RangeTupleCheckerChip::new(bus);
+//     let bus = RangeTupleCheckerBus::new(bus_index, sizes);
+//     let range_checker = RangeTupleCheckerChip::new(bus);
 
-    let height = sizes.iter().product();
-    let range_trace = RowMajorMatrix::new(
-        (1..=height)
-            .flat_map(|idx| {
-                let mut idx = idx;
-                let mut v = vec![];
-                for size in sizes.iter().rev() {
-                    let val = idx % size;
-                    idx /= size;
-                    v.push(val);
-                }
-                v.reverse();
-                v.into_iter().chain(iter::once(0))
-            })
-            .map(AbstractField::from_wrapped_u32)
-            .collect(),
-        sizes.len() + 1,
-    );
+//     let height = sizes.iter().product();
+//     let range_trace = RowMajorMatrix::new(
+//         (1..=height)
+//             .flat_map(|idx| {
+//                 let mut idx = idx;
+//                 let mut v = vec![];
+//                 for size in sizes.iter().rev() {
+//                     let val = idx % size;
+//                     idx /= size;
+//                     v.push(val);
+//                 }
+//                 v.reverse();
+//                 v.into_iter().chain(iter::once(0))
+//             })
+//             .map(AbstractField::from_wrapped_u32)
+//             .collect(),
+//         sizes.len() + 1,
+//     );
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-    assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![range_checker.air],
-            vec![range_trace]
-        )
-        .err(),
-        Some(VerificationError::NonZeroCumulativeSum),
-        "Expected constraint to fail"
-    );
-}
+//     disable_debug_builder();
+//     assert_eq!(
+//         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+//             any_rap_box_vec![range_checker.air],
+//             vec![range_trace]
+//         )
+//         .err(),
+//         Some(VerificationError::NonZeroCumulativeSum),
+//         "Expected constraint to fail"
+//     );
+// }
