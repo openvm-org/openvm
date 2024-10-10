@@ -36,6 +36,9 @@ impl std::fmt::Display for SymbolicExpr {
             SymbolicExpr::Mul(lhs, rhs) => write!(f, "({} * {})", lhs, rhs),
             SymbolicExpr::Div(lhs, rhs) => write!(f, "({} / {})", lhs, rhs),
             SymbolicExpr::IntMul(lhs, s) => write!(f, "({} x {})", lhs, s),
+            SymbolicExpr::Select(flag_id, lhs, rhs) => {
+                write!(f, "(if {} then {} else {})", flag_id, lhs, rhs)
+            }
         }
     }
 }
