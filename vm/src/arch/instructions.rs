@@ -275,26 +275,6 @@ pub enum DivRemOpcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum UnimplementedOpcode {
-    ADD_RV32,
-    SUB_RV32,
-    XOR_RV32,
-    OR_RV32,
-    AND_RV32,
-    SLL_RV32,
-    SRL_RV32,
-    SRA_RV32,
-    SLT_RV32,
-    SLTU_RV32,
-
-    LOADB_RV32,
-    LOADH_RV32,
-    LOADW_RV32,
-    LOADBU_RV32,
-    LOADHU_RV32,
-    STOREB_RV32,
-    STOREH_RV32,
-    STOREW_RV32,
-
     BLT_RV32,
     BGE_RV32,
     BLTU_RV32,
@@ -303,13 +283,4 @@ pub enum UnimplementedOpcode {
     JALR_RV32,
     LUI_RV32,
     AUIPC_RV32,
-
-    MUL_RV32,
-    MULH_RV32,
-    MULHSU_RV32,
-    MULHU_RV32,
-    DIV_RV32,
-    DIVU_RV32,
-    REM_RV32,
-    REMU_RV32,
 }

@@ -1,6 +1,6 @@
 // Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT License
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
-use std::{cmp::min, collections::BTreeMap};
+use std::{cmp::min, collections::BTreeMap, io::SeekFrom};
 
 use axvm_platform::WORD_SIZE;
 use color_eyre::eyre::{self, bail, ContextCompat};
