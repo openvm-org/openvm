@@ -246,6 +246,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs: left_limb_max_abs,
             max_overflow_bits: left_max_overflow_bits,
             expr_limbs: left_expr_limbs,
+            range_checker_bits: a.range_checker_bits,
             _marker: PhantomData,
         }
     }

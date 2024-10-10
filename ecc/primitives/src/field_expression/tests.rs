@@ -382,10 +382,8 @@ fn test_ec_double() {
 #[test]
 fn test_select() {
     let prime = secp256k1_coord_prime();
-    let (subair, range_checker) = get_sub_air(&prime);
+    let (subair, range_checker, builder) = setup(&prime);
 
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
-    let builder = Rc::new(RefCell::new(builder));
     let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let x3 = x1.clone() + x2.clone();
@@ -429,10 +427,7 @@ fn test_select() {
 #[test]
 fn test_select2() {
     let prime = secp256k1_coord_prime();
-    let (subair, range_checker) = get_sub_air(&prime);
-
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32);
-    let builder = Rc::new(RefCell::new(builder));
+    let (subair, range_checker, builder) = setup(&prime);
     let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
     let x3 = x1.clone() + x2.clone();
