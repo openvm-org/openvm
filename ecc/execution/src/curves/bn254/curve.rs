@@ -1,7 +1,12 @@
-use halo2curves_axiom::bn256::{Fq, Fq2, G1Affine, G2Affine};
+use std::ops::Mul;
+
+use halo2curves_axiom::{
+    bn256::{Fq, Fq2, Fr, G1Affine, G2Affine},
+    group::prime::PrimeCurveAffine,
+};
 use rand::Rng;
 
-use crate::common::{AffineCoords, FieldExtension};
+use crate::common::{AffineCoords, FieldExtension, ScalarMul};
 
 // from gnark implementation: https://github.com/Consensys/gnark/blob/42dcb0c3673b2394bf1fd82f5128f7a121d7d48e/std/algebra/emulated/sw_bn254/pairing.go#L356
 // loopCounter = 6x₀+2 = 29793968203157093288 in 2-NAF (nonadjacent form)
@@ -49,6 +54,12 @@ impl AffineCoords<Fq> for G1Affine {
     }
 }
 
+impl ScalarMul<Fr> for G1Affine {
+    fn scalar_mul(&self, s: Fr) -> Self {
+        (self.to_curve().mul(s)).into()
+    }
+}
+
 impl AffineCoords<Fq2> for G2Affine {
     fn x(&self) -> Fq2 {
         self.x
@@ -64,5 +75,11 @@ impl AffineCoords<Fq2> for G2Affine {
 
     fn generator() -> Self {
         G2Affine::generator()
+    }
+}
+
+impl ScalarMul<Fr> for G2Affine {
+    fn scalar_mul(&self, s: Fr) -> Self {
+        (self.to_curve().mul(s)).into()
     }
 }

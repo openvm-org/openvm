@@ -1,10 +1,12 @@
-use halo2curves_axiom::bn256::{Fq, Fq2, G1Affine, G2Affine};
+use halo2curves_axiom::bn256::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use num::{BigInt, Num};
 
 use crate::{
     common::{ExpBigInt, FeltPrint, FinalExp, MultiMillerLoop},
     curves::bn254::Bn254,
-    tests::utils::{generate_test_points, generate_test_points_generator},
+    tests::utils::{
+        generate_test_points, generate_test_points_generator, generate_test_points_generator_scalar,
+    },
 };
 
 #[test]
@@ -36,18 +38,15 @@ fn test_final_exp_hint() {
 #[test]
 #[allow(non_snake_case)]
 fn test_assert_final_exp_is_one() {
-    // let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) =
-    //     generate_test_points_generator::<G1Affine, G2Affine, Fq, Fq2>();
-    // println!("P_ecpoints: {:#?}", P_ecpoints);
-    // println!("Q_ecpoints: {:#?}", Q_ecpoints);
-    let rand_seeds = [888];
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) =
-        generate_test_points::<G1Affine, G2Affine, Fq, Fq2>(&rand_seeds);
+        generate_test_points_generator_scalar::<G1Affine, G2Affine, Fr, Fq, Fq2, 2>(
+            &[Fr::from(5), Fr::from(2).neg()],
+            &[Fr::from(10), Fr::from(25)],
+        );
+    println!("P_ecpoints: {:#?}", P_ecpoints);
+    println!("Q_ecpoints: {:#?}", Q_ecpoints);
 
     let bn254 = Bn254;
     let f = bn254.multi_miller_loop(&P_ecpoints, &Q_ecpoints);
-    println!("f: {:#?}", f);
-    f.felt_print("f");
-    println!("\n---------------\n");
     bn254.assert_final_exp_is_one(f, &P_ecpoints, &Q_ecpoints);
 }

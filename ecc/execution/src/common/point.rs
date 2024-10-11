@@ -26,3 +26,7 @@ pub trait AffineCoords<F: Field>: Clone {
     fn random(rng: &mut impl Rng) -> Self;
     fn generator() -> Self;
 }
+
+pub trait ScalarMul<Fr: Field> {
+    fn scalar_mul(&self, s: Fr) -> Self;
+}

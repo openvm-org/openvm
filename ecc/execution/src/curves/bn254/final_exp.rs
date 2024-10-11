@@ -84,6 +84,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
             10
         ).unwrap();
 
+        // get the 27th root of unity
         let u0 = str_to_u64_arr(
             "9483667112135124394372960210728142145589475128897916459350428495526310884707",
             10,
@@ -96,7 +97,6 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
             Fq::from_raw([u0[0], u0[1], u0[2], u0[3]]),
             Fq::from_raw([u1[0], u1[1], u1[2], u1[3]]),
         ]);
-        // 27th root of unity
         let unity_root_27 = Fq12::from_coeffs(&[
             Fq2::ZERO,
             Fq2::ZERO,
@@ -108,7 +108,6 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         unity_root_27.felt_print("27th root of unity");
         debug_assert_eq!(unity_root_27.pow([27]), Fq12::one());
 
-        // let f_mul_unity_root_27_exp1 = f_mul_unity_root_27.exp(exp1.clone());
         if f.exp(exp1.clone()) == Fq12::ONE {
             println!("f is cubic residue");
             c = f;
