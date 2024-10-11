@@ -49,6 +49,9 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2Chip<NUM_LIM
         let builder = Rc::new(RefCell::new(builder));
         let x1 = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
         let x2 = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
+        // constraint is x * x2 = z
+        // where x = if is_mul_flag then x1 else x3
+        // and z = if is_mul_flag then x3 else x1
         let mut x3 = x1.clone() * x2.clone();
         x3.save(); // div auto save, so this has to save to match.
         let x4 = x1 / x2;
