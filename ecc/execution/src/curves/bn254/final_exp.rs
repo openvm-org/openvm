@@ -17,11 +17,11 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         let c_inv = c.invert().unwrap();
 
         // c_mul = c^{q^3 - q^2 + q}
-        let c_f3 = c.frobenius_map(Some(3));
-        let c_f2 = c.frobenius_map(Some(2));
-        let c_f2_inv = c_f2.invert().unwrap();
-        let c_f = c.frobenius_map(Some(1));
-        let c_mul = c_f3 * c_f2_inv * c_f;
+        let c_q3 = c.frobenius_map(Some(3));
+        let c_q2 = c.frobenius_map(Some(2));
+        let c_q2_inv = c_q2.invert().unwrap();
+        let c_q = c.frobenius_map(Some(1));
+        let c_mul = c_q3 * c_q2_inv * c_q;
         let c_mul_inv = c_mul.invert().unwrap();
         c_mul.felt_print("c_mul");
 
@@ -31,9 +31,10 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
 
         // We want f_{-(6x+2)} * c^{-(q^3 - q^2 + q)} = u
         let cmp = fx * c_mul_inv;
-        cmp.felt_print("cmp (fx * c_mul_inv) output");
+        cmp.felt_print("cmp (fx * c_mul_inv)");
 
-        u.felt_print("u output");
+        f.felt_print("f");
+        u.felt_print("u");
 
         // ------ native exponentiation ------
         let q = BigInt::from_str_radix(
@@ -48,17 +49,15 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         let c_to_six = c.exp(six_x_plus_2);
         let c_to_q = c.exp(q_pows);
         assert_eq!(c_mul, c_to_q);
-        c_mul.felt_print("c_mul");
-        c_to_q.felt_print("c_to_q");
 
         let c_lambda = c.exp(lambda);
-        let res = f.invert().unwrap() * c_lambda * u;
-        res.felt_print("res");
-        f.felt_print("f");
-        c_lambda.felt_print("c_lambda");
+        // let res = f.invert().unwrap() * c_lambda * u;
+        // res.felt_print("res");
+        // f.felt_print("f");
+        // c_lambda.felt_print("c_lambda");
 
-        let res2 = f * c_lambda.invert().unwrap() * u.invert().unwrap();
-        res2.felt_print("res2");
+        // let res2 = f * c_lambda.invert().unwrap() * u.invert().unwrap();
+        // res2.felt_print("res2");
 
         // ------ end ------
 
