@@ -315,7 +315,7 @@ impl<F: PrimeField64> ProgramChip<F> {
         }
     }
 
-    pub fn get_instruction(
+    pub fn get_instruction_and_debug_info(
         &mut self,
         pc: usize,
     ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
