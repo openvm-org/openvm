@@ -82,8 +82,8 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
         F::from_canonical_usize(dec_insn.rs2),
         F::from_canonical_usize(dec_insn.rs1),
         F::from_canonical_u32(dec_insn.imm as u32),
-        F::zero(), // TODO: hold until we sort out address spaces in S-type operations
         F::one(),
+        F::two(),
         F::zero(),
         F::zero(),
         String::new(),
