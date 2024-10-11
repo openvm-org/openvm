@@ -20,6 +20,8 @@ p3-uni-stark = { workspace = true }
 axvm-platform = { workspace = true }
 stark-vm = { workspace = true }
 
+backtrace.workspace = true
+
 color-eyre = "0.6.3"
 elf = "0.7.4"
 rrs-lib = "0.1.0"
