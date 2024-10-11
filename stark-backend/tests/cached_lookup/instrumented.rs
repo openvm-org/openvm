@@ -1,4 +1,7 @@
-use std::fs::{self, File};
+use std::{
+    error::Error,
+    fs::{self, File},
+};
 
 use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
 use ax_sdk::{
@@ -96,7 +99,7 @@ fn instrumented_verifier_comparison(
 // Run with `RUSTFLAGS="-Ctarget-cpu=native" cargo t --release -- --ignored --nocapture instrument_cached_trace_verifier`
 #[test]
 #[ignore = "bench"]
-fn instrument_cached_trace_verifier() -> eyre::Result<()> {
+fn instrument_cached_trace_verifier() -> Result<(), Box<dyn Error>> {
     let fri_params = [1, 2, 3, 4]
         .map(standard_fri_params_with_100_bits_conjectured_security)
         .to_vec();

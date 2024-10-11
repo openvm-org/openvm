@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     fs::{self, File},
     iter,
     time::Instant,
@@ -209,7 +210,7 @@ fn compare_provers(
 // Run with `RUSTFLAGS="-Ctarget-cpu=native" cargo t --release -- --ignored --nocapture bench_cached_trace_prover`
 #[test]
 #[ignore = "bench"]
-fn bench_cached_trace_prover() -> eyre::Result<()> {
+fn bench_cached_trace_prover() -> Result<(), Box<dyn Error>> {
     let fri_params = [1, 2, 3, 4]
         .map(standard_fri_params_with_100_bits_conjectured_security)
         .to_vec();
