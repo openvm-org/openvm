@@ -73,7 +73,7 @@ fn simple_execute_roundtrip_test() {
     let mut rng = create_seeded_rng();
     let mut tester = MachineChipTestBuilder::default();
     let adapter = Rv32RdWriteAdapter::<F>::new();
-    let inner = Rv32JalLuiIntegration::<F>::new(Rv32JalLuiOpcode::default_offset());
+    let inner = Rv32JalLuiIntegration::new(Rv32JalLuiOpcode::default_offset());
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_chip());
 
     let num_tests: usize = 10;

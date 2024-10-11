@@ -2,14 +2,14 @@ use std::mem::size_of;
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Reads, Result, Writes,
+        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes,
     },
     program::Instruction,
 };
@@ -43,9 +43,25 @@ impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualAir<NUM_LIMBS> 
     }
 }
 
-impl<AB: InteractionBuilder, const NUM_LIMBS: usize> Air<AB> for BranchEqualAir<NUM_LIMBS> {
-    fn eval(&self, _builder: &mut AB) {
-        todo!();
+impl<
+        F: PrimeField32,
+        A: MachineAdapter<F>,
+        AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues,
+        const NUM_LIMBS: usize,
+    > MachineIntegrationAir<F, A, BranchEqualIntegration<NUM_LIMBS>, AB>
+    for BranchEqualAir<NUM_LIMBS>
+where
+    Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
+    Writes<F, A::Interface<F>>: Default,
+{
+    /// Returns `(to_pc, interface)`
+    fn eval_primitive(
+        &self,
+        _builder: &mut AB,
+        _local: &BranchEqualCols<AB::Var, NUM_LIMBS>,
+        _local_adapter: &A::Cols<AB::Var>,
+    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
+        todo!()
     }
 }
 
@@ -112,16 +128,6 @@ where
     }
 
     fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
-        todo!()
-    }
-
-    /// Returns `(to_pc, interface)`.
-    fn eval_primitive<AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues>(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &A::Cols<AB::Var>,
-    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
         todo!()
     }
 

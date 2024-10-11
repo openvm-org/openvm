@@ -27,6 +27,7 @@ pub trait MachineAdapterInterface<T> {
 
 pub type Reads<T, I> = <I as MachineAdapterInterface<T>>::Reads;
 pub type Writes<T, I> = <I as MachineAdapterInterface<T>>::Writes;
+pub type ProcessedInstruction<T, I> = <I as MachineAdapterInterface<T>>::ProcessedInstruction;
 
 /// The adapter owns all memory accesses and timestamp changes.
 /// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
@@ -68,26 +69,31 @@ pub trait MachineAdapter<F: PrimeField32> {
     /// Should mutate `row_slice` to populate with values corresponding to `record`.
     fn generate_trace_row(
         &self,
+        memory: &mut MemoryChip<F>,
         row_slice: &mut Self::Cols<F>,
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
     );
 
+    fn air(&self) -> Self::Air;
+}
+
+pub trait MachineAdapterAir<
+    F: PrimeField32,
+    A: MachineAdapter<F>,
+    AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues,
+>: BaseAir<AB::F>
+{
     /// [Air](p3_air::Air) constraints owned by the adapter.
     /// The `interface` is given as abstract expressions so it can be directly used in other AIR constraints.
-    /// Returns `
     ///
     /// Adapters should document the max constraint degree as a function of the constraint degrees of `reads, writes, instruction`.
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        air: &Self::Air,
+    fn eval_adapter_constraints(
+        &self,
         builder: &mut AB,
-        local: &Self::Cols<AB::Var>,
-        interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr;
-
-    fn air(&self) -> Self::Air;
+        local: &A::Cols<AB::Var>,
+        interface: IntegrationInterface<AB::Expr, A::Interface<AB::Expr>>,
+    );
 }
 
 /// Trait to be implemented on primitive chip to integrate with the machine.
@@ -112,16 +118,24 @@ pub trait MachineIntegration<F: PrimeField32, A: MachineAdapter<F>> {
     // Should mutate `row_slice` to populate with values corresponding to `record`.
     fn generate_trace_row(&self, row_slice: &mut Self::Cols<F>, record: Self::Record);
 
+    fn air(&self) -> Self::Air;
+}
+
+pub trait MachineIntegrationAir<
+    F: PrimeField32,
+    A: MachineAdapter<F>,
+    M: MachineIntegration<F, A>,
+    AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues,
+>: BaseAir<AB::F>
+{
     /// Returns `(to_pc, interface)`.
-    // `local_adapter` provided for flexibility - likely only needed for `from_pc` and `is_valid`
-    fn eval_primitive<AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues>(
-        air: &Self::Air,
+    // `local_adapter` provided for flexibility - likely only needed for `from_pc`
+    fn eval_primitive(
+        &self,
         builder: &mut AB,
-        local: &Self::Cols<AB::Var>,
+        local: &M::Cols<AB::Var>,
         local_adapter: &A::Cols<AB::Var>,
     ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>>;
-
-    fn air(&self) -> Self::Air;
 }
 
 pub struct InstructionOutput<T, I: MachineAdapterInterface<T>> {
@@ -168,6 +182,8 @@ where
     A: MachineAdapter<F>,
     M: MachineIntegration<F, A>,
     AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
+    A::Air: MachineAdapterAir<F, A, AB>,
+    M::Air: MachineIntegrationAir<F, A, M, AB>,
     [AB::Var]: Borrow<A::Cols<AB::Var>>,
     [AB::Var]: Borrow<M::Cols<AB::Var>>,
 {
@@ -179,8 +195,11 @@ where
         let local_adapter: &A::Cols<AB::Var> = (*local_adapter).borrow();
         let local_inner: &M::Cols<AB::Var> = (*local_inner).borrow();
 
-        let interface = M::eval_primitive(&self.inner, builder, local_inner, local_adapter);
-        A::eval_adapter_constraints(&self.adapter, builder, local_adapter, interface);
+        let interface = self
+            .inner
+            .eval_primitive(builder, local_inner, local_adapter);
+        self.adapter
+            .eval_adapter_constraints(builder, local_adapter, interface);
     }
 }
 

@@ -9,7 +9,7 @@ use super::{read_rv32_register, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
         ExecutionBridge, ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter,
-        MachineAdapterInterface, Result,
+        MachineAdapterAir, MachineAdapterInterface, Result,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -82,6 +82,27 @@ impl<F, const READ_SIZE: usize, const WRITE_SIZE: usize> BaseAir<F>
 {
     fn width(&self) -> usize {
         size_of::<Rv32HeapAdapterCols<u8, READ_SIZE, WRITE_SIZE>>()
+    }
+}
+
+impl<
+        F: PrimeField32,
+        AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > MachineAdapterAir<F, Rv32HeapAdapter<F, READ_SIZE, WRITE_SIZE>, AB>
+    for Rv32HeapAdapterAir<READ_SIZE, WRITE_SIZE>
+{
+    fn eval_adapter_constraints(
+        &self,
+        _builder: &mut AB,
+        _local: &Rv32HeapAdapterCols<AB::Var, READ_SIZE, WRITE_SIZE>,
+        _interface: IntegrationInterface<
+            AB::Expr,
+            Rv32HeapAdapterInterface<AB::Expr, READ_SIZE, WRITE_SIZE>,
+        >,
+    ) {
+        todo!();
     }
 }
 
@@ -195,21 +216,11 @@ impl<
 
     fn generate_trace_row(
         &self,
+        _memory: &mut MemoryChip<F>,
         _row_slice: &mut Self::Cols<F>,
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
     ) {
-        todo!()
-    }
-
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
         todo!()
     }
 

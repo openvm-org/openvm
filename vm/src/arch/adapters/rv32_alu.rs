@@ -2,18 +2,18 @@ use std::{marker::PhantomData, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
-        MachineAdapter, MachineAdapterInterface, Result,
+        MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
+        MemoryAddress, MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
     },
     program::{bridge::ProgramBus, Instruction},
 };
@@ -37,8 +37,8 @@ impl<F: PrimeField32> Rv32AluAdapter<F> {
         Self {
             _marker: PhantomData,
             air: Rv32AluAdapterAir {
-                _execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                _memory_bridge: memory_bridge,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
             },
         }
     }
@@ -69,10 +69,15 @@ pub struct Rv32AluAdapterInterface<T>(PhantomData<T>);
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct Rv32AluProcessedInstruction<T> {
+    pub is_valid: T,
     /// Absolute opcode number
     pub opcode: T,
-    /// Boolean for whether rs2 is an immediate or not
-    pub rs2_is_imm: T,
+}
+
+impl<T> From<(T, T)> for Rv32AluProcessedInstruction<T> {
+    fn from((is_valid, opcode): (T, T)) -> Self {
+        Self { is_valid, opcode }
+    }
 }
 
 impl<T: AbstractField> MachineAdapterInterface<T> for Rv32AluAdapterInterface<T> {
@@ -85,8 +90,11 @@ impl<T: AbstractField> MachineAdapterInterface<T> for Rv32AluAdapterInterface<T>
 #[derive(AlignedBorrow)]
 pub struct Rv32AluAdapterCols<T> {
     pub from_state: ExecutionState<T>,
-    pub rs1_index: T,
-    pub rs2_index: T,
+    pub rd_ptr: T,
+    pub rs1_ptr: T,
+    pub rs2_ptr: T,
+    /// 1 if rs2 was a read, 0 if an immediate
+    pub rs2_as: T,
     pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>; 2],
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
 }
@@ -99,8 +107,8 @@ impl<T> Rv32AluAdapterCols<T> {
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32AluAdapterAir {
-    pub(super) _execution_bridge: ExecutionBridge,
-    pub(super) _memory_bridge: MemoryBridge,
+    pub(super) execution_bridge: ExecutionBridge,
+    pub(super) memory_bridge: MemoryBridge,
 }
 
 impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
@@ -109,9 +117,63 @@ impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for Rv32AluAdapterAir {
-    fn eval(&self, _builder: &mut AB) {
-        todo!();
+impl<F: PrimeField32, AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues>
+    MachineAdapterAir<F, Rv32AluAdapter<F>, AB> for Rv32AluAdapterAir
+{
+    fn eval_adapter_constraints(
+        &self,
+        builder: &mut AB,
+        local: &Rv32AluAdapterCols<AB::Var>,
+        interface: IntegrationInterface<AB::Expr, Rv32AluAdapterInterface<AB::Expr>>,
+    ) {
+        let timestamp: AB::Var = local.from_state.timestamp;
+        let mut timestamp_delta: usize = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+        };
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(AB::Expr::one(), local.rs1_ptr),
+                interface.reads[0].clone(),
+                timestamp_pp(),
+                &local.reads_aux[0],
+            )
+            .eval(builder, interface.instruction.is_valid.clone());
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(local.rs2_as, local.rs2_ptr),
+                interface.reads[1].clone(),
+                timestamp_pp(),
+                &local.reads_aux[1],
+            )
+            .eval(builder, local.rs2_as);
+
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(AB::Expr::one(), local.rd_ptr),
+                interface.writes,
+                timestamp + AB::F::from_canonical_usize(timestamp_delta),
+                &local.writes_aux,
+            )
+            .eval(builder, interface.instruction.is_valid.clone());
+
+        self.execution_bridge
+            .execute_and_increment_pc(
+                interface.instruction.opcode,
+                [
+                    local.rd_ptr.into(),
+                    local.rs1_ptr.into(),
+                    local.rs2_ptr.into(),
+                    AB::Expr::one(),
+                    local.rs2_as.into(),
+                ],
+                local.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, interface.instruction.is_valid);
     }
 }
 
@@ -197,22 +259,22 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut Self::Cols<F>,
-        _read_record: Self::ReadRecord,
-        _write_record: Self::WriteRecord,
+        memory: &mut MemoryChip<F>,
+        row_slice: &mut Self::Cols<F>,
+        read_record: Self::ReadRecord,
+        write_record: Self::WriteRecord,
     ) {
-        todo!();
-    }
-
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
-        todo!();
+        let aux_cols_factory = memory.aux_cols_factory();
+        row_slice.from_state = write_record.from_state.map(F::from_canonical_usize);
+        row_slice.rd_ptr = write_record.rd.pointer;
+        row_slice.rs1_ptr = read_record.rs1.pointer;
+        row_slice.rs2_ptr = read_record.rs2.pointer;
+        // TODO: rs2_as definition
+        row_slice.reads_aux = [
+            aux_cols_factory.make_read_aux_cols(read_record.rs1),
+            aux_cols_factory.make_read_aux_cols(read_record.rs2),
+        ];
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
     }
 
     fn air(&self) -> Self::Air {

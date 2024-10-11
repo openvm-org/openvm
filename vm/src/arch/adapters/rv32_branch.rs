@@ -2,14 +2,14 @@ use std::{marker::PhantomData, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
-        MachineAdapter, MachineAdapterInterface, Result,
+        MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols},
@@ -101,8 +101,15 @@ impl<F: Field> BaseAir<F> for Rv32BranchAdapterAir {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for Rv32BranchAdapterAir {
-    fn eval(&self, _builder: &mut AB) {
+impl<F: PrimeField32, AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues>
+    MachineAdapterAir<F, Rv32BranchAdapter<F>, AB> for Rv32BranchAdapterAir
+{
+    fn eval_adapter_constraints(
+        &self,
+        _builder: &mut AB,
+        _local: &Rv32BranchAdapterCols<AB::Var>,
+        _interface: IntegrationInterface<AB::Expr, Rv32BranchAdapterInterface<AB::Expr>>,
+    ) {
         todo!();
     }
 }
@@ -165,21 +172,11 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32BranchAdapter<F> {
 
     fn generate_trace_row(
         &self,
+        _memory: &mut MemoryChip<F>,
         _row_slice: &mut Self::Cols<F>,
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
     ) {
-        todo!();
-    }
-
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
         todo!();
     }
 

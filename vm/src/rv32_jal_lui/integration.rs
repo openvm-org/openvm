@@ -11,7 +11,8 @@ use crate::{
             UsizeOpcode,
         },
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Result, Writes, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS,
+        MachineIntegration, MachineIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
+        RV_J_TYPE_IMM_BITS,
     },
     program::Instruction,
 };
@@ -28,39 +29,54 @@ impl<T> Rv32JalLuiCols<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalLuiAir<F: Field> {
-    pub _marker: PhantomData<F>,
+pub struct Rv32JalLuiAir {
     pub offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32JalLuiAir<F> {
+impl<F: Field> BaseAir<F> for Rv32JalLuiAir {
     fn width(&self) -> usize {
         Rv32JalLuiCols::<F>::width()
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Rv32JalLuiIntegration<F: Field> {
-    pub air: Rv32JalLuiAir<F>,
+impl<
+        F: PrimeField32,
+        A: MachineAdapter<F>,
+        AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues,
+    > MachineIntegrationAir<F, A, Rv32JalLuiIntegration, AB> for Rv32JalLuiAir
+where
+    Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
+{
+    /// Returns `(to_pc, interface)`
+    fn eval_primitive(
+        &self,
+        _builder: &mut AB,
+        _local: &Rv32JalLuiCols<AB::Var>,
+        _local_adapter: &A::Cols<AB::Var>,
+    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
+        todo!()
+    }
 }
 
-impl<F: Field> Rv32JalLuiIntegration<F> {
+#[derive(Debug, Clone)]
+pub struct Rv32JalLuiIntegration {
+    pub air: Rv32JalLuiAir,
+}
+
+impl Rv32JalLuiIntegration {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: Rv32JalLuiAir::<F> {
-                _marker: PhantomData,
-                offset,
-            },
+            air: Rv32JalLuiAir { offset },
         }
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32JalLuiIntegration<F>
+impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32JalLuiIntegration
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
-    type Air = Rv32JalLuiAir<F>;
+    type Air = Rv32JalLuiAir;
     type Cols<T> = Rv32JalLuiCols<T>;
 
     #[allow(clippy::type_complexity)]
@@ -100,15 +116,6 @@ where
     }
 
     fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
-        todo!()
-    }
-
-    fn eval_primitive<AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues>(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &A::Cols<AB::Var>,
-    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
         todo!()
     }
 

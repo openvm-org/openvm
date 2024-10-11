@@ -11,7 +11,7 @@ use crate::{
             UsizeOpcode,
         },
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Reads, Result, Writes,
+        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes,
     },
     program::Instruction,
 };
@@ -28,41 +28,58 @@ impl<T, const NUM_CELLS: usize> LoadStoreCols<T, NUM_CELLS> {
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreAir<F: Field, const NUM_CELLS: usize> {
-    pub _marker: PhantomData<F>,
+pub struct LoadStoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
 }
 
-impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreAir<F, NUM_CELLS> {
+impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreAir<NUM_CELLS> {
     fn width(&self) -> usize {
         LoadStoreCols::<F, NUM_CELLS>::width()
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct LoadStoreIntegration<F: Field, const NUM_CELLS: usize> {
-    pub air: LoadStoreAir<F, NUM_CELLS>,
+impl<
+        F: PrimeField32,
+        A: MachineAdapter<F>,
+        AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues,
+        const NUM_CELLS: usize,
+    > MachineIntegrationAir<F, A, LoadStoreIntegration<NUM_CELLS>, AB> for LoadStoreAir<NUM_CELLS>
+where
+    Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,
+    Writes<F, A::Interface<F>>: From<[F; NUM_CELLS]>,
+{
+    /// Returns `(to_pc, interface)`
+    fn eval_primitive(
+        &self,
+        _builder: &mut AB,
+        _local: &LoadStoreCols<AB::Var, NUM_CELLS>,
+        _local_adapter: &A::Cols<AB::Var>,
+    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
+        todo!()
+    }
 }
 
-impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
+#[derive(Debug, Clone)]
+pub struct LoadStoreIntegration<const NUM_CELLS: usize> {
+    pub air: LoadStoreAir<NUM_CELLS>,
+}
+
+impl<const NUM_CELLS: usize> LoadStoreIntegration<NUM_CELLS> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: LoadStoreAir::<F, NUM_CELLS> {
-                _marker: PhantomData,
-                offset,
-            },
+            air: LoadStoreAir::<NUM_CELLS> { offset },
         }
     }
 }
 
 impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_CELLS: usize> MachineIntegration<F, A>
-    for LoadStoreIntegration<F, NUM_CELLS>
+    for LoadStoreIntegration<NUM_CELLS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_CELLS]>,
 {
     type Record = ();
-    type Air = LoadStoreAir<F, NUM_CELLS>;
+    type Air = LoadStoreAir<NUM_CELLS>;
     type Cols<T> = LoadStoreCols<T, NUM_CELLS>;
 
     #[allow(clippy::type_complexity)]
@@ -92,15 +109,6 @@ where
     }
 
     fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
-        todo!()
-    }
-
-    fn eval_primitive<AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues>(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &A::Cols<AB::Var>,
-    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
         todo!()
     }
 

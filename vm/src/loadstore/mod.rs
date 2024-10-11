@@ -8,4 +8,4 @@ use crate::arch::{MachineChipWrapper, Rv32LoadStoreAdapter};
 mod tests;
 
 pub type Rv32LoadStoreChip<F> =
-    MachineChipWrapper<F, Rv32LoadStoreAdapter<F, 4>, LoadStoreIntegration<F, 4>>;
+    MachineChipWrapper<F, Rv32LoadStoreAdapter<F, 4>, LoadStoreIntegration<4>>;

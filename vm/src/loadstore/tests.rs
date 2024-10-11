@@ -94,7 +94,7 @@ fn simple_execute_roundtrip_test() {
         tester.memory_chip().borrow().range_checker.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadStoreIntegration::<F, RV32_NUM_CELLS>::new(adapter.offset);
+    let inner = LoadStoreIntegration::<RV32_NUM_CELLS>::new(adapter.offset);
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_chip());
 
     let num_tests: usize = 10;

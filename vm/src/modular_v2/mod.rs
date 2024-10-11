@@ -8,10 +8,7 @@ use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
 use crate::{
-    arch::{
-        InstructionOutput, MachineIntegration, Rv32HeapAdapter, Rv32HeapAdapterCols,
-        Rv32HeapAdapterInterface,
-    },
+    arch::{InstructionOutput, MachineIntegration, Rv32HeapAdapter, Rv32HeapAdapterInterface},
     utils::{biguint_to_limbs, limbs_to_biguint},
 };
 
@@ -118,22 +115,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     }
 
     fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
-        todo!()
-    }
-
-    fn eval_primitive<
-        AB: afs_stark_backend::interaction::InteractionBuilder<F = F>
-            + p3_air::PairBuilder
-            + p3_air::AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &Rv32HeapAdapterCols<AB::Var, NUM_LIMBS, NUM_LIMBS>,
-    ) -> crate::arch::IntegrationInterface<
-        AB::Expr,
-        Rv32HeapAdapterInterface<AB::Expr, NUM_LIMBS, NUM_LIMBS>,
-    > {
         todo!()
     }
 
