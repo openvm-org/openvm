@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::field_expression::{ExprBuilder, FieldVariable, FieldVariableConfig, SymbolicExpr};
+use crate::field_expression::{ExprBuilder, FieldVariable, FieldVariableConfig};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
 pub struct Fp2<C: FieldVariableConfig> {
@@ -42,74 +42,27 @@ impl<C: FieldVariableConfig> Fp2<C> {
 
     pub fn div(&mut self, other: &mut Fp2<C>) -> Fp2<C> {
         let mut builder = self.c0.builder.borrow_mut();
-        builder.num_variables += 1;
-        let z0 = SymbolicExpr::Var(builder.num_variables - 1);
-        builder.num_variables += 1;
-        let z1 = SymbolicExpr::Var(builder.num_variables - 1);
+        let z0 = builder.new_var();
+        let z1 = builder.new_var();
 
         // Constraint 1: x0 = y0*z0 - y1*z1
-        let rhs = SymbolicExpr::Sub(
-            Box::new(SymbolicExpr::Mul(
-                Box::new(other.c0.expr.clone()),
-                Box::new(z0.clone()),
-            )),
-            Box::new(SymbolicExpr::Mul(
-                Box::new(other.c1.expr.clone()),
-                Box::new(z1.clone()),
-            )),
-        );
-        let constraint1 = SymbolicExpr::Sub(Box::new(self.c0.expr.clone()), Box::new(rhs));
+        let rhs = &other.c0.expr * &z0 - &other.c1.expr * &z1;
+        let constraint1 = &self.c0.expr - &rhs;
         builder.add_constraint(constraint1);
         // Constraint 2: x1 = y1*z0 + y0*z1
-        let rhs = SymbolicExpr::Add(
-            Box::new(SymbolicExpr::Mul(
-                Box::new(other.c1.expr.clone()),
-                Box::new(z0.clone()),
-            )),
-            Box::new(SymbolicExpr::Mul(
-                Box::new(other.c0.expr.clone()),
-                Box::new(z1.clone()),
-            )),
-        );
-        let constraint2 = SymbolicExpr::Sub(Box::new(self.c1.expr.clone()), Box::new(rhs));
+        let rhs = &other.c1.expr * &z0 + &other.c0.expr * &z1;
+        let constraint2 = &self.c1.expr - &rhs;
         builder.add_constraint(constraint2);
+
         // Compute z0
-        let compute_denom = SymbolicExpr::Add(
-            Box::new(SymbolicExpr::Mul(
-                Box::new(other.c0.expr.clone()),
-                Box::new(other.c0.expr.clone()),
-            )),
-            Box::new(SymbolicExpr::Mul(
-                Box::new(other.c1.expr.clone()),
-                Box::new(other.c1.expr.clone()),
-            )),
-        );
-        let compute_z0_nom = SymbolicExpr::Add(
-            Box::new(SymbolicExpr::Mul(
-                Box::new(self.c0.expr.clone()),
-                Box::new(other.c0.expr.clone()),
-            )),
-            Box::new(SymbolicExpr::Mul(
-                Box::new(self.c1.expr.clone()),
-                Box::new(other.c1.expr.clone()),
-            )),
-        );
-        let compute_z0 =
-            SymbolicExpr::Div(Box::new(compute_z0_nom), Box::new(compute_denom.clone()));
-        builder.computes.push(compute_z0);
+        let compute_denom = &other.c0.expr * &other.c0.expr + &other.c1.expr * &other.c1.expr;
+        let compute_z0_nom = &self.c0.expr * &other.c0.expr + &self.c1.expr * &other.c1.expr;
+        let compute_z0 = &compute_z0_nom / &compute_denom;
+        builder.add_compute(compute_z0);
         // Compute z1
-        let compute_z1_nom = SymbolicExpr::Sub(
-            Box::new(SymbolicExpr::Mul(
-                Box::new(self.c1.expr.clone()),
-                Box::new(other.c0.expr.clone()),
-            )),
-            Box::new(SymbolicExpr::Mul(
-                Box::new(self.c0.expr.clone()),
-                Box::new(other.c1.expr.clone()),
-            )),
-        );
-        let compute_z1 = SymbolicExpr::Div(Box::new(compute_z1_nom), Box::new(compute_denom));
-        builder.computes.push(compute_z1);
+        let compute_z1_nom = &self.c1.expr * &other.c0.expr - &self.c0.expr * &other.c1.expr;
+        let compute_z1 = &compute_z1_nom / &compute_denom;
+        builder.add_compute(compute_z1);
 
         let z0_var = FieldVariable::from_var(self.c0.builder.clone(), builder.num_variables - 2);
         let z1_var = FieldVariable::from_var(self.c0.builder.clone(), builder.num_variables - 1);
