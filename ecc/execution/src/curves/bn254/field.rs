@@ -182,8 +182,8 @@ impl ExpBigInt<Fq12> for Fq12 {
 }
 
 impl FeltPrint<Fq> for Fq {
-    fn felt_print(&self, _label: &str) {
-        println!("{:?}", self.0);
+    fn felt_print(&self, label: &str) {
+        println!("{} {:?}", label, self.0);
         // print!("[{:x} ", self.0[0]);
         // print!("{:x} ", self.0[1]);
         // print!("{:x} ", self.0[2]);
@@ -194,29 +194,29 @@ impl FeltPrint<Fq> for Fq {
 impl FeltPrint<Fq12> for Fq12 {
     fn felt_print(&self, label: &str) {
         println!("felt_print - {}", label);
-        print!("c0.c0.c0: ");
+        print!("c0.c0.c0:");
         self.c0.c0.c0.felt_print("");
-        print!("c0.c0.c1: ");
+        print!("c0.c0.c1:");
         self.c0.c0.c1.felt_print("");
-        print!("c0.c1.c0: ");
+        print!("c0.c1.c0:");
         self.c0.c1.c0.felt_print("");
-        print!("c0.c1.c1: ");
+        print!("c0.c1.c1:");
         self.c0.c1.c1.felt_print("");
-        print!("c0.c2.c0: ");
+        print!("c0.c2.c0:");
         self.c0.c2.c0.felt_print("");
-        print!("c0.c2.c1: ");
+        print!("c0.c2.c1:");
         self.c0.c2.c1.felt_print("");
-        print!("c1.c0.c0: ");
+        print!("c1.c0.c0:");
         self.c1.c0.c0.felt_print("");
-        print!("c1.c0.c1: ");
+        print!("c1.c0.c1:");
         self.c1.c0.c1.felt_print("");
-        print!("c1.c1.c0: ");
+        print!("c1.c1.c0:");
         self.c1.c1.c0.felt_print("");
-        print!("c1.c1.c1: ");
+        print!("c1.c1.c1:");
         self.c1.c1.c1.felt_print("");
-        print!("c1.c2.c0: ");
+        print!("c1.c2.c0:");
         self.c1.c2.c0.felt_print("");
-        print!("c1.c2.c1: ");
+        print!("c1.c2.c1:");
         self.c1.c2.c1.felt_print("");
         println!("");
     }

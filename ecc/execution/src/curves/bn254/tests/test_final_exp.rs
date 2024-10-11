@@ -48,12 +48,15 @@ fn test_assert_final_exp_is_one() {
     println!("P_ecpoints: {:#?}", P_ecpoints);
     println!("Q_ecpoints: {:#?}", Q_ecpoints);
 
-    P_ecpoints[0].x.felt_print("P_ecpoints[0].x");
-    P_ecpoints[0].y.felt_print("P_ecpoints[0].y");
-    P_ecpoints[1].x.felt_print("P_ecpoints[1].x");
-    P_ecpoints[1].y.felt_print("P_ecpoints[1].y");
-
     let bn254 = Bn254;
     let f = bn254.multi_miller_loop(&P_ecpoints, &Q_ecpoints);
+
+    let f_cmp1 = bn254.multi_miller_loop(&[P_ecpoints[0].clone()], &[Q_ecpoints[0].clone()]);
+    let f_cmp2 = bn254.multi_miller_loop(&[P_ecpoints[1].clone()], &[Q_ecpoints[1].clone()]);
+    f_cmp1.felt_print("f_cmp1");
+    f_cmp2.felt_print("f_cmp2");
+    let f_cmp = f_cmp1 * f_cmp2;
+    f_cmp.felt_print("f_cmp");
+    assert_eq!(f, f_cmp);
     bn254.assert_final_exp_is_one(f, &P_ecpoints, &Q_ecpoints);
 }
