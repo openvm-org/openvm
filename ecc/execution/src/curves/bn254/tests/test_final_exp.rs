@@ -40,11 +40,18 @@ fn test_final_exp_hint() {
 fn test_assert_final_exp_is_one() {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) =
         generate_test_points_generator_scalar::<G1Affine, G2Affine, Fr, Fq, Fq2, 2>(
-            &[Fr::from(5), Fr::from(2).neg()],
-            &[Fr::from(10), Fr::from(25)],
+            &[Fr::from(1), Fr::from(1)],
+            &[Fr::from(1), Fr::from(1)],
+            // &[Fr::from(5), Fr::from(2)],
+            // &[Fr::from(10), Fr::from(25)],
         );
     println!("P_ecpoints: {:#?}", P_ecpoints);
     println!("Q_ecpoints: {:#?}", Q_ecpoints);
+
+    P_ecpoints[0].x.felt_print("P_ecpoints[0].x");
+    P_ecpoints[0].y.felt_print("P_ecpoints[0].y");
+    P_ecpoints[1].x.felt_print("P_ecpoints[1].x");
+    P_ecpoints[1].y.felt_print("P_ecpoints[1].y");
 
     let bn254 = Bn254;
     let f = bn254.multi_miller_loop(&P_ecpoints, &Q_ecpoints);

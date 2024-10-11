@@ -38,6 +38,12 @@ impl AffineCoords<Fq> for G1Affine {
         self.y
     }
 
+    fn neg(&self) -> Self {
+        let mut pt = self.clone();
+        pt.y = -pt.y;
+        pt
+    }
+
     fn random(rng: &mut impl Rng) -> Self {
         G1Affine::random(rng)
     }
@@ -54,6 +60,12 @@ impl AffineCoords<Fq2> for G2Affine {
 
     fn y(&self) -> Fq2 {
         self.y
+    }
+
+    fn neg(&self) -> Self {
+        let mut pt = self.clone();
+        pt.y = -pt.y;
+        pt
     }
 
     fn random(rng: &mut impl Rng) -> Self {

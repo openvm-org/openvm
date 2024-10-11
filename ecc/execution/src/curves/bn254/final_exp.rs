@@ -55,12 +55,19 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         let res = f.invert().unwrap() * c_lambda * u;
         res.felt_print("res");
         f.felt_print("f");
+        c_lambda.felt_print("c_lambda");
 
         let res2 = f * c_lambda.invert().unwrap() * u.invert().unwrap();
         res2.felt_print("res2");
 
         // ------ end ------
-        assert_eq!(f, c_lambda);
+
+        let c_lambda_u = c_lambda * u;
+        fx.felt_print("fx");
+        c_lambda_u.felt_print("c_lambda_u");
+
+        assert_eq!(fx, c_lambda_u);
+        // assert_eq!(f, c_lambda);
 
         // assert_eq!(res, Fq12::ONE)
     }

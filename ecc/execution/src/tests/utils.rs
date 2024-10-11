@@ -72,10 +72,14 @@ where
     Fp: Field,
     Fp2: FieldExtension<BaseField = Fp>,
 {
+    assert!(N % 2 == 0, "Must have even number of P and Q scalars");
     let mut P_vec = vec![];
     let mut Q_vec = vec![];
     for i in 0..N {
-        let p = A1::generator().scalar_mul(a[i]);
+        let mut p = A1::generator().scalar_mul(a[i]);
+        if i % 2 == 1 {
+            p = p.neg();
+        }
         let q = A2::generator().scalar_mul(b[i]);
         P_vec.push(p);
         Q_vec.push(q);

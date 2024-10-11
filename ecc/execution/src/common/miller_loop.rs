@@ -75,7 +75,7 @@ where
             Fp12::ONE
         };
 
-        let mut f = Fp12::ONE;
+        let mut f = if let Some(c) = c { c } else { Fp12::ONE };
         let mut Q_acc = Q.to_vec();
 
         let (f_out, Q_acc_out) = self.pre_loop(f, Q_acc, Q, x_over_ys.clone(), y_invs.clone());

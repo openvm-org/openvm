@@ -23,6 +23,7 @@ impl<F: Field> EcPoint<F> {
 pub trait AffineCoords<F: Field>: Clone {
     fn x(&self) -> F;
     fn y(&self) -> F;
+    fn neg(&self) -> Self;
     fn random(rng: &mut impl Rng) -> Self;
     fn generator() -> Self;
 }
