@@ -83,12 +83,6 @@ pub struct Rv32MultAdapterCols<T> {
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
 }
 
-impl<T> Rv32MultAdapterCols<T> {
-    pub fn width() -> usize {
-        size_of::<Rv32MultAdapterCols<u8>>()
-    }
-}
-
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32MultAdapterAir {
     pub(super) _execution_bridge: ExecutionBridge,

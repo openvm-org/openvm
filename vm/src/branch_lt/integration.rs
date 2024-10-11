@@ -1,4 +1,4 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::xor::{bus::XorBus, lookup::XorLookupChip};
@@ -35,14 +35,6 @@ pub struct BranchLessThanCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     // an i exists, diff_val = c[i] - b[i]
     pub diff_marker: [T; NUM_LIMBS],
     pub diff_val: T,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    BranchLessThanCols<T, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn width() -> usize {
-        size_of::<BranchLessThanCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }
 
 #[derive(Copy, Clone, Debug)]

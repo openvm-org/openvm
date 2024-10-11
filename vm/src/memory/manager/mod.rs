@@ -95,7 +95,7 @@ impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
 /// Holds the heap data and the information about its address.
 #[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
-pub struct MemoryHeapDataIoCols<T: Clone, const N: usize> {
+pub struct MemoryHeapDataIoCols<T, const N: usize> {
     pub address: MemoryDataIoCols<T, 1>,
     pub data: MemoryDataIoCols<T, N>,
 }

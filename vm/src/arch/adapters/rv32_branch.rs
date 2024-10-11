@@ -83,12 +83,6 @@ pub struct Rv32BranchAdapterCols<T> {
     pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>; 2],
 }
 
-impl<T> Rv32BranchAdapterCols<T> {
-    pub fn width() -> usize {
-        size_of::<Rv32BranchAdapterCols<u8>>()
-    }
-}
-
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32BranchAdapterAir {
     pub(super) _execution_bridge: ExecutionBridge,

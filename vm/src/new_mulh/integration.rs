@@ -1,4 +1,4 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
@@ -31,12 +31,6 @@ pub struct MulHCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_mulh_flag: T,
     pub opcode_mulhsu_flag: T,
     pub opcode_mulhu_flag: T,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCols<T, NUM_LIMBS, LIMB_BITS> {
-    pub fn width() -> usize {
-        size_of::<MulHCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }
 
 #[derive(Copy, Clone, Debug)]

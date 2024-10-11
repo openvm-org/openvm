@@ -1,4 +1,4 @@
-use std::{array, mem::size_of, sync::Arc};
+use std::{array, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::{
@@ -32,12 +32,6 @@ pub struct DivRemCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_divu_flag: T,
     pub opcode_rem_flag: T,
     pub opcode_remu_flag: T,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCols<T, NUM_LIMBS, LIMB_BITS> {
-    pub fn width() -> usize {
-        size_of::<DivRemCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }
 
 #[derive(Copy, Clone, Debug)]

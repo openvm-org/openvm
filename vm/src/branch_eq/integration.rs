@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
@@ -26,12 +24,6 @@ pub struct BranchEqualCols<T, const NUM_LIMBS: usize> {
     pub opcode_bne_flag: T,
 
     pub diff_marker: [T; NUM_LIMBS],
-}
-
-impl<T, const NUM_LIMBS: usize> BranchEqualCols<T, NUM_LIMBS> {
-    pub fn width() -> usize {
-        size_of::<BranchEqualCols<u8, NUM_LIMBS>>()
-    }
 }
 
 #[derive(Copy, Clone, Debug)]

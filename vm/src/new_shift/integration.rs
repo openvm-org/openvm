@@ -1,4 +1,4 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::{
@@ -43,12 +43,6 @@ pub struct ShiftCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
     // Part of each x[i] that gets bit shifted to the next limb
     pub bit_shift_carry: [T; NUM_LIMBS],
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCols<T, NUM_LIMBS, LIMB_BITS> {
-    pub fn width() -> usize {
-        size_of::<ShiftCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }
 
 #[derive(Copy, Clone, Debug)]

@@ -91,12 +91,6 @@ pub struct Rv32AluAdapterCols<T> {
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
 }
 
-impl<T> Rv32AluAdapterCols<T> {
-    pub fn width() -> usize {
-        size_of::<Rv32AluAdapterCols<u8>>()
-    }
-}
-
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32AluAdapterAir {
     pub(super) _execution_bridge: ExecutionBridge,

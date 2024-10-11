@@ -50,7 +50,7 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
     let methods = quote! {
         impl #impl_generics core::borrow::Borrow<#name #type_generics> for [#type_generic] #where_clause {
             fn borrow(&self) -> &#name #type_generics {
-                debug_assert_eq!(self.len(), std::mem::size_of::<#name<u8 #(, #non_first_generics)*>>());
+                debug_assert_eq!(self.len(), #name::#type_generics::width());
                 let (prefix, shorts, _suffix) = unsafe { self.align_to::<#name #type_generics>() };
                 debug_assert!(prefix.is_empty(), "Alignment should match");
                 debug_assert_eq!(shorts.len(), 1);
@@ -60,11 +60,17 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
 
         impl #impl_generics core::borrow::BorrowMut<#name #type_generics> for [#type_generic] #where_clause {
             fn borrow_mut(&mut self) -> &mut #name #type_generics {
-                debug_assert_eq!(self.len(), std::mem::size_of::<#name<u8 #(, #non_first_generics)*>>());
+                debug_assert_eq!(self.len(), #name::#type_generics::width());
                 let (prefix, shorts, _suffix) = unsafe { self.align_to_mut::<#name #type_generics>() };
                 debug_assert!(prefix.is_empty(), "Alignment should match");
                 debug_assert_eq!(shorts.len(), 1);
                 &mut shorts[0]
+            }
+        }
+
+        impl #impl_generics #name #type_generics {
+            pub const fn width() -> usize {
+                std::mem::size_of::<#name<u8 #(, #non_first_generics)*>>()
             }
         }
     };

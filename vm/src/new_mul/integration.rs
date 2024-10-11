@@ -1,4 +1,4 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
@@ -25,14 +25,6 @@ pub struct MultiplicationCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub c: [T; NUM_LIMBS],
 
     pub is_valid: T,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    MultiplicationCols<T, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn width() -> usize {
-        size_of::<MultiplicationCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }
 
 #[derive(Copy, Clone, Debug)]
