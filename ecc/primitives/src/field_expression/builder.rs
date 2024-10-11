@@ -103,6 +103,26 @@ impl ExprBuilder {
         self.num_flags += 1;
         self.num_flags - 1
     }
+
+    // Below functions are used when adding variables and constraints manually, need to be careful.
+    // Number of variables, constraints and computes should be consistent,
+    // so there should be same amount of calls to the below functions.
+    pub fn new_var(&mut self) -> SymbolicExpr {
+        self.num_variables += 1;
+        SymbolicExpr::Var(self.num_variables - 1)
+    }
+
+    pub fn add_constraint(&mut self, constraint: SymbolicExpr) {
+        let (q_limbs, carry_limbs) =
+            constraint.constraint_limbs(&self.prime, self.limb_bits, self.num_limbs);
+        self.constraints.push(constraint);
+        self.q_limbs.push(q_limbs);
+        self.carry_limbs.push(carry_limbs);
+    }
+
+    pub fn add_compute(&mut self, compute: SymbolicExpr) {
+        self.computes.push(compute);
+    }
 }
 
 #[derive(Clone)]

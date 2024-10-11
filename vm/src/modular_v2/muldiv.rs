@@ -3,7 +3,9 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerChip,
 };
-use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExprChip, FieldVariable};
+use ax_ecc_primitives::field_expression::{
+    ExprBuilder, FieldExprChip, FieldVariable, SymbolicExpr,
+};
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
@@ -47,17 +49,19 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2Chip<NUM_LIM
             range_checker.range_max_bits(),
         );
         let builder = Rc::new(RefCell::new(builder));
-        let x1 = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
-        let x2 = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
-        // constraint is x * x2 = z
-        // where x = if is_mul_flag then x1 else x3
-        // and z = if is_mul_flag then x3 else x1
-        let mut x3 = x1.clone() * x2.clone();
-        x3.save(); // div auto save, so this has to save to match.
-        let x4 = x1 / x2;
+        let x = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
+        let y = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
+        let z = builder.borrow_mut().new_var();
+        let z = FieldVariable::from_var(builder.clone(), z);
         let is_mul_flag = builder.borrow_mut().new_flag();
-        let mut x5 = FieldVariable::select(is_mul_flag, &x3, &x4);
-        x5.save();
+        // constraint is x * y = z, or z * y = x
+        let lvar = FieldVariable::select(is_mul_flag, &x, &z);
+        let rvar = FieldVariable::select(is_mul_flag, &z, &x);
+        let constraint = lvar * y.clone() - rvar;
+        builder.borrow_mut().add_constraint(constraint.expr);
+        let compute = SymbolicExpr::Div(Box::new(x.expr), Box::new(y.expr));
+        builder.borrow_mut().add_compute(compute);
+
         let builder = builder.borrow().clone();
 
         let chip = FieldExprChip {
@@ -105,8 +109,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         let vars = self
             .chip
             .execute(vec![x_biguint, y_biguint], vec![is_mul_flag]);
-        assert_eq!(vars.len(), 3); // TODO: might be too inefficient.
-        let z_biguint = vars[2].clone();
+        assert_eq!(vars.len(), 1);
+        let z_biguint = vars[0].clone();
         let z_limbs = biguint_to_limbs::<NUM_LIMBS>(z_biguint, LIMB_SIZE);
 
         Ok((

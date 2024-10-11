@@ -250,6 +250,26 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             _marker: PhantomData,
         }
     }
+
+    pub fn from_var(builder: Rc<RefCell<ExprBuilder>>, var: SymbolicExpr) -> FieldVariable<C> {
+        let range_checker_bits = {
+            let builder = builder.borrow();
+            builder.range_checker_bits
+        };
+        assert!(
+            matches!(var, SymbolicExpr::Var(_)),
+            "Expected var to be of type SymbolicExpr::Var"
+        );
+        FieldVariable {
+            expr: var,
+            builder,
+            limb_max_abs: (1 << C::canonical_limb_bits()) - 1,
+            max_overflow_bits: C::canonical_limb_bits(),
+            expr_limbs: C::num_limbs_per_field_element(),
+            range_checker_bits,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<C: FieldVariableConfig> Add<&mut FieldVariable<C>> for &mut FieldVariable<C> {

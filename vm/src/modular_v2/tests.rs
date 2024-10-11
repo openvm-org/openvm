@@ -176,7 +176,7 @@ fn test_modular_muldiv() {
         assert!(b < modulus);
 
         let r = chip.chip.execute(vec![a.clone(), b.clone()], vec![op == 2]);
-        let r = r[2].clone();
+        let r = r[0].clone();
 
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:
