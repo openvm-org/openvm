@@ -1,6 +1,7 @@
 use halo2curves_axiom::{
-    bn256::{Fq, Fq12, Fq2},
+    bn256::{Fq, Fq12, Fq2, Gt},
     ff::Field,
+    pairing::MillerLoopResult,
 };
 use num::{BigInt, Num};
 
@@ -41,11 +42,12 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         )
         .unwrap();
         let six_x_plus_2: BigInt = BigInt::from_str_radix("29793968203157093288", 10).unwrap();
-        let q_pows = q.clone() + q.clone().pow(2) + q.pow(3);
+        let q_pows = q.clone().pow(3) - q.clone().pow(2) + q;
         let lambda = six_x_plus_2.clone() + q_pows.clone();
 
         let c_to_six = c.exp(six_x_plus_2);
         let c_to_q = c.exp(q_pows);
+        assert_eq!(c_mul, c_to_q);
         c_mul.felt_print("c_mul");
         c_to_q.felt_print("c_to_q");
 
@@ -58,11 +60,17 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         res2.felt_print("res2");
 
         // ------ end ------
+        assert_eq!(f, c_lambda);
 
-        assert_eq!(res, Fq12::ONE)
+        // assert_eq!(res, Fq12::ONE)
     }
 
     fn final_exp_hint(&self, f: Fq12) -> (Fq12, Fq12) {
+        debug_assert_eq!(
+            Gt(f).final_exponentiation(),
+            Gt(Fq12::one()),
+            "Trying to call final_exp_hint on {f:?} which does not final exponentiate to 1."
+        );
         println!("f: {:#?}", f);
         let mut f = f;
         // Residue witness inverse
@@ -98,19 +106,24 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
             Fq2::ZERO,
         ]);
         unity_root_27.felt_print("27th root of unity");
+        debug_assert_eq!(unity_root_27.pow([27]), Fq12::one());
 
-        let f_mul_unity_root_27 = f * unity_root_27;
         // let f_mul_unity_root_27_exp1 = f_mul_unity_root_27.exp(exp1.clone());
         if f.exp(exp1.clone()) == Fq12::ONE {
+            println!("f is cubic residue");
             c = f;
             u = Fq12::ONE;
-        } else if f_mul_unity_root_27.exp(exp1.clone()) == Fq12::ONE {
-            c = f;
-            u = unity_root_27;
         } else {
-            f = f_mul_unity_root_27;
-            c = f * unity_root_27;
-            u = unity_root_27.square();
+            let f_mul_unity_root_27 = f * unity_root_27;
+            if f_mul_unity_root_27.exp(exp1.clone()) == Fq12::ONE {
+                println!("f * omega is cubic residue");
+                c = f_mul_unity_root_27;
+                u = unity_root_27;
+            } else {
+                println!("f * omega^2 is cubic residue");
+                c = f_mul_unity_root_27 * unity_root_27;
+                u = unity_root_27.square();
+            }
         }
 
         c.felt_print("c");
@@ -122,6 +135,16 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
             "495819184011867778744231927046742333492451180917315223017345540833046880485481720031136878341141903241966521818658471092566752321606779256340158678675679238405722886654128392203338228575623261160538734808887996935946888297414610216445334190959815200956855428635568184508263913274453942864817234480763055154719338281461936129150171789463489422401982681230261920147923652438266934726901346095892093443898852488218812468761027620988447655860644584419583586883569984588067403598284748297179498734419889699245081714359110559679136004228878808158639412436468707589339209058958785568729925402190575720856279605832146553573981587948304340677613460685405477047119496887534881410757668344088436651291444274840864486870663164657544390995506448087189408281061890434467956047582679858345583941396130713046072603335601764495918026585155498301896749919393",
             10
         ).unwrap();
+        #[cfg(debug_assertions)]
+        {
+            let r = BigInt::from_str_radix(
+                "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+                10,
+            )
+            .unwrap();
+            assert_eq!(c.exp(r_inv.clone()).exp(r), c);
+        }
+
         c = c.exp(r_inv);
 
         // 2. Compute m-th root where
@@ -165,6 +188,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
             tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
         }
 
+        debug_assert_eq!(c, x * x * x);
         // x is the cube root of the residue witness c
         c = x;
 
