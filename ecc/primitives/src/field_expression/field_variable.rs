@@ -194,35 +194,45 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
     // expr cannot have division, so auto-save a new variable.
     pub fn div(&self, other: &FieldVariable<C>) -> FieldVariable<C> {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
-        let mut builder = self.builder.borrow_mut();
-        builder.num_variables += 1;
+        let new_var = {
+            let mut builder = self.builder.borrow_mut();
+            // Introduce a new variable to replace self.expr / other.expr.
+            let new_var = builder.new_var();
+            // other.expr * new_var = self.expr
+            let new_constraint = SymbolicExpr::Sub(
+                Box::new(SymbolicExpr::Mul(
+                    Box::new(other.expr.clone()),
+                    Box::new(new_var.clone()),
+                )),
+                Box::new(self.expr.clone()),
+            );
+            builder.add_constraint(new_constraint);
+            // Only compute can have division.
+            let compute =
+                SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));
+            builder.computes.push(compute);
+            new_var
+        };
 
-        // Introduce a new variable to replace self.expr / other.expr.
-        let new_var = SymbolicExpr::Var(builder.num_variables - 1);
-        // other.expr * new_var = self.expr
-        let new_constraint = SymbolicExpr::Sub(
-            Box::new(SymbolicExpr::Mul(
-                Box::new(other.expr.clone()),
-                Box::new(new_var),
-            )),
-            Box::new(self.expr.clone()),
-        );
-        builder.add_constraint(new_constraint);
-        // Only compute can have division.
-        let compute = SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));
-        builder.computes.push(compute);
-
-        FieldVariable::from_var(self.builder.clone(), builder.num_variables - 1)
+        FieldVariable::from_var(self.builder.clone(), new_var)
     }
 
-    pub fn from_var(builder: Rc<RefCell<ExprBuilder>>, var_id: usize) -> FieldVariable<C> {
+    pub fn from_var(builder: Rc<RefCell<ExprBuilder>>, var: SymbolicExpr) -> FieldVariable<C> {
+        let range_checker_bits = {
+            let builder = builder.borrow();
+            builder.range_checker_bits
+        };
+        assert!(
+            matches!(var, SymbolicExpr::Var(_)),
+            "Expected var to be of type SymbolicExpr::Var"
+        );
         FieldVariable {
-            expr: SymbolicExpr::Var(var_id),
+            expr: var,
             builder,
             limb_max_abs: (1 << C::canonical_limb_bits()) - 1,
             max_overflow_bits: C::canonical_limb_bits(),
             expr_limbs: C::num_limbs_per_field_element(),
-            range_checker_bits: self.range_checker_bits,
+            range_checker_bits,
             _marker: PhantomData,
         }
     }
