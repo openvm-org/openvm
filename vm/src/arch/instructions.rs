@@ -330,12 +330,5 @@ pub enum DivRemOpcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum UnimplementedOpcode {
-    BLT_RV32,
-    BGE_RV32,
-    BLTU_RV32,
-    BGEU_RV32,
-    JAL_RV32,
-    JALR_RV32,
-    LUI_RV32,
-    AUIPC_RV32,
+    KECCAK256_RV32,
 }

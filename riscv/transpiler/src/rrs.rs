@@ -7,8 +7,9 @@ use rrs_lib::{
 };
 use stark_vm::{
     arch::instructions::{
-        AluOpcode, CoreOpcode, DivRemOpcode, LessThanOpcode, MulHOpcode, MulOpcode,
-        Rv32LoadStoreOpcode, ShiftOpcode, UnimplementedOpcode, UsizeOpcode,
+        AluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
+        MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
+        Rv32LoadStoreOpcode, ShiftOpcode, UsizeOpcode,
     },
     program::Instruction,
 };
@@ -131,52 +132,37 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_beq(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(CoreOpcode::BEQ.with_default_offset(), &dec_insn)
+        from_b_type(BranchEqualOpcode::BEQ.with_default_offset(), &dec_insn)
     }
 
     fn process_bne(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(CoreOpcode::BNE.with_default_offset(), &dec_insn)
+        from_b_type(BranchEqualOpcode::BNE.with_default_offset(), &dec_insn)
     }
 
     fn process_blt(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(
-            UnimplementedOpcode::BLT_RV32.with_default_offset(),
-            &dec_insn,
-        )
+        from_b_type(BranchLessThanOpcode::BLT.with_default_offset(), &dec_insn)
     }
 
     fn process_bge(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(
-            UnimplementedOpcode::BGE_RV32.with_default_offset(),
-            &dec_insn,
-        )
+        from_b_type(BranchLessThanOpcode::BGE.with_default_offset(), &dec_insn)
     }
 
     fn process_bltu(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(
-            UnimplementedOpcode::BLTU_RV32.with_default_offset(),
-            &dec_insn,
-        )
+        from_b_type(BranchLessThanOpcode::BLTU.with_default_offset(), &dec_insn)
     }
 
     fn process_bgeu(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(
-            UnimplementedOpcode::BGEU_RV32.with_default_offset(),
-            &dec_insn,
-        )
+        from_b_type(BranchLessThanOpcode::BGEU.with_default_offset(), &dec_insn)
     }
 
     fn process_jal(&mut self, dec_insn: JType) -> Self::InstructionResult {
-        from_j_type(
-            UnimplementedOpcode::JAL_RV32.with_default_offset(),
-            &dec_insn,
-        )
+        from_j_type(Rv32JalLuiOpcode::JAL.with_default_offset(), &dec_insn)
     }
 
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
         let imm = dec_insn.imm / 2;
         Instruction::new(
-            UnimplementedOpcode::JALR_RV32.with_default_offset(),
+            Rv32JalrOpcode::JALR.with_default_offset(),
             F::from_canonical_usize(dec_insn.rd),
             F::from_canonical_usize(dec_insn.rs1),
             if imm < 0 {
@@ -193,15 +179,12 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_lui(&mut self, dec_insn: UType) -> Self::InstructionResult {
-        from_u_type(
-            UnimplementedOpcode::LUI_RV32.with_default_offset(),
-            &dec_insn,
-        )
+        from_u_type(Rv32JalLuiOpcode::LUI.with_default_offset(), &dec_insn)
     }
 
     fn process_auipc(&mut self, dec_insn: UType) -> Self::InstructionResult {
         Instruction::new(
-            UnimplementedOpcode::AUIPC_RV32.with_default_offset(),
+            Rv32AuipcOpcode::AUIPC.with_default_offset(),
             F::from_canonical_usize(dec_insn.rd),
             F::zero(),
             F::from_canonical_u32(((dec_insn.imm as u32) & 0xfffff) << 4),
@@ -247,6 +230,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
 
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
         let _ = dec_insn;
+        eprintln!("trying to transpile fence ({:?})", dec_insn);
         // unimplemented!()
         Instruction {
             debug: format!("fence({:?})", dec_insn),
@@ -267,6 +251,7 @@ pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instru
     for instruction_u32 in instructions_u32 {
         // TODO: we probably want to forbid such instructions, but for now we just skip them
         if *instruction_u32 == 115 {
+            eprintln!("trying to transpile ecall ({:x})", instruction_u32);
             instructions.push(unimp());
             continue;
         }
