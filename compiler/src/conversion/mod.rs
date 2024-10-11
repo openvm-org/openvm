@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use stark_vm::{
@@ -910,10 +912,8 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     };
 
     let debug_infos = vec![debug_info; instructions.len()];
-    Program {
-        instructions,
-        debug_infos,
-    }
+
+    Program::from_instructions_and_debug_infos(&instructions, &debug_infos)
 }
 
 pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
@@ -948,26 +948,31 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
         }
     }
 
-    let mut instructions = vec![init_register_0];
-    let mut debug_infos = vec![init_debug_info];
+    let mut instructions_and_debug_infos = HashMap::new();
+    instructions_and_debug_infos.insert(0, (init_register_0, init_debug_info));
     for block in program.blocks.iter() {
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
+            let cur_size = instructions_and_debug_infos.len();
+
             let labels =
                 |label: F| F::from_canonical_usize(block_start[label.as_canonical_u64() as usize]);
             let result = convert_instruction(
                 instruction.clone(),
                 debug_info.clone(),
-                F::from_canonical_usize(instructions.len()),
+                F::from_canonical_usize(cur_size),
                 labels,
                 &options,
             );
-            instructions.extend(result.instructions);
-            debug_infos.extend(result.debug_infos);
+
+            for (index, (instruction, debug_info)) in result.instructions_and_debug_infos.iter() {
+                instructions_and_debug_infos
+                    .insert(cur_size + index, (instruction.clone(), debug_info.clone()));
+            }
         }
     }
 
     Program {
-        instructions,
-        debug_infos,
+        instructions_and_debug_infos,
+        step: 1,
     }
 }

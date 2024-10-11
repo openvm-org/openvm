@@ -33,7 +33,7 @@ fn test_flatten_fromslice_roundtrip() {
 }
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
-    let instructions = program.instructions.clone();
+    let instructions = program.instructions().cloned().collect::<Vec<_>>();
     let mut chip = ProgramChip::new(program);
     let mut execution_frequencies = vec![0; instructions.len()];
     for pc in execution {
@@ -98,10 +98,7 @@ fn test_program_1() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; 6],
-    };
+    let program = Program::from_instructions(&instructions);
 
     interaction_test(program, vec![0, 3, 2, 5]);
 }
@@ -122,10 +119,7 @@ fn test_program_without_field_arithmetic() {
         Instruction::from_isize(BEQ.with_default_offset(), 0, 5, -1, 1, 0),
     ];
 
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; 5],
-    };
+    let program = Program::from_instructions(&instructions);
 
     interaction_test(program, vec![0, 2, 4, 1]);
 }
@@ -138,10 +132,7 @@ fn test_program_negative() {
         Instruction::large_from_isize(LOADW.with_default_offset(), -1, 0, 0, 1, 1, 0, 1),
         Instruction::large_from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0, 0, 0),
     ];
-    let program = Program {
-        instructions: instructions.clone(),
-        debug_infos: vec![None; 3],
-    };
+    let program = Program::from_instructions(&instructions);
 
     let mut chip = ProgramChip::new(program);
     let execution_frequencies = vec![1; instructions.len()];

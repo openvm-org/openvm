@@ -126,10 +126,7 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; 5],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(vm_config_with_field_arithmetic(), program, vec![]);
 }
@@ -156,10 +153,7 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ.with_default_offset(), 0, 5, -1, 1, 0),
     ];
 
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; 5],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(VmConfig::core(), program, vec![]);
 }
@@ -182,12 +176,7 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(vm_config_with_field_arithmetic(), program.clone(), vec![]);
 }
@@ -219,12 +208,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(vm_config_with_field_arithmetic(), program.clone(), vec![]);
 }
@@ -248,12 +232,7 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(
         VmConfig::core()
@@ -288,12 +267,7 @@ fn test_vm_hint() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     type F = BabyBear;
 
@@ -379,12 +353,7 @@ fn test_vm_compress_poseidon2_as2() {
         0,
     ));
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test_with_compress_poseidon2(7, program.clone());
     air_test_with_compress_poseidon2(3, program);
@@ -504,12 +473,7 @@ fn test_vm_keccak() {
         0,
     ));
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(
         VmConfig::core().add_default_executor(ExecutorName::Keccak256),
@@ -536,12 +500,7 @@ fn test_vm_keccak_non_full_round() {
         0,
     ));
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(
         VmConfig::core().add_default_executor(ExecutorName::Keccak256),

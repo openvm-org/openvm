@@ -6,7 +6,7 @@ use super::{columns::ProgramExecutionCols, ProgramChip};
 impl<F: PrimeField64> ProgramChip<F> {
     pub fn generate_cached_trace(&self) -> RowMajorMatrix<F> {
         let mut rows = vec![];
-        for (pc, instruction) in self.air.program.instructions.iter().enumerate() {
+        for (pc, instruction) in self.air.program.instructions().enumerate() {
             let exec_cols = ProgramExecutionCols {
                 pc: F::from_canonical_usize(pc),
                 opcode: F::from_canonical_usize(instruction.opcode),

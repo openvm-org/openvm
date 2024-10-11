@@ -47,10 +47,10 @@ fn test_cycle_tracker() {
         ..Default::default()
     });
 
-    for (i, debug_info) in program.debug_infos.iter().enumerate() {
+    for (i, debug_info) in program.debug_infos().enumerate() {
         println!("debug_info {}: {:?}", i, debug_info);
     }
 
-    display_program(&program.instructions);
+    display_program(&program.instructions().cloned().collect::<Vec<_>>());
     execute_program(program, vec![]);
 }
