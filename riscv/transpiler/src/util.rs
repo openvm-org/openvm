@@ -25,7 +25,7 @@ pub fn from_r_type<F: PrimeField32>(opcode: usize, dec_insn: &RType) -> Instruct
     )
 }
 
-/// Create a new [`Instruction`] from an I-type instruction.
+/// Create a new [`Instruction`] from an I-type instruction. Should only be used for ALU instructions because `imm` is transpiled in a special way.
 pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
     Instruction::new(
         opcode,
