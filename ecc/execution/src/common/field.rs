@@ -30,9 +30,10 @@ pub trait Fp12Constructor<Fp2: FieldExtension> {
 
 pub trait ExpBigInt<Fp: Field> {
     /// Exponentiates a field element by a BigInt
-    fn exp(&self, k: BigInt) -> Fp;
+    fn exp_bigint(&self, k: BigInt) -> Fp;
 }
 
+#[cfg(test)]
 pub trait FeltPrint<Fp: Field> {
     fn felt_print(&self, label: &str);
 }

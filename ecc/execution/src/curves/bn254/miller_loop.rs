@@ -3,7 +3,8 @@ use itertools::izip;
 
 use super::{mul_013_by_013, mul_by_01234, mul_by_013, Bn254, BN254_PBE_BITS};
 use crate::common::{
-    miller_add_step, miller_double_step, EcPoint, EvaluatedLine, FieldExtension, MultiMillerLoop,
+    fp12_square, miller_add_step, miller_double_step, EcPoint, EvaluatedLine, FieldExtension,
+    MultiMillerLoop,
 };
 
 #[allow(non_snake_case)]
@@ -46,6 +47,11 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         y_invs: Vec<Fq>,
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
         let mut f = f;
+
+        if f != Fq12::one() {
+            f = fp12_square(f);
+        }
+
         let mut Q_acc = Q_acc;
         let mut initial_lines = Vec::<EvaluatedLine<Fq, Fq2>>::new();
 
@@ -74,7 +80,6 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         x_over_ys: Vec<Fq>,
         y_invs: Vec<Fq>,
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
-        let mut f = f;
         let mut Q_acc = Q_acc;
         let mut lines = Vec::<EvaluatedLine<Fq, Fq2>>::new();
 
@@ -125,6 +130,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
             let line = lines_S_plus_Q.evaluate(*x_over_y, *y_inv);
             lines.push(line);
         }
+        let mut f = f;
 
         f = self.evaluate_lines_vec(f, lines);
 

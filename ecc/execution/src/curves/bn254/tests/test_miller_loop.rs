@@ -43,27 +43,3 @@ fn test_multi_miller_loop_bn254() {
     let rand_seeds = [8, 15, 29, 55, 166];
     run_miller_loop_test(&rand_seeds);
 }
-
-#[test]
-#[allow(non_snake_case)]
-fn test_miller_loop_final_exp() {
-    let rand_seeds = [619];
-    let (P_vec, Q_vec, P_ecpoints, Q_ecpoints) =
-        generate_test_points::<G1Affine, G2Affine, Fq, Fq2>(&rand_seeds);
-
-    // Run the multi-miller loop with embedded exponents
-    let bn254 = Bn254;
-    let f = bn254.multi_miller_loop_embedded_exp(
-        P_ecpoints.as_slice(),
-        Q_ecpoints.as_slice(),
-        Some(Fq12::one()),
-    );
-    // f.assert_final_exp_is_one();
-
-    // // Compare against miller loop with final exp
-    // let f_compare = bn254.multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
-    // let wrapped_f_compare = Gt(f_compare);
-    // let final_f_compare = wrapped_f_compare.final_exponentiation();
-
-    // assert_eq!(f, final_f_compare);
-}

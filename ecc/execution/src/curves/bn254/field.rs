@@ -140,57 +140,55 @@ impl LineDType<Fq, Fq2, Fq12> for Fq12 {
 }
 
 impl ExpBigInt<Fq12> for Fq12 {
-    fn exp(&self, k: BigInt) -> Fq12 {
-        let (sign, digits) = k.to_u64_digits();
-        let mut res = self.pow_vartime(digits);
-        if sign == Sign::Minus {
-            res = res.invert().unwrap();
-        }
-        res
-        // if k == BigInt::from(0) {
-        //     return Fq12::one();
+    fn exp_bigint(&self, k: BigInt) -> Fq12 {
+        // let (sign, digits) = k.to_u64_digits();
+        // let mut res = self.pow_vartime(digits);
+        // if sign == Sign::Minus {
+        //     res = res.invert().unwrap();
         // }
-
-        // let mut e = k.clone();
-        // let mut x = *self;
-
-        // if k < BigInt::from(0) {
-        //     x = x.invert().unwrap();
-        //     e = -k;
-        // }
-
-        // let mut res = Fq12::one();
-
-        // let x_sq = x.square();
-        // let ops = [x, x_sq, x_sq * x];
-
-        // let bytes = e.to_bytes_be();
-        // for &b in bytes.1.iter() {
-        //     let mut mask = 0xc0;
-        //     for j in 0..4 {
-        //         res = res.square().square();
-        //         let c = (b & mask) >> (6 - 2 * j);
-        //         if c != 0 {
-        //             res *= &ops[(c - 1) as usize];
-        //         }
-        //         mask >>= 2;
-        //     }
-        // }
-
         // res
+        if k == BigInt::from(0) {
+            return Fq12::one();
+        }
+
+        let mut e = k.clone();
+        let mut x = *self;
+
+        if k < BigInt::from(0) {
+            x = x.invert().unwrap();
+            e = -k;
+        }
+
+        let mut res = Fq12::one();
+
+        let x_sq = x.square();
+        let ops = [x, x_sq, x_sq * x];
+
+        let bytes = e.to_bytes_be();
+        for &b in bytes.1.iter() {
+            let mut mask = 0xc0;
+            for j in 0..4 {
+                res = res.square().square();
+                let c = (b & mask) >> (6 - 2 * j);
+                if c != 0 {
+                    res *= &ops[(c - 1) as usize];
+                }
+                mask >>= 2;
+            }
+        }
+
+        res
     }
 }
 
+#[cfg(test)]
 impl FeltPrint<Fq> for Fq {
     fn felt_print(&self, label: &str) {
         println!("{} {:?}", label, self.0);
-        // print!("[{:x} ", self.0[0]);
-        // print!("{:x} ", self.0[1]);
-        // print!("{:x} ", self.0[2]);
-        // print!("{:x}]\n", self.0[3]);
     }
 }
 
+#[cfg(test)]
 impl FeltPrint<Fq12> for Fq12 {
     fn felt_print(&self, label: &str) {
         println!("felt_print - {}", label);

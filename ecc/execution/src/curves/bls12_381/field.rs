@@ -3,7 +3,9 @@ use halo2curves_axiom::{
     ff::Field,
 };
 
-use crate::common::{EvaluatedLine, FieldExtension, Fp12Constructor, Fp2Constructor, LineMType};
+use crate::common::{
+    EvaluatedLine, FeltPrint, FieldExtension, Fp12Constructor, Fp2Constructor, LineMType,
+};
 
 impl Fp2Constructor<Fq> for Fq2 {
     fn new(c0: Fq, c1: Fq) -> Self {
@@ -129,5 +131,44 @@ impl FieldExtension for Fq12 {
 impl LineMType<Fq, Fq2, Fq12> for Fq12 {
     fn from_evaluated_line_m_type(line: EvaluatedLine<Fq, Fq2>) -> Fq12 {
         Fq12::from_coeffs(&[line.c, Fq2::ZERO, line.b, Fq2::ONE, Fq2::ZERO, Fq2::ZERO])
+    }
+}
+
+#[cfg(test)]
+impl FeltPrint<Fq> for Fq {
+    fn felt_print(&self, label: &str) {
+        println!("{} {:?}", label, self.0);
+    }
+}
+
+#[cfg(test)]
+impl FeltPrint<Fq12> for Fq12 {
+    fn felt_print(&self, label: &str) {
+        println!("felt_print - {}", label);
+        print!("c0.c0.c0:");
+        self.c0.c0.c0.felt_print("");
+        print!("c0.c0.c1:");
+        self.c0.c0.c1.felt_print("");
+        print!("c0.c1.c0:");
+        self.c0.c1.c0.felt_print("");
+        print!("c0.c1.c1:");
+        self.c0.c1.c1.felt_print("");
+        print!("c0.c2.c0:");
+        self.c0.c2.c0.felt_print("");
+        print!("c0.c2.c1:");
+        self.c0.c2.c1.felt_print("");
+        print!("c1.c0.c0:");
+        self.c1.c0.c0.felt_print("");
+        print!("c1.c0.c1:");
+        self.c1.c0.c1.felt_print("");
+        print!("c1.c1.c0:");
+        self.c1.c1.c0.felt_print("");
+        print!("c1.c1.c1:");
+        self.c1.c1.c1.felt_print("");
+        print!("c1.c2.c0:");
+        self.c1.c2.c0.felt_print("");
+        print!("c1.c2.c1:");
+        self.c1.c2.c1.felt_print("");
+        println!("");
     }
 }
