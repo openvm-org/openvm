@@ -7,4 +7,4 @@ use crate::arch::{MachineChipWrapper, Rv32RdWriteAdapter};
 #[cfg(test)]
 mod tests;
 
-pub type Rv32AuipcChip<F> = MachineChipWrapper<F, Rv32RdWriteAdapter<F>, Rv32AuipcIntegration<F>>;
+pub type Rv32AuipcChip<F> = MachineChipWrapper<F, Rv32RdWriteAdapter<F>, Rv32AuipcIntegration>;

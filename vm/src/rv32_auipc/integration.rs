@@ -8,7 +8,7 @@ use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Result, Writes, RV32_REGISTER_NUM_LANES,
+        MachineIntegration, MachineIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,
 };
@@ -20,44 +20,59 @@ pub struct Rv32AuipcCols<T> {
 
 impl<T> Rv32AuipcCols<T> {
     pub fn width() -> usize {
-        size_of::<Rv32AuipcCols<T>>()
+        size_of::<Rv32AuipcCols<u8>>()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32AuipcAir<F: Field> {
-    pub _marker: PhantomData<F>,
+pub struct Rv32AuipcAir {
     pub offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32AuipcAir<F> {
+impl<F: Field> BaseAir<F> for Rv32AuipcAir {
     fn width(&self) -> usize {
         Rv32AuipcCols::<F>::width()
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Rv32AuipcIntegration<F: Field> {
-    pub air: Rv32AuipcAir<F>,
+impl<
+        F: PrimeField32,
+        A: MachineAdapter<F>,
+        AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues,
+    > MachineIntegrationAir<F, A, Rv32AuipcIntegration, AB> for Rv32AuipcAir
+where
+    Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
+{
+    /// Returns `(to_pc, interface)`
+    fn eval_primitive(
+        &self,
+        _builder: &mut AB,
+        _local: &Rv32AuipcCols<AB::Var>,
+        _local_adapter: &A::Cols<AB::Var>,
+    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
+        todo!()
+    }
 }
 
-impl<F: Field> Rv32AuipcIntegration<F> {
+#[derive(Debug, Clone)]
+pub struct Rv32AuipcIntegration {
+    pub air: Rv32AuipcAir,
+}
+
+impl Rv32AuipcIntegration {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: Rv32AuipcAir::<F> {
-                _marker: PhantomData,
-                offset,
-            },
+            air: Rv32AuipcAir { offset },
         }
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32AuipcIntegration<F>
+impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32AuipcIntegration
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
-    type Air = Rv32AuipcAir<F>;
+    type Air = Rv32AuipcAir;
     type Cols<T> = Rv32AuipcCols<T>;
 
     #[allow(clippy::type_complexity)]
@@ -91,15 +106,6 @@ where
     }
 
     fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
-        todo!()
-    }
-
-    fn eval_primitive<AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues>(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &A::Cols<AB::Var>,
-    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
         todo!()
     }
 

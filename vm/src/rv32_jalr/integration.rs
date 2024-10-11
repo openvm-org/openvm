@@ -9,8 +9,8 @@ use crate::{
         compose,
         instructions::{Rv32JalrOpcode, UsizeOpcode},
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Reads, Result, Writes, PC_BITS, RV32_REGISTER_NUM_LANES,
-        RV_IS_TYPE_IMM_BITS,
+        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes, PC_BITS,
+        RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     program::Instruction,
 };
@@ -22,45 +22,61 @@ pub struct Rv32JalrCols<T> {
 
 impl<T> Rv32JalrCols<T> {
     pub fn width() -> usize {
-        size_of::<Rv32JalrCols<T>>()
+        size_of::<Rv32JalrCols<u8>>()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalrAir<F: Field> {
-    pub _marker: PhantomData<F>,
+pub struct Rv32JalrAir {
     pub offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32JalrAir<F> {
+impl<F: Field> BaseAir<F> for Rv32JalrAir {
     fn width(&self) -> usize {
         Rv32JalrCols::<F>::width()
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Rv32JalrIntegration<F: Field> {
-    pub air: Rv32JalrAir<F>,
+impl<
+        F: PrimeField32,
+        A: MachineAdapter<F>,
+        AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues,
+    > MachineIntegrationAir<F, A, Rv32JalrIntegration, AB> for Rv32JalrAir
+where
+    Reads<F, A::Interface<F>>: Into<[F; RV32_REGISTER_NUM_LANES]>,
+    Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
+{
+    /// Returns `(to_pc, interface)`
+    fn eval_primitive(
+        &self,
+        _builder: &mut AB,
+        _local: &Rv32JalrCols<AB::Var>,
+        _local_adapter: &A::Cols<AB::Var>,
+    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
+        todo!()
+    }
 }
 
-impl<F: Field> Rv32JalrIntegration<F> {
+#[derive(Debug, Clone)]
+pub struct Rv32JalrIntegration {
+    pub air: Rv32JalrAir,
+}
+
+impl Rv32JalrIntegration {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: Rv32JalrAir::<F> {
-                _marker: PhantomData,
-                offset,
-            },
+            air: Rv32JalrAir { offset },
         }
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32JalrIntegration<F>
+impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32JalrIntegration
 where
     Reads<F, A::Interface<F>>: Into<[F; RV32_REGISTER_NUM_LANES]>,
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
-    type Air = Rv32JalrAir<F>;
+    type Air = Rv32JalrAir;
     type Cols<T> = Rv32JalrCols<T>;
 
     #[allow(clippy::type_complexity)]
@@ -97,15 +113,6 @@ where
     }
 
     fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
-        todo!()
-    }
-
-    fn eval_primitive<AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues>(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &A::Cols<AB::Var>,
-    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
         todo!()
     }
 

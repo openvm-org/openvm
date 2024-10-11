@@ -1,11 +1,15 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::AnyRap};
+use afs_stark_backend::{
+    config::StarkGenericConfig,
+    interaction::InteractionBuilder,
+    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_commit::PolynomialSpace;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::{Domain, StarkGenericConfig};
+use p3_uni_stark::Domain;
 
 use super::{ExecutionState, InstructionExecutor, MachineChip, Result};
 use crate::{
@@ -160,6 +164,7 @@ pub struct MachineChipWrapper<F: PrimeField32, A: MachineAdapter<F>, M: MachineI
     memory: MemoryChipRef<F>,
 }
 
+#[derive(Copy, Clone, Debug)]
 pub struct MachineAirWrapper<F: PrimeField32, A: MachineAdapter<F>, M: MachineIntegration<F, A>> {
     pub adapter: A::Air,
     pub inner: M::Air,
@@ -174,6 +179,22 @@ where
     fn width(&self) -> usize {
         self.adapter.width() + self.inner.width()
     }
+}
+
+impl<F, A, M> PartitionedBaseAir<F> for MachineAirWrapper<F, A, M>
+where
+    F: PrimeField32,
+    A: MachineAdapter<F>,
+    M: MachineIntegration<F, A>,
+{
+}
+
+impl<F, A, M> BaseAirWithPublicValues<F> for MachineAirWrapper<F, A, M>
+where
+    F: PrimeField32,
+    A: MachineAdapter<F>,
+    M: MachineIntegration<F, A>,
+{
 }
 
 impl<F, A, M, AB> Air<AB> for MachineAirWrapper<F, A, M>
@@ -257,14 +278,10 @@ where
     F: PrimeField32,
     A: MachineAdapter<F>,
     M: MachineIntegration<F, A>,
-    // [F]: BorrowMut<A::Cols<F>>,
-    // [F]: BorrowMut<M::Cols<F>>,
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let height = self.records.len().next_power_of_two();
-        let inner_width = self.inner.air().width();
-        let adapter_width = self.adapter.air().width();
-        let width = inner_width + adapter_width;
+        let height = self.current_trace_height().next_power_of_two();
+        let width = self.trace_width();
         let mut values = vec![F::zero(); height * width];
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros.
@@ -278,18 +295,20 @@ where
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        todo!()
+        todo!();
     }
 
     fn air_name(&self) -> String {
-        todo!()
+        let adapter = get_air_name(&self.adapter.air());
+        let inner = get_air_name(&self.inner.air());
+        format!("MachineAirWrapper({:?}, {:?})", adapter, inner)
     }
 
     fn current_trace_height(&self) -> usize {
-        todo!()
+        self.records.len()
     }
 
     fn trace_width(&self) -> usize {
-        todo!()
+        self.inner.air().width() + self.adapter.air().width()
     }
 }
