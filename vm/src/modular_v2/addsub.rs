@@ -98,13 +98,11 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
             _ => panic!("Unsupported opcode: {:?}", opcode),
         };
 
-        // TODO: chip (expr builder) should be able to handle this.
         let vars = self
             .chip
             .execute(vec![x_biguint, y_biguint], vec![is_add_flag]);
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
-        // let z_biguint = (x_biguint + y_biguint) % &self.modulus;
         let z_limbs = biguint_to_limbs::<NUM_LIMBS>(z_biguint, LIMB_SIZE);
 
         Ok((
