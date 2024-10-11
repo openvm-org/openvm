@@ -10,7 +10,7 @@ use crate::{
     arch::{
         instructions::{LessThanOpcode, UsizeOpcode},
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Result,
+        MachineIntegration, Reads, Result, Writes,
     },
     program::Instruction,
 };
@@ -83,9 +83,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanIntegration<NUM_LIM
 impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     MachineIntegration<F, A> for LessThanIntegration<NUM_LIMBS, LIMB_BITS>
 where
-    A::Interface<F>: MachineAdapterInterface<F>,
-    <A::Interface<F> as MachineAdapterInterface<F>>::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    <A::Interface<F> as MachineAdapterInterface<F>>::Writes: From<[F; NUM_LIMBS]>,
+    Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
+    Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
 {
     // TODO: update for trace generation
     type Record = u32;

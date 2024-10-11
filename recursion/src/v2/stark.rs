@@ -208,19 +208,31 @@ where
             builder.set_value(&challenges_per_phase, phase_idx, challenges);
 
             builder.range(0, num_airs).for_each(|j, builder| {
-                let air_proof_data = builder.get(&proof.per_air, j);
-                let exposed_values = air_proof_data.exposed_values_after_challenge;
-                let values = builder.get(&exposed_values, phase_idx);
-                builder.range(0, values.len()).for_each(|k, builder| {
-                    let value = builder.get(&values, k);
-                    let felts = builder.ext2felt(value);
-                    challenger.observe_slice(builder, felts);
-                });
-
                 let air_advice = builder.get(&m_advice_var.per_air, j);
-                let values_len =
-                    builder.get(&air_advice.num_exposed_values_after_challenge, phase_idx);
-                builder.assert_eq::<Usize<_>>(values_len, values.len());
+                builder
+                    .if_ne(
+                        air_advice.num_exposed_values_after_challenge.len(),
+                        RVar::zero(),
+                    )
+                    .then(|builder| {
+                        // Only support 1 challenge phase
+                        builder.assert_eq::<Usize<_>>(
+                            air_advice.num_exposed_values_after_challenge.len(),
+                            RVar::one(),
+                        );
+                        let air_proof_data = builder.get(&proof.per_air, j);
+                        let exposed_values = air_proof_data.exposed_values_after_challenge;
+                        let values = builder.get(&exposed_values, phase_idx);
+                        let values_len =
+                            builder.get(&air_advice.num_exposed_values_after_challenge, phase_idx);
+                        builder.assert_eq::<Usize<_>>(values_len, values.len());
+
+                        builder.range(0, values.len()).for_each(|k, builder| {
+                            let value = builder.get(&values, k);
+                            let felts = builder.ext2felt(value);
+                            challenger.observe_slice(builder, felts);
+                        });
+                    });
             });
 
             // Observe single commitment to all trace matrices in this phase.
@@ -429,25 +441,36 @@ where
             let values_per_mat = builder.get(&opening.values.after_challenge, phase_idx);
             let batch_commit = builder.get(after_challenge_commits, phase_idx);
 
-            builder.assert_eq::<Usize<_>>(values_per_mat.len(), num_airs);
-
-            let mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_airs);
+            let mat_idx: Usize<_> = builder.eval(RVar::zero());
+            let mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(values_per_mat.len());
             builder.range(0, num_airs).for_each(|i, builder| {
-                let domain = builder.get(&domains, i);
-                let trace_points = builder.get(&trace_points_per_domain, i);
+                let advice = builder.get(&m_advice_var.per_air, i);
+                builder
+                    .if_ne(advice.num_challenges_to_sample.len(), RVar::zero())
+                    .then(|builder| {
+                        // Only 1 phase is supported.
+                        builder.assert_eq::<Usize<_>>(
+                            advice.num_challenges_to_sample.len(),
+                            RVar::one(),
+                        );
+                        let domain = builder.get(&domains, i);
+                        let trace_points = builder.get(&trace_points_per_domain, i);
 
-                let after_challenge = builder.get(&values_per_mat, i);
+                        let after_challenge = builder.get(&values_per_mat, mat_idx.clone());
 
-                let values = builder.array::<Array<C, _>>(2);
-                builder.set_value(&values, 0, after_challenge.local);
-                builder.set_value(&values, 1, after_challenge.next);
-                let after_challenge_mat = TwoAdicPcsMatsVariable::<C> {
-                    domain,
-                    values,
-                    points: trace_points,
-                };
-                builder.set_value(&mats, i, after_challenge_mat);
+                        let values = builder.array::<Array<C, _>>(2);
+                        builder.set_value(&values, 0, after_challenge.local);
+                        builder.set_value(&values, 1, after_challenge.next);
+                        let after_challenge_mat = TwoAdicPcsMatsVariable::<C> {
+                            domain,
+                            values,
+                            points: trace_points,
+                        };
+                        builder.set_value(&mats, mat_idx.clone(), after_challenge_mat);
+                        builder.inc(&mat_idx);
+                    });
             });
+            builder.assert_eq::<Usize<_>>(mat_idx, values_per_mat.len());
 
             builder.set_value(
                 &rounds,
@@ -891,16 +914,18 @@ fn assert_cumulative_sums<C: Config>(
             let air_proof_input = builder.get(air_proofs, i);
             let exposed_values = air_proof_input.exposed_values_after_challenge;
 
-            // Verifier does not support more than 1 challenge phase
-            builder.assert_eq::<Usize<_>>(exposed_values.len(), RVar::one());
+            builder
+                .if_ne(exposed_values.len(), RVar::zero())
+                .then(|builder| {
+                    // Verifier does not support more than 1 challenge phase
+                    builder.assert_eq::<Usize<_>>(exposed_values.len(), RVar::one());
+                    let values = builder.get(&exposed_values, RVar::zero());
+                    // Only exposed value should be cumulative sum
+                    builder.assert_eq::<Usize<_>>(values.len(), RVar::one());
 
-            let values = builder.get(&exposed_values, RVar::zero());
-
-            // Only exposed value should be cumulative sum
-            builder.assert_eq::<Usize<_>>(values.len(), RVar::one());
-
-            let summand = builder.get(&values, RVar::zero());
-            builder.assign(&cumulative_sum, cumulative_sum + summand);
+                    let summand = builder.get(&values, RVar::zero());
+                    builder.assign(&cumulative_sum, cumulative_sum + summand);
+                });
         });
     });
 

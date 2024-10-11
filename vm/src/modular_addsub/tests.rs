@@ -12,6 +12,7 @@ use crate::{
         testing::MachineChipTestBuilder,
     },
     program::Instruction,
+    utils::biguint_to_limbs,
 };
 
 const NUM_LIMBS: usize = 32;
@@ -97,12 +98,10 @@ fn test_modular_addsub() {
         tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
 
         let a_limbs: [BabyBear; NUM_LIMBS] =
-            ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(a.clone())
-                .map(BabyBear::from_canonical_u32);
+            biguint_to_limbs(a.clone(), LIMB_SIZE).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address1, a_limbs);
         let b_limbs: [BabyBear; NUM_LIMBS] =
-            ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(b.clone())
-                .map(BabyBear::from_canonical_u32);
+            biguint_to_limbs(b.clone(), LIMB_SIZE).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address2, b_limbs);
 
         let instruction = Instruction::from_isize(
@@ -120,7 +119,7 @@ fn test_modular_addsub() {
             &mut coord_chip
         };
         tester.execute(chip, instruction);
-        let r_limbs = ModularAddSubChip::<F, NUM_LIMBS, LIMB_SIZE>::biguint_to_limbs(r.clone());
+        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
 
         for (i, &elem) in r_limbs.iter().enumerate() {
             let address = address3 + i;

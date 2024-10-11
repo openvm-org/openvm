@@ -79,7 +79,7 @@ pub mod inner {
             vparams,
             CompilerOptions::default(),
             VmConfig::aggregation(7),
-            BabyBearPoseidon2Engine::new(fri_params),
+            &BabyBearPoseidon2Engine::new(fri_params),
         )
         .unwrap();
     }
@@ -95,7 +95,7 @@ pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>
     vparams: VerificationDataWithFriParams<InnerSC>,
     compiler_options: CompilerOptions,
     vm_config: VmConfig,
-    engine: E,
+    engine: &E,
 ) -> Result<(VerificationDataWithFriParams<AggSC>, Vec<Vec<Val<AggSC>>>), VerificationError>
 where
     Domain<AggSC>: PolynomialSpace<Val = BabyBear>,

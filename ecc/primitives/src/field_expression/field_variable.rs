@@ -19,8 +19,6 @@ pub trait FieldVariableConfig {
     fn max_limb_bits() -> usize;
     // Number of limbs to represent a field element.
     fn num_limbs_per_field_element() -> usize;
-    // The max bits allowed for each limb, determined by range checker.
-    fn range_checker_bits() -> usize;
 }
 
 #[derive(Clone)]
@@ -42,6 +40,10 @@ pub struct FieldVariable<C: FieldVariableConfig> {
     pub max_overflow_bits: usize,
     // Number of limbs to represent the expression.
     pub expr_limbs: usize,
+
+    // This is the same for all FieldVariable, but we might use different values at runtime,
+    // so store it here for easy configuration.
+    pub range_checker_bits: usize,
 
     pub _marker: PhantomData<C>,
 }
@@ -84,7 +86,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let (_, carry_bits) =
             get_carry_max_abs_and_bits(max_overflow_bits, C::canonical_limb_bits());
-        if carry_bits > C::range_checker_bits() {
+        if carry_bits > a.range_checker_bits {
             // Need to save self or other (or both) to prevent overflow.
             if a.max_overflow_bits > b.max_overflow_bits {
                 assert!(a.max_overflow_bits > C::canonical_limb_bits());
@@ -115,6 +117,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
+            range_checker_bits: self.range_checker_bits,
             _marker: PhantomData,
         }
     }
@@ -135,6 +138,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
+            range_checker_bits: self.range_checker_bits,
             _marker: PhantomData,
         }
     }
@@ -156,6 +160,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs + other.expr_limbs - 1,
+            range_checker_bits: self.range_checker_bits,
             _marker: PhantomData,
         }
     }
@@ -166,7 +171,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let (_, carry_bits) =
             get_carry_max_abs_and_bits(max_overflow_bits, C::canonical_limb_bits());
-        if carry_bits > C::range_checker_bits() {
+        if carry_bits > self.range_checker_bits {
             self.save();
         }
         let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
@@ -177,6 +182,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs,
+            range_checker_bits: self.range_checker_bits,
             _marker: PhantomData,
         };
         if max_overflow_bits > C::max_limb_bits() {
@@ -218,6 +224,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs: (1 << C::canonical_limb_bits()) - 1,
             max_overflow_bits: C::canonical_limb_bits(),
             expr_limbs: C::num_limbs_per_field_element(),
+            range_checker_bits: self.range_checker_bits,
             _marker: PhantomData,
         }
     }
@@ -239,6 +246,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs: left_limb_max_abs,
             max_overflow_bits: left_max_overflow_bits,
             expr_limbs: left_expr_limbs,
+            range_checker_bits: a.range_checker_bits,
             _marker: PhantomData,
         }
     }

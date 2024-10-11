@@ -7,7 +7,6 @@ use afs_primitives::{
 use air::ModularAddSubAir;
 use hex_literal::hex;
 use num_bigint_dig::BigUint;
-use num_traits::{FromPrimitive, ToPrimitive, Zero};
 use once_cell::sync::Lazy;
 use p3_field::PrimeField32;
 
@@ -18,6 +17,7 @@ use crate::{
     },
     memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
     program::{bridge::ProgramBus, ExecutionError, Instruction},
+    utils::{biguint_to_limbs, limbs_to_biguint},
 };
 
 mod air;
@@ -143,15 +143,15 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
         let x = x_array_read.data_read.data.map(|x| x.as_canonical_u32());
         let y = y_array_read.data_read.data.map(|x| x.as_canonical_u32());
 
-        let x_biguint = Self::limbs_to_biguint(&x);
-        let y_biguint = Self::limbs_to_biguint(&y);
+        let x_biguint = limbs_to_biguint(&x, LIMB_SIZE);
+        let y_biguint = limbs_to_biguint(&y, LIMB_SIZE);
 
         let z_biguint = self.solve(
             ModularArithmeticOpcode::from_usize(opcode),
             x_biguint,
             y_biguint,
         );
-        let z_limbs = Self::biguint_to_limbs(z_biguint);
+        let z_limbs = biguint_to_limbs(z_biguint, LIMB_SIZE);
 
         let z_array_write = memory_chip.write_heap::<NUM_LIMBS>(
             d,
@@ -197,28 +197,5 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
             }
             _ => panic!("Unsupported opcode: {:?}", opcode),
         }
-    }
-
-    // little endian.
-    pub fn limbs_to_biguint(x: &[u32]) -> BigUint {
-        let mut result = BigUint::zero();
-        let base = BigUint::from_u32(1 << LIMB_SIZE).unwrap();
-        for limb in x.iter().rev() {
-            result = result * &base + BigUint::from_u32(*limb).unwrap();
-        }
-        result
-    }
-
-    // little endian.
-    // Warning: This function only returns the last NUM_LIMBS*LIMB_SIZE bits of
-    //          the input, while the input can have more than that.
-    pub fn biguint_to_limbs(mut x: BigUint) -> [u32; NUM_LIMBS] {
-        let mut result = [0; NUM_LIMBS];
-        let base = BigUint::from_u32(1 << LIMB_SIZE).unwrap();
-        for r in result.iter_mut() {
-            *r = (x.clone() % &base).to_u32().unwrap();
-            x /= &base;
-        }
-        result
     }
 }

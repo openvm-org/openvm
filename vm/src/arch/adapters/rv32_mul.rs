@@ -22,7 +22,7 @@ use crate::{
 /// Operand d can only be 1, and there is no immediate support.
 #[derive(Debug)]
 pub struct Rv32MultAdapter<F: Field> {
-    _marker: std::marker::PhantomData<F>,
+    _marker: PhantomData<F>,
     pub air: Rv32MultAdapterAir,
 }
 
@@ -34,7 +34,7 @@ impl<F: PrimeField32> Rv32MultAdapter<F> {
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
             air: Rv32MultAdapterAir {
                 _execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 _memory_bridge: memory_bridge,
