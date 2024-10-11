@@ -6,6 +6,7 @@ fn bls12_381_p() -> BigUint {
     BigUint::from_str_radix("1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab", 16).unwrap()
 }
 
+#[allow(dead_code)]
 fn bn254_p() -> BigUint {
     BigUint::from_str_radix(
         "21888242871839275222246405745257275088696311157297823662689037894645226208583",

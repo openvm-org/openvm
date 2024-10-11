@@ -5,6 +5,7 @@ use rand::{rngs::StdRng, SeedableRng};
 use crate::common::{AffineCoords, EcPoint, FieldExtension, ScalarMul};
 
 #[allow(non_snake_case)]
+#[allow(clippy::type_complexity)]
 pub fn generate_test_points<A1, A2, Fp, Fp2>(
     rand_seeds: &[u64],
 ) -> (Vec<A1>, Vec<A2>, Vec<EcPoint<Fp>>, Vec<EcPoint<Fp2>>)
@@ -35,7 +36,9 @@ where
     (P_vec, Q_vec, P_ecpoints, Q_ecpoints)
 }
 
+#[allow(dead_code)]
 #[allow(non_snake_case)]
+#[allow(clippy::type_complexity)]
 pub fn generate_test_points_generator<A1, A2, Fp, Fp2>(
 ) -> (Vec<A1>, Vec<A2>, Vec<EcPoint<Fp>>, Vec<EcPoint<Fp2>>)
 where
@@ -61,6 +64,7 @@ where
 }
 
 #[allow(non_snake_case)]
+#[allow(clippy::type_complexity)]
 pub fn generate_test_points_generator_scalar<A1, A2, Fr, Fp, Fp2, const N: usize>(
     a: &[Fr; N],
     b: &[Fr; N],

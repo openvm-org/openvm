@@ -2,10 +2,12 @@ use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, Fq6},
     ff::Field,
 };
-use num::{bigint::Sign, BigInt};
+use num::BigInt;
 
+#[cfg(test)]
+use crate::common::FeltPrint;
 use crate::common::{
-    EvaluatedLine, ExpBigInt, FeltPrint, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType,
+    EvaluatedLine, ExpBigInt, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType,
 };
 
 impl Fp2Constructor<Fq> for Fq2 {
@@ -216,6 +218,5 @@ impl FeltPrint<Fq12> for Fq12 {
         self.c1.c2.c0.felt_print("");
         print!("c1.c2.c1:");
         self.c1.c2.c1.felt_print("");
-        println!("");
     }
 }

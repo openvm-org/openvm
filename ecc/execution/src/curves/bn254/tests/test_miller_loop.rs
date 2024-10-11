@@ -1,5 +1,5 @@
 use halo2curves_axiom::{
-    bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, Gt},
+    bn256::{Fq, Fq2, G1Affine, G2Affine, G2Prepared, Gt},
     pairing::MillerLoopResult,
 };
 

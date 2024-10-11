@@ -3,9 +3,9 @@ use halo2curves_axiom::{
     ff::Field,
 };
 
-use crate::common::{
-    EvaluatedLine, FeltPrint, FieldExtension, Fp12Constructor, Fp2Constructor, LineMType,
-};
+#[cfg(test)]
+use crate::common::FeltPrint;
+use crate::common::{EvaluatedLine, FieldExtension, Fp12Constructor, Fp2Constructor, LineMType};
 
 impl Fp2Constructor<Fq> for Fq2 {
     fn new(c0: Fq, c1: Fq) -> Self {
@@ -169,6 +169,5 @@ impl FeltPrint<Fq12> for Fq12 {
         self.c1.c2.c0.felt_print("");
         print!("c1.c2.c1:");
         self.c1.c2.c1.felt_print("");
-        println!("");
     }
 }

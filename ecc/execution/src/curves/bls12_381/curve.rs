@@ -39,7 +39,7 @@ impl AffineCoords<Fq> for G1Affine {
     }
 
     fn neg(&self) -> Self {
-        let mut pt = self.clone();
+        let mut pt = *self;
         pt.y = -pt.y;
         pt
     }
@@ -63,7 +63,7 @@ impl AffineCoords<Fq2> for G2Affine {
     }
 
     fn neg(&self) -> Self {
-        let mut pt = self.clone();
+        let mut pt = *self;
         pt.y = -pt.y;
         pt
     }
