@@ -89,7 +89,6 @@ fn test_compiler_256_mul() {
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            bigint_limb_size: 8,
             ..Default::default()
         }
         .add_default_executor(ExecutorName::U256Multiplication),
@@ -283,7 +282,6 @@ fn test_compiler_256_sll_srl() {
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            bigint_limb_size: 8,
             ..Default::default()
         }
         .add_default_executor(ExecutorName::Shift256),
@@ -343,7 +341,6 @@ fn test_compiler_256_sra() {
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            bigint_limb_size: 8,
             ..Default::default()
         }
         .add_default_executor(ExecutorName::Shift256),

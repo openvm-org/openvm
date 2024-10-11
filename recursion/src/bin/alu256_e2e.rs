@@ -109,7 +109,6 @@ where
     let program = bench_program();
 
     let vm_config = VmConfig {
-        bigint_limb_size: 8,
         ..Default::default()
     }
     .add_default_executor(ExecutorName::ArithmeticLogicUnit256)

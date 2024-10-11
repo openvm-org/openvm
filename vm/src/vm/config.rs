@@ -175,7 +175,6 @@ pub struct VmConfig {
     /*pub max_program_length: usize,
     pub max_operations: usize,*/
     pub collect_metrics: bool,
-    pub bigint_limb_size: usize,
 }
 
 impl VmConfig {
@@ -185,7 +184,6 @@ impl VmConfig {
         num_public_values: usize,
         max_segment_len: usize,
         collect_metrics: bool,
-        bigint_limb_size: usize,
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         enabled_modulus: Vec<BigUint>,
     ) -> Self {
@@ -196,7 +194,6 @@ impl VmConfig {
             num_public_values,
             max_segment_len,
             collect_metrics,
-            bigint_limb_size,
             modular_executors: Vec::new(),
         };
         config.add_modular_support(enabled_modulus)
@@ -281,7 +278,6 @@ impl VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
-            8,
             vec![],
         )
     }
@@ -299,7 +295,6 @@ impl VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
-            8,
             vec![],
         )
         .add_default_executor(ExecutorName::Core)
