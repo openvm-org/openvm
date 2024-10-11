@@ -13,6 +13,7 @@ members = [
     "vm",
     "riscv/zkvm/lib",
     "riscv/zkvm/platform",
+    "riscv/transpiler",
 ]
 resolver = "2"
 
@@ -57,8 +58,15 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
-axvm-platform = { path = "riscv/zkvm/platform" }
-axvm = { path = "riscv/zkvm/lib" }
+axvm-platform = { path = "riscv/zkvm/platform", default-features = false }
+axvm = { path = "riscv/zkvm/lib", default-features = false }
+afs-compiler = { path = "compiler", default-features = false }
+stark-vm = { path = "vm", default-features = false }
+afs-primitives = { path = "primitives", default-features = false }
+afs-stark-backend = { path = "stark-backend", default-features = false }
+afs-derive = { path = "derive", default-features = false }
+ax-sdk = { path = "sdk", default-features = false }
+afs-transpiler = { path = "riscv/transpiler", default-features = false }
 
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }

@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::{marker::PhantomData, mem::size_of};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
@@ -11,14 +11,14 @@ use crate::{
             UsizeOpcode,
         },
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Result,
+        MachineIntegration, Reads, Result, Writes,
     },
     program::Instruction,
 };
 
 #[derive(Debug, Clone)]
 pub struct LoadStoreCols<T, const NUM_CELLS: usize> {
-    pub _marker: std::marker::PhantomData<T>,
+    pub _marker: PhantomData<T>,
 }
 
 impl<T, const NUM_CELLS: usize> LoadStoreCols<T, NUM_CELLS> {
@@ -29,7 +29,7 @@ impl<T, const NUM_CELLS: usize> LoadStoreCols<T, NUM_CELLS> {
 
 #[derive(Debug, Clone)]
 pub struct LoadStoreAir<F: Field, const NUM_CELLS: usize> {
-    pub _marker: std::marker::PhantomData<F>,
+    pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
@@ -48,7 +48,7 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
     pub fn new(offset: usize) -> Self {
         Self {
             air: LoadStoreAir::<F, NUM_CELLS> {
-                _marker: std::marker::PhantomData,
+                _marker: PhantomData,
                 offset,
             },
         }
@@ -58,10 +58,10 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
 impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_CELLS: usize> MachineIntegration<F, A>
     for LoadStoreIntegration<F, NUM_CELLS>
 where
-    <A::Interface<F> as MachineAdapterInterface<F>>::Reads: Into<[[F; NUM_CELLS]; 2]>,
-    <A::Interface<F> as MachineAdapterInterface<F>>::Writes: From<[F; NUM_CELLS]>,
+    Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,
+    Writes<F, A::Interface<F>>: From<[F; NUM_CELLS]>,
 {
-    type Record = std::marker::PhantomData<F>;
+    type Record = ();
     type Air = LoadStoreAir<F, NUM_CELLS>;
     type Cols<T> = LoadStoreCols<T, NUM_CELLS>;
 
@@ -81,7 +81,7 @@ where
             writes: write_data.into(),
         };
 
-        Ok((output, std::marker::PhantomData))
+        Ok((output, ()))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

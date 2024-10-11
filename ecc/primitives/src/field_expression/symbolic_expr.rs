@@ -1,12 +1,11 @@
 use std::cmp::max;
 
-use afs_primitives::bigint::OverflowInt;
+use afs_primitives::bigint::{utils::big_uint_mod_inverse, OverflowInt};
 use num_bigint_dig::{BigInt, BigUint};
 use num_traits::{FromPrimitive, One, Zero};
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 use p3_util::log2_ceil_usize;
-use stark_vm::modular_addsub::big_uint_mod_inverse;
 
 /// Example: If there are 4 inputs (x1, y1, x2, y2), and one intermediate variable lambda,
 /// Mul(Var(0), Var(0)) - Input(0) - Input(2) =>
@@ -22,6 +21,9 @@ pub enum SymbolicExpr {
     Div(Box<SymbolicExpr>, Box<SymbolicExpr>),
     // Multiply each limb with an integer. For BigInt this is just scalar multiplication.
     IntMul(Box<SymbolicExpr>, isize),
+    // Select one of the two expressions based on the flag.
+    // The two expressions must have the same structure (number of limbs etc), e.g. a+b and a-b.
+    Select(usize, Box<SymbolicExpr>, Box<SymbolicExpr>),
 }
 
 impl SymbolicExpr {
@@ -59,6 +61,11 @@ impl SymbolicExpr {
                 let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
                 (lhs_max_pos * &scalar, lhs_max_neg * &scalar)
             }
+            SymbolicExpr::Select(_, lhs, rhs) => {
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
+                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
+                (max(lhs_max_pos, rhs_max_pos), max(lhs_max_neg, rhs_max_neg))
+            }
         }
     }
 
@@ -77,6 +84,12 @@ impl SymbolicExpr {
                 unimplemented!()
             }
             SymbolicExpr::IntMul(lhs, _) => lhs.expr_limbs(num_limbs),
+            SymbolicExpr::Select(_, lhs, rhs) => {
+                let left = lhs.expr_limbs(num_limbs);
+                let right = rhs.expr_limbs(num_limbs);
+                assert_eq!(left, right);
+                left
+            }
         }
     }
 
@@ -103,21 +116,36 @@ impl SymbolicExpr {
     }
 
     // Used in trace gen to compute q.
-    pub fn evaluate_bigint(&self, inputs: &[BigInt], variables: &[BigInt]) -> BigInt {
+    pub fn evaluate_bigint(
+        &self,
+        inputs: &[BigInt],
+        variables: &[BigInt],
+        flags: &[bool],
+    ) -> BigInt {
         match self {
             SymbolicExpr::IntMul(lhs, s) => {
-                lhs.evaluate_bigint(inputs, variables) * BigInt::from_isize(*s).unwrap()
+                lhs.evaluate_bigint(inputs, variables, flags) * BigInt::from_isize(*s).unwrap()
             }
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
-                lhs.evaluate_bigint(inputs, variables) + rhs.evaluate_bigint(inputs, variables)
+                lhs.evaluate_bigint(inputs, variables, flags)
+                    + rhs.evaluate_bigint(inputs, variables, flags)
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                lhs.evaluate_bigint(inputs, variables) - rhs.evaluate_bigint(inputs, variables)
+                lhs.evaluate_bigint(inputs, variables, flags)
+                    - rhs.evaluate_bigint(inputs, variables, flags)
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                lhs.evaluate_bigint(inputs, variables) * rhs.evaluate_bigint(inputs, variables)
+                lhs.evaluate_bigint(inputs, variables, flags)
+                    * rhs.evaluate_bigint(inputs, variables, flags)
+            }
+            SymbolicExpr::Select(flag_id, lhs, rhs) => {
+                if flags[*flag_id] {
+                    lhs.evaluate_bigint(inputs, variables, flags)
+                } else {
+                    rhs.evaluate_bigint(inputs, variables, flags)
+                }
             }
             SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
         }
@@ -128,10 +156,11 @@ impl SymbolicExpr {
         &self,
         inputs: &[OverflowInt<isize>],
         variables: &[OverflowInt<isize>],
+        flags: &[bool],
     ) -> OverflowInt<isize> {
         match self {
             SymbolicExpr::IntMul(lhs, s) => {
-                let mut left = lhs.evaluate_overflow_isize(inputs, variables);
+                let mut left = lhs.evaluate_overflow_isize(inputs, variables, flags);
                 for limb in left.limbs.iter_mut() {
                     *limb *= *s;
                 }
@@ -142,16 +171,23 @@ impl SymbolicExpr {
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
-                lhs.evaluate_overflow_isize(inputs, variables)
-                    + rhs.evaluate_overflow_isize(inputs, variables)
+                lhs.evaluate_overflow_isize(inputs, variables, flags)
+                    + rhs.evaluate_overflow_isize(inputs, variables, flags)
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                lhs.evaluate_overflow_isize(inputs, variables)
-                    - rhs.evaluate_overflow_isize(inputs, variables)
+                lhs.evaluate_overflow_isize(inputs, variables, flags)
+                    - rhs.evaluate_overflow_isize(inputs, variables, flags)
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                lhs.evaluate_overflow_isize(inputs, variables)
-                    * rhs.evaluate_overflow_isize(inputs, variables)
+                lhs.evaluate_overflow_isize(inputs, variables, flags)
+                    * rhs.evaluate_overflow_isize(inputs, variables, flags)
+            }
+            SymbolicExpr::Select(flag_id, lhs, rhs) => {
+                if flags[*flag_id] {
+                    lhs.evaluate_overflow_isize(inputs, variables, flags)
+                } else {
+                    rhs.evaluate_overflow_isize(inputs, variables, flags)
+                }
             }
             SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
         }
@@ -162,10 +198,11 @@ impl SymbolicExpr {
         &self,
         inputs: &[OverflowInt<AB::Expr>],
         variables: &[OverflowInt<AB::Expr>],
+        flags: &[AB::Var],
     ) -> OverflowInt<AB::Expr> {
         match self {
             SymbolicExpr::IntMul(lhs, s) => {
-                let mut left = lhs.evaluate_overflow_expr::<AB>(inputs, variables);
+                let mut left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags);
                 let scalar = if *s >= 0 {
                     AB::Expr::from_canonical_usize(*s as usize)
                 } else {
@@ -181,53 +218,86 @@ impl SymbolicExpr {
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
-                lhs.evaluate_overflow_expr::<AB>(inputs, variables)
-                    + rhs.evaluate_overflow_expr::<AB>(inputs, variables)
+                lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
+                    + rhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                lhs.evaluate_overflow_expr::<AB>(inputs, variables)
-                    - rhs.evaluate_overflow_expr::<AB>(inputs, variables)
+                lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
+                    - rhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                lhs.evaluate_overflow_expr::<AB>(inputs, variables)
-                    * rhs.evaluate_overflow_expr::<AB>(inputs, variables)
+                lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
+                    * rhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
+            }
+            SymbolicExpr::Select(flag_id, lhs, rhs) => {
+                let left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags);
+                let right = rhs.evaluate_overflow_expr::<AB>(inputs, variables, flags);
+                assert_eq!(left.limbs.len(), right.limbs.len());
+                let flag = flags[*flag_id];
+                let mut res = vec![];
+                for i in 0..left.limbs.len() {
+                    res.push(
+                        left.limbs[i].clone() * flag.into()
+                            + right.limbs[i].clone() * (AB::Expr::one() - flag.into()),
+                    );
+                }
+                OverflowInt {
+                    limbs: res,
+                    limb_max_abs: left.limb_max_abs,
+                    max_overflow_bits: left.max_overflow_bits,
+                }
             }
             SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
         }
     }
 
     // Result will be within [0, prime).
-    pub fn compute(&self, inputs: &[BigUint], variables: &[BigUint], prime: &BigUint) -> BigUint {
+    pub fn compute(
+        &self,
+        inputs: &[BigUint],
+        variables: &[BigUint],
+        flags: &[bool],
+        prime: &BigUint,
+    ) -> BigUint {
         match self {
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
-                (lhs.compute(inputs, variables, prime) + rhs.compute(inputs, variables, prime))
+                (lhs.compute(inputs, variables, flags, prime)
+                    + rhs.compute(inputs, variables, flags, prime))
                     % prime
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                (prime + lhs.compute(inputs, variables, prime)
-                    - rhs.compute(inputs, variables, prime))
+                (prime + lhs.compute(inputs, variables, flags, prime)
+                    - rhs.compute(inputs, variables, flags, prime))
                     % prime
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                (lhs.compute(inputs, variables, prime) * rhs.compute(inputs, variables, prime))
+                (lhs.compute(inputs, variables, flags, prime)
+                    * rhs.compute(inputs, variables, flags, prime))
                     % prime
             }
             SymbolicExpr::Div(lhs, rhs) => {
-                let left = lhs.compute(inputs, variables, prime);
-                let right = rhs.compute(inputs, variables, prime);
+                let left = lhs.compute(inputs, variables, flags, prime);
+                let right = rhs.compute(inputs, variables, flags, prime);
                 let right_inv = big_uint_mod_inverse(&right, prime);
                 (left * right_inv) % prime
             }
             SymbolicExpr::IntMul(lhs, s) => {
-                let left = lhs.compute(inputs, variables, prime);
+                let left = lhs.compute(inputs, variables, flags, prime);
                 let right = if *s >= 0 {
                     BigUint::from_usize(*s as usize).unwrap()
                 } else {
                     prime - BigUint::from_usize(s.unsigned_abs()).unwrap()
                 };
                 (left * right) % prime
+            }
+            SymbolicExpr::Select(flag_id, lhs, rhs) => {
+                if flags[*flag_id] {
+                    lhs.compute(inputs, variables, flags, prime)
+                } else {
+                    rhs.compute(inputs, variables, flags, prime)
+                }
             }
         }
     }

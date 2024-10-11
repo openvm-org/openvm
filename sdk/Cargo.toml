@@ -43,6 +43,7 @@ metrics = { workspace = true }
 serde_json = { workspace = true }
 
 afs-stark-backend = { path = "../stark-backend", default-features = false }
+afs-derive = { path = "../derive" }
 
 [features]
 default = []

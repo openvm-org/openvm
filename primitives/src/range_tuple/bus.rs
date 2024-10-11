@@ -1,14 +1,14 @@
 use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
 use p3_field::AbstractField;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RangeTupleCheckerBus {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RangeTupleCheckerBus<const N: usize> {
     pub index: usize,
-    pub sizes: Vec<u32>,
+    pub sizes: [u32; N],
 }
 
-impl RangeTupleCheckerBus {
-    pub fn new(index: usize, sizes: Vec<u32>) -> Self {
+impl<const N: usize> RangeTupleCheckerBus<N> {
+    pub fn new(index: usize, sizes: [u32; N]) -> Self {
         Self { index, sizes }
     }
 

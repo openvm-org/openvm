@@ -151,7 +151,7 @@ fn poseidon2_negative_test() {
     // test is slow, avoid too many repetitions
     for _ in 0..5 {
         // TODO: better way to modify existing traces in tester
-        let trace = &mut tester.traces[2];
+        let trace = &mut tester.air_infos[2].common_trace;
         let original_trace = trace.clone();
 
         // avoid pranking IO cols or dst,lhs,rhs
@@ -170,7 +170,7 @@ fn poseidon2_negative_test() {
             Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
-        tester.traces[1] = original_trace;
+        tester.air_infos[2].common_trace = original_trace;
     }
 }
 

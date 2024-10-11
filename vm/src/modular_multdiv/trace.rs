@@ -22,6 +22,7 @@ use crate::{
         MachineChip,
     },
     memory::MemoryHeapDataIoCols,
+    utils::limbs_to_biguint,
 };
 
 impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
@@ -45,26 +46,29 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
                 y: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.y_array_read.clone()),
                 z: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.z_array_write.clone()),
             };
-            let x = Self::limbs_to_biguint(
+            let x = limbs_to_biguint(
                 &record
                     .x_array_read
                     .data_read
                     .data
                     .map(|x| x.as_canonical_u32()),
+                LIMB_SIZE,
             );
-            let y = Self::limbs_to_biguint(
+            let y = limbs_to_biguint(
                 &record
                     .y_array_read
                     .data_read
                     .data
                     .map(|x| x.as_canonical_u32()),
+                LIMB_SIZE,
             );
-            let r = Self::limbs_to_biguint(
+            let r = limbs_to_biguint(
                 &record
                     .z_array_write
                     .data_write
                     .data
                     .map(|x| x.as_canonical_u32()),
+                LIMB_SIZE,
             );
             let is_mult = match ModularArithmeticOpcode::from_usize(record.instruction.opcode) {
                 ModularArithmeticOpcode::MUL => true,

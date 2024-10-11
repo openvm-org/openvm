@@ -78,7 +78,7 @@ fn main() {
             info_span!("Bench Program Inner", group = "bench_program_inner").in_scope(|| {
                 let program_stark = bench_program_stark_for_test();
                 program_stark
-                    .run_simple_test(&BabyBearPoseidon2Engine::new(
+                    .run_test(&BabyBearPoseidon2Engine::new(
                         standard_fri_params_with_100_bits_conjectured_security(4),
                     ))
                     .unwrap()
@@ -100,7 +100,7 @@ fn main() {
                 },
             );
             inner_verifier_stf
-                .run_simple_test(&BabyBearPoseidon2Engine::new(
+                .run_test(&BabyBearPoseidon2Engine::new(
                     // log_blowup = 3 because of poseidon2 chip.
                     standard_fri_params_with_100_bits_conjectured_security(3),
                 ))
@@ -120,7 +120,7 @@ fn main() {
                 },
             );
             afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
-                &outer_verifier_sft,
+                outer_verifier_sft,
                 // log_blowup = 3 because of poseidon2 chip.
                 Some(standard_fri_params_with_100_bits_conjectured_security(3)),
             );

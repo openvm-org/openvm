@@ -1,18 +1,18 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use afs_primitives::{
     sum::SumChip,
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::utils::AirInfo;
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Config,
         fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
         FriParameters,
     },
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkForTest,
-    interaction::dummy_interaction_air::DummyInteractionAir,
     utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
 };
 use p3_field::{AbstractField, PrimeField32};
@@ -27,17 +27,15 @@ where
 {
     setup_tracing();
 
-    let fib_air = Rc::new(FibonacciAir {});
+    let fib_air = Box::new(FibonacciAir {});
     let trace = generate_fib_trace_rows::<Val<SC>>(n);
-    let pvs = vec![vec![
+    let pvs = vec![
         Val::<SC>::from_canonical_u32(0),
         Val::<SC>::from_canonical_u32(1),
         trace.get(n - 1, 1),
-    ]];
+    ];
     StarkForTest {
-        any_raps: vec![fib_air.clone()],
-        traces: vec![trace],
-        pvs,
+        air_infos: vec![AirInfo::simple(fib_air, trace, pvs)],
     }
 }
 
@@ -86,20 +84,23 @@ where
         receiver_air.field_width() + 1,
     );
     let range_checker_trace = sum_chip.range_checker.generate_trace();
-    let sum_air = Rc::new(sum_chip.air);
-    let sender_air = Rc::new(sender_air);
-    let receiver_air = Rc::new(receiver_air);
-    let range_checker_air = Rc::new(sum_chip.range_checker.air);
+    let sum_air = Box::new(sum_chip.air);
+    let sender_air = Box::new(sender_air);
+    let receiver_air = Box::new(receiver_air);
+    let range_checker_air = Box::new(sum_chip.range_checker.air);
 
-    let any_raps: Vec<Rc<dyn AnyRap<SC>>> =
-        vec![range_checker_air, sum_air, sender_air, receiver_air];
-    let traces = vec![range_checker_trace, sum_trace, sender_trace, receiver_trace];
-    let pvs = vec![vec![], vec![], vec![], vec![]];
+    let range_checker_air_info = AirInfo::simple_no_pis(range_checker_air, range_checker_trace);
+    let sum_air_info = AirInfo::simple_no_pis(sum_air, sum_trace);
+    let sender_air_info = AirInfo::simple_no_pis(sender_air, sender_trace);
+    let receiver_air_info = AirInfo::simple_no_pis(receiver_air, receiver_trace);
 
     StarkForTest {
-        any_raps,
-        traces,
-        pvs,
+        air_infos: vec![
+            range_checker_air_info,
+            sum_air_info,
+            sender_air_info,
+            receiver_air_info,
+        ],
     }
 }
 
@@ -120,17 +121,12 @@ where
         to_field_vec([[1, 1]; RECEIVER_HEIGHT].into_iter().flatten().collect()),
         receiver_air.field_width() + 1,
     );
-    let sender_air = Rc::new(sender_air);
-    let receiver_air = Rc::new(receiver_air);
 
-    let any_raps: Vec<Rc<dyn AnyRap<SC>>> = vec![sender_air, receiver_air];
-    let traces = vec![sender_trace, receiver_trace];
-    let pvs = vec![vec![]; 2];
+    let sender_air_info = AirInfo::simple_no_pis(Box::new(sender_air), sender_trace);
+    let receiver_air_info = AirInfo::simple_no_pis(Box::new(receiver_air), receiver_trace);
 
     StarkForTest {
-        any_raps,
-        traces,
-        pvs,
+        air_infos: vec![sender_air_info, receiver_air_info],
     }
 }
 

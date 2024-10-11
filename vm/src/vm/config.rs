@@ -82,6 +82,21 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Rv32LoadStoreOpcode::COUNT,
             Rv32LoadStoreOpcode::default_offset(),
         ),
+        ExecutorName::JalLuiRv32 => (
+            Rv32JalLuiOpcode::default_offset(),
+            Rv32JalLuiOpcode::COUNT,
+            Rv32JalLuiOpcode::default_offset(),
+        ),
+        ExecutorName::JalrRv32 => (
+            Rv32JalrOpcode::default_offset(),
+            Rv32JalrOpcode::COUNT,
+            Rv32JalrOpcode::default_offset(),
+        ),
+        ExecutorName::AuipcRv32 => (
+            Rv32AuipcOpcode::default_offset(),
+            Rv32AuipcOpcode::COUNT,
+            Rv32AuipcOpcode::default_offset(),
+        ),
         ExecutorName::ArithmeticLogicUnit256 => (
             U256Opcode::default_offset(),
             8,
@@ -92,10 +107,25 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             LessThanOpcode::COUNT,
             LessThanOpcode::default_offset(),
         ),
+        ExecutorName::MultiplicationRv32 => (
+            MulOpcode::default_offset(),
+            MulOpcode::COUNT,
+            MulOpcode::default_offset(),
+        ),
+        ExecutorName::MultiplicationHighRv32 => (
+            MulHOpcode::default_offset(),
+            MulHOpcode::COUNT,
+            MulHOpcode::default_offset(),
+        ),
         ExecutorName::U256Multiplication => (
             U256Opcode::default_offset() + 11,
             1,
             U256Opcode::default_offset(),
+        ),
+        ExecutorName::DivRemRv32 => (
+            DivRemOpcode::default_offset(),
+            DivRemOpcode::COUNT,
+            DivRemOpcode::default_offset(),
         ),
         ExecutorName::ShiftRv32 => (
             ShiftOpcode::default_offset(),
@@ -106,6 +136,16 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             U256Opcode::default_offset() + 8,
             3,
             U256Opcode::default_offset(),
+        ),
+        ExecutorName::BranchEqualRv32 => (
+            BranchEqualOpcode::default_offset(),
+            BranchEqualOpcode::COUNT,
+            BranchEqualOpcode::default_offset(),
+        ),
+        ExecutorName::BranchLessThanRv32 => (
+            BranchLessThanOpcode::default_offset(),
+            BranchLessThanOpcode::COUNT,
+            BranchLessThanOpcode::default_offset(),
         ),
         ExecutorName::Ui => (
             U32Opcode::default_offset(),
@@ -145,7 +185,6 @@ pub struct VmConfig {
     /*pub max_program_length: usize,
     pub max_operations: usize,*/
     pub collect_metrics: bool,
-    pub bigint_limb_size: usize,
 }
 
 impl VmConfig {
@@ -155,7 +194,6 @@ impl VmConfig {
         num_public_values: usize,
         max_segment_len: usize,
         collect_metrics: bool,
-        bigint_limb_size: usize,
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         enabled_modulus: Vec<BigUint>,
     ) -> Self {
@@ -166,7 +204,6 @@ impl VmConfig {
             num_public_values,
             max_segment_len,
             collect_metrics,
-            bigint_limb_size,
             modular_executors: Vec::new(),
         };
         config.add_modular_support(enabled_modulus)
@@ -251,7 +288,6 @@ impl VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
-            8,
             vec![],
         )
     }
@@ -269,7 +305,6 @@ impl VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
-            8,
             vec![],
         )
         .add_default_executor(ExecutorName::Core)

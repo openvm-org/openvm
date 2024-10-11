@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_primitives::range_tuple::bus::RangeTupleCheckerBus;
+use afs_primitives::range_tuple::RangeTupleCheckerBus;
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -18,7 +18,7 @@ use crate::{
 pub struct UintMultiplicationAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
-    pub bus: RangeTupleCheckerBus,
+    pub bus: RangeTupleCheckerBus<2>,
 
     pub(super) offset: usize,
 }

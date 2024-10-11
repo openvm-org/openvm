@@ -2,25 +2,25 @@
 
 use std::sync::{atomic::AtomicU32, Arc};
 
-pub mod air;
-pub mod bus;
-pub mod columns;
-pub mod trace;
+mod air;
+mod bus;
+mod columns;
+mod trace;
 
 #[cfg(test)]
 pub mod tests;
 
-pub use air::RangeTupleCheckerAir;
-use bus::RangeTupleCheckerBus;
+pub use air::*;
+pub use bus::*;
 
-#[derive(Clone, Default, Debug)]
-pub struct RangeTupleCheckerChip {
-    pub air: RangeTupleCheckerAir,
+#[derive(Clone, Debug)]
+pub struct RangeTupleCheckerChip<const N: usize> {
+    pub air: RangeTupleCheckerAir<N>,
     count: Vec<Arc<AtomicU32>>,
 }
 
-impl RangeTupleCheckerChip {
-    pub fn new(bus: RangeTupleCheckerBus) -> Self {
+impl<const N: usize> RangeTupleCheckerChip<N> {
+    pub fn new(bus: RangeTupleCheckerBus<N>) -> Self {
         let range_max = bus.sizes.iter().product();
         let count = (0..range_max)
             .map(|_| Arc::new(AtomicU32::new(0)))
@@ -32,11 +32,11 @@ impl RangeTupleCheckerChip {
         }
     }
 
-    pub fn bus(&self) -> &RangeTupleCheckerBus {
+    pub fn bus(&self) -> &RangeTupleCheckerBus<N> {
         &self.air.bus
     }
 
-    pub fn sizes(&self) -> &Vec<u32> {
+    pub fn sizes(&self) -> &[u32; N] {
         &self.air.bus.sizes
     }
 

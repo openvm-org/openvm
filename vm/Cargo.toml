@@ -21,6 +21,7 @@ afs-primitives = { path = "../primitives", default-features = false }
 afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }
 ax-sdk = { path = "../sdk", default-features = false, optional = true }
+ax-ecc-primitives = { path = "../ecc/primitives", default-features = false }
 
 toml = "0.8.14"
 enum-utils = "0.1.1"

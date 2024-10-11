@@ -137,10 +137,10 @@ jobs:
 
             if [[ $count -gt 0 ]]; then
               s5cmd cp $prev_path prev.json
-              python3 sdk/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json > results.md
+              python3 sdk/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json sdk/scripts/metric_unify/aggregation.json > results.md
             else
               echo "No previous benchmark on main branch found"
-              python3 sdk/scripts/metric_unify/main.py $METRIC_PATH > results.md
+              python3 sdk/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json sdk/scripts/metric_unify/aggregation.json > results.md
             fi
           else
             echo "No benchmark metrics found at ${METRIC_PATH}"

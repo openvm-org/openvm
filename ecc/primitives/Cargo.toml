@@ -6,10 +6,8 @@ description = "Elliptic curve cryptography building blocks."
 
 [dependencies]
 afs-stark-backend = { path = "../../stark-backend" }
-afs-compiler = { path = "../../compiler" }
 afs-primitives = { path = "../../primitives" }
 ax-sdk = { path = "../../sdk" }
-stark-vm = { path = "../../vm" }
 p3-air = { workspace = true }
 p3-field = { workspace = true }
 p3-commit = { workspace = true }

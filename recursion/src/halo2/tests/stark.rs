@@ -8,50 +8,37 @@ use ax_sdk::{
 };
 
 use crate::{
-    config::outer::new_from_outer_multi_vk,
+    config::outer::new_from_outer_multi_vkv2,
     halo2::Halo2Prover,
     stark::outer::build_circuit_verify_operations,
     tests::{fibonacci_stark_for_test, interaction_stark_for_test},
-    types::VerifierInput,
     witness::Witnessable,
 };
 
 #[test]
 fn test_fibonacci() {
     setup_tracing();
-    run_recursive_test(&fibonacci_stark_for_test::<BabyBearPoseidon2OuterConfig>(
-        16,
-    ))
+    run_recursive_test(fibonacci_stark_for_test::<BabyBearPoseidon2OuterConfig>(16))
 }
 
 #[test]
 fn test_interactions() {
     // Please make sure kzg trusted params are downloaded before running the test.
     setup_tracing();
-    run_recursive_test(&interaction_stark_for_test::<BabyBearPoseidon2OuterConfig>())
+    run_recursive_test(interaction_stark_for_test::<BabyBearPoseidon2OuterConfig>())
 }
 
-fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>) {
-    let StarkForTest {
-        any_raps,
-        traces,
-        pvs,
-    } = stark_for_test;
-    let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-
+fn run_recursive_test(stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>) {
     let vparams =
-        BabyBearPoseidon2OuterEngine::run_simple_test(&any_raps, traces.clone(), pvs).unwrap();
-
-    let advice = new_from_outer_multi_vk(&vparams.data.vk);
-    let log_degree_per_air = vparams.data.proof.log_degrees();
-
-    let input = VerifierInput {
-        proof: vparams.data.proof,
-        log_degree_per_air,
-    };
+        <BabyBearPoseidon2OuterEngine as StarkFriEngine<BabyBearPoseidon2OuterConfig>>::run_test_fast(
+            stark_for_test.air_infos,
+        )
+        .unwrap();
+    let advice = new_from_outer_multi_vkv2(&vparams.data.vk);
+    let proof = vparams.data.proof;
 
     let mut witness = Witness::default();
-    input.write(&mut witness);
-    let operations = build_circuit_verify_operations(advice, &vparams.fri_params, &input);
+    proof.write(&mut witness);
+    let operations = build_circuit_verify_operations(advice, &vparams.fri_params, &proof);
     Halo2Prover::mock(20, operations, witness);
 }

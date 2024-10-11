@@ -41,7 +41,6 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            bigint_limb_size: 8,
             ..Default::default()
         }
         .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
@@ -129,7 +128,7 @@ mod sdk {
         program: Program<Val<SC>>,
         input_stream: Vec<Vec<Val<SC>>>,
         config: VmConfig,
-        engine: E,
+        engine: &E,
     ) -> Result<(VerificationDataWithFriParams<SC>, Vec<Vec<Val<SC>>>), VerificationError>
     where
         Val<SC>: PrimeField32,
@@ -142,8 +141,12 @@ mod sdk {
     {
         let span = tracing::info_span!("execute_and_prove_program").entered();
         let stark_for_test = gen_vm_program_stark_for_test(program, input_stream, config);
-        let pvs = stark_for_test.pvs.clone();
-        let vparams = stark_for_test.run_simple_test(&engine)?;
+        let pvs = stark_for_test
+            .air_infos
+            .iter()
+            .map(|air| air.public_values.clone())
+            .collect();
+        let vparams = stark_for_test.run_test(engine)?;
         span.exit();
         Ok((vparams, pvs))
     }

@@ -14,6 +14,7 @@ pub mod testing_utils;
 mod tests;
 pub mod types;
 mod utils;
+pub mod v2;
 pub mod witness;
 
 /// Digest size in the outer config.

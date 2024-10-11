@@ -1,8 +1,9 @@
 use std::iter;
 
+use afs_stark_backend::utils::AirInfo;
 use ax_sdk::{
-    any_rap_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
 };
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -11,20 +12,17 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::Program;
 use crate::{
-    arch::{
-        instructions::{CoreOpcode::*, FieldArithmeticOpcode::*, UsizeOpcode},
-        MachineChip,
-    },
+    arch::instructions::{CoreOpcode::*, FieldArithmeticOpcode::*, UsizeOpcode},
     core::READ_INSTRUCTION_BUS,
-    program::{columns::ProgramPreprocessedCols, Instruction, ProgramChip},
+    program::{columns::ProgramCols, Instruction, ProgramChip},
 };
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
-    let num_cols = ProgramPreprocessedCols::<usize>::get_width();
+    let num_cols = ProgramCols::<usize>::width();
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let cols_numbered = ProgramPreprocessedCols::<usize>::from_slice(&all_cols);
+    let cols_numbered = ProgramCols::<usize>::from_slice(&all_cols);
     let flattened = cols_numbered.flatten();
 
     for (i, col) in flattened.iter().enumerate() {
@@ -43,7 +41,8 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
         chip.get_instruction(pc).unwrap();
     }
     let air = chip.air.clone();
-    let trace = chip.generate_trace();
+    let cached_trace = chip.generate_cached_trace();
+    let main_trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(9, true, READ_INSTRUCTION_BUS);
     let mut program_cells = vec![];
@@ -63,19 +62,19 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     }
 
     // Pad program cells with zeroes to make height a power of two.
-    let width = air.width() + ProgramPreprocessedCols::<BabyBear>::get_width();
+    let width = air.width();
     let desired_height = instructions.len().next_power_of_two();
-    let cells_to_add = desired_height * width - instructions.len() * width;
+    let cells_to_add = (desired_height - instructions.len()) * width;
     program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
 
     let counter_trace = RowMajorMatrix::new(program_cells, 10);
-    println!("trace height = {}", trace.height());
+    println!("trace height = {}", main_trace.height());
     println!("counter trace height = {}", counter_trace.height());
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(
-        &any_rap_vec![&air, &counter_air],
-        vec![trace, counter_trace],
-    )
+    BabyBearPoseidon2Engine::run_test_fast(vec![
+        AirInfo::no_pis(Box::new(air), vec![cached_trace], main_trace),
+        AirInfo::simple_no_pis(Box::new(counter_air), counter_trace),
+    ])
     .expect("Verification failed");
 }
 
@@ -150,7 +149,8 @@ fn test_program_negative() {
         chip.get_instruction(pc).unwrap();
     }
     let air = chip.air.clone();
-    let trace = chip.generate_trace();
+    let cached_trace = chip.generate_cached_trace();
+    let common_trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
@@ -169,9 +169,9 @@ fn test_program_negative() {
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis(
-        &any_rap_vec![&air, &counter_air],
-        vec![trace, counter_trace],
-    )
-    .expect("Incorrect failure mode");
+    BabyBearPoseidon2Engine::run_test_fast(vec![
+        AirInfo::no_pis(Box::new(air), vec![cached_trace], common_trace),
+        AirInfo::simple_no_pis(Box::new(counter_air), counter_trace),
+    ])
+    .expect("Verification failed");
 }

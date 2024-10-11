@@ -9,41 +9,31 @@ use ax_sdk::{
 use snark_verifier_sdk::Snark;
 
 use crate::{
-    config::outer::new_from_outer_multi_vk,
+    config::outer::new_from_outer_multi_vkv2,
     halo2::{
         utils::sort_chips,
         verifier::{
             gen_wrapper_circuit_evm_proof, generate_halo2_verifier_circuit, Halo2VerifierCircuit,
         },
     },
-    types::VerifierInput,
 };
 
 pub fn run_static_verifier_test(
-    stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>,
+    stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>,
     fri_params: FriParameters,
 ) -> (Halo2VerifierCircuit, Snark) {
-    let StarkForTest {
-        any_raps,
-        traces,
-        pvs,
-    } = stark_for_test;
-    let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-    let (any_raps, traces, pvs) = sort_chips(any_raps, traces.clone(), pvs.clone());
+    let stark_for_test = StarkForTest {
+        air_infos: sort_chips(stark_for_test.air_infos),
+    };
     let info_span =
         tracing::info_span!("prove outer stark to verify", step = "outer_stark_prove").entered();
-    let vparams = BabyBearPoseidon2OuterEngine::new(fri_params)
-        .run_simple_test_impl(&any_raps, traces.clone(), &pvs)
-        .unwrap();
+    let engine = BabyBearPoseidon2OuterEngine::new(fri_params);
+    let vparams = stark_for_test.run_test(&engine).unwrap();
+
     info_span.exit();
 
     // Build verification program in eDSL.
-    let advice = new_from_outer_multi_vk(&vparams.data.vk);
-    let log_degree_per_air = vparams.data.proof.log_degrees();
-    let input = VerifierInput {
-        proof: vparams.data.proof,
-        log_degree_per_air,
-    };
+    let advice = new_from_outer_multi_vkv2(&vparams.data.vk);
 
     let info_span = tracing::info_span!(
         "keygen halo2 verifier circuit",
@@ -51,7 +41,7 @@ pub fn run_static_verifier_test(
     )
     .entered();
     let stark_verifier_circuit =
-        generate_halo2_verifier_circuit(21, advice, &vparams.fri_params, &input);
+        generate_halo2_verifier_circuit(21, advice, &vparams.fri_params, &vparams.data.proof);
     info_span.exit();
 
     let info_span = tracing::info_span!(
@@ -59,13 +49,13 @@ pub fn run_static_verifier_test(
         step = "static_verifier_prove"
     )
     .entered();
-    let static_verifier_snark = stark_verifier_circuit.prove(input);
+    let static_verifier_snark = stark_verifier_circuit.prove(vparams.data.proof);
     info_span.exit();
     (stark_verifier_circuit, static_verifier_snark)
 }
 
 pub fn run_evm_verifier_e2e_test(
-    stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>,
+    stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>,
     fri_params: Option<FriParameters>,
 ) {
     let (stark_verifier_circuit, static_verifier_snark) = run_static_verifier_test(

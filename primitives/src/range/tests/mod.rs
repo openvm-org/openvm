@@ -54,17 +54,17 @@ fn test_list_range_checker() {
 
     let range_trace = range_checker.generate_trace();
 
-    let mut all_chips: Vec<&dyn AnyRap<_>> = vec![];
-    for list in &lists {
-        all_chips.push(&list.air);
+    let mut all_chips: Vec<Box<dyn AnyRap<_>>> = vec![];
+    for list in lists {
+        all_chips.push(Box::new(list.air));
     }
-    all_chips.push(&range_checker.air);
+    all_chips.push(Box::new(range_checker.air));
 
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(range_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis(&all_chips, all_traces)
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }

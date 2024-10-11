@@ -19,6 +19,8 @@ use strum_macros::IntoStaticStr;
 use crate::{
     alu::ArithmeticLogicChip,
     arch::ExecutionState,
+    branch_eq::Rv32BranchEqualChip,
+    branch_lt::Rv32BranchLessThanChip,
     castf::CastFChip,
     core::CoreChip,
     ecc::{EcAddUnequalChip, EcDoubleChip},
@@ -30,9 +32,15 @@ use crate::{
     modular_addsub::ModularAddSubChip,
     modular_multdiv::ModularMultDivChip,
     new_alu::Rv32ArithmeticLogicChip,
+    new_divrem::Rv32DivRemChip,
     new_lt::Rv32LessThanChip,
+    new_mul::Rv32MultiplicationChip,
+    new_mulh::Rv32MulHChip,
     new_shift::Rv32ShiftChip,
-    program::{ExecutionError, Instruction, ProgramChip},
+    program::{ExecutionError, Instruction},
+    rv32_auipc::Rv32AuipcChip,
+    rv32_jal_lui::Rv32JalLuiChip,
+    rv32_jalr::Rv32JalrChip,
     shift::ShiftChip,
     ui::UiChip,
     uint_multiplication::UintMultiplicationChip,
@@ -189,10 +197,18 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32ArithmeticLogicChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
+    MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
+    MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
+    BranchEqualRv32(Rc<RefCell<Rv32BranchEqualChip<F>>>),
+    BranchLessThanRv32(Rc<RefCell<Rv32BranchLessThanChip<F>>>),
+    JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
+    JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
+    AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
     Ui(Rc<RefCell<UiChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
@@ -203,23 +219,30 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
 #[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
-    Program(Rc<RefCell<ProgramChip<F>>>),
     Memory(MemoryChipRef<F>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<VariableRangeCheckerChip>),
-    RangeTupleChecker(Arc<RangeTupleCheckerChip>),
+    RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32ArithmeticLogicChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
+    MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
+    MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
     U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     Ui(Rc<RefCell<UiChip<F>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
+    BranchEqualRv32(Rc<RefCell<Rv32BranchEqualChip<F>>>),
+    BranchLessThanRv32(Rc<RefCell<Rv32BranchLessThanChip<F>>>),
+    JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
+    JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
+    AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
@@ -250,7 +273,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for Arc<RangeTupleCheckerChip> {
+impl<F: PrimeField32, const N: usize> MachineChip<F> for Arc<RangeTupleCheckerChip<N>> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         RangeTupleCheckerChip::generate_trace(&self)
     }
@@ -259,7 +282,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeTupleCheckerChip> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air.clone())
+        Box::new(self.air)
     }
 
     fn air_name(&self) -> String {

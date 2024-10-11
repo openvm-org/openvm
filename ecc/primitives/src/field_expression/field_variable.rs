@@ -19,8 +19,6 @@ pub trait FieldVariableConfig {
     fn max_limb_bits() -> usize;
     // Number of limbs to represent a field element.
     fn num_limbs_per_field_element() -> usize;
-    // The max bits allowed for each limb, determined by range checker.
-    fn range_checker_bits() -> usize;
 }
 
 #[derive(Clone)]
@@ -43,12 +41,17 @@ pub struct FieldVariable<C: FieldVariableConfig> {
     // Number of limbs to represent the expression.
     pub expr_limbs: usize,
 
+    // This is the same for all FieldVariable, but we might use different values at runtime,
+    // so store it here for easy configuration.
+    pub range_checker_bits: usize,
+
     pub _marker: PhantomData<C>,
 }
 
 impl<C: FieldVariableConfig> FieldVariable<C> {
+    // Returns the index of the new variable.
     // There should be no division in the expression.
-    pub fn save(&mut self) {
+    pub fn save(&mut self) -> usize {
         let mut builder = self.builder.borrow_mut();
         builder.num_variables += 1;
 
@@ -70,6 +73,8 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         self.limb_max_abs = (1 << C::canonical_limb_bits()) - 1;
         self.max_overflow_bits = C::canonical_limb_bits();
         self.expr_limbs = C::num_limbs_per_field_element();
+
+        builder.num_variables - 1
     }
 
     fn save_if_overflow(
@@ -81,7 +86,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let (_, carry_bits) =
             get_carry_max_abs_and_bits(max_overflow_bits, C::canonical_limb_bits());
-        if carry_bits > C::range_checker_bits() {
+        if carry_bits > a.range_checker_bits {
             // Need to save self or other (or both) to prevent overflow.
             if a.max_overflow_bits > b.max_overflow_bits {
                 assert!(a.max_overflow_bits > C::canonical_limb_bits());
@@ -112,6 +117,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
+            range_checker_bits: self.range_checker_bits,
             _marker: PhantomData,
         }
     }
@@ -132,6 +138,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
+            range_checker_bits: self.range_checker_bits,
             _marker: PhantomData,
         }
     }
@@ -153,6 +160,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs + other.expr_limbs - 1,
+            range_checker_bits: self.range_checker_bits,
             _marker: PhantomData,
         }
     }
@@ -163,7 +171,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let (_, carry_bits) =
             get_carry_max_abs_and_bits(max_overflow_bits, C::canonical_limb_bits());
-        if carry_bits > C::range_checker_bits() {
+        if carry_bits > self.range_checker_bits {
             self.save();
         }
         let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
@@ -174,6 +182,7 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs,
+            range_checker_bits: self.range_checker_bits,
             _marker: PhantomData,
         };
         if max_overflow_bits > C::max_limb_bits() {
@@ -215,6 +224,29 @@ impl<C: FieldVariableConfig> FieldVariable<C> {
             limb_max_abs: (1 << C::canonical_limb_bits()) - 1,
             max_overflow_bits: C::canonical_limb_bits(),
             expr_limbs: C::num_limbs_per_field_element(),
+            range_checker_bits: self.range_checker_bits,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn select(flag_id: usize, a: &FieldVariable<C>, b: &FieldVariable<C>) -> FieldVariable<C> {
+        assert!(Rc::ptr_eq(&a.builder, &b.builder));
+        let left_limb_max_abs = max(a.limb_max_abs, b.limb_max_abs);
+        let left_max_overflow_bits = max(a.max_overflow_bits, b.max_overflow_bits);
+        let left_expr_limbs = max(a.expr_limbs, b.expr_limbs);
+        let right_limb_max_abs = left_limb_max_abs;
+        let right_max_overflow_bits = left_max_overflow_bits;
+        let right_expr_limbs = left_expr_limbs;
+        assert_eq!(left_limb_max_abs, right_limb_max_abs);
+        assert_eq!(left_max_overflow_bits, right_max_overflow_bits);
+        assert_eq!(left_expr_limbs, right_expr_limbs);
+        FieldVariable {
+            expr: SymbolicExpr::Select(flag_id, Box::new(a.expr.clone()), Box::new(b.expr.clone())),
+            builder: a.builder.clone(),
+            limb_max_abs: left_limb_max_abs,
+            max_overflow_bits: left_max_overflow_bits,
+            expr_limbs: left_expr_limbs,
+            range_checker_bits: a.range_checker_bits,
             _marker: PhantomData,
         }
     }

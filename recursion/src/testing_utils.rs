@@ -14,11 +14,7 @@ use p3_commit::PolynomialSpace;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use stark_vm::{program::Program, vm::config::VmConfig};
 
-use crate::{
-    hints::InnerVal,
-    stark::VerifierProgram,
-    types::{new_from_inner_multi_vk, VerifierInput},
-};
+use crate::hints::InnerVal;
 
 type InnerSC = BabyBearPoseidon2Config;
 
@@ -34,7 +30,10 @@ pub mod inner {
     use stark_vm::vm::config::VmConfig;
 
     use super::*;
-    use crate::hints::Hintable;
+    use crate::{
+        hints::Hintable,
+        v2::{stark::VerifierProgramV2, types::new_from_inner_multi_vkv2},
+    };
 
     pub fn build_verification_program(
         vparams: VerificationDataWithFriParams<InnerSC>,
@@ -43,25 +42,18 @@ pub mod inner {
         let VerificationDataWithFriParams { data, fri_params } = vparams;
         let VerificationData { proof, vk } = data;
 
-        let advice = new_from_inner_multi_vk(&vk);
+        let advice = new_from_inner_multi_vkv2(&vk);
         cfg_if::cfg_if! {
             if #[cfg(feature = "bench-metrics")] {
                 let start = std::time::Instant::now();
             }
         }
-        let program = VerifierProgram::build_with_options(advice, &fri_params, compiler_options);
+        let program = VerifierProgramV2::build_with_options(advice, &fri_params, compiler_options);
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("verify_program_compile_ms").set(start.elapsed().as_millis() as f64);
 
-        let log_degree_per_air = proof.log_degrees();
-
-        let input = VerifierInput {
-            proof,
-            log_degree_per_air,
-        };
-
         let mut input_stream = Vec::new();
-        input_stream.extend(input.write());
+        input_stream.extend(proof.write());
 
         (program, input_stream)
     }
@@ -76,16 +68,10 @@ pub mod inner {
         stark_for_test: StarkForTest<BabyBearPoseidon2Config>,
         fri_params: FriParameters,
     ) {
-        let StarkForTest {
-            any_raps,
-            traces,
-            pvs,
-        } = stark_for_test;
-        let any_raps: Vec<_> = any_raps.iter().map(|x| x.as_ref()).collect();
-
+        let StarkForTest { air_infos } = stark_for_test;
         let vparams =
-            <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_simple_test(
-                &any_raps, traces, &pvs,
+            <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_test_fast(
+                air_infos,
             )
             .unwrap();
 
@@ -93,7 +79,7 @@ pub mod inner {
             vparams,
             CompilerOptions::default(),
             VmConfig::aggregation(7),
-            BabyBearPoseidon2Engine::new(fri_params),
+            &BabyBearPoseidon2Engine::new(fri_params),
         )
         .unwrap();
     }
@@ -109,7 +95,7 @@ pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>
     vparams: VerificationDataWithFriParams<InnerSC>,
     compiler_options: CompilerOptions,
     vm_config: VmConfig,
-    engine: E,
+    engine: &E,
 ) -> Result<(VerificationDataWithFriParams<AggSC>, Vec<Vec<Val<AggSC>>>), VerificationError>
 where
     Domain<AggSC>: PolynomialSpace<Val = BabyBear>,

@@ -232,3 +232,103 @@ pub enum Rv32LoadStoreOpcode {
     LOADBU,
     LOADHU,
 }
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x330]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum BranchEqualOpcode {
+    BEQ,
+    BNE,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x335]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum BranchLessThanOpcode {
+    BLT,
+    BLTU,
+    BGE,
+    BGEU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x340]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32JalLuiOpcode {
+    JAL,
+    LUI,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x345]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32JalrOpcode {
+    JALR,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x350]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32AuipcOpcode {
+    AUIPC,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x360]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum MulOpcode {
+    MUL,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x365]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum MulHOpcode {
+    MULH,
+    MULHSU,
+    MULHU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x370]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum DivRemOpcode {
+    DIV,
+    DIVU,
+    REM,
+    REMU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0xdeadaf]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum UnimplementedOpcode {
+    KECCAK256_RV32,
+}

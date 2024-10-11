@@ -87,7 +87,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTest
     }
     let mut tester = tester.build().load(chip).load(xor_chip).finalize();
 
-    let keccak_trace = &mut tester.traces[2];
+    let keccak_trace = &mut tester.air_infos[2].common_trace;
     let mut row = 0;
     for (input, output) in io {
         let num_blocks = num_keccak_f(input.len());
