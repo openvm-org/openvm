@@ -70,7 +70,7 @@ fn test_xor_limbs_chip() {
     let xor_limbs_chip_trace = xor_chip.generate_trace();
     let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
 
-    let mut all_chips: Vec<Box<dyn AnyRap<_>>> = vec![];
+    let mut all_chips: Vec<Arc<dyn AnyRap<_>>> = vec![];
     for requester in requesters {
         all_chips.push(Box::new(requester));
     }

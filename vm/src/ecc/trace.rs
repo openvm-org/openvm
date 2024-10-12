@@ -37,7 +37,7 @@ fn load_ec_point<F: PrimeField32>(
 impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
     fn air<SC: p3_uni_stark::StarkGenericConfig>(
         &self,
-    ) -> Box<dyn afs_stark_backend::rap::AnyRap<SC>>
+    ) -> Arc<dyn afs_stark_backend::rap::AnyRap<SC>>
     where
         p3_uni_stark::Domain<SC>: p3_commit::PolynomialSpace<Val = F>,
     {
@@ -129,7 +129,7 @@ impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
 impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
     fn air<SC: p3_uni_stark::StarkGenericConfig>(
         &self,
-    ) -> Box<dyn afs_stark_backend::rap::AnyRap<SC>>
+    ) -> Arc<dyn afs_stark_backend::rap::AnyRap<SC>>
     where
         p3_uni_stark::Domain<SC>: p3_commit::PolynomialSpace<Val = F>,
     {

@@ -408,7 +408,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         ]
     }
 
-    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<Box<dyn AnyRap<SC>>>
+    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {

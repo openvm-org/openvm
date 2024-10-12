@@ -63,7 +63,7 @@ impl<F: Field> MachineChip<F> for ProgramTester<F> {
         RowMajorMatrix::new(values, width)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {

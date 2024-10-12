@@ -57,7 +57,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     #[instrument(name = "compute quotient values", skip_all)]
     pub fn quotient_values<'a>(
         &self,
-        raps: Vec<&'a dyn AnyRap<SC>>,
+        raps: Vec<impl AsRef<dyn AnyRap<SC>>>,
         qvks: &[QuotientVKData<'a, SC>],
         traces: &[SingleRapCommittedTraceView<'a, SC>],
         public_values: &'a [Vec<Val<SC>>],
@@ -82,7 +82,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
 
     pub(crate) fn single_rap_quotient_values<'a, R>(
         &self,
-        rap: &'a R,
+        rap: impl AsRef<R>,
         qvk: &QuotientVKData<'a, SC>,
         trace: &SingleRapCommittedTraceView<'a, SC>,
         public_values: &'a [Val<SC>],
@@ -135,7 +135,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             .unzip();
 
         let quotient_values = compute_single_rap_quotient_values(
-            rap,
+            rap.as_ref(),
             qvk.symbolic_constraints,
             trace_domain,
             quotient_domain,

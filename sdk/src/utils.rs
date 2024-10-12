@@ -92,13 +92,13 @@ macro_rules! any_rap_vec {
     };
 }
 
-/// A macro to create a `Vec<Box<dyn AnyRap<_>>>` from a list of AIRs because Rust cannot infer the
+/// A macro to create a `Vec<Arc<dyn AnyRap<_>>>` from a list of AIRs because Rust cannot infer the
 /// type correctly when using `vec!`.
 #[macro_export]
 macro_rules! any_rap_box_vec {
     [$($e:expr),*] => {
         {
-            let chips: Vec<Box<dyn afs_stark_backend::rap::AnyRap<_>>> = vec![$(Box::new($e)),*];
+            let chips: Vec<Arc<dyn afs_stark_backend::rap::AnyRap<_>>> = vec![$(Box::new($e)),*];
             chips
         }
     };

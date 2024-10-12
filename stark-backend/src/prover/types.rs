@@ -61,12 +61,12 @@ pub struct AirProofData<SC: StarkGenericConfig> {
 }
 
 /// Proof input
-pub struct ProofInput<'a, SC: StarkGenericConfig> {
+pub struct ProofInput<SC: StarkGenericConfig> {
     /// (AIR id, AIR input)
-    pub per_air: Vec<(usize, AirProofInput<'a, SC>)>,
+    pub per_air: Vec<(usize, AirProofInput<SC>)>,
 }
 
-impl<'a, SC: StarkGenericConfig> ProofInput<'a, SC> {
+impl<SC: StarkGenericConfig> ProofInput<SC> {
     pub fn new(per_air: Vec<(usize, AirProofInput<SC>)>) -> Self {
         Self { per_air }
     }
@@ -104,7 +104,7 @@ impl<SC: StarkGenericConfig> Proof<SC> {
     }
 }
 
-impl<'a, SC: StarkGenericConfig> ProofInput<'a, SC> {
+impl<SC: StarkGenericConfig> ProofInput<SC> {
     pub fn sort(&mut self) {
         self.per_air.sort_by_key(|p| p.0);
     }

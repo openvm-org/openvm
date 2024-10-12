@@ -33,7 +33,7 @@ impl<F: PrimeField32> MachineChip<F> for CoreChip<F> {
         RowMajorMatrix::new(self.rows.concat(), CoreCols::<F>::get_width(&self.air))
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {

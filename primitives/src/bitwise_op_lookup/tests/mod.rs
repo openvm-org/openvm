@@ -62,9 +62,9 @@ fn test_bitwise_operation_lookup() {
 
     let chips = dummies
         .into_iter()
-        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
-        .chain(iter::once(Box::new(lookup.air) as Box<dyn AnyRap<_>>))
-        .collect::<Vec<Box<dyn AnyRap<_>>>>();
+        .map(|list| Box::new(list) as Arc<dyn AnyRap<_>>)
+        .chain(iter::once(Box::new(lookup.air) as Arc<dyn AnyRap<_>>))
+        .collect::<Vec<Arc<dyn AnyRap<_>>>>();
 
     let mut traces = lists
         .par_iter()

@@ -61,7 +61,7 @@ pub trait InstructionExecutor<F> {
 
 #[enum_dispatch]
 pub trait MachineChip<F>: Sized {
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>;
 
@@ -102,7 +102,7 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
         }
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
@@ -196,7 +196,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
         VariableRangeCheckerChip::generate_trace(&self)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
@@ -221,7 +221,7 @@ impl<F: PrimeField32, const N: usize> MachineChip<F> for Arc<RangeTupleCheckerCh
         RangeTupleCheckerChip::generate_trace(&self)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
@@ -246,7 +246,7 @@ impl<F: PrimeField32, const M: usize> MachineChip<F> for Arc<XorLookupChip<M>> {
         XorLookupChip::generate_trace(&self)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {

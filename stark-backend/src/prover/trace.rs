@@ -65,7 +65,7 @@ pub(super) fn commit_quotient_traces<'a, SC: StarkGenericConfig>(
     mpk: &MultiStarkProvingKeyView<SC>,
     alpha: SC::Challenge,
     challenges: &[Vec<SC::Challenge>],
-    raps: Vec<&'a dyn AnyRap<SC>>,
+    raps: Vec<impl AsRef<dyn AnyRap<SC>>>,
     public_values_per_air: &[Vec<Val<SC>>],
     domain_per_air: Vec<Domain<SC>>,
     cached_mains_per_air: &'a [Vec<CommittedTraceData<SC>>],

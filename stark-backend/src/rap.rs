@@ -3,6 +3,7 @@
 
 use std::any::{type_name, Any};
 
+use dyn_clone::DynClone;
 use p3_air::{BaseAir, PermutationAirBuilder};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
@@ -66,6 +67,7 @@ pub trait AnyRap<SC: StarkGenericConfig>:
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
     + BaseAirWithPublicValues<Val<SC>>
     + PartitionedBaseAir<Val<SC>>
+    + DynClone
 {
     fn as_any(&self) -> &dyn Any;
     /// Name for display purposes
@@ -80,6 +82,7 @@ where
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
         + BaseAirWithPublicValues<Val<SC>>
         + PartitionedBaseAir<Val<SC>>
+        + Clone
         + 'static,
 {
     fn as_any(&self) -> &dyn Any {

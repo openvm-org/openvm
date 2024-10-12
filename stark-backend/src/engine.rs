@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use p3_matrix::dense::DenseMatrix;
 use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
@@ -52,7 +54,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
     /// This function should only be used on AIRs where the main trace is **not** partitioned.
     fn run_simple_test_impl(
         &self,
-        chips: Vec<Box<dyn AnyRap<SC>>>,
+        chips: Vec<Arc<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: Vec<Vec<Val<SC>>>,
     ) -> Result<VerificationData<SC>, VerificationError>
@@ -136,7 +138,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
                 (
                     air_id,
                     AirProofInput {
-                        air: air_info.air.as_ref(),
+                        air: air_info.air.clone(),
                         cached_mains,
                         common_main: Some(air_info.common_trace.clone()),
                         public_values: air_info.public_values.clone(),

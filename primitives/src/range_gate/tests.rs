@@ -62,7 +62,7 @@ fn test_range_gate_chip() {
 
     let mut all_chips = lists
         .into_iter()
-        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
+        .map(|list| Box::new(list) as Arc<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
     all_chips.push(Box::new(range_checker.air));
 

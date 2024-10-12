@@ -51,7 +51,7 @@ fn test_xor_bits_chip() {
 
     let xor_chip_trace = xor_chip.generate_trace();
 
-    let mut all_chips: Vec<Box<dyn AnyRap<_>>> = vec![];
+    let mut all_chips: Vec<Arc<dyn AnyRap<_>>> = vec![];
     for requester in &requesters {
         all_chips.push(Box::new(requester.air));
     }

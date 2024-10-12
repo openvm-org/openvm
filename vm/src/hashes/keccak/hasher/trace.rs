@@ -193,7 +193,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
         trace
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {

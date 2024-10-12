@@ -51,7 +51,7 @@ fn test_variable_range_checker_chip_send() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
+        .map(|list| Box::new(list) as Arc<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
     all_chips.push(Box::new(var_range_checker.air));
 
@@ -164,7 +164,7 @@ fn test_variable_range_checker_chip_range_check() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
+        .map(|list| Box::new(list) as Arc<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
     all_chips.push(Box::new(var_range_checker.air));
 

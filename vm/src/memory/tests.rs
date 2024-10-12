@@ -266,9 +266,9 @@ fn test_memory_chip() {
 
     let memory_airs = memory_chip.airs();
     let range_checker_air = range_checker.air();
-    let airs: Vec<Box<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_airs
+    let airs: Vec<Arc<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_airs
         .into_iter()
-        .chain(iter::once(memory_requester_air as Box<dyn AnyRap<_>>))
+        .chain(iter::once(memory_requester_air as Arc<dyn AnyRap<_>>))
         .chain(iter::once(range_checker_air))
         .collect();
 

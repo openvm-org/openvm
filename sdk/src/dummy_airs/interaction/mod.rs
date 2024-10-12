@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{
@@ -34,12 +36,12 @@ pub fn verify_interactions(
     let pk = keygen_builder.generate_pk();
     let vk = pk.get_vk();
 
-    let per_air: Vec<_> = izip!(air_ids, &airs, traces, pis)
+    let per_air: Vec<_> = izip!(air_ids, airs, traces, pis)
         .map(|(air_id, air, trace, pvs)| {
             (
                 air_id,
                 AirProofInput {
-                    air: *air,
+                    air: Arc::new(air.clone()),
                     cached_mains: vec![],
                     common_main: Some(trace),
                     public_values: pvs,
