@@ -13,7 +13,7 @@ where
     Fp2: FieldExtension<BaseField = Fp>,
     Fp12: FieldExtension<BaseField = Fp2>,
 {
-    /// Xi value for the curve
+    /// We use the field extension tower `Fp12 = Fp2[w]/(w^6 - xi)`.
     fn xi() -> Fp2;
 
     /// Seed value for the curve
