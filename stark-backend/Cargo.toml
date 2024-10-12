@@ -23,6 +23,7 @@ serde = { workspace = true, default-features = false, features = [
     "rc",
 ] }
 derivative = "2.2.0"
+dyn-clone = "1.0.17"
 metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 
