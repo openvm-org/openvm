@@ -9,10 +9,7 @@ use std::iter;
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder,
     interaction::{InteractionBuilder, InteractionType},
-    prover::{
-        trace::TraceCommitter,
-        v2::types::{AirProofInput, Chip, CommittedTraceData},
-    },
+    prover::types::{AirProofInput, Chip, CommittedTraceData, TraceCommitter},
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use itertools::izip;

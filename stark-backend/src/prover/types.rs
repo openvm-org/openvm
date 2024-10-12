@@ -4,10 +4,11 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
+pub use super::trace::{ProverTraceData, TraceCommitter};
 use crate::{
     config::Com,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-    prover::{opener::OpeningProof, trace::ProverTraceData},
+    prover::opener::OpeningProof,
     rap::AnyRap,
 };
 

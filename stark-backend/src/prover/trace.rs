@@ -19,7 +19,7 @@ use crate::{
     keygen::{types::StarkProvingKey, view::MultiStarkProvingKeyView},
     prover::{
         commit_perm_traces,
-        quotient::{helper::QuotientVKDataHelper, ProverQuotientData, QuotientCommitter},
+        quotient::{helper::QuotientVkDataHelper, ProverQuotientData, QuotientCommitter},
         types::CommittedTraceData,
     },
     rap::AnyRap,

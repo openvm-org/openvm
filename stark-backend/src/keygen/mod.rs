@@ -1,15 +1,16 @@
 use itertools::Itertools;
 use p3_field::AbstractExtensionField;
+use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
     air_builders::symbolic::{get_symbolic_builder, SymbolicRapBuilder},
     keygen::types::{
-        MultiStarkProvingKeyV2, ProverOnlySinglePreprocessedData, StarkProvingKeyV2,
-        StarkVerifyingKeyV2, TraceWidth, VerifierSinglePreprocessedData,
+        MultiStarkProvingKey, ProverOnlySinglePreprocessedData, StarkProvingKey, StarkVerifyingKey,
+        TraceWidth, VerifierSinglePreprocessedData,
     },
-    prover::trace::TraceCommitter,
+    prover::types::TraceCommitter,
     rap::AnyRap,
 };
 
@@ -24,13 +25,13 @@ struct AirKeygenBuilder<'a, SC: StarkGenericConfig> {
 
 /// Stateful builder to create multi-stark proving and verifying keys
 /// for system of multiple RAPs with multiple multi-matrix commitments
-pub struct MultiStarkKeygenBuilderV2<'a, SC: StarkGenericConfig> {
+pub struct MultiStarkKeygenBuilder<'a, SC: StarkGenericConfig> {
     pub config: &'a SC,
     /// Information for partitioned AIRs.
     partitioned_airs: Vec<AirKeygenBuilder<'a, SC>>,
 }
 
-impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilderV2<'a, SC> {
+impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     pub fn new(config: &'a SC) -> Self {
         Self {
             config,
@@ -62,7 +63,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilderV2<'a, SC> {
 
     /// Consume the builder and generate proving key.
     /// The verifying key can be obtained from the proving key.
-    pub fn generate_pk(self) -> MultiStarkProvingKeyV2<SC> {
+    pub fn generate_pk(self) -> MultiStarkProvingKey<SC> {
         let global_max_constraint_degree = self
             .partitioned_airs
             .iter()
@@ -117,7 +118,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilderV2<'a, SC> {
             }
         }
 
-        MultiStarkProvingKeyV2 {
+        MultiStarkProvingKey {
             per_air: pk_per_air,
             max_constraint_degree: global_max_constraint_degree,
         }
@@ -140,7 +141,7 @@ impl<'a, SC: StarkGenericConfig> AirKeygenBuilder<'a, SC> {
             .max_constraint_degree()
     }
 
-    fn generate_pk(mut self, max_constraint_degree: usize) -> StarkProvingKeyV2<SC> {
+    fn generate_pk(mut self, max_constraint_degree: usize) -> StarkProvingKey<SC> {
         let air_name = self.air.name();
         self.find_interaction_chunk_size(max_constraint_degree);
 
@@ -162,13 +163,13 @@ impl<'a, SC: StarkGenericConfig> AirKeygenBuilder<'a, SC> {
         let interaction_chunk_size = interaction_chunk_size
             .expect("Interaction chunk size should be set before generating proving key");
 
-        let vk = StarkVerifyingKeyV2 {
+        let vk = StarkVerifyingKey {
             preprocessed_data: prep_verifier_data,
             params,
             symbolic_constraints,
             quotient_degree,
         };
-        StarkProvingKeyV2 {
+        StarkProvingKey {
             air_name,
             vk,
             preprocessed_data: prep_prover_data,

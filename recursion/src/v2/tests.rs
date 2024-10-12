@@ -1,5 +1,6 @@
 use std::panic::catch_unwind;
 
+use afs_stark_backend::prover::types::ProofInput;
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -24,7 +25,7 @@ use crate::{
 fn test_optional_air() {
     use afs_stark_backend::{
         engine::StarkEngine,
-        prover::v2::types::{Chip, ProofInput},
+        prover::types::{Chip, ProofInput},
     };
     setup_tracing();
 

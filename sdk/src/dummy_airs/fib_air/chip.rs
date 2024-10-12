@@ -1,5 +1,5 @@
 use afs_stark_backend::{
-    prover::v2::types::{AirProofInput, Chip},
+    prover::types::{AirProofInput, Chip},
     rap::AnyRap,
 };
 use p3_field::{AbstractField, PrimeField32};

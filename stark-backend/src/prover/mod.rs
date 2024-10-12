@@ -111,7 +111,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             let committer = TraceCommitter::<SC>::new(pcs);
             let (trace_views, traces): (Vec<_>, Vec<_>) = common_main_per_air
                 .iter()
-                .filter_map(|cm| cm.as_ref())
+                .filter_map(|cm: &Option<RowMajorMatrix<_>>| cm.as_ref())
                 .map(|m| (m.as_view(), m.clone()))
                 .unzip();
 
