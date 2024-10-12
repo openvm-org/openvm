@@ -1,7 +1,5 @@
 use num::{BigUint, Num};
 
-use crate::common::str_to_hex_str;
-
 fn bls12_381_p() -> BigUint {
     BigUint::from_str_radix("1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab", 16).unwrap()
 }
@@ -30,7 +28,7 @@ fn test_convert_string_to_u384() {
 #[test]
 fn test_convert_string_to_u256() {
     let s = "30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47";
-    let x = str_to_hex_str(s, 16);
+    let x = BigUint::from_str_radix(s, 16).unwrap();
 
     println!("{:?}", x);
 }

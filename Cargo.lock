@@ -872,9 +872,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.1.29"
+version = "1.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58e804ac3194a48bb129643eb1d62fcc20d18c6b8c181704489353d13120bcd1"
+checksum = "b16803a61b81d9eabb7eae2588776c4c1e584b738ede45fdbb4c972cec1e9945"
 dependencies = [
  "shlex",
 ]
@@ -964,7 +964,7 @@ checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
 [[package]]
 name = "color-eyre"
 version = "0.6.2"
-source = "git+https://github.com/eyre-rs/eyre.git#7706273bcffa867b98458a2c6bd0f0e3c908c928"
+source = "git+https://github.com/eyre-rs/eyre.git?rev=7706273#7706273bcffa867b98458a2c6bd0f0e3c908c928"
 dependencies = [
  "backtrace",
  "color-spantrace",
@@ -978,7 +978,7 @@ dependencies = [
 [[package]]
 name = "color-spantrace"
 version = "0.2.1"
-source = "git+https://github.com/eyre-rs/eyre.git#7706273bcffa867b98458a2c6bd0f0e3c908c928"
+source = "git+https://github.com/eyre-rs/eyre.git?rev=7706273#7706273bcffa867b98458a2c6bd0f0e3c908c928"
 dependencies = [
  "once_cell",
  "owo-colors",
@@ -1439,7 +1439,7 @@ dependencies = [
 [[package]]
 name = "eyre"
 version = "1.0.0"
-source = "git+https://github.com/eyre-rs/eyre.git#7706273bcffa867b98458a2c6bd0f0e3c908c928"
+source = "git+https://github.com/eyre-rs/eyre.git?rev=7706273#7706273bcffa867b98458a2c6bd0f0e3c908c928"
 dependencies = [
  "autocfg",
  "indenter",

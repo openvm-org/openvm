@@ -4,6 +4,8 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::common::{AffineCoords, EcPoint, FieldExtension, ScalarMul};
 
+/// Generates a set of random G1 and G2 points from a random seed and outputs the vectors of P and Q points as well as
+/// the corresponding P and Q EcPoint structs.
 #[allow(non_snake_case)]
 #[allow(clippy::type_complexity)]
 pub fn generate_test_points<A1, A2, Fp, Fp2>(
@@ -36,33 +38,10 @@ where
     (P_vec, Q_vec, P_ecpoints, Q_ecpoints)
 }
 
-#[allow(dead_code)]
-#[allow(non_snake_case)]
-#[allow(clippy::type_complexity)]
-pub fn generate_test_points_generator<A1, A2, Fp, Fp2>(
-) -> (Vec<A1>, Vec<A2>, Vec<EcPoint<Fp>>, Vec<EcPoint<Fp2>>)
-where
-    A1: AffineCoords<Fp>,
-    A2: AffineCoords<Fp2>,
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-{
-    let (P_vec, Q_vec) = {
-        let p = A1::generator();
-        let q = A2::generator();
-        (vec![p], vec![q])
-    };
-    let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
-        .map(|(P, Q)| {
-            (
-                EcPoint { x: P.x(), y: P.y() },
-                EcPoint { x: Q.x(), y: Q.y() },
-            )
-        })
-        .unzip::<_, _, Vec<_>, Vec<_>>();
-    (P_vec, Q_vec, P_ecpoints, Q_ecpoints)
-}
-
+/// Generates test points for N number of points for an elliptic curve pairing, where the inputs `a` and `b` are
+/// scalars of generators in G1 and G2, respectively. Importantly, for every even index, the generator P point is
+/// negated (reflected an the x-axis). Outputs the vectors of P and Q points as well as the corresponding P and Q
+/// EcPoint structs.
 #[allow(non_snake_case)]
 #[allow(clippy::type_complexity)]
 pub fn generate_test_points_generator_scalar<A1, A2, Fr, Fp, Fp2, const N: usize>(
