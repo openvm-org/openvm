@@ -1,5 +1,5 @@
 use afs_compiler::ir::Config;
-use afs_stark_backend::keygen::v2::types::{MultiStarkVerifyingKeyV2, StarkVerifyingKeyV2};
+use afs_stark_backend::keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey};
 use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254};
@@ -16,8 +16,10 @@ use p3_symmetric::{MultiField32PaddingFreeSponge, TruncatedPermutation};
 
 use crate::{
     digest::DigestVal,
-    types::VerifierSinglePreprocessedDataInProgram,
-    v2::types::{MultiStarkVerificationAdviceV2, StarkVerificationAdviceV2},
+    types::{
+        MultiStarkVerificationAdvice, StarkVerificationAdvice,
+        VerifierSinglePreprocessedDataInProgram,
+    },
 };
 
 const WIDTH: usize = 3;
@@ -56,15 +58,15 @@ pub type OuterPcsProof =
     TwoAdicFriPcsProof<OuterVal, OuterChallenge, OuterValMmcs, OuterChallengeMmcs>;
 
 pub(crate) fn new_from_outer_vkv2(
-    vk: StarkVerifyingKeyV2<BabyBearPoseidon2OuterConfig>,
-) -> StarkVerificationAdviceV2<OuterConfig> {
-    let StarkVerifyingKeyV2 {
+    vk: StarkVerifyingKey<BabyBearPoseidon2OuterConfig>,
+) -> StarkVerificationAdvice<OuterConfig> {
+    let StarkVerifyingKey {
         preprocessed_data,
         params,
         quotient_degree,
         symbolic_constraints,
     } = vk;
-    StarkVerificationAdviceV2 {
+    StarkVerificationAdvice {
         preprocessed_data: preprocessed_data.map(|data| {
             let commit: [Bn254Fr; DIGEST_WIDTH] = data.commit.into();
             VerifierSinglePreprocessedDataInProgram {
@@ -81,12 +83,12 @@ pub(crate) fn new_from_outer_vkv2(
 }
 
 /// Create MultiStarkVerificationAdvice for the outer config.
-pub fn new_from_outer_multi_vkv2(
-    vk: &MultiStarkVerifyingKeyV2<BabyBearPoseidon2OuterConfig>,
-) -> MultiStarkVerificationAdviceV2<OuterConfig> {
+pub fn new_from_outer_multi_vk(
+    vk: &MultiStarkVerifyingKey<BabyBearPoseidon2OuterConfig>,
+) -> MultiStarkVerificationAdvice<OuterConfig> {
     let num_challenges_to_sample = vk.num_challenges_to_sample();
-    let MultiStarkVerifyingKeyV2::<BabyBearPoseidon2OuterConfig> { per_air } = vk;
-    MultiStarkVerificationAdviceV2 {
+    let MultiStarkVerifyingKey::<BabyBearPoseidon2OuterConfig> { per_air } = vk;
+    MultiStarkVerificationAdvice {
         per_air: per_air
             .clone()
             .into_iter()

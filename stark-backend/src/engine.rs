@@ -41,13 +41,12 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         MultiTraceStarkProver::new(self.config())
     }
 
-    fn prover_v1(&self) -> MultiTraceStarkProver<SC> {
-        MultiTraceStarkProver::new(self.config())
-    }
-
     fn verifier(&self) -> MultiTraceStarkVerifier<SC> {
         MultiTraceStarkVerifier::new(self.config())
     }
+
+    // TODO[jpw]: the following does not belong in this crate! dev tooling only
+
     /// Runs a single end-to-end test for a given set of AIRs and traces.
     /// This includes proving/verifying key generation, creating a proof, and verifying the proof.
     /// This function should only be used on AIRs where the main trace is **not** partitioned.

@@ -134,7 +134,7 @@ fn test_double_fib_starks() {
 fn test_optional_air() {
     use afs_stark_backend::{
         engine::StarkEngine,
-        prover::v2::types::{Chip, ProofInput},
+        prover::types::{Chip, ProofInput},
     };
     setup_tracing();
 

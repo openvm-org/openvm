@@ -3,13 +3,12 @@ use afs_compiler::{
     prelude::*,
 };
 
-use crate::{
-    digest::DigestVariable,
-    types::{CommitmentsVariable, OpeningProofVariable},
-};
+use crate::{digest::DigestVariable, fri::types::TwoAdicPcsProofVariable, OUTER_DIGEST_SIZE};
+
+pub type OuterDigestVariable<C> = [Var<<C as Config>::N>; OUTER_DIGEST_SIZE];
 
 #[derive(DslVariable, Clone)]
-pub struct StarkProofV2Variable<C: Config> {
+pub struct StarkProofVariable<C: Config> {
     pub commitments: CommitmentsVariable<C>,
     pub opening: OpeningProofVariable<C>,
     pub per_air: Array<C, AirProofDataVariable<C>>,
@@ -30,15 +29,15 @@ pub struct AirProofDataVariable<C: Config> {
 }
 
 #[derive(Clone)]
-pub struct MultiStarkVerificationAdviceV2Variable<C: Config> {
-    pub per_air: Array<C, StarkVerificationAdviceV2Variable<C>>,
+pub struct MultiStarkVerificationAdviceVariable<C: Config> {
+    pub per_air: Array<C, StarkVerificationAdviceVariable<C>>,
     /// Shape is as same as the shape of the original VK's `num_challenges_to_sample.
     /// Each element is 0 or 1. 1 means the challenge should be sampled.
     pub num_challenges_to_sample_mask: Vec<Vec<Usize<C::N>>>,
 }
 
 #[derive(DslVariable, Clone)]
-pub struct StarkVerificationAdviceV2Variable<C: Config> {
+pub struct StarkVerificationAdviceVariable<C: Config> {
     /// Preprocessed trace data, if any
     pub preprocessed_data: Array<C, DigestVariable<C>>,
     /// Trace sub-matrix widths
@@ -61,4 +60,40 @@ pub struct TraceWidthVariable<C: Config> {
     pub common_main: Usize<C::N>,
     /// Width counted by extension field elements, _not_ base field elements
     pub after_challenge: Array<C, Usize<C::N>>,
+}
+
+#[derive(DslVariable, Clone)]
+pub struct CommitmentsVariable<C: Config> {
+    pub main_trace: Array<C, DigestVariable<C>>,
+    pub after_challenge: Array<C, DigestVariable<C>>,
+    pub quotient: DigestVariable<C>,
+}
+
+#[derive(DslVariable, Clone)]
+pub struct OpeningProofVariable<C: Config> {
+    pub proof: TwoAdicPcsProofVariable<C>,
+    pub values: OpenedValuesVariable<C>,
+}
+
+#[allow(clippy::type_complexity)]
+#[derive(DslVariable, Clone)]
+pub struct OpenedValuesVariable<C: Config> {
+    pub preprocessed: Array<C, AdjacentOpenedValuesVariable<C>>,
+    pub main: Array<C, Array<C, AdjacentOpenedValuesVariable<C>>>,
+    pub after_challenge: Array<C, Array<C, AdjacentOpenedValuesVariable<C>>>,
+    pub quotient: Array<C, Array<C, Array<C, Ext<C::F, C::EF>>>>,
+}
+
+#[derive(DslVariable, Debug, Clone)]
+pub struct AdjacentOpenedValuesVariable<C: Config> {
+    pub local: Array<C, Ext<C::F, C::EF>>,
+    pub next: Array<C, Ext<C::F, C::EF>>,
+}
+
+#[derive(DslVariable, Clone)]
+pub struct VerifierInputVariable<C: Config> {
+    pub proof: StarkProofVariable<C>,
+    pub log_degree_per_air: Array<C, Usize<C::N>>,
+    /// A permutation of AIR indexes which are sorted by log_degree in descending order.
+    pub air_perm_by_height: Array<C, Usize<C::N>>,
 }

@@ -1,9 +1,9 @@
 use afs_compiler::prelude::*;
 use itertools::Itertools;
 
-use crate::v2::vars::{MultiStarkVerificationAdviceV2Variable, StarkProofV2Variable};
+use crate::vars::{MultiStarkVerificationAdviceVariable, StarkProofVariable};
 
-impl<C: Config> StarkProofV2Variable<C> {
+impl<C: Config> StarkProofVariable<C> {
     pub fn get_air_ids(&self, builder: &mut Builder<C>) -> Array<C, Usize<C::N>> {
         if builder.flags.static_only {
             builder.vec(
@@ -22,7 +22,7 @@ impl<C: Config> StarkProofV2Variable<C> {
     }
 }
 
-impl<C: Config> MultiStarkVerificationAdviceV2Variable<C> {
+impl<C: Config> MultiStarkVerificationAdviceVariable<C> {
     /// Assumption: at most 1 phase is supported.
     pub fn num_challenges_to_sample(&self, builder: &mut Builder<C>) -> Array<C, Usize<C::N>> {
         if self.num_challenges_to_sample_mask.is_empty() {

@@ -1,16 +1,12 @@
 use std::iter;
 
 use afs_stark_backend::{
-    keygen::v2::MultiStarkKeygenBuilderV2,
+    keygen::MultiStarkKeygenBuilder,
     prover::{
-        trace::TraceCommitter,
-        v2::{
-            types::{AirProofInput, CommittedTraceData, ProofInput},
-            MultiTraceStarkProverV2,
-        },
-        USE_DEBUG_BUILDER,
+        types::{AirProofInput, CommittedTraceData, ProofInput, TraceCommitter},
+        MultiTraceStarkProver, USE_DEBUG_BUILDER,
     },
-    verifier::{v2::MultiTraceStarkVerifierV2, VerificationError},
+    verifier::{MultiTraceStarkVerifier, VerificationError},
 };
 use ax_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
@@ -74,7 +70,7 @@ pub fn prove_and_verify_indexless_lookups(
         receiver_air.field_width(),
     );
     {
-        let mut keygen_builder = MultiStarkKeygenBuilderV2::new(&config);
+        let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
         let receiver_air_id = keygen_builder.add_air(&receiver_air);
         // Auto-adds sender matrix
         let sender_air_id = keygen_builder.add_air(&sender_air);
@@ -107,7 +103,7 @@ pub fn prove_and_verify_indexless_lookups(
             ],
         };
 
-        let prover = MultiTraceStarkProverV2::new(&config);
+        let prover = MultiTraceStarkProver::new(&config);
 
         let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
         let proof = prover.prove(&mut challenger, &pk, proof_input);
@@ -115,7 +111,7 @@ pub fn prove_and_verify_indexless_lookups(
         // Verify the proof:
         // Start from clean challenger
         let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
-        let verifier = MultiTraceStarkVerifierV2::new(prover.config);
+        let verifier = MultiTraceStarkVerifier::new(prover.config);
         verifier.verify(&mut challenger, &pk.get_vk(), &proof)
     }
 }

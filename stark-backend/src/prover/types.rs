@@ -64,6 +64,12 @@ pub struct ProofInput<'a, SC: StarkGenericConfig> {
     pub per_air: Vec<(usize, AirProofInput<'a, SC>)>,
 }
 
+impl<'a, SC: StarkGenericConfig> ProofInput<'a, SC> {
+    pub fn new(per_air: Vec<(usize, AirProofInput<'a, SC>)>) -> Self {
+        Self { per_air }
+    }
+}
+
 #[derive(Derivative)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct CommittedTraceData<SC: StarkGenericConfig> {

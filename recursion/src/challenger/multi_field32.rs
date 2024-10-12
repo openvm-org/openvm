@@ -8,8 +8,8 @@ use crate::{
     },
     digest::DigestVariable,
     outer_poseidon2::{Poseidon2CircuitBuilder, SPONGE_SIZE},
-    types::OuterDigestVariable,
     utils::{reduce_32, split_32},
+    vars::OuterDigestVariable,
 };
 
 #[derive(Clone)]

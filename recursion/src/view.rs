@@ -6,19 +6,18 @@ use afs_stark_backend::keygen::types::TraceWidth;
 use itertools::Itertools;
 use p3_util::log2_strict_usize;
 
-use crate::v2::{
-    types::{MultiStarkVerificationAdviceV2, StarkVerificationAdviceV2},
+use crate::{
+    types::{MultiStarkVerificationAdvice, StarkVerificationAdvice},
     vars::{
-        MultiStarkVerificationAdviceV2Variable, StarkVerificationAdviceV2Variable,
-        TraceWidthVariable,
+        MultiStarkVerificationAdviceVariable, StarkVerificationAdviceVariable, TraceWidthVariable,
     },
 };
 
 pub fn get_advice_per_air<C: Config>(
     builder: &mut Builder<C>,
-    m_advice: &MultiStarkVerificationAdviceV2<C>,
+    m_advice: &MultiStarkVerificationAdvice<C>,
     air_ids: &Array<C, Usize<C::N>>,
-) -> MultiStarkVerificationAdviceV2Variable<C> {
+) -> MultiStarkVerificationAdviceVariable<C> {
     let num_challenges_to_sample_mask = m_advice
         .num_challenges_to_sample
         .iter()
@@ -38,7 +37,7 @@ pub fn get_advice_per_air<C: Config>(
         });
     }
 
-    MultiStarkVerificationAdviceV2Variable {
+    MultiStarkVerificationAdviceVariable {
         per_air: advice_per_air,
         num_challenges_to_sample_mask,
     }
@@ -46,9 +45,9 @@ pub fn get_advice_per_air<C: Config>(
 
 fn constant_advice_and_update_mask<C: Config>(
     builder: &mut Builder<C>,
-    advice: &StarkVerificationAdviceV2<C>,
+    advice: &StarkVerificationAdvice<C>,
     num_challenges_to_sample_mask: &[Vec<Usize<C::N>>],
-) -> StarkVerificationAdviceV2Variable<C> {
+) -> StarkVerificationAdviceVariable<C> {
     let preprocessed_data = if let Some(preprocessed_data) = advice.preprocessed_data.as_ref() {
         let commit = builder.constant(preprocessed_data.commit.clone());
         let arr = builder.array(1);
@@ -62,7 +61,7 @@ fn constant_advice_and_update_mask<C: Config>(
             builder.assign(&num_challenges_to_sample_mask[phase][i], RVar::one());
         }
     }
-    StarkVerificationAdviceV2Variable {
+    StarkVerificationAdviceVariable {
         preprocessed_data,
         width: constant_trace_width(builder, &advice.width),
         log_quotient_degree: builder.eval(RVar::from(log2_strict_usize(advice.quotient_degree))),

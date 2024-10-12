@@ -7,7 +7,8 @@ use std::{
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkVerifyingKey,
-    prover::{trace::TraceCommitmentBuilder, types::Proof, USE_DEBUG_BUILDER},
+    prover::types::{AirProofInput, CommittedTraceData, Proof, ProofInput},
+    utils::disable_debug_builder,
 };
 use ax_sdk::{
     config::{
@@ -44,8 +45,6 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    // tracing_setup();
-
     let mut air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
     air.partition = partition;
 
@@ -79,49 +78,49 @@ where
         air.field_width(),
     );
 
-    let mut keygen_builder = engine.keygen_builder_v1();
-    if partition {
-        let fields_ptr = keygen_builder.add_cached_main_matrix(air.field_width());
-        let count_ptr = keygen_builder.add_main_matrix(1);
-        keygen_builder.add_partitioned_air(&air, vec![count_ptr, fields_ptr]);
-    } else {
-        keygen_builder.add_air(&air);
-    }
+    let mut keygen_builder = engine.keygen_builder();
+    let air_id = keygen_builder.add_air(&air);
     let pk = keygen_builder.generate_pk();
-    let vk = pk.vk();
+    let vk = pk.get_vk();
 
     let mut benchmarks = ProverBenchmarks::default();
-    let prover = engine.prover_v1();
+    let prover = engine.prover();
     // Must add trace matrices in the same order as above
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     let mut start;
-    if partition {
+    let air_proof_input = if partition {
+        let committer = prover.committer();
         start = Instant::now();
         // Receiver fields table is cached
-        let cached_trace_data = trace_builder
-            .committer
-            .commit(vec![part_fields_trace.clone()]);
-        trace_builder.load_cached_trace(part_fields_trace, cached_trace_data);
+        let cached_trace_data = committer.commit(vec![part_fields_trace.clone()]);
         benchmarks.cached_commit_time = start.elapsed().as_micros();
-        trace_builder.load_trace(part_count_trace);
+        let cached_mains = vec![CommittedTraceData {
+            raw_data: part_fields_trace,
+            prover_data: cached_trace_data,
+        }];
+        AirProofInput {
+            air: &air,
+            cached_mains,
+            common_main: Some(part_count_trace),
+            public_values: vec![],
+        }
     } else {
-        trace_builder.load_trace(nopart_trace);
-    }
+        AirProofInput {
+            air: &air,
+            cached_mains: vec![],
+            common_main: Some(nopart_trace),
+            public_values: vec![],
+        }
+    };
+    let proof_input = ProofInput {
+        per_air: vec![(air_id, air_proof_input)],
+    };
     start = Instant::now();
-    trace_builder.commit_current();
-    benchmarks.main_commit_time = start.elapsed().as_micros();
-
-    start = Instant::now();
-    let main_trace_data = trace_builder.view(&vk, vec![&air]);
-    let pis = vec![vec![]];
 
     // Disable debug prover since we don't balance the buses
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
-    benchmarks.prove_time = start.elapsed().as_micros();
+    let proof = prover.prove(&mut challenger, &pk, proof_input);
+    benchmarks.prove_time_without_trace_gen = start.elapsed().as_micros();
 
     (vk, air, proof, benchmarks)
 }
@@ -129,8 +128,8 @@ where
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct ProverBenchmarks {
     pub cached_commit_time: u128,
-    pub main_commit_time: u128,
-    pub prove_time: u128,
+    /// Includes common main trace commitment time.
+    pub prove_time_without_trace_gen: u128,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

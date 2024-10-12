@@ -17,8 +17,8 @@ use crate::{
     challenger::ChallengerVariable,
     digest::{CanPoseidon2Digest, DigestVariable},
     outer_poseidon2::Poseidon2CircuitBuilder,
-    types::OuterDigestVariable,
     utils::cond_eval,
+    vars::OuterDigestVariable,
 };
 
 pub mod domain;
