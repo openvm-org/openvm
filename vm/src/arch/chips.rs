@@ -6,7 +6,6 @@ use afs_primitives::{
 };
 use afs_stark_backend::rap::{get_air_name, AnyRap};
 use enum_dispatch::enum_dispatch;
-use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -28,7 +27,6 @@ use crate::{
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     loadstore::Rv32LoadStoreChip,
-    memory::MemoryChipRef,
     modular_addsub::ModularAddSubChip,
     modular_multdiv::ModularMultDivChip,
     new_alu::Rv32ArithmeticLogicChip,
@@ -63,11 +61,12 @@ pub trait InstructionExecutor<F> {
 
 #[enum_dispatch]
 pub trait MachineChip<F>: Sized {
-    // Functions for when chip owns a single AIR
-    fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>;
+
+    // Functions for when chip owns a single AIR
+    fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air_name(&self) -> String;
     fn generate_public_values(&mut self) -> Vec<F> {
         vec![]
@@ -75,39 +74,9 @@ pub trait MachineChip<F>: Sized {
     fn current_trace_height(&self) -> usize;
     fn trace_width(&self) -> usize;
 
-    // Functions for when chip owns multiple AIRs.
-    // Default implementations fallback to single AIR functions, but
-    // these can be overridden, in which case the single AIR functions
-    // should be `unreachable!()`.
-    fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
-        vec![self.generate_trace()]
-    }
-    fn airs<SC: StarkGenericConfig>(&self) -> Vec<Box<dyn AnyRap<SC>>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        vec![self.air()]
-    }
-    fn air_names(&self) -> Vec<String> {
-        vec![self.air_name()]
-    }
-    fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
-        vec![self.generate_public_values()]
-    }
-    fn current_trace_heights(&self) -> Vec<usize> {
-        vec![self.current_trace_height()]
-    }
-    fn trace_widths(&self) -> Vec<usize> {
-        vec![self.trace_width()]
-    }
-
     /// For metrics collection
-    fn current_trace_cells(&self) -> Vec<usize> {
-        self.trace_widths()
-            .into_iter()
-            .zip_eq(self.current_trace_heights())
-            .map(|(width, height)| width * height)
-            .collect()
+    fn current_trace_cells(&self) -> usize {
+        self.trace_width() * self.current_trace_height()
     }
 }
 
@@ -133,52 +102,27 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
         }
     }
 
-    fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
-        match Rc::try_unwrap(self) {
-            Ok(ref_cell) => ref_cell.into_inner().generate_traces(),
-            Err(_) => panic!("cannot generate trace while other chips still hold a reference"),
-        }
-    }
-
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         self.borrow().air()
     }
-    fn airs<SC: StarkGenericConfig>(&self) -> Vec<Box<dyn AnyRap<SC>>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        self.borrow().airs()
-    }
 
     fn generate_public_values(&mut self) -> Vec<F> {
         self.borrow_mut().generate_public_values()
-    }
-    fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
-        self.borrow_mut().generate_public_values_per_air()
     }
 
     fn air_name(&self) -> String {
         self.borrow().air_name()
     }
-    fn air_names(&self) -> Vec<String> {
-        self.borrow().air_names()
-    }
 
     fn current_trace_height(&self) -> usize {
         self.borrow().current_trace_height()
     }
-    fn current_trace_heights(&self) -> Vec<usize> {
-        self.borrow().current_trace_heights()
-    }
 
     fn trace_width(&self) -> usize {
         self.borrow().trace_width()
-    }
-    fn trace_widths(&self) -> Vec<usize> {
-        self.borrow().trace_widths()
     }
 }
 
@@ -219,7 +163,6 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
 #[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
-    Memory(MemoryChipRef<F>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),

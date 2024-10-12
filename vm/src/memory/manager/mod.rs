@@ -11,6 +11,7 @@ use afs_primitives::{
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use afs_stark_backend::rap::AnyRap;
+use itertools::zip_eq;
 pub use memory::{AddressSpace, MemoryReadRecord, MemoryWriteRecord};
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
@@ -24,7 +25,6 @@ use super::{
     offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
 };
 use crate::{
-    arch::MachineChip,
     core::RANGE_CHECKER_BUS,
     memory::{
         adapter::AccessAdapterAir,
@@ -394,13 +394,9 @@ impl<F: PrimeField32> MemoryChip<F> {
             }
         }
     }
-}
 
-impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
-    fn generate_trace(self) -> RowMajorMatrix<F> {
-        panic!("cannot call generate_trace on MemoryChip, which has more than one trace");
-    }
-    fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
+    // TEMPORARY[jpw]: MemoryChip is not a MachineChip: it is not a chip and instead owns multiple AIRs. To be renamed and refactored in the future.
+    pub fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
         vec![
             self.generate_memory_interface_trace(),
             self.generate_access_adapter_trace::<2>(),
@@ -412,13 +408,7 @@ impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
         ]
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        panic!("cannot call air on MemoryChip, which has more than one air");
-    }
-    fn airs<SC: StarkGenericConfig>(&self) -> Vec<Box<dyn AnyRap<SC>>>
+    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<Box<dyn AnyRap<SC>>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
@@ -433,10 +423,7 @@ impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
         ]
     }
 
-    fn air_name(&self) -> String {
-        panic!("cannot call air_name on MemoryChip, which has more than one trace");
-    }
-    fn air_names(&self) -> Vec<String> {
+    pub fn air_names(&self) -> Vec<String> {
         vec![
             "Audit".to_string(),
             "AccessAdapter<2>".to_string(),
@@ -448,10 +435,7 @@ impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
         ]
     }
 
-    fn current_trace_height(&self) -> usize {
-        panic!("cannot call current_trace_height on MemoryChip, which has more than one trace");
-    }
-    fn current_trace_heights(&self) -> Vec<usize> {
+    pub fn current_trace_heights(&self) -> Vec<usize> {
         vec![
             self.interface_chip.current_height(),
             self.adapter_records
@@ -475,10 +459,7 @@ impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
         ]
     }
 
-    fn trace_width(&self) -> usize {
-        panic!("cannot call trace_width on MemoryChip, which has more than one trace");
-    }
-    fn trace_widths(&self) -> Vec<usize> {
+    pub fn trace_widths(&self) -> Vec<usize> {
         vec![
             self.get_audit_air().air_width(),
             BaseAir::<F>::width(&self.access_adapter_air::<2>()),
@@ -490,10 +471,13 @@ impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
         ]
     }
 
-    fn generate_public_values(&mut self) -> Vec<F> {
-        panic!("cannot call generate_public_values on MemoryChip, which has more than one trace");
+    pub fn current_trace_cells(&self) -> Vec<usize> {
+        zip_eq(self.current_trace_heights(), self.trace_widths())
+            .map(|(h, w)| h * w)
+            .collect()
     }
-    fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
+
+    pub fn generate_public_values_per_air(&self) -> Vec<Vec<F>> {
         vec![vec![]; 7]
     }
 }

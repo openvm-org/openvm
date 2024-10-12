@@ -156,17 +156,15 @@ pub struct MachineChipTester {
 
 impl MachineChipTester {
     pub fn load<C: MachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
-        let public_values = chip.generate_public_values_per_air();
-        let airs = chip.airs();
-        let traces = chip.generate_traces();
+        let public_value = chip.generate_public_values();
+        let air = chip.air();
+        let trace = chip.generate_trace();
 
-        for (public_value, air, trace) in izip!(public_values, airs, traces) {
-            if trace.height() > 0 {
-                dbg!(air.name());
-                dbg!(trace.width);
-                self.air_infos
-                    .push(AirInfo::simple(air, trace, public_value));
-            }
+        if trace.height() > 0 {
+            dbg!(air.name());
+            dbg!(trace.width);
+            self.air_infos
+                .push(AirInfo::simple(air, trace, public_value));
         }
 
         self
@@ -174,10 +172,25 @@ impl MachineChipTester {
 
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
-            let manager = memory_tester.chip.clone();
-            let range_checker = manager.borrow().range_checker.clone();
+            let memory_chip = memory_tester.chip.clone();
+            let range_checker = memory_chip.borrow().range_checker.clone();
             self = self.load(memory_tester); // dummy memory interactions
-            self = self.load(manager); // memory initial and final state
+            {
+                let memory = memory_chip.borrow();
+                let public_values = memory.generate_public_values_per_air();
+                let airs = memory.airs();
+                drop(memory);
+                let traces = Rc::try_unwrap(memory_chip)
+                    .unwrap()
+                    .into_inner()
+                    .generate_traces();
+
+                for (pvs, air, trace) in izip!(public_values, airs, traces) {
+                    if trace.height() > 0 {
+                        self.air_infos.push(AirInfo::simple(air, trace, pvs));
+                    }
+                }
+            }
             self = self.load(range_checker); // this must be last because other trace generation mutates its state
         }
         self

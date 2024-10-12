@@ -14,7 +14,7 @@ use afs_primitives::{
 };
 use afs_stark_backend::utils::AirInfo;
 use backtrace::Backtrace;
-use itertools::{izip, Itertools};
+use itertools::{izip, zip_eq};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
@@ -516,10 +516,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         chips.push(MachineChipVariant::RangeTupleChecker(range_tuple_checker));
-        // Most chips have a reference to the memory chip, and the memory chip has a reference to
-        // the range checker chip.
-        chips.push(MachineChipVariant::Memory(memory_chip.clone()));
-        chips.push(MachineChipVariant::RangeChecker(range_checker.clone()));
 
         let connector_chip = VmConnectorChip::new(execution_bus);
 
@@ -693,7 +689,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         drop(self.executors);
         drop(self.core_chip);
         drop(self.persistent_memory_hasher);
-        drop(self.memory_chip);
 
         let mut result = SegmentResult {
             air_infos: vec![self.program_chip.into()],
@@ -701,10 +696,29 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         };
 
         for mut chip in self.chips {
-            let heights = chip.current_trace_heights();
-            let airs = chip.airs();
-            let public_values = chip.generate_public_values_per_air();
-            let traces = chip.generate_traces();
+            let height = chip.current_trace_height();
+            let air = chip.air();
+            let public_values = chip.generate_public_values();
+            let trace = chip.generate_trace();
+
+            if height != 0 {
+                result
+                    .air_infos
+                    .push(AirInfo::simple(air, trace, public_values));
+            }
+        }
+        // System chips required by architecture: memory and connector
+        // REVISIT: range checker is also system chip because memory requests from it, so range checker must generate trace last.
+        {
+            // memory
+            let memory_chip = Rc::try_unwrap(self.memory_chip)
+                .expect("other chips still hold a reference to memory chip")
+                .into_inner();
+            let range_checker = memory_chip.range_checker.clone();
+            let heights = memory_chip.current_trace_heights();
+            let airs = memory_chip.airs();
+            let public_values = memory_chip.generate_public_values_per_air();
+            let traces = memory_chip.generate_traces();
 
             for (height, air, public_values, trace) in izip!(heights, airs, public_values, traces) {
                 if height != 0 {
@@ -713,7 +727,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         .push(AirInfo::simple(air, trace, public_values));
                 }
             }
+            // range checker
+            let chip = range_checker;
+            let air = chip.air();
+            let trace = chip.generate_trace();
+            result.air_infos.push(AirInfo::simple(air, trace, vec![]));
         }
+
         let trace = self.connector_chip.generate_trace();
         result.air_infos.push(AirInfo::simple_no_pis(
             Box::new(self.connector_chip.air),
@@ -727,22 +747,28 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {
-        self.chips.iter().any(|chip| {
-            chip.current_trace_heights()
+        self.memory_chip
+            .borrow()
+            .current_trace_heights()
+            .iter()
+            .any(|&h| h > self.config.max_segment_len)
+            || self
+                .chips
                 .iter()
-                .any(|height| *height > self.config.max_segment_len)
-        })
+                .any(|chip| chip.current_trace_height() > self.config.max_segment_len)
     }
 
     fn current_trace_cells(&self) -> BTreeMap<String, usize> {
-        self.chips
-            .iter()
-            .flat_map(|chip| {
-                chip.air_names()
-                    .into_iter()
-                    .zip_eq(chip.current_trace_cells())
-            })
-            .collect()
+        zip_eq(
+            self.memory_chip.borrow().air_names(),
+            self.memory_chip.borrow().current_trace_cells(),
+        )
+        .chain(
+            self.chips
+                .iter()
+                .map(|chip| (chip.air_name(), chip.current_trace_cells())),
+        )
+        .collect()
     }
 
     pub(crate) fn update_chip_metrics(&mut self) {
@@ -751,16 +777,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
     fn chip_heights(&self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
+        // TODO: more systematic handling of system chips: Program, Memory, Connector
         metrics.insert("ProgramChip".into(), self.program_chip.true_program_length);
+        for (air_name, height) in zip_eq(
+            self.memory_chip.borrow().air_names(),
+            self.memory_chip.borrow().current_trace_heights(),
+        ) {
+            metrics.insert(format!("MemoryChip {air_name}"), height);
+        }
         for chip in self.chips.iter() {
             let chip_name: &'static str = chip.into();
-            for (i, height) in chip.current_trace_heights().iter().enumerate() {
-                if i == 0 {
-                    metrics.insert(chip_name.into(), *height);
-                } else {
-                    metrics.insert(format!("{} {}", chip_name, i + 1), *height);
-                }
-            }
+            metrics.insert(chip_name.into(), chip.current_trace_height());
         }
         metrics
     }
