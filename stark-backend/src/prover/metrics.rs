@@ -5,7 +5,7 @@ use p3_field::AbstractExtensionField;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
-use crate::keygen::types::{StarkProvingKey, TraceWidth};
+use crate::keygen::{types::TraceWidth, v2::types::StarkProvingKeyV2};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TraceMetrics {
@@ -64,7 +64,7 @@ impl Display for SingleTraceMetrics {
 
 /// heights are the trace heights for each air
 pub fn trace_metrics<SC: StarkGenericConfig>(
-    pk: &[StarkProvingKey<SC>],
+    pk: &[&StarkProvingKeyV2<SC>],
     heights: &[usize],
 ) -> TraceMetrics {
     let per_air: Vec<_> = pk
@@ -72,7 +72,7 @@ pub fn trace_metrics<SC: StarkGenericConfig>(
         .zip_eq(heights)
         .map(|(pk, &height)| {
             let air_name = pk.air_name.clone();
-            let mut width = pk.vk.width().clone();
+            let mut width = pk.vk.params.width.clone();
             let ext_degree = <SC::Challenge as AbstractExtensionField<Val<SC>>>::D;
             for w in &mut width.after_challenge {
                 *w *= ext_degree;

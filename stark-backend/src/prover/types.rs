@@ -1,60 +1,15 @@
 use derivative::Derivative;
-use p3_matrix::dense::RowMajorMatrixView;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use p3_util::log2_strict_usize;
+use itertools::Itertools;
+use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
-use super::opener::OpeningProof;
 use crate::{
-    config::{Com, PcsProverData},
+    config::Com,
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    prover::{opener::OpeningProof, trace::ProverTraceData},
     rap::AnyRap,
 };
-
-/// Prover trace data for multiple AIRs where each AIR has partitioned main trace.
-/// The different main trace parts can belong to different commitments.
-#[derive(Derivative)]
-#[derivative(Clone(bound = "PcsProverData<SC>: Clone"))]
-pub struct MultiAirCommittedTraceData<'a, SC: StarkGenericConfig> {
-    /// A list of multi-matrix commitments and their associated prover data.
-    pub pcs_data: Vec<(Com<SC>, &'a PcsProverData<SC>)>,
-    // main trace, for each air, list of trace matrices and pointer to prover data for each
-    /// Proven trace data for each AIR.
-    pub air_traces: Vec<SingleAirCommittedTrace<'a, SC>>,
-}
-
-impl<'a, SC: StarkGenericConfig> MultiAirCommittedTraceData<'a, SC> {
-    pub fn get_domain(&self, air_index: usize) -> Domain<SC> {
-        self.air_traces[air_index].domain
-    }
-
-    pub fn get_commit(&self, commit_index: usize) -> Option<&Com<SC>> {
-        self.pcs_data.get(commit_index).map(|(commit, _)| commit)
-    }
-
-    pub fn commits(&self) -> impl Iterator<Item = &Com<SC>> {
-        self.pcs_data.iter().map(|(commit, _)| commit)
-    }
-}
-
-/// Partitioned main trace data for a single AIR.
-///
-/// We use dynamic dispatch here for the extra flexibility. The overhead is small
-/// **if we ensure dynamic dispatch only once per AIR** (not true right now).
-pub struct SingleAirCommittedTrace<'a, SC: StarkGenericConfig> {
-    pub air: &'a dyn AnyRap<SC>,
-    pub domain: Domain<SC>,
-    pub partitioned_main_trace: Vec<RowMajorMatrixView<'a, Val<SC>>>,
-}
-
-impl<'a, SC: StarkGenericConfig> Clone for SingleAirCommittedTrace<'a, SC> {
-    fn clone(&self) -> Self {
-        Self {
-            air: self.air,
-            domain: self.domain,
-            partitioned_main_trace: self.partitioned_main_trace.clone(),
-        }
-    }
-}
 
 /// All commitments to a multi-matrix STARK that are not preprocessed.
 #[derive(Serialize, Deserialize)]
@@ -82,21 +37,102 @@ pub struct Commitments<SC: StarkGenericConfig> {
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct Proof<SC: StarkGenericConfig> {
-    /// For each RAP, the height of trace matrix.
-    pub degrees: Vec<usize>,
     /// The PCS commitments
     pub commitments: Commitments<SC>,
-    // Opening proofs separated by partition, but this may change
+    /// Opening proofs separated by partition, but this may change
     pub opening: OpeningProof<SC>,
-    /// For each RAP, for each challenge phase with trace,
-    /// the values to expose to the verifier in that phase
-    pub exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
-    // For each RAP, the public values to expose to the verifier
-    pub public_values: Vec<Vec<Val<SC>>>,
+    /// Proof data for each AIR
+    pub per_air: Vec<AirProofData<SC>>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct AirProofData<SC: StarkGenericConfig> {
+    pub air_id: usize,
+    /// height of trace matrix.
+    pub degree: usize,
+    /// For each challenge phase with trace, the values to expose to the verifier in that phase
+    pub exposed_values_after_challenge: Vec<Vec<SC::Challenge>>,
+    // The public values to expose to the verifier
+    pub public_values: Vec<Val<SC>>,
+}
+
+/// Proof input
+pub struct ProofInput<'a, SC: StarkGenericConfig> {
+    /// (AIR id, AIR input)
+    pub per_air: Vec<(usize, AirProofInput<'a, SC>)>,
+}
+
+#[derive(Derivative)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
+pub struct CommittedTraceData<SC: StarkGenericConfig> {
+    pub raw_data: RowMajorMatrix<Val<SC>>,
+    pub prover_data: ProverTraceData<SC>,
+}
+
+/// Necessary input for proving a single AIR.
+#[derive(Derivative)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
+pub struct AirProofInput<'a, SC: StarkGenericConfig> {
+    pub air: &'a dyn AnyRap<SC>,
+    /// Cached main trace matrices
+    pub cached_mains: Vec<CommittedTraceData<SC>>,
+    /// Common main trace matrix
+    pub common_main: Option<RowMajorMatrix<Val<SC>>>,
+    /// Public values
+    pub public_values: Vec<Val<SC>>,
+}
+
+pub trait Chip<SC: StarkGenericConfig> {
+    fn air(&self) -> &dyn AnyRap<SC>;
+    /// Generate all necessary input for proving a single AIR.
+    fn generate_air_proof_input(&self) -> AirProofInput<SC>;
+    fn generate_air_proof_input_with_id(&self, air_id: usize) -> (usize, AirProofInput<SC>) {
+        (air_id, self.generate_air_proof_input())
+    }
 }
 
 impl<SC: StarkGenericConfig> Proof<SC> {
-    pub fn log_degrees(&self) -> Vec<usize> {
-        self.degrees.iter().map(|d| log2_strict_usize(*d)).collect()
+    pub fn get_air_ids(&self) -> Vec<usize> {
+        self.per_air.iter().map(|p| p.air_id).collect()
+    }
+    pub fn get_public_values(&self) -> Vec<Vec<Val<SC>>> {
+        self.per_air
+            .iter()
+            .map(|p| p.public_values.clone())
+            .collect()
+    }
+}
+
+impl<'a, SC: StarkGenericConfig> ProofInput<'a, SC> {
+    pub fn sort(&mut self) {
+        self.per_air.sort_by_key(|p| p.0);
+    }
+}
+
+impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
+    pub fn validate(&self, proof_input: &ProofInput<SC>) -> bool {
+        if !proof_input
+            .per_air
+            .iter()
+            .all(|input| input.0 < self.per_air.len())
+        {
+            return false;
+        }
+        if !proof_input
+            .per_air
+            .iter()
+            .tuple_windows()
+            .all(|(a, b)| a.0 < b.0)
+        {
+            return false;
+        }
+        true
+    }
+}
+
+impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
+    pub fn validate(&self, proof_input: &ProofInput<SC>) -> bool {
+        self.get_vk().validate(proof_input)
     }
 }
