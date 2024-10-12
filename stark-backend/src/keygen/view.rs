@@ -4,39 +4,39 @@ use p3_uni_stark::StarkGenericConfig;
 
 use crate::{
     config::Com,
-    keygen::v2::types::{
-        MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2, StarkProvingKeyV2, StarkVerifyingKeyV2,
+    keygen::types::{
+        MultiStarkProvingKey, MultiStarkVerifyingKey, StarkProvingKey, StarkVerifyingKey,
     },
 };
 
-pub(crate) struct MultiStarkVerifyingKeyV2View<'a, SC: StarkGenericConfig> {
-    pub per_air: Vec<&'a StarkVerifyingKeyV2<SC>>,
+pub(crate) struct MultiStarkVerifyingKeyView<'a, SC: StarkGenericConfig> {
+    pub per_air: Vec<&'a StarkVerifyingKey<SC>>,
 }
 
-pub(crate) struct MultiStarkProvingKeyV2View<'a, SC: StarkGenericConfig> {
+pub(crate) struct MultiStarkProvingKeyView<'a, SC: StarkGenericConfig> {
     pub air_ids: Vec<usize>,
-    pub per_air: Vec<&'a StarkProvingKeyV2<SC>>,
+    pub per_air: Vec<&'a StarkProvingKey<SC>>,
 }
 
-impl<SC: StarkGenericConfig> MultiStarkVerifyingKeyV2<SC> {
+impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
     /// Returns a view with all airs.
-    pub(crate) fn full_view(&self) -> MultiStarkVerifyingKeyV2View<SC> {
+    pub(crate) fn full_view(&self) -> MultiStarkVerifyingKeyView<SC> {
         self.view(&(0..self.per_air.len()).collect_vec())
     }
-    pub(crate) fn view(&self, air_ids: &[usize]) -> MultiStarkVerifyingKeyV2View<SC> {
-        MultiStarkVerifyingKeyV2View {
+    pub(crate) fn view(&self, air_ids: &[usize]) -> MultiStarkVerifyingKeyView<SC> {
+        MultiStarkVerifyingKeyView {
             per_air: air_ids.iter().map(|&id| &self.per_air[id]).collect(),
         }
     }
 }
-impl<SC: StarkGenericConfig> MultiStarkProvingKeyV2<SC> {
-    pub(crate) fn view(&self, air_ids: Vec<usize>) -> MultiStarkProvingKeyV2View<SC> {
+impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
+    pub(crate) fn view(&self, air_ids: Vec<usize>) -> MultiStarkProvingKeyView<SC> {
         let per_air = air_ids.iter().map(|&id| &self.per_air[id]).collect();
-        MultiStarkProvingKeyV2View { air_ids, per_air }
+        MultiStarkProvingKeyView { air_ids, per_air }
     }
 }
 
-impl<'a, SC: StarkGenericConfig> MultiStarkVerifyingKeyV2View<'a, SC> {
+impl<'a, SC: StarkGenericConfig> MultiStarkVerifyingKeyView<'a, SC> {
     /// Returns the preprocessed commit of each AIR. If the AIR does not have a preprocessed trace, returns None.
     pub fn preprocessed_commits(&self) -> Vec<Option<Com<SC>>> {
         self.per_air
@@ -98,9 +98,9 @@ impl<'a, SC: StarkGenericConfig> MultiStarkVerifyingKeyV2View<'a, SC> {
     }
 }
 
-impl<'a, SC: StarkGenericConfig> MultiStarkProvingKeyV2View<'a, SC> {
-    pub fn vk_view(&self) -> MultiStarkVerifyingKeyV2View<SC> {
-        MultiStarkVerifyingKeyV2View {
+impl<'a, SC: StarkGenericConfig> MultiStarkProvingKeyView<'a, SC> {
+    pub fn vk_view(&self) -> MultiStarkVerifyingKeyView<SC> {
+        MultiStarkVerifyingKeyView {
             per_air: self.per_air.iter().map(|pk| &pk.vk).collect(),
         }
     }
