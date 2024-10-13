@@ -1,15 +1,17 @@
 use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
-use afs_stark_backend::rap::{get_air_name, AnyRap};
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::{get_air_name, AnyRap},
+    Chip,
+};
 use p3_air::BaseAir;
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_keccak_air::{
     generate_trace_rows, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, NUM_ROUNDS, U64_LIMBS,
 };
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 use tiny_keccak::keccakf;
 
 use super::{KeccakVmChip, KECCAK_DIGEST_WRITES, KECCAK_WORD_SIZE};
@@ -193,13 +195,6 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
         trace
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Arc::new(self.air)
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -211,5 +206,14 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
     fn current_trace_height(&self) -> usize {
         let num_blocks: usize = self.records.iter().map(|r| r.input_blocks.len()).sum();
         num_blocks * NUM_ROUNDS
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for KeccakVmChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 }

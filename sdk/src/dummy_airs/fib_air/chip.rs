@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{chip::Chip, prover::types::AirProofInput, rap::AnyRap};
+use afs_stark_backend::{prover::types::AirProofInput, rap::AnyRap, Chip};
 use p3_field::{AbstractField, PrimeField32};
 use p3_uni_stark::{StarkGenericConfig, Val};
 

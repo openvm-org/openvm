@@ -8,10 +8,10 @@ use std::{iter, sync::Arc};
 
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder,
-    chip::Chip,
     interaction::{InteractionBuilder, InteractionType},
     prover::types::{AirProofInput, CommittedTraceData, TraceCommitter},
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip,
 };
 use itertools::izip;
 use p3_air::{Air, BaseAir};

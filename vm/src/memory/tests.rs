@@ -11,6 +11,7 @@ use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheck
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip,
 };
 use ax_sdk::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},

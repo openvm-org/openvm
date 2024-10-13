@@ -44,9 +44,9 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             ..Default::default()
         }
         .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
-        .add_canonical_modulus()
-        .add_default_executor(ExecutorName::Secp256k1AddUnequal)
-        .add_default_executor(ExecutorName::Secp256k1Double),
+        .add_canonical_modulus(),
+        // .add_default_executor(ExecutorName::Secp256k1AddUnequal)
+        // .add_default_executor(ExecutorName::Secp256k1Double),
         program,
         input_stream,
     );

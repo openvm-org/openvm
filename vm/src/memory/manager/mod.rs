@@ -10,14 +10,16 @@ use afs_primitives::{
     sub_chip::LocalTraceInstructions,
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::{
+    config::{Domain, StarkGenericConfig},
+    p3_commit::PolynomialSpace,
+    rap::AnyRap,
+};
 use itertools::zip_eq;
 pub use memory::{AddressSpace, MemoryReadRecord, MemoryWriteRecord};
 use p3_air::BaseAir;
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use self::interface::MemoryInterface;
 use super::{

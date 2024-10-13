@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
 use afs_primitives::{ecc::EcAuxCols as EcPrimitiveAuxCols, sub_chip::LocalTraceInstructions};
-use afs_stark_backend::rap::get_air_name;
+use afs_stark_backend::{
+    chip::Chip,
+    rap::{get_air_name, AnyRap},
+};
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::{
     EcAddUnequalAuxCols, EcAddUnequalChip, EcAddUnequalCols, EcAddUnequalIoCols,
@@ -37,15 +41,6 @@ fn load_ec_point<F: PrimeField32>(
 }
 
 impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
-    fn air<SC: p3_uni_stark::StarkGenericConfig>(
-        &self,
-    ) -> Arc<dyn afs_stark_backend::rap::AnyRap<SC>>
-    where
-        p3_uni_stark::Domain<SC>: p3_commit::PolynomialSpace<Val = F>,
-    {
-        Arc::new(self.air.clone())
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -129,15 +124,6 @@ impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
 }
 
 impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
-    fn air<SC: p3_uni_stark::StarkGenericConfig>(
-        &self,
-    ) -> Arc<dyn afs_stark_backend::rap::AnyRap<SC>>
-    where
-        p3_uni_stark::Domain<SC>: p3_commit::PolynomialSpace<Val = F>,
-    {
-        Arc::new(self.air.clone())
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -210,5 +196,14 @@ impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
         padded_rows.extend(std::iter::repeat(blank_row).take(padded_height - height));
 
         RowMajorMatrix::new(padded_rows.concat(), width)
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for EcDoubleChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
     }
 }

@@ -186,7 +186,7 @@ fn test_unordered() {
 
 #[test]
 fn test_optional_air() {
-    use afs_stark_backend::{chip::Chip, engine::StarkEngine, prover::types::ProofInput};
+    use afs_stark_backend::{engine::StarkEngine, prover::types::ProofInput, Chip};
     setup_tracing();
 
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);

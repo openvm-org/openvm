@@ -1,11 +1,14 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::AnyRap};
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    interaction::InteractionBuilder,
+    rap::AnyRap,
+    Chip,
+};
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
-use p3_commit::PolynomialSpace;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{ExecutionState, InstructionExecutor, MachineChip, Result};
 use crate::{
@@ -255,13 +258,6 @@ where
         RowMajorMatrix::new(values, width)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        todo!()
-    }
-
     fn air_name(&self) -> String {
         todo!()
     }
@@ -271,6 +267,18 @@ where
     }
 
     fn trace_width(&self) -> usize {
+        todo!()
+    }
+}
+
+impl<SC, A, M> Chip<SC> for MachineChipWrapper<Val<SC>, A, M>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+    A: MachineAdapter<Val<SC>>,
+    M: MachineIntegration<Val<SC>, A>,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
         todo!()
     }
 }

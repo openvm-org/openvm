@@ -10,6 +10,7 @@ mod trace;
 #[cfg(test)]
 pub mod tests;
 
+use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap, Chip};
 pub use air::*;
 pub use bus::*;
 
@@ -53,5 +54,11 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
         );
         let val_atomic = &self.count[index];
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for RangeTupleCheckerChip<N> {
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 }

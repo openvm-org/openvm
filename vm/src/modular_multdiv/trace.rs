@@ -5,12 +5,14 @@ use afs_primitives::bigint::{
     utils::{big_int_to_limbs, big_uint_sub},
     CanonicalUint, DefaultLimbConfig, OverflowInt,
 };
-use afs_stark_backend::rap::{get_air_name, AnyRap};
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::{get_air_name, AnyRap},
+    Chip,
+};
 use num_bigint_dig::{BigInt, BigUint, Sign};
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{
     columns::{ModularMultDivAuxCols, ModularMultDivCols, ModularMultDivIoCols},
@@ -98,13 +100,6 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         )
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Arc::new(self.air.clone())
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -115,6 +110,20 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
 
     fn trace_width(&self) -> usize {
         ModularMultDivCols::<F, CARRY_LIMBS, NUM_LIMBS>::width()
+    }
+}
+
+impl<
+        SC: StarkGenericConfig,
+        const CARRY_LIMBS: usize,
+        const NUM_LIMBS: usize,
+        const LIMB_SIZE: usize,
+    > Chip<SC> for ModularMultDivChip<Val<SC>, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
     }
 }
 

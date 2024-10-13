@@ -1,7 +1,9 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{engine::VerificationData, utils::AirInfo, verifier::VerificationError};
+use afs_stark_backend::{
+    config::Val, engine::VerificationData, utils::AirInfo, verifier::VerificationError, Chip,
+};
 use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
@@ -148,14 +150,16 @@ impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
 }
 
 // TODO[jpw]: generic Config
+type SC = BabyBearPoseidon2Config;
+
 #[derive(Default)]
 pub struct MachineChipTester {
-    pub memory: Option<MemoryTester<BabyBear>>,
-    pub air_infos: Vec<AirInfo<BabyBearPoseidon2Config>>,
+    pub memory: Option<MemoryTester<Val<SC>>>,
+    pub air_infos: Vec<AirInfo<SC>>,
 }
 
 impl MachineChipTester {
-    pub fn load<C: MachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
+    pub fn load<C: MachineChip<Val<SC>> + Chip<SC>>(mut self, mut chip: C) -> Self {
         let public_value = chip.generate_public_values();
         let air = chip.air();
         let trace = chip.generate_trace();
@@ -196,10 +200,10 @@ impl MachineChipTester {
         self
     }
 
-    pub fn load_with_custom_trace<C: MachineChip<BabyBear>>(
+    pub fn load_with_custom_trace<C: MachineChip<Val<SC>> + Chip<SC>>(
         mut self,
         mut chip: C,
-        trace: RowMajorMatrix<BabyBear>,
+        trace: RowMajorMatrix<Val<SC>>,
     ) -> Self {
         self.air_infos.push(AirInfo::simple(
             chip.air(),
@@ -209,9 +213,7 @@ impl MachineChipTester {
         self
     }
 
-    pub fn simple_test(
-        &self,
-    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
+    pub fn simple_test(&self) -> Result<VerificationData<SC>, VerificationError> {
         self.test(baby_bear_poseidon2::default_engine)
     }
 
@@ -224,10 +226,10 @@ impl MachineChipTester {
     }
     /// Given a function to produce an engine from the max trace height,
     /// runs a simple test on that engine
-    pub fn test<E: StarkEngine<BabyBearPoseidon2Config>, P: Fn(usize) -> E>(
+    pub fn test<E: StarkEngine<SC>, P: Fn(usize) -> E>(
         &self, // do no take ownership so it's easier to prank
         engine_provider: P,
-    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
+    ) -> Result<VerificationData<SC>, VerificationError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
         engine_provider(self.max_trace_height()).run_test_impl(&self.air_infos)
     }

@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
-use afs_stark_backend::rap::{get_air_name, AnyRap};
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::{get_air_name, AnyRap},
+    Chip,
+};
 use p3_air::BaseAir;
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{columns::*, Poseidon2Chip};
 use crate::arch::MachineChip;
@@ -36,13 +38,6 @@ impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
         RowMajorMatrix::new(flat_rows, air.width())
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Arc::new(self.air.clone())
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -53,5 +48,14 @@ impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
 
     fn trace_width(&self) -> usize {
         self.air.width()
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for Poseidon2Chip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
     }
 }

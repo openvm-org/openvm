@@ -1,11 +1,13 @@
 use std::{error::Error, fmt::Display, sync::Arc};
 
-use afs_stark_backend::utils::AirInfo;
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    utils::AirInfo,
+};
 use backtrace::Backtrace;
 use bridge::ProgramBus;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
     arch::{

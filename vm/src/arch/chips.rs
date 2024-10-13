@@ -1,16 +1,15 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+use afs_derive::Chip;
 use afs_primitives::{
     range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip,
     xor::lookup::XorLookupChip,
 };
-use afs_stark_backend::rap::{get_air_name, AnyRap};
+use afs_stark_backend::rap::get_air_name;
 use enum_dispatch::enum_dispatch;
 use p3_air::BaseAir;
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 use serde::{Deserialize, Serialize};
 use strum::EnumDiscriminants;
 use strum_macros::IntoStaticStr;
@@ -22,13 +21,10 @@ use crate::{
     branch_lt::Rv32BranchLessThanChip,
     castf::CastFChip,
     core::CoreChip,
-    ecc::{EcAddUnequalChip, EcDoubleChip},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     loadstore::Rv32LoadStoreChip,
-    modular_addsub::ModularAddSubChip,
-    modular_multdiv::ModularMultDivChip,
     new_alu::Rv32ArithmeticLogicChip,
     new_divrem::Rv32DivRemChip,
     new_lt::Rv32LessThanChip,
@@ -40,7 +36,6 @@ use crate::{
     rv32_jal_lui::Rv32JalLuiChip,
     rv32_jalr::Rv32JalrChip,
     shift::ShiftChip,
-    ui::UiChip,
     uint_multiplication::UintMultiplicationChip,
 };
 
@@ -59,13 +54,12 @@ pub trait InstructionExecutor<F> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
+// TODO[jpw]: consider renaming this BaseChip and moving to stark-backend
+/// This trait contains the functions of a chip that do not need to know about the STARK config.
+/// Currently also specialized to AIRs with only a single common main trace matrix and no cached trace.
+/// For proving, the trait [Chip](afs_stark_backend::chip::Chip) must also be implemented.
 #[enum_dispatch]
 pub trait MachineChip<F>: Sized {
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>;
-
-    // Functions for when chip owns a single AIR
     fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air_name(&self) -> String;
     fn generate_public_values(&mut self) -> Vec<F> {
@@ -102,13 +96,6 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
         }
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        self.borrow().air()
-    }
-
     fn generate_public_values(&mut self) -> Vec<F> {
         self.borrow_mut().generate_public_values()
     }
@@ -136,8 +123,6 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
-    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
-    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32ArithmeticLogicChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
@@ -153,13 +138,10 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
     JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
-    Ui(Rc<RefCell<UiChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
-    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
-    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
-#[derive(Debug, Clone, IntoStaticStr)]
+#[derive(Debug, Clone, IntoStaticStr, Chip)]
 #[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
@@ -179,7 +161,6 @@ pub enum MachineChipVariant<F: PrimeField32> {
     DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
-    Ui(Rc<RefCell<UiChip<F>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
     BranchEqualRv32(Rc<RefCell<Rv32BranchEqualChip<F>>>),
     BranchLessThanRv32(Rc<RefCell<Rv32BranchLessThanChip<F>>>),
@@ -187,20 +168,11 @@ pub enum MachineChipVariant<F: PrimeField32> {
     JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
-    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
-    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
 impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         VariableRangeCheckerChip::generate_trace(&self)
-    }
-
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Arc::new(self.air)
     }
 
     fn air_name(&self) -> String {
@@ -221,13 +193,6 @@ impl<F: PrimeField32, const N: usize> MachineChip<F> for Arc<RangeTupleCheckerCh
         RangeTupleCheckerChip::generate_trace(&self)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Arc::new(self.air)
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -244,13 +209,6 @@ impl<F: PrimeField32, const N: usize> MachineChip<F> for Arc<RangeTupleCheckerCh
 impl<F: PrimeField32, const M: usize> MachineChip<F> for Arc<XorLookupChip<M>> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         XorLookupChip::generate_trace(&self)
-    }
-
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Arc::new(self.air)
     }
 
     fn air_name(&self) -> String {

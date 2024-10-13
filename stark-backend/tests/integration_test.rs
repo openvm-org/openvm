@@ -1,7 +1,7 @@
 #![feature(trait_upcasting)]
 #![allow(incomplete_features)]
 
-use afs_stark_backend::chip::Chip;
+use afs_stark_backend::Chip;
 /// Test utils
 use ax_sdk::{
     any_rap_arc_vec, config,

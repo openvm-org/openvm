@@ -4,7 +4,7 @@ pub mod branch_eq;
 pub mod branch_lt;
 pub mod castf;
 pub mod core;
-pub mod ecc;
+// pub mod ecc; // TO BE REPLACED
 pub mod field_arithmetic;
 pub mod field_extension;
 pub mod hashes;
@@ -27,7 +27,6 @@ pub mod rv32_jalr;
 #[cfg(feature = "sdk")]
 pub mod sdk;
 pub mod shift;
-pub mod ui;
 pub mod uint_multiplication;
 pub mod vm;
 

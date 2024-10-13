@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
-use afs_stark_backend::rap::{get_air_name, AnyRap};
-use p3_commit::PolynomialSpace;
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::{get_air_name, AnyRap},
+    Chip,
+};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{
     columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
@@ -109,18 +111,20 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
         get_air_name(&self.air)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Arc<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Arc::new(self.air)
-    }
-
     fn current_trace_height(&self) -> usize {
         self.records.len()
     }
 
     fn trace_width(&self) -> usize {
         FieldArithmeticCols::<F>::get_width()
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for FieldArithmeticChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 }
