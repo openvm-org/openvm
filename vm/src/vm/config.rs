@@ -62,16 +62,16 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Keccak256Opcode::COUNT,
             Keccak256Opcode::default_offset(),
         ),
-        // ExecutorName::ModularAddSub => (
-        //     ModularArithmeticOpcode::default_offset(),
-        //     2,
-        //     ModularArithmeticOpcode::default_offset(),
-        // ),
-        // ExecutorName::ModularMultDiv => (
-        //     ModularArithmeticOpcode::default_offset() + 2,
-        //     2,
-        //     ModularArithmeticOpcode::default_offset(),
-        // ),
+        ExecutorName::ModularAddSub => (
+            ModularArithmeticOpcode::default_offset(),
+            2,
+            ModularArithmeticOpcode::default_offset(),
+        ),
+        ExecutorName::ModularMultDiv => (
+            ModularArithmeticOpcode::default_offset() + 2,
+            2,
+            ModularArithmeticOpcode::default_offset(),
+        ),
         ExecutorName::ArithmeticLogicUnitRv32 => (
             AluOpcode::default_offset(),
             AluOpcode::COUNT,
@@ -151,6 +151,14 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CastfOpcode::default_offset(),
             CastfOpcode::COUNT,
             CastfOpcode::default_offset(),
+        ),
+        ExecutorName::Secp256k1AddUnequal => {
+            (EccOpcode::default_offset(), 1, EccOpcode::default_offset())
+        }
+        ExecutorName::Secp256k1Double => (
+            EccOpcode::default_offset() + 1,
+            1,
+            EccOpcode::default_offset(),
         ),
     };
     (start..(start + len), offset)
@@ -233,24 +241,23 @@ impl VmConfig {
         self.add_modular_support(primes)
     }
 
-    pub fn add_modular_prime(self, _prime: &BigUint, _shift: usize) -> Self {
-        todo!()
-        // let add_sub_range = default_executor_range(ExecutorName::ModularAddSub);
-        // let mult_div_range = default_executor_range(ExecutorName::ModularMultDiv);
-        // let mut res = self;
-        // res.modular_executors.push((
-        //     shift_range(&add_sub_range.0, shift),
-        //     ExecutorName::ModularAddSub,
-        //     add_sub_range.1 + shift,
-        //     prime.clone(),
-        // ));
-        // res.modular_executors.push((
-        //     shift_range(&mult_div_range.0, shift),
-        //     ExecutorName::ModularMultDiv,
-        //     mult_div_range.1 + shift,
-        //     prime.clone(),
-        // ));
-        // res
+    pub fn add_modular_prime(self, prime: &BigUint, shift: usize) -> Self {
+        let add_sub_range = default_executor_range(ExecutorName::ModularAddSub);
+        let mult_div_range = default_executor_range(ExecutorName::ModularMultDiv);
+        let mut res = self;
+        res.modular_executors.push((
+            shift_range(&add_sub_range.0, shift),
+            ExecutorName::ModularAddSub,
+            add_sub_range.1 + shift,
+            prime.clone(),
+        ));
+        res.modular_executors.push((
+            shift_range(&mult_div_range.0, shift),
+            ExecutorName::ModularMultDiv,
+            mult_div_range.1 + shift,
+            prime.clone(),
+        ));
+        res
     }
 
     pub fn add_ecc_support(self) -> Self {

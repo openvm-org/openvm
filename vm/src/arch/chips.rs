@@ -21,10 +21,13 @@ use crate::{
     branch_lt::Rv32BranchLessThanChip,
     castf::CastFChip,
     core::CoreChip,
+    ecc::{EcAddUnequalChip, EcDoubleChip},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     loadstore::Rv32LoadStoreChip,
+    modular_addsub::ModularAddSubChip,
+    modular_multdiv::ModularMultDivChip,
     new_alu::Rv32ArithmeticLogicChip,
     new_divrem::Rv32DivRemChip,
     new_lt::Rv32LessThanChip,
@@ -139,7 +142,12 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
     JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
+    // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
+    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
+    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
+    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
 #[derive(Debug, Clone, IntoStaticStr, Chip)]
@@ -168,7 +176,12 @@ pub enum MachineChipVariant<F: PrimeField32> {
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
     JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
+    // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
+    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
+    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
+    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
 impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {

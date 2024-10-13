@@ -45,11 +45,14 @@ use crate::{
         CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
         READ_INSTRUCTION_BUS,
     },
+    ecc::{EcAddUnequalChip, EcDoubleChip},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     loadstore::{LoadStoreIntegration, Rv32LoadStoreChip},
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
+    modular_addsub::ModularAddSubChip,
+    modular_multdiv::ModularMultDivChip,
     new_alu::{ArithmeticLogicIntegration, Rv32ArithmeticLogicChip},
     new_divrem::{DivRemIntegration, Rv32DivRemChip},
     new_lt::{LessThanIntegration, Rv32LessThanChip},
@@ -131,8 +134,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         let mut chips = vec![];
 
-        // let mut modular_muldiv_chips = vec![];
-        // let mut modular_addsub_chips = vec![];
+        let mut modular_muldiv_chips = vec![];
+        let mut modular_addsub_chips = vec![];
         let mut core_chip = if config
             .executors
             .iter()
@@ -428,54 +431,79 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(MachineChipVariant::CastF(chip));
-                } // ExecutorName::ModularAddSub | ExecutorName::ModularMultDiv => {
-                  //     unreachable!("Modular executors should be handled differently")
-                  // }
+                }
+                // TODO: make these customizable opcode classes
+                ExecutorName::Secp256k1AddUnequal => {
+                    let chip = Rc::new(RefCell::new(EcAddUnequalChip::new(
+                        execution_bus,
+                        program_bus,
+                        memory_chip.clone(),
+                        offset,
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::Secp256k1AddUnequal(chip));
+                }
+                ExecutorName::Secp256k1Double => {
+                    let chip = Rc::new(RefCell::new(EcDoubleChip::new(
+                        execution_bus,
+                        program_bus,
+                        memory_chip.clone(),
+                        offset,
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(MachineChipVariant::Secp256k1Double(chip));
+                }
+                ExecutorName::ModularAddSub | ExecutorName::ModularMultDiv => {
+                    unreachable!("Modular executors should be handled differently")
+                }
             }
         }
 
-        // FIXME[jpw]: add back modular arithmetic
-        // for (range, executor, offset, modulus) in config.clone().modular_executors {
-        //     for opcode in range.clone() {
-        //         if let Some(old_executor) = executors.get(&opcode) {
-        //             panic!(
-        //                 "Attempting to override an executor for opcode {} ({:?} -> {:?})",
-        //                 opcode, old_executor, executor
-        //             );
-        //         }
-        //     }
-        //     match executor {
-        //         // ExecutorName::ModularAddSub => {
-        //         //     let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
-        //         //         execution_bus,
-        //         //         program_bus,
-        //         //         memory_chip.clone(),
-        //         //         modulus,
-        //         //         offset,
-        //         //     )));
-        //         //     modular_addsub_chips.push(new_chip.clone());
-        //         //     for opcode in range {
-        //         //         executors.insert(opcode, new_chip.clone().into());
-        //         //     }
-        //         // }
-        //         // ExecutorName::ModularMultDiv => {
-        //         //     let new_chip = Rc::new(RefCell::new(ModularMultDivChip::new(
-        //         //         execution_bus,
-        //         //         program_bus,
-        //         //         memory_chip.clone(),
-        //         //         modulus,
-        //         //         offset,
-        //         //     )));
-        //         //     modular_muldiv_chips.push(new_chip.clone());
-        //         //     for opcode in range {
-        //         //         executors.insert(opcode, new_chip.clone().into());
-        //         //     }
-        //         // }
-        //         _ => unreachable!(
-        //             "modular_executors should only contain ModularAddSub and ModularMultDiv"
-        //         ),
-        //     }
-        // }
+        for (range, executor, offset, modulus) in config.clone().modular_executors {
+            for opcode in range.clone() {
+                if let Some(old_executor) = executors.get(&opcode) {
+                    panic!(
+                        "Attempting to override an executor for opcode {} ({:?} -> {:?})",
+                        opcode, old_executor, executor
+                    );
+                }
+            }
+            match executor {
+                ExecutorName::ModularAddSub => {
+                    let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
+                        execution_bus,
+                        program_bus,
+                        memory_chip.clone(),
+                        modulus,
+                        offset,
+                    )));
+                    modular_addsub_chips.push(new_chip.clone());
+                    for opcode in range {
+                        executors.insert(opcode, new_chip.clone().into());
+                    }
+                }
+                ExecutorName::ModularMultDiv => {
+                    let new_chip = Rc::new(RefCell::new(ModularMultDivChip::new(
+                        execution_bus,
+                        program_bus,
+                        memory_chip.clone(),
+                        modulus,
+                        offset,
+                    )));
+                    modular_muldiv_chips.push(new_chip.clone());
+                    for opcode in range {
+                        executors.insert(opcode, new_chip.clone().into());
+                    }
+                }
+                _ => unreachable!(
+                    "modular_executors should only contain ModularAddSub and ModularMultDiv"
+                ),
+            }
+        }
 
         chips.push(MachineChipVariant::ByteXor(byte_xor_chip));
         chips.push(MachineChipVariant::RangeTupleChecker(range_tuple_checker));

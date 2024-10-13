@@ -4,7 +4,7 @@ pub mod branch_eq;
 pub mod branch_lt;
 pub mod castf;
 pub mod core;
-// pub mod ecc; // TO BE REPLACED
+pub mod ecc;
 pub mod field_arithmetic;
 pub mod field_extension;
 pub mod hashes;

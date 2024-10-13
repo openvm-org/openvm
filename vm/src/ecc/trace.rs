@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use afs_primitives::{ecc::EcAuxCols as EcPrimitiveAuxCols, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::{
-    chip::Chip,
+    config::{StarkGenericConfig, Val},
     rap::{get_air_name, AnyRap},
+    Chip,
 };
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::{
     EcAddUnequalAuxCols, EcAddUnequalChip, EcAddUnequalCols, EcAddUnequalIoCols,
@@ -196,6 +196,15 @@ impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
         padded_rows.extend(std::iter::repeat(blank_row).take(padded_height - height));
 
         RowMajorMatrix::new(padded_rows.concat(), width)
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for EcAddUnequalChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
     }
 }
 
