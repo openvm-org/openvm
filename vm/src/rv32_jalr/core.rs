@@ -8,7 +8,7 @@ use crate::{
     arch::{
         compose,
         instructions::{Rv32JalrOpcode, UsizeOpcode},
-        AdapterContext, CoreIO, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        AdapterContext, AdapterAirContext, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
         Writes, PC_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     program::Instruction,
@@ -48,7 +48,7 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> CoreIO<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }

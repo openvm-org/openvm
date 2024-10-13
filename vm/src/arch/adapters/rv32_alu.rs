@@ -8,7 +8,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterContext, CoreIO, ExecutionBridge, ExecutionBus, ExecutionState, Result, VmAdapter,
+        AdapterContext, AdapterAirContext, ExecutionBridge, ExecutionBus, ExecutionState, Result, VmAdapter,
         VmAdapterAir, VmAdapterInterface,
     },
     memory::{
@@ -94,7 +94,7 @@ impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
     type Interface = Rv32RTypeAdapterInterface<AB::Expr>;
 
-    fn eval(&self, _builder: &mut AB, _local: &[AB::Var], _ctx: CoreIO<AB::Expr, Self::Interface>) {
+    fn eval(&self, _builder: &mut AB, _local: &[AB::Var], _ctx: AdapterAirContext<AB::Expr, Self::Interface>) {
         todo!()
     }
 }

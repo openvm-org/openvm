@@ -13,7 +13,7 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterContext, CoreIO, ExecutionState, Result, VmAdapter, VmAdapterAir,
+        AdapterContext, AdapterAirContext, ExecutionState, Result, VmAdapter, VmAdapterAir,
         VmAdapterInterface, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{
@@ -55,7 +55,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
 {
     type Interface = Rv32LoadStoreAdapterInterface<AB::Expr, NUM_CELLS>;
 
-    fn eval(&self, _builder: &mut AB, _local: &[AB::Var], _ctx: CoreIO<AB::Expr, Self::Interface>) {
+    fn eval(&self, _builder: &mut AB, _local: &[AB::Var], _ctx: AdapterAirContext<AB::Expr, Self::Interface>) {
         todo!()
     }
 }

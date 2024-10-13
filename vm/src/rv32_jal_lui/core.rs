@@ -10,7 +10,7 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        CoreIO, AdapterContext, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        AdapterAirContext, AdapterContext, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
         Writes, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS,
     },
     program::Instruction,
@@ -51,7 +51,7 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> CoreIO<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }
