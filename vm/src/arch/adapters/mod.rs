@@ -6,7 +6,6 @@ mod rv32_loadstore;
 mod rv32_mul;
 mod rv32_rdwrite;
 
-use afs_derive::AlignedBorrow;
 pub use rv32_alu::*;
 pub use rv32_branch::*;
 pub use rv32_heap::*;
@@ -26,15 +25,11 @@ pub const PC_BITS: usize = 30;
 
 use p3_field::PrimeField32;
 
+use super::CommonAdapterInterface;
 use crate::memory::{MemoryChip, MemoryReadRecord};
 
-#[repr(C)]
-#[derive(AlignedBorrow)]
-pub struct MinimalInstruction<T> {
-    pub is_valid: T,
-    /// Absolute opcode number
-    pub opcode: T,
-}
+pub type Rv32RTypeAdapterInterface<T> =
+    CommonAdapterInterface<T, 2, 1, RV32_REGISTER_NUM_LANES, RV32_REGISTER_NUM_LANES>;
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.

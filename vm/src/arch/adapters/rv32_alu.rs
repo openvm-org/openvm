@@ -10,11 +10,11 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{MinimalInstruction, RV32_REGISTER_NUM_LANES};
+use super::{MinimalInstruction, Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
-        MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
+        CommonAdapterInterface, ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput,
+        IntegrationInterface, MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -133,7 +133,7 @@ impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32AluAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::Expr::one(), local.rd_idx),
-                ctx.writes,
+                ctx.writes[0].clone(),
                 timestamp + AB::F::from_canonical_usize(timestamp_delta),
                 &local.writes_aux,
             )
@@ -224,7 +224,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
         // TODO: timestamp delta debug check
 
         let Instruction { op_a: a, d, .. } = *instruction;
-        let rd = memory.write(d, a, output.writes);
+        let rd = memory.write(d, a, output.writes[0]);
 
         Ok((
             ExecutionState {

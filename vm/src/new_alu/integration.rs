@@ -54,15 +54,16 @@ impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegrationAi
     for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr, ProcessedInstruction = MinimalInstruction<AB::Expr>>,
+    I: MachineAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
     I::Writes: From<[AB::Expr; NUM_LIMBS]>,
+    I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
         builder: &mut AB,
         local: &[AB::Var],
-        local_adapter: &[AB::Var],
+        _local_adapter: &[AB::Var],
     ) -> IntegrationInterface<AB::Expr, I> {
         let cols: &ArithmeticLogicCols<_, NUM_LIMBS, LIMB_BITS> = local.borrow();
         let flags = [
@@ -147,7 +148,8 @@ where
             instruction: MinimalInstruction {
                 is_valid,
                 opcode: expected_opcode,
-            },
+            }
+            .into(),
         }
     }
 }
