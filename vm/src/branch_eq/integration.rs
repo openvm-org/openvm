@@ -1,13 +1,13 @@
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Reads, Result, Writes,
+        InstructionOutput, MachineAdapter, MachineAdapterInterface, MachineIntegration, Reads,
+        Result, Writes,
     },
     program::Instruction,
 };
