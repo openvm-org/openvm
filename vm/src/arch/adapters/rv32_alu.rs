@@ -1,7 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
-    marker::PhantomData,
     mem::size_of,
 };
 
@@ -13,8 +12,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        CommonAdapterInterface, ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput,
-        IntegrationInterface, MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
+        MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},

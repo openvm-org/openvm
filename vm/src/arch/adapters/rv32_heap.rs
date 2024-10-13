@@ -8,7 +8,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{read_rv32_register, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter,
+        ExecutionBridge, ExecutionState, InstructionOutput, MachineAdapter,
         MachineAdapterInterface, Result,
     },
     memory::{
