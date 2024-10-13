@@ -9,8 +9,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{MulOpcode, UsizeOpcode},
-        InstructionOutput, MachineAdapter, MachineAdapterInterface, MachineIntegration, Reads,
-        Result, Writes,
+        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
+        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes,
     },
     program::Instruction,
 };
@@ -50,6 +50,22 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 {
     fn eval(&self, _builder: &mut AB) {
         todo!();
+    }
+}
+
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegrationAir<AB, I>
+    for MultiplicationAir<NUM_LIMBS, LIMB_BITS>
+where
+    AB: InteractionBuilder,
+    I: MachineAdapterInterface<AB::Expr>,
+{
+    fn eval(
+        &self,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _local_adapter: &[AB::Var],
+    ) -> IntegrationInterface<AB::Expr, I> {
+        todo!()
     }
 }
 
