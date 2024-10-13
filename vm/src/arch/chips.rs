@@ -121,7 +121,7 @@ impl<F, C: VmChip<F>> VmChip<F> for Rc<RefCell<C>> {
 #[strum_discriminants(derive(Serialize, Deserialize))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
-pub enum InstructionExecutorVariant<F: PrimeField32> {
+pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
@@ -152,7 +152,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
 
 #[derive(Debug, Clone, IntoStaticStr, Chip)]
 #[enum_dispatch(VmChip<F>)]
-pub enum VmChipVariant<F: PrimeField32> {
+pub enum AxVmChip<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),

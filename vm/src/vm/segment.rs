@@ -33,9 +33,9 @@ use super::{
 use crate::{
     alu::ArithmeticLogicChip,
     arch::{
-        instructions::*, ExecutionBus, ExecutionState, ExecutorName, InstructionExecutor,
-        InstructionExecutorVariant, Rv32AluAdapter, Rv32BranchAdapter, Rv32JalrAdapter,
-        Rv32LoadStoreAdapter, Rv32MultAdapter, Rv32RdWriteAdapter, VmChip, VmChipVariant,
+        instructions::*, AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutionState,
+        ExecutorName, InstructionExecutor, Rv32AluAdapter, Rv32BranchAdapter, Rv32JalrAdapter,
+        Rv32LoadStoreAdapter, Rv32MultAdapter, Rv32RdWriteAdapter, VmChip,
     },
     branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
     branch_lt::{BranchLessThanCoreChip, Rv32BranchLessThanChip},
@@ -75,8 +75,8 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub connector_chip: VmConnectorChip<F>,
     pub persistent_memory_hasher: Option<Rc<RefCell<Poseidon2Chip<F>>>>,
 
-    pub executors: BTreeMap<usize, InstructionExecutorVariant<F>>,
-    pub chips: Vec<VmChipVariant<F>>,
+    pub executors: BTreeMap<usize, AxVmInstructionExecutor<F>>,
+    pub chips: Vec<AxVmChip<F>>,
     // FIXME: remove this
     pub core_chip: Rc<RefCell<CoreChip<F>>>,
 
@@ -126,7 +126,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         )));
         let program_chip = ProgramChip::new(program);
 
-        let mut executors: BTreeMap<usize, InstructionExecutorVariant<F>> = BTreeMap::new();
+        let mut executors: BTreeMap<usize, AxVmInstructionExecutor<F>> = BTreeMap::new();
 
         // NOTE: The order of entries in `chips` must be a linear extension of the dependency DAG.
         // That is, if chip A holds a strong reference to chip B, then A must precede B in `chips`.
@@ -155,7 +155,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             for opcode in range {
                 executors.insert(offset + opcode, chip.clone().into());
             }
-            chips.push(VmChipVariant::Core(chip.clone()));
+            chips.push(AxVmChip::Core(chip.clone()));
             Some(chip)
         };
 
@@ -201,7 +201,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, core_chip.clone().unwrap().into());
                     }
-                    chips.push(VmChipVariant::Core(core_chip.clone().unwrap()));
+                    chips.push(AxVmChip::Core(core_chip.clone().unwrap()));
                 }
                 ExecutorName::FieldArithmetic => {
                     let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
@@ -213,7 +213,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::FieldArithmetic(chip));
+                    chips.push(AxVmChip::FieldArithmetic(chip));
                 }
                 ExecutorName::FieldExtension => {
                     let chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
@@ -225,13 +225,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::FieldExtension(chip));
+                    chips.push(AxVmChip::FieldExtension(chip));
                 }
                 ExecutorName::Poseidon2 => {
                     for opcode in range {
                         executors.insert(opcode, poseidon_chip.clone().into());
                     }
-                    chips.push(VmChipVariant::Poseidon2(poseidon_chip.clone()));
+                    chips.push(AxVmChip::Poseidon2(poseidon_chip.clone()));
                 }
                 ExecutorName::Keccak256 => {
                     let chip = Rc::new(RefCell::new(KeccakVmChip::new(
@@ -244,7 +244,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::Keccak256(chip));
+                    chips.push(AxVmChip::Keccak256(chip));
                 }
                 ExecutorName::ArithmeticLogicUnitRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32ArithmeticLogicChip::new(
@@ -255,7 +255,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::ArithmeticLogicUnitRv32(chip));
+                    chips.push(AxVmChip::ArithmeticLogicUnitRv32(chip));
                 }
                 ExecutorName::ArithmeticLogicUnit256 => {
                     // We probably must include this chip if we include any modular arithmetic,
@@ -270,7 +270,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::ArithmeticLogicUnit256(chip));
+                    chips.push(AxVmChip::ArithmeticLogicUnit256(chip));
                 }
                 ExecutorName::LessThanRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LessThanChip::new(
@@ -281,7 +281,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::LessThanRv32(chip));
+                    chips.push(AxVmChip::LessThanRv32(chip));
                 }
                 ExecutorName::MultiplicationRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MultiplicationChip::new(
@@ -292,7 +292,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::MultiplicationRv32(chip));
+                    chips.push(AxVmChip::MultiplicationRv32(chip));
                 }
                 ExecutorName::MultiplicationHighRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MulHChip::new(
@@ -303,7 +303,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::MultiplicationHighRv32(chip));
+                    chips.push(AxVmChip::MultiplicationHighRv32(chip));
                 }
                 ExecutorName::U256Multiplication => {
                     let chip = Rc::new(RefCell::new(UintMultiplicationChip::new(
@@ -316,7 +316,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::U256Multiplication(chip));
+                    chips.push(AxVmChip::U256Multiplication(chip));
                 }
                 ExecutorName::DivRemRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32DivRemChip::new(
@@ -327,7 +327,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::DivRemRv32(chip));
+                    chips.push(AxVmChip::DivRemRv32(chip));
                 }
                 ExecutorName::ShiftRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32ShiftChip::new(
@@ -338,7 +338,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::ShiftRv32(chip));
+                    chips.push(AxVmChip::ShiftRv32(chip));
                 }
                 ExecutorName::Shift256 => {
                     let chip = Rc::new(RefCell::new(ShiftChip::new(
@@ -351,7 +351,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::Shift256(chip));
+                    chips.push(AxVmChip::Shift256(chip));
                 }
                 ExecutorName::LoadStoreRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LoadStoreChip::new(
@@ -362,7 +362,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::LoadStoreRv32(chip));
+                    chips.push(AxVmChip::LoadStoreRv32(chip));
                 }
                 ExecutorName::BranchEqualRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BranchEqualChip::new(
@@ -373,7 +373,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::BranchEqualRv32(chip));
+                    chips.push(AxVmChip::BranchEqualRv32(chip));
                 }
                 ExecutorName::BranchLessThanRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BranchLessThanChip::new(
@@ -384,7 +384,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::BranchLessThanRv32(chip));
+                    chips.push(AxVmChip::BranchLessThanRv32(chip));
                 }
                 ExecutorName::JalLuiRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalLuiChip::new(
@@ -395,7 +395,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::JalLuiRv32(chip));
+                    chips.push(AxVmChip::JalLuiRv32(chip));
                 }
                 ExecutorName::JalrRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalrChip::new(
@@ -406,7 +406,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::JalrRv32(chip));
+                    chips.push(AxVmChip::JalrRv32(chip));
                 }
                 ExecutorName::AuipcRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32AuipcChip::new(
@@ -417,7 +417,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::AuipcRv32(chip));
+                    chips.push(AxVmChip::AuipcRv32(chip));
                 }
                 ExecutorName::CastF => {
                     let chip = Rc::new(RefCell::new(CastFChip::new(
@@ -429,7 +429,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::CastF(chip));
+                    chips.push(AxVmChip::CastF(chip));
                 }
                 // TODO: make these customizable opcode classes
                 ExecutorName::Secp256k1AddUnequal => {
@@ -442,7 +442,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::Secp256k1AddUnequal(chip));
+                    chips.push(AxVmChip::Secp256k1AddUnequal(chip));
                 }
                 ExecutorName::Secp256k1Double => {
                     let chip = Rc::new(RefCell::new(EcDoubleChip::new(
@@ -454,7 +454,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(VmChipVariant::Secp256k1Double(chip));
+                    chips.push(AxVmChip::Secp256k1Double(chip));
                 }
                 ExecutorName::ModularAddSub | ExecutorName::ModularMultDiv => {
                     unreachable!("Modular executors should be handled differently")
@@ -504,8 +504,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
         }
 
-        chips.push(VmChipVariant::ByteXor(byte_xor_chip));
-        chips.push(VmChipVariant::RangeTupleChecker(range_tuple_checker));
+        chips.push(AxVmChip::ByteXor(byte_xor_chip));
+        chips.push(AxVmChip::RangeTupleChecker(range_tuple_checker));
 
         let connector_chip = VmConnectorChip::new(execution_bus);
 
