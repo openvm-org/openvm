@@ -93,7 +93,7 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
         &self,
         builder: &mut AB,
         local: &[AB::Var],
-        interface: CoreInterface<AB::Expr, Self::Interface>,
+        interface: CoreIO<AB::Expr, Self::Interface>,
     );
 }
 
@@ -133,7 +133,7 @@ where
         builder: &mut AB,
         local: &[AB::Var],
         local_adapter: &[AB::Var],
-    ) -> CoreInterface<AB::Expr, I>;
+    ) -> CoreIO<AB::Expr, I>;
 }
 
 pub struct InstructionOutput<T, I: VmAdapterInterface<T>> {
@@ -143,7 +143,7 @@ pub struct InstructionOutput<T, I: VmAdapterInterface<T>> {
 }
 
 // better name: AdapterContext
-pub struct CoreInterface<T, I: VmAdapterInterface<T>> {
+pub struct CoreIO<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<T>,
     pub reads: I::Reads,

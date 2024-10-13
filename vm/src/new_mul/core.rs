@@ -9,7 +9,7 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{MulOpcode, UsizeOpcode},
-        CoreInterface, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
+        CoreIO, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
         VmCoreAir, Writes,
     },
     program::Instruction,
@@ -64,7 +64,7 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> CoreInterface<AB::Expr, I> {
+    ) -> CoreIO<AB::Expr, I> {
         todo!()
     }
 }

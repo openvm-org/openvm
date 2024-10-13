@@ -8,7 +8,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, CoreInterface,
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, CoreIO,
         VmAdapter, VmAdapterAir, VmAdapterInterface, Result,
     },
     memory::{
@@ -108,7 +108,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
-        _ctx: CoreInterface<AB::Expr, Self::Interface>,
+        _ctx: CoreIO<AB::Expr, Self::Interface>,
     ) {
         todo!()
     }

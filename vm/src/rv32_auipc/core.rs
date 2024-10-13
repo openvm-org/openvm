@@ -7,7 +7,7 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        CoreInterface, InstructionOutput, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        CoreIO, InstructionOutput, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
         Writes, RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,
@@ -47,7 +47,7 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> CoreInterface<AB::Expr, I> {
+    ) -> CoreIO<AB::Expr, I> {
         todo!()
     }
 }
