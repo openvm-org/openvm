@@ -8,7 +8,7 @@ use crate::{
     arch::{
         compose,
         instructions::{Rv32JalrOpcode, UsizeOpcode},
-        AdapterContext, AdapterAirContext, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
         Writes, PC_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     program::Instruction,
@@ -83,7 +83,7 @@ where
         instruction: &Instruction<F>,
         from_pc: F,
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterContext<F, A::Interface<F>>, Self::Record)> {
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction {
             opcode, op_c: c, ..
         } = *instruction;
@@ -98,7 +98,7 @@ where
         let (to_pc, rd_data) = solve_jalr(opcode, from_pc.as_canonical_u32(), imm, rs1);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: AdapterContext<F, A::Interface<F>> = AdapterContext {
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: Some(F::from_canonical_u32(to_pc)),
             writes: rd_data.into(),
         };

@@ -9,7 +9,7 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{MulHOpcode, UsizeOpcode},
-        AdapterContext, AdapterAirContext, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
         Writes,
     },
     program::Instruction,
@@ -110,7 +110,7 @@ where
         instruction: &Instruction<F>,
         _from_pc: F,
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterContext<F, A::Interface<F>>, Self::Record)> {
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
         let opcode = MulHOpcode::from_usize(opcode - self.offset);
 
@@ -120,7 +120,7 @@ where
         let (z, _z_mul, _x_ext, _y_ext) = solve_mulh::<NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
 
         // Core doesn't modify PC directly, so we let Adapter handle the increment
-        let output: AdapterContext<F, A::Interface<F>> = AdapterContext {
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: None,
             writes: z.map(F::from_canonical_u32).into(),
         };

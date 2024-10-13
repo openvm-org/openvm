@@ -7,7 +7,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{read_rv32_register, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterContext, ExecutionBridge, ExecutionState, Result, VmAdapter, VmAdapterInterface,
+        AdapterRuntimeContext, ExecutionBridge, ExecutionState, Result, VmAdapter, VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -165,7 +165,7 @@ impl<
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: AdapterContext<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction {

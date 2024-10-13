@@ -8,7 +8,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterContext, AdapterAirContext, ExecutionBridge, ExecutionBus, ExecutionState, Result, VmAdapter,
+        AdapterRuntimeContext, AdapterAirContext, ExecutionBridge, ExecutionBus, ExecutionState, Result, VmAdapter,
         VmAdapterAir, VmAdapterInterface,
     },
     memory::{
@@ -161,7 +161,7 @@ impl<F: PrimeField32> VmAdapter<F> for Rv32AluAdapter<F> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: AdapterContext<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check

@@ -13,7 +13,7 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterContext, AdapterAirContext, ExecutionState, Result, VmAdapter, VmAdapterAir,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapter, VmAdapterAir,
         VmAdapterInterface, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{
@@ -55,7 +55,12 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
 {
     type Interface = Rv32LoadStoreAdapterInterface<AB::Expr, NUM_CELLS>;
 
-    fn eval(&self, _builder: &mut AB, _local: &[AB::Var], _ctx: AdapterAirContext<AB::Expr, Self::Interface>) {
+    fn eval(
+        &self,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
+    ) {
         todo!()
     }
 }
@@ -199,7 +204,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapter<F> for Rv32LoadStoreAdap
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: AdapterContext<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction {

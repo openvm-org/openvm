@@ -10,7 +10,7 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterContext, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
         Writes, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS,
     },
     program::Instruction,
@@ -85,7 +85,7 @@ where
         instruction: &Instruction<F>,
         from_pc: F,
         _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterContext<F, A::Interface<F>>, Self::Record)> {
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let opcode = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c;
 
@@ -100,7 +100,7 @@ where
         let (to_pc, rd_data) = solve_jal_lui(opcode, from_pc.as_canonical_u32() as usize, imm);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: AdapterContext<F, A::Interface<F>> = AdapterContext {
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: Some(F::from_canonical_usize(to_pc)),
             writes: rd_data.into(),
         };
