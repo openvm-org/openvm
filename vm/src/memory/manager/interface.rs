@@ -7,7 +7,7 @@ use super::TimestampedValue;
 use crate::memory::audit::MemoryAuditChip;
 
 #[derive(Clone, Debug)]
-pub enum MemoryInterface<const NUM_WORDS: usize, F: PrimeField32> {
+pub enum MemoryInterface<const NUM_WORDS: usize, F> {
     Volatile(MemoryAuditChip<F>),
     // Persistent(MemoryExpandInterfaceChip<NUM_WORDS, WORD_SIZE, F>),
 }

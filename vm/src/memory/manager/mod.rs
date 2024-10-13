@@ -152,7 +152,7 @@ impl<T: Clone, const N: usize> From<MemoryHeapWriteRecord<T, N>> for MemoryHeapD
 pub type MemoryChipRef<F> = Rc<RefCell<MemoryChip<F>>>;
 
 #[derive(Clone, Debug)]
-pub struct MemoryChip<F: PrimeField32> {
+pub struct MemoryChip<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<NUM_WORDS, F>,
     pub(crate) mem_config: MemoryConfig,
