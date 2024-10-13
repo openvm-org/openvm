@@ -21,14 +21,14 @@ use super::{
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        MachineChip,
+        VmChip,
     },
     memory::MemoryHeapDataIoCols,
     utils::limbs_to_biguint,
 };
 
 impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    MachineChip<F> for ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+    VmChip<F> for ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();

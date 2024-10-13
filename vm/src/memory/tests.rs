@@ -26,7 +26,7 @@ use rand::{prelude::SliceRandom, thread_rng, Rng};
 
 use super::{MemoryChip, MemoryReadRecord};
 use crate::{
-    arch::MachineChip,
+    arch::VmChip,
     core::RANGE_CHECKER_BUS,
     hashes::poseidon2::Poseidon2Chip,
     memory::{

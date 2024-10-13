@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
+        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
+        VmIntegration, VmIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,
 };
@@ -38,9 +38,9 @@ impl<F: Field> BaseAir<F> for Rv32AuipcAir<F> {
 
 impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcAir<F> {}
 
-impl<AB: InteractionBuilder, I> MachineIntegrationAir<AB, I> for Rv32AuipcAir<AB::F>
+impl<AB: InteractionBuilder, I> VmIntegrationAir<AB, I> for Rv32AuipcAir<AB::F>
 where
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
@@ -68,7 +68,7 @@ impl<F: Field> Rv32AuipcIntegration<F> {
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32AuipcIntegration<F>
+impl<F: PrimeField32, A: VmAdapter<F>> VmIntegration<F, A> for Rv32AuipcIntegration<F>
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
@@ -80,7 +80,7 @@ where
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        _reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
         let opcode = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c.as_canonical_u32();

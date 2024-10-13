@@ -15,7 +15,7 @@ use super::columns::{
 use crate::{
     arch::{
         instructions::{FieldExtensionOpcode, UsizeOpcode},
-        MachineChip,
+        VmChip,
     },
     field_extension::chip::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
@@ -24,7 +24,7 @@ use crate::{
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
-impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
+impl<F: PrimeField32> VmChip<F> for FieldExtensionArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
     fn generate_trace(mut self) -> RowMajorMatrix<F> {
         let curr_height = self.records.len();

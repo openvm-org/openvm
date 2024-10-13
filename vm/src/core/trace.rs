@@ -10,7 +10,7 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::CoreCols, CoreChip};
-use crate::arch::MachineChip;
+use crate::arch::VmChip;
 
 impl<F: PrimeField32> CoreChip<F> {
     /// Pad with NOP rows.
@@ -30,7 +30,7 @@ impl<F: PrimeField32> CoreChip<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for CoreChip<F> {
+impl<F: PrimeField32> VmChip<F> for CoreChip<F> {
     fn generate_trace(mut self) -> RowMajorMatrix<F> {
         self.pad_rows();
 

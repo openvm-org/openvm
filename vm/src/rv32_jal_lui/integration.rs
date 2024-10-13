@@ -10,8 +10,8 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
+        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
+        VmIntegration, VmIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
         RV_J_TYPE_IMM_BITS,
     },
     program::Instruction,
@@ -42,10 +42,10 @@ impl<F: Field> BaseAir<F> for Rv32JalLuiAir<F> {
 
 impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalLuiAir<F> {}
 
-impl<AB, I> MachineIntegrationAir<AB, I> for Rv32JalLuiAir<AB::F>
+impl<AB, I> VmIntegrationAir<AB, I> for Rv32JalLuiAir<AB::F>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
@@ -73,7 +73,7 @@ impl<F: Field> Rv32JalLuiIntegration<F> {
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32JalLuiIntegration<F>
+impl<F: PrimeField32, A: VmAdapter<F>> VmIntegration<F, A> for Rv32JalLuiIntegration<F>
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
@@ -85,7 +85,7 @@ where
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        _reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
         let opcode = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c;

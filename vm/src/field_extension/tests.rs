@@ -16,7 +16,7 @@ use crate::{
         instructions::{FieldExtensionOpcode, UsizeOpcode},
         testing::{
             memory::{gen_address_space, gen_pointer},
-            MachineChipTestBuilder,
+            VmChipTestBuilder,
         },
     },
     field_extension::chip::{FieldExtensionArithmetic, FieldExtensionArithmeticChip},
@@ -27,7 +27,7 @@ use crate::{
 fn field_extension_air_test() {
     type F = BabyBear;
 
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = FieldExtensionArithmeticChip::new(
         tester.execution_bus(),
         tester.program_bus(),

@@ -13,8 +13,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterAir,
-        MachineAdapterInterface, Result, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        ExecutionState, InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterAir,
+        VmAdapterInterface, Result, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -50,7 +50,7 @@ impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for Rv32LoadStoreAdapterAir<F,
     }
 }
 
-impl<AB: InteractionBuilder, const NUM_CELLS: usize> MachineAdapterAir<AB>
+impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
     for Rv32LoadStoreAdapterAir<AB::F, NUM_CELLS>
 {
     type Interface = Rv32LoadStoreAdapterInterface<AB::Expr, NUM_CELLS>;
@@ -84,7 +84,7 @@ pub struct Rv32LoadStoreAdapterInterface<T, const NUM_CELLS: usize> {
     _marker: PhantomData<T>,
 }
 
-impl<T, const NUM_CELLS: usize> MachineAdapterInterface<T>
+impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     for Rv32LoadStoreAdapterInterface<T, NUM_CELLS>
 {
     /// `[read_data, prev_data]` where `prev_data` is currenlty only used when this is a STORE instruction.
@@ -112,7 +112,7 @@ impl<F: Field, const NUM_CELLS: usize> Rv32LoadStoreAdapter<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
+impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapter<F>
     for Rv32LoadStoreAdapter<F, NUM_CELLS>
 {
     type ReadRecord = Rv32LoadStoreAdapterReadRecord<F, NUM_CELLS>;
@@ -127,7 +127,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {

@@ -9,7 +9,7 @@ use super::{ModularAddSubChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        testing::MachineChipTestBuilder,
+        testing::VmChipTestBuilder,
     },
     program::Instruction,
     utils::biguint_to_limbs,
@@ -23,7 +23,7 @@ type F = BabyBear;
 fn test_modular_addsub() {
     setup_tracing();
 
-    let mut tester: MachineChipTestBuilder<F> = MachineChipTestBuilder::default();
+    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let mut coord_chip: ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE> = ModularAddSubChip::new(
         tester.execution_bus(),
         tester.program_bus(),

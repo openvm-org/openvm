@@ -15,7 +15,7 @@ use super::{
 use crate::{
     arch::{
         instructions::{FieldArithmeticOpcode, UsizeOpcode},
-        MachineChip,
+        VmChip,
     },
     memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
 };
@@ -86,7 +86,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
+impl<F: PrimeField32> VmChip<F> for FieldArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self

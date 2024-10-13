@@ -20,8 +20,8 @@ use crate::{
             FieldArithmeticOpcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, MachineChipTestBuilder},
-        MachineChip,
+        testing::{memory::gen_pointer, VmChipTestBuilder},
+        VmChip,
     },
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
     program::Instruction,
@@ -35,7 +35,7 @@ fn field_arithmetic_air_test() {
     let z_address_space_range = || 1usize..=2;
     let xy_address_space_range = || 0usize..=2;
 
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut field_arithmetic_chip = FieldArithmeticChip::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -123,7 +123,7 @@ fn field_arithmetic_air_test() {
 
 #[test]
 fn field_arithmetic_air_zero_div_zero() {
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut field_arithmetic_chip = FieldArithmeticChip::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -160,7 +160,7 @@ fn field_arithmetic_air_zero_div_zero() {
 #[should_panic]
 #[test]
 fn field_arithmetic_air_test_panic() {
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut field_arithmetic_chip = FieldArithmeticChip::new(
         tester.execution_bus(),
         tester.program_bus(),

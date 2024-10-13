@@ -12,7 +12,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
-    arch::chips::MachineChip,
+    arch::chips::VmChip,
     memory::{
         offline_checker::{MemoryBus, MemoryBusInteraction},
         MemoryAddress, MemoryChipRef,
@@ -90,7 +90,7 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
+impl<F: PrimeField32> VmChip<F> for MemoryTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();

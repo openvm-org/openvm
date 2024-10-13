@@ -397,7 +397,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         }
     }
 
-    // TEMPORARY[jpw]: MemoryChip is not a MachineChip: it is not a chip and instead owns multiple AIRs. To be renamed and refactored in the future.
+    // TEMPORARY[jpw]: MemoryChip is not a VmChip: it is not a chip and instead owns multiple AIRs. To be renamed and refactored in the future.
     pub fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
         vec![
             self.generate_memory_interface_trace(),

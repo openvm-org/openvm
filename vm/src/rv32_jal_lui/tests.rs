@@ -10,7 +10,7 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, MachineChipTestBuilder},
+        testing::{memory::gen_pointer, VmChipTestBuilder},
         Rv32RdWriteAdapter,
     },
     program::Instruction,
@@ -21,7 +21,7 @@ const IMM_BITS: usize = 20;
 type F = BabyBear;
 
 fn set_and_execute(
-    tester: &mut MachineChipTestBuilder<F>,
+    tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32JalLuiChip<F>,
     rng: &mut StdRng,
     opcode: Rv32JalLuiOpcode,
@@ -71,7 +71,7 @@ fn set_and_execute(
 #[test]
 fn simple_execute_roundtrip_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32RdWriteAdapter::<F>::new();
     let inner = Rv32JalLuiIntegration::<F>::new(Rv32JalLuiOpcode::default_offset());
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_chip());

@@ -13,8 +13,8 @@ use super::{solve_shift, ShiftChip};
 use crate::{
     arch::{
         instructions::U256Opcode,
-        testing::{memory::gen_pointer, MachineChipTestBuilder},
-        MachineChip,
+        testing::{memory::gen_pointer, VmChipTestBuilder},
+        VmChip,
     },
     core::BYTE_XOR_BUS,
     program::Instruction,
@@ -42,7 +42,7 @@ fn generate_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(rng: &mut StdR
 
 #[allow(clippy::too_many_arguments)]
 fn run_shift_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    tester: &mut MachineChipTestBuilder<F>,
+    tester: &mut VmChipTestBuilder<F>,
     chip: &mut ShiftChip<F, NUM_LIMBS, LIMB_BITS>,
     opcode: U256Opcode,
     x: Vec<u32>,
@@ -107,7 +107,7 @@ fn run_shift_negative_test(
     expected_error: VerificationError,
 ) {
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -174,7 +174,7 @@ fn shift_sll_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -353,7 +353,7 @@ fn shift_srl_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -478,7 +478,7 @@ fn shift_sra_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -573,7 +573,7 @@ fn shift_sra_wrong_sign_negative_test() {
 fn shift_overflow_test() {
     let mut rng = create_seeded_rng();
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),

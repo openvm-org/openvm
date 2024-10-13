@@ -14,9 +14,9 @@ use super::{
     },
     UintMultiplicationChip, UintMultiplicationRecord,
 };
-use crate::arch::MachineChip;
+use crate::arch::VmChip;
 
-impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChip<F>
+impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmChip<F>
     for UintMultiplicationChip<F, NUM_LIMBS, LIMB_BITS>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {

@@ -9,7 +9,7 @@ use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
-        MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
+        VmAdapter, VmAdapterAir, VmAdapterInterface, Result,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols},
@@ -67,7 +67,7 @@ pub struct Rv32BranchProcessedInstruction<T> {
     pub pc_inc: T,
 }
 
-impl<T: AbstractField> MachineAdapterInterface<T> for Rv32BranchAdapterInterface<T> {
+impl<T: AbstractField> VmAdapterInterface<T> for Rv32BranchAdapterInterface<T> {
     type Reads = [[T; RV32_REGISTER_NUM_LANES]; 2];
     type Writes = ();
     type ProcessedInstruction = Rv32BranchProcessedInstruction<T>;
@@ -101,7 +101,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32BranchAdapterAir {
     }
 }
 
-impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32BranchAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
     type Interface = Rv32BranchAdapterInterface<AB::Expr>;
 
     fn eval(
@@ -114,7 +114,7 @@ impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32BranchAdapterAir {
     }
 }
 
-impl<F: PrimeField32> MachineAdapter<F> for Rv32BranchAdapter<F> {
+impl<F: PrimeField32> VmAdapter<F> for Rv32BranchAdapter<F> {
     type ReadRecord = Rv32BranchReadRecord<F>;
     type WriteRecord = Rv32BranchWriteRecord;
     type Air = Rv32BranchAdapterAir;
@@ -125,7 +125,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32BranchAdapter<F> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {

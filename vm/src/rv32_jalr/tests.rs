@@ -12,7 +12,7 @@ use crate::{
             Rv32JalrOpcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, MachineChipTestBuilder},
+        testing::{memory::gen_pointer, VmChipTestBuilder},
         Rv32JalrAdapter, PC_BITS,
     },
     program::Instruction,
@@ -27,7 +27,7 @@ fn into_limbs(num: u32) -> [F; 4] {
 }
 
 fn set_and_execute(
-    tester: &mut MachineChipTestBuilder<F>,
+    tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32JalrChip<F>,
     rng: &mut StdRng,
     opcode: Rv32JalrOpcode,
@@ -80,7 +80,7 @@ fn set_and_execute(
 #[test]
 fn simple_execute_roundtrip_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32JalrAdapter::<F>::new();
     let inner = Rv32JalrIntegration::<F>::new(Rv32JalrOpcode::default_offset());
     let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.memory_chip());

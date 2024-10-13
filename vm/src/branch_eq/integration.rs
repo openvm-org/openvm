@@ -6,8 +6,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes,
+        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
+        VmIntegration, VmIntegrationAir, Reads, Result, Writes,
     },
     program::Instruction,
 };
@@ -43,10 +43,10 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize> Air<AB> for BranchEqualAir<
 
 impl<F: Field, const NUM_LIMBS: usize> BaseAirWithPublicValues<F> for BranchEqualAir<NUM_LIMBS> {}
 
-impl<AB, I, const NUM_LIMBS: usize> MachineIntegrationAir<AB, I> for BranchEqualAir<NUM_LIMBS>
+impl<AB, I, const NUM_LIMBS: usize> VmIntegrationAir<AB, I> for BranchEqualAir<NUM_LIMBS>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
@@ -73,7 +73,7 @@ impl<const NUM_LIMBS: usize> BranchEqualIntegration<NUM_LIMBS> {
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_LIMBS: usize> MachineIntegration<F, A>
+impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize> VmIntegration<F, A>
     for BranchEqualIntegration<NUM_LIMBS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
@@ -88,7 +88,7 @@ where
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
         let Instruction {
             opcode, op_c: imm, ..

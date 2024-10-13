@@ -8,7 +8,7 @@ use super::integration::{solve_cmp, BranchLessThanIntegration};
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        MachineIntegration, Rv32BranchAdapter,
+        VmIntegration, Rv32BranchAdapter,
     },
     core::BYTE_XOR_BUS,
     program::Instruction,
@@ -32,7 +32,7 @@ fn execute_pc_increment_sanity_test() {
     let x: [F; RV32_NUM_LIMBS] = [145, 34, 25, 205].map(F::from_canonical_u32);
 
     let result =
-        <BranchLessThanIntegration<RV32_NUM_LIMBS, RV32_LIMB_BITS> as MachineIntegration<
+        <BranchLessThanIntegration<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmIntegration<
             F,
             Rv32BranchAdapter<F>,
         >>::execute_instruction(&integration, &instruction, F::zero(), [x, x]);
@@ -41,7 +41,7 @@ fn execute_pc_increment_sanity_test() {
 
     instruction.opcode = BranchLessThanOpcode::BGE.as_usize();
     let result =
-        <BranchLessThanIntegration<RV32_NUM_LIMBS, RV32_LIMB_BITS> as MachineIntegration<
+        <BranchLessThanIntegration<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmIntegration<
             F,
             Rv32BranchAdapter<F>,
         >>::execute_instruction(&integration, &instruction, F::zero(), [x, x]);

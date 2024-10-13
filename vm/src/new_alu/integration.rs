@@ -9,8 +9,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{AluOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, MinimalInstruction, Reads, Result, Writes,
+        InstructionOutput, IntegrationInterface, MinimalInstruction, Reads, Result, VmAdapter,
+        VmAdapterInterface, VmIntegration, VmIntegrationAir, Writes,
     },
     program::Instruction,
 };
@@ -49,11 +49,11 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublic
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegrationAir<AB, I>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmIntegrationAir<AB, I>
     for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
     I::Writes: From<[[AB::Expr; NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
@@ -96,11 +96,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegration<F, A>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmIntegration<F, A>
     for ArithmeticLogicIntegration<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: MachineAdapter<F>,
+    A: VmAdapter<F>,
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
 {
@@ -112,7 +112,7 @@ where
         &self,
         instruction: &Instruction<F>,
         _from_pc: F,
-        reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
         let opcode = AluOpcode::from_usize(opcode - self.air.offset);

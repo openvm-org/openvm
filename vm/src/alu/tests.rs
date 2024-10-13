@@ -15,8 +15,8 @@ use crate::{
     alu::solve_alu,
     arch::{
         instructions::U256Opcode,
-        testing::{memory::gen_pointer, MachineChipTestBuilder},
-        MachineChip,
+        testing::{memory::gen_pointer, VmChipTestBuilder},
+        VmChip,
     },
     core::BYTE_XOR_BUS,
     program::Instruction,
@@ -37,7 +37,7 @@ fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 
 #[allow(clippy::too_many_arguments)]
 fn run_alu_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    tester: &mut MachineChipTestBuilder<F>,
+    tester: &mut VmChipTestBuilder<F>,
     chip: &mut ArithmeticLogicChip<F, NUM_LIMBS, LIMB_BITS>,
     opcode: U256Opcode,
     x: Vec<u32>,
@@ -107,7 +107,7 @@ fn run_alu_negative_test(
     expected_error: VerificationError,
 ) {
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester: MachineChipTestBuilder<BabyBear> = MachineChipTestBuilder::default();
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -159,7 +159,7 @@ fn alu_add_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -224,7 +224,7 @@ fn alu_sub_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -289,7 +289,7 @@ fn alu_sltu_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -356,7 +356,7 @@ fn alu_eq_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -395,7 +395,7 @@ fn alu_xor_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -434,7 +434,7 @@ fn alu_and_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -473,7 +473,7 @@ fn alu_or_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -515,7 +515,7 @@ fn alu_slt_rand_test() {
     let mut rng = create_seeded_rng();
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),

@@ -12,8 +12,8 @@ use super::{columns::UintMultiplicationCols, solve_uint_multiplication, UintMult
 use crate::{
     arch::{
         instructions::U256Opcode,
-        testing::{memory::gen_pointer, MachineChipTestBuilder},
-        MachineChip,
+        testing::{memory::gen_pointer, VmChipTestBuilder},
+        VmChip,
     },
     core::RANGE_TUPLE_CHECKER_BUS,
     program::Instruction,
@@ -30,7 +30,7 @@ fn generate_uint_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 }
 
 fn run_uint_multiplication_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    tester: &mut MachineChipTestBuilder<F>,
+    tester: &mut VmChipTestBuilder<F>,
     chip: &mut UintMultiplicationChip<F, NUM_LIMBS, LIMB_BITS>,
     x: Vec<u32>,
     y: Vec<u32>,
@@ -92,7 +92,7 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
     );
     let range_tuple_chip: Arc<RangeTupleCheckerChip<2>> = Arc::new(RangeTupleCheckerChip::new(bus));
 
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -142,7 +142,7 @@ fn uint_multiplication_rand_air_test() {
     );
     let range_tuple_chip: Arc<RangeTupleCheckerChip<2>> = Arc::new(RangeTupleCheckerChip::new(bus));
 
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = UintMultiplicationChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),

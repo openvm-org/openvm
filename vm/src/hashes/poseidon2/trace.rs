@@ -10,9 +10,9 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::*, Poseidon2Chip};
-use crate::arch::MachineChip;
+use crate::arch::VmChip;
 
-impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
+impl<F: PrimeField32> VmChip<F> for Poseidon2Chip<F> {
     /// Generates final Poseidon2VmAir trace from cached rows.
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let Self {

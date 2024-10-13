@@ -5,7 +5,7 @@ use super::integration::{solve_eq, BranchEqualIntegration};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        MachineIntegration, Rv32BranchAdapter,
+        VmIntegration, Rv32BranchAdapter,
     },
     program::Instruction,
 };
@@ -25,7 +25,7 @@ fn execute_pc_increment_sanity_test() {
     let x: [F; RV32_NUM_LIMBS] = [19, 4, 1790, 60].map(F::from_canonical_u32);
     let y: [F; RV32_NUM_LIMBS] = [19, 32, 1804, 60].map(F::from_canonical_u32);
 
-    let result = <BranchEqualIntegration<RV32_NUM_LIMBS> as MachineIntegration<
+    let result = <BranchEqualIntegration<RV32_NUM_LIMBS> as VmIntegration<
         F,
         Rv32BranchAdapter<F>,
     >>::execute_instruction(&integration, &instruction, F::zero(), [x, y]);
@@ -33,7 +33,7 @@ fn execute_pc_increment_sanity_test() {
     assert!(output.to_pc.is_none());
 
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
-    let result = <BranchEqualIntegration<RV32_NUM_LIMBS> as MachineIntegration<
+    let result = <BranchEqualIntegration<RV32_NUM_LIMBS> as VmIntegration<
         F,
         Rv32BranchAdapter<F>,
     >>::execute_instruction(&integration, &instruction, F::zero(), [x, y]);

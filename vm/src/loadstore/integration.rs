@@ -10,8 +10,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes,
+        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
+        VmIntegration, VmIntegrationAir, Reads, Result, Writes,
     },
     program::Instruction,
 };
@@ -41,10 +41,10 @@ impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreAir<F, NUM_CELLS>
 
 impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F> for LoadStoreAir<F, NUM_CELLS> {}
 
-impl<AB, I, const NUM_CELLS: usize> MachineIntegrationAir<AB, I> for LoadStoreAir<AB::F, NUM_CELLS>
+impl<AB, I, const NUM_CELLS: usize> VmIntegrationAir<AB, I> for LoadStoreAir<AB::F, NUM_CELLS>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
@@ -72,7 +72,7 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_CELLS: usize> MachineIntegration<F, A>
+impl<F: PrimeField32, A: VmAdapter<F>, const NUM_CELLS: usize> VmIntegration<F, A>
     for LoadStoreIntegration<F, NUM_CELLS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,
@@ -86,7 +86,7 @@ where
         &self,
         instruction: &Instruction<F>,
         _from_pc: F,
-        reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
         let opcode = Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
         let data: [[F; NUM_CELLS]; 2] = reads.into();

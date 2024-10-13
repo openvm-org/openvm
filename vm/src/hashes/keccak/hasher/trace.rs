@@ -16,7 +16,7 @@ use tiny_keccak::keccakf;
 
 use super::{KeccakVmChip, KECCAK_DIGEST_WRITES, KECCAK_WORD_SIZE};
 use crate::{
-    arch::MachineChip,
+    arch::VmChip,
     hashes::keccak::hasher::{
         columns::{KeccakOpcodeCols, KeccakVmCols},
         KECCAK_ABSORB_READS, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
@@ -24,7 +24,7 @@ use crate::{
     memory::{MemoryReadRecord, MemoryWriteRecord},
 };
 
-impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
+impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
     /// This should only be called once. It takes all records from the chip state.
     fn generate_trace(mut self) -> RowMajorMatrix<F> {
         let records = std::mem::take(&mut self.records);

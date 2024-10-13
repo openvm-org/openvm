@@ -17,8 +17,8 @@ use super::{
 use crate::{
     arch::{
         instructions::CastfOpcode,
-        testing::{memory::gen_pointer, MachineChipTestBuilder},
-        MachineChip,
+        testing::{memory::gen_pointer, VmChipTestBuilder},
+        VmChip,
     },
     program::Instruction,
 };
@@ -30,7 +30,7 @@ fn generate_uint_number(rng: &mut StdRng) -> u32 {
 }
 
 fn prepare_castf_rand_write_execute(
-    tester: &mut MachineChipTestBuilder<F>,
+    tester: &mut VmChipTestBuilder<F>,
     chip: &mut CastFChip<F>,
     y: u32,
     rng: &mut StdRng,
@@ -65,7 +65,7 @@ fn prepare_castf_rand_write_execute(
 #[test]
 fn castf_rand_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -85,7 +85,7 @@ fn castf_rand_test() {
 
 #[test]
 fn negative_castf_overflow_test() {
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -120,7 +120,7 @@ fn negative_castf_overflow_test() {
 
 #[test]
 fn negative_castf_memread_test() {
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -155,7 +155,7 @@ fn negative_castf_memread_test() {
 
 #[test]
 fn negative_castf_memwrite_test() {
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -190,7 +190,7 @@ fn negative_castf_memwrite_test() {
 
 #[test]
 fn negative_castf_as_test() {
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),

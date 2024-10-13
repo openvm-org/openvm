@@ -20,7 +20,7 @@ use crate::{
             Poseidon2Opcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, MachineChipTestBuilder, MachineChipTester},
+        testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
     },
     hashes::poseidon2::Poseidon2VmIoCols,
     program::Instruction,
@@ -59,10 +59,10 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
         .collect()
 }
 
-fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
+fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester {
     let elem_range = || 1..=100;
 
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let mut chip = Poseidon2Chip::from_poseidon2_config(
         Poseidon2Config::<16, _>::new_p3_baby_bear_16(),
         7,

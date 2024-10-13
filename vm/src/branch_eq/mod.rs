@@ -1,4 +1,4 @@
-use crate::arch::{MachineChipWrapper, Rv32BranchAdapter};
+use crate::arch::{VmChipWrapper, Rv32BranchAdapter};
 
 mod integration;
 pub use integration::*;
@@ -7,4 +7,4 @@ pub use integration::*;
 mod tests;
 
 pub type Rv32BranchEqualChip<F> =
-    MachineChipWrapper<F, Rv32BranchAdapter<F>, BranchEqualIntegration<4>>;
+    VmChipWrapper<F, Rv32BranchAdapter<F>, BranchEqualIntegration<4>>;

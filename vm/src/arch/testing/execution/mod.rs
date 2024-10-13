@@ -9,7 +9,7 @@ use air::{DummyExecutionInteractionCols, ExecutionDummyAir};
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::arch::{ExecutionBus, ExecutionState, MachineChip};
+use crate::arch::{ExecutionBus, ExecutionState, VmChip};
 
 pub mod air;
 
@@ -61,7 +61,7 @@ impl<F: PrimeField32> ExecutionTester<F> {
     }*/
 }
 
-impl<F: Field> MachineChip<F> for ExecutionTester<F> {
+impl<F: Field> VmChip<F> for ExecutionTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
