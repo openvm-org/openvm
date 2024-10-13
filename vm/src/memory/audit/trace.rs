@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use afs_primitives::{sub_chip::LocalTraceInstructions, utils::next_power_of_two_or_zero};
+use itertools::Itertools;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -47,7 +48,7 @@ impl<F: PrimeField32> MemoryAuditChip<F> {
 
         let mut rows_concat = Vec::with_capacity(trace_height * self.air.air_width());
         let mut prev_idx = vec![0, 0];
-        for (addr, initial_data) in self.initial_memory.iter() {
+        for (addr, initial_data) in self.initial_memory.iter().sorted() {
             let TimestampedValue {
                 timestamp: final_clk,
                 value: final_data,
