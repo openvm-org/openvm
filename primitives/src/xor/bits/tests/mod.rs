@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
+    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
@@ -53,9 +53,9 @@ fn test_xor_bits_chip() {
 
     let mut all_chips: Vec<Arc<dyn AnyRap<_>>> = vec![];
     for requester in &requesters {
-        all_chips.push(Box::new(requester.air));
+        all_chips.push(Arc::new(requester.air));
     }
-    all_chips.push(Box::new(xor_chip.air));
+    all_chips.push(Arc::new(xor_chip.air));
 
     let all_traces = requesters_traces
         .into_iter()
@@ -107,7 +107,7 @@ fn negative_test_xor_bits_chip() {
         *debug.lock().unwrap() = false;
     });
     let result = BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![dummy_requester, xor_chip.air],
+        any_rap_arc_vec![dummy_requester, xor_chip.air],
         vec![dummy_trace, xor_chip_trace],
     );
 

@@ -6,7 +6,7 @@ use std::{
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
@@ -107,7 +107,7 @@ fn audit_air_test() {
     let range_checker_trace = range_checker.generate_trace();
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![
+        any_rap_arc_vec![
             audit_chip.air,
             range_checker.air,
             init_memory_dummy_air,

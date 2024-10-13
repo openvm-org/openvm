@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, mem::size_of};
+use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
 use afs_stark_backend::rap::AnyRap;
 use air::{DummyExecutionInteractionCols, ExecutionDummyAir};
@@ -76,7 +76,7 @@ impl<F: Field> MachineChip<F> for ExecutionTester<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(ExecutionDummyAir::new(self.bus))
+        Arc::new(ExecutionDummyAir::new(self.bus))
     }
 
     fn air_name(&self) -> String {

@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of};
+use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, sync::Arc};
 
 use afs_stark_backend::{interaction::InteractionType, rap::AnyRap};
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
@@ -111,7 +111,7 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
+        Arc::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
     }
 
     fn air_name(&self) -> String {

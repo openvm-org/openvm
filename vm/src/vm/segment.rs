@@ -736,7 +736,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         let trace = self.connector_chip.generate_trace();
         result.air_infos.push(AirInfo::simple_no_pis(
-            Box::new(self.connector_chip.air),
+            Arc::new(self.connector_chip.air),
             trace,
         ));
 

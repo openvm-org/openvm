@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use afs_primitives::{ecc::EcAuxCols as EcPrimitiveAuxCols, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::rap::get_air_name;
 use num_bigint_dig::BigUint;
@@ -41,7 +43,7 @@ impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
     where
         p3_uni_stark::Domain<SC>: p3_commit::PolynomialSpace<Val = F>,
     {
-        Box::new(self.air.clone())
+        Arc::new(self.air.clone())
     }
 
     fn air_name(&self) -> String {
@@ -133,7 +135,7 @@ impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
     where
         p3_uni_stark::Domain<SC>: p3_commit::PolynomialSpace<Val = F>,
     {
-        Box::new(self.air.clone())
+        Arc::new(self.air.clone())
     }
 
     fn air_name(&self) -> String {

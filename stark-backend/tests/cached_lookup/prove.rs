@@ -1,6 +1,7 @@
 use std::{
     fs::{self, File},
     iter,
+    sync::Arc,
     time::Instant,
 };
 
@@ -33,7 +34,7 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     partition: bool,
 ) -> (
     MultiStarkVerifyingKey<SC>,
-    DummyInteractionAir,
+    Arc<DummyInteractionAir>,
     Proof<SC>,
     ProverBenchmarks,
 )
@@ -47,6 +48,7 @@ where
 {
     let mut air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
     air.partition = partition;
+    let air = Arc::new(air);
 
     // Single row major matrix for |count|fields[..]|
     let nopart_trace = RowMajorMatrix::new(
@@ -79,7 +81,7 @@ where
     );
 
     let mut keygen_builder = engine.keygen_builder();
-    let air_id = keygen_builder.add_air(&air);
+    let air_id = keygen_builder.add_air(air.clone());
     let pk = keygen_builder.generate_pk();
     let vk = pk.get_vk();
 
@@ -98,14 +100,14 @@ where
             prover_data: cached_trace_data,
         }];
         AirProofInput {
-            air: &air,
+            air: air.clone(),
             cached_mains,
             common_main: Some(part_count_trace),
             public_values: vec![],
         }
     } else {
         AirProofInput {
-            air: &air,
+            air: air.clone(),
             cached_mains: vec![],
             common_main: Some(nopart_trace),
             public_values: vec![],

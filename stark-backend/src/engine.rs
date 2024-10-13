@@ -101,10 +101,10 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         air_infos
             .iter()
             .map(|air_info| {
-                let air = &air_info.air;
+                let air = air_info.air.clone();
                 assert_eq!(air_info.cached_traces.len(), air.cached_main_widths().len());
                 assert_eq!(air_info.common_trace.width, air.common_main_width());
-                keygen_builder.add_air(air.as_ref())
+                keygen_builder.add_air(air)
             })
             .collect()
     }

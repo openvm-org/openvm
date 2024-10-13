@@ -28,7 +28,7 @@ use crate::{
 fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumentation<SC>>(
     engine: &mut E,
     vk: MultiStarkVerifyingKey<SC>,
-    air: DummyInteractionAir,
+    air: &DummyInteractionAir,
     proof: Proof<SC>,
 ) -> StarkHashStatistics<BenchParams> {
     let degree = proof.per_air[0].degree;
@@ -73,7 +73,7 @@ fn instrumented_prove_and_verify(
 
     let (vk, air, proof, _) = prove(&engine, trace, partition);
     engine.perm.is_on = true;
-    instrumented_verify(&mut engine, vk, air, proof)
+    instrumented_verify(&mut engine, vk, &air, proof)
 }
 
 fn instrumented_verifier_comparison(

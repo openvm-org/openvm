@@ -200,7 +200,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air)
+        Arc::new(self.air)
     }
 
     fn air_name(&self) -> String {
@@ -225,7 +225,7 @@ impl<F: PrimeField32, const N: usize> MachineChip<F> for Arc<RangeTupleCheckerCh
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air)
+        Arc::new(self.air)
     }
 
     fn air_name(&self) -> String {
@@ -250,7 +250,7 @@ impl<F: PrimeField32, const M: usize> MachineChip<F> for Arc<XorLookupChip<M>> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air)
+        Arc::new(self.air)
     }
 
     fn air_name(&self) -> String {

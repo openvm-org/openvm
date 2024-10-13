@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use itertools::Itertools;
 use p3_field::AbstractExtensionField;
 use p3_matrix::Matrix;
@@ -17,8 +19,8 @@ use crate::{
 pub mod types;
 pub(crate) mod view;
 
-struct AirKeygenBuilder<'a, SC: StarkGenericConfig> {
-    air: &'a dyn AnyRap<SC>,
+struct AirKeygenBuilder<SC: StarkGenericConfig> {
+    air: Arc<dyn AnyRap<SC>>,
     prep_keygen_data: PrepKeygenData<SC>,
     interaction_chunk_size: Option<usize>,
 }
@@ -28,7 +30,7 @@ struct AirKeygenBuilder<'a, SC: StarkGenericConfig> {
 pub struct MultiStarkKeygenBuilder<'a, SC: StarkGenericConfig> {
     pub config: &'a SC,
     /// Information for partitioned AIRs.
-    partitioned_airs: Vec<AirKeygenBuilder<'a, SC>>,
+    partitioned_airs: Vec<AirKeygenBuilder<SC>>,
 }
 
 impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
@@ -42,7 +44,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     /// Default way to add a single Interactive AIR.
     /// Returns `air_id`
     #[instrument(level = "debug", skip_all)]
-    pub fn add_air(&mut self, air: &'a dyn AnyRap<SC>) -> usize {
+    pub fn add_air(&mut self, air: Arc<dyn AnyRap<SC>>) -> usize {
         self.add_air_with_interaction_chunk_size(air, None)
     }
 
@@ -50,7 +52,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     /// Returns `air_id`
     pub fn add_air_with_interaction_chunk_size(
         &mut self,
-        air: &'a dyn AnyRap<SC>,
+        air: Arc<dyn AnyRap<SC>>,
         interaction_chunk_size: Option<usize>,
     ) -> usize {
         self.partitioned_airs.push(AirKeygenBuilder::new(
@@ -125,9 +127,9 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     }
 }
 
-impl<'a, SC: StarkGenericConfig> AirKeygenBuilder<'a, SC> {
-    fn new(pcs: &SC::Pcs, air: &'a dyn AnyRap<SC>, interaction_chunk_size: Option<usize>) -> Self {
-        let prep_keygen_data = compute_prep_data_for_air(pcs, air);
+impl<SC: StarkGenericConfig> AirKeygenBuilder<SC> {
+    fn new(pcs: &SC::Pcs, air: Arc<dyn AnyRap<SC>>, interaction_chunk_size: Option<usize>) -> Self {
+        let prep_keygen_data = compute_prep_data_for_air(pcs, air.as_ref());
         AirKeygenBuilder {
             air,
             prep_keygen_data,
@@ -219,7 +221,7 @@ impl<'a, SC: StarkGenericConfig> AirKeygenBuilder<'a, SC> {
             after_challenge: vec![],
         };
         get_symbolic_builder(
-            self.air,
+            self.air.as_ref(),
             &width,
             &[],
             &[],

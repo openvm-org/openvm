@@ -1,8 +1,8 @@
-use std::iter;
+use std::{iter, sync::Arc};
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use dummy::DummyAir;
@@ -62,8 +62,8 @@ fn test_bitwise_operation_lookup() {
 
     let chips = dummies
         .into_iter()
-        .map(|list| Box::new(list) as Arc<dyn AnyRap<_>>)
-        .chain(iter::once(Box::new(lookup.air) as Arc<dyn AnyRap<_>>))
+        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
+        .chain(iter::once(Arc::new(lookup.air) as Arc<dyn AnyRap<_>>))
         .collect::<Vec<Arc<dyn AnyRap<_>>>>();
 
     let mut traces = lists
@@ -95,7 +95,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperationLookupOpcode)) {
     list.push(bad_row);
 
     let dummy = DummyAir::new(bus);
-    let chips = any_rap_box_vec![dummy, lookup.air];
+    let chips = any_rap_arc_vec![dummy, lookup.air];
 
     let traces = vec![
         RowMajorMatrix::new(

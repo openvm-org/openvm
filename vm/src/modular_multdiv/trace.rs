@@ -1,4 +1,4 @@
-use std::{array, borrow::BorrowMut, iter::repeat};
+use std::{array, borrow::BorrowMut, iter::repeat, sync::Arc};
 
 use afs_primitives::bigint::{
     check_carry_to_zero::get_carry_max_abs_and_bits,
@@ -102,7 +102,7 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air.clone())
+        Arc::new(self.air.clone())
     }
 
     fn air_name(&self) -> String {

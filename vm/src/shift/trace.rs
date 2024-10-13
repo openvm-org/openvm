@@ -1,4 +1,4 @@
-use std::{array, borrow::BorrowMut};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
 use afs_stark_backend::{
     config::StarkGenericConfig,
@@ -109,7 +109,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air)
+        Arc::new(self.air)
     }
 
     fn air_name(&self) -> String {

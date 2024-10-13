@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use afs_stark_backend::{
     prover::{
         types::{AirProofInput, CommittedTraceData, ProofInput},
@@ -33,10 +35,10 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let y_width = ys[0].len();
     let y_trace = RowMajorMatrix::new(ys.into_iter().flatten().collect_vec(), y_width);
 
-    let air = SumAir(y_width);
+    let air = Arc::new(SumAir(y_width));
 
     let mut keygen_builder = engine.keygen_builder();
-    let air_id = keygen_builder.add_air(&air);
+    let air_id = keygen_builder.add_air(air.clone());
     let pk = keygen_builder.generate_pk();
     let vk = pk.get_vk();
 
@@ -49,7 +51,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     };
     // Load x normally
     let air_proof_input = AirProofInput {
-        air: &air,
+        air,
         cached_mains: vec![cached_main],
         common_main: Some(x_trace),
         public_values: vec![],

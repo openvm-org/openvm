@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use afs_stark_backend::rap::{get_air_name, AnyRap};
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
@@ -38,7 +40,7 @@ impl<F: PrimeField32> MachineChip<F> for Poseidon2Chip<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air.clone())
+        Arc::new(self.air.clone())
     }
 
     fn air_name(&self) -> String {

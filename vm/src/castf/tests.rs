@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -109,7 +109,7 @@ fn negative_castf_overflow_test() {
     disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![air, range_air],
+            any_rap_arc_vec![air, range_air],
             vec![trace, range_trace],
         )
         .err(),
@@ -144,7 +144,7 @@ fn negative_castf_memread_test() {
     disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![air, range_air],
+            any_rap_arc_vec![air, range_air],
             vec![trace, range_trace],
         )
         .err(),
@@ -179,7 +179,7 @@ fn negative_castf_memwrite_test() {
     disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![air, range_air],
+            any_rap_arc_vec![air, range_air],
             vec![trace, range_trace],
         )
         .err(),
@@ -214,7 +214,7 @@ fn negative_castf_as_test() {
     disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![air, range_air],
+            any_rap_arc_vec![air, range_air],
             vec![trace, range_trace],
         )
         .err(),

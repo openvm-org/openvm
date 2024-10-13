@@ -56,9 +56,9 @@ fn test_list_range_checker() {
 
     let mut all_chips: Vec<Arc<dyn AnyRap<_>>> = vec![];
     for list in lists {
-        all_chips.push(Box::new(list.air));
+        all_chips.push(Arc::new(list.air));
     }
-    all_chips.push(Box::new(range_checker.air));
+    all_chips.push(Arc::new(range_checker.air));
 
     let all_traces = lists_traces
         .into_iter()

@@ -1,4 +1,4 @@
-use std::iter;
+use std::{iter, sync::Arc};
 
 use afs_stark_backend::utils::AirInfo;
 use ax_sdk::{
@@ -72,8 +72,8 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     println!("counter trace height = {}", counter_trace.height());
 
     BabyBearPoseidon2Engine::run_test_fast(vec![
-        AirInfo::no_pis(Box::new(air), vec![cached_trace], main_trace),
-        AirInfo::simple_no_pis(Box::new(counter_air), counter_trace),
+        AirInfo::no_pis(Arc::new(air), vec![cached_trace], main_trace),
+        AirInfo::simple_no_pis(Arc::new(counter_air), counter_trace),
     ])
     .expect("Verification failed");
 }
@@ -170,8 +170,8 @@ fn test_program_negative() {
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
     BabyBearPoseidon2Engine::run_test_fast(vec![
-        AirInfo::no_pis(Box::new(air), vec![cached_trace], common_trace),
-        AirInfo::simple_no_pis(Box::new(counter_air), counter_trace),
+        AirInfo::no_pis(Arc::new(air), vec![cached_trace], common_trace),
+        AirInfo::simple_no_pis(Arc::new(counter_air), counter_trace),
     ])
     .expect("Verification failed");
 }

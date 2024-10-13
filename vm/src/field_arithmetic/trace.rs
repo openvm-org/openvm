@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use afs_stark_backend::rap::{get_air_name, AnyRap};
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
@@ -111,7 +113,7 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air)
+        Arc::new(self.air)
     }
 
     fn current_trace_height(&self) -> usize {

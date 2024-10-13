@@ -1,4 +1,4 @@
-use std::iter;
+use std::{iter, sync::Arc};
 
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
@@ -71,9 +71,9 @@ pub fn prove_and_verify_indexless_lookups(
     );
     {
         let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
-        let receiver_air_id = keygen_builder.add_air(&receiver_air);
+        let receiver_air_id = keygen_builder.add_air(Arc::new(receiver_air));
         // Auto-adds sender matrix
-        let sender_air_id = keygen_builder.add_air(&sender_air);
+        let sender_air_id = keygen_builder.add_air(Arc::new(sender_air));
         let pk = keygen_builder.generate_pk();
         let committer = TraceCommitter::new(config.pcs());
         let cached_trace_data = committer.commit(vec![recv_fields_trace.clone()]);
@@ -82,7 +82,7 @@ pub fn prove_and_verify_indexless_lookups(
                 (
                     receiver_air_id,
                     AirProofInput {
-                        air: &receiver_air,
+                        air: Arc::new(receiver_air),
                         cached_mains: vec![CommittedTraceData {
                             raw_data: recv_fields_trace,
                             prover_data: cached_trace_data,
@@ -94,7 +94,7 @@ pub fn prove_and_verify_indexless_lookups(
                 (
                     sender_air_id,
                     AirProofInput {
-                        air: &sender_air,
+                        air: Arc::new(sender_air),
                         cached_mains: vec![],
                         common_main: Some(sender_trace),
                         public_values: vec![],

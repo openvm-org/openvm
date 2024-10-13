@@ -36,7 +36,7 @@ where
 {
     setup_tracing();
 
-    let fib_air = Box::new(FibonacciAir {});
+    let fib_air = Arc::new(FibonacciAir {});
     let trace = generate_fib_trace_rows::<Val<SC>>(n);
     let pvs = vec![
         Val::<SC>::from_canonical_u32(0),
@@ -93,10 +93,10 @@ where
         receiver_air.field_width() + 1,
     );
     let range_checker_trace = sum_chip.range_checker.generate_trace();
-    let sum_air = Box::new(sum_chip.air);
-    let sender_air = Box::new(sender_air);
-    let receiver_air = Box::new(receiver_air);
-    let range_checker_air = Box::new(sum_chip.range_checker.air);
+    let sum_air = Arc::new(sum_chip.air);
+    let sender_air = Arc::new(sender_air);
+    let receiver_air = Arc::new(receiver_air);
+    let range_checker_air = Arc::new(sum_chip.range_checker.air);
 
     let range_checker_air_info = AirInfo::simple_no_pis(range_checker_air, range_checker_trace);
     let sum_air_info = AirInfo::simple_no_pis(sum_air, sum_trace);
@@ -131,8 +131,8 @@ where
         receiver_air.field_width() + 1,
     );
 
-    let sender_air_info = AirInfo::simple_no_pis(Box::new(sender_air), sender_trace);
-    let receiver_air_info = AirInfo::simple_no_pis(Box::new(receiver_air), receiver_trace);
+    let sender_air_info = AirInfo::simple_no_pis(Arc::new(sender_air), sender_trace);
+    let receiver_air_info = AirInfo::simple_no_pis(Arc::new(receiver_air), receiver_trace);
 
     StarkForTest {
         air_infos: vec![sender_air_info, receiver_air_info],
@@ -186,10 +186,7 @@ fn test_unordered() {
 
 #[test]
 fn test_optional_air() {
-    use afs_stark_backend::{
-        engine::StarkEngine,
-        prover::types::{Chip, ProofInput},
-    };
+    use afs_stark_backend::{chip::Chip, engine::StarkEngine, prover::types::ProofInput};
     setup_tracing();
 
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);

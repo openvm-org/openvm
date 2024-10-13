@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, sync::Arc};
 
 use afs_stark_backend::{interaction::InteractionBuilder, rap::AnyRap};
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};

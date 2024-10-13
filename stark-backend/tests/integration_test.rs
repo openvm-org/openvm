@@ -1,15 +1,17 @@
 #![feature(trait_upcasting)]
 #![allow(incomplete_features)]
 
+use afs_stark_backend::chip::Chip;
 /// Test utils
-use ax_sdk::{any_rap_box_vec, config, utils};
 use ax_sdk::{
+    any_rap_arc_vec, config,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     dummy_airs::{
         fib_air::chip::FibonacciChip,
         interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
     },
     engine::StarkFriEngine,
+    utils,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -40,7 +42,7 @@ fn test_single_fib_stark() {
 
     let trace = generate_trace_rows::<Val>(a, b, n);
 
-    BabyBearPoseidon2Engine::run_simple_test_fast(any_rap_box_vec![air], vec![trace], vec![pis])
+    BabyBearPoseidon2Engine::run_simple_test_fast(any_rap_arc_vec![air], vec![trace], vec![pis])
         .expect("Verification failed");
 }
 
@@ -64,7 +66,7 @@ fn test_single_fib_triples_stark() {
 
     let trace = generate_trace_rows::<Val>(a, b, n);
 
-    BabyBearPoseidon2Engine::run_simple_test_fast(any_rap_box_vec![air], vec![trace], vec![pis])
+    BabyBearPoseidon2Engine::run_simple_test_fast(any_rap_arc_vec![air], vec![trace], vec![pis])
         .expect("Verification failed");
 }
 
@@ -89,7 +91,7 @@ fn test_single_fib_selector_stark() {
 
     let trace = generate_trace_rows::<Val>(a, b, air.sels());
 
-    BabyBearPoseidon2Engine::run_simple_test_fast(any_rap_box_vec![air], vec![trace], vec![pis])
+    BabyBearPoseidon2Engine::run_simple_test_fast(any_rap_arc_vec![air], vec![trace], vec![pis])
         .expect("Verification failed");
 }
 
@@ -123,7 +125,7 @@ fn test_double_fib_starks() {
     let trace2 = fib_selector_air::trace::generate_trace_rows::<Val>(a, b, air2.sels());
 
     BabyBearPoseidon2Engine::run_simple_test_fast(
-        any_rap_box_vec![air1, air2],
+        any_rap_arc_vec![air1, air2],
         vec![trace1, trace2],
         vec![pis1, pis2],
     )
@@ -132,10 +134,7 @@ fn test_double_fib_starks() {
 
 #[test]
 fn test_optional_air() {
-    use afs_stark_backend::{
-        engine::StarkEngine,
-        prover::types::{Chip, ProofInput},
-    };
+    use afs_stark_backend::{engine::StarkEngine, prover::types::ProofInput};
     setup_tracing();
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());

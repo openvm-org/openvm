@@ -21,7 +21,7 @@ type Val = BabyBear;
 
 pub fn verify_interactions(
     traces: Vec<RowMajorMatrix<Val>>,
-    airs: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
+    airs: Vec<Arc<dyn AnyRap<BabyBearPoseidon2Config>>>,
     pis: Vec<Vec<Val>>,
 ) -> Result<(), VerificationError> {
     let log_trace_degree = 3;
@@ -31,7 +31,7 @@ pub fn verify_interactions(
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
     let air_ids = airs
         .iter()
-        .map(|air| keygen_builder.add_air(*air))
+        .map(|air| keygen_builder.add_air(air.clone()))
         .collect_vec();
     let pk = keygen_builder.generate_pk();
     let vk = pk.get_vk();
@@ -41,7 +41,7 @@ pub fn verify_interactions(
             (
                 air_id,
                 AirProofInput {
-                    air: Arc::new(air.clone()),
+                    air,
                     cached_mains: vec![],
                     common_main: Some(trace),
                     public_values: pvs,

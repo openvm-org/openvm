@@ -203,7 +203,7 @@ fn test_memory_chip() {
         })
         .collect_vec();
 
-    let memory_requester_air = Box::new(MemoryRequesterAir {
+    let memory_requester_air = Arc::new(MemoryRequesterAir {
         memory_bridge: memory_chip.memory_bridge(),
     });
 

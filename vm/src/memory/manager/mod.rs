@@ -413,13 +413,13 @@ impl<F: PrimeField32> MemoryChip<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         vec![
-            Box::new(self.get_audit_air()),
-            Box::new(self.access_adapter_air::<2>()),
-            Box::new(self.access_adapter_air::<4>()),
-            Box::new(self.access_adapter_air::<8>()),
-            Box::new(self.access_adapter_air::<16>()),
-            Box::new(self.access_adapter_air::<32>()),
-            Box::new(self.access_adapter_air::<64>()),
+            Arc::new(self.get_audit_air()),
+            Arc::new(self.access_adapter_air::<2>()),
+            Arc::new(self.access_adapter_air::<4>()),
+            Arc::new(self.access_adapter_air::<8>()),
+            Arc::new(self.access_adapter_air::<16>()),
+            Arc::new(self.access_adapter_air::<32>()),
+            Arc::new(self.access_adapter_air::<64>()),
         ]
     }
 

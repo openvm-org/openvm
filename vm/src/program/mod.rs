@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display};
+use std::{error::Error, fmt::Display, sync::Arc};
 
 use afs_stark_backend::utils::AirInfo;
 use backtrace::Backtrace;
@@ -280,6 +280,6 @@ where
         let air = program_chip.air.clone();
         let cached_trace = program_chip.generate_cached_trace();
         let common_trace = program_chip.generate_trace();
-        AirInfo::no_pis(Box::new(air), vec![cached_trace], common_trace)
+        AirInfo::no_pis(Arc::new(air), vec![cached_trace], common_trace)
     }
 }

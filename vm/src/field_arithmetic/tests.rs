@@ -2,7 +2,7 @@ use afs_stark_backend::{
     prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError,
 };
 use ax_sdk::{
-    any_rap_box_vec,
+    any_rap_arc_vec,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing},
     engine::StarkFriEngine,
     utils::create_seeded_rng,
@@ -150,7 +150,7 @@ fn field_arithmetic_air_zero_div_zero() {
     });
 
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![air], vec![trace])
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
             .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"

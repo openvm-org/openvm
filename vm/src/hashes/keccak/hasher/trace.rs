@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::BorrowMut};
+use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
 use afs_stark_backend::rap::{get_air_name, AnyRap};
 use p3_air::BaseAir;
@@ -197,7 +197,7 @@ impl<F: PrimeField32> MachineChip<F> for KeccakVmChip<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air)
+        Arc::new(self.air)
     }
 
     fn air_name(&self) -> String {

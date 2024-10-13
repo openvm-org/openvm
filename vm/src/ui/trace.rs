@@ -1,4 +1,4 @@
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_stark_backend::{
     config::StarkGenericConfig,
@@ -47,7 +47,7 @@ impl<F: PrimeField32> MachineChip<F> for UiChip<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air)
+        Arc::new(self.air)
     }
 
     fn air_name(&self) -> String {
