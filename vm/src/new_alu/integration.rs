@@ -56,7 +56,7 @@ where
     AB: InteractionBuilder,
     I: MachineAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
-    I::Writes: From<[AB::Expr; NUM_LIMBS]>,
+    I::Writes: From<[[AB::Expr; NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
 {
     fn eval(
@@ -144,7 +144,7 @@ where
         IntegrationInterface {
             to_pc: None,
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
-            writes: cols.c.map(Into::into).into(),
+            writes: [cols.c.map(Into::into)].into(),
             instruction: MinimalInstruction {
                 is_valid,
                 opcode: expected_opcode,
@@ -182,11 +182,13 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    MachineIntegration<F, A> for ArithmeticLogicIntegration<NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegration<F, A>
+    for ArithmeticLogicIntegration<NUM_LIMBS, LIMB_BITS>
 where
+    F: PrimeField32,
+    A: MachineAdapter<F>,
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
-    Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
+    Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
 {
     type Record = ArithmeticLogicRecord<F, NUM_LIMBS, LIMB_BITS>;
     type Air = ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>;
@@ -209,7 +211,7 @@ where
         // Integration doesn't modify PC directly, so we let Adapter handle the increment
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
             to_pc: None,
-            writes: a.map(F::from_canonical_u32).into(),
+            writes: [a.map(F::from_canonical_u32)].into(),
         };
 
         if opcode == AluOpcode::ADD || opcode == AluOpcode::SUB {
