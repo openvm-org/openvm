@@ -11,6 +11,7 @@ use super::trace::SingleRapCommittedTraceView;
 use crate::{
     air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicConstraints},
     config::{Com, PcsProverData},
+    parizip,
     rap::{AnyRap, PartitionedBaseAir, Rap},
 };
 
@@ -68,13 +69,8 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
     {
-        #[cfg(feature = "parallel")]
-        let inner = (raps, qvks, traces, public_values)
-            .into_par_iter() // uses rayon multizip
-            .map(|(rap, qvk, trace, pis)| self.single_rap_quotient_values(rap, qvk, trace, pis))
-            .collect();
-        #[cfg(not(feature = "parallel"))]
-        let inner = itertools::izip!(raps, qvks, traces, public_values)
+        let raps = raps.iter().map(|rap| rap.as_ref()).collect_vec();
+        let inner = parizip!(raps, qvks, traces, public_values)
             .map(|(rap, qvk, trace, pis)| self.single_rap_quotient_values(rap, qvk, trace, pis))
             .collect();
         QuotientData { inner }
@@ -82,7 +78,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
 
     pub(crate) fn single_rap_quotient_values<'a, R>(
         &self,
-        rap: impl AsRef<R>,
+        rap: &'a R,
         qvk: &QuotientVKData<'a, SC>,
         trace: &SingleRapCommittedTraceView<'a, SC>,
         public_values: &'a [Val<SC>],
@@ -135,7 +131,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             .unzip();
 
         let quotient_values = compute_single_rap_quotient_values(
-            rap.as_ref(),
+            rap,
             qvk.symbolic_constraints,
             trace_domain,
             quotient_domain,

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use itertools::izip;
 use p3_matrix::dense::DenseMatrix;
 use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
@@ -127,7 +128,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         let committer = TraceCommitter::new(prover.pcs());
 
         // Commit to the cached traces
-        let air_proof_inputs = parizip!(air_ids, air_infos)
+        let air_proof_inputs = izip!(air_ids, air_infos)
             .map(|(air_id, air_info)| {
                 let cached_mains = parizip!(air_info.cached_traces.clone())
                     .map(|trace| CommittedTraceData {

@@ -106,8 +106,8 @@ impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32MultAdapterAir {
 
     fn eval(
         &self,
-        builder: &mut AB,
-        local: &[AB::Var],
+        _builder: &mut AB,
+        _local: &[AB::Var],
         _ctx: IntegrationInterface<AB::Expr, Self::Interface>,
     ) {
         todo!()

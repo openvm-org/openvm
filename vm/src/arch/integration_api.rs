@@ -6,15 +6,13 @@ use afs_stark_backend::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
     },
     config::{StarkGenericConfig, Val},
-    interaction::InteractionBuilder,
-    p3_uni_stark::SymbolicAirBuilder,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelSliceMut};
+use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, MachineChip, Result};
 use crate::{
@@ -212,8 +210,8 @@ where
 impl<F, A, M> MachineChip<F> for MachineChipWrapper<F, A, M>
 where
     F: PrimeField32,
-    A: MachineAdapter<F>,
-    M: MachineIntegration<F, A>,
+    A: MachineAdapter<F> + Sync,
+    M: MachineIntegration<F, A> + Sync,
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
