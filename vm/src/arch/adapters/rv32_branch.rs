@@ -8,8 +8,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, MachineAdapter,
-        MachineAdapterInterface, Result,
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
+        MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols},
@@ -98,6 +98,19 @@ impl<F: Field> BaseAir<F> for Rv32BranchAdapterAir {
 impl<AB: InteractionBuilder> Air<AB> for Rv32BranchAdapterAir {
     fn eval(&self, _builder: &mut AB) {
         todo!();
+    }
+}
+
+impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32BranchAdapterAir {
+    type Interface = Rv32BranchAdapterInterface<AB::Expr>;
+
+    fn eval(
+        &self,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _ctx: IntegrationInterface<AB::Expr, Self::Interface>,
+    ) {
+        todo!()
     }
 }
 
