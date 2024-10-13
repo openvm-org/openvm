@@ -152,7 +152,7 @@ pub struct IntegrationInterface<T, I: MachineAdapterInterface<T>> {
     pub instruction: I::ProcessedInstruction,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MachineChipWrapper<F: PrimeField32, A: MachineAdapter<F>, M: MachineIntegration<F, A>> {
     pub adapter: A,
     pub inner: M,

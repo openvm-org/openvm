@@ -83,7 +83,7 @@ impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_LIMBS: usize, const LIMB_B
     MachineIntegration<F, A> for LessThanIntegration<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
-    Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
+    Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
 {
     // TODO: update for trace generation
     type Record = u32;
@@ -111,7 +111,7 @@ where
         // Integration doesn't modify PC directly, so we let Adapter handle the increment
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
             to_pc: None,
-            writes: writes.map(F::from_canonical_u32).into(),
+            writes: [writes.map(F::from_canonical_u32)].into(),
         };
 
         // TODO: send XorLookupChip requests
