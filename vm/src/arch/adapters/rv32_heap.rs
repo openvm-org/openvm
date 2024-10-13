@@ -1,8 +1,7 @@
 use std::{marker::PhantomData, mem::size_of};
 
 use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::{read_rv32_register, RV32_REGISTER_NUM_LANES};

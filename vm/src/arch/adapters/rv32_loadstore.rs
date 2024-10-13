@@ -2,8 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::VariableRangeCheckerChip;
-use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::compose;
@@ -13,8 +12,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter,
-        MachineAdapterInterface, Result, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        ExecutionState, InstructionOutput, MachineAdapter, MachineAdapterInterface, Result,
+        RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},

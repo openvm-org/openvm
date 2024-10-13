@@ -6,10 +6,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
-    arch::{
-        ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter,
-        MachineAdapterInterface, Result,
-    },
+    arch::{ExecutionState, InstructionOutput, MachineAdapter, MachineAdapterInterface, Result},
     memory::{MemoryChip, MemoryReadRecord, MemoryWriteRecord},
     program::Instruction,
 };
