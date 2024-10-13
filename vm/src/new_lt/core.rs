@@ -10,7 +10,7 @@ use crate::{
     arch::{
         instructions::{LessThanOpcode, UsizeOpcode},
         AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreChip, VmCoreAir, Writes,
+        VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -35,12 +35,12 @@ pub struct LessThanCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct LessThanAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct LessThanCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: XorBus,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for LessThanAir<NUM_LIMBS, LIMB_BITS>
+    for LessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         LessThanCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -48,7 +48,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for LessThanAir<NUM_LIMBS, LIMB_BITS>
+    for LessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, _builder: &mut AB) {
         todo!();
@@ -56,12 +56,12 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for LessThanAir<NUM_LIMBS, LIMB_BITS>
+    for LessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for LessThanAir<NUM_LIMBS, LIMB_BITS>
+    for LessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -77,16 +77,16 @@ where
 }
 
 #[derive(Debug)]
-pub struct LessThanCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: LessThanAir<NUM_LIMBS, LIMB_BITS>,
+pub struct LessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: LessThanCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCore<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
         Self {
-            air: LessThanAir {
+            air: LessThanCoreAir {
                 bus: xor_lookup_chip.bus(),
             },
             xor_lookup_chip,
@@ -96,14 +96,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCore<NUM_LIMBS, LIM
 }
 
 impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmCoreChip<F, A> for LessThanCore<NUM_LIMBS, LIMB_BITS>
+    VmCoreChip<F, A> for LessThanCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Air = LessThanAir<NUM_LIMBS, LIMB_BITS>;
+    type Air = LessThanCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

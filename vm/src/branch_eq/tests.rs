@@ -1,7 +1,7 @@
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::core::{solve_eq, BranchEqualCore};
+use super::core::{solve_eq, BranchEqualCoreChip};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
@@ -15,7 +15,7 @@ type F = BabyBear;
 
 #[test]
 fn execute_pc_increment_sanity_test() {
-    let core = BranchEqualCore::<RV32_NUM_LIMBS>::new(0);
+    let core = BranchEqualCoreChip::<RV32_NUM_LIMBS>::new(0);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchEqualOpcode::BEQ.as_usize(),
@@ -26,7 +26,7 @@ fn execute_pc_increment_sanity_test() {
     let y: [F; RV32_NUM_LIMBS] = [19, 32, 1804, 60].map(F::from_canonical_u32);
 
     let result =
-        <BranchEqualCore<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
+        <BranchEqualCoreChip<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
             &core,
             &instruction,
             F::zero(),
@@ -37,7 +37,7 @@ fn execute_pc_increment_sanity_test() {
 
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
     let result =
-        <BranchEqualCore<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
+        <BranchEqualCoreChip<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
             &core,
             &instruction,
             F::zero(),

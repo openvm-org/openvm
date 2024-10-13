@@ -9,8 +9,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapterChip, VmAdapterInterface, VmCoreChip, VmCoreAir,
-        Writes,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -38,12 +38,12 @@ pub struct BranchLessThanCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct BranchLessThanAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BranchLessThanCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: XorBus,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for BranchLessThanAir<NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         BranchLessThanCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -51,7 +51,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for BranchLessThanAir<NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, _builder: &mut AB) {
         todo!();
@@ -59,12 +59,12 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for BranchLessThanAir<NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for BranchLessThanAir<NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -80,16 +80,16 @@ where
 }
 
 #[derive(Debug)]
-pub struct BranchLessThanCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: BranchLessThanAir<NUM_LIMBS, LIMB_BITS>,
+pub struct BranchLessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanCore<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
         Self {
-            air: BranchLessThanAir {
+            air: BranchLessThanCoreAir {
                 bus: xor_lookup_chip.bus(),
             },
             xor_lookup_chip,
@@ -98,15 +98,15 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanCore<NUM_LIMB
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, A>
-    for BranchLessThanCore<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    VmCoreChip<F, A> for BranchLessThanCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: Default,
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Air = BranchLessThanAir<NUM_LIMBS, LIMB_BITS>;
+    type Air = BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

@@ -7,4 +7,4 @@ pub use core::*;
 mod tests;
 
 pub type Rv32BranchLessThanChip<F> =
-    VmChipWrapper<F, Rv32BranchAdapter<F>, BranchLessThanCore<4, 8>>;
+    VmChipWrapper<F, Rv32BranchAdapter<F>, BranchLessThanCoreChip<4, 8>>;

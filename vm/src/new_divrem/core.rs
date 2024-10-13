@@ -35,12 +35,12 @@ pub struct DivRemCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct DivRemAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct DivRemCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: RangeTupleCheckerBus<2>,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for DivRemAir<NUM_LIMBS, LIMB_BITS>
+    for DivRemCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         DivRemCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -48,12 +48,12 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for DivRemAir<NUM_LIMBS, LIMB_BITS>
+    for DivRemCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for DivRemAir<NUM_LIMBS, LIMB_BITS>
+    for DivRemCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, _builder: &mut AB) {
         todo!();
@@ -61,7 +61,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for DivRemAir<NUM_LIMBS, LIMB_BITS>
+    for DivRemCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -77,16 +77,16 @@ where
 }
 
 #[derive(Debug)]
-pub struct DivRemCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: DivRemAir<NUM_LIMBS, LIMB_BITS>,
+pub struct DivRemCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: DivRemCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCore<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(range_tuple_chip: Arc<RangeTupleCheckerChip<2>>, offset: usize) -> Self {
         Self {
-            air: DivRemAir {
+            air: DivRemCoreAir {
                 bus: *range_tuple_chip.bus(),
             },
             range_tuple_chip,
@@ -96,14 +96,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCore<NUM_LIMBS, LIMB_
 }
 
 impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmCoreChip<F, A> for DivRemCore<NUM_LIMBS, LIMB_BITS>
+    VmCoreChip<F, A> for DivRemCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Air = DivRemAir<NUM_LIMBS, LIMB_BITS>;
+    type Air = DivRemCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

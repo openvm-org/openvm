@@ -6,4 +6,4 @@ pub use core::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv32BranchEqualChip<F> = VmChipWrapper<F, Rv32BranchAdapter<F>, BranchEqualCore<4>>;
+pub type Rv32BranchEqualChip<F> = VmChipWrapper<F, Rv32BranchAdapter<F>, BranchEqualCoreChip<4>>;

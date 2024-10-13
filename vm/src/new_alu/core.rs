@@ -10,7 +10,7 @@ use crate::{
     arch::{
         instructions::{AluOpcode, UsizeOpcode},
         AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Reads, Result, VmAdapterChip,
-        VmAdapterInterface, VmCoreChip, VmCoreAir, Writes,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -32,25 +32,25 @@ pub struct ArithmeticLogicCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct ArithmeticLogicAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ArithmeticLogicCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: XorBus,
     offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -77,15 +77,15 @@ pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
 }
 
 #[derive(Debug)]
-pub struct ArithmeticLogicCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>,
+pub struct ArithmeticLogicCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCore<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
         Self {
-            air: ArithmeticLogicAir {
+            air: ArithmeticLogicCoreAir {
                 bus: xor_lookup_chip.bus(),
                 offset,
             },
@@ -95,7 +95,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCore<NUM_LIM
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, A>
-    for ArithmeticLogicCore<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: VmAdapterChip<F>,
@@ -103,7 +103,7 @@ where
     Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
 {
     type Record = ArithmeticLogicRecord<F, NUM_LIMBS, LIMB_BITS>;
-    type Air = ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>;
+    type Air = ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

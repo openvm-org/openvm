@@ -37,8 +37,8 @@ use crate::{
         InstructionExecutorVariant, Rv32AluAdapter, Rv32BranchAdapter, Rv32JalrAdapter,
         Rv32LoadStoreAdapter, Rv32MultAdapter, Rv32RdWriteAdapter, VmChip, VmChipVariant,
     },
-    branch_eq::{BranchEqualCore, Rv32BranchEqualChip},
-    branch_lt::{BranchLessThanCore, Rv32BranchLessThanChip},
+    branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
+    branch_lt::{BranchLessThanCoreChip, Rv32BranchLessThanChip},
     castf::CastFChip,
     core::{
         CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
@@ -48,20 +48,20 @@ use crate::{
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
     hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-    loadstore::{LoadStoreCore, Rv32LoadStoreChip},
+    loadstore::{LoadStoreCoreChip, Rv32LoadStoreChip},
     memory::{offline_checker::MemoryBus, MemoryChip, MemoryChipRef},
     modular_addsub::ModularAddSubChip,
     modular_multdiv::ModularMultDivChip,
-    new_alu::{ArithmeticLogicCore, Rv32ArithmeticLogicChip},
-    new_divrem::{DivRemCore, Rv32DivRemChip},
-    new_lt::{LessThanCore, Rv32LessThanChip},
-    new_mul::{MultiplicationCore, Rv32MultiplicationChip},
-    new_mulh::{MulHCore, Rv32MulHChip},
-    new_shift::{Rv32ShiftChip, ShiftCore},
+    new_alu::{ArithmeticLogicCoreChip, Rv32ArithmeticLogicChip},
+    new_divrem::{DivRemCoreChip, Rv32DivRemChip},
+    new_lt::{LessThanCoreChip, Rv32LessThanChip},
+    new_mul::{MultiplicationCoreChip, Rv32MultiplicationChip},
+    new_mulh::{MulHCoreChip, Rv32MulHChip},
+    new_shift::{Rv32ShiftChip, ShiftCoreChip},
     program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
     rv32_auipc::{Rv32AuipcChip, Rv32AuipcCoreChip},
-    rv32_jal_lui::{Rv32JalLuiChip, Rv32JalLuiCore},
-    rv32_jalr::{Rv32JalrChip, Rv32JalrCore},
+    rv32_jal_lui::{Rv32JalLuiChip, Rv32JalLuiCoreChip},
+    rv32_jalr::{Rv32JalrChip, Rv32JalrCoreChip},
     shift::ShiftChip,
     uint_multiplication::UintMultiplicationChip,
     vm::config::PersistenceType,
@@ -249,7 +249,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::ArithmeticLogicUnitRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32ArithmeticLogicChip::new(
                         Rv32AluAdapter::new(execution_bus, program_bus, memory_chip.clone()),
-                        ArithmeticLogicCore::new(byte_xor_chip.clone(), offset),
+                        ArithmeticLogicCoreChip::new(byte_xor_chip.clone(), offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -275,7 +275,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::LessThanRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LessThanChip::new(
                         Rv32AluAdapter::new(execution_bus, program_bus, memory_chip.clone()),
-                        LessThanCore::new(byte_xor_chip.clone(), offset),
+                        LessThanCoreChip::new(byte_xor_chip.clone(), offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -286,7 +286,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::MultiplicationRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MultiplicationChip::new(
                         Rv32MultAdapter::new(execution_bus, program_bus, memory_chip.clone()),
-                        MultiplicationCore::new(range_tuple_checker.clone(), offset),
+                        MultiplicationCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -297,7 +297,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::MultiplicationHighRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MulHChip::new(
                         Rv32MultAdapter::new(execution_bus, program_bus, memory_chip.clone()),
-                        MulHCore::new(range_tuple_checker.clone(), offset),
+                        MulHCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -321,7 +321,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::DivRemRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32DivRemChip::new(
                         Rv32MultAdapter::new(execution_bus, program_bus, memory_chip.clone()),
-                        DivRemCore::new(range_tuple_checker.clone(), offset),
+                        DivRemCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -332,7 +332,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::ShiftRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32ShiftChip::new(
                         Rv32AluAdapter::new(execution_bus, program_bus, memory_chip.clone()),
-                        ShiftCore::new(byte_xor_chip.clone(), range_checker.clone(), offset),
+                        ShiftCoreChip::new(byte_xor_chip.clone(), range_checker.clone(), offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -356,7 +356,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::LoadStoreRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LoadStoreChip::new(
                         Rv32LoadStoreAdapter::new(range_checker.clone(), offset),
-                        LoadStoreCore::new(offset),
+                        LoadStoreCoreChip::new(offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -367,7 +367,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::BranchEqualRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BranchEqualChip::new(
                         Rv32BranchAdapter::new(execution_bus, program_bus, memory_chip.clone()),
-                        BranchEqualCore::new(offset),
+                        BranchEqualCoreChip::new(offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -378,7 +378,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::BranchLessThanRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BranchLessThanChip::new(
                         Rv32BranchAdapter::new(execution_bus, program_bus, memory_chip.clone()),
-                        BranchLessThanCore::new(byte_xor_chip.clone(), offset),
+                        BranchLessThanCoreChip::new(byte_xor_chip.clone(), offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -389,7 +389,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::JalLuiRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalLuiChip::new(
                         Rv32RdWriteAdapter::new(),
-                        Rv32JalLuiCore::new(offset),
+                        Rv32JalLuiCoreChip::new(offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -400,7 +400,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::JalrRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalrChip::new(
                         Rv32JalrAdapter::new(),
-                        Rv32JalrCore::new(offset),
+                        Rv32JalrCoreChip::new(offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {

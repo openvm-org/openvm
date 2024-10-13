@@ -25,20 +25,20 @@ impl<T> Rv32AuipcCols<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32AuipcCoreChipAir<F: Field> {
+pub struct Rv32AuipcCoreAir<F: Field> {
     pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32AuipcCoreChipAir<F> {
+impl<F: Field> BaseAir<F> for Rv32AuipcCoreAir<F> {
     fn width(&self) -> usize {
         Rv32AuipcCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcCoreChipAir<F> {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcCoreAir<F> {}
 
-impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32AuipcCoreChipAir<AB::F>
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32AuipcCoreAir<AB::F>
 where
     I: VmAdapterInterface<AB::Expr>,
 {
@@ -54,13 +54,13 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Rv32AuipcCoreChip<F: Field> {
-    pub air: Rv32AuipcCoreChipAir<F>,
+    pub air: Rv32AuipcCoreAir<F>,
 }
 
 impl<F: Field> Rv32AuipcCoreChip<F> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: Rv32AuipcCoreChipAir::<F> {
+            air: Rv32AuipcCoreAir::<F> {
                 _marker: PhantomData,
                 offset,
             },
@@ -73,7 +73,7 @@ where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
-    type Air = Rv32AuipcCoreChipAir<F>;
+    type Air = Rv32AuipcCoreAir<F>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

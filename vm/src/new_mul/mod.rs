@@ -7,4 +7,5 @@ pub use core::*;
 mod tests;
 
 // TODO: Replace current uint_multiplication module upon completion
-pub type Rv32MultiplicationChip<F> = VmChipWrapper<F, Rv32MultAdapter<F>, MultiplicationCore<4, 8>>;
+pub type Rv32MultiplicationChip<F> =
+    VmChipWrapper<F, Rv32MultAdapter<F>, MultiplicationCoreChip<4, 8>>;

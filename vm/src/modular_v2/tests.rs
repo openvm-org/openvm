@@ -5,9 +5,9 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
 
-use super::ModularAddSubV2Chip;
+use super::ModularAddSubV2CoreChip;
 use crate::{
-    arch::{testing::VmChipTestBuilder, ExecutionBridge, VmChipWrapper, Rv32HeapAdapter},
+    arch::{testing::VmChipTestBuilder, ExecutionBridge, Rv32HeapAdapter, VmChipWrapper},
     program::Instruction,
     utils::biguint_to_limbs,
 };
@@ -26,11 +26,11 @@ fn test_modular_add() {
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
     let memory_bridge = tester.memory_chip().borrow().memory_bridge();
     let adapter = Rv32HeapAdapter::new(execution_bridge, memory_bridge);
-    let coord_chip = ModularAddSubV2Chip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let coord_chip = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         coord_modulus.clone(),
         tester.memory_chip().borrow().range_checker.clone(),
     );
-    let scalar_chip = ModularAddSubV2Chip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let scalar_chip = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         scalar_modulus.clone(),
         tester.memory_chip().borrow().range_checker.clone(),
     );

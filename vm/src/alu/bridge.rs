@@ -3,12 +3,12 @@ use itertools::izip;
 use p3_field::AbstractField;
 
 use super::{
-    air::ArithmeticLogicAir,
+    air::ArithmeticLogicCoreAir,
     columns::{ArithmeticLogicAuxCols, ArithmeticLogicIoCols},
 };
 use crate::memory::MemoryAddress;
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,

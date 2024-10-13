@@ -7,4 +7,4 @@ pub use core::*;
 mod tests;
 
 // TODO: Replace current Shift256 module upon completion
-pub type Rv32ShiftChip<F> = VmChipWrapper<F, Rv32AluAdapter<F>, ShiftCore<4, 8>>;
+pub type Rv32ShiftChip<F> = VmChipWrapper<F, Rv32AluAdapter<F>, ShiftCoreChip<4, 8>>;

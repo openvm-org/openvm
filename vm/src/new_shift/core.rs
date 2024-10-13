@@ -12,8 +12,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{ShiftOpcode, UsizeOpcode},
-        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapterChip, VmAdapterInterface, VmCoreChip, VmCoreAir,
-        Writes,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -46,13 +46,13 @@ pub struct ShiftCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct ShiftAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub xor_bus: XorBus,
     pub range_bus: VariableRangeCheckerBus,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         ShiftCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -60,7 +60,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, _builder: &mut AB) {
         todo!();
@@ -68,12 +68,12 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -89,21 +89,21 @@ where
 }
 
 #[derive(Debug)]
-pub struct ShiftCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ShiftAir<NUM_LIMBS, LIMB_BITS>,
+pub struct ShiftCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCore<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
         range_checker_chip: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
         Self {
-            air: ShiftAir {
+            air: ShiftCoreAir {
                 xor_bus: xor_lookup_chip.bus(),
                 range_bus: range_checker_chip.bus(),
             },
@@ -114,15 +114,15 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCore<NUM_LIMBS, LIMB_B
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, A>
-    for ShiftCore<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    VmCoreChip<F, A> for ShiftCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Air = ShiftAir<NUM_LIMBS, LIMB_BITS>;
+    type Air = ShiftCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

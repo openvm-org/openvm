@@ -10,8 +10,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapterChip, VmAdapterInterface, VmCoreChip, VmCoreAir,
-        Writes,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -28,20 +28,23 @@ impl<T, const NUM_CELLS: usize> LoadStoreCols<T, NUM_CELLS> {
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreAir<F: Field, const NUM_CELLS: usize> {
+pub struct LoadStoreCoreAir<F: Field, const NUM_CELLS: usize> {
     pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
-impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreAir<F, NUM_CELLS> {
+impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreCoreAir<F, NUM_CELLS> {
     fn width(&self) -> usize {
         LoadStoreCols::<F, NUM_CELLS>::width()
     }
 }
 
-impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F> for LoadStoreAir<F, NUM_CELLS> {}
+impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F>
+    for LoadStoreCoreAir<F, NUM_CELLS>
+{
+}
 
-impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreAir<AB::F, NUM_CELLS>
+impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreCoreAir<AB::F, NUM_CELLS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -57,14 +60,14 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreCore<F: Field, const NUM_CELLS: usize> {
-    pub air: LoadStoreAir<F, NUM_CELLS>,
+pub struct LoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
+    pub air: LoadStoreCoreAir<F, NUM_CELLS>,
 }
 
-impl<F: Field, const NUM_CELLS: usize> LoadStoreCore<F, NUM_CELLS> {
+impl<F: Field, const NUM_CELLS: usize> LoadStoreCoreChip<F, NUM_CELLS> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: LoadStoreAir::<F, NUM_CELLS> {
+            air: LoadStoreCoreAir::<F, NUM_CELLS> {
                 _marker: PhantomData,
                 offset,
             },
@@ -73,13 +76,13 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreCore<F, NUM_CELLS> {
 }
 
 impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_CELLS: usize> VmCoreChip<F, A>
-    for LoadStoreCore<F, NUM_CELLS>
+    for LoadStoreCoreChip<F, NUM_CELLS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_CELLS]>,
 {
     type Record = ();
-    type Air = LoadStoreAir<F, NUM_CELLS>;
+    type Air = LoadStoreCoreAir<F, NUM_CELLS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

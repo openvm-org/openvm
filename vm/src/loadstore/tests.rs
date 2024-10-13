@@ -5,7 +5,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
-use super::{solve_write_data, LoadStoreCore, Rv32LoadStoreChip};
+use super::{solve_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
 use crate::{
     arch::{
         instructions::{
@@ -94,7 +94,7 @@ fn simple_execute_roundtrip_test() {
         tester.memory_chip().borrow().range_checker.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadStoreCore::<F, RV32_NUM_CELLS>::new(adapter.offset);
+    let inner = LoadStoreCoreChip::<F, RV32_NUM_CELLS>::new(adapter.offset);
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_chip());
 
     let num_tests: usize = 10;

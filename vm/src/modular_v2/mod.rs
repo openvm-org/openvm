@@ -35,12 +35,12 @@ impl<const NUM_LIMBS: usize> FieldVariableConfig for ModularConfig<NUM_LIMBS> {
 }
 
 #[derive(Clone)]
-pub struct ModularAddSubV2Chip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+pub struct ModularAddSubV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub chip: FieldExprChip,
     modulus: BigUint,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2Chip<NUM_LIMBS, LIMB_SIZE> {
+impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE> {
     pub fn new(modulus: BigUint, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         // TODO: assert modulus and NUM_LIMBS are consistent with each other
         let bus = range_checker.bus();
@@ -75,7 +75,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2Chip<NUM_LIM
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     VmCoreChip<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
-    for ModularAddSubV2Chip<NUM_LIMBS, LIMB_SIZE>
+    for ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE>
 {
     type Record = ();
     type Air = FieldExprChip;

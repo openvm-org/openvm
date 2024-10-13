@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_primitives::xor::lookup::XorLookupChip;
-use air::ArithmeticLogicAir;
+use air::ArithmeticLogicCoreAir;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -58,7 +58,7 @@ pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
 
 #[derive(Clone, Debug)]
 pub struct ArithmeticLogicChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>,
+    pub air: ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ArithmeticLogicRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
@@ -78,7 +78,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            air: ArithmeticLogicAir {
+            air: ArithmeticLogicCoreAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus: xor_lookup_chip.bus(),

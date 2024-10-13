@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[derive(Copy, Clone, Debug)]
-pub struct ArithmeticLogicAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
+pub struct ArithmeticLogicCoreAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub bus: XorBus,
@@ -26,11 +26,11 @@ pub struct ArithmeticLogicAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -38,12 +38,12 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

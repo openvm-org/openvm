@@ -4,7 +4,7 @@ use afs_primitives::xor::lookup::XorLookupChip;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::core::{solve_cmp, BranchLessThanCore};
+use super::core::{solve_cmp, BranchLessThanCoreChip};
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
@@ -21,7 +21,7 @@ type F = BabyBear;
 #[test]
 fn execute_pc_increment_sanity_test() {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_LIMB_BITS>::new(BYTE_XOR_BUS));
-    let core = BranchLessThanCore::<RV32_NUM_LIMBS, RV32_LIMB_BITS>::new(xor_lookup_chip, 0);
+    let core = BranchLessThanCoreChip::<RV32_NUM_LIMBS, RV32_LIMB_BITS>::new(xor_lookup_chip, 0);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchLessThanOpcode::BLT.as_usize(),
@@ -30,7 +30,7 @@ fn execute_pc_increment_sanity_test() {
     };
     let x: [F; RV32_NUM_LIMBS] = [145, 34, 25, 205].map(F::from_canonical_u32);
 
-    let result = <BranchLessThanCore<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
+    let result = <BranchLessThanCoreChip<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
         F,
         Rv32BranchAdapter<F>,
     >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
@@ -38,7 +38,7 @@ fn execute_pc_increment_sanity_test() {
     assert!(output.to_pc.is_none());
 
     instruction.opcode = BranchLessThanOpcode::BGE.as_usize();
-    let result = <BranchLessThanCore<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
+    let result = <BranchLessThanCoreChip<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
         F,
         Rv32BranchAdapter<F>,
     >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);

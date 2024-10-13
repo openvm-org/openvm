@@ -8,8 +8,8 @@ use crate::{
     arch::{
         compose,
         instructions::{Rv32JalrOpcode, UsizeOpcode},
-        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapterChip, VmAdapterInterface, VmCoreChip, VmCoreAir,
-        Writes, PC_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes, PC_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     program::Instruction,
 };
@@ -26,20 +26,20 @@ impl<T> Rv32JalrCols<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalrAir<F: Field> {
+pub struct Rv32JalrCoreAir<F: Field> {
     pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32JalrAir<F> {
+impl<F: Field> BaseAir<F> for Rv32JalrCoreAir<F> {
     fn width(&self) -> usize {
         Rv32JalrCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalrAir<F> {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalrCoreAir<F> {}
 
-impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32JalrAir<AB::F>
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32JalrCoreAir<AB::F>
 where
     I: VmAdapterInterface<AB::Expr>,
 {
@@ -54,14 +54,14 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalrCore<F: Field> {
-    pub air: Rv32JalrAir<F>,
+pub struct Rv32JalrCoreChip<F: Field> {
+    pub air: Rv32JalrCoreAir<F>,
 }
 
-impl<F: Field> Rv32JalrCore<F> {
+impl<F: Field> Rv32JalrCoreChip<F> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: Rv32JalrAir::<F> {
+            air: Rv32JalrCoreAir::<F> {
                 _marker: PhantomData,
                 offset,
             },
@@ -69,13 +69,13 @@ impl<F: Field> Rv32JalrCore<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32JalrCore<F>
+impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32JalrCoreChip<F>
 where
     Reads<F, A::Interface<F>>: Into<[F; RV32_REGISTER_NUM_LANES]>,
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
-    type Air = Rv32JalrAir<F>;
+    type Air = Rv32JalrCoreAir<F>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

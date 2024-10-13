@@ -7,4 +7,4 @@ pub use core::*;
 mod tests;
 
 // TODO: Remove new_* prefix when completed
-pub type Rv32DivRemChip<F> = VmChipWrapper<F, Rv32MultAdapter<F>, DivRemCore<4, 8>>;
+pub type Rv32DivRemChip<F> = VmChipWrapper<F, Rv32MultAdapter<F>, DivRemCoreChip<4, 8>>;

@@ -27,23 +27,26 @@ pub struct BranchEqualCols<T, const NUM_LIMBS: usize> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct BranchEqualAir<const NUM_LIMBS: usize> {}
+pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {}
 
-impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualAir<NUM_LIMBS> {
+impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualCoreAir<NUM_LIMBS> {
     fn width(&self) -> usize {
         BranchEqualCols::<F, NUM_LIMBS>::width()
     }
 }
 
-impl<AB: InteractionBuilder, const NUM_LIMBS: usize> Air<AB> for BranchEqualAir<NUM_LIMBS> {
+impl<AB: InteractionBuilder, const NUM_LIMBS: usize> Air<AB> for BranchEqualCoreAir<NUM_LIMBS> {
     fn eval(&self, _builder: &mut AB) {
         todo!();
     }
 }
 
-impl<F: Field, const NUM_LIMBS: usize> BaseAirWithPublicValues<F> for BranchEqualAir<NUM_LIMBS> {}
+impl<F: Field, const NUM_LIMBS: usize> BaseAirWithPublicValues<F>
+    for BranchEqualCoreAir<NUM_LIMBS>
+{
+}
 
-impl<AB, I, const NUM_LIMBS: usize> VmCoreAir<AB, I> for BranchEqualAir<NUM_LIMBS>
+impl<AB, I, const NUM_LIMBS: usize> VmCoreAir<AB, I> for BranchEqualCoreAir<NUM_LIMBS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -59,29 +62,29 @@ where
 }
 
 #[derive(Debug)]
-pub struct BranchEqualCore<const NUM_LIMBS: usize> {
-    pub air: BranchEqualAir<NUM_LIMBS>,
+pub struct BranchEqualCoreChip<const NUM_LIMBS: usize> {
+    pub air: BranchEqualCoreAir<NUM_LIMBS>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize> BranchEqualCore<NUM_LIMBS> {
+impl<const NUM_LIMBS: usize> BranchEqualCoreChip<NUM_LIMBS> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: BranchEqualAir {},
+            air: BranchEqualCoreAir {},
             offset,
         }
     }
 }
 
 impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize> VmCoreChip<F, A>
-    for BranchEqualCore<NUM_LIMBS>
+    for BranchEqualCoreChip<NUM_LIMBS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: Default,
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Air = BranchEqualAir<NUM_LIMBS>;
+    type Air = BranchEqualCoreAir<NUM_LIMBS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

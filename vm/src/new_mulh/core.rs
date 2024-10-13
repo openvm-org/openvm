@@ -10,7 +10,7 @@ use crate::{
     arch::{
         instructions::{MulHOpcode, UsizeOpcode},
         AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreChip, VmCoreAir, Writes,
+        VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -34,12 +34,12 @@ pub struct MulHCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct MulHAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct MulHCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: RangeTupleCheckerBus<2>,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for MulHAir<NUM_LIMBS, LIMB_BITS>
+    for MulHCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         MulHCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -47,7 +47,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for MulHAir<NUM_LIMBS, LIMB_BITS>
+    for MulHCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, _builder: &mut AB) {
         todo!();
@@ -55,7 +55,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for MulHAir<NUM_LIMBS, LIMB_BITS>
+    for MulHCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -71,21 +71,21 @@ where
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for MulHAir<NUM_LIMBS, LIMB_BITS>
+    for MulHCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 #[derive(Debug)]
-pub struct MulHCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: MulHAir<NUM_LIMBS, LIMB_BITS>,
+pub struct MulHCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: MulHCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCore<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(range_tuple_chip: Arc<RangeTupleCheckerChip<2>>, offset: usize) -> Self {
         Self {
-            air: MulHAir {
+            air: MulHCoreAir {
                 bus: *range_tuple_chip.bus(),
             },
             range_tuple_chip,
@@ -95,14 +95,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCore<NUM_LIMBS, LIMB_BI
 }
 
 impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmCoreChip<F, A> for MulHCore<NUM_LIMBS, LIMB_BITS>
+    VmCoreChip<F, A> for MulHCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Air = MulHAir<NUM_LIMBS, LIMB_BITS>;
+    type Air = MulHCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(

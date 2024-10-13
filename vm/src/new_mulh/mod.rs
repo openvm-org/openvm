@@ -7,4 +7,4 @@ pub use core::*;
 mod tests;
 
 // TODO: Remove new_* prefix when completed
-pub type Rv32MulHChip<F> = VmChipWrapper<F, Rv32MultAdapter<F>, MulHCore<4, 8>>;
+pub type Rv32MulHChip<F> = VmChipWrapper<F, Rv32MultAdapter<F>, MulHCoreChip<4, 8>>;

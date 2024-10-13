@@ -1,7 +1,7 @@
 use std::{array, sync::Arc};
 
 use afs_primitives::{var_range::VariableRangeCheckerChip, xor::lookup::XorLookupChip};
-use air::ShiftAir;
+use air::ShiftCoreAir;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -39,7 +39,7 @@ pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Clone, Debug)]
 pub struct ShiftChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ShiftAir<NUM_LIMBS, LIMB_BITS>,
+    pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ShiftRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
@@ -76,7 +76,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         let memory_bridge = memory_chip.borrow().memory_bridge();
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         Self {
-            air: ShiftAir {
+            air: ShiftCoreAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 range_bus: range_checker_chip.bus(),
