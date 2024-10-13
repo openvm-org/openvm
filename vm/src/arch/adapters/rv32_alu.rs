@@ -1,4 +1,8 @@
-use std::{cell::RefCell, mem::size_of};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    mem::size_of,
+};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
@@ -13,7 +17,8 @@ use crate::{
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        MemoryAuxColsFactory, MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
+        MemoryAddress, MemoryAuxColsFactory, MemoryChip, MemoryChipRef, MemoryReadRecord,
+        MemoryWriteRecord,
     },
     program::{bridge::ProgramBus, Instruction},
 };
@@ -96,11 +101,59 @@ impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32AluAdapterAir {
 
     fn eval(
         &self,
-        _builder: &mut AB,
-        _local: &[AB::Var],
-        _ctx: IntegrationInterface<AB::Expr, Self::Interface>,
+        builder: &mut AB,
+        local: &[AB::Var],
+        ctx: IntegrationInterface<AB::Expr, Self::Interface>,
     ) {
-        todo!()
+        let local: &Rv32AluAdapterCols<_> = local.borrow();
+        let timestamp = local.from_state.timestamp;
+        let mut timestamp_delta: usize = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+        };
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(AB::Expr::one(), local.rs1_idx),
+                ctx.reads[0].clone(),
+                timestamp_pp(),
+                &local.reads_aux[0],
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(local.rs2_as, local.rs2_idx),
+                ctx.reads[1].clone(),
+                timestamp_pp(),
+                &local.reads_aux[1],
+            )
+            .eval(builder, local.rs2_as);
+
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(AB::Expr::one(), local.rd_idx),
+                ctx.writes[0].clone(),
+                timestamp + AB::F::from_canonical_usize(timestamp_delta),
+                &local.writes_aux,
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+
+        self.execution_bridge
+            .execute_and_increment_pc(
+                ctx.instruction.opcode,
+                [
+                    local.rd_idx.into(),
+                    local.rs1_idx.into(),
+                    local.rs2_idx.into(),
+                    AB::Expr::one(),
+                    local.rs2_as.into(),
+                ],
+                local.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, ctx.instruction.is_valid);
     }
 }
 
@@ -185,11 +238,22 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut [F],
-        _read_record: Self::ReadRecord,
-        _write_record: Self::WriteRecord,
+        row_slice: &mut [F],
+        read_record: Self::ReadRecord,
+        write_record: Self::WriteRecord,
     ) {
-        todo!()
+        let row_slice: &mut Rv32AluAdapterCols<_> = row_slice.borrow_mut();
+        let aux_cols_factory = &self.aux_cols_factory;
+        row_slice.from_state = write_record.from_state.map(F::from_canonical_usize);
+        row_slice.rd_idx = write_record.rd.pointer;
+        row_slice.rs1_idx = read_record.rs1.pointer;
+        row_slice.rs2_idx = read_record.rs2.pointer;
+        // TODO: rs2_as definition
+        row_slice.reads_aux = [
+            aux_cols_factory.make_read_aux_cols(read_record.rs1),
+            aux_cols_factory.make_read_aux_cols(read_record.rs2),
+        ];
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
     }
 
     fn air(&self) -> &Self::Air {
