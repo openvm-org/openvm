@@ -1,11 +1,10 @@
-use std::{array, borrow::Borrow, sync::Arc};
+use std::{array, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::xor::{bus::XorBus, lookup::XorLookupChip};
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use p3_air::{AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
-use strum::IntoEnumIterator;
+use p3_air::BaseAir;
+use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
@@ -61,8 +60,8 @@ where
 {
     fn eval(
         &self,
-        builder: &mut AB,
-        local: &[AB::Var],
+        _builder: &mut AB,
+        _local: &[AB::Var],
         _local_adapter: &[AB::Var],
     ) -> IntegrationInterface<AB::Expr, I> {
         todo!()

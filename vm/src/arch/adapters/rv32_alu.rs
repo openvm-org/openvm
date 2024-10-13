@@ -1,8 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    cell::RefCell,
-    mem::size_of,
-};
+use std::{cell::RefCell, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
@@ -17,8 +13,7 @@ use crate::{
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        MemoryAddress, MemoryAuxColsFactory, MemoryChip, MemoryChipRef, MemoryReadRecord,
-        MemoryWriteRecord,
+        MemoryAuxColsFactory, MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
     },
     program::{bridge::ProgramBus, Instruction},
 };
@@ -26,6 +21,7 @@ use crate::{
 /// Reads instructions of the form OP a, b, c, d, e where [a:4]_d = [b:4]_d op [c:4]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Rv32AluAdapter<F: Field> {
     pub air: Rv32AluAdapterAir,
@@ -82,6 +78,7 @@ pub struct Rv32AluAdapterCols<T> {
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32AluAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
@@ -99,9 +96,9 @@ impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32AluAdapterAir {
 
     fn eval(
         &self,
-        builder: &mut AB,
-        local: &[AB::Var],
-        ctx: IntegrationInterface<AB::Expr, Self::Interface>,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _ctx: IntegrationInterface<AB::Expr, Self::Interface>,
     ) {
         todo!()
     }
@@ -188,9 +185,9 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
 
     fn generate_trace_row(
         &self,
-        row_slice: &mut [F],
-        read_record: Self::ReadRecord,
-        write_record: Self::WriteRecord,
+        _row_slice: &mut [F],
+        _read_record: Self::ReadRecord,
+        _write_record: Self::WriteRecord,
     ) {
         todo!()
     }
