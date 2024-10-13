@@ -7,7 +7,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{read_rv32_register, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterRuntimeContext, ExecutionBridge, ExecutionState, Result, VmAdapter, VmAdapterInterface,
+        AdapterRuntimeContext, ExecutionBridge, ExecutionState, Result, VmAdapter,
+        VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -127,7 +128,7 @@ impl<
         // const NUM_WRITES: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > VmAdapter<F> for Rv32HeapAdapter<F, READ_SIZE, WRITE_SIZE>
+    > VmAdapterChip<F> for Rv32HeapAdapter<F, READ_SIZE, WRITE_SIZE>
 {
     type ReadRecord = [Rv32RegisterHeapReadRecord<F, READ_SIZE>; 2];
     type WriteRecord = [Rv32RegisterHeapWriteRecord<F, WRITE_SIZE>; 1];

@@ -14,8 +14,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{DivRemOpcode, UsizeOpcode},
-        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
-        Writes,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapter, VmAdapterInterface,
+        VmCore, VmCoreAir, Writes,
     },
     program::Instruction,
 };
@@ -95,8 +95,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCore<NUM_LIMBS, LIMB_
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCore<F, A>
-    for DivRemCore<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    VmCoreChip<F, A> for DivRemCore<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,

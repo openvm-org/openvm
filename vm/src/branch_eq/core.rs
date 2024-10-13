@@ -6,8 +6,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
-        Writes,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapter, VmAdapterInterface,
+        VmCore, VmCoreAir, Writes,
     },
     program::Instruction,
 };
@@ -73,7 +73,7 @@ impl<const NUM_LIMBS: usize> BranchEqualCore<NUM_LIMBS> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize> VmCore<F, A>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize> VmCoreChip<F, A>
     for BranchEqualCore<NUM_LIMBS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,

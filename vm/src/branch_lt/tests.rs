@@ -30,7 +30,7 @@ fn execute_pc_increment_sanity_test() {
     };
     let x: [F; RV32_NUM_LIMBS] = [145, 34, 25, 205].map(F::from_canonical_u32);
 
-    let result = <BranchLessThanCore<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCore<
+    let result = <BranchLessThanCore<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
         F,
         Rv32BranchAdapter<F>,
     >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
@@ -38,7 +38,7 @@ fn execute_pc_increment_sanity_test() {
     assert!(output.to_pc.is_none());
 
     instruction.opcode = BranchLessThanOpcode::BGE.as_usize();
-    let result = <BranchLessThanCore<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCore<
+    let result = <BranchLessThanCore<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
         F,
         Rv32BranchAdapter<F>,
     >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);

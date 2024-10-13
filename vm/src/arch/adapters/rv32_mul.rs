@@ -114,7 +114,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
     }
 }
 
-impl<F: PrimeField32> VmAdapter<F> for Rv32MultAdapter<F> {
+impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapter<F> {
     type ReadRecord = Rv32MultReadRecord<F>;
     type WriteRecord = Rv32MultWriteRecord<F>;
     type Air = Rv32MultAdapterAir;

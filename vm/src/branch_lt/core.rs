@@ -98,7 +98,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanCore<NUM_LIMB
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCore<F, A>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, A>
     for BranchLessThanCore<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,

@@ -26,7 +26,7 @@ fn execute_pc_increment_sanity_test() {
     let y: [F; RV32_NUM_LIMBS] = [19, 32, 1804, 60].map(F::from_canonical_u32);
 
     let result =
-        <BranchEqualCore<RV32_NUM_LIMBS> as VmCore<F, Rv32BranchAdapter<F>>>::execute_instruction(
+        <BranchEqualCore<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
             &core,
             &instruction,
             F::zero(),
@@ -37,7 +37,7 @@ fn execute_pc_increment_sanity_test() {
 
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
     let result =
-        <BranchEqualCore<RV32_NUM_LIMBS> as VmCore<F, Rv32BranchAdapter<F>>>::execute_instruction(
+        <BranchEqualCore<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
             &core,
             &instruction,
             F::zero(),

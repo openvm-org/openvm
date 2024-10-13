@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        AdapterRuntimeContext, AdapterAirContext, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir, Writes,
-        RV32_REGISTER_NUM_LANES,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapter, VmAdapterInterface, VmCore,
+        VmCoreAir, Writes, RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,
 };
@@ -68,7 +68,7 @@ impl<F: Field> Rv32AuipcCore<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>> VmCore<F, A> for Rv32AuipcCore<F>
+impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32AuipcCore<F>
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {

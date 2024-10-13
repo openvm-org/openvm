@@ -112,7 +112,9 @@ impl<F: Field, const NUM_CELLS: usize> Rv32LoadStoreAdapter<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapter<F> for Rv32LoadStoreAdapter<F, NUM_CELLS> {
+impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
+    for Rv32LoadStoreAdapter<F, NUM_CELLS>
+{
     type ReadRecord = Rv32LoadStoreAdapterReadRecord<F, NUM_CELLS>;
     type WriteRecord = Rv32LoadStoreAdapterWriteRecord<F, NUM_CELLS>;
     type Air = Rv32LoadStoreAdapterAir<F, NUM_CELLS>;

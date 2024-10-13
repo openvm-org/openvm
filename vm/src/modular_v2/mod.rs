@@ -74,7 +74,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2Chip<NUM_LIM
 }
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    VmCore<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
+    VmCoreChip<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
     for ModularAddSubV2Chip<NUM_LIMBS, LIMB_SIZE>
 {
     type Record = ();

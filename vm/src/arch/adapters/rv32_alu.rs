@@ -8,8 +8,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterRuntimeContext, AdapterAirContext, ExecutionBridge, ExecutionBus, ExecutionState, Result, VmAdapter,
-        VmAdapterAir, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
+        Result, VmAdapter, VmAdapterAir, VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -94,12 +94,17 @@ impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
     type Interface = Rv32RTypeAdapterInterface<AB::Expr>;
 
-    fn eval(&self, _builder: &mut AB, _local: &[AB::Var], _ctx: AdapterAirContext<AB::Expr, Self::Interface>) {
+    fn eval(
+        &self,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
+    ) {
         todo!()
     }
 }
 
-impl<F: PrimeField32> VmAdapter<F> for Rv32AluAdapter<F> {
+impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
     type ReadRecord = Rv32AluReadRecord<F>;
     type WriteRecord = Rv32AluWriteRecord<F>;
     type Air = Rv32AluAdapterAir;

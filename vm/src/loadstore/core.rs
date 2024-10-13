@@ -72,7 +72,7 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreCore<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_CELLS: usize> VmCore<F, A>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_CELLS: usize> VmCoreChip<F, A>
     for LoadStoreCore<F, NUM_CELLS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,

@@ -69,7 +69,7 @@ impl<F: Field> Rv32JalrCore<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>> VmCore<F, A> for Rv32JalrCore<F>
+impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32JalrCore<F>
 where
     Reads<F, A::Interface<F>>: Into<[F; RV32_REGISTER_NUM_LANES]>,
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,

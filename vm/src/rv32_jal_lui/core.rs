@@ -72,7 +72,7 @@ impl<F: Field> Rv32JalLuiCore<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>> VmCore<F, A> for Rv32JalLuiCore<F>
+impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32JalLuiCore<F>
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
