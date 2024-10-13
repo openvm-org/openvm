@@ -13,7 +13,7 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapter, VmAdapterAir,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterChip, VmAdapterAir,
         VmAdapterInterface, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{

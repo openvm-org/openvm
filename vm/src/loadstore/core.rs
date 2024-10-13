@@ -10,7 +10,7 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        AdapterRuntimeContext, AdapterAirContext, Reads, Result, VmAdapterChip, VmAdapterInterface, VmCoreChip, VmCoreAir,
         Writes,
     },
     program::Instruction,

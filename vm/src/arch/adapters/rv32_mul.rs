@@ -9,7 +9,7 @@ use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VmAdapter, VmAdapterAir, VmAdapterInterface,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},

@@ -10,7 +10,7 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterChip, VmAdapterInterface, VmCoreChip, VmCoreAir,
         Writes, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS,
     },
     program::Instruction,

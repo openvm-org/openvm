@@ -9,7 +9,7 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{MulOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface, VmCoreChip,
         VmCoreAir, Writes,
     },
     program::Instruction,

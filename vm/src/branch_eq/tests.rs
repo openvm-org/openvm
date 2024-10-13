@@ -5,7 +5,7 @@ use super::core::{solve_eq, BranchEqualCore};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        Rv32BranchAdapter, VmCore,
+        Rv32BranchAdapter, VmCoreChip,
     },
     program::Instruction,
 };

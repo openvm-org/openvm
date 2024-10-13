@@ -7,7 +7,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{read_rv32_register, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterRuntimeContext, ExecutionBridge, ExecutionState, Result, VmAdapter,
+        AdapterRuntimeContext, ExecutionBridge, ExecutionState, Result, VmAdapterChip,
         VmAdapterInterface,
     },
     memory::{

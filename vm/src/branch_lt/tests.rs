@@ -8,7 +8,7 @@ use super::core::{solve_cmp, BranchLessThanCore};
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        Rv32BranchAdapter, VmCore,
+        Rv32BranchAdapter, VmCoreChip,
     },
     core::BYTE_XOR_BUS,
     program::Instruction,

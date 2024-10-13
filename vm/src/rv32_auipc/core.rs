@@ -7,7 +7,7 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapter, VmAdapterInterface, VmCore,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterChip, VmAdapterInterface, VmCoreChip,
         VmCoreAir, Writes, RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,

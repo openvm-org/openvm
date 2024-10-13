@@ -8,7 +8,7 @@ use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
 use crate::{
-    arch::{AdapterRuntimeContext, Rv32HeapAdapter, Rv32HeapAdapterInterface, VmCore},
+    arch::{AdapterRuntimeContext, Rv32HeapAdapter, Rv32HeapAdapterInterface, VmCoreChip},
     utils::{biguint_to_limbs, limbs_to_biguint},
 };
 
