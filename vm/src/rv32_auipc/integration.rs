@@ -1,14 +1,14 @@
 use std::{array, marker::PhantomData, mem::size_of};
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use afs_stark_backend::rap::BaseAirWithPublicValues;
+use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Result, Writes, RV32_REGISTER_NUM_LANES,
+        InstructionOutput, MachineAdapter, MachineAdapterInterface, MachineIntegration, Result,
+        Writes, RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,
 };

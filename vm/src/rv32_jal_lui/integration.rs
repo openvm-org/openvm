@@ -1,7 +1,7 @@
 use std::{array, marker::PhantomData, mem::size_of};
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use afs_stark_backend::rap::BaseAirWithPublicValues;
+use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32};
 
 use crate::{
@@ -10,8 +10,8 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Result, Writes, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS,
+        InstructionOutput, MachineAdapter, MachineAdapterInterface, MachineIntegration, Result,
+        Writes, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS,
     },
     program::Instruction,
 };

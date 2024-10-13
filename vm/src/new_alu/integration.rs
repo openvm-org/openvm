@@ -3,7 +3,7 @@ use std::{array, borrow::Borrow, sync::Arc};
 use afs_derive::AlignedBorrow;
 use afs_primitives::xor::{bus::XorBus, lookup::XorLookupChip};
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
