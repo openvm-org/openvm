@@ -110,7 +110,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             ..
         } = instruction.clone();
         let local_opcode_index = opcode - self.offset;
-        assert!(U256Opcode::shift_opcodes().any(|op| op as usize == local_opcode_index as usize));
+        assert!(U256Opcode::shift_opcodes().any(|op| op as usize == local_opcode_index));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(

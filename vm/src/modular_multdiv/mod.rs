@@ -170,7 +170,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         self.data.push(ModularMultDivRecord {
             from_state,
             instruction: Instruction {
-                opcode: local_opcode_index as usize,
+                opcode: local_opcode_index,
                 ..instruction
             },
             x_array_read,
