@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use afs_primitives::sub_chip::LocalTraceInstructions;
+use afs_primitives::{sub_chip::LocalTraceInstructions, utils::next_power_of_two_or_zero};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -13,7 +13,7 @@ impl<F: PrimeField32> MemoryAuditChip<F> {
         // TODO[osama]: consider making a struct for address
         final_memory: &HashMap<(F, F), TimestampedValue<F>>,
     ) -> RowMajorMatrix<F> {
-        let trace_height = self.initial_memory.len().next_power_of_two();
+        let trace_height = next_power_of_two_or_zero(self.initial_memory.len());
         self.generate_trace_with_height(final_memory, trace_height)
     }
     pub fn generate_trace_with_height(

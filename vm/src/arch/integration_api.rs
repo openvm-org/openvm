@@ -1,6 +1,7 @@
 use std::{borrow::Borrow, marker::PhantomData, sync::Arc};
 
 use afs_derive::AlignedBorrow;
+use afs_primitives::utils::next_power_of_two_or_zero;
 use afs_stark_backend::{
     air_builders::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
@@ -214,7 +215,7 @@ where
     M: MachineIntegration<F, A> + Sync,
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let height = self.records.len().next_power_of_two();
+        let height = next_power_of_two_or_zero(self.records.len());
         let inner_width = self.inner.air().width();
         let adapter_width = self.adapter.air().width();
         let width = inner_width + adapter_width;
