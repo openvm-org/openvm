@@ -103,7 +103,6 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
     type ReadRecord = Rv32LoadStoreAdapterReadRecord<F, NUM_CELLS>;
     type WriteRecord = Rv32LoadStoreAdapterWriteRecord<F, NUM_CELLS>;
     type Air = Rv32LoadStoreAdapterAir<F>;
-    type Cols<T> = Rv32LoadStoreAdapterCols<T, NUM_CELLS>;
 
     type Interface<T: AbstractField> = Rv32LoadStoreAdapterInterface<T, NUM_CELLS>;
 
@@ -239,25 +238,14 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut Self::Cols<F>,
+        _row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
     ) {
         todo!()
     }
 
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
-        todo!()
-    }
-
-    fn air(&self) -> Self::Air {
-        todo!()
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }

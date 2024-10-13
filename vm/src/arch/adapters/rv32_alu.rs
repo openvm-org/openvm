@@ -10,7 +10,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{MinimalInstruction, Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
+use super::{Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
         CommonAdapterInterface, ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput,

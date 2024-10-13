@@ -105,7 +105,6 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32MultAdapter<F> {
     type ReadRecord = Rv32MultReadRecord<F>;
     type WriteRecord = Rv32MultWriteRecord<F>;
     type Air = Rv32MultAdapterAir;
-    type Cols<T> = Rv32MultAdapterCols<T>;
     type Interface<T: AbstractField> = Rv32MultAdapterInterface<T>;
 
     fn preprocess(
@@ -155,25 +154,14 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32MultAdapter<F> {
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut Self::Cols<F>,
+        _row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
     ) {
         todo!();
     }
 
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
-        todo!();
-    }
-
-    fn air(&self) -> Self::Air {
-        self.air
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }

@@ -133,7 +133,6 @@ impl<
 {
     type ReadRecord = [Rv32RegisterHeapReadRecord<F, READ_SIZE>; 2];
     type WriteRecord = [Rv32RegisterHeapWriteRecord<F, WRITE_SIZE>; 1];
-    type Cols<T> = Rv32HeapAdapterCols<T, READ_SIZE, WRITE_SIZE>;
     type Interface<T: AbstractField> = Rv32HeapAdapterInterface<T, READ_SIZE, WRITE_SIZE>;
     type Air = Rv32HeapAdapterAir<READ_SIZE, WRITE_SIZE>;
 
@@ -195,26 +194,15 @@ impl<
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut Self::Cols<F>,
+        _row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
     ) {
         todo!()
     }
 
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
-        todo!()
-    }
-
-    fn air(&self) -> Self::Air {
-        self.air
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }
 
