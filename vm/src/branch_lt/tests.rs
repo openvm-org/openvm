@@ -4,7 +4,7 @@ use afs_primitives::xor::lookup::XorLookupChip;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::integration::{solve_cmp, BranchLessThanCore};
+use super::core::{solve_cmp, BranchLessThanCore};
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
@@ -21,7 +21,7 @@ type F = BabyBear;
 #[test]
 fn execute_pc_increment_sanity_test() {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_LIMB_BITS>::new(BYTE_XOR_BUS));
-    let integration = BranchLessThanCore::<RV32_NUM_LIMBS, RV32_LIMB_BITS>::new(xor_lookup_chip, 0);
+    let core = BranchLessThanCore::<RV32_NUM_LIMBS, RV32_LIMB_BITS>::new(xor_lookup_chip, 0);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchLessThanOpcode::BLT.as_usize(),
@@ -33,7 +33,7 @@ fn execute_pc_increment_sanity_test() {
     let result = <BranchLessThanCore<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCore<
         F,
         Rv32BranchAdapter<F>,
-    >>::execute_instruction(&integration, &instruction, F::zero(), [x, x]);
+    >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
@@ -41,7 +41,7 @@ fn execute_pc_increment_sanity_test() {
     let result = <BranchLessThanCore<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCore<
         F,
         Rv32BranchAdapter<F>,
-    >>::execute_instruction(&integration, &instruction, F::zero(), [x, x]);
+    >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());
     assert_eq!(output.to_pc.unwrap(), F::from_canonical_u8(8));

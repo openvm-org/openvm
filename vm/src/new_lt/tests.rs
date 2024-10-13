@@ -1,4 +1,4 @@
-use super::integration::solve_less_than;
+use super::core::solve_less_than;
 use crate::arch::instructions::LessThanOpcode;
 
 const RV32_NUM_LIMBS: usize = 4;

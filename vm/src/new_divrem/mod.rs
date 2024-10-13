@@ -1,7 +1,7 @@
 use crate::arch::{Rv32MultAdapter, VmChipWrapper};
 
-mod integration;
-pub use integration::*;
+mod core;
+pub use core::*;
 
 #[cfg(test)]
 mod tests;

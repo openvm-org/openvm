@@ -1,6 +1,6 @@
-mod integration;
+mod core;
 
-pub use integration::*;
+pub use core::*;
 
 use crate::arch::{Rv32RdWriteAdapter, VmChipWrapper};
 

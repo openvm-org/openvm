@@ -1,7 +1,7 @@
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::integration::{solve_eq, BranchEqualCore};
+use super::core::{solve_eq, BranchEqualCore};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
@@ -15,7 +15,7 @@ type F = BabyBear;
 
 #[test]
 fn execute_pc_increment_sanity_test() {
-    let integration = BranchEqualCore::<RV32_NUM_LIMBS>::new(0);
+    let core = BranchEqualCore::<RV32_NUM_LIMBS>::new(0);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchEqualOpcode::BEQ.as_usize(),
@@ -27,7 +27,7 @@ fn execute_pc_increment_sanity_test() {
 
     let result =
         <BranchEqualCore<RV32_NUM_LIMBS> as VmCore<F, Rv32BranchAdapter<F>>>::execute_instruction(
-            &integration,
+            &core,
             &instruction,
             F::zero(),
             [x, y],
@@ -38,7 +38,7 @@ fn execute_pc_increment_sanity_test() {
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
     let result =
         <BranchEqualCore<RV32_NUM_LIMBS> as VmCore<F, Rv32BranchAdapter<F>>>::execute_instruction(
-            &integration,
+            &core,
             &instruction,
             F::zero(),
             [x, y],
