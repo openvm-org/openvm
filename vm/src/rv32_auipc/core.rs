@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        CoreIO, InstructionOutput, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
-        Writes, RV32_REGISTER_NUM_LANES,
+        AdapterContext, CoreIO, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir, Writes,
+        RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,
 };
@@ -81,13 +81,13 @@ where
         instruction: &Instruction<F>,
         from_pc: F,
         _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
+    ) -> Result<(AdapterContext<F, A::Interface<F>>, Self::Record)> {
         let opcode = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c.as_canonical_u32();
         let rd_data = solve_auipc(opcode, from_pc.as_canonical_u32(), c);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        let output: AdapterContext<F, A::Interface<F>> = AdapterContext {
             to_pc: None,
             writes: rd_data.into(),
         };

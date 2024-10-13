@@ -66,7 +66,7 @@ pub trait VmAdapter<F: Field> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterContext<F, Self::Interface<F>>,
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)>;
 
@@ -110,7 +110,7 @@ pub trait VmCore<F: PrimeField32, A: VmAdapter<F>> {
         instruction: &Instruction<F>,
         from_pc: F,
         reads: Reads<F, A::Interface<F>>,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)>;
+    ) -> Result<(AdapterContext<F, A::Interface<F>>, Self::Record)>;
 
     fn get_opcode_name(&self, opcode: usize) -> String;
 
@@ -136,7 +136,7 @@ where
     ) -> CoreIO<AB::Expr, I>;
 }
 
-pub struct InstructionOutput<T, I: VmAdapterInterface<T>> {
+pub struct AdapterContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<T>,
     pub writes: I::Writes,

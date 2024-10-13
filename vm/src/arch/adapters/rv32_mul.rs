@@ -8,8 +8,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
-        CoreIO, ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, Result,
-        VmAdapter, VmAdapterAir, VmAdapterInterface,
+        AdapterContext, CoreIO, ExecutionBridge, ExecutionBus, ExecutionState, Result, VmAdapter,
+        VmAdapterAir, VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -143,7 +143,7 @@ impl<F: PrimeField32> VmAdapter<F> for Rv32MultAdapter<F> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterContext<F, Self::Interface<F>>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check

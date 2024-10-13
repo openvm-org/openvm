@@ -10,8 +10,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        CoreIO, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
-        VmCoreAir, Writes,
+        AdapterContext, CoreIO, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        Writes,
     },
     program::Instruction,
 };
@@ -87,12 +87,12 @@ where
         instruction: &Instruction<F>,
         _from_pc: F,
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
+    ) -> Result<(AdapterContext<F, A::Interface<F>>, Self::Record)> {
         let opcode = Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
         let data: [[F; NUM_CELLS]; 2] = reads.into();
         let write_data = solve_write_data(opcode, data[0], data[1]);
 
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        let output: AdapterContext<F, A::Interface<F>> = AdapterContext {
             to_pc: None,
             writes: write_data.into(),
         };

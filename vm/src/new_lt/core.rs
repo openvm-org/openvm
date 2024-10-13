@@ -9,8 +9,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{LessThanOpcode, UsizeOpcode},
-        CoreIO, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
-        VmCoreAir, Writes,
+        AdapterContext, CoreIO, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        Writes,
     },
     program::Instruction,
 };
@@ -111,7 +111,7 @@ where
         instruction: &Instruction<F>,
         _from_pc: F,
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
+    ) -> Result<(AdapterContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
         let opcode = LessThanOpcode::from_usize(opcode - self.offset);
 
@@ -125,7 +125,7 @@ where
         writes[0] = cmp_result as u32;
 
         // Core doesn't modify PC directly, so we let Adapter handle the increment
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        let output: AdapterContext<F, A::Interface<F>> = AdapterContext {
             to_pc: None,
             writes: [writes.map(F::from_canonical_u32)].into(),
         };

@@ -8,8 +8,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, CoreIO,
-        VmAdapter, VmAdapterAir, VmAdapterInterface, Result,
+        AdapterContext, CoreIO, ExecutionBridge, ExecutionBus, ExecutionState, Result, VmAdapter,
+        VmAdapterAir, VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols},
@@ -104,12 +104,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32BranchAdapterAir {
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
     type Interface = Rv32BranchAdapterInterface<AB::Expr>;
 
-    fn eval(
-        &self,
-        _builder: &mut AB,
-        _local: &[AB::Var],
-        _ctx: CoreIO<AB::Expr, Self::Interface>,
-    ) {
+    fn eval(&self, _builder: &mut AB, _local: &[AB::Var], _ctx: CoreIO<AB::Expr, Self::Interface>) {
         todo!()
     }
 }
@@ -150,7 +145,7 @@ impl<F: PrimeField32> VmAdapter<F> for Rv32BranchAdapter<F> {
         memory: &mut MemoryChip<F>,
         _instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterContext<F, Self::Interface<F>>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check

@@ -6,8 +6,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        CoreIO, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
-        VmCoreAir, Writes,
+        AdapterContext, CoreIO, Reads, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        Writes,
     },
     program::Instruction,
 };
@@ -89,7 +89,7 @@ where
         instruction: &Instruction<F>,
         from_pc: F,
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
+    ) -> Result<(AdapterContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction {
             opcode, op_c: imm, ..
         } = *instruction;
@@ -100,7 +100,7 @@ where
         let y = data[1].map(|y| y.as_canonical_u32());
         let (cmp_result, _diff_idx, _diff_val) = solve_eq::<F, NUM_LIMBS>(opcode, &x, &y);
 
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        let output: AdapterContext<F, A::Interface<F>> = AdapterContext {
             to_pc: if cmp_result {
                 Some(from_pc + imm)
             } else {

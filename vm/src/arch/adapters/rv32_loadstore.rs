@@ -13,8 +13,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        ExecutionState, InstructionOutput, CoreIO, VmAdapter, VmAdapterAir,
-        VmAdapterInterface, Result, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        AdapterContext, CoreIO, ExecutionState, Result, VmAdapter, VmAdapterAir,
+        VmAdapterInterface, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -55,12 +55,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
 {
     type Interface = Rv32LoadStoreAdapterInterface<AB::Expr, NUM_CELLS>;
 
-    fn eval(
-        &self,
-        _builder: &mut AB,
-        _local: &[AB::Var],
-        _ctx: CoreIO<AB::Expr, Self::Interface>,
-    ) {
+    fn eval(&self, _builder: &mut AB, _local: &[AB::Var], _ctx: CoreIO<AB::Expr, Self::Interface>) {
         todo!()
     }
 }
@@ -112,9 +107,7 @@ impl<F: Field, const NUM_CELLS: usize> Rv32LoadStoreAdapter<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapter<F>
-    for Rv32LoadStoreAdapter<F, NUM_CELLS>
-{
+impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapter<F> for Rv32LoadStoreAdapter<F, NUM_CELLS> {
     type ReadRecord = Rv32LoadStoreAdapterReadRecord<F, NUM_CELLS>;
     type WriteRecord = Rv32LoadStoreAdapterWriteRecord<F, NUM_CELLS>;
     type Air = Rv32LoadStoreAdapterAir<F, NUM_CELLS>;
@@ -206,7 +199,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapter<F>
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterContext<F, Self::Interface<F>>,
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction {

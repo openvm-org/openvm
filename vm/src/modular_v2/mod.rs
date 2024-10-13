@@ -8,7 +8,7 @@ use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
 use crate::{
-    arch::{InstructionOutput, VmCore, Rv32HeapAdapter, Rv32HeapAdapterInterface},
+    arch::{AdapterContext, Rv32HeapAdapter, Rv32HeapAdapterInterface, VmCore},
     utils::{biguint_to_limbs, limbs_to_biguint},
 };
 
@@ -86,7 +86,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         _from_pc: F,
         reads: <Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS> as crate::arch::VmAdapterInterface<F>>::Reads,
     ) -> crate::arch::Result<(
-        InstructionOutput<F, Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS>>,
+        AdapterContext<F, Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS>>,
         Self::Record,
     )> {
         let (x, y) = reads;
@@ -101,7 +101,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         let z_limbs = biguint_to_limbs::<NUM_LIMBS>(z_biguint, LIMB_SIZE);
 
         Ok((
-            InstructionOutput {
+            AdapterContext {
                 to_pc: None,
                 writes: z_limbs.map(|x| F::from_canonical_u32(x)),
             },
