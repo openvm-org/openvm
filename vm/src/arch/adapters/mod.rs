@@ -6,6 +6,7 @@ mod rv32_loadstore;
 mod rv32_mul;
 mod rv32_rdwrite;
 
+use afs_derive::AlignedBorrow;
 pub use rv32_alu::*;
 pub use rv32_branch::*;
 pub use rv32_heap::*;

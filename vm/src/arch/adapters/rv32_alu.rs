@@ -70,17 +70,6 @@ pub struct Rv32AluWriteRecord<F: Field> {
     pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
 }
 
-/// Interface for reading two RV32 registers, or one RV32 register and
-/// one immediate
-// TODO: this should be const generic interface not specific to RV
-pub struct Rv32RTypeAdapterInterface<T>(PhantomData<T>);
-
-impl<T: AbstractField> MachineAdapterInterface<T> for Rv32RTypeAdapterInterface<T> {
-    type Reads = [[T; RV32_REGISTER_NUM_LANES]; 2];
-    type Writes = [T; RV32_REGISTER_NUM_LANES];
-    type ProcessedInstruction = MinimalInstruction<T>;
-}
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct Rv32AluAdapterCols<T> {

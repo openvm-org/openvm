@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, marker::PhantomData, sync::Arc};
 
+use afs_derive::AlignedBorrow;
 use afs_stark_backend::{
     air_builders::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
@@ -338,4 +339,38 @@ where
         let ctx = self.inner.eval(builder, local_inner, local_adapter);
         self.adapter.eval(builder, local_adapter, ctx);
     }
+}
+
+/// The most common adapter interface.
+/// Performs `NUM_READS` batch reads of size `READ_SIZE` and
+/// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
+///
+pub struct CommonAdapterInterface<
+    T,
+    const NUM_READS: usize,
+    const NUM_WRITES: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+>(PhantomData<T>);
+
+impl<
+        T: AbstractField,
+        const NUM_READS: usize,
+        const NUM_WRITES: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > MachineAdapterInterface<T>
+    for CommonAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
+{
+    type Reads = [[T; READ_SIZE]; NUM_READS];
+    type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
+    type ProcessedInstruction = MinimalInstruction<T>;
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct MinimalInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
 }
