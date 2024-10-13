@@ -18,7 +18,7 @@ use afs_stark_backend::{
 use itertools::zip_eq;
 pub use memory::{AddressSpace, MemoryReadRecord, MemoryWriteRecord};
 use p3_air::BaseAir;
-use p3_field::PrimeField32;
+use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use self::interface::MemoryInterface;
@@ -152,7 +152,7 @@ impl<T: Clone, const N: usize> From<MemoryHeapWriteRecord<T, N>> for MemoryHeapD
 pub type MemoryChipRef<F> = Rc<RefCell<MemoryChip<F>>>;
 
 #[derive(Clone, Debug)]
-pub struct MemoryChip<F> {
+pub struct MemoryChip<F: Field> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<NUM_WORDS, F>,
     pub(crate) mem_config: MemoryConfig,

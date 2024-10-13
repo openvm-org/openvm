@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_field::PrimeField32;
@@ -11,7 +11,7 @@ impl<F: PrimeField32> MemoryAuditChip<F> {
     pub fn generate_trace(
         &self,
         // TODO[osama]: consider making a struct for address
-        final_memory: &BTreeMap<(F, F), TimestampedValue<F>>,
+        final_memory: &HashMap<(F, F), TimestampedValue<F>>,
     ) -> RowMajorMatrix<F> {
         let trace_height = self.initial_memory.len().next_power_of_two();
         self.generate_trace_with_height(final_memory, trace_height)
@@ -19,7 +19,7 @@ impl<F: PrimeField32> MemoryAuditChip<F> {
     pub fn generate_trace_with_height(
         &self,
         // TODO[osama]: consider making a struct for address
-        final_memory: &BTreeMap<(F, F), TimestampedValue<F>>,
+        final_memory: &HashMap<(F, F), TimestampedValue<F>>,
         trace_height: usize,
     ) -> RowMajorMatrix<F> {
         let gen_row = |prev_idx: Vec<u32>,

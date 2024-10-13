@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use p3_field::PrimeField32;
+use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::TimestampedValue;
 use crate::memory::audit::MemoryAuditChip;
 
 #[derive(Clone, Debug)]
-pub enum MemoryInterface<const NUM_WORDS: usize, F> {
+pub enum MemoryInterface<const NUM_WORDS: usize, F: Field> {
     Volatile(MemoryAuditChip<F>),
     // Persistent(MemoryExpandInterfaceChip<NUM_WORDS, WORD_SIZE, F>),
 }

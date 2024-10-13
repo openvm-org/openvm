@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use p3_field::PrimeField;
+use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
@@ -14,7 +14,7 @@ use crate::{
 };
 
 impl IsLessThanTupleChip {
-    pub fn generate_trace<F: PrimeField>(
+    pub fn generate_trace<F: Field>(
         &self,
         tuple_pairs: Vec<(Vec<u32>, Vec<u32>)>,
     ) -> RowMajorMatrix<F> {
@@ -38,7 +38,7 @@ impl IsLessThanTupleChip {
 }
 
 impl IsLessThanTupleAir {
-    pub fn generate_trace_row<F: PrimeField>(
+    pub fn generate_trace_row<F: Field>(
         &self,
         x: &[u32],
         y: &[u32],
@@ -52,7 +52,7 @@ impl IsLessThanTupleAir {
         self.generate_trace_row_aux(x, y, range_checker, &mut lt_cols.aux);
     }
 
-    pub fn generate_trace_row_aux<F: PrimeField>(
+    pub fn generate_trace_row_aux<F: Field>(
         &self,
         x: &[u32],
         y: &[u32],
@@ -97,7 +97,7 @@ impl IsLessThanTupleAir {
 }
 
 // TODO[jpw] stop using Arc<VariableRangeCheckerChip> and use &VariableRangeCheckerChip (requires not using this trait)
-impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
+impl<F: Field> LocalTraceInstructions<F> for IsLessThanTupleAir {
     type LocalInput = (Vec<u32>, Vec<u32>, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
