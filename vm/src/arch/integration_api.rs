@@ -344,7 +344,7 @@ where
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
 ///
-pub struct CommonAdapterInterface<
+pub struct BasicAdapterInterface<
     T,
     const NUM_READS: usize,
     const NUM_WRITES: usize,
@@ -359,7 +359,7 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > VmAdapterInterface<T>
-    for CommonAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
+    for BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
     type Reads = [[T; READ_SIZE]; NUM_READS];
     type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
