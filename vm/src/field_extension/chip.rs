@@ -63,7 +63,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
             e,
             ..
         } = instruction;
-        let opcode = opcode - self.offset;
+        let local_opcode_index = opcode - self.offset;
 
         assert_ne!(d, F::zero());
         assert_ne!(e, F::zero());
@@ -76,15 +76,19 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
         let y_read = memory_chip.read(e, op_c);
         let y: [F; EXT_DEG] = y_read.data;
 
-        let z = FieldExtensionArithmetic::solve(FieldExtensionOpcode::from_usize(opcode), x, y)
-            .unwrap();
+        let z = FieldExtensionArithmetic::solve(
+            FieldExtensionOpcode::from_usize(local_opcode_index),
+            x,
+            y,
+        )
+        .unwrap();
         let z_write = memory_chip.write(d, op_a, z);
 
         self.records.push(FieldExtensionArithmeticRecord {
             timestamp: from_state.timestamp,
             pc: from_state.pc,
             instruction: Instruction {
-                opcode,
+                opcode: opcode - self.offset,
                 ..instruction
             },
             x,

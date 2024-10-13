@@ -87,7 +87,7 @@ where
         let Instruction {
             opcode, op_c: c, ..
         } = *instruction;
-        let opcode = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode_index = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
 
         // Note: immediate is a signed integer and c is a field element
         let imm = (c + F::from_canonical_u32(1 << (RV_IS_TYPE_IMM_BITS - 1))).as_canonical_u32()
@@ -95,7 +95,7 @@ where
             - (1 << (RV_IS_TYPE_IMM_BITS - 1));
 
         let rs1 = compose(reads.into());
-        let (to_pc, rd_data) = solve_jalr(opcode, from_pc.as_canonical_u32(), imm, rs1);
+        let (to_pc, rd_data) = solve_jalr(local_opcode_index, from_pc.as_canonical_u32(), imm, rs1);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
         let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {

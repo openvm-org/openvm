@@ -75,15 +75,15 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         &self,
         record: FieldExtensionArithmeticRecord<F>,
     ) -> FieldExtensionArithmeticCols<F> {
-        let opcode = FieldExtensionOpcode::from_usize(record.instruction.opcode);
-        let is_add = F::from_bool(opcode == FieldExtensionOpcode::FE4ADD);
-        let is_sub = F::from_bool(opcode == FieldExtensionOpcode::FE4SUB);
-        let is_mul = F::from_bool(opcode == FieldExtensionOpcode::BBE4MUL);
-        let is_div = F::from_bool(opcode == FieldExtensionOpcode::BBE4DIV);
+        let local_opcode_index = FieldExtensionOpcode::from_usize(record.instruction.opcode);
+        let is_add = F::from_bool(local_opcode_index == FieldExtensionOpcode::FE4ADD);
+        let is_sub = F::from_bool(local_opcode_index == FieldExtensionOpcode::FE4SUB);
+        let is_mul = F::from_bool(local_opcode_index == FieldExtensionOpcode::BBE4MUL);
+        let is_div = F::from_bool(local_opcode_index == FieldExtensionOpcode::BBE4DIV);
 
         let FieldExtensionArithmeticRecord { x, y, z, .. } = record;
 
-        let divisor_inv = if opcode == FieldExtensionOpcode::BBE4DIV {
+        let divisor_inv = if local_opcode_index == FieldExtensionOpcode::BBE4DIV {
             FieldExtensionArithmetic::invert(record.y)
         } else {
             [F::zero(); EXT_DEG]

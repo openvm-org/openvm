@@ -113,18 +113,20 @@ where
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let opcode = DivRemOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = DivRemOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
         let (q, r, _x_sign, _y_sign) = solve_divrem::<NUM_LIMBS, LIMB_BITS>(
-            opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM,
+            local_opcode_index == DivRemOpcode::DIV || local_opcode_index == DivRemOpcode::REM,
             &x,
             &y,
         );
 
-        let z = if opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::DIVU {
+        let z = if local_opcode_index == DivRemOpcode::DIV
+            || local_opcode_index == DivRemOpcode::DIVU
+        {
             &q
         } else {
             &r

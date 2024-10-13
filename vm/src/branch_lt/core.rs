@@ -118,13 +118,13 @@ where
         let Instruction {
             opcode, op_c: imm, ..
         } = *instruction;
-        let opcode = BranchLessThanOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = BranchLessThanOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
         let (cmp_result, _diff_idx, _x_sign, _y_sign) =
-            solve_cmp::<NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
+            solve_cmp::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
         let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: if cmp_result {
@@ -156,12 +156,14 @@ where
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)
 pub(super) fn solve_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    opcode: BranchLessThanOpcode,
+    local_opcode_index: BranchLessThanOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> (bool, usize, bool, bool) {
-    let signed = opcode == BranchLessThanOpcode::BLT || opcode == BranchLessThanOpcode::BGE;
-    let ge_op = opcode == BranchLessThanOpcode::BGE || opcode == BranchLessThanOpcode::BGEU;
+    let signed = local_opcode_index == BranchLessThanOpcode::BLT
+        || local_opcode_index == BranchLessThanOpcode::BGE;
+    let ge_op = local_opcode_index == BranchLessThanOpcode::BGE
+        || local_opcode_index == BranchLessThanOpcode::BGEU;
     let x_sign = (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && signed;
     let y_sign = (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && signed;
     for i in (0..NUM_LIMBS).rev() {

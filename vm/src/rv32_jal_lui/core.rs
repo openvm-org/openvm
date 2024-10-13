@@ -86,10 +86,10 @@ where
         from_pc: F,
         _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
-        let opcode = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode_index = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c;
 
-        let imm = match opcode {
+        let imm = match local_opcode_index {
             JAL => {
                 // Note: immediate is a signed integer and c is a field element
                 (c + F::from_canonical_u32(1 << (RV_J_TYPE_IMM_BITS - 1))).as_canonical_u32() as i32
@@ -97,7 +97,8 @@ where
             }
             LUI => c.as_canonical_u32() as i32,
         };
-        let (to_pc, rd_data) = solve_jal_lui(opcode, from_pc.as_canonical_u32() as usize, imm);
+        let (to_pc, rd_data) =
+            solve_jal_lui(local_opcode_index, from_pc.as_canonical_u32() as usize, imm);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
         let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {

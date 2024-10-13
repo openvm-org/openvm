@@ -112,12 +112,13 @@ where
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let opcode = MulHOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = MulHOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
-        let (z, _z_mul, _x_ext, _y_ext) = solve_mulh::<NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
+        let (z, _z_mul, _x_ext, _y_ext) =
+            solve_mulh::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
         // Core doesn't modify PC directly, so we let Adapter handle the increment
         let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {

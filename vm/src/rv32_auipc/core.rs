@@ -82,9 +82,9 @@ where
         from_pc: F,
         _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
-        let opcode = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode_index = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c.as_canonical_u32();
-        let rd_data = solve_auipc(opcode, from_pc.as_canonical_u32(), c);
+        let rd_data = solve_auipc(local_opcode_index, from_pc.as_canonical_u32(), c);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
         let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {

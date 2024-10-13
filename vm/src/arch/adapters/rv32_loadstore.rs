@@ -13,8 +13,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterChip, VmAdapterAir,
-        VmAdapterInterface, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterAir,
+        VmAdapterChip, VmAdapterInterface, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -157,9 +157,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         assert!(imm < (1 << RV_IS_TYPE_IMM_BITS));
         assert!(ptr_val < (1 << addr_bits));
 
-        let opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
-        let read_record = match opcode {
+        let read_record = match local_opcode_index {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                 memory.read::<NUM_CELLS>(e, F::from_canonical_u32(ptr_val))
             }
@@ -168,7 +168,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         // We need to keep values of some cells to keep them unchanged when writing to those cells
         let mut prev_data = [F::zero(); NUM_CELLS];
-        match opcode {
+        match local_opcode_index {
             STOREH => {
                 for (i, cell) in prev_data
                     .iter_mut()
@@ -218,9 +218,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             ..
         } = *instruction;
 
-        let opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
-        let write_record = match opcode {
+        let write_record = match local_opcode_index {
             STOREW | STOREH | STOREB => {
                 let ptr = compose(read_record.rs1.data);
                 let imm =

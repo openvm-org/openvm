@@ -134,7 +134,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
             e,
             ..
         } = instruction;
-        let opcode = opcode - self.offset;
+        let local_opcode_index = opcode - self.offset;
         assert_eq!(CARRY_LIMBS, NUM_LIMBS * 2 - 1);
         assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
 
@@ -154,7 +154,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         let y_biguint = limbs_to_biguint(&y, LIMB_SIZE);
 
         let z_biguint = self.solve(
-            ModularArithmeticOpcode::from_usize(opcode),
+            ModularArithmeticOpcode::from_usize(local_opcode_index),
             x_biguint,
             y_biguint,
         );
@@ -170,7 +170,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         self.data.push(ModularMultDivRecord {
             from_state,
             instruction: Instruction {
-                opcode,
+                opcode: local_opcode_index as usize,
                 ..instruction
             },
             x_array_read,
@@ -185,8 +185,11 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        let opcode = ModularArithmeticOpcode::from_usize(opcode - self.offset);
-        format!("{opcode:?}<{:?},{NUM_LIMBS},{LIMB_SIZE}>", self.modulus)
+        let local_opcode_index = ModularArithmeticOpcode::from_usize(opcode - self.offset);
+        format!(
+            "{local_opcode_index:?}<{:?},{NUM_LIMBS},{LIMB_SIZE}>",
+            self.modulus
+        )
     }
 }
 

@@ -113,13 +113,13 @@ where
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let opcode = LessThanOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = LessThanOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
         let (cmp_result, _diff_idx, _x_sign, _y_sign) =
-            solve_less_than::<NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
+            solve_less_than::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
         let mut writes = [0u32; NUM_LIMBS];
         writes[0] = cmp_result as u32;

@@ -91,9 +91,10 @@ where
         _from_pc: F,
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
-        let opcode = Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode_index =
+            Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
         let data: [[F; NUM_CELLS]; 2] = reads.into();
-        let write_data = solve_write_data(opcode, data[0], data[1]);
+        let write_data = solve_write_data(local_opcode_index, data[0], data[1]);
 
         let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: None,

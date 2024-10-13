@@ -113,12 +113,12 @@ where
         reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let opcode = AluOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode_index = AluOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
-        let a = solve_alu::<NUM_LIMBS, LIMB_BITS>(opcode, &b, &c);
+        let a = solve_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
         // Core doesn't modify PC directly, so we let Adapter handle the increment
         let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
@@ -126,7 +126,7 @@ where
             writes: [a.map(F::from_canonical_u32)].into(),
         };
 
-        if opcode == AluOpcode::ADD || opcode == AluOpcode::SUB {
+        if local_opcode_index == AluOpcode::ADD || local_opcode_index == AluOpcode::SUB {
             for a_val in a {
                 self.xor_lookup_chip.request(a_val, a_val);
             }
@@ -137,7 +137,7 @@ where
         }
 
         let record = Self::Record {
-            opcode,
+            opcode: local_opcode_index,
             a: a.map(F::from_canonical_u32),
             b: data[0],
             c: data[1],

@@ -96,12 +96,13 @@ where
         let Instruction {
             opcode, op_c: imm, ..
         } = *instruction;
-        let opcode = BranchEqualOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = BranchEqualOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
-        let (cmp_result, _diff_idx, _diff_val) = solve_eq::<F, NUM_LIMBS>(opcode, &x, &y);
+        let (cmp_result, _diff_idx, _diff_val) =
+            solve_eq::<F, NUM_LIMBS>(local_opcode_index, &x, &y);
 
         let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: if cmp_result {
@@ -133,18 +134,18 @@ where
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
 pub(super) fn solve_eq<F: PrimeField32, const NUM_LIMBS: usize>(
-    opcode: BranchEqualOpcode,
+    local_opcode_index: BranchEqualOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> (bool, usize, F) {
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
             return (
-                opcode == BranchEqualOpcode::BNE,
+                local_opcode_index == BranchEqualOpcode::BNE,
                 i,
                 (F::from_canonical_u32(x[i]) - F::from_canonical_u32(y[i])).inverse(),
             );
         }
     }
-    (opcode == BranchEqualOpcode::BEQ, 0, F::zero())
+    (local_opcode_index == BranchEqualOpcode::BEQ, 0, F::zero())
 }
