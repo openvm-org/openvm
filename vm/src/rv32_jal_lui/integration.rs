@@ -1,6 +1,6 @@
 use std::{array, marker::PhantomData, mem::size_of};
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{Field, PrimeField32};
 
@@ -39,6 +39,8 @@ impl<F: Field> BaseAir<F> for Rv32JalLuiAir<F> {
     }
 }
 
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalLuiAir<F> {}
+
 #[derive(Debug, Clone)]
 pub struct Rv32JalLuiIntegration<F: Field> {
     pub air: Rv32JalLuiAir<F>,
@@ -61,7 +63,6 @@ where
 {
     type Record = ();
     type Air = Rv32JalLuiAir<F>;
-    type Cols<T> = Rv32JalLuiCols<T>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
@@ -99,21 +100,12 @@ where
         )
     }
 
-    fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
+    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
         todo!()
     }
 
-    fn eval_primitive<AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues>(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &A::Cols<AB::Var>,
-    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
-        todo!()
-    }
-
-    fn air(&self) -> Self::Air {
-        todo!()
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }
 

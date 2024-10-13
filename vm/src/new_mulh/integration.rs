@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{Field, PrimeField32};
 
@@ -54,6 +54,11 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
     }
 }
 
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
+    for MulHAir<NUM_LIMBS, LIMB_BITS>
+{
+}
+
 #[derive(Debug)]
 pub struct MulHIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: MulHAir<NUM_LIMBS, LIMB_BITS>,
@@ -81,7 +86,6 @@ where
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Cols<T> = MulHCols<T, NUM_LIMBS, LIMB_BITS>;
     type Air = MulHAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
@@ -115,22 +119,12 @@ where
         todo!()
     }
 
-    fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
+    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
         todo!()
     }
 
-    /// Returns `(to_pc, interface)`.
-    fn eval_primitive<AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues>(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &A::Cols<AB::Var>,
-    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
-        todo!()
-    }
-
-    fn air(&self) -> Self::Air {
-        self.air
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }
 
