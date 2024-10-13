@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     iter,
     sync::Arc,
 };
@@ -48,7 +48,7 @@ fn audit_air_test() {
     let mut audit_chip =
         MemoryAuditChip::<Val>::new(memory_bus, 2, LIMB_BITS, DECOMP, range_checker.clone());
 
-    let mut final_memory: BTreeMap<_, _> = BTreeMap::new();
+    let mut final_memory: HashMap<_, _> = HashMap::new();
 
     for (addr_space, pointer) in distinct_addresses.iter().cloned() {
         let final_data = random_f(MAX_VAL);
