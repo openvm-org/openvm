@@ -8,7 +8,7 @@ use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
 use crate::{
-    arch::{InstructionOutput, VmIntegration, Rv32HeapAdapter, Rv32HeapAdapterInterface},
+    arch::{InstructionOutput, VmCore, Rv32HeapAdapter, Rv32HeapAdapterInterface},
     utils::{biguint_to_limbs, limbs_to_biguint},
 };
 
@@ -74,7 +74,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2Chip<NUM_LIM
 }
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    VmIntegration<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
+    VmCore<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
     for ModularAddSubV2Chip<NUM_LIMBS, LIMB_SIZE>
 {
     type Record = ();

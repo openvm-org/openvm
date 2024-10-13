@@ -6,8 +6,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
-        VmIntegration, VmIntegrationAir, Reads, Result, Writes,
+        CoreInterface, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
+        VmCoreAir, Writes,
     },
     program::Instruction,
 };
@@ -43,7 +43,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize> Air<AB> for BranchEqualAir<
 
 impl<F: Field, const NUM_LIMBS: usize> BaseAirWithPublicValues<F> for BranchEqualAir<NUM_LIMBS> {}
 
-impl<AB, I, const NUM_LIMBS: usize> VmIntegrationAir<AB, I> for BranchEqualAir<NUM_LIMBS>
+impl<AB, I, const NUM_LIMBS: usize> VmCoreAir<AB, I> for BranchEqualAir<NUM_LIMBS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -53,18 +53,18 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct BranchEqualIntegration<const NUM_LIMBS: usize> {
+pub struct BranchEqualCore<const NUM_LIMBS: usize> {
     pub air: BranchEqualAir<NUM_LIMBS>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize> BranchEqualIntegration<NUM_LIMBS> {
+impl<const NUM_LIMBS: usize> BranchEqualCore<NUM_LIMBS> {
     pub fn new(offset: usize) -> Self {
         Self {
             air: BranchEqualAir {},
@@ -73,8 +73,8 @@ impl<const NUM_LIMBS: usize> BranchEqualIntegration<NUM_LIMBS> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize> VmIntegration<F, A>
-    for BranchEqualIntegration<NUM_LIMBS>
+impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize> VmCore<F, A>
+    for BranchEqualCore<NUM_LIMBS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: Default,

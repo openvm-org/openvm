@@ -1,4 +1,4 @@
-use crate::arch::{VmChipWrapper, Rv32BranchAdapter};
+use crate::arch::{Rv32BranchAdapter, VmChipWrapper};
 
 mod integration;
 pub use integration::*;
@@ -7,4 +7,4 @@ pub use integration::*;
 mod tests;
 
 pub type Rv32BranchLessThanChip<F> =
-    VmChipWrapper<F, Rv32BranchAdapter<F>, BranchLessThanIntegration<4, 8>>;
+    VmChipWrapper<F, Rv32BranchAdapter<F>, BranchLessThanCore<4, 8>>;

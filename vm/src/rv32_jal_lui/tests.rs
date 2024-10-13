@@ -3,7 +3,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use rand::{rngs::StdRng, Rng};
 
-use super::{solve_jal_lui, Rv32JalLuiChip, Rv32JalLuiIntegration};
+use super::{solve_jal_lui, Rv32JalLuiChip, Rv32JalLuiCore};
 use crate::{
     arch::{
         instructions::{
@@ -73,7 +73,7 @@ fn simple_execute_roundtrip_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32RdWriteAdapter::<F>::new();
-    let inner = Rv32JalLuiIntegration::<F>::new(Rv32JalLuiOpcode::default_offset());
+    let inner = Rv32JalLuiCore::<F>::new(Rv32JalLuiOpcode::default_offset());
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_chip());
 
     let num_tests: usize = 10;

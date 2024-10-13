@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
-        VmIntegration, VmIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
+        CoreInterface, InstructionOutput, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        Writes, RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,
 };
@@ -38,7 +38,7 @@ impl<F: Field> BaseAir<F> for Rv32AuipcAir<F> {
 
 impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcAir<F> {}
 
-impl<AB: InteractionBuilder, I> VmIntegrationAir<AB, I> for Rv32AuipcAir<AB::F>
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32AuipcAir<AB::F>
 where
     I: VmAdapterInterface<AB::Expr>,
 {
@@ -47,17 +47,17 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32AuipcIntegration<F: Field> {
+pub struct Rv32AuipcCore<F: Field> {
     pub air: Rv32AuipcAir<F>,
 }
 
-impl<F: Field> Rv32AuipcIntegration<F> {
+impl<F: Field> Rv32AuipcCore<F> {
     pub fn new(offset: usize) -> Self {
         Self {
             air: Rv32AuipcAir::<F> {
@@ -68,7 +68,7 @@ impl<F: Field> Rv32AuipcIntegration<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>> VmIntegration<F, A> for Rv32AuipcIntegration<F>
+impl<F: PrimeField32, A: VmAdapter<F>> VmCore<F, A> for Rv32AuipcCore<F>
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {

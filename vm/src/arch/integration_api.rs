@@ -93,12 +93,12 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
         &self,
         builder: &mut AB,
         local: &[AB::Var],
-        interface: IntegrationInterface<AB::Expr, Self::Interface>,
+        interface: CoreInterface<AB::Expr, Self::Interface>,
     );
 }
 
 /// Trait to be implemented on primitive chip to integrate with the machine.
-pub trait VmIntegration<F: PrimeField32, A: VmAdapter<F>> {
+pub trait VmCore<F: PrimeField32, A: VmAdapter<F>> {
     /// Minimum data that must be recorded to be able to generate trace for one row of `PrimitiveAir`.
     type Record: Send;
     /// The primitive AIR with main constraints that do not depend on memory and other architecture-specifics.
@@ -121,7 +121,7 @@ pub trait VmIntegration<F: PrimeField32, A: VmAdapter<F>> {
     fn air(&self) -> &Self::Air;
 }
 
-pub trait VmIntegrationAir<AB, I>: BaseAirWithPublicValues<AB::F>
+pub trait VmCoreAir<AB, I>: BaseAirWithPublicValues<AB::F>
 where
     AB: AirBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -133,7 +133,7 @@ where
         builder: &mut AB,
         local: &[AB::Var],
         local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I>;
+    ) -> CoreInterface<AB::Expr, I>;
 }
 
 pub struct InstructionOutput<T, I: VmAdapterInterface<T>> {
@@ -143,7 +143,7 @@ pub struct InstructionOutput<T, I: VmAdapterInterface<T>> {
 }
 
 // better name: AdapterContext
-pub struct IntegrationInterface<T, I: VmAdapterInterface<T>> {
+pub struct CoreInterface<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<T>,
     pub reads: I::Reads,
@@ -152,7 +152,7 @@ pub struct IntegrationInterface<T, I: VmAdapterInterface<T>> {
 }
 
 #[derive(Clone, Debug)]
-pub struct VmChipWrapper<F: PrimeField32, A: VmAdapter<F>, M: VmIntegration<F, A>> {
+pub struct VmChipWrapper<F: PrimeField32, A: VmAdapter<F>, M: VmCore<F, A>> {
     pub adapter: A,
     pub inner: M,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, M::Record)>,
@@ -163,7 +163,7 @@ impl<F, A, M> VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: VmAdapter<F>,
-    M: VmIntegration<F, A>,
+    M: VmCore<F, A>,
 {
     pub fn new(adapter: A, inner: M, memory: MemoryChipRef<F>) -> Self {
         Self {
@@ -179,7 +179,7 @@ impl<F, A, M> InstructionExecutor<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: VmAdapter<F>,
-    M: VmIntegration<F, A>,
+    M: VmCore<F, A>,
 {
     fn execute(
         &mut self,
@@ -212,7 +212,7 @@ impl<F, A, M> VmChip<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: VmAdapter<F> + Sync,
-    M: VmIntegration<F, A> + Sync,
+    M: VmCore<F, A> + Sync,
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = next_power_of_two_or_zero(self.records.len());
@@ -253,7 +253,7 @@ where
 
 // Note[jpw]: the statement we want is:
 // - when A::Air is an AdapterAir for all AirBuilders needed by stark-backend
-// - and when M::Air is an IntegrationAir for all AirBuilders needed by stark-backend,
+// - and when M::Air is an CoreAir for all AirBuilders needed by stark-backend,
 // then VmAirWrapper<A::Air, M::Air> is an Air for all AirBuilders needed
 // by stark-backend, which is equivalent to saying it implements AnyRap<SC>
 // The where clauses to achieve this statement is unfortunately really verbose.
@@ -262,21 +262,21 @@ where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
     A: VmAdapter<Val<SC>>,
-    M: VmIntegration<Val<SC>, A>,
+    M: VmCore<Val<SC>, A>,
     A::Air: 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
     A::Air: for<'a> VmAdapterAir<DebugConstraintBuilder<'a, SC>>,
     M::Air: 'static,
-    M::Air: VmIntegrationAir<
+    M::Air: VmCoreAir<
         SymbolicRapBuilder<Val<SC>>,
         <A::Air as VmAdapterAir<SymbolicRapBuilder<Val<SC>>>>::Interface,
     >,
-    M::Air: for<'a> VmIntegrationAir<
+    M::Air: for<'a> VmCoreAir<
         ProverConstraintFolder<'a, SC>,
         <A::Air as VmAdapterAir<ProverConstraintFolder<'a, SC>>>::Interface,
     >,
-    M::Air: for<'a> VmIntegrationAir<
+    M::Air: for<'a> VmCoreAir<
         DebugConstraintBuilder<'a, SC>,
         <A::Air as VmAdapterAir<DebugConstraintBuilder<'a, SC>>>::Interface,
     >,
@@ -327,7 +327,7 @@ impl<AB, A, M> Air<AB> for VmAirWrapper<A, M>
 where
     AB: AirBuilder,
     A: VmAdapterAir<AB>,
-    M: VmIntegrationAir<AB, A::Interface>,
+    M: VmCoreAir<AB, A::Interface>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

@@ -10,8 +10,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
-        VmIntegration, VmIntegrationAir, Reads, Result, Writes,
+        CoreInterface, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
+        VmCoreAir, Writes,
     },
     program::Instruction,
 };
@@ -41,7 +41,7 @@ impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreAir<F, NUM_CELLS>
 
 impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F> for LoadStoreAir<F, NUM_CELLS> {}
 
-impl<AB, I, const NUM_CELLS: usize> VmIntegrationAir<AB, I> for LoadStoreAir<AB::F, NUM_CELLS>
+impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreAir<AB::F, NUM_CELLS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -51,17 +51,17 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreIntegration<F: Field, const NUM_CELLS: usize> {
+pub struct LoadStoreCore<F: Field, const NUM_CELLS: usize> {
     pub air: LoadStoreAir<F, NUM_CELLS>,
 }
 
-impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
+impl<F: Field, const NUM_CELLS: usize> LoadStoreCore<F, NUM_CELLS> {
     pub fn new(offset: usize) -> Self {
         Self {
             air: LoadStoreAir::<F, NUM_CELLS> {
@@ -72,8 +72,8 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_CELLS: usize> VmIntegration<F, A>
-    for LoadStoreIntegration<F, NUM_CELLS>
+impl<F: PrimeField32, A: VmAdapter<F>, const NUM_CELLS: usize> VmCore<F, A>
+    for LoadStoreCore<F, NUM_CELLS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_CELLS]>,

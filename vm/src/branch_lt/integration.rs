@@ -9,8 +9,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
-        VmIntegration, VmIntegrationAir, Reads, Result, Writes,
+        CoreInterface, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
+        VmCoreAir, Writes,
     },
     program::Instruction,
 };
@@ -63,7 +63,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublic
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmIntegrationAir<AB, I>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
     for BranchLessThanAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
@@ -74,21 +74,19 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct BranchLessThanIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BranchLessThanCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BranchLessThanAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    BranchLessThanIntegration<NUM_LIMBS, LIMB_BITS>
-{
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanCore<NUM_LIMBS, LIMB_BITS> {
     pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
         Self {
             air: BranchLessThanAir {
@@ -100,8 +98,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmIntegration<F, A> for BranchLessThanIntegration<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCore<F, A>
+    for BranchLessThanCore<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: Default,

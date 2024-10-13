@@ -9,8 +9,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{LessThanOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
-        VmIntegration, VmIntegrationAir, Reads, Result, Writes,
+        CoreInterface, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
+        VmCoreAir, Writes,
     },
     program::Instruction,
 };
@@ -60,7 +60,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublic
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmIntegrationAir<AB, I>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
     for LessThanAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
@@ -71,19 +71,19 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct LessThanIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct LessThanCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: LessThanAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanIntegration<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCore<NUM_LIMBS, LIMB_BITS> {
     pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
         Self {
             air: LessThanAir {
@@ -95,8 +95,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanIntegration<NUM_LIM
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmIntegration<F, A> for LessThanIntegration<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCore<F, A>
+    for LessThanCore<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
@@ -124,7 +124,7 @@ where
         let mut writes = [0u32; NUM_LIMBS];
         writes[0] = cmp_result as u32;
 
-        // Integration doesn't modify PC directly, so we let Adapter handle the increment
+        // Core doesn't modify PC directly, so we let Adapter handle the increment
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
             to_pc: None,
             writes: [writes.map(F::from_canonical_u32)].into(),

@@ -2,10 +2,9 @@ mod integration;
 
 pub use integration::*;
 
-use crate::arch::{VmChipWrapper, Rv32LoadStoreAdapter};
+use crate::arch::{Rv32LoadStoreAdapter, VmChipWrapper};
 
 #[cfg(test)]
 mod tests;
 
-pub type Rv32LoadStoreChip<F> =
-    VmChipWrapper<F, Rv32LoadStoreAdapter<F, 4>, LoadStoreIntegration<F, 4>>;
+pub type Rv32LoadStoreChip<F> = VmChipWrapper<F, Rv32LoadStoreAdapter<F, 4>, LoadStoreCore<F, 4>>;

@@ -12,8 +12,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{ShiftOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
-        VmIntegration, VmIntegrationAir, Reads, Result, Writes,
+        CoreInterface, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
+        VmCoreAir, Writes,
     },
     program::Instruction,
 };
@@ -72,7 +72,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublic
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmIntegrationAir<AB, I>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
     for ShiftAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
@@ -83,20 +83,20 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct ShiftIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ShiftAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftIntegration<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCore<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
         range_checker_chip: Arc<VariableRangeCheckerChip>,
@@ -114,8 +114,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftIntegration<NUM_LIMBS,
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmIntegration<F, A> for ShiftIntegration<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCore<F, A>
+    for ShiftCore<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
@@ -139,7 +139,7 @@ where
         let y = data[1].map(|y| y.as_canonical_u32());
         let (z, _limb_shift, _bit_shift) = solve_shift::<NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
 
-        // Integration doesn't modify PC directly, so we let Adapter handle the increment
+        // Core doesn't modify PC directly, so we let Adapter handle the increment
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
             to_pc: None,
             writes: [z.map(F::from_canonical_u32)].into(),

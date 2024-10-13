@@ -10,9 +10,8 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
-        VmIntegration, VmIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
-        RV_J_TYPE_IMM_BITS,
+        CoreInterface, InstructionOutput, Result, VmAdapter, VmAdapterInterface, VmCore, VmCoreAir,
+        Writes, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS,
     },
     program::Instruction,
 };
@@ -42,7 +41,7 @@ impl<F: Field> BaseAir<F> for Rv32JalLuiAir<F> {
 
 impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalLuiAir<F> {}
 
-impl<AB, I> VmIntegrationAir<AB, I> for Rv32JalLuiAir<AB::F>
+impl<AB, I> VmCoreAir<AB, I> for Rv32JalLuiAir<AB::F>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -52,17 +51,17 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalLuiIntegration<F: Field> {
+pub struct Rv32JalLuiCore<F: Field> {
     pub air: Rv32JalLuiAir<F>,
 }
 
-impl<F: Field> Rv32JalLuiIntegration<F> {
+impl<F: Field> Rv32JalLuiCore<F> {
     pub fn new(offset: usize) -> Self {
         Self {
             air: Rv32JalLuiAir::<F> {
@@ -73,7 +72,7 @@ impl<F: Field> Rv32JalLuiIntegration<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>> VmIntegration<F, A> for Rv32JalLuiIntegration<F>
+impl<F: PrimeField32, A: VmAdapter<F>> VmCore<F, A> for Rv32JalLuiCore<F>
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {

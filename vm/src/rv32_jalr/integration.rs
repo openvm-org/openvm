@@ -8,9 +8,8 @@ use crate::{
     arch::{
         compose,
         instructions::{Rv32JalrOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, VmAdapter, VmAdapterInterface,
-        VmIntegration, VmIntegrationAir, Reads, Result, Writes, PC_BITS,
-        RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        CoreInterface, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
+        VmCoreAir, Writes, PC_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     program::Instruction,
 };
@@ -40,7 +39,7 @@ impl<F: Field> BaseAir<F> for Rv32JalrAir<F> {
 
 impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalrAir<F> {}
 
-impl<AB: InteractionBuilder, I> VmIntegrationAir<AB, I> for Rv32JalrAir<AB::F>
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32JalrAir<AB::F>
 where
     I: VmAdapterInterface<AB::Expr>,
 {
@@ -49,17 +48,17 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalrIntegration<F: Field> {
+pub struct Rv32JalrCore<F: Field> {
     pub air: Rv32JalrAir<F>,
 }
 
-impl<F: Field> Rv32JalrIntegration<F> {
+impl<F: Field> Rv32JalrCore<F> {
     pub fn new(offset: usize) -> Self {
         Self {
             air: Rv32JalrAir::<F> {
@@ -70,7 +69,7 @@ impl<F: Field> Rv32JalrIntegration<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>> VmIntegration<F, A> for Rv32JalrIntegration<F>
+impl<F: PrimeField32, A: VmAdapter<F>> VmCore<F, A> for Rv32JalrCore<F>
 where
     Reads<F, A::Interface<F>>: Into<[F; RV32_REGISTER_NUM_LANES]>,
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,

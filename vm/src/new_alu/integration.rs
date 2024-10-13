@@ -9,8 +9,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{AluOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MinimalInstruction, Reads, Result, VmAdapter,
-        VmAdapterInterface, VmIntegration, VmIntegrationAir, Writes,
+        CoreInterface, InstructionOutput, MinimalInstruction, Reads, Result, VmAdapter,
+        VmAdapterInterface, VmCore, VmCoreAir, Writes,
     },
     program::Instruction,
 };
@@ -49,7 +49,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublic
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmIntegrationAir<AB, I>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
     for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
@@ -63,7 +63,7 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
@@ -77,14 +77,12 @@ pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
 }
 
 #[derive(Debug)]
-pub struct ArithmeticLogicIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ArithmeticLogicCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ArithmeticLogicIntegration<NUM_LIMBS, LIMB_BITS>
-{
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCore<NUM_LIMBS, LIMB_BITS> {
     pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
         Self {
             air: ArithmeticLogicAir {
@@ -96,8 +94,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmIntegration<F, A>
-    for ArithmeticLogicIntegration<NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCore<F, A>
+    for ArithmeticLogicCore<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: VmAdapter<F>,
@@ -122,7 +120,7 @@ where
         let c = data[1].map(|y| y.as_canonical_u32());
         let a = solve_alu::<NUM_LIMBS, LIMB_BITS>(opcode, &b, &c);
 
-        // Integration doesn't modify PC directly, so we let Adapter handle the increment
+        // Core doesn't modify PC directly, so we let Adapter handle the increment
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
             to_pc: None,
             writes: [a.map(F::from_canonical_u32)].into(),

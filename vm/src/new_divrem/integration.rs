@@ -14,8 +14,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{DivRemOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, Reads, Result, VmAdapter, VmAdapterInterface,
-        VmIntegration, VmIntegrationAir, Writes,
+        CoreInterface, InstructionOutput, Reads, Result, VmAdapter, VmAdapterInterface, VmCore,
+        VmCoreAir, Writes,
     },
     program::Instruction,
 };
@@ -60,7 +60,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
     }
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmIntegrationAir<AB, I>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
     for DivRemAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
@@ -71,19 +71,19 @@ where
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> CoreInterface<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct DivRemIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct DivRemCore<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: DivRemAir<NUM_LIMBS, LIMB_BITS>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemIntegration<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCore<NUM_LIMBS, LIMB_BITS> {
     pub fn new(range_tuple_chip: Arc<RangeTupleCheckerChip<2>>, offset: usize) -> Self {
         Self {
             air: DivRemAir {
@@ -95,8 +95,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemIntegration<NUM_LIMBS
     }
 }
 
-impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmIntegration<F, A> for DivRemIntegration<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, A: VmAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCore<F, A>
+    for DivRemCore<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
@@ -130,7 +130,7 @@ where
             &r
         };
 
-        // Integration doesn't modify PC directly, so we let Adapter handle the increment
+        // Core doesn't modify PC directly, so we let Adapter handle the increment
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
             to_pc: None,
             writes: z.map(F::from_canonical_u32).into(),
