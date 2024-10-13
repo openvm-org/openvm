@@ -59,7 +59,7 @@ use crate::{
     new_mulh::{MulHCore, Rv32MulHChip},
     new_shift::{Rv32ShiftChip, ShiftCore},
     program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
-    rv32_auipc::{Rv32AuipcChip, Rv32AuipcCore},
+    rv32_auipc::{Rv32AuipcChip, Rv32AuipcCoreChip},
     rv32_jal_lui::{Rv32JalLuiChip, Rv32JalLuiCore},
     rv32_jalr::{Rv32JalrChip, Rv32JalrCore},
     shift::ShiftChip,
@@ -411,7 +411,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 ExecutorName::AuipcRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32AuipcChip::new(
                         Rv32RdWriteAdapter::new(),
-                        Rv32AuipcCore::new(offset),
+                        Rv32AuipcCoreChip::new(offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {

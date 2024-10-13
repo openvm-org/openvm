@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterChip, VmAdapterInterface, VmCoreChip,
-        VmCoreAir, Writes, RV32_REGISTER_NUM_LANES,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes, RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,
 };
@@ -25,20 +25,20 @@ impl<T> Rv32AuipcCols<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32AuipcAir<F: Field> {
+pub struct Rv32AuipcCoreChipAir<F: Field> {
     pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32AuipcAir<F> {
+impl<F: Field> BaseAir<F> for Rv32AuipcCoreChipAir<F> {
     fn width(&self) -> usize {
         Rv32AuipcCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcAir<F> {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcCoreChipAir<F> {}
 
-impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32AuipcAir<AB::F>
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32AuipcCoreChipAir<AB::F>
 where
     I: VmAdapterInterface<AB::Expr>,
 {
@@ -53,14 +53,14 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32AuipcCore<F: Field> {
-    pub air: Rv32AuipcAir<F>,
+pub struct Rv32AuipcCoreChip<F: Field> {
+    pub air: Rv32AuipcCoreChipAir<F>,
 }
 
-impl<F: Field> Rv32AuipcCore<F> {
+impl<F: Field> Rv32AuipcCoreChip<F> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: Rv32AuipcAir::<F> {
+            air: Rv32AuipcCoreChipAir::<F> {
                 _marker: PhantomData,
                 offset,
             },
@@ -68,12 +68,12 @@ impl<F: Field> Rv32AuipcCore<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32AuipcCore<F>
+impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32AuipcCoreChip<F>
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
-    type Air = Rv32AuipcAir<F>;
+    type Air = Rv32AuipcCoreChipAir<F>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
