@@ -66,6 +66,7 @@ pub trait MachineChip<F>: Sized {
         vec![]
     }
     fn current_trace_height(&self) -> usize;
+    /// Width of the common main trace
     fn trace_width(&self) -> usize;
 
     /// For metrics collection

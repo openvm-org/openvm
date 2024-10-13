@@ -1,16 +1,17 @@
-use std::{array, sync::Arc};
+use std::{array, borrow::Borrow, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::xor::{bus::XorBus, lookup::XorLookupChip};
-use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
-use p3_field::{Field, PrimeField32};
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_field::{AbstractField, Field, PrimeField32};
+use strum::IntoEnumIterator;
 
 use crate::{
     arch::{
         instructions::{AluOpcode, UsizeOpcode},
         InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, Reads, Result, Writes,
+        MachineIntegration, MachineIntegrationAir, MinimalInstruction, Reads, Result, Writes,
     },
     program::Instruction,
 };
@@ -34,6 +35,7 @@ pub struct ArithmeticLogicCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize
 #[derive(Copy, Clone, Debug)]
 pub struct ArithmeticLogicAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: XorBus,
+    offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -43,20 +45,125 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
         ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
-
-impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
     for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
 {
-    fn eval(&self, _builder: &mut AB) {
-        todo!();
+}
+
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegrationAir<AB, I>
+    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+where
+    AB: InteractionBuilder,
+    I: MachineAdapterInterface<AB::Expr, ProcessedInstruction = MinimalInstruction<AB::Expr>>,
+    I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
+    I::Writes: From<[AB::Expr; NUM_LIMBS]>,
+{
+    fn eval(
+        &self,
+        builder: &mut AB,
+        local: &[AB::Var],
+        local_adapter: &[AB::Var],
+    ) -> IntegrationInterface<AB::Expr, I> {
+        let cols: &ArithmeticLogicCols<_, NUM_LIMBS, LIMB_BITS> = local.borrow();
+        let flags = [
+            cols.opcode_add_flag,
+            cols.opcode_sub_flag,
+            cols.opcode_xor_flag,
+            cols.opcode_and_flag,
+            cols.opcode_or_flag,
+        ];
+
+        for flag in flags {
+            builder.assert_bool(flag);
+        }
+
+        let is_valid = flags
+            .iter()
+            .fold(AB::Expr::zero(), |acc, &flag| acc + flag.into());
+        builder.assert_bool(is_valid.clone());
+
+        let expected_opcode = flags
+            .iter()
+            .zip(AluOpcode::iter())
+            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
+                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+            })
+            - AB::Expr::from_canonical_usize(self.offset);
+
+        let a = &cols.a;
+        let b = &cols.b;
+        let c = &cols.c;
+
+        // For ADD, define carry[i] = (b[i] + c[i] + carry[i - 1] - a[i]) / 2^LIMB_BITS. If
+        // each carry[i] is boolean and 0 <= a[i] < 2^LIMB_BITS, it can be proven that
+        // a[i] = (b[i] + c[i]) % 2^LIMB_BITS as necessary. The same holds for SUB when
+        // carry[i] is (a[i] + b[i] - c[i] + carry[i - 1]) / 2^LIMB_BITS.
+        let mut carry_add: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry_sub: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let carry_divide = AB::F::from_canonical_usize(1 << LIMB_BITS).inverse();
+
+        for i in 0..NUM_LIMBS {
+            // We explicitly separate the constraints for ADD and SUB in order to keep degree
+            // cubic. Because we constrain that the carry (which is arbitrary) is bool, if
+            // carry has degree larger than 1 the max-degree constrain could be at least 4.
+            carry_add[i] = AB::Expr::from(carry_divide)
+                * (b[i] + c[i] - a[i]
+                    + if i > 0 {
+                        carry_add[i - 1].clone()
+                    } else {
+                        AB::Expr::zero()
+                    });
+            builder
+                .when(cols.opcode_add_flag)
+                .assert_bool(carry_add[i].clone());
+            carry_sub[i] = AB::Expr::from(carry_divide)
+                * (a[i] + c[i] - c[i]
+                    + if i > 0 {
+                        carry_sub[i - 1].clone()
+                    } else {
+                        AB::Expr::zero()
+                    });
+            builder
+                .when(cols.opcode_sub_flag)
+                .assert_bool(carry_sub[i].clone());
+        }
+
+        // Interaction with XorLookup to range check a for ADD and SUB, and constrain a's
+        // correctness for XOR, AND, and OR. XorLookup expects interaction [x, y, x ^ y].
+        let bitwise = cols.opcode_xor_flag + cols.opcode_and_flag + cols.opcode_or_flag;
+        for i in 0..NUM_LIMBS {
+            let x = (AB::Expr::one() - bitwise.clone()) * a[i] + bitwise.clone() * b[i];
+            let y = (AB::Expr::one() - bitwise.clone()) * a[i] + bitwise.clone() * c[i];
+            let x_xor_y = cols.opcode_xor_flag * a[i]
+                + cols.opcode_and_flag * (b[i] + c[i] - (AB::Expr::from_canonical_u32(2) * a[i]))
+                + cols.opcode_or_flag * ((AB::Expr::from_canonical_u32(2) * a[i]) - b[i] - c[i]);
+            self.bus.send(x, y, x_xor_y).eval(builder, AB::Expr::one());
+        }
+
+        IntegrationInterface {
+            to_pc: None,
+            reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
+            writes: cols.c.map(Into::into).into(),
+            instruction: MinimalInstruction {
+                is_valid,
+                opcode: expected_opcode,
+            },
+        }
     }
+}
+
+#[derive(Debug)]
+pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub opcode: AluOpcode,
+    pub a: [T; NUM_LIMBS],
+    pub b: [T; NUM_LIMBS],
+    pub c: [T; NUM_LIMBS],
 }
 
 #[derive(Debug)]
 pub struct ArithmeticLogicIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
-    offset: usize,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
@@ -66,9 +173,9 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
         Self {
             air: ArithmeticLogicAir {
                 bus: xor_lookup_chip.bus(),
+                offset,
             },
             xor_lookup_chip,
-            offset,
         }
     }
 }
@@ -79,9 +186,7 @@ where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
 {
-    // TODO: update for trace generation
-    type Record = u32;
-    type Cols<T> = ArithmeticLogicCols<T, NUM_LIMBS, LIMB_BITS>;
+    type Record = ArithmeticLogicRecord<F, NUM_LIMBS, LIMB_BITS>;
     type Air = ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
@@ -92,23 +197,37 @@ where
         reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
     ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let opcode = AluOpcode::from_usize(opcode - self.offset);
+        let opcode = AluOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let x = data[0].map(|x| x.as_canonical_u32());
-        let y = data[1].map(|y| y.as_canonical_u32());
-        let z = solve_alu::<NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
+        let b = data[0].map(|x| x.as_canonical_u32());
+        let c = data[1].map(|y| y.as_canonical_u32());
+        let a = solve_alu::<NUM_LIMBS, LIMB_BITS>(opcode, &b, &c);
 
         // Integration doesn't modify PC directly, so we let Adapter handle the increment
         let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
             to_pc: None,
-            writes: z.map(F::from_canonical_u32).into(),
+            writes: a.map(F::from_canonical_u32).into(),
         };
 
-        // TODO: send XorLookupChip requests
-        // TODO: create Record and return
+        if opcode == AluOpcode::ADD || opcode == AluOpcode::SUB {
+            for a_val in a {
+                self.xor_lookup_chip.request(a_val, a_val);
+            }
+        } else {
+            for (b_val, c_val) in b.iter().zip(c.iter()) {
+                self.xor_lookup_chip.request(*b_val, *c_val);
+            }
+        }
 
-        Ok((output, 0))
+        let record = Self::Record {
+            opcode,
+            a: a.map(F::from_canonical_u32),
+            b: data[0],
+            c: data[1],
+        };
+
+        Ok((output, record))
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {
@@ -119,18 +238,8 @@ where
         todo!()
     }
 
-    /// Returns `(to_pc, interface)`.
-    fn eval_primitive<AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues>(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &A::Cols<AB::Var>,
-    ) -> IntegrationInterface<AB::Expr, A::Interface<AB::Expr>> {
-        todo!()
-    }
-
-    fn air(&self) -> Self::Air {
-        self.air
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }
 

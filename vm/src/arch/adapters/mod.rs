@@ -27,6 +27,14 @@ use p3_field::PrimeField32;
 
 use crate::memory::{MemoryChip, MemoryReadRecord};
 
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct MinimalInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+}
+
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.
 pub fn compose<F: PrimeField32>(ptr_data: [F; 4]) -> u32 {

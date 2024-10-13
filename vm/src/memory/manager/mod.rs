@@ -484,6 +484,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct MemoryAuxColsFactory<T> {
     range_checker: Arc<VariableRangeCheckerChip>,
     timestamp_lt_air: AssertLessThanAir<AUX_LEN>,

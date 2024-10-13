@@ -1,19 +1,25 @@
-use std::{marker::PhantomData, mem::size_of};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    marker::PhantomData,
+    mem::size_of,
+};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::RV32_REGISTER_NUM_LANES;
+use super::{MinimalInstruction, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
-        MachineAdapter, MachineAdapterInterface, Result,
+        MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
+        MemoryAddress, MemoryAuxColsFactory, MemoryChip, MemoryChipRef, MemoryReadRecord,
+        MemoryWriteRecord,
     },
     program::{bridge::ProgramBus, Instruction},
 };
@@ -21,10 +27,10 @@ use crate::{
 /// Reads instructions of the form OP a, b, c, d, e where [a:4]_d = [b:4]_d op [c:4]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Rv32AluAdapter<F: Field> {
-    _marker: PhantomData<F>,
     pub air: Rv32AluAdapterAir,
+    aux_cols_factory: MemoryAuxColsFactory<F>,
 }
 
 impl<F: PrimeField32> Rv32AluAdapter<F> {
@@ -33,13 +39,15 @@ impl<F: PrimeField32> Rv32AluAdapter<F> {
         program_bus: ProgramBus,
         memory_chip: MemoryChipRef<F>,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_chip = RefCell::borrow(&memory_chip);
+        let memory_bridge = memory_chip.memory_bridge();
+        let aux_cols_factory = memory_chip.aux_cols_factory();
         Self {
-            _marker: PhantomData,
             air: Rv32AluAdapterAir {
-                _execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                _memory_bridge: memory_bridge,
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
             },
+            aux_cols_factory,
         }
     }
 }
@@ -64,37 +72,32 @@ pub struct Rv32AluWriteRecord<F: Field> {
 
 /// Interface for reading two RV32 registers, or one RV32 register and
 /// one immediate
-pub struct Rv32AluAdapterInterface<T>(PhantomData<T>);
+// TODO: this should be const generic interface not specific to RV
+pub struct Rv32RTypeAdapterInterface<T>(PhantomData<T>);
 
-#[repr(C)]
-#[derive(AlignedBorrow)]
-pub struct Rv32AluProcessedInstruction<T> {
-    /// Absolute opcode number
-    pub opcode: T,
-    /// Boolean for whether rs2 is an immediate or not
-    pub rs2_is_imm: T,
-}
-
-impl<T: AbstractField> MachineAdapterInterface<T> for Rv32AluAdapterInterface<T> {
+impl<T: AbstractField> MachineAdapterInterface<T> for Rv32RTypeAdapterInterface<T> {
     type Reads = [[T; RV32_REGISTER_NUM_LANES]; 2];
     type Writes = [T; RV32_REGISTER_NUM_LANES];
-    type ProcessedInstruction = Rv32AluProcessedInstruction<T>;
+    type ProcessedInstruction = MinimalInstruction<T>;
 }
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct Rv32AluAdapterCols<T> {
     pub from_state: ExecutionState<T>,
-    pub rs1_index: T,
-    pub rs2_index: T,
+    pub rd_idx: T,
+    pub rs1_idx: T,
+    pub rs2_idx: T,
+    /// 1 if rs2 was a read, 0 if an immediate
+    pub rs2_as: T,
     pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>; 2],
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32AluAdapterAir {
-    pub(super) _execution_bridge: ExecutionBridge,
-    pub(super) _memory_bridge: MemoryBridge,
+    pub(super) execution_bridge: ExecutionBridge,
+    pub(super) memory_bridge: MemoryBridge,
 }
 
 impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
@@ -103,9 +106,64 @@ impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for Rv32AluAdapterAir {
-    fn eval(&self, _builder: &mut AB) {
-        todo!();
+impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32AluAdapterAir {
+    type Interface = Rv32RTypeAdapterInterface<AB::Expr>;
+
+    fn eval(
+        &self,
+        builder: &mut AB,
+        local: &[AB::Var],
+        ctx: IntegrationInterface<AB::Expr, Self::Interface>,
+    ) {
+        let local: &Rv32AluAdapterCols<_> = local.borrow();
+        let timestamp = local.from_state.timestamp;
+        let mut timestamp_delta: usize = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+        };
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(AB::Expr::one(), local.rs1_idx),
+                ctx.reads[0].clone(),
+                timestamp_pp(),
+                &local.reads_aux[0],
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(local.rs2_as, local.rs2_idx),
+                ctx.reads[1].clone(),
+                timestamp_pp(),
+                &local.reads_aux[1],
+            )
+            .eval(builder, local.rs2_as);
+
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(AB::Expr::one(), local.rd_idx),
+                ctx.writes,
+                timestamp + AB::F::from_canonical_usize(timestamp_delta),
+                &local.writes_aux,
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+
+        self.execution_bridge
+            .execute_and_increment_pc(
+                ctx.instruction.opcode,
+                [
+                    local.rd_idx.into(),
+                    local.rs1_idx.into(),
+                    local.rs2_idx.into(),
+                    AB::Expr::one(),
+                    local.rs2_as.into(),
+                ],
+                local.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+            )
+            .eval(builder, ctx.instruction.is_valid);
     }
 }
 
@@ -113,8 +171,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
     type ReadRecord = Rv32AluReadRecord<F>;
     type WriteRecord = Rv32AluWriteRecord<F>;
     type Air = Rv32AluAdapterAir;
-    type Cols<T> = Rv32AluAdapterCols<T>;
-    type Interface<T: AbstractField> = Rv32AluAdapterInterface<T>;
+    type Interface<T: AbstractField> = Rv32RTypeAdapterInterface<T>;
 
     fn preprocess(
         &mut self,
@@ -191,25 +248,25 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut Self::Cols<F>,
-        _read_record: Self::ReadRecord,
-        _write_record: Self::WriteRecord,
+        row_slice: &mut [F],
+        read_record: Self::ReadRecord,
+        write_record: Self::WriteRecord,
     ) {
-        todo!();
+        let row_slice: &mut Rv32AluAdapterCols<_> = row_slice.borrow_mut();
+        let aux_cols_factory = &self.aux_cols_factory;
+        row_slice.from_state = write_record.from_state.map(F::from_canonical_usize);
+        row_slice.rd_idx = write_record.rd.pointer;
+        row_slice.rs1_idx = read_record.rs1.pointer;
+        row_slice.rs2_idx = read_record.rs2.pointer;
+        // TODO: rs2_as definition
+        row_slice.reads_aux = [
+            aux_cols_factory.make_read_aux_cols(read_record.rs1),
+            aux_cols_factory.make_read_aux_cols(read_record.rs2),
+        ];
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
     }
 
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
-        todo!();
-    }
-
-    fn air(&self) -> Self::Air {
-        self.air
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }
