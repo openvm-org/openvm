@@ -35,7 +35,7 @@ fn test_generate_program() -> Result<()> {
 #[test]
 fn test_runtime() -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let data = read(dir.join("data/rv32im-fib-from-as"))?;
+    let data = read(dir.join("data/rv32im-empty-program-elf"))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     let instructions = transpile::<BabyBear>(&elf.instructions);
     for instruction in instructions.iter() {

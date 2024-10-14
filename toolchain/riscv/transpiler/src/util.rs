@@ -46,11 +46,7 @@ pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instructio
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rs1),
-        if dec_insn.imm < 0 {
-            -F::from_canonical_u32(-dec_insn.imm as u32)
-        } else {
-            F::from_canonical_u32(dec_insn.imm as u32)
-        },
+        isize_to_field(dec_insn.imm as isize),
         F::one(), // rd is a register
         F::two(), // we load from memory
         F::zero(),
@@ -81,7 +77,7 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rs2),
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rs1),
-        F::from_canonical_u32(dec_insn.imm as u32),
+        isize_to_field(dec_insn.imm as isize),
         F::one(),
         F::two(),
         F::zero(),
@@ -113,11 +109,7 @@ pub fn from_j_type<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruct
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
         F::zero(),
-        if dec_insn.imm < 0 {
-            -F::from_canonical_u32(-dec_insn.imm as u32)
-        } else {
-            F::from_canonical_u32(dec_insn.imm as u32)
-        },
+        isize_to_field(dec_insn.imm as isize),
         F::one(), // rd is a register
         F::zero(),
         F::zero(),

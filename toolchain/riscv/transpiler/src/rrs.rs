@@ -11,7 +11,8 @@ use stark_vm::{
         MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
         Rv32LoadStoreOpcode, ShiftOpcode, UsizeOpcode,
     },
-    system::program::Instruction,
+    rv32im::adapters::RV32_REGISTER_NUM_LANES,
+    system::program::{isize_to_field, Instruction},
 };
 
 use crate::util::*;
@@ -163,13 +164,9 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         let imm = dec_insn.imm / 2;
         Instruction::new(
             Rv32JalrOpcode::JALR.with_default_offset(),
-            F::from_canonical_usize(dec_insn.rd),
-            F::from_canonical_usize(dec_insn.rs1),
-            if imm < 0 {
-                -F::from_canonical_u32((-imm) as u32)
-            } else {
-                F::from_canonical_u32(imm as u32)
-            },
+            F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
+            F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rs1),
+            isize_to_field(imm as isize),
             F::one(),
             F::zero(),
             F::zero(),
