@@ -103,6 +103,26 @@ impl ExprBuilder {
         self.num_flags += 1;
         self.num_flags - 1
     }
+
+    // Below functions are used when adding variables and constraints manually, need to be careful.
+    // Number of variables, constraints and computes should be consistent,
+    // so there should be same number of calls to the new_var, add_constraint and add_compute.
+    pub fn new_var(&mut self) -> SymbolicExpr {
+        self.num_variables += 1;
+        SymbolicExpr::Var(self.num_variables - 1)
+    }
+
+    pub fn add_constraint(&mut self, constraint: SymbolicExpr) {
+        let (q_limbs, carry_limbs) =
+            constraint.constraint_limbs(&self.prime, self.limb_bits, self.num_limbs);
+        self.constraints.push(constraint);
+        self.q_limbs.push(q_limbs);
+        self.carry_limbs.push(carry_limbs);
+    }
+
+    pub fn add_compute(&mut self, compute: SymbolicExpr) {
+        self.computes.push(compute);
+    }
 }
 
 #[derive(Clone)]
@@ -216,10 +236,15 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
             vars[i] = r.clone();
             vars_bigint[i] = BigInt::from_biguint(Sign::Plus, r);
             vars_overflow[i] = to_overflow_int(&vars_bigint[i], self.num_limbs, self.limb_bits);
+        }
+        // We need to have all variables computed first because, e.g. constraints[2] might need variables[3].
+        for i in 0..self.constraints.len() {
             // expr = q * p
             let expr_bigint =
                 self.constraints[i].evaluate_bigint(&input_bigint, &vars_bigint, &flags);
-            let q = expr_bigint / &self.prime_bigint;
+            let q = &expr_bigint / &self.prime_bigint;
+            // If this is not true then the evaluated constraint is not divisible by p.
+            debug_assert_eq!(expr_bigint, &q * &self.prime_bigint);
             let q_limbs = big_int_to_num_limbs(&q, limb_bits, self.q_limbs[i]);
             assert_eq!(q_limbs.len(), self.q_limbs[i]); // If this fails, the q_limbs estimate is wrong.
             for &q in q_limbs.iter() {
