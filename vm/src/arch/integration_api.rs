@@ -375,6 +375,7 @@ impl<
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
+/// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat array for each
 pub struct FlatInterface<T, const READ_BYTES: usize, const WRITE_BYTES: usize>(PhantomData<T>);
 
 impl<T: AbstractField, const READ_BYTES: usize, const WRITE_BYTES: usize> VmAdapterInterface<T>
