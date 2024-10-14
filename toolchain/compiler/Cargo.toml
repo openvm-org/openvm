@@ -10,9 +10,14 @@ edition = "2021"
 p3-field = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-bn254-fr = { workspace = true }
-afs-derive = { path = "../../derive" }
-ax-sdk = { path = "../../sdk" }
-stark-vm = { path = "../../vm" }
+zkhash = { workspace = true }
+
+afs-derive = { workspace = true }
+ax-sdk = { workspace = true }
+stark-vm = { workspace = true }
+# disable jemalloc to be compatible with afs-starkbackend
+snark-verifier-sdk = { workspace = true, optional = true }
+
 tracing.workspace = true
 itertools.workspace = true
 serde.workspace = true
@@ -23,9 +28,6 @@ num-bigint-dig.workspace = true
 num-bigint.workspace = true
 num-integer.workspace = true
 num-traits.workspace = true
-# disable jemalloc to be compatible with afs-starkbackend
-snark-verifier-sdk = { workspace = true, optional = true }
-zkhash = { workspace = true }
 metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 strum = { workspace = true }
@@ -40,7 +42,7 @@ rand = "0.8.5"
 afs-compiler = { path = ".", features = ["sdk"] }
 
 [features]
-default = []
+default = ["parallel"]
 halo2-compiler = ["dep:snark-verifier-sdk"]
 parallel = ["stark-vm/parallel"]
 sdk = ["stark-vm/sdk"]

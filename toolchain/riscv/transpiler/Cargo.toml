@@ -7,15 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-p3-air = { workspace = true }
-p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
-p3-keccak-air = { workspace = true }
-p3-commit = { workspace = true }
-p3-matrix = { workspace = true }
-p3-maybe-rayon = { workspace = true }
-p3-util = { workspace = true }
-p3-uni-stark = { workspace = true }
 
 axvm-platform = { workspace = true }
 stark-vm = { workspace = true }
@@ -23,3 +15,6 @@ stark-vm = { workspace = true }
 color-eyre = { git = "https://github.com/eyre-rs/eyre.git", rev = "7706273" }
 elf = "0.7.4"
 rrs-lib = "0.1.0"
+
+[dev-dependencies]
+p3-baby-bear = { workspace = true }
