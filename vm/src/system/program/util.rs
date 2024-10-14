@@ -1,7 +1,6 @@
 use std::fmt::{self, Display};
 
 use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
 #[cfg(feature = "sdk")]
 pub use sdk::*;
 
@@ -58,7 +57,7 @@ pub fn execute_program_with_public_values(
     vm.execute().unwrap()
 }
 
-impl<F: PrimeField32> Display for Program<F> {
+impl<F: Copy + Display> Display for Program<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for instruction in self.instructions().iter() {
             let Instruction {
@@ -82,7 +81,7 @@ impl<F: PrimeField32> Display for Program<F> {
     }
 }
 
-pub fn display_program_with_pc<F: PrimeField32>(program: &Program<F>) {
+pub fn display_program_with_pc<F: Copy + Display>(program: &Program<F>) {
     for (pc, instruction) in program.instructions().iter().enumerate() {
         let Instruction {
             opcode,
