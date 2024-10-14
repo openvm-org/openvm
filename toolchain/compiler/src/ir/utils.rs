@@ -1,10 +1,24 @@
 use std::ops::{Add, Mul, MulAssign};
 
-use p3_field::{AbstractExtensionField, AbstractField};
+use p3_field::{AbstractExtensionField, AbstractField, PrimeField};
 
 use super::{
     Array, Builder, CanSelect, Config, DslIr, Ext, Felt, MemIndex, RVar, SymbolicExt, Var, Variable,
 };
+
+pub const NUM_LIMBS: usize = 32;
+pub const LIMB_SIZE: usize = 8;
+
+/// Converts a prime field element to a usize.
+pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
+    let bu = x.as_canonical_biguint();
+    let digits = bu.to_u64_digits();
+    if digits.is_empty() {
+        return 0;
+    }
+    assert!(digits.len() == 1, "Prime field element is too large");
+    digits[0] as usize
+}
 
 impl<C: Config> Builder<C> {
     /// The generator for the field.

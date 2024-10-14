@@ -1,10 +1,10 @@
 use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
-    util::{display_program, execute_program},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
+use stark_vm::system::program::util::execute_program;
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {
@@ -48,6 +48,6 @@ fn main() {
     builder.halt();
 
     let program = builder.compile_isa();
-    display_program(&program);
+    println!("{}", program);
     execute_program(program, vec![]);
 }

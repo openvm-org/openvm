@@ -1,10 +1,7 @@
-use afs_compiler::{
-    asm::AsmBuilder,
-    prelude::*,
-    util::{execute_program, execute_program_with_public_values},
-};
+use afs_compiler::{asm::AsmBuilder, prelude::*};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
+use stark_vm::system::program::util::{execute_program, execute_program_with_public_values};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

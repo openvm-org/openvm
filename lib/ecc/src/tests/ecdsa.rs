@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions};
 use k256::{
     ecdsa::{hazmat::DigestPrimitive, signature::Signer, Signature, SigningKey, VerifyingKey},
     sha2::digest::FixedOutput,
@@ -11,6 +11,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{rngs::StdRng, SeedableRng};
 use sha3::Digest;
+use stark_vm::system::program::util::execute_program;
 use test_log::test;
 
 use super::SECP256K1_COORD_BITS;

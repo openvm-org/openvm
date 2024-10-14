@@ -1,6 +1,6 @@
 use p3_field::PrimeField64;
 
-use super::{modular_arithmetic::BigUintVar, Var, NUM_LIMBS};
+use super::{modular_arithmetic::BigUintVar, utils::NUM_LIMBS, Var};
 use crate::ir::{Builder, Config, DslIr};
 
 impl<C: Config> Builder<C>

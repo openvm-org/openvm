@@ -262,7 +262,6 @@ mod tests {
     use afs_compiler::{
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
-        util::execute_program,
     };
     use ax_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
@@ -271,6 +270,7 @@ mod tests {
     use p3_challenger::{CanObserve, CanSample};
     use p3_field::AbstractField;
     use p3_uni_stark::{StarkGenericConfig, Val};
+    use stark_vm::system::program::util::execute_program;
 
     use super::DuplexChallengerVariable;
 

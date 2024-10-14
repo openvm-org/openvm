@@ -8,8 +8,10 @@ use stark_vm::{
     system::vm::config::Modulus,
 };
 
-use super::{LIMB_SIZE, NUM_LIMBS};
-use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
+use super::{
+    utils::{LIMB_SIZE, NUM_LIMBS},
+    Array, Builder, Config, DslIr, IfBuilder, Var,
+};
 
 pub type BigUintVar<C> = Array<C, Var<<C as Config>::N>>;
 

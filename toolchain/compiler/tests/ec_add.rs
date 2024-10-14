@@ -3,8 +3,7 @@ use std::borrow::Cow;
 use afs_compiler::{
     asm::AsmBuilder,
     conversion::CompilerOptions,
-    ir::{Array, Builder, Config, Var},
-    util::{execute_program_with_config, LIMB_SIZE, NUM_LIMBS},
+    ir::{Array, Builder, Config, Var, LIMB_SIZE, NUM_LIMBS},
 };
 use itertools::Itertools;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
@@ -14,7 +13,7 @@ use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     arch::ExecutorName,
     intrinsics::modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
-    system::vm::config::VmConfig,
+    system::{program::util::execute_program_with_config, vm::config::VmConfig},
 };
 
 struct Fraction {

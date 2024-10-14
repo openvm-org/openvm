@@ -24,6 +24,7 @@ pub mod air;
 pub mod bridge;
 pub mod columns;
 pub mod trace;
+pub mod util;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]

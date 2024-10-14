@@ -1,10 +1,11 @@
-use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var};
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, One, Zero};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField, ExtensionField, TwoAdicField};
 use rand::RngCore;
+use stark_vm::system::program::util::execute_program;
 
 fn secp256k1_coord_prime() -> BigUint {
     let mut result = BigUint::one() << 256;

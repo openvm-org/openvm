@@ -6,10 +6,9 @@ use p3_field::{AbstractExtensionField, AbstractField, ExtensionField, Field, Pri
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Builder, Config, DslIr, ExtConst, FromConstant, MemIndex, MemVariable, Ptr, RVar, SymbolicExt,
-    SymbolicFelt, SymbolicVar, Variable,
+    utils::prime_field_to_usize, Builder, Config, DslIr, ExtConst, FromConstant, MemIndex,
+    MemVariable, Ptr, RVar, SymbolicExt, SymbolicFelt, SymbolicVar, Variable,
 };
-use crate::util::prime_field_to_usize;
 
 /// A variable that represents a native field element.
 ///
