@@ -72,12 +72,12 @@ impl<T: Copy> MemoryReadRecord<T, 1> {
     }
 }
 
-// The ID of the node corresponding to the block in the binary trie. (See [Memory] for more details.)
-//
-// The ID of the root node is 1. The ID of the left child of a node with id `node_id` is `2*node_id`,
-// and the ID of the right child is `2*node_id + 1`.
-//
-// Thus, the ith block of size 2^j has ID `2^{pointer_max_bits - j} + i`.
+/// The ID of the node corresponding to the block in the binary trie. (See [Memory] for more details.)
+///
+/// The ID of the root node is 1. The ID of the left child of a node with id `node_id` is `2*node_id`,
+/// and the ID of the right child is `2*node_id + 1`.
+///
+/// Thus, the ith block of size 2^j has ID `2^{pointer_max_bits - j} + i`.
 type BlockId = usize;
 
 /// Tracks the state of memory cells specified by `(address_space, index)` tuples.
@@ -98,11 +98,14 @@ impl<F: PrimeField32> Memory<F> {
     /// The timestamp corresponding to initial memory.
     const INITIAL_TIMESTAMP: u32 = 0;
 
-    /// Creates a new `Memory` instance with the given `pointer_max_bits` and `initial_block_len`.
+    /// Creates a new `Memory` instance with the given `pointer_max_bits` from a partition in which
+    /// every part has length `N`.
     pub fn new<const N: usize>(
         initial_memory: &MemoryEquipartition<F, N>,
         pointer_max_bits: usize,
     ) -> Self {
+        assert!(N.is_power_of_two());
+
         let mut blocks = HashMap::new();
         for ((address_space, label), timestamped_values) in initial_memory {
             let block_id = ((1 << pointer_max_bits) + label * N) >> log2_strict_usize(N);
