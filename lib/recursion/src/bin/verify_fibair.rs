@@ -17,7 +17,7 @@ use ax_sdk::{
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
-use stark_vm::vm::config::VmConfig;
+use stark_vm::system::vm::config::VmConfig;
 
 fn main() {
     let n = 16; // STARK to calculate 16th Fibonacci number.
