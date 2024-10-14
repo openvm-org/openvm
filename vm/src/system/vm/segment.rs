@@ -72,7 +72,7 @@ use crate::{
     },
     system::{
         memory::{
-            expand::MemoryMerkleBus, offline_checker::MemoryBus, MemoryChipRef, MemoryChip,
+            expand::MemoryMerkleBus, offline_checker::MemoryBus, MemoryChip, MemoryChipRef,
             MemoryEquipartition, CHUNK,
         },
         program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
@@ -133,13 +133,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
         let memory_chip = match config.memory_config.persistence_type {
-            PersistenceType::Volatile => {
-                Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
-                    memory_bus,
-                    config.memory_config.clone(),
-                    range_checker.clone(),
-                )))
-            }
+            PersistenceType::Volatile => Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
+                memory_bus,
+                config.memory_config.clone(),
+                range_checker.clone(),
+            ))),
             PersistenceType::Persistent => {
                 Rc::new(RefCell::new(MemoryChip::with_persistent_memory(
                     memory_bus,

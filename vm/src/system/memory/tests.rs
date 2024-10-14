@@ -232,11 +232,8 @@ fn test_memory_chip() {
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-    let mut memory_chip = MemoryChip::with_volatile_memory(
-        memory_bus,
-        memory_config.clone(),
-        range_checker.clone(),
-    );
+    let mut memory_chip =
+        MemoryChip::with_volatile_memory(memory_bus, memory_config.clone(), range_checker.clone());
     let aux_factory = memory_chip.aux_cols_factory();
 
     let mut rng = thread_rng();

@@ -8,8 +8,7 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::system::memory::{
-    adapter::AccessAdapterCols, manager::memory::AccessAdapterRecordKind, MemoryAddress,
-    MemoryChip,
+    adapter::AccessAdapterCols, manager::memory::AccessAdapterRecordKind, MemoryAddress, MemoryChip,
 };
 
 impl<F: PrimeField32> MemoryChip<F> {
