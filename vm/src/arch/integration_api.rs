@@ -131,7 +131,7 @@ where
     fn eval(
         &self,
         builder: &mut AB,
-        local: &[AB::Var],
+        local_core: &[AB::Var],
         local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I>;
 }
