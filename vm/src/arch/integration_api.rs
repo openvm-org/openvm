@@ -42,7 +42,7 @@ pub trait VmAdapterChip<F: Field> {
     type WriteRecord: Send;
     /// AdapterAir should not have public values
     type Air: BaseAir<F> + Clone;
-    type Interface<T: AbstractField>: VmAdapterInterface<T>;
+    type Interface: VmAdapterInterface<F>;
 
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
     /// This is called at the start of instruction execution.
@@ -55,7 +55,7 @@ pub trait VmAdapterChip<F: Field> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
+        <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )>;
 
@@ -66,7 +66,7 @@ pub trait VmAdapterChip<F: Field> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: AdapterRuntimeContext<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface>,
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)>;
 
@@ -161,7 +161,7 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 }
 
 #[derive(Clone)]
-pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface<F>>> {
+pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
     pub adapter: A,
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
@@ -172,7 +172,7 @@ impl<F, A, C> VmChipWrapper<F, A, C>
 where
     F: PrimeField32,
     A: VmAdapterChip<F>,
-    C: VmCoreChip<F, A::Interface<F>>,
+    C: VmCoreChip<F, A::Interface>,
 {
     pub fn new(adapter: A, core: C, memory: MemoryChipRef<F>) -> Self {
         Self {
@@ -188,7 +188,7 @@ impl<F, A, M> InstructionExecutor<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: VmAdapterChip<F>,
-    M: VmCoreChip<F, A::Interface<F>>,
+    M: VmCoreChip<F, A::Interface>,
 {
     fn execute(
         &mut self,
@@ -221,7 +221,7 @@ impl<F, A, M> VmChip<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: VmAdapterChip<F> + Sync,
-    M: VmCoreChip<F, A::Interface<F>> + Sync,
+    M: VmCoreChip<F, A::Interface> + Sync,
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = next_power_of_two_or_zero(self.records.len());
@@ -271,7 +271,7 @@ where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
     A: VmAdapterChip<Val<SC>>,
-    C: VmCoreChip<Val<SC>, A::Interface<Val<SC>>>,
+    C: VmCoreChip<Val<SC>, A::Interface>,
     A::Air: 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,

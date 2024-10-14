@@ -3,7 +3,7 @@ use std::{cell::RefCell, mem::size_of};
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
+use p3_field::{Field, PrimeField32};
 
 use super::{Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
 use crate::{
@@ -110,14 +110,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
     type ReadRecord = Rv32AluReadRecord<F>;
     type WriteRecord = Rv32AluWriteRecord<F>;
     type Air = Rv32AluAdapterAir;
-    type Interface<T: AbstractField> = Rv32RTypeAdapterInterface<T>;
+    type Interface = Rv32RTypeAdapterInterface<F>;
 
     fn preprocess(
         &mut self,
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
+        <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -168,7 +168,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: AdapterRuntimeContext<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check

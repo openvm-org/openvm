@@ -87,11 +87,7 @@ impl<F, const READ_SIZE: usize, const WRITE_SIZE: usize> BaseAir<F>
 }
 
 // TODO: delete and use BasicAdapterInterface
-pub struct Rv32HeapAdapterInterface<
-    T: AbstractField,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
-> {
+pub struct Rv32HeapAdapterInterface<T, const READ_SIZE: usize, const WRITE_SIZE: usize> {
     _marker: PhantomData<T>,
 }
 
@@ -135,7 +131,7 @@ impl<
 {
     type ReadRecord = [Rv32RegisterHeapReadRecord<F, READ_SIZE>; 2];
     type WriteRecord = [Rv32RegisterHeapWriteRecord<F, WRITE_SIZE>; 1];
-    type Interface<T: AbstractField> = Rv32HeapAdapterInterface<T, READ_SIZE, WRITE_SIZE>;
+    type Interface = Rv32HeapAdapterInterface<F, READ_SIZE, WRITE_SIZE>;
     type Air = Rv32HeapAdapterAir<READ_SIZE, WRITE_SIZE>;
 
     fn preprocess(
@@ -143,7 +139,7 @@ impl<
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
+        <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -169,7 +165,7 @@ impl<
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: AdapterRuntimeContext<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction {

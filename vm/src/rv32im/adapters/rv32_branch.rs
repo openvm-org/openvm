@@ -3,7 +3,7 @@ use std::{marker::PhantomData, mem::size_of};
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
+use p3_field::{Field, PrimeField32};
 
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
@@ -69,7 +69,7 @@ pub struct Rv32BranchProcessedInstruction<T> {
     pub pc_inc: T,
 }
 
-impl<T: AbstractField> VmAdapterInterface<T> for Rv32BranchAdapterInterface<T> {
+impl<T> VmAdapterInterface<T> for Rv32BranchAdapterInterface<T> {
     type Reads = [[T; RV32_REGISTER_NUM_LANES]; 2];
     type Writes = ();
     type ProcessedInstruction = Rv32BranchProcessedInstruction<T>;
@@ -120,14 +120,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapter<F> {
     type ReadRecord = Rv32BranchReadRecord<F>;
     type WriteRecord = Rv32BranchWriteRecord;
     type Air = Rv32BranchAdapterAir;
-    type Interface<T: AbstractField> = Rv32BranchAdapterInterface<T>;
+    type Interface = Rv32BranchAdapterInterface<F>;
 
     fn preprocess(
         &mut self,
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
+        <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -152,7 +152,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapter<F> {
         memory: &mut MemoryChip<F>,
         _instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: AdapterRuntimeContext<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check
