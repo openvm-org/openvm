@@ -151,7 +151,7 @@ fn rv32_alu_or_rand_test() {
 
 #[test]
 fn rv32_alu_and_rand_test() {
-    run_rv32_alu_rand_test(AluOpcode::AND, 1);
+    run_rv32_alu_rand_test(AluOpcode::AND, 12);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
