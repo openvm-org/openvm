@@ -124,7 +124,10 @@ mod sdk {
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
     use p3_field::PrimeField32;
-    use stark_vm::{program::Program, sdk::gen_vm_program_stark_for_test, vm::config::VmConfig};
+    use stark_vm::{
+        sdk::gen_vm_program_stark_for_test,
+        system::{program::Program, vm::config::VmConfig},
+    };
 
     pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>>(
         program: Program<Val<SC>>,

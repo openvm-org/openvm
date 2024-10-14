@@ -12,7 +12,7 @@ use num_traits::Zero;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{Rng, RngCore};
-use stark_vm::{arch::ExecutorName, vm::config::VmConfig};
+use stark_vm::{arch::ExecutorName, system::vm::config::VmConfig};
 
 #[test]
 fn test_compiler_256_add_sub() {

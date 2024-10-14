@@ -13,8 +13,8 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     arch::ExecutorName,
-    modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
-    vm::config::VmConfig,
+    intrinsics::modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
+    system::vm::config::VmConfig,
 };
 
 struct Fraction {

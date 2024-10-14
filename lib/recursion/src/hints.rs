@@ -26,7 +26,7 @@ use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use p3_util::log2_strict_usize;
-use stark_vm::modular_addsub::big_uint_to_num_limbs;
+use stark_vm::intrinsics::modular_addsub::big_uint_to_num_limbs;
 
 use crate::{
     types::{InnerConfig, VerifierInput},

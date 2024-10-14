@@ -17,8 +17,8 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     arch::ExecutorName,
-    hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
-    vm::config::VmConfig,
+    intrinsics::hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
+    system::vm::config::VmConfig,
 };
 use tracing::Level;
 

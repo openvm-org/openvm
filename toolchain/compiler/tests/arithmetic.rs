@@ -7,7 +7,7 @@ use afs_compiler::{
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
-use stark_vm::{
+use stark_vm::system::{
     program::ExecutionError::Fail,
     vm::{config::VmConfig, VirtualMachine},
 };

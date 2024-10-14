@@ -18,7 +18,7 @@ use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
-use stark_vm::program::Program;
+use stark_vm::system::program::Program;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
