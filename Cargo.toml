@@ -1,19 +1,19 @@
 [workspace]
 members = [
-    "primitives",
-    "compiler",
     "derive",
-    "poseidon2-air",
-    "recursion",
-    "ecc/lib",
-    "ecc/execution",
-    "ecc/primitives",
-    "stark-backend",
+    "circuits/ecc",
+    "circuits/hashes/poseidon2-air",
+    "circuits/primitives",
+    "lib/ecc",
+    "lib/ecc-execution",
+    "lib/recursion",
     "sdk",
-    "vm",
-    "riscv/zkvm/lib",
-    "riscv/zkvm/platform",
-    "riscv/transpiler",
+    "stark-backend",
+    "toolchain/compiler",
+    "toolchain/riscv/zkvm/lib",
+    "toolchain/riscv/zkvm/platform",
+    "toolchain/riscv/transpiler",
+    "vm"
 ]
 resolver = "2"
 
@@ -58,15 +58,15 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
-axvm-platform = { path = "riscv/zkvm/platform", default-features = false }
-axvm = { path = "riscv/zkvm/lib", default-features = false }
-afs-compiler = { path = "compiler", default-features = false }
+axvm-platform = { path = "toolchain/riscv/zkvm/platform", default-features = false }
+axvm = { path = "toolchain/riscv/zkvm/lib", default-features = false }
+afs-compiler = { path = "toolchain/compiler", default-features = false }
 stark-vm = { path = "vm", default-features = false }
-afs-primitives = { path = "primitives", default-features = false }
+afs-primitives = { path = "circuits/primitives", default-features = false }
 afs-stark-backend = { path = "stark-backend", default-features = false }
 afs-derive = { path = "derive", default-features = false }
 ax-sdk = { path = "sdk", default-features = false }
-afs-transpiler = { path = "riscv/transpiler", default-features = false }
+afs-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
 
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }

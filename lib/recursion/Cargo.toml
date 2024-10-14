@@ -1,0 +1,76 @@
+[package]
+name = "afs-recursion"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+afs-stark-backend = { path = "../../stark-backend" }
+afs-compiler = { path = "../../toolchain/compiler", features = ["sdk"] }
+ax-sdk = { path = "../../sdk" }                                # TODO: feature-gate sdk
+afs-derive = { path = "../../derive" }
+stark-vm = { path = "../../vm", features = ["sdk"] }
+ax-ecc-lib = { path = "../ecc" }
+
+p3-air = { workspace = true }
+p3-field = { workspace = true }
+p3-commit = { workspace = true }
+p3-dft = { workspace = true }
+p3-fri = { workspace = true }
+p3-matrix = { workspace = true }
+p3-util = { workspace = true }
+p3-symmetric = { workspace = true }
+p3-challenger = { workspace = true }
+p3-bn254-fr = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-maybe-rayon = { workspace = true }
+p3-merkle-tree = { workspace = true }
+p3-poseidon2 = { workspace = true }
+p3-uni-stark = { workspace = true }
+zkhash = { workspace = true }
+snark-verifier-sdk = { workspace = true, features = [
+    "loader_evm",
+    "revm",
+], optional = true }
+ff = { version = "0.13", features = ["derive", "derive_bits"] }
+itertools.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+lazy_static.workspace = true
+once_cell = { workspace = true, optional = true }
+num-bigint-dig = { workspace = true }
+metrics = { workspace = true, optional = true }
+cfg-if = { workspace = true }
+
+[dev-dependencies]
+afs-primitives = { path = "../../circuits/primitives" }
+
+[[bin]]
+name = "verify_fibair"
+required-features = ["bench-metrics"]
+
+[[bin]]
+name = "tiny_e2e"
+harness = false
+required-features = ["bench-metrics"]
+
+[[bin]]
+name = "alu256_e2e"
+required-features = ["bench-metrics"]
+
+[[bin]]
+name = "small_e2e"
+required-features = ["bench-metrics"]
+
+[features]
+default = []
+parallel = ["afs-stark-backend/parallel"]
+static-verifier = [
+    "afs-compiler/halo2-compiler",
+    "dep:snark-verifier-sdk",
+    "dep:once_cell",
+]
+bench-metrics = ["dep:metrics", "stark-vm/bench-metrics"]
+mimalloc = ["afs-stark-backend/mimalloc"]
+jemalloc = ["afs-stark-backend/jemalloc"]

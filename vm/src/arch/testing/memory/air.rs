@@ -8,7 +8,7 @@ use afs_stark_backend::{
 use p3_air::{Air, BaseAir};
 use p3_matrix::Matrix;
 
-use crate::memory::{offline_checker::MemoryBus, MemoryAddress};
+use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
 
 #[derive(Clone, Copy, Debug, AlignedBorrow, derive_new::new)]
 #[repr(C)]

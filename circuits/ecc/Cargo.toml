@@ -1,0 +1,46 @@
+[package]
+name = "ax-ecc-primitives"
+version = "0.1.0"
+edition = "2021"
+description = "Elliptic curve cryptography building blocks."
+
+[dependencies]
+afs-stark-backend = { path = "../../stark-backend" }
+afs-primitives = { path = "../primitives" }
+ax-sdk = { path = "../../sdk" }
+p3-air = { workspace = true }
+p3-field = { workspace = true }
+p3-commit = { workspace = true }
+p3-dft = { workspace = true }
+p3-fri = { workspace = true }
+p3-matrix = { workspace = true }
+p3-util = { workspace = true }
+p3-symmetric = { workspace = true }
+p3-challenger = { workspace = true }
+p3-bn254-fr = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-merkle-tree = { workspace = true }
+p3-poseidon2 = { workspace = true }
+p3-uni-stark = { workspace = true }
+itertools.workspace = true
+
+rand.workspace = true
+num-bigint-dig.workspace = true
+num-traits.workspace = true
+serde = { workspace = true }
+snark-verifier-sdk = { workspace = true }
+zkhash = { workspace = true }
+ff = { version = "0.13", features = ["derive", "derive_bits"] }
+serde_json = "1.0.121"
+tracing = { workspace = true }
+k256 = { workspace = true }
+elliptic-curve = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+afs-primitives = { path = "../primitives" }
+hex-literal = { workspace = true }
+sha3 = "0.10.8"
+
+[features]
+default = []
+parallel = ["afs-stark-backend/parallel"]

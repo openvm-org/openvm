@@ -7,10 +7,10 @@ on:
     branches: ["main"]
     paths:
       - "stark-backend/**"
-      - "primitives/**"
+      - "circuits/primitives/**"
       - "vm/**"
-      - "compiler/**"
-      - "recursion/**"
+      - "toolchain/compiler/**"
+      - "lib/recursion/**"
       - ".github/workflows/benchmark-call.yml"
   label:
     types: [created]

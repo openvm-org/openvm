@@ -16,7 +16,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result, VmChip};
-use crate::{
+use crate::system::{
     memory::{MemoryChip, MemoryChipRef},
     program::Instruction,
 };
@@ -142,7 +142,6 @@ pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
     pub writes: I::Writes,
 }
 
-// better name: AdapterRuntimeContext
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<T>,
@@ -152,23 +151,23 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 }
 
 #[derive(Clone, Debug)]
-pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, M: VmCoreChip<F, A>> {
+pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, C: VmCoreChip<F, A>> {
     pub adapter: A,
-    pub inner: M,
-    pub records: Vec<(A::ReadRecord, A::WriteRecord, M::Record)>,
+    pub core: C,
+    pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
     memory: MemoryChipRef<F>,
 }
 
-impl<F, A, M> VmChipWrapper<F, A, M>
+impl<F, A, C> VmChipWrapper<F, A, C>
 where
     F: PrimeField32,
     A: VmAdapterChip<F>,
-    M: VmCoreChip<F, A>,
+    C: VmCoreChip<F, A>,
 {
-    pub fn new(adapter: A, inner: M, memory: MemoryChipRef<F>) -> Self {
+    pub fn new(adapter: A, core: C, memory: MemoryChipRef<F>) -> Self {
         Self {
             adapter,
-            inner,
+            core,
             records: vec![],
             memory,
         }
@@ -189,9 +188,9 @@ where
         let mut memory = self.memory.borrow_mut();
         let (reads, read_record) = self.adapter.preprocess(&mut memory, &instruction)?;
         let from_pc = F::from_canonical_usize(from_state.pc);
-        let (output, inner_record) =
-            self.inner
-                .execute_instruction(&instruction, from_pc, reads)?;
+        let (output, core_record) = self
+            .core
+            .execute_instruction(&instruction, from_pc, reads)?;
         let (to_state, write_record) = self.adapter.postprocess(
             &mut memory,
             &instruction,
@@ -199,12 +198,12 @@ where
             output,
             &read_record,
         )?;
-        self.records.push((read_record, write_record, inner_record));
+        self.records.push((read_record, write_record, core_record));
         Ok(to_state)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        self.inner.get_opcode_name(opcode)
+        self.core.get_opcode_name(opcode)
     }
 }
 
@@ -216,9 +215,9 @@ where
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = next_power_of_two_or_zero(self.records.len());
-        let inner_width = self.inner.air().width();
+        let core_width = self.core.air().width();
         let adapter_width = self.adapter.air().width();
-        let width = inner_width + adapter_width;
+        let width = core_width + adapter_width;
         let mut values = vec![F::zero(); height * width];
         // This zip only goes through records.
         // The padding rows between records.len()..height are filled with zeros.
@@ -226,10 +225,10 @@ where
             .par_chunks_mut(width)
             .zip(self.records.into_par_iter())
             .for_each(|(row_slice, record)| {
-                let (adapter_row, inner_row) = row_slice.split_at_mut(adapter_width);
+                let (adapter_row, core_row) = row_slice.split_at_mut(adapter_width);
                 self.adapter
                     .generate_trace_row(adapter_row, record.0, record.1);
-                self.inner.generate_trace_row(inner_row, record.2);
+                self.core.generate_trace_row(core_row, record.2);
             });
         RowMajorMatrix::new(values, width)
     }
@@ -238,7 +237,7 @@ where
         format!(
             "<{},{}>",
             get_air_name(self.adapter.air()),
-            get_air_name(self.inner.air())
+            get_air_name(self.core.air())
         )
     }
 
@@ -247,7 +246,7 @@ where
     }
 
     fn trace_width(&self) -> usize {
-        self.adapter.air().width() + self.inner.air().width()
+        self.adapter.air().width() + self.core.air().width()
     }
 }
 
@@ -257,51 +256,51 @@ where
 // then VmAirWrapper<A::Air, M::Air> is an Air for all AirBuilders needed
 // by stark-backend, which is equivalent to saying it implements AnyRap<SC>
 // The where clauses to achieve this statement is unfortunately really verbose.
-impl<SC, A, M> Chip<SC> for VmChipWrapper<Val<SC>, A, M>
+impl<SC, A, C> Chip<SC> for VmChipWrapper<Val<SC>, A, C>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
     A: VmAdapterChip<Val<SC>>,
-    M: VmCoreChip<Val<SC>, A>,
+    C: VmCoreChip<Val<SC>, A>,
     A::Air: 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
     A::Air: for<'a> VmAdapterAir<DebugConstraintBuilder<'a, SC>>,
-    M::Air: 'static,
-    M::Air: VmCoreAir<
+    C::Air: 'static,
+    C::Air: VmCoreAir<
         SymbolicRapBuilder<Val<SC>>,
         <A::Air as VmAdapterAir<SymbolicRapBuilder<Val<SC>>>>::Interface,
     >,
-    M::Air: for<'a> VmCoreAir<
+    C::Air: for<'a> VmCoreAir<
         ProverConstraintFolder<'a, SC>,
         <A::Air as VmAdapterAir<ProverConstraintFolder<'a, SC>>>::Interface,
     >,
-    M::Air: for<'a> VmCoreAir<
+    C::Air: for<'a> VmCoreAir<
         DebugConstraintBuilder<'a, SC>,
         <A::Air as VmAdapterAir<DebugConstraintBuilder<'a, SC>>>::Interface,
     >,
 {
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        let air: VmAirWrapper<A::Air, M::Air> = VmAirWrapper {
+        let air: VmAirWrapper<A::Air, C::Air> = VmAirWrapper {
             adapter: self.adapter.air().clone(),
-            inner: self.inner.air().clone(),
+            core: self.core.air().clone(),
         };
         Arc::new(air)
     }
 }
 
-pub struct VmAirWrapper<A, M> {
+pub struct VmAirWrapper<A, C> {
     pub adapter: A,
-    pub inner: M,
+    pub core: C,
 }
 
-impl<F, A, M> BaseAir<F> for VmAirWrapper<A, M>
+impl<F, A, C> BaseAir<F> for VmAirWrapper<A, C>
 where
     A: BaseAir<F>,
-    M: BaseAir<F>,
+    C: BaseAir<F>,
 {
     fn width(&self) -> usize {
-        self.adapter.width() + self.inner.width()
+        self.adapter.width() + self.core.width()
     }
 }
 
@@ -311,7 +310,7 @@ where
     M: BaseAirWithPublicValues<F>,
 {
     fn num_public_values(&self) -> usize {
-        self.inner.num_public_values()
+        self.core.num_public_values()
     }
 }
 
@@ -333,9 +332,9 @@ where
         let main = builder.main();
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
-        let (local_adapter, local_inner) = local.split_at(self.adapter.width());
+        let (local_adapter, local_core) = local.split_at(self.adapter.width());
 
-        let ctx = self.inner.eval(builder, local_inner, local_adapter);
+        let ctx = self.core.eval(builder, local_core, local_adapter);
         self.adapter.eval(builder, local_adapter, ctx);
     }
 }

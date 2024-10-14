@@ -4,7 +4,7 @@ use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
 
-use crate::program::{bridge::ProgramBus, ExecutionError, Instruction};
+use crate::system::program::{bridge::ProgramBus, ExecutionError, Instruction};
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
 
