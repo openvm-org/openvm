@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 afs-stark-backend = { path = "../stark-backend" }
-afs-compiler = { path = "../compiler", features = ["sdk"] }
+afs-compiler = { path = "../toolchain/compiler", features = ["sdk"] }
 ax-sdk = { path = "../sdk" }                                # TODO: feature-gate sdk
 afs-derive = { path = "../derive" }
 stark-vm = { path = "../vm", features = ["sdk"] }

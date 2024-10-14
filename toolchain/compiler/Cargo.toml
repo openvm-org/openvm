@@ -10,9 +10,9 @@ edition = "2021"
 p3-field = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-bn254-fr = { workspace = true }
-afs-derive = { path = "../derive" }
-ax-sdk = { path = "../sdk" }
-stark-vm = { path = "../vm" }
+afs-derive = { path = "../../derive" }
+ax-sdk = { path = "../../sdk" }
+stark-vm = { path = "../../vm" }
 tracing.workspace = true
 itertools.workspace = true
 serde.workspace = true

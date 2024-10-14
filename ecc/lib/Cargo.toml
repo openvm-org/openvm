@@ -6,7 +6,7 @@ description = "Elliptic curve cryptography library written in Axiom's eDSL."
 
 [dependencies]
 afs-stark-backend = { path = "../../stark-backend" }
-afs-compiler = { path = "../../compiler" }
+afs-compiler = { path = "../../toolchain/compiler" }
 ax-sdk = { path = "../../sdk" }
 stark-vm = { path = "../../vm" }
 p3-air = { workspace = true }
