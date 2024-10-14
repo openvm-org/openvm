@@ -38,7 +38,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     let mut execution_frequencies = vec![0; instructions.len()];
     for pc in execution {
         execution_frequencies[pc] += 1;
-        chip.get_instruction_and_debug_info(pc).unwrap();
+        chip.get_instruction(pc).unwrap();
     }
     let air = chip.air.clone();
     let cached_trace = chip.generate_cached_trace();
@@ -137,7 +137,7 @@ fn test_program_negative() {
     let mut chip = ProgramChip::new(program);
     let execution_frequencies = vec![1; instructions.len()];
     for pc in 0..instructions.len() {
-        chip.get_instruction_and_debug_info(pc).unwrap();
+        chip.get_instruction(pc).unwrap();
     }
     let air = chip.air.clone();
     let cached_trace = chip.generate_cached_trace();
