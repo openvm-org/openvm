@@ -5,17 +5,16 @@ use p3_field::{AbstractExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
 use tracing::instrument;
 
+use crate::{
+    keygen::{types::MultiStarkVerifyingKey, view::MultiStarkVerifyingKeyView},
+    prover::{opener::AdjacentOpenedValues, types::Proof},
+    verifier::constraints::verify_single_rap_constraints,
+};
+
 pub mod constraints;
 mod error;
-pub mod v2;
 
 pub use error::*;
-
-use self::constraints::verify_single_rap_constraints;
-use crate::{
-    keygen::types::MultiStarkVerifyingKey,
-    prover::{opener::AdjacentOpenedValues, types::Proof},
-};
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 pub struct MultiTraceStarkVerifier<'c, SC: StarkGenericConfig> {
@@ -26,25 +25,25 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
     pub fn new(config: &'c SC) -> Self {
         Self { config }
     }
-
     /// Verify collection of InteractiveAIRs and check the permutation
     /// cumulative sum is equal to zero across all AIRs.
     #[instrument(name = "MultiTraceStarkVerifier::verify", level = "debug", skip_all)]
     pub fn verify(
         &self,
         challenger: &mut SC::Challenger,
-        vk: &MultiStarkVerifyingKey<SC>,
+        mvk: &MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
     ) -> Result<(), VerificationError> {
+        let mvk = mvk.view(&proof.get_air_ids());
         let cumulative_sums = proof
-            .exposed_values_after_challenge
+            .per_air
             .iter()
-            .map(|exposed_values| {
+            .map(|p| {
                 assert!(
-                    exposed_values.len() <= 1,
+                    p.exposed_values_after_challenge.len() <= 1,
                     "Verifier does not support more than 1 challenge phase"
                 );
-                exposed_values.first().map(|values| {
+                p.exposed_values_after_challenge.first().map(|values| {
                     assert_eq!(
                         values.len(),
                         1,
@@ -55,7 +54,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
             })
             .collect_vec();
 
-        self.verify_raps(challenger, vk, proof)?;
+        self.verify_raps(challenger, &mvk, proof)?;
 
         // Check cumulative sum
         let sum: SC::Challenge = cumulative_sums
@@ -68,7 +67,6 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         Ok(())
     }
 
-    // It would be better to pass in only symbolic constraints, which can be serialized.
     /// Verify general RAPs without checking any relations (e.g., cumulative sum) between exposed values of different RAPs.
     ///
     /// Public values is a global list shared across all AIRs.
@@ -79,23 +77,17 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
     pub fn verify_raps(
         &self,
         challenger: &mut SC::Challenger,
-        vk: &MultiStarkVerifyingKey<SC>,
+        mvk: &MultiStarkVerifyingKeyView<SC>,
         proof: &Proof<SC>,
-        // public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {
-        let public_values = &proof.public_values;
+        let public_values = proof.get_public_values();
         // Challenger must observe public values
-        for pis in public_values {
+        for pis in &public_values {
             challenger.observe_slice(pis);
         }
 
         // TODO: valid shape check from verifying key
-
-        for preprocessed_commit in vk.per_air.iter().filter_map(|vk| {
-            vk.preprocessed_data
-                .as_ref()
-                .map(|data| data.commit.clone())
-        }) {
+        for preprocessed_commit in mvk.flattened_preprocessed_commits() {
             challenger.observe(preprocessed_commit);
         }
 
@@ -103,8 +95,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         challenger.observe_slice(&proof.commitments.main_trace);
 
         let mut challenges = Vec::new();
-        for (phase_idx, (&num_to_sample, commit)) in vk
-            .num_challenges_to_sample
+        for (phase_idx, (&num_to_sample, commit)) in mvk
+            .num_challenges_to_sample()
             .iter()
             .zip_eq(&proof.commitments.after_challenge)
             .enumerate()
@@ -116,8 +108,9 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                     .collect_vec(),
             );
             // For each RAP, the exposed values in current phase
-            for exposed_values in &proof.exposed_values_after_challenge {
-                if let Some(values) = exposed_values.get(phase_idx) {
+            for air_proof in &proof.per_air {
+                let exposed_values = air_proof.exposed_values_after_challenge.get(phase_idx);
+                if let Some(values) = exposed_values {
                     // Observe exposed values (in ext field)
                     for value in values {
                         challenger.observe_slice(value.as_base_slice());
@@ -141,13 +134,14 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
 
         let pcs = self.config.pcs();
         // Build domains
-        let (domains, quotient_chunks_domains): (Vec<_>, Vec<Vec<_>>) = vk
+        let (domains, quotient_chunks_domains): (Vec<_>, Vec<Vec<_>>) = mvk
             .per_air
             .iter()
-            .zip_eq(&proof.degrees)
-            .map(|(vk, degree)| {
+            .zip_eq(&proof.per_air)
+            .map(|(vk, air_proof)| {
+                let degree = air_proof.degree;
                 let quotient_degree = vk.quotient_degree;
-                let domain = pcs.natural_domain_for_degree(*degree);
+                let domain = pcs.natural_domain_for_degree(degree);
                 let quotient_domain = domain.create_disjoint_domain(degree * quotient_degree);
                 let qc_domains = quotient_domain.split_domains(quotient_degree);
                 (domain, qc_domains)
@@ -169,69 +163,91 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
             };
         // Build the opening rounds
         // 1. First the preprocessed trace openings
-        let mut rounds: Vec<_> = domains
-            .iter()
-            .zip_eq(&vk.per_air)
-            .flat_map(|(domain, vk)| {
-                vk.preprocessed_data
-                    .as_ref()
-                    .map(|data| (data.commit.clone(), *domain))
-            }) // Assumption: each AIR with preprocessed trace has its own commitment and opening values
+        // Assumption: each AIR with preprocessed trace has its own commitment and opening values
+        let mut rounds: Vec<_> = mvk
+            .preprocessed_commits()
+            .into_iter()
+            .zip_eq(&domains)
+            .flat_map(|(commit, domain)| commit.map(|commit| (commit, *domain)))
             .zip_eq(&opened_values.preprocessed)
             .map(|((commit, domain), values)| {
                 let domain_and_openings = trace_domain_and_openings(domain, zeta, values);
                 (commit, vec![domain_and_openings])
             })
             .collect();
+
         // 2. Then the main trace openings
-        opened_values
-            .main
-            .iter()
-            .zip_eq(&proof.commitments.main_trace)
-            .enumerate()
-            .for_each(|(commit_idx, (values_per_mat, commit))| {
-                let domains_and_openings = values_per_mat
-                    .iter()
-                    .enumerate()
-                    .map(|(matrix_idx, values)| {
-                        let air_idx =
-                            vk.main_commit_to_air_graph.commit_to_air_index[commit_idx][matrix_idx];
-                        let domain = domains[air_idx];
-                        trace_domain_and_openings(domain, zeta, values)
-                    })
-                    .collect_vec();
+
+        let num_main_commits = opened_values.main.len();
+        assert_eq!(num_main_commits, proof.commitments.main_trace.len());
+        let mut main_commit_idx = 0;
+        // All commits except the last one are cached main traces.
+        izip!(&mvk.per_air, &domains).for_each(|(vk, domain)| {
+            for _ in 0..vk.num_cached_mains() {
+                let commit = proof.commitments.main_trace[main_commit_idx].clone();
+                let value = &opened_values.main[main_commit_idx][0];
+                let domains_and_openings = vec![trace_domain_and_openings(*domain, zeta, value)];
                 rounds.push((commit.clone(), domains_and_openings));
-            });
-        // 3. Then after_challenge trace openings, one phase at a time
-        opened_values
-            .after_challenge
+                main_commit_idx += 1;
+            }
+        });
+        // In the last commit, each matrix corresponds to an AIR with a common main trace.
+        {
+            let values_per_mat = &opened_values.main[main_commit_idx];
+            let commit = proof.commitments.main_trace[main_commit_idx].clone();
+            let domains_and_openings = mvk
+                .per_air
+                .iter()
+                .zip_eq(&domains)
+                .filter_map(|(vk, domain)| {
+                    if vk.has_common_main() {
+                        Some(*domain)
+                    } else {
+                        None
+                    }
+                })
+                .zip_eq(values_per_mat)
+                .map(|(domain, values)| trace_domain_and_openings(domain, zeta, values))
+                .collect_vec();
+            rounds.push((commit.clone(), domains_and_openings));
+        }
+
+        // 3. Then after_challenge trace openings, at most 1 phase for now.
+        // All AIRs with interactions should an after challenge trace.
+        let after_challenge_domain_per_air = mvk
+            .per_air
             .iter()
-            .zip_eq(&proof.commitments.after_challenge)
-            .enumerate()
-            .for_each(|(phase_idx, (values_per_mat, commit))| {
-                // Filter RAPs by those that have non-empty trace matrix in this phase
-                let domains = vk.per_air.iter().enumerate().flat_map(|(air_idx, vk)| {
-                    (*vk.width().after_challenge.get(phase_idx).unwrap_or(&0) > 0)
-                        .then(|| domains[air_idx])
-                });
-                let domains_and_openings = domains
-                    .zip_eq(values_per_mat)
-                    .map(|(domain, values)| trace_domain_and_openings(domain, zeta, values))
-                    .collect_vec();
-                rounds.push((commit.clone(), domains_and_openings));
-            });
+            .zip_eq(&domains)
+            .filter_map(|(vk, domain)| {
+                if vk.has_interaction() {
+                    Some(*domain)
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
+        if after_challenge_domain_per_air.is_empty() {
+            assert_eq!(proof.commitments.after_challenge.len(), 0);
+            assert_eq!(opened_values.after_challenge.len(), 0);
+        } else {
+            let after_challenge_commit = proof.commitments.after_challenge[0].clone();
+            let domains_and_openings = after_challenge_domain_per_air
+                .into_iter()
+                .zip_eq(&opened_values.after_challenge[0])
+                .map(|(domain, values)| trace_domain_and_openings(domain, zeta, values))
+                .collect_vec();
+            rounds.push((after_challenge_commit, domains_and_openings));
+        }
+
         let quotient_domains_and_openings = opened_values
             .quotient
             .iter()
-            .enumerate()
-            .flat_map(|(i, chunk)| {
+            .zip_eq(&quotient_chunks_domains)
+            .flat_map(|(chunk, quotient_chunks_domains_per_air)| {
                 chunk
                     .iter()
-                    .enumerate()
-                    .map(|(j, values)| {
-                        (quotient_chunks_domains[i][j], vec![(zeta, values.clone())])
-                    })
-                    .collect_vec()
+                    .zip_eq(quotient_chunks_domains_per_air)
+                    .map(|(values, &domain)| (domain, vec![(zeta, values.clone())]))
             })
             .collect_vec();
         rounds.push((
@@ -243,36 +259,46 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
             .map_err(|e| VerificationError::InvalidOpeningArgument(format!("{:?}", e)))?;
 
         let mut preprocessed_idx = 0usize; // preprocessed commit idx
-        let mut after_challenge_idx = vec![0usize; vk.num_challenges_to_sample.len()];
+        let num_phases = mvk.num_phases();
+        let mut after_challenge_idx = vec![0usize; num_phases];
+        let mut cached_main_commit_idx = 0;
+        let mut common_main_matrix_idx = 0;
 
         // Verify each RAP's constraints
-        for (domain, qc_domains, quotient_chunks, vk, public_values, exposed_values) in izip!(
+        for (domain, qc_domains, quotient_chunks, vk, air_proof) in izip!(
             domains,
             quotient_chunks_domains,
             &opened_values.quotient,
-            &vk.per_air,
-            public_values,
-            &proof.exposed_values_after_challenge
+            &mvk.per_air,
+            &proof.per_air
         ) {
             let preprocessed_values = vk.preprocessed_data.as_ref().map(|_| {
                 let values = &opened_values.preprocessed[preprocessed_idx];
                 preprocessed_idx += 1;
                 values
             });
-            let partitioned_main_values = vk
-                .main_graph
-                .matrix_ptrs
-                .iter()
-                .map(|ptr| &opened_values.main[ptr.commit_index][ptr.matrix_index])
-                .collect_vec();
+            let mut partitioned_main_values = Vec::with_capacity(vk.num_cached_mains());
+            for _ in 0..vk.num_cached_mains() {
+                partitioned_main_values.push(&opened_values.main[cached_main_commit_idx][0]);
+                cached_main_commit_idx += 1;
+            }
+            if vk.has_common_main() {
+                partitioned_main_values
+                    .push(&opened_values.main.last().unwrap()[common_main_matrix_idx]);
+                common_main_matrix_idx += 1;
+            }
             // loop through challenge phases of this single RAP
-            let after_challenge_values = (0..vk.width().after_challenge.len())
-                .map(|phase_idx| {
-                    let matrix_idx = after_challenge_idx[phase_idx];
-                    after_challenge_idx[phase_idx] += 1;
-                    &opened_values.after_challenge[phase_idx][matrix_idx]
-                })
-                .collect_vec();
+            let after_challenge_values = if vk.has_interaction() {
+                (0..num_phases)
+                    .map(|phase_idx| {
+                        let matrix_idx = after_challenge_idx[phase_idx];
+                        after_challenge_idx[phase_idx] += 1;
+                        &opened_values.after_challenge[phase_idx][matrix_idx]
+                    })
+                    .collect_vec()
+            } else {
+                vec![]
+            };
             verify_single_rap_constraints::<SC>(
                 &vk.symbolic_constraints.constraints,
                 preprocessed_values,
@@ -284,8 +310,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                 zeta,
                 alpha,
                 &challenges,
-                public_values,
-                exposed_values,
+                &air_proof.public_values,
+                &air_proof.exposed_values_after_challenge,
             )?;
         }
 

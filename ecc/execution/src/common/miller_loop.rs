@@ -13,10 +13,19 @@ where
     Fp2: FieldExtension<BaseField = Fp>,
     Fp12: FieldExtension<BaseField = Fp2>,
 {
+    /// We use the field extension tower `Fp12 = Fp2[w]/(w^6 - xi)`.
     fn xi() -> Fp2;
+
+    /// Seed value for the curve
     fn seed() -> u64;
+
+    /// Pseudo-binary used for the loop counter of the curve
     fn pseudo_binary_encoding() -> [i8; BITS];
+
+    /// Function to evaluate the line functions of the Miller loop
     fn evaluate_lines_vec(&self, f: Fp12, lines: Vec<EvaluatedLine<Fp, Fp2>>) -> Fp12;
+
+    /// Runs before the main loop in the Miller loop function
     fn pre_loop(
         &self,
         f: Fp12,
@@ -25,6 +34,8 @@ where
         x_over_ys: Vec<Fp>,
         y_invs: Vec<Fp>,
     ) -> (Fp12, Vec<EcPoint<Fp2>>);
+
+    /// Runs after the main loop in the Miller loop function
     fn post_loop(
         &self,
         f: Fp12,
@@ -34,11 +45,14 @@ where
         y_invs: Vec<Fp>,
     ) -> (Fp12, Vec<EcPoint<Fp2>>);
 
+    /// Runs the multi-Miller loop with no embedded exponent
     #[allow(non_snake_case)]
     fn multi_miller_loop(&self, P: &[EcPoint<Fp>], Q: &[EcPoint<Fp2>]) -> Fp12 {
         self.multi_miller_loop_embedded_exp(P, Q, None)
     }
 
+    /// Runs the multi-Miller loop with an embedded exponent, removing the need to calculate the residue witness
+    /// in the final exponentiation step
     #[allow(non_snake_case)]
     fn multi_miller_loop_embedded_exp(
         &self,
@@ -61,7 +75,7 @@ where
             Fp12::ONE
         };
 
-        let mut f = Fp12::ONE;
+        let mut f = if let Some(c) = c { c } else { Fp12::ONE };
         let mut Q_acc = Q.to_vec();
 
         let (f_out, Q_acc_out) = self.pre_loop(f, Q_acc, Q, x_over_ys.clone(), y_invs.clone());
@@ -70,11 +84,6 @@ where
 
         let pseudo_binary_encoding = Self::pseudo_binary_encoding();
         for i in (0..pseudo_binary_encoding.len() - 2).rev() {
-            println!(
-                "miller i: {} = {}; Q_acc.x: {:?}",
-                i, pseudo_binary_encoding[i], Q_acc[0].x
-            );
-
             f = fp12_square::<Fp12>(f);
 
             let mut lines = Vec::<EvaluatedLine<Fp, Fp2>>::new();

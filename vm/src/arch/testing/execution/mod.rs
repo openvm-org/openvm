@@ -1,13 +1,15 @@
-use std::{borrow::BorrowMut, mem::size_of};
+use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::AnyRap,
+    Chip,
+};
 use air::{DummyExecutionInteractionCols, ExecutionDummyAir};
-use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use crate::arch::{ExecutionBus, ExecutionState, MachineChip};
+use crate::arch::{ExecutionBus, ExecutionState, VmChip};
 
 pub mod air;
 
@@ -59,7 +61,7 @@ impl<F: PrimeField32> ExecutionTester<F> {
     }*/
 }
 
-impl<F: Field> MachineChip<F> for ExecutionTester<F> {
+impl<F: Field> VmChip<F> for ExecutionTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
@@ -72,13 +74,6 @@ impl<F: Field> MachineChip<F> for ExecutionTester<F> {
         RowMajorMatrix::new(values, self.trace_width())
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(ExecutionDummyAir::new(self.bus))
-    }
-
     fn air_name(&self) -> String {
         "ExecutionDummyAir".to_string()
     }
@@ -89,5 +84,11 @@ impl<F: Field> MachineChip<F> for ExecutionTester<F> {
 
     fn trace_width(&self) -> usize {
         size_of::<DummyExecutionInteractionCols<u8>>()
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for ExecutionTester<Val<SC>> {
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(ExecutionDummyAir::new(self.bus))
     }
 }

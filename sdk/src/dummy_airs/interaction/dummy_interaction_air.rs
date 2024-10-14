@@ -4,16 +4,14 @@
 //! Chip will either send or receive the fields with multiplicity count.
 //! The main Air has no constraints, the only constraints are specified by the Chip trait
 
-use std::iter;
+use std::{iter, sync::Arc};
 
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder,
     interaction::{InteractionBuilder, InteractionType},
-    prover::{
-        trace::TraceCommitter,
-        v2::types::{AirProofInput, Chip, CommittedTraceData},
-    },
+    prover::types::{AirProofInput, CommittedTraceData, TraceCommitter},
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip,
 };
 use itertools::izip;
 use p3_air::{Air, BaseAir};
@@ -226,8 +224,8 @@ where
 }
 
 impl<'a, SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'a, SC> {
-    fn air(&self) -> &dyn AnyRap<SC> {
-        &self.air
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 
     fn generate_air_proof_input(&self) -> AirProofInput<SC> {

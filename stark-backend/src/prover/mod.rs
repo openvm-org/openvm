@@ -1,29 +1,28 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    iter,
+    sync::{Arc, Mutex},
+};
 
-use itertools::{izip, Itertools};
-use metrics::trace_metrics;
+use itertools::{izip, multiunzip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractExtensionField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
-use self::{
-    opener::OpeningProver,
-    quotient::QuotientCommitter,
-    types::{Commitments, MultiAirCommittedTraceData, Proof},
-};
-#[cfg(debug_assertions)]
-use crate::air_builders::debug::check_constraints::{check_constraints, check_logup};
 use crate::{
-    commit::CommittedSingleMatrixView,
     config::{Com, PcsProof, PcsProverData},
-    interaction::trace::generate_permutation_trace,
-    keygen::types::MultiStarkProvingKey,
-    prover::trace::{ProverTraceData, SingleRapCommittedTraceView},
-    rap::AnyRap,
+    keygen::{types::MultiStarkProvingKey, view::MultiStarkProvingKeyView},
+    prover::{
+        metrics::trace_metrics,
+        opener::OpeningProver,
+        quotient::ProverQuotientData,
+        trace::{
+            commit_permutation_traces, commit_quotient_traces, ProverTraceData, TraceCommitter,
+        },
+        types::{AirProofData, Commitments, Proof, ProofInput},
+    },
 };
 
 /// Metrics about trace and other statistics related to prover performance
@@ -33,9 +32,8 @@ pub mod opener;
 /// Computation of DEEP quotient polynomial and commitment
 pub mod quotient;
 /// Trace commitment computation
-pub mod trace;
+mod trace;
 pub mod types;
-pub mod v2;
 
 thread_local! {
    pub static USE_DEBUG_BUILDER: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
@@ -56,6 +54,10 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         self.config.pcs()
     }
 
+    pub fn committer(&self) -> TraceCommitter<SC> {
+        TraceCommitter::new(self.pcs())
+    }
+
     /// Specialized prove for InteractiveAirs.
     /// Handles trace generation of the permutation traces.
     /// Assumes the main traces have been generated and committed already.
@@ -67,9 +69,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
     pub fn prove<'a>(
         &self,
         challenger: &mut SC::Challenger,
-        pk: &'a MultiStarkProvingKey<SC>,
-        main_trace_data: MultiAirCommittedTraceData<'a, SC>,
-        public_values: &'a [Vec<Val<SC>>],
+        mpk: &'a MultiStarkProvingKey<SC>,
+        proof_input: ProofInput<SC>,
     ) -> Proof<SC>
     where
         SC::Pcs: Sync,
@@ -79,347 +80,292 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
+        assert!(mpk.validate(&proof_input), "Invalid proof input");
         let pcs = self.config.pcs();
 
+        let (air_ids, air_inputs): (Vec<_>, Vec<_>) = multiunzip(proof_input.per_air.into_iter());
+        let (airs, cached_mains_per_air, common_main_per_air, pvs_per_air): (
+            Vec<_>,
+            Vec<_>,
+            Vec<_>,
+            Vec<_>,
+        ) = multiunzip(air_inputs.into_iter().map(|input| {
+            (
+                input.air,
+                input.cached_mains,
+                input.common_main,
+                input.public_values,
+            )
+        }));
+
+        let num_air = air_ids.len();
+        // Ignore unused AIRs.
+        let mpk = mpk.view(air_ids);
+
         // Challenger must observe public values
-        for pis in public_values.iter() {
-            challenger.observe_slice(pis);
+        for pvs in &pvs_per_air {
+            challenger.observe_slice(pvs);
         }
 
-        let preprocessed_commits: Vec<_> = pk.preprocessed_commits().cloned().collect();
+        let preprocessed_commits = mpk.vk_view().flattened_preprocessed_commits();
         challenger.observe_slice(&preprocessed_commits);
 
-        // Challenger must observe all trace commitments
-        let main_trace_commitments = main_trace_data.commits().cloned().collect_vec();
-        assert_eq!(main_trace_commitments.len(), pk.num_main_trace_commitments);
+        // Commit all common main traces in a commitment. Traces inside are ordered by AIR id.
+        let (common_main_trace_views, common_main_prover_data) = {
+            let committer = TraceCommitter::<SC>::new(pcs);
+            let (trace_views, traces): (Vec<_>, Vec<_>) = common_main_per_air
+                .iter()
+                .filter_map(|cm: &Option<RowMajorMatrix<_>>| cm.as_ref())
+                .map(|m| (m.as_view(), m.clone()))
+                .unzip();
+
+            (trace_views, committer.commit(traces))
+        };
+
+        // Commitments order:
+        // - for each air:
+        //   - for each cached main trace
+        //     - 1 commitment
+        // - 1 commitment of all common main traces
+        let main_trace_commitments: Vec<_> = cached_mains_per_air
+            .iter()
+            .flatten()
+            .map(|cm| &cm.prover_data.commit)
+            .chain(iter::once(&common_main_prover_data.commit))
+            .cloned()
+            .collect();
         challenger.observe_slice(&main_trace_commitments);
 
         // TODO: this is not needed if there are no interactions. Number of challenge rounds should be specified in proving key
-        // Generate 2 permutation challenges
-        assert!(pk.num_challenges_to_sample.len() <= 1);
-        let challenges: Vec<_> = pk
-            .num_challenges_to_sample
+        // Generate permutation challenges
+        let challenges = mpk.vk_view().sample_challenges(challenger);
+
+        let mut common_main_idx = 0;
+        let mut degree_per_air = Vec::with_capacity(num_air);
+        let mut main_views_per_air = Vec::with_capacity(num_air);
+        for (pk, cached_mains) in mpk.per_air.iter().zip(&cached_mains_per_air) {
+            let mut main_views: Vec<_> = cached_mains
+                .iter()
+                .map(|cm| cm.raw_data.as_view())
+                .collect();
+            if pk.vk.has_common_main() {
+                main_views.push(common_main_trace_views[common_main_idx].as_view());
+                common_main_idx += 1;
+            }
+            degree_per_air.push(main_views[0].height());
+            main_views_per_air.push(main_views);
+        }
+        let domain_per_air: Vec<_> = degree_per_air
             .iter()
-            .map(|&num_challenges| {
-                (0..num_challenges)
-                    .map(|_| challenger.sample_ext_element::<SC::Challenge>())
-                    .collect_vec()
-            })
+            .map(|&degree| pcs.natural_domain_for_degree(degree))
             .collect();
 
-        // TODO: ===== Permutation Trace Generation should be moved to separate module ====
-        // Generate permutation traces
-        let (perm_traces, cumulative_sums_and_indices): (Vec<Option<_>>, Vec<Option<_>>) =
-            tracing::info_span!("generate permutation traces").in_scope(|| {
-                let perm_challenges = challenges.first().map(|c| [c[0], c[1]]); // must have 2 challenges
-                let perm_traces = pk
-                    .per_air
-                    .par_iter()
-                    .zip_eq(main_trace_data.air_traces.par_iter())
-                    .zip_eq(public_values.par_iter())
-                    .map(|((pk, main), public_values)| {
-                        let interactions = &pk.vk.symbolic_constraints.interactions;
-                        let preprocessed_trace =
-                            pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
-                        generate_permutation_trace(
-                            interactions,
-                            &preprocessed_trace,
-                            &main.partitioned_main_trace,
-                            public_values,
-                            perm_challenges,
-                            pk.interaction_chunk_size,
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                let mut count = 0usize;
-                let cumulative_sums_and_indices = perm_traces
-                    .iter()
-                    .map(|opt_trace| {
-                        opt_trace.as_ref().map(|trace| {
-                            // The cumulative sum is the element in last row of phi, which is the last column in perm_trace
-                            let cumulative_sum =
-                                *trace.row_slice(trace.height() - 1).last().unwrap();
-                            let matrix_index = count;
-                            count += 1;
-                            (cumulative_sum, matrix_index)
-                        })
-                    })
-                    .collect();
-                (perm_traces, cumulative_sums_and_indices)
-            });
+        let (cumulative_sum_per_air, perm_prover_data) = commit_permutation_traces(
+            pcs,
+            &mpk,
+            &challenges,
+            &main_views_per_air,
+            &pvs_per_air,
+            domain_per_air.clone(),
+        );
 
         // Challenger needs to observe permutation_exposed_values (aka cumulative_sums)
-        for (cumulative_sum, _) in cumulative_sums_and_indices.iter().flatten() {
+        for cumulative_sum in cumulative_sum_per_air.iter().flatten() {
             challenger.observe_slice(cumulative_sum.as_base_slice());
         }
-
-        // TODO: Move to a separate MockProver
-        // Debug check constraints
-        #[cfg(debug_assertions)]
-        USE_DEBUG_BUILDER.with(|debug| {
-            if *debug.lock().unwrap() {
-                let mut preprocessed = vec![];
-                let mut partitioned_main = vec![];
-                for (preprocessed_trace, main_data, perm_trace, cumulative_sum_and_index, pis) in
-                    izip!(
-                        pk.preprocessed_traces(),
-                        &main_trace_data.air_traces,
-                        &perm_traces,
-                        &cumulative_sums_and_indices,
-                        public_values
-                    )
-                {
-                    let rap = main_data.air;
-                    let partitioned_main_trace = &main_data.partitioned_main_trace;
-                    let perm_trace = perm_trace.as_ref().map(|t| t.as_view());
-                    let cumulative_sum = cumulative_sum_and_index.as_ref().map(|(sum, _)| *sum);
-
-                    check_constraints(
-                        rap,
-                        &preprocessed_trace,
-                        partitioned_main_trace,
-                        perm_trace.as_slice(),
-                        &challenges,
-                        pis,
-                        cumulative_sum.map(|c| vec![c]).as_slice(),
-                    );
-
-                    preprocessed.push(preprocessed_trace);
-                    partitioned_main.push(partitioned_main_trace.as_slice());
-                }
-                let interactions = pk
-                    .per_air
-                    .iter()
-                    .map(|pk| &pk.vk.symbolic_constraints.interactions[..])
-                    .collect_vec();
-                check_logup(
-                    &interactions,
-                    &preprocessed,
-                    &partitioned_main,
-                    public_values,
-                );
-            }
-        });
-
-        // Commit to permutation traces: this means only 1 challenge round right now
-        // One shared commit for all permutation traces
-        let perm_pcs_data = tracing::info_span!("commit to permutation traces").in_scope(|| {
-            commit_perm_traces::<SC>(
-                pcs,
-                perm_traces,
-                &main_trace_data
-                    .air_traces
-                    .iter()
-                    .map(|t| t.domain)
-                    .collect_vec(),
-            )
-        });
         // Challenger observes commitment if exists
-        if let Some(data) = &perm_pcs_data {
+        if let Some(data) = &perm_prover_data {
             challenger.observe(data.commit.clone());
         }
-
-        // Either 0 or 1 after_challenge commits, depending on if there are any permutation traces
-        let after_challenge_pcs_data: Vec<_> = perm_pcs_data.into_iter().collect();
-        let main_pcs_data = &main_trace_data.pcs_data;
-
-        // Prepare the proven RAP trace views
-        // Abstraction boundary: after this, we consider InteractiveAIR as a RAP with virtual columns included in the trace.
-        let (raps, trace_views): (Vec<_>, Vec<_>) = izip!(
-            main_trace_data.air_traces,
-            &pk.per_air,
-            cumulative_sums_and_indices
-        )
-        .map(|(main, pk, cumulative_sum_and_index)| {
-            // The AIR will be treated as the full RAP with virtual columns after this
-            let rap = main.air;
-            let domain = main.domain;
-            let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
-                // TODO: currently assuming each chip has it's own preprocessed commitment
-                CommittedSingleMatrixView::new(p.data.as_ref(), 0)
-            });
-            let matrix_ptrs = &pk.vk.main_graph.matrix_ptrs;
-            assert_eq!(main.partitioned_main_trace.len(), matrix_ptrs.len());
-            let partitioned_main = matrix_ptrs
-                .iter()
-                .map(|ptr| {
-                    CommittedSingleMatrixView::new(
-                        main_pcs_data[ptr.commit_index].1,
-                        ptr.matrix_index,
-                    )
-                })
-                .collect_vec();
-
-            // There will be either 0 or 1 after_challenge traces
-            let after_challenge = if let Some((cumulative_sum, index)) = cumulative_sum_and_index {
-                let matrix = CommittedSingleMatrixView::new(
-                    after_challenge_pcs_data[0].data.as_ref(),
-                    index,
-                );
-                let exposed_values = vec![cumulative_sum];
-                vec![(matrix, exposed_values)]
-            } else {
-                Vec::new()
-            };
-            let trace_view = SingleRapCommittedTraceView {
-                domain,
-                preprocessed,
-                partitioned_main,
-                after_challenge,
-            };
-            (rap, trace_view)
-        })
-        .unzip();
-        // === END of logic specific to Interactions/permutations, we can now deal with general RAP ===
-
-        Self::prove_raps_with_committed_traces(
-            pcs,
-            challenger,
-            pk,
-            raps,
-            trace_views,
-            main_pcs_data,
-            &after_challenge_pcs_data,
-            &challenges,
-            public_values,
-        )
-    }
-    /// Proves general RAPs after all traces have been committed.
-    /// Soundness depends on `challenger` having already observed
-    /// public values, exposed values after challenge, and all
-    /// trace commitments.
-    ///
-    /// - `challenges`: for each trace challenge phase, the challenges sampled
-    ///
-    /// ## Assumptions
-    /// - `raps, trace_views, public_values` have same length and same order
-    /// - per challenge round, shared commitment for
-    /// all trace matrices, with matrices in increasing order of air index
-    #[allow(clippy::too_many_arguments)]
-    #[instrument(level = "info", skip_all)]
-    pub fn prove_raps_with_committed_traces<'a>(
-        pcs: &SC::Pcs,
-        challenger: &mut SC::Challenger,
-        pk: &'a MultiStarkProvingKey<SC>,
-        raps: Vec<&'a dyn AnyRap<SC>>,
-        trace_views: Vec<SingleRapCommittedTraceView<'a, SC>>,
-        main_pcs_data: &[(Com<SC>, &PcsProverData<SC>)],
-        after_challenge_pcs_data: &[ProverTraceData<SC>],
-        challenges: &[Vec<SC::Challenge>],
-        public_values: &'a [Vec<Val<SC>>],
-    ) -> Proof<SC>
-    where
-        SC::Pcs: Sync,
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
-        let after_challenge_commitments: Vec<_> = after_challenge_pcs_data
-            .iter()
-            .map(|data| data.commit.clone())
-            .collect();
-
         // Generate `alpha` challenge
         let alpha: SC::Challenge = challenger.sample_ext_element();
         tracing::debug!("alpha: {alpha:?}");
 
-        let degrees = trace_views
-            .iter()
-            .map(|view| view.domain.size())
-            .collect_vec();
-        let qvks = pk.get_quotient_vk_data_per_air();
-        let quotient_degrees = qvks.iter().map(|qvk| qvk.quotient_degree).collect_vec();
-        let quotient_committer = QuotientCommitter::new(pcs, challenges, alpha);
-        let quotient_values =
-            quotient_committer.quotient_values(raps, &qvks, &trace_views, public_values);
-        // Commit to quotient polynomias. One shared commit for all quotient polynomials
-        let quotient_data = quotient_committer.commit(quotient_values);
-
-        // Observe quotient commitment
-        challenger.observe(quotient_data.commit.clone());
-
-        // Collect the commitments
-        let commitments = Commitments {
-            main_trace: main_pcs_data
-                .iter()
-                .map(|(commit, _)| commit.clone())
-                .collect(),
-            after_challenge: after_challenge_commitments,
-            quotient: quotient_data.commit.clone(),
-        };
-
-        // Draw `zeta` challenge
-        let zeta: SC::Challenge = challenger.sample_ext_element();
-        tracing::debug!("zeta: {zeta:?}");
-
-        // Open all polynomials at random points using pcs
-        let opener = OpeningProver::new(pcs, zeta);
-        let preprocessed_data: Vec<_> = trace_views
-            .iter()
-            .flat_map(|view| {
-                view.preprocessed
-                    .as_ref()
-                    .map(|matrix| (matrix.data, view.domain))
-            })
-            .collect();
-
-        let main_data: Vec<_> = main_pcs_data
-            .iter()
-            .zip_eq(&pk.main_commit_to_air_graph.commit_to_air_index)
-            .map(|((_, data), mat_to_air_index)| {
-                let domains = mat_to_air_index
-                    .iter()
-                    .map(|i| trace_views[*i].domain)
-                    .collect_vec();
-                (*data, domains)
-            })
-            .collect();
-
-        // ASSUMING: per challenge round, shared commitment for all trace matrices, with matrices in increasing order of air index
-        let after_challenge_data: Vec<_> = after_challenge_pcs_data
-            .iter()
-            .enumerate()
-            .map(|(round, data)| {
-                let domains = trace_views
-                    .iter()
-                    .flat_map(|view| (view.after_challenge.len() > round).then_some(view.domain))
-                    .collect_vec();
-                (data.data.as_ref(), domains)
-            })
-            .collect();
-
-        let opening = opener.open(
-            challenger,
-            preprocessed_data,
-            main_data,
-            after_challenge_data,
-            &quotient_data.data,
-            &quotient_degrees,
+        let quotient_data = commit_quotient_traces(
+            pcs,
+            &mpk,
+            alpha,
+            &challenges,
+            airs,
+            &pvs_per_air,
+            domain_per_air.clone(),
+            &cached_mains_per_air,
+            &common_main_prover_data,
+            &perm_prover_data,
+            cumulative_sum_per_air.clone(),
         );
 
-        let exposed_values_after_challenge = trace_views
+        let main_prover_data: Vec<_> = cached_mains_per_air
             .into_iter()
-            .map(|view| {
-                view.after_challenge
-                    .into_iter()
-                    .map(|(_, values)| values)
-                    .collect_vec()
-            })
-            .collect_vec();
+            .flatten()
+            .map(|cm| cm.prover_data)
+            .chain(iter::once(common_main_prover_data))
+            .collect();
+        prove_raps_with_committed_traces(
+            pcs,
+            challenger,
+            mpk,
+            &main_prover_data,
+            perm_prover_data,
+            cumulative_sum_per_air,
+            quotient_data,
+            domain_per_air,
+            pvs_per_air,
+        )
+    }
+}
+//
+/// Proves general RAPs after all traces have been committed.
+/// Soundness depends on `challenger` having already observed
+/// public values, exposed values after challenge, and all
+/// trace commitments.
+///
+/// - `challenges`: for each trace challenge phase, the challenges sampled
+///
+/// ## Assumptions
+/// - `raps, trace_views, public_values` have same length and same order
+/// - per challenge round, shared commitment for
+/// all trace matrices, with matrices in increasing order of air index
+#[allow(clippy::too_many_arguments)]
+#[instrument(level = "info", skip_all)]
+fn prove_raps_with_committed_traces<'a, SC: StarkGenericConfig>(
+    pcs: &SC::Pcs,
+    challenger: &mut SC::Challenger,
+    mpk: MultiStarkProvingKeyView<SC>,
+    main_prover_data: &[ProverTraceData<SC>],
+    perm_prover_data: Option<ProverTraceData<SC>>,
+    cumulative_sum_per_air: Vec<Option<SC::Challenge>>,
+    quotient_data: ProverQuotientData<SC>,
+    domain_per_air: Vec<Domain<SC>>,
+    public_values_per_air: Vec<Vec<Val<SC>>>,
+) -> Proof<SC>
+where
+    SC::Pcs: Sync,
+    Domain<SC>: Send + Sync,
+    PcsProverData<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Challenge: Send + Sync,
+    PcsProof<SC>: Send + Sync,
+{
+    // Observe quotient commitment
+    challenger.observe(quotient_data.commit.clone());
 
-        tracing::info!("{}", trace_metrics(&pk.per_air, &degrees));
-        #[cfg(feature = "bench-metrics")]
-        trace_metrics(&pk.per_air, &degrees).emit();
+    let after_challenge_commitments: Vec<_> = perm_prover_data
+        .iter()
+        .map(|data| data.commit.clone())
+        .collect();
+    // Collect the commitments
+    let commitments = Commitments {
+        main_trace: main_prover_data
+            .iter()
+            .map(|data| data.commit.clone())
+            .collect(),
+        after_challenge: after_challenge_commitments,
+        quotient: quotient_data.commit.clone(),
+    };
 
-        Proof {
-            degrees,
-            commitments,
-            opening,
-            exposed_values_after_challenge,
-            public_values: public_values.to_vec(),
+    // Draw `zeta` challenge
+    let zeta: SC::Challenge = challenger.sample_ext_element();
+    tracing::debug!("zeta: {zeta:?}");
+
+    // Open all polynomials at random points using pcs
+    let opener = OpeningProver::new(pcs, zeta);
+    let preprocessed_data: Vec<_> = mpk
+        .per_air
+        .iter()
+        .zip_eq(&domain_per_air)
+        .flat_map(|(pk, domain)| {
+            pk.preprocessed_data
+                .as_ref()
+                .map(|prover_data| (prover_data.data.as_ref(), *domain))
+        })
+        .collect();
+
+    let mut main_prover_data_idx = 0;
+    let mut main_data = Vec::with_capacity(main_prover_data.len());
+    let mut common_main_domains = Vec::with_capacity(mpk.per_air.len());
+    for (air_id, pk) in mpk.per_air.iter().enumerate() {
+        for _ in 0..pk.vk.num_cached_mains() {
+            main_data.push((
+                main_prover_data[main_prover_data_idx].data.as_ref(),
+                vec![domain_per_air[air_id]],
+            ));
+            main_prover_data_idx += 1;
         }
+        if pk.vk.has_common_main() {
+            common_main_domains.push(domain_per_air[air_id]);
+        }
+    }
+    main_data.push((
+        main_prover_data[main_prover_data_idx].data.as_ref(),
+        common_main_domains,
+    ));
+
+    // ASSUMING: per challenge round, shared commitment for all trace matrices, with matrices in increasing order of air index
+    let after_challenge_data = if let Some(perm_prover_data) = &perm_prover_data {
+        let mut domains = Vec::new();
+        for (air_id, pk) in mpk.per_air.iter().enumerate() {
+            if pk.vk.has_interaction() {
+                domains.push(domain_per_air[air_id]);
+            }
+        }
+        vec![(perm_prover_data.data.as_ref(), domains)]
+    } else {
+        vec![]
+    };
+
+    let quotient_degrees = mpk
+        .per_air
+        .iter()
+        .map(|pk| pk.vk.quotient_degree)
+        .collect_vec();
+    let opening = opener.open(
+        challenger,
+        preprocessed_data,
+        main_data,
+        after_challenge_data,
+        &quotient_data.data,
+        &quotient_degrees,
+    );
+
+    let degrees = domain_per_air
+        .iter()
+        .map(|domain| domain.size())
+        .collect_vec();
+
+    let exposed_values_after_challenge = cumulative_sum_per_air
+        .into_iter()
+        .map(|csum| {
+            if let Some(csum) = csum {
+                vec![vec![csum]]
+            } else {
+                vec![]
+            }
+        })
+        .collect_vec();
+
+    tracing::info!("{}", trace_metrics(&mpk.per_air, &degrees));
+    #[cfg(feature = "bench-metrics")]
+    trace_metrics(&mpk.per_air, &degrees).emit();
+
+    Proof {
+        commitments,
+        opening,
+        per_air: izip!(
+            mpk.air_ids,
+            degrees,
+            exposed_values_after_challenge,
+            public_values_per_air
+        )
+        .map(
+            |(air_id, degree, exposed_values, public_values)| AirProofData {
+                air_id,
+                degree,
+                public_values,
+                exposed_values_after_challenge: exposed_values,
+            },
+        )
+        .collect(),
     }
 }
 

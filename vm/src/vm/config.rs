@@ -147,11 +147,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             BranchLessThanOpcode::COUNT,
             BranchLessThanOpcode::default_offset(),
         ),
-        ExecutorName::Ui => (
-            U32Opcode::default_offset(),
-            U32Opcode::COUNT,
-            U32Opcode::default_offset(),
-        ),
         ExecutorName::CastF => (
             CastfOpcode::default_offset(),
             CastfOpcode::COUNT,
@@ -185,7 +180,6 @@ pub struct VmConfig {
     /*pub max_program_length: usize,
     pub max_operations: usize,*/
     pub collect_metrics: bool,
-    pub bigint_limb_size: usize,
 }
 
 impl VmConfig {
@@ -195,7 +189,6 @@ impl VmConfig {
         num_public_values: usize,
         max_segment_len: usize,
         collect_metrics: bool,
-        bigint_limb_size: usize,
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         enabled_modulus: Vec<BigUint>,
     ) -> Self {
@@ -206,7 +199,6 @@ impl VmConfig {
             num_public_values,
             max_segment_len,
             collect_metrics,
-            bigint_limb_size,
             modular_executors: Vec::new(),
         };
         config.add_modular_support(enabled_modulus)
@@ -219,7 +211,7 @@ impl VmConfig {
         offset: usize,
     ) -> Self {
         // Some executors need to be handled in a special way, and cannot be added like other executors.
-        let not_allowed_executors = [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
+        let not_allowed_executors = []; // [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
         if not_allowed_executors.contains(&executor) {
             panic!("Cannot add executor for {:?}", executor);
         }
@@ -291,7 +283,6 @@ impl VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
-            8,
             vec![],
         )
     }
@@ -309,7 +300,6 @@ impl VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
-            8,
             vec![],
         )
         .add_default_executor(ExecutorName::Core)
@@ -350,10 +340,11 @@ impl Modulus {
     }
 
     pub fn all() -> Vec<Self> {
-        Self::iter().collect()
+        Modulus::iter().collect()
     }
 }
 
+#[allow(dead_code)]
 fn shift_range(r: &Range<usize>, x: usize) -> Range<usize> {
     let start = r.start + x;
     let end = r.end + x;

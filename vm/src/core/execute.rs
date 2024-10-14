@@ -35,7 +35,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let pc_usize = pc.as_canonical_u64() as usize;
 
-        let opcode = instruction.opcode - self.offset;
+        let local_opcode_index = instruction.opcode - self.offset;
         let a = instruction.op_a;
         let b = instruction.op_b;
         let c = instruction.op_c;
@@ -47,7 +47,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         let io = CoreIoCols {
             timestamp: F::from_canonical_usize(timestamp),
             pc,
-            opcode: F::from_canonical_usize(opcode),
+            opcode: F::from_canonical_usize(local_opcode_index),
             op_a: a,
             op_b: b,
             op_c: c,
@@ -89,8 +89,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let hint_stream = &mut self.streams.hint_stream;
 
-        let opcode = CoreOpcode::from_usize(opcode);
-        match opcode {
+        let local_opcode_index = CoreOpcode::from_usize(local_opcode_index);
+        match local_opcode_index {
             // d[a] <- e[d[c] + b]
             LOADW => {
                 let base_pointer = read!(d, c);
@@ -222,7 +222,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             }
             _ => unreachable!(),
         };
-        timestamp += timestamp_delta(opcode);
+        timestamp += timestamp_delta(local_opcode_index);
 
         // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
         // and move this logic into generate_trace().
@@ -261,7 +261,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
             let mut operation_flags = BTreeMap::new();
             for other_opcode in CoreOpcode::iter() {
-                operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
+                operation_flags.insert(
+                    other_opcode,
+                    F::from_bool(other_opcode == local_opcode_index),
+                );
             }
 
             let is_equal_cols = LocalTraceInstructions::generate_trace_row(
@@ -293,7 +296,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             clock_cycle: self.state.clock_cycle + 1,
             timestamp,
             pc: next_pc.as_canonical_u64() as usize,
-            is_done: opcode == TERMINATE,
+            is_done: local_opcode_index == TERMINATE,
         });
 
         Ok(ExecutionState::new(
@@ -303,7 +306,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        let opcode = CoreOpcode::from_usize(opcode - self.offset);
-        format!("{opcode:?}")
+        let local_opcode_index = CoreOpcode::from_usize(opcode - self.offset);
+        format!("{local_opcode_index:?}")
     }
 }

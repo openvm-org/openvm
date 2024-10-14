@@ -3,7 +3,7 @@ use std::sync::Arc;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use assert_sorted::AssertSortedChip;
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::DenseMatrix;
@@ -57,7 +57,7 @@ fn test_assert_sorted_chip_small_positive() {
     let range_checker_trace = assert_sorted_chip.range_checker.generate_trace();
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![assert_sorted_chip.air, range_checker_chip.air],
+        any_rap_arc_vec![assert_sorted_chip.air, range_checker_chip.air],
         vec![assert_sorted_chip_trace, range_checker_trace],
     )
     .expect("Verification failed");
@@ -84,7 +84,7 @@ fn test_assert_sorted_chip_large_positive() {
     let range_checker_trace = assert_sorted_chip.range_checker.generate_trace();
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![assert_sorted_chip.air, range_checker_chip.air],
+        any_rap_arc_vec![assert_sorted_chip.air, range_checker_chip.air],
         vec![assert_sorted_chip_trace, range_checker_trace],
     )
     .expect("Verification failed");
@@ -115,7 +115,7 @@ fn test_assert_sorted_chip_unsorted_negative() {
     disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![assert_sorted_chip.air, range_checker_chip.air],
+            any_rap_arc_vec![assert_sorted_chip.air, range_checker_chip.air],
             vec![assert_sorted_chip_trace, range_checker_trace],
         )
         .err(),

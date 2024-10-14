@@ -20,7 +20,7 @@ use super::{utils::num_keccak_f, KeccakVmChip};
 use crate::{
     arch::{
         instructions::Keccak256Opcode,
-        testing::{MachineChipTestBuilder, MachineChipTester},
+        testing::{VmChipTestBuilder, VmChipTester},
     },
     core::BYTE_XOR_BUS,
     hashes::keccak::hasher::columns::KeccakVmCols,
@@ -36,8 +36,8 @@ fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
 
 // io is vector of (input, prank_output) where prank_output is Some if the trace
 // will be replaced
-fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> MachineChipTester {
-    let mut tester = MachineChipTestBuilder::default();
+fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> VmChipTester {
+    let mut tester = VmChipTestBuilder::default();
     let xor_chip = Arc::new(XorLookupChip::<8>::new(BYTE_XOR_BUS));
     let mut chip = KeccakVmChip::new(
         tester.execution_bus(),

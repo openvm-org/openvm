@@ -1,6 +1,6 @@
 use afs_primitives::{bigint::utils::*, ecc::SampleEcPoints, sub_chip::LocalTraceInstructions};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
 };
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
@@ -44,7 +44,7 @@ fn test_add() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip, range_checker.air],
+        any_rap_arc_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -82,7 +82,7 @@ fn test_div() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip, range_checker.air],
+        any_rap_arc_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -125,7 +125,7 @@ fn test_auto_carry_mul() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip, range_checker.air],
+        any_rap_arc_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -170,7 +170,7 @@ fn test_auto_carry_intmul() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip, range_checker.air],
+        any_rap_arc_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -224,7 +224,7 @@ fn test_auto_carry_add() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip, range_checker.air],
+        any_rap_arc_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -271,7 +271,7 @@ fn test_ec_add() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip, range_checker.air],
+        any_rap_arc_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -315,7 +315,7 @@ fn test_ec_double() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip, range_checker.air],
+        any_rap_arc_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -360,7 +360,7 @@ fn test_select() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip, range_checker.air],
+        any_rap_arc_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -404,7 +404,7 @@ fn test_select2() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip, range_checker.air],
+        any_rap_arc_vec![chip, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");

@@ -89,8 +89,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
             e,
             ..
         } = instruction.clone();
-        let opcode = opcode - self.offset;
-        assert_eq!(opcode, CastfOpcode::CASTF as usize);
+        assert_eq!(opcode - self.offset, CastfOpcode::CASTF as usize);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
 
@@ -126,6 +125,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
             timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
         })
     }
+
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", CastfOpcode::CASTF)
     }

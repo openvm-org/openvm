@@ -1,4 +1,4 @@
-use std::{iter, mem::size_of};
+use std::iter;
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::ecc::{EcAirConfig, EcAuxCols as EcPrimitivesAuxCols};
@@ -35,7 +35,8 @@ impl<T: Clone> EcAddUnequalCols<T> {
 }
 
 #[derive(AlignedBorrow, Clone)]
-pub struct EcAddUnequalIoCols<T: Clone> {
+#[repr(C)]
+pub struct EcAddUnequalIoCols<T> {
     pub from_state: ExecutionState<T>,
     pub p1: MemoryHeapDataIoCols<T, TWO_NUM_LIMBS>,
     pub p2: MemoryHeapDataIoCols<T, TWO_NUM_LIMBS>,
@@ -43,10 +44,6 @@ pub struct EcAddUnequalIoCols<T: Clone> {
 }
 
 impl<T: Clone> EcAddUnequalIoCols<T> {
-    pub const fn width() -> usize {
-        size_of::<EcAddUnequalIoCols<u8>>()
-    }
-
     pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
         let from_state = ExecutionState::from_iter(iter.by_ref());
         let p1 = MemoryHeapDataIoCols::from_iterator(iter.by_ref());
@@ -135,17 +132,14 @@ impl<T: Clone> EcDoubleCols<T> {
 }
 
 #[derive(AlignedBorrow, Clone)]
-pub struct EcDoubleIoCols<T: Clone> {
+#[repr(C)]
+pub struct EcDoubleIoCols<T> {
     pub from_state: ExecutionState<T>,
     pub p1: MemoryHeapDataIoCols<T, TWO_NUM_LIMBS>,
     pub p2: MemoryHeapDataIoCols<T, TWO_NUM_LIMBS>,
 }
 
 impl<T: Clone> EcDoubleIoCols<T> {
-    pub const fn width() -> usize {
-        2 + 2 * (TWO_NUM_LIMBS + 5)
-    }
-
     pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
         let from_state = ExecutionState::from_iter(iter.by_ref());
         let p1 = MemoryHeapDataIoCols::from_iterator(iter.by_ref());

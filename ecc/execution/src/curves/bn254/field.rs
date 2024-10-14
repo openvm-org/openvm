@@ -2,8 +2,13 @@ use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, Fq6},
     ff::Field,
 };
+use num::BigInt;
 
-use crate::common::{EvaluatedLine, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType};
+#[cfg(test)]
+use crate::common::FeltPrint;
+use crate::common::{
+    EvaluatedLine, ExpBigInt, FieldExtension, Fp12Constructor, Fp2Constructor, LineDType,
+};
 
 impl Fp2Constructor<Fq> for Fq2 {
     fn new(c0: Fq, c1: Fq) -> Self {
@@ -133,5 +138,85 @@ impl FieldExtension for Fq12 {
 impl LineDType<Fq, Fq2, Fq12> for Fq12 {
     fn from_evaluated_line_d_type(line: EvaluatedLine<Fq, Fq2>) -> Fq12 {
         Fq12::from_coeffs(&[Fq2::ONE, line.b, Fq2::ZERO, line.c, Fq2::ZERO, Fq2::ZERO])
+    }
+}
+
+impl ExpBigInt<Fq12> for Fq12 {
+    fn exp_bigint(&self, k: BigInt) -> Fq12 {
+        // let (sign, digits) = k.to_u64_digits();
+        // let mut res = self.pow_vartime(digits);
+        // if sign == Sign::Minus {
+        //     res = res.invert().unwrap();
+        // }
+        // res
+        if k == BigInt::from(0) {
+            return Fq12::one();
+        }
+
+        let mut e = k.clone();
+        let mut x = *self;
+
+        if k < BigInt::from(0) {
+            x = x.invert().unwrap();
+            e = -k;
+        }
+
+        let mut res = Fq12::one();
+
+        let x_sq = x.square();
+        let ops = [x, x_sq, x_sq * x];
+
+        let bytes = e.to_bytes_be();
+        for &b in bytes.1.iter() {
+            let mut mask = 0xc0;
+            for j in 0..4 {
+                res = res.square().square();
+                let c = (b & mask) >> (6 - 2 * j);
+                if c != 0 {
+                    res *= &ops[(c - 1) as usize];
+                }
+                mask >>= 2;
+            }
+        }
+
+        res
+    }
+}
+
+#[cfg(test)]
+impl FeltPrint<Fq> for Fq {
+    fn felt_print(&self, label: &str) {
+        println!("{} {:?}", label, self.0);
+    }
+}
+
+#[cfg(test)]
+impl FeltPrint<Fq12> for Fq12 {
+    fn felt_print(&self, label: &str) {
+        println!("felt_print - {}", label);
+        print!("c0.c0.c0:");
+        self.c0.c0.c0.felt_print("");
+        print!("c0.c0.c1:");
+        self.c0.c0.c1.felt_print("");
+        print!("c0.c1.c0:");
+        self.c0.c1.c0.felt_print("");
+        print!("c0.c1.c1:");
+        self.c0.c1.c1.felt_print("");
+        print!("c0.c2.c0:");
+        self.c0.c2.c0.felt_print("");
+        print!("c0.c2.c1:");
+        self.c0.c2.c1.felt_print("");
+        print!("c1.c0.c0:");
+        self.c1.c0.c0.felt_print("");
+        print!("c1.c0.c1:");
+        self.c1.c0.c1.felt_print("");
+        print!("c1.c1.c0:");
+        self.c1.c1.c0.felt_print("");
+        print!("c1.c1.c1:");
+        self.c1.c1.c1.felt_print("");
+        print!("c1.c2.c0:");
+        self.c1.c2.c0.felt_print("");
+        print!("c1.c2.c1:");
+        self.c1.c2.c1.felt_print("");
     }
 }

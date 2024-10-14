@@ -1,10 +1,10 @@
-use crate::arch::{MachineChipWrapper, Rv32AluAdapter};
+use crate::arch::{Rv32AluAdapter, VmChipWrapper};
 
-mod integration;
-pub use integration::*;
+mod core;
+pub use core::*;
 
 #[cfg(test)]
 mod tests;
 
 // TODO: Replace current Shift256 module upon completion
-pub type Rv32ShiftChip<F> = MachineChipWrapper<F, Rv32AluAdapter<F>, ShiftIntegration<4, 8>>;
+pub type Rv32ShiftChip<F> = VmChipWrapper<F, Rv32AluAdapter<F>, ShiftCoreChip<4, 8>>;

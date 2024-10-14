@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use afs_derive::AlignedBorrow;
 
 use crate::{
@@ -14,15 +12,6 @@ pub struct UintMultiplicationCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
     pub aux: UintMultiplicationAuxCols<T, NUM_LIMBS, LIMB_BITS>,
 }
 
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    UintMultiplicationCols<T, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn width() -> usize {
-        UintMultiplicationAuxCols::<T, NUM_LIMBS, LIMB_BITS>::width()
-            + UintMultiplicationIoCols::<T, NUM_LIMBS, LIMB_BITS>::width()
-    }
-}
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct UintMultiplicationIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -32,14 +21,6 @@ pub struct UintMultiplicationIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: 
     pub z: MemoryData<T, NUM_LIMBS, LIMB_BITS>,
     pub ptr_as: T,
     pub address_as: T,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    UintMultiplicationIoCols<T, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn width() -> usize {
-        size_of::<UintMultiplicationIoCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }
 
 #[repr(C)]
@@ -53,24 +34,10 @@ pub struct UintMultiplicationAuxCols<T, const NUM_LIMBS: usize, const LIMB_BITS:
     pub write_z_aux_cols: MemoryWriteAuxCols<T, NUM_LIMBS>,
 }
 
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    UintMultiplicationAuxCols<T, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn width() -> usize {
-        size_of::<UintMultiplicationAuxCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
-}
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct MemoryData<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub data: [T; NUM_LIMBS],
     pub address: T,
     pub ptr_to_address: T,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> MemoryData<T, NUM_LIMBS, LIMB_BITS> {
-    pub fn width() -> usize {
-        size_of::<MemoryData<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }

@@ -2,8 +2,9 @@ pub mod air;
 pub mod columns;
 pub mod trace;
 
-use std::sync::atomic::AtomicU32;
+use std::sync::{atomic::AtomicU32, Arc};
 
+use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap, Chip};
 use air::XorLookupAir;
 
 use super::bus::XorBus;
@@ -55,5 +56,11 @@ impl<const M: usize> XorLookupChip<M> {
                 self.count[i][j].store(0, std::sync::atomic::Ordering::Relaxed);
             }
         }
+    }
+}
+
+impl<SC: StarkGenericConfig, const M: usize> Chip<SC> for XorLookupChip<M> {
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 }

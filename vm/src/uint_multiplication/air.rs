@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct UintMultiplicationAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct UintMultiplicationCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub bus: RangeTupleCheckerBus<2>,
@@ -24,11 +24,11 @@ pub struct UintMultiplicationAir<const NUM_LIMBS: usize, const LIMB_BITS: usize>
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
-    for UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>
+    for UintMultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>
+    for UintMultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         UintMultiplicationCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -36,12 +36,12 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>
+    for UintMultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>
+    for UintMultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

@@ -1,15 +1,14 @@
 use std::{marker::PhantomData, mem::size_of};
 
 use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::{read_rv32_register, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter,
-        MachineAdapterInterface, Result,
+        AdapterRuntimeContext, ExecutionBridge, ExecutionState, Result, VmAdapterChip,
+        VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -93,7 +92,7 @@ pub struct Rv32HeapAdapterInterface<
     _marker: PhantomData<T>,
 }
 
-impl<T: AbstractField, const READ_SIZE: usize, const WRITE_SIZE: usize> MachineAdapterInterface<T>
+impl<T: AbstractField, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapterInterface<T>
     for Rv32HeapAdapterInterface<T, READ_SIZE, WRITE_SIZE>
 {
     type Reads = ([T; READ_SIZE], [T; READ_SIZE]);
@@ -129,11 +128,10 @@ impl<
         // const NUM_WRITES: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > MachineAdapter<F> for Rv32HeapAdapter<F, READ_SIZE, WRITE_SIZE>
+    > VmAdapterChip<F> for Rv32HeapAdapter<F, READ_SIZE, WRITE_SIZE>
 {
     type ReadRecord = [Rv32RegisterHeapReadRecord<F, READ_SIZE>; 2];
     type WriteRecord = [Rv32RegisterHeapWriteRecord<F, WRITE_SIZE>; 1];
-    type Cols<T> = Rv32HeapAdapterCols<T, READ_SIZE, WRITE_SIZE>;
     type Interface<T: AbstractField> = Rv32HeapAdapterInterface<T, READ_SIZE, WRITE_SIZE>;
     type Air = Rv32HeapAdapterAir<READ_SIZE, WRITE_SIZE>;
 
@@ -142,7 +140,7 @@ impl<
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -168,7 +166,7 @@ impl<
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction {
@@ -195,26 +193,15 @@ impl<
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut Self::Cols<F>,
+        _row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
     ) {
         todo!()
     }
 
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
-        todo!()
-    }
-
-    fn air(&self) -> Self::Air {
-        self.air
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }
 

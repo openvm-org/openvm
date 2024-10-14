@@ -1,16 +1,15 @@
+// Keygen V2 API for STARK backend
+// Changes:
+// - All AIRs can be optional
 use std::sync::Arc;
 
 use derivative::Derivative;
-use itertools::Itertools;
-use p3_field::AbstractExtensionField;
-use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
+use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
-use tracing::info;
 
 use crate::{
     air_builders::symbolic::SymbolicConstraints,
-    commit::MatrixCommitmentPointers,
     config::{Com, PcsProverData},
 };
 
@@ -47,23 +46,6 @@ pub struct StarkVerifyingParams {
     pub num_challenges_to_sample: Vec<usize>,
 }
 
-/// Proving key for a single STARK (corresponding to single AIR matrix)
-#[derive(Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "PcsProverData<SC>: Serialize",
-    deserialize = "PcsProverData<SC>: Deserialize<'de>"
-))]
-pub struct StarkProvingKey<SC: StarkGenericConfig> {
-    /// Type name of the AIR, for display purposes only
-    pub air_name: String,
-    /// Verifying key
-    pub vk: StarkVerifyingKey<SC>,
-    /// Prover only data for preprocessed trace
-    pub preprocessed_data: Option<ProverOnlySinglePreprocessedData<SC>>,
-    /// Number of interactions to bundle in permutation trace
-    pub interaction_chunk_size: usize,
-}
-
 /// Verifying key for a single STARK (corresponding to single AIR matrix)
 #[derive(Derivative, Serialize, Deserialize)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
@@ -79,18 +61,80 @@ pub struct StarkVerifyingKey<SC: StarkGenericConfig> {
     /// Symbolic constraints of the AIR in all challenge phases. This is
     /// a serialization of the constraints in the AIR.
     pub symbolic_constraints: SymbolicConstraints<Val<SC>>,
-    /// [MatrixCommitmentPointers] for partitioned main trace matrix
-    pub main_graph: MatrixCommitmentPointers,
     /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
     /// This is equivalently the number of chunks the quotient polynomial is split into.
     pub quotient_degree: usize,
+}
+
+/// Common verifying key for multiple AIRs.
+///
+/// This struct contains the necessary data for the verifier to verify proofs generated for
+/// multiple AIRs using a single verifying key.
+#[derive(Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "Com<SC>: Serialize",
+    deserialize = "Com<SC>: Deserialize<'de>"
+))]
+pub struct MultiStarkVerifyingKey<SC: StarkGenericConfig> {
+    pub per_air: Vec<StarkVerifyingKey<SC>>,
+}
+
+/// Proving key for a single STARK (corresponding to single AIR matrix)
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(bound(
+    serialize = "PcsProverData<SC>: Serialize",
+    deserialize = "PcsProverData<SC>: Deserialize<'de>"
+))]
+pub struct StarkProvingKey<SC: StarkGenericConfig> {
+    /// Type name of the AIR, for display purposes only
+    pub air_name: String,
+    /// Verifying key
+    pub vk: StarkVerifyingKey<SC>,
+    /// Prover only data for preprocessed trace
+    pub preprocessed_data: Option<ProverOnlySinglePreprocessedData<SC>>,
     /// Number of interactions to bundle in permutation trace
     pub interaction_chunk_size: usize,
 }
 
+/// Common proving key for multiple AIRs.
+///
+/// This struct contains the necessary data for the prover to generate proofs for multiple AIRs
+/// using a single proving key.
+#[derive(Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "PcsProverData<SC>: Serialize",
+    deserialize = "PcsProverData<SC>: Deserialize<'de>"
+))]
+pub struct MultiStarkProvingKey<SC: StarkGenericConfig> {
+    pub per_air: Vec<StarkProvingKey<SC>>,
+    /// Maximum degree of constraints (excluding logup constraints) across all AIRs
+    pub max_constraint_degree: usize,
+}
+
 impl<SC: StarkGenericConfig> StarkVerifyingKey<SC> {
-    pub fn width(&self) -> &TraceWidth {
-        &self.params.width
+    pub fn num_cached_mains(&self) -> usize {
+        self.params.width.cached_mains.len()
+    }
+
+    pub fn has_common_main(&self) -> bool {
+        self.params.width.common_main != 0
+    }
+
+    pub fn has_interaction(&self) -> bool {
+        !self.symbolic_constraints.interactions.is_empty()
+    }
+}
+
+impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
+    pub fn get_vk(&self) -> MultiStarkVerifyingKey<SC> {
+        MultiStarkVerifyingKey {
+            per_air: self.per_air.iter().map(|pk| pk.vk.clone()).collect(),
+        }
+    }
+}
+impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
+    pub fn num_challenges_to_sample(&self) -> Vec<usize> {
+        self.full_view().num_challenges_to_sample()
     }
 }
 
@@ -120,205 +164,4 @@ pub struct ProverOnlySinglePreprocessedData<SC: StarkGenericConfig> {
 pub struct VerifierSinglePreprocessedData<SC: StarkGenericConfig> {
     /// Commitment to the preprocessed trace.
     pub commit: Com<SC>,
-}
-
-/// Common proving key for multiple AIRs.
-///
-/// This struct contains the necessary data for the prover to generate proofs for multiple AIRs
-/// using a single proving key.
-///
-/// !! This is not the full proving key right now. It is missing AIR constraints
-/// in the ProverRap trait
-#[derive(Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "PcsProverData<SC>: Serialize",
-    deserialize = "PcsProverData<SC>: Deserialize<'de>"
-))]
-pub struct MultiStarkProvingKey<SC: StarkGenericConfig> {
-    pub per_air: Vec<StarkProvingKey<SC>>,
-    /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
-    pub num_main_trace_commitments: usize,
-    /// Mapping from commit_idx to global AIR index for matrix in commitment, in order.
-    pub main_commit_to_air_graph: CommitmentToAirGraph,
-    /// The number of challenges to sample in each challenge phase.
-    /// The length determines the global number of challenge phases.
-    pub num_challenges_to_sample: Vec<usize>,
-    /// Maximum degree of constraints (excluding logup constraints) across all AIRs
-    pub max_constraint_degree: usize,
-}
-
-impl<SC: StarkGenericConfig> Default for MultiStarkProvingKey<SC> {
-    fn default() -> Self {
-        Self::empty()
-    }
-}
-
-impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
-    /// Empty with 1 main trace commitment
-    pub fn empty() -> Self {
-        Self {
-            per_air: Vec::new(),
-            num_main_trace_commitments: 1,
-            main_commit_to_air_graph: CommitmentToAirGraph {
-                commit_to_air_index: vec![vec![]],
-            },
-            num_challenges_to_sample: Vec::new(),
-            max_constraint_degree: 0,
-        }
-    }
-
-    pub fn new(
-        per_air: Vec<StarkProvingKey<SC>>,
-        num_main_trace_commitments: usize,
-        num_challenges_to_sample: Vec<usize>,
-        max_constraint_degree: usize,
-    ) -> Self {
-        let air_matrices = per_air
-            .iter()
-            .map(|pk| pk.vk.main_graph.clone())
-            .collect_vec();
-        let main_commit_to_air_graph =
-            create_commit_to_air_graph(&air_matrices, num_main_trace_commitments);
-        Self {
-            per_air,
-            num_main_trace_commitments,
-            main_commit_to_air_graph,
-            num_challenges_to_sample,
-            max_constraint_degree,
-        }
-    }
-
-    pub fn vk(&self) -> MultiStarkVerifyingKey<SC> {
-        MultiStarkVerifyingKey {
-            per_air: self.per_air.iter().map(|pk| pk.vk.clone()).collect(),
-            main_commit_to_air_graph: self.main_commit_to_air_graph.clone(),
-            num_main_trace_commitments: self.num_main_trace_commitments,
-            num_challenges_to_sample: self.num_challenges_to_sample.clone(),
-        }
-    }
-
-    pub fn preprocessed_commits(&self) -> impl Iterator<Item = &Com<SC>> {
-        self.per_air
-            .iter()
-            .filter_map(|pk| pk.vk.preprocessed_data.as_ref())
-            .map(|data| &data.commit)
-    }
-
-    pub fn preprocessed_traces(&self) -> impl Iterator<Item = Option<RowMajorMatrixView<Val<SC>>>> {
-        self.per_air.iter().map(|pk| {
-            pk.preprocessed_data
-                .as_ref()
-                .map(|data| data.trace.as_view())
-        })
-    }
-}
-
-/// Common verifying key for multiple AIRs.
-///
-/// This struct contains the necessary data for the verifier to verify proofs generated for
-/// multiple AIRs using a single verifying key.
-///
-/// !! This is not the full verifying key right now. It is missing AIR constraints
-#[derive(Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "Com<SC>: Serialize",
-    deserialize = "Com<SC>: Deserialize<'de>"
-))]
-pub struct MultiStarkVerifyingKey<SC: StarkGenericConfig> {
-    pub per_air: Vec<StarkVerifyingKey<SC>>,
-    /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
-    pub num_main_trace_commitments: usize,
-    /// Mapping from commit_idx to global AIR index for matrix in commitment, in order.
-    pub main_commit_to_air_graph: CommitmentToAirGraph,
-    /// The number of challenges to sample in each challenge phase.
-    /// The length determines the global number of challenge phases.
-    pub num_challenges_to_sample: Vec<usize>,
-}
-
-impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
-    pub fn new(
-        per_air: Vec<StarkVerifyingKey<SC>>,
-        num_main_trace_commitments: usize,
-        num_challenges_to_sample: Vec<usize>,
-    ) -> Self {
-        let air_matrices = per_air.iter().map(|vk| vk.main_graph.clone()).collect_vec();
-        let main_commit_to_air_graph =
-            create_commit_to_air_graph(&air_matrices, num_main_trace_commitments);
-        Self {
-            per_air,
-            num_main_trace_commitments,
-            main_commit_to_air_graph,
-            num_challenges_to_sample,
-        }
-    }
-
-    pub fn total_air_width(&self) -> (usize, usize, usize) {
-        let mut total_preprocessed = 0;
-        let mut total_partitioned_main = 0;
-        let mut total_after_challenge = 0;
-        for per_air in self.per_air.iter() {
-            let preprocessed_width = per_air.width().preprocessed.unwrap_or(0);
-            total_preprocessed += preprocessed_width;
-            let partitioned_main_width = per_air
-                .width()
-                .cached_mains
-                .iter()
-                .fold(0, |acc, x| acc + *x);
-            total_partitioned_main += partitioned_main_width;
-            total_partitioned_main += per_air.width().common_main;
-            let after_challenge_width = per_air
-                .width()
-                .after_challenge
-                .iter()
-                .fold(0, |acc, x| acc + *x);
-            total_after_challenge += after_challenge_width;
-        }
-        let ext_degree = <SC::Challenge as AbstractExtensionField<Val<SC>>>::D;
-        total_after_challenge *= ext_degree;
-        info!("Total air width: preprocessed={} ", total_preprocessed);
-        info!(
-            "Total air width: partitioned_main={} ",
-            total_partitioned_main
-        );
-        info!(
-            "Total air width: after_challenge={} ",
-            total_after_challenge
-        );
-        (
-            total_preprocessed,
-            total_partitioned_main,
-            total_after_challenge,
-        )
-    }
-}
-
-/// Assuming all AIRs are ordered and each have an index,
-/// then in a system with multiple multi-matrix commitments, then
-/// commit_to_air_index[commit_idx][matrix_idx] = global AIR index that the matrix corresponding to matrix_idx belongs to
-#[derive(Clone, Serialize, Deserialize)]
-pub struct CommitmentToAirGraph {
-    pub commit_to_air_index: Vec<Vec<usize>>,
-}
-
-pub(super) fn create_commit_to_air_graph(
-    air_matrices: &[MatrixCommitmentPointers],
-    num_total_commitments: usize,
-) -> CommitmentToAirGraph {
-    let mut commit_to_air_index = vec![vec![]; num_total_commitments];
-    for (air_idx, m) in air_matrices.iter().enumerate() {
-        for ptr in &m.matrix_ptrs {
-            let commit_mats = commit_to_air_index
-                .get_mut(ptr.commit_index)
-                .expect("commit_index exceeds num_total_commitments");
-            if let Some(mat_air_idx) = commit_mats.get_mut(ptr.matrix_index) {
-                *mat_air_idx = air_idx;
-            } else {
-                commit_mats.resize(ptr.matrix_index + 1, air_matrices.len() + 1); // allocate out-of-bounds first
-                commit_mats[ptr.matrix_index] = air_idx;
-            }
-        }
-    }
-    CommitmentToAirGraph {
-        commit_to_air_index,
-    }
 }

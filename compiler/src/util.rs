@@ -41,7 +41,6 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
-            bigint_limb_size: 8,
             ..Default::default()
         }
         .add_default_executor(ExecutorName::ArithmeticLogicUnit256)

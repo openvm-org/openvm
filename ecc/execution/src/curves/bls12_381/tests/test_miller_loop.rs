@@ -1,7 +1,6 @@
 use halo2curves_axiom::bls12_381::{
     Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, MillerLoopResult,
 };
-use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
 use subtle::ConditionallySelectable;
 
@@ -13,26 +12,13 @@ use crate::{
         line::{mul_023_by_023, mul_by_023, mul_by_02345},
         Bls12_381,
     },
+    tests::utils::generate_test_points,
 };
 
 #[allow(non_snake_case)]
 fn run_miller_loop_test(rand_seeds: &[u64]) {
-    let (P_vec, Q_vec) = rand_seeds
-        .iter()
-        .map(|seed| {
-            let mut rng0 = StdRng::seed_from_u64(*seed);
-            let p = G1Affine::random(&mut rng0);
-            let mut rng1 = StdRng::seed_from_u64(*seed * 2);
-            let q = G2Affine::random(&mut rng1);
-            let either_identity = p.is_identity() | q.is_identity();
-            let p = G1Affine::conditional_select(&p, &G1Affine::generator(), either_identity);
-            let q = G2Affine::conditional_select(&q, &G2Affine::generator(), either_identity);
-            (p, q)
-        })
-        .unzip::<_, _, Vec<_>, Vec<_>>();
-    let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
-        .map(|(P, Q)| (EcPoint { x: P.x, y: P.y }, EcPoint { x: Q.x, y: Q.y }))
-        .unzip::<_, _, Vec<_>, Vec<_>>();
+    let (P_vec, Q_vec, P_ecpoints, Q_ecpoints) =
+        generate_test_points::<G1Affine, G2Affine, Fq, Fq2>(rand_seeds);
 
     // Compare against halo2curves implementation
     let g2_prepareds = Q_vec

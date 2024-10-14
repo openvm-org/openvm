@@ -1,4 +1,4 @@
-use std::sync::atomic::AtomicU32;
+use std::sync::{atomic::AtomicU32, Arc};
 
 pub mod air;
 pub mod bus;
@@ -8,6 +8,7 @@ pub mod trace;
 #[cfg(test)]
 pub mod tests;
 
+use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap, Chip};
 pub use air::VariableRangeCheckerAir;
 use bus::VariableRangeCheckerBus;
 use columns::NUM_VARIABLE_RANGE_COLS;
@@ -58,5 +59,11 @@ impl VariableRangeCheckerChip {
         for i in 0..self.count.len() {
             self.count[i].store(0, std::sync::atomic::Ordering::Relaxed);
         }
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for VariableRangeCheckerChip {
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 }

@@ -87,7 +87,7 @@ impl<C: FieldVariableConfig> Fp2<C> {
 mod tests {
     use afs_primitives::sub_chip::LocalTraceInstructions;
     use ax_sdk::{
-        any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+        any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
     };
     use elliptic_curve::Group;
@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(r_c1, expected_c1);
 
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![chip, range_checker.air],
+            any_rap_arc_vec![chip, range_checker.air],
             vec![trace, range_trace],
         )
         .expect("Verification failed");
@@ -236,7 +236,7 @@ mod tests {
         assert_eq!(r_c1, expected_c1);
 
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![chip, range_checker.air],
+            any_rap_arc_vec![chip, range_checker.air],
             vec![trace, range_trace],
         )
         .expect("Verification failed");

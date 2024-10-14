@@ -1,4 +1,4 @@
-use std::{array, iter};
+use std::{array, iter, sync::Arc};
 
 use afs_stark_backend::rap::AnyRap;
 use ax_sdk::{
@@ -47,9 +47,9 @@ fn test_range_tuple_chip() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
-    all_chips.push(Box::new(range_checker.air));
+    all_chips.push(Arc::new(range_checker.air));
 
     // generate traces for each list
     let lists_traces = lists_vals
@@ -110,7 +110,7 @@ fn test_range_tuple_chip() {
 //     disable_debug_builder();
 //     assert_eq!(
 //         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-//             any_rap_box_vec![range_checker.air],
+//             any_rap_arc_vec![range_checker.air],
 //             vec![range_trace]
 //         )
 //         .err(),
