@@ -126,14 +126,14 @@ impl ExprBuilder {
 }
 
 #[derive(Clone)]
-pub struct FieldExprChip {
+pub struct FieldExprAir {
     pub builder: ExprBuilder,
 
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
-impl Deref for FieldExprChip {
+impl Deref for FieldExprAir {
     type Target = ExprBuilder;
 
     fn deref(&self) -> &ExprBuilder {
@@ -141,9 +141,9 @@ impl Deref for FieldExprChip {
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for FieldExprChip {}
-impl<F: Field> PartitionedBaseAir<F> for FieldExprChip {}
-impl<F: Field> BaseAir<F> for FieldExprChip {
+impl<F: Field> BaseAirWithPublicValues<F> for FieldExprAir {}
+impl<F: Field> PartitionedBaseAir<F> for FieldExprAir {}
+impl<F: Field> BaseAir<F> for FieldExprAir {
     fn width(&self) -> usize {
         self.num_limbs * (self.builder.num_input + self.builder.num_variables)
             + self.builder.q_limbs.iter().sum::<usize>()
@@ -157,7 +157,7 @@ type Vecs<T> = Vec<Vec<T>>;
 // is_valid, inputs, vars, q_limbs, carry_limbs, flags
 type AllCols<T> = (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>, Vec<T>);
 
-impl<AB: InteractionBuilder> Air<AB> for FieldExprChip {
+impl<AB: InteractionBuilder> Air<AB> for FieldExprAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -196,12 +196,12 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExprChip {
     }
 }
 
-impl AirConfig for FieldExprChip {
+impl AirConfig for FieldExprAir {
     // No column struct.
     type Cols<T> = Vec<T>;
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
+impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprAir {
     type LocalInput = (Vec<BigUint>, Arc<VariableRangeCheckerChip>, Vec<bool>);
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
@@ -300,7 +300,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
     }
 }
 
-impl FieldExprChip {
+impl FieldExprAir {
     pub fn execute(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
         let mut vars = vec![BigUint::zero(); self.num_variables];
         for i in 0..self.constraints.len() {

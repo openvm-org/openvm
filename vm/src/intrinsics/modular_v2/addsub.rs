@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerChip,
 };
-use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExprChip, FieldVariable};
+use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExprAir, FieldVariable};
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
@@ -20,7 +20,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct ModularAddSubV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
-    pub chip: FieldExprChip,
+    pub air: FieldExprAir,
 
     pub offset: usize,
 }
@@ -31,7 +31,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
-        // TODO: assert modulus and NUM_LIMBS are consistent with each other
+        assert!(modulus.bits() <= NUM_LIMBS * LIMB_SIZE);
         let bus = range_checker.bus();
         let subair = CheckCarryModToZeroSubAir::new(
             modulus.clone(),
@@ -56,12 +56,12 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM
         x5.save();
         let builder = builder.borrow().clone();
 
-        let chip = FieldExprChip {
+        let chip = FieldExprAir {
             builder,
             check_carry_mod_to_zero: subair,
             range_checker,
         };
-        Self { chip, offset }
+        Self { air: chip, offset }
     }
 }
 
@@ -70,7 +70,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     for ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE>
 {
     type Record = ();
-    type Air = FieldExprChip;
+    type Air = FieldExprAir;
 
     fn execute_instruction(
         &self,
@@ -98,7 +98,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         };
 
         let vars = self
-            .chip
+            .air
             .execute(vec![x_biguint, y_biguint], vec![is_add_flag]);
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
@@ -122,6 +122,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     }
 
     fn air(&self) -> &Self::Air {
-        &self.chip
+        &self.air
     }
 }
