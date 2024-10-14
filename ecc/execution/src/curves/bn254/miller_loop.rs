@@ -130,8 +130,8 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
             let line = lines_S_plus_Q.evaluate(*x_over_y, *y_inv);
             lines.push(line);
         }
-        let mut f = f;
 
+        let mut f = f;
         f = self.evaluate_lines_vec(f, lines);
 
         (f, Q_acc)
