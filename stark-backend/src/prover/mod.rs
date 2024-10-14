@@ -445,12 +445,18 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
             )
             .collect_vec();
 
-            let interactions = mpk
+            let (air_names, interactions): (Vec<_>, Vec<_>) = mpk
                 .per_air
                 .iter()
-                .map(|pk| &pk.vk.symbolic_constraints.interactions[..])
-                .collect_vec();
+                .map(|pk| {
+                    (
+                        pk.air_name.clone(),
+                        &pk.vk.symbolic_constraints.interactions[..],
+                    )
+                })
+                .unzip();
             check_logup(
+                &air_names,
                 &interactions,
                 &preprocessed,
                 main_views_per_air,

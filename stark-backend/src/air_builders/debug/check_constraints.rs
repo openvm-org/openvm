@@ -105,6 +105,7 @@ pub fn check_constraints<R, SC>(
 }
 
 pub fn check_logup<F: Field>(
+    air_names: &[String],
     interactions: &[&[SymbolicInteraction<F>]],
     preprocessed: &[Option<RowMajorMatrixView<F>>],
     partitioned_main: &[Vec<RowMajorMatrixView<F>>],
@@ -147,8 +148,8 @@ pub fn check_logup<F: Field>(
                 );
                 for (air_idx, itype, count) in connections {
                     println!(
-                        "   Air idx: {}, interaction type: {:?}, count: {:?}",
-                        air_idx, itype, count
+                        "   Air idx: {}, Air name: {}, interaction type: {:?}, count: {:?}",
+                        air_idx, air_names[air_idx], itype, count
                     );
                 }
             }
