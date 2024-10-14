@@ -36,7 +36,7 @@ multiple accesses.
 ### Design
 
 Persistent memory requires three chips: the `PersistentBoundaryChip`, the `MemoryMerkleChip`, and a chip to assist in
-hashing, which is by default the `Poseidon2Chip`. For simplify the discussion, define constants `C` equal to the number
+hashing, which is by default the `Poseidon2Chip`. To simplify the discussion, define constants `C` equal to the number
 of field elements in a hash value, `L` where the addresses in an address space are $0..2^L$, `M` and `AS_OFFSET` where
 the address spaces are `AS_OFFSET..AS_OFFSET + 2^M`, and `H = M + L - log2(C)`. `H` is the height of the Merkle tree in
 the sense that the leaves are at distance `H` from the root. We define the following interactions:
@@ -54,7 +54,7 @@ On the <span style="color:green">MERKLE_BUS</span>, we have interactions of the 
   `(x, y)`, then its left child has labels `(2x, 2y)` and its right child has labels either `(2x + 1, 2y)` or
   `(2x, 2y + 1)` depending on whether the address space or address is being expanded (this is determined by the height
   of the node). Defined this way, if a leaf has labels `(x, y)`, then the address space it corresponds to is
-  `(y / 2^M) + AS_OFFSET` and the addresses it corresponds to are `C * x..C * (x + 1)`
+  `(x / 2^L) + AS_OFFSET` and the addresses it corresponds to are `C * y..C * (y + 1)`
 - **hash** is the hash value of the node represented by the interaction.
 
 Rows that correspond to initial/final memory states are sent to the `MEMORY_BUS` with the corresponding timestamps and
@@ -83,8 +83,8 @@ The `PersistentBoundaryChip` has rows of the form
 `(expand_direction, address_space, leaf_label, values, timestamp)`
 and has the following interactions on the <span style="color:green">MERKLE_BUS</span>:
 
-- Send <span style="color:green">**(1, 0, (as - AS_OFFSET) \* 2^M, node\*label, hash_initial)**</span>
-- Receive <span style="color:green">**(-1, 0, (as - AS_OFFSET) \* 2^M, node_label, hash_final)**</span>
+- Send <span style="color:green">**(1, 0, (as - AS_OFFSET) \* 2^L, node\*label, hash_initial)**</span>
+- Receive <span style="color:green">**(-1, 0, (as - AS_OFFSET) \* 2^L, node_label, hash_final)**</span>
 
 ## Aggregation
 
