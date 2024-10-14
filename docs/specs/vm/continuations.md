@@ -64,7 +64,7 @@ We send the above interactions when we know the value and receive them when we w
 frequency is 1 unless otherwise specified.
 
 Each (IO part of a) row in the `MemoryMerkleChip` trace contains the fields
-**(height, parent_labels, parent_hash, left_hash, right_hash)**
+**(height, parent_labels, parent_hash, left_child_labels, left_hash, right_child_labels, right_hash)**
 and has the following interactions:
 
 - Send <span style="color:green">**(expand_direction, height + 1, parent_labels, parent_hash)**</span>
@@ -73,11 +73,6 @@ and has the following interactions:
   on <span style="color:green">MERKLE_BUS</span> with multiplicity `expand_direction`
 - Receive <span style="color:green">**(expand_direction, height, right_child_labels, right_hash)**</span>
   on <span style="color:green">MERKLE_BUS</span> with multiplicity `expand_direction`
-
-Each row corresponding to a compression in the `MemoryMerkleChip` trace
-contains the following information:
-`(height, parent_label, parent_hash, left_direction_change, left_node, left_hash, right_direction_change, right_node, right_hash)`
-and its interactions are:
 
 The `PersistentBoundaryChip` has rows of the form
 `(expand_direction, address_space, leaf_label, values, timestamp)`
