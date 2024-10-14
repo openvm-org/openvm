@@ -92,7 +92,7 @@ jobs:
         working-directory: lib/recursion
         run: |
           BIN_NAME="verify_fibair"
-          python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
@@ -100,7 +100,7 @@ jobs:
         working-directory: lib/recursion
         run: |
           BIN_NAME="tiny_e2e"
-          python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
@@ -108,7 +108,7 @@ jobs:
         working-directory: lib/recursion
         run: |
           BIN_NAME="alu256_e2e"
-          python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
@@ -116,7 +116,7 @@ jobs:
         working-directory: lib/recursion
         run: |
           BIN_NAME="small_e2e"
-          python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       ######################################################
