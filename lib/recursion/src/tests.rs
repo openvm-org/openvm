@@ -4,7 +4,7 @@ use afs_primitives::{
     sum::SumChip,
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use afs_stark_backend::utils::AirInfo;
+use afs_stark_backend::utils::{disable_debug_builder, AirInfo};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -281,6 +281,7 @@ fn test_optional_air() {
     }
     // Case 3: Negative - unbalanced interactions.
     {
+        disable_debug_builder();
         let mut challenger = engine.new_challenger();
         recv_chip1.load_data(DummyInteractionData {
             count: vec![1, 2, 4],

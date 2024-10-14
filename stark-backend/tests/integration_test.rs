@@ -1,7 +1,7 @@
 #![feature(trait_upcasting)]
 #![allow(incomplete_features)]
 
-use afs_stark_backend::Chip;
+use afs_stark_backend::{utils::disable_debug_builder, Chip};
 /// Test utils
 use ax_sdk::{
     any_rap_arc_vec, config,
@@ -212,6 +212,7 @@ fn test_optional_air() {
     }
     // Case 3: Negative - unbalanced interactions.
     {
+        disable_debug_builder();
         let mut challenger = engine.new_challenger();
         recv_chip1.load_data(DummyInteractionData {
             count: vec![1, 2, 4],

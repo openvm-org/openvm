@@ -18,22 +18,22 @@ use crate::{
     interaction::trace::generate_permutation_trace,
     keygen::{types::StarkProvingKey, view::MultiStarkProvingKeyView},
     prover::{
-        commit_perm_traces,
         quotient::{helper::QuotientVkDataHelper, ProverQuotientData, QuotientCommitter},
         types::CommittedTraceData,
     },
     rap::AnyRap,
 };
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub(super) fn commit_permutation_traces<SC: StarkGenericConfig>(
-    pcs: &SC::Pcs,
     mpk: &MultiStarkProvingKeyView<SC>,
     challenges: &[Vec<SC::Challenge>],
     main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
     public_values_per_air: &[Vec<Val<SC>>],
-    domain_per_air: Vec<Domain<SC>>,
-) -> (Vec<Option<SC::Challenge>>, Option<ProverTraceData<SC>>)
+) -> (
+    Vec<Option<SC::Challenge>>,
+    Vec<Option<RowMajorMatrix<SC::Challenge>>>,
+)
 where
     SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
@@ -51,12 +51,8 @@ where
         )
     });
     let cumulative_sum_per_air = extract_cumulative_sums::<SC>(&perm_trace_per_air);
-    // Commit to permutation traces: this means only 1 challenge round right now
-    // One shared commit for all permutation traces
-    let perm_prover_data = tracing::info_span!("commit to permutation traces")
-        .in_scope(|| commit_perm_traces::<SC>(pcs, perm_trace_per_air, &domain_per_air));
 
-    (cumulative_sum_per_air, perm_prover_data)
+    (cumulative_sum_per_air, perm_trace_per_air)
 }
 
 #[allow(clippy::too_many_arguments)]

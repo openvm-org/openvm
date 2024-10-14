@@ -107,7 +107,7 @@ pub fn check_constraints<R, SC>(
 pub fn check_logup<F: Field>(
     interactions: &[&[SymbolicInteraction<F>]],
     preprocessed: &[Option<RowMajorMatrixView<F>>],
-    partitioned_main: &[&[RowMajorMatrixView<F>]],
+    partitioned_main: &[Vec<RowMajorMatrixView<F>>],
     public_values: &[Vec<F>],
 ) {
     let mut logical_interactions = LogicalInteractions::<F>::default();

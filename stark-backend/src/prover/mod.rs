@@ -7,11 +7,15 @@ use itertools::{izip, multiunzip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractExtensionField;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::{
+    dense::{RowMajorMatrix, RowMajorMatrixView},
+    Matrix,
+};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
+    air_builders::debug::check_constraints::{check_constraints, check_logup},
     config::{Com, PcsProof, PcsProverData},
     keygen::{types::MultiStarkProvingKey, view::MultiStarkProvingKeyView},
     prover::{
@@ -23,6 +27,7 @@ use crate::{
         },
         types::{AirProofData, Commitments, Proof, ProofInput},
     },
+    rap::AnyRap,
 };
 
 /// Metrics about trace and other statistics related to prover performance
@@ -160,14 +165,24 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .map(|&degree| pcs.natural_domain_for_degree(degree))
             .collect();
 
-        let (cumulative_sum_per_air, perm_prover_data) = commit_permutation_traces(
-            pcs,
+        let (cumulative_sum_per_air, perm_trace_per_air) =
+            commit_permutation_traces(&mpk, &challenges, &main_views_per_air, &pvs_per_air);
+
+        #[cfg(debug_assertions)]
+        debug_constraints_and_interactions(
+            &airs,
             &mpk,
-            &challenges,
             &main_views_per_air,
             &pvs_per_air,
-            domain_per_air.clone(),
+            &perm_trace_per_air,
+            &cumulative_sum_per_air,
+            &challenges,
         );
+
+        // Commit to permutation traces: this means only 1 challenge round right now
+        // One shared commit for all permutation traces
+        let perm_prover_data = tracing::info_span!("commit to permutation traces")
+            .in_scope(|| commit_perm_traces::<SC>(pcs, perm_trace_per_air, &domain_per_air));
 
         // Challenger needs to observe permutation_exposed_values (aka cumulative_sums)
         for cumulative_sum in cumulative_sum_per_air.iter().flatten() {
@@ -389,4 +404,58 @@ fn commit_perm_traces<SC: StarkGenericConfig>(
     } else {
         None
     }
+}
+
+fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
+    raps: &[Arc<dyn AnyRap<SC>>],
+    mpk: &MultiStarkProvingKeyView<SC>,
+    main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
+    public_values_per_air: &[Vec<Val<SC>>],
+    perm_trace_per_air: &[Option<RowMajorMatrix<SC::Challenge>>],
+    cumulative_sum_per_air: &[Option<SC::Challenge>],
+    challenges: &[Vec<SC::Challenge>],
+) {
+    USE_DEBUG_BUILDER.with(|debug| {
+        if *debug.lock().unwrap() {
+            let preprocessed = izip!(
+                raps,
+                &mpk.per_air,
+                main_views_per_air,
+                public_values_per_air,
+                perm_trace_per_air,
+                cumulative_sum_per_air
+            )
+            .map(
+                |(rap, pk, main, public_values, perm_trace, cumulative_sum)| {
+                    let preprocessed_trace = pk
+                        .preprocessed_data
+                        .as_ref()
+                        .map(|data| data.trace.as_view());
+                    check_constraints(
+                        rap.as_ref(),
+                        &preprocessed_trace,
+                        main,
+                        &perm_trace.iter().map(|m| m.as_view()).collect_vec(),
+                        challenges,
+                        public_values,
+                        cumulative_sum.map(|c| vec![c]).as_slice(),
+                    );
+                    preprocessed_trace
+                },
+            )
+            .collect_vec();
+
+            let interactions = mpk
+                .per_air
+                .iter()
+                .map(|pk| &pk.vk.symbolic_constraints.interactions[..])
+                .collect_vec();
+            check_logup(
+                &interactions,
+                &preprocessed,
+                main_views_per_air,
+                public_values_per_air,
+            );
+        }
+    });
 }
