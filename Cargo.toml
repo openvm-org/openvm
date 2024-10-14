@@ -1,19 +1,19 @@
 [workspace]
 members = [
-    "primitives",
-    "compiler",
     "derive",
-    "poseidon2-air",
-    "recursion",
-    "ecc/lib",
-    "ecc/execution",
-    "ecc/primitives",
-    "stark-backend",
+    "circuits/ecc",
+    "circuits/hashes/poseidon2-air",
+    "circuits/primitives",
+    "lib/ecc",
+    "lib/ecc-execution",
+    "lib/recursion",
     "sdk",
+    "stark-backend",
+    "toolchain/compiler",
+    "toolchain/riscv/zkvm/lib",
+    "toolchain/riscv/zkvm/platform",
+    "toolchain/riscv/transpiler",
     "vm",
-    "riscv/zkvm/lib",
-    "riscv/zkvm/platform",
-    "riscv/transpiler",
 ]
 resolver = "2"
 
@@ -48,25 +48,29 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 
+[profile.dev]
+opt-level = 1
+
 # For O1 optimization but still fast(ish) compile times
 [profile.fast]
 inherits = "dev"
-opt-level = 1
 debug-assertions = true
 # better recompile times
 incremental = true
 lto = "thin"
 
 [workspace.dependencies]
-axvm-platform = { path = "riscv/zkvm/platform", default-features = false }
-axvm = { path = "riscv/zkvm/lib", default-features = false }
-afs-compiler = { path = "compiler", default-features = false }
-stark-vm = { path = "vm", default-features = false }
-afs-primitives = { path = "primitives", default-features = false }
+axvm-platform = { path = "toolchain/riscv/zkvm/platform", default-features = false }
+axvm = { path = "toolchain/riscv/zkvm/lib", default-features = false }
 afs-stark-backend = { path = "stark-backend", default-features = false }
+afs-compiler = { path = "toolchain/compiler", default-features = false }
+stark-vm = { path = "vm", default-features = false }
+afs-primitives = { path = "circuits/primitives", default-features = false }
+ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
 afs-derive = { path = "derive", default-features = false }
 ax-sdk = { path = "sdk", default-features = false }
-afs-transpiler = { path = "riscv/transpiler", default-features = false }
+afs-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
+poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
 
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
@@ -101,13 +105,15 @@ zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9"
 
 itertools = "0.13.0"
 rayon = "1.10"
+parking_lot = "0.12.2"
 tracing = "0.1.40"
 serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 serde_json = "1.0.117"
+toml = "0.8.14"
 bincode = "1.3.3"
 lazy_static = "1.5.0"
 once_cell = "1.19.0"
-derive-new = "0.5.1"
+derive-new = "0.6.0"
 strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
 backtrace = "0.3.71"
@@ -124,6 +130,7 @@ cfg-if = "1.0.0"
 inferno = "0.11.21"
 test-case = "3.3.1"
 test-log = "0.2.16"
+enum_dispatch = "0.3.13"
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

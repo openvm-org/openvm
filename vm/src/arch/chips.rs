@@ -15,31 +15,28 @@ use strum::EnumDiscriminants;
 use strum_macros::IntoStaticStr;
 
 use crate::{
-    alu::ArithmeticLogicChip,
     arch::ExecutionState,
-    branch_eq::Rv32BranchEqualChip,
-    branch_lt::Rv32BranchLessThanChip,
-    castf::CastFChip,
-    core::CoreChip,
-    ecc::{EcAddUnequalChip, EcDoubleChip},
-    field_arithmetic::FieldArithmeticChip,
-    field_extension::chip::FieldExtensionArithmeticChip,
-    hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-    loadstore::Rv32LoadStoreChip,
-    modular_addsub::ModularAddSubChip,
-    modular_multdiv::ModularMultDivChip,
-    new_alu::Rv32ArithmeticLogicChip,
-    new_divrem::Rv32DivRemChip,
-    new_lt::Rv32LessThanChip,
-    new_mul::Rv32MultiplicationChip,
-    new_mulh::Rv32MulHChip,
-    new_shift::Rv32ShiftChip,
-    program::{ExecutionError, Instruction},
-    rv32_auipc::Rv32AuipcChip,
-    rv32_jal_lui::Rv32JalLuiChip,
-    rv32_jalr::Rv32JalrChip,
-    shift::ShiftChip,
-    uint_multiplication::UintMultiplicationChip,
+    intrinsics::{
+        castf::CastFChip,
+        ecc::{EcAddUnequalChip, EcDoubleChip},
+        hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
+        modular_addsub::ModularAddSubChip,
+        modular_multdiv::ModularMultDivChip,
+        uint_multiplication::UintMultiplicationChip,
+    },
+    kernels::{
+        core::CoreChip, field_arithmetic::FieldArithmeticChip,
+        field_extension::chip::FieldExtensionArithmeticChip,
+    },
+    old::{alu::ArithmeticLogicChip, shift::ShiftChip},
+    rv32im::{
+        branch_eq::Rv32BranchEqualChip, branch_lt::Rv32BranchLessThanChip,
+        loadstore::Rv32LoadStoreChip, new_alu::Rv32ArithmeticLogicChip, new_divrem::Rv32DivRemChip,
+        new_lt::Rv32LessThanChip, new_mul::Rv32MultiplicationChip, new_mulh::Rv32MulHChip,
+        new_shift::Rv32ShiftChip, rv32_auipc::Rv32AuipcChip, rv32_jal_lui::Rv32JalLuiChip,
+        rv32_jalr::Rv32JalrChip,
+    },
+    system::program::{ExecutionError, Instruction},
 };
 
 #[enum_dispatch]
@@ -117,7 +114,7 @@ impl<F, C: VmChip<F>> VmChip<F> for Rc<RefCell<C>> {
     }
 }
 
-#[derive(Debug, Clone, EnumDiscriminants)]
+#[derive(Clone, EnumDiscriminants)]
 #[strum_discriminants(derive(Serialize, Deserialize))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
@@ -150,7 +147,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
-#[derive(Debug, Clone, IntoStaticStr, Chip)]
+#[derive(Clone, IntoStaticStr, Chip)]
 #[enum_dispatch(VmChip<F>)]
 pub enum AxVmChip<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),

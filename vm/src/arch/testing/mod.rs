@@ -17,10 +17,12 @@ use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use crate::{
     arch::{ExecutionState, VmChip},
-    core::RANGE_CHECKER_BUS,
-    memory::{offline_checker::MemoryBus, MemoryChip},
-    program::{bridge::ProgramBus, Instruction},
-    vm::config::MemoryConfig,
+    kernels::core::RANGE_CHECKER_BUS,
+    system::{
+        memory::{offline_checker::MemoryBus, MemoryChip},
+        program::{bridge::ProgramBus, Instruction},
+        vm::config::MemoryConfig,
+    },
 };
 
 pub mod execution;
@@ -31,7 +33,10 @@ pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
 
 use super::{ExecutionBus, InstructionExecutor};
-use crate::{hashes::poseidon2::Poseidon2Chip, memory::MemoryChipRef, vm::config::PersistenceType};
+use crate::{
+    intrinsics::hashes::poseidon2::Poseidon2Chip,
+    system::{memory::MemoryChipRef, vm::config::PersistenceType},
+};
 
 #[derive(Clone, Debug)]
 pub struct VmChipTestBuilder<F: PrimeField32> {

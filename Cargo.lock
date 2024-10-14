@@ -78,8 +78,7 @@ dependencies = [
  "afs-derive",
  "afs-stark-backend",
  "ax-sdk",
- "derive-new 0.6.0",
- "getset",
+ "derive-new",
  "itertools 0.13.0",
  "lazy_static",
  "num-bigint-dig",
@@ -93,7 +92,6 @@ dependencies = [
  "p3-fri",
  "p3-goldilocks",
  "p3-keccak",
- "p3-keccak-air",
  "p3-matrix",
  "p3-maybe-rayon",
  "p3-merkle-tree",
@@ -102,7 +100,6 @@ dependencies = [
  "p3-uni-stark",
  "p3-util",
  "parking_lot",
- "prime_factorization",
  "rand 0.8.5",
  "test-case",
 ]
@@ -534,34 +531,17 @@ dependencies = [
  "afs-primitives",
  "afs-stark-backend",
  "ax-sdk",
- "elliptic-curve",
- "ff 0.13.0",
  "hex-literal",
- "itertools 0.13.0",
- "k256",
  "num-bigint-dig",
  "num-traits",
  "p3-air",
  "p3-baby-bear",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
  "p3-field",
- "p3-fri",
  "p3-matrix",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
  "p3-util",
  "rand 0.8.5",
- "serde",
- "serde_json",
  "sha3",
- "snark-verifier-sdk",
  "tracing",
- "zkhash",
 ]
 
 [[package]]
@@ -637,15 +617,8 @@ dependencies = [
  "axvm-platform",
  "color-eyre",
  "elf",
- "p3-air",
  "p3-baby-bear",
- "p3-commit",
  "p3-field",
- "p3-keccak-air",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-uni-stark",
- "p3-util",
  "rrs-lib",
  "stark-vm",
 ]
@@ -1188,17 +1161,6 @@ name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "derive-new"
-version = "0.5.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2777,7 +2739,6 @@ dependencies = [
 name = "poseidon2-air"
 version = "0.1.0"
 dependencies = [
- "afs-derive",
  "afs-primitives",
  "afs-stark-backend",
  "ark-ff 0.4.2",
@@ -2816,17 +2777,6 @@ checksum = "479cf940fbbb3426c32c5d5176f62ad57549a0bb84773423ba8be9d089f5faba"
 dependencies = [
  "proc-macro2",
  "syn 2.0.79",
-]
-
-[[package]]
-name = "prime_factorization"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61b43cd4d5e49fa3c769f72033129f07eeaa102c3db2aa11be0c7f1a0cb50f0c"
-dependencies = [
- "itertools 0.10.5",
- "num",
- "rand 0.8.5",
 ]
 
 [[package]]
@@ -3623,7 +3573,7 @@ dependencies = [
  "ax-sdk",
  "backtrace",
  "cfg-if",
- "derive-new 0.5.9",
+ "derive-new",
  "enum-utils",
  "enum_dispatch",
  "hex-literal",
