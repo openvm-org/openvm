@@ -1,8 +1,8 @@
-use std::iter;
+use std::{iter, sync::Arc};
 
 use afs_stark_backend::{rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
+    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
@@ -62,9 +62,9 @@ fn test_range_gate_chip() {
 
     let mut all_chips = lists
         .into_iter()
-        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
-    all_chips.push(Box::new(range_checker.air));
+    all_chips.push(Arc::new(range_checker.air));
 
     let all_traces = lists_traces
         .into_iter()
@@ -100,7 +100,7 @@ fn negative_test_range_gate_chip() {
     disable_debug_builder();
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![range_checker.air],
+            any_rap_arc_vec![range_checker.air],
             vec![range_trace]
         )
         .err(),

@@ -27,7 +27,6 @@ pub mod rv32_jalr;
 #[cfg(feature = "sdk")]
 pub mod sdk;
 pub mod shift;
-pub mod ui;
 pub mod uint_multiplication;
 pub mod vm;
 

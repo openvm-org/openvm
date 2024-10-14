@@ -2,7 +2,7 @@ use afs_compiler::ir::{Builder, Config, DslIr, Felt, Var};
 use itertools::Itertools;
 use p3_field::{AbstractField, Field};
 
-use crate::{types::OuterDigestVariable, utils::reduce_32, OUTER_DIGEST_SIZE};
+use crate::{utils::reduce_32, vars::OuterDigestVariable, OUTER_DIGEST_SIZE};
 
 pub const SPONGE_SIZE: usize = 3;
 pub const RATE: usize = 2;

@@ -1,7 +1,6 @@
-use afs_stark_backend::{
-    prover::v2::types::{AirProofInput, Chip},
-    rap::AnyRap,
-};
+use std::sync::Arc;
+
+use afs_stark_backend::{prover::types::AirProofInput, rap::AnyRap, Chip};
 use p3_field::{AbstractField, PrimeField32};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
@@ -27,8 +26,8 @@ impl<SC: StarkGenericConfig> Chip<SC> for FibonacciChip
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> &dyn AnyRap<SC> {
-        &FibonacciAir
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(FibonacciAir)
     }
 
     fn generate_air_proof_input(&self) -> AirProofInput<SC> {

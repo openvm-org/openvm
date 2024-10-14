@@ -1,4 +1,4 @@
-use super::integration::solve_mul;
+use super::core::solve_mul;
 
 const RV32_NUM_LIMBS: usize = 4;
 const RV32_LIMB_BITS: usize = 8;

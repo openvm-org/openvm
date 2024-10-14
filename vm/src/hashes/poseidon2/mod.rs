@@ -206,11 +206,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             e,
             ..
         } = instruction;
-        let opcode = opcode - self.offset;
+        let local_opcode_index = opcode - self.offset;
 
-        let opcode = Poseidon2Opcode::from_usize(opcode);
+        let local_opcode_index = Poseidon2Opcode::from_usize(local_opcode_index);
 
-        assert!(matches!(opcode, COMP_POS2 | PERM_POS2));
+        assert!(matches!(local_opcode_index, COMP_POS2 | PERM_POS2));
         debug_assert_eq!(WIDTH, CHUNK * 2);
 
         let chunk_f = F::from_canonical_usize(CHUNK);
@@ -221,7 +221,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         let lhs_ptr_read = memory_chip.read_cell(d, op_b);
         let lhs_ptr = lhs_ptr_read.value();
 
-        let (rhs_ptr, rhs_ptr_read) = match opcode {
+        let (rhs_ptr, rhs_ptr_read) = match local_opcode_index {
             COMP_POS2 => {
                 let rhs_ptr_read = memory_chip.read_cell(d, op_c);
                 (rhs_ptr_read.value(), Some(rhs_ptr_read))
@@ -249,7 +249,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         let output2: [F; CHUNK] = array::from_fn(|i| output[CHUNK + i]);
 
         let output1_write = memory_chip.write(e, dst_ptr, output1);
-        let output2_write = match opcode {
+        let output2_write = match local_opcode_index {
             COMP_POS2 => {
                 memory_chip.increment_timestamp();
                 None
@@ -259,7 +259,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         self.records.push(Poseidon2Record {
             instruction: Instruction {
-                opcode: opcode as usize,
+                opcode: local_opcode_index as usize,
                 ..instruction
             },
             from_state,
@@ -281,8 +281,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        let opcode = Poseidon2Opcode::from_usize(opcode - self.offset);
-        format!("{opcode:?}")
+        let local_opcode_index = Poseidon2Opcode::from_usize(opcode - self.offset);
+        format!("{local_opcode_index:?}")
     }
 }
 

@@ -147,11 +147,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             BranchLessThanOpcode::COUNT,
             BranchLessThanOpcode::default_offset(),
         ),
-        ExecutorName::Ui => (
-            U32Opcode::default_offset(),
-            U32Opcode::COUNT,
-            U32Opcode::default_offset(),
-        ),
         ExecutorName::CastF => (
             CastfOpcode::default_offset(),
             CastfOpcode::COUNT,
@@ -216,7 +211,7 @@ impl VmConfig {
         offset: usize,
     ) -> Self {
         // Some executors need to be handled in a special way, and cannot be added like other executors.
-        let not_allowed_executors = [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
+        let not_allowed_executors = []; // [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
         if not_allowed_executors.contains(&executor) {
             panic!("Cannot add executor for {:?}", executor);
         }
@@ -345,10 +340,11 @@ impl Modulus {
     }
 
     pub fn all() -> Vec<Self> {
-        Self::iter().collect()
+        Modulus::iter().collect()
     }
 }
 
+#[allow(dead_code)]
 fn shift_range(r: &Range<usize>, x: usize) -> Range<usize> {
     let start = r.start + x;
     let end = r.end + x;

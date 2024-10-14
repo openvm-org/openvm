@@ -3,7 +3,7 @@ use std::{marker::PhantomData, sync::Arc};
 use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::compose;
@@ -13,8 +13,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter,
-        MachineAdapterInterface, Result, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterAir,
+        VmAdapterChip, VmAdapterInterface, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -40,12 +40,27 @@ pub struct Rv32LoadStoreAdapterCols<T, const NUM_CELLS: usize> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Rv32LoadStoreAdapterAir<F: Field> {
+pub struct Rv32LoadStoreAdapterAir<F: Field, const NUM_CELLS: usize> {
     marker: PhantomData<F>,
 }
 
-impl<F: Field> BaseAir<F> for Rv32LoadStoreAdapterAir<F> {
+impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for Rv32LoadStoreAdapterAir<F, NUM_CELLS> {
     fn width(&self) -> usize {
+        todo!()
+    }
+}
+
+impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
+    for Rv32LoadStoreAdapterAir<AB::F, NUM_CELLS>
+{
+    type Interface = Rv32LoadStoreAdapterInterface<AB::Expr, NUM_CELLS>;
+
+    fn eval(
+        &self,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
+    ) {
         todo!()
     }
 }
@@ -69,7 +84,7 @@ pub struct Rv32LoadStoreAdapterInterface<T, const NUM_CELLS: usize> {
     _marker: PhantomData<T>,
 }
 
-impl<T, const NUM_CELLS: usize> MachineAdapterInterface<T>
+impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     for Rv32LoadStoreAdapterInterface<T, NUM_CELLS>
 {
     /// `[read_data, prev_data]` where `prev_data` is currenlty only used when this is a STORE instruction.
@@ -80,7 +95,7 @@ impl<T, const NUM_CELLS: usize> MachineAdapterInterface<T>
 
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreAdapter<F: Field, const NUM_CELLS: usize> {
-    pub air: Rv32LoadStoreAdapterAir<F>,
+    pub air: Rv32LoadStoreAdapterAir<F, NUM_CELLS>,
     pub offset: usize,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
@@ -88,7 +103,7 @@ pub struct Rv32LoadStoreAdapter<F: Field, const NUM_CELLS: usize> {
 impl<F: Field, const NUM_CELLS: usize> Rv32LoadStoreAdapter<F, NUM_CELLS> {
     pub fn new(range_checker_chip: Arc<VariableRangeCheckerChip>, offset: usize) -> Self {
         Self {
-            air: Rv32LoadStoreAdapterAir::<F> {
+            air: Rv32LoadStoreAdapterAir::<F, NUM_CELLS> {
                 marker: PhantomData,
             },
             offset,
@@ -97,13 +112,12 @@ impl<F: Field, const NUM_CELLS: usize> Rv32LoadStoreAdapter<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
+impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
     for Rv32LoadStoreAdapter<F, NUM_CELLS>
 {
     type ReadRecord = Rv32LoadStoreAdapterReadRecord<F, NUM_CELLS>;
     type WriteRecord = Rv32LoadStoreAdapterWriteRecord<F, NUM_CELLS>;
-    type Air = Rv32LoadStoreAdapterAir<F>;
-    type Cols<T> = Rv32LoadStoreAdapterCols<T, NUM_CELLS>;
+    type Air = Rv32LoadStoreAdapterAir<F, NUM_CELLS>;
 
     type Interface<T: AbstractField> = Rv32LoadStoreAdapterInterface<T, NUM_CELLS>;
 
@@ -113,7 +127,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -143,9 +157,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         assert!(imm < (1 << RV_IS_TYPE_IMM_BITS));
         assert!(ptr_val < (1 << addr_bits));
 
-        let opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
-        let read_record = match opcode {
+        let read_record = match local_opcode_index {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                 memory.read::<NUM_CELLS>(e, F::from_canonical_u32(ptr_val))
             }
@@ -154,7 +168,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
 
         // We need to keep values of some cells to keep them unchanged when writing to those cells
         let mut prev_data = [F::zero(); NUM_CELLS];
-        match opcode {
+        match local_opcode_index {
             STOREH => {
                 for (i, cell) in prev_data
                     .iter_mut()
@@ -192,7 +206,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction {
@@ -204,9 +218,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
             ..
         } = *instruction;
 
-        let opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
-        let write_record = match opcode {
+        let write_record = match local_opcode_index {
             STOREW | STOREH | STOREB => {
                 let ptr = compose(read_record.rs1.data);
                 let imm =
@@ -239,25 +253,14 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut Self::Cols<F>,
+        _row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
     ) {
         todo!()
     }
 
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
-        todo!()
-    }
-
-    fn air(&self) -> Self::Air {
-        todo!()
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }

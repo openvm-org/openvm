@@ -1,15 +1,18 @@
-use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of};
+use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, sync::Arc};
 
-use afs_stark_backend::{interaction::InteractionType, rap::AnyRap};
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    interaction::InteractionType,
+    rap::AnyRap,
+    Chip,
+};
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
-    arch::chips::MachineChip,
+    arch::chips::VmChip,
     memory::{
         offline_checker::{MemoryBus, MemoryBusInteraction},
         MemoryAddress, MemoryChipRef,
@@ -87,7 +90,7 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
+impl<F: PrimeField32> VmChip<F> for MemoryTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
@@ -107,13 +110,6 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
         RowMajorMatrix::new(values, width)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
-    }
-
     fn air_name(&self) -> String {
         "MemoryDummyAir".to_string()
     }
@@ -124,6 +120,15 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
 
     fn trace_width(&self) -> usize {
         size_of::<DummyMemoryInteractionCols<u8, WORD_SIZE>>()
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for MemoryTester<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
     }
 }
 

@@ -2,14 +2,14 @@ use std::{marker::PhantomData, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
-        MachineAdapter, MachineAdapterInterface, Result,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -67,7 +67,7 @@ pub struct Rv32MultProcessedInstruction<T> {
     pub opcode: T,
 }
 
-impl<T: AbstractField> MachineAdapterInterface<T> for Rv32MultAdapterInterface<T> {
+impl<T: AbstractField> VmAdapterInterface<T> for Rv32MultAdapterInterface<T> {
     type Reads = [[T; RV32_REGISTER_NUM_LANES]; 2];
     type Writes = [T; RV32_REGISTER_NUM_LANES];
     type ProcessedInstruction = Rv32MultProcessedInstruction<T>;
@@ -81,12 +81,6 @@ pub struct Rv32MultAdapterCols<T> {
     pub rs2_index: T,
     pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>; 2],
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
-}
-
-impl<T> Rv32MultAdapterCols<T> {
-    pub fn width() -> usize {
-        size_of::<Rv32MultAdapterCols<u8>>()
-    }
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -107,11 +101,23 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32MultAdapterAir {
     }
 }
 
-impl<F: PrimeField32> MachineAdapter<F> for Rv32MultAdapter<F> {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
+    type Interface = Rv32MultAdapterInterface<AB::Expr>;
+
+    fn eval(
+        &self,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
+    ) {
+        todo!()
+    }
+}
+
+impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapter<F> {
     type ReadRecord = Rv32MultReadRecord<F>;
     type WriteRecord = Rv32MultWriteRecord<F>;
     type Air = Rv32MultAdapterAir;
-    type Cols<T> = Rv32MultAdapterCols<T>;
     type Interface<T: AbstractField> = Rv32MultAdapterInterface<T>;
 
     fn preprocess(
@@ -119,7 +125,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32MultAdapter<F> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -142,7 +148,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32MultAdapter<F> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check
@@ -161,25 +167,14 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32MultAdapter<F> {
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut Self::Cols<F>,
+        _row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
     ) {
         todo!();
     }
 
-    fn eval_adapter_constraints<
-        AB: InteractionBuilder<F = F> + PairBuilder + AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _interface: IntegrationInterface<AB::Expr, Self::Interface<AB::Expr>>,
-    ) -> AB::Expr {
-        todo!();
-    }
-
-    fn air(&self) -> Self::Air {
-        self.air
+    fn air(&self) -> &Self::Air {
+        &self.air
     }
 }

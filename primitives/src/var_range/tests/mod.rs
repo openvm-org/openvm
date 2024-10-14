@@ -1,8 +1,8 @@
-use std::iter;
+use std::{iter, sync::Arc};
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -51,9 +51,9 @@ fn test_variable_range_checker_chip_send() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
-    all_chips.push(Box::new(var_range_checker.air));
+    all_chips.push(Arc::new(var_range_checker.air));
 
     // generate traces for each list
     let lists_traces = lists_vals
@@ -107,7 +107,7 @@ fn negative_test_variable_range_checker_chip_send() {
 
     // generate dummy AIR chip
     let list_chip = TestSendAir::new(bus);
-    let all_chips = any_rap_box_vec![list_chip, var_range_checker.air];
+    let all_chips = any_rap_arc_vec![list_chip, var_range_checker.air];
 
     // generate trace with a [val, bits] pair such that val >= 2^bits (i.e. [4, 2])
     let list_trace = RowMajorMatrix::new(
@@ -164,9 +164,9 @@ fn test_variable_range_checker_chip_range_check() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Box::new(list) as Box<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
         .collect::<Vec<_>>();
-    all_chips.push(Box::new(var_range_checker.air));
+    all_chips.push(Arc::new(var_range_checker.air));
 
     // generate traces for each list
     let lists_traces = lists_vals
@@ -218,7 +218,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
 
     // generate dummy AIR chip
     let list_chip = TestRangeCheckAir::new(bus, MAX_BITS);
-    let all_chips = any_rap_box_vec![list_chip, var_range_checker.air];
+    let all_chips = any_rap_arc_vec![list_chip, var_range_checker.air];
 
     // generate trace with one value >= 2^max_bits (i.e. MAX_VAL)
     let list_trace = RowMajorMatrix::new(

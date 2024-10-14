@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Debug)]
-pub struct ShiftAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub xor_bus: XorBus,
@@ -26,11 +26,11 @@ pub struct ShiftAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         ShiftCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -38,12 +38,12 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB: InteractionBuilder + AirBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

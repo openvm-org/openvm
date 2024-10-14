@@ -1,11 +1,11 @@
-use crate::arch::{MachineChipWrapper, Rv32MultAdapter};
+use crate::arch::{Rv32MultAdapter, VmChipWrapper};
 
-mod integration;
-pub use integration::*;
+mod core;
+pub use core::*;
 
 #[cfg(test)]
 mod tests;
 
 // TODO: Replace current uint_multiplication module upon completion
 pub type Rv32MultiplicationChip<F> =
-    MachineChipWrapper<F, Rv32MultAdapter<F>, MultiplicationIntegration<4, 8>>;
+    VmChipWrapper<F, Rv32MultAdapter<F>, MultiplicationCoreChip<4, 8>>;

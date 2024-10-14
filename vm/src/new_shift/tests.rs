@@ -1,4 +1,4 @@
-use super::integration::solve_shift;
+use super::core::solve_shift;
 use crate::arch::instructions::ShiftOpcode;
 
 const RV32_NUM_LIMBS: usize = 4;

@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -45,7 +45,7 @@ fn test_assert_less_than_chip_lt() {
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip.air, chip.range_checker.air],
+        any_rap_arc_vec![chip.air, chip.range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -65,7 +65,7 @@ fn test_lt_chip_decomp_does_not_divide() {
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![chip.air, chip.range_checker.air],
+        any_rap_arc_vec![chip.air, chip.range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -92,7 +92,7 @@ fn test_assert_less_than_negative_1() {
     });
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![chip.air, chip.range_checker.air],
+            any_rap_arc_vec![chip.air, chip.range_checker.air],
             vec![trace, range_trace],
         )
         .err(),
@@ -121,7 +121,7 @@ fn test_assert_less_than_negative_2() {
     });
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![chip.air, chip.range_checker.air],
+            any_rap_arc_vec![chip.air, chip.range_checker.air],
             vec![trace, range_trace],
         )
         .err(),

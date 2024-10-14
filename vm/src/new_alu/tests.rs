@@ -1,4 +1,4 @@
-use super::integration::solve_alu;
+use super::core::solve_alu;
 use crate::arch::instructions::AluOpcode;
 
 const RV32_NUM_LIMBS: usize = 4;

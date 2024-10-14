@@ -127,11 +127,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             op_f: f,
             ..
         } = instruction;
-        let opcode = opcode - self.offset;
-        debug_assert_eq!(
-            Keccak256Opcode::from_usize(opcode),
-            Keccak256Opcode::KECCAK256
-        );
+        let local_opcode_index = Keccak256Opcode::from_usize(opcode - self.offset);
+        debug_assert_eq!(local_opcode_index, Keccak256Opcode::KECCAK256);
 
         let mut memory = self.memory_chip.borrow_mut();
         debug_assert_eq!(

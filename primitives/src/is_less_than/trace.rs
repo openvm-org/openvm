@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use p3_field::{PrimeField, PrimeField64};
+use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
@@ -10,7 +10,7 @@ use super::{
 use crate::{sub_chip::LocalTraceInstructions, var_range::VariableRangeCheckerChip};
 
 impl IsLessThanChip {
-    pub fn generate_trace<F: PrimeField64>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: Field>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
         let width: usize = IsLessThanCols::<F>::width(&self.air);
 
         let mut rows_concat = vec![F::zero(); width * pairs.len()];
@@ -27,7 +27,7 @@ impl IsLessThanChip {
 }
 
 impl IsLessThanAir {
-    pub fn generate_trace_row<F: PrimeField>(
+    pub fn generate_trace_row<F: Field>(
         &self,
         x: u32,
         y: u32,
@@ -43,7 +43,7 @@ impl IsLessThanAir {
         self.generate_trace_row_aux(x, y, range_checker, &mut lt_cols.aux);
     }
 
-    pub fn generate_trace_row_aux<F: PrimeField>(
+    pub fn generate_trace_row_aux<F: Field>(
         &self,
         x: u32,
         y: u32,
@@ -73,7 +73,7 @@ impl IsLessThanAir {
 }
 
 // TODO[jpw] stop using Arc<VariableRangeCheckerChip> and use &VariableRangeCheckerChip (requires not using this trait)
-impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
+impl<F: Field> LocalTraceInstructions<F> for IsLessThanAir {
     type LocalInput = (u32, u32, Arc<VariableRangeCheckerChip>);
 
     fn generate_trace_row(

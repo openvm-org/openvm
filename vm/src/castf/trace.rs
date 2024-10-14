@@ -1,21 +1,20 @@
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_stark_backend::{
-    config::StarkGenericConfig,
+    config::{StarkGenericConfig, Val},
     rap::{get_air_name, AnyRap},
+    Chip,
 };
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::Domain;
 
 use super::{
     columns::{CastFAuxCols, CastFCols, CastFIoCols},
     CastFChip,
 };
-use crate::arch::MachineChip;
+use crate::arch::VmChip;
 
-impl<F: PrimeField32> MachineChip<F> for CastFChip<F> {
+impl<F: PrimeField32> VmChip<F> for CastFChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
 
@@ -43,13 +42,6 @@ impl<F: PrimeField32> MachineChip<F> for CastFChip<F> {
         RowMajorMatrix::new(rows.concat(), CastFCols::<F>::width())
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(self.air)
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -60,5 +52,14 @@ impl<F: PrimeField32> MachineChip<F> for CastFChip<F> {
 
     fn trace_width(&self) -> usize {
         CastFCols::<F>::width()
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for CastFChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 }

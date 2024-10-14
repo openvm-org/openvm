@@ -3,19 +3,21 @@ use core::borrow::Borrow;
 use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness};
 use afs_stark_backend::prover::{
     opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
-    types::{Commitments, Proof},
+    types::{AirProofData, Commitments, Proof},
 };
 use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_symmetric::Hash;
+use p3_util::log2_strict_usize;
 
 use crate::{
     config::outer::{OuterChallenge, OuterConfig, OuterVal},
     digest::{DigestVal, DigestVariable},
-    types::{
-        AdjacentOpenedValuesVariable, CommitmentsVariable, OpenedValuesVariable,
-        OpeningProofVariable, StarkProofVariable, VerifierInput, VerifierInputVariable,
+    types::VerifierInput,
+    vars::{
+        AdjacentOpenedValuesVariable, AirProofDataVariable, CommitmentsVariable,
+        OpenedValuesVariable, OpeningProofVariable, StarkProofVariable, VerifierInputVariable,
     },
 };
 
@@ -161,27 +163,55 @@ impl Witnessable<OuterConfig> for VerifierInput<BabyBearPoseidon2OuterConfig> {
     }
 }
 
-impl Witnessable<OuterConfig> for Proof<BabyBearPoseidon2OuterConfig> {
-    type WitnessVariable = StarkProofVariable<OuterConfig>;
+impl VectorWitnessable<C> for AirProofData<BabyBearPoseidon2OuterConfig> {}
 
-    fn read(&self, builder: &mut Builder<OuterConfig>) -> Self::WitnessVariable {
+impl Witnessable<C> for Proof<BabyBearPoseidon2OuterConfig> {
+    type WitnessVariable = StarkProofVariable<C>;
+
+    fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
         let commitments = self.commitments.read(builder);
         let opening = self.opening.read(builder);
+        let per_air = self.per_air.read(builder);
+        // This reads nothing because air_perm_by_height is a constant.
+        let air_perm_by_height = builder.array(0);
+
+        StarkProofVariable {
+            commitments,
+            opening,
+            per_air,
+            air_perm_by_height,
+        }
+    }
+
+    fn write(&self, witness: &mut Witness<C>) {
+        self.commitments.write(witness);
+        self.opening.write(witness);
+        self.per_air.write(witness);
+        // air_perm_by_height is a constant so we write nothing.
+    }
+}
+
+impl Witnessable<C> for AirProofData<BabyBearPoseidon2OuterConfig> {
+    type WitnessVariable = AirProofDataVariable<C>;
+    fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
+        // air_id is constant, skip
+        let air_id = Usize::from(0);
+        // log_degree is constant, skip
+        let log_degree = Usize::from(log2_strict_usize(self.degree));
         let exposed_values_after_challenge = self.exposed_values_after_challenge.read(builder);
         let public_values = self.public_values.read(builder);
         Self::WitnessVariable {
-            commitments,
-            opening,
+            air_id,
+            log_degree,
             exposed_values_after_challenge,
             public_values,
         }
     }
-
-    fn write(&self, witness: &mut Witness<OuterConfig>) {
-        self.commitments.write(witness);
-        self.opening.write(witness);
-        <Vec<_> as Witnessable<C>>::write(&self.exposed_values_after_challenge, witness);
-        <Vec<_> as Witnessable<C>>::write(&self.public_values, witness);
+    fn write(&self, witness: &mut Witness<C>) {
+        // air_id is constant, skip
+        // log_degree is constant, skip
+        <_ as Witnessable<_>>::write(&self.exposed_values_after_challenge, witness);
+        <_ as Witnessable<_>>::write(&self.public_values, witness);
     }
 }
 

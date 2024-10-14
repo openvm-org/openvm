@@ -8,7 +8,7 @@ use rand::Rng;
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        testing::MachineChipTestBuilder,
+        testing::VmChipTestBuilder,
     },
     modular_multdiv::{ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     program::Instruction,
@@ -23,7 +23,7 @@ type F = BabyBear;
 fn test_modular_multdiv() {
     setup_tracing();
 
-    let mut tester: MachineChipTestBuilder<F> = MachineChipTestBuilder::default();
+    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let mut coord_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
         ModularMultDivChip::new(
             tester.execution_bus(),

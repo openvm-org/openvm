@@ -1,12 +1,12 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{HashMap, HashSet},
     iter,
     sync::Arc,
 };
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
@@ -48,7 +48,7 @@ fn audit_air_test() {
     let mut audit_chip =
         MemoryAuditChip::<Val>::new(memory_bus, 2, LIMB_BITS, DECOMP, range_checker.clone());
 
-    let mut final_memory: BTreeMap<_, _> = BTreeMap::new();
+    let mut final_memory: HashMap<_, _> = HashMap::new();
 
     for (addr_space, pointer) in distinct_addresses.iter().cloned() {
         let final_data = random_f(MAX_VAL);
@@ -107,7 +107,7 @@ fn audit_air_test() {
     let range_checker_trace = range_checker.generate_trace();
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![
+        any_rap_arc_vec![
             audit_chip.air,
             range_checker.air,
             init_memory_dummy_air,

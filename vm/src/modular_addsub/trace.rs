@@ -1,16 +1,18 @@
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_primitives::bigint::{
     check_carry_to_zero::get_carry_max_abs_and_bits,
     utils::{big_int_to_limbs, big_uint_sub},
     CanonicalUint, DefaultLimbConfig, OverflowInt,
 };
-use afs_stark_backend::rap::{get_air_name, AnyRap};
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::{get_air_name, AnyRap},
+    Chip,
+};
 use num_bigint_dig::{BigInt, BigUint, Sign};
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{
     columns::{ModularAddSubAuxCols, ModularAddSubCols, ModularAddSubIoCols},
@@ -19,13 +21,13 @@ use super::{
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        MachineChip,
+        VmChip,
     },
     memory::MemoryHeapDataIoCols,
     utils::limbs_to_biguint,
 };
 
-impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChip<F>
+impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> VmChip<F>
     for ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
@@ -95,13 +97,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChi
         RowMajorMatrix::new(rows.concat(), ModularAddSubCols::<F, NUM_LIMBS>::width())
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(self.air.clone())
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -112,6 +107,16 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> MachineChi
 
     fn trace_width(&self) -> usize {
         ModularAddSubCols::<F, NUM_LIMBS>::width()
+    }
+}
+
+impl<SC: StarkGenericConfig, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Chip<SC>
+    for ModularAddSubChip<Val<SC>, NUM_LIMBS, LIMB_SIZE>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
     }
 }
 

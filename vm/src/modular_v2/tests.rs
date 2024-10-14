@@ -5,12 +5,12 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
 
-use super::{ModularAddSubV2Chip, ModularMulDivV2Chip};
+use super::{ModularAddSubV2CoreChip, ModularMulDivV2CoreChip};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        testing::MachineChipTestBuilder,
-        ExecutionBridge, MachineChipWrapper, Rv32HeapAdapter,
+        testing::VmChipTestBuilder,
+        ExecutionBridge, Rv32HeapAdapter, VmChipWrapper,
     },
     program::Instruction,
     utils::biguint_to_limbs,
@@ -25,17 +25,17 @@ fn test_modular_addsub() {
     setup_tracing();
     let coord_modulus = secp256k1_coord_prime();
     let scalar_modulus = secp256k1_scalar_prime();
-    let mut tester: MachineChipTestBuilder<F> = MachineChipTestBuilder::default();
+    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
 
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
     let memory_bridge = tester.memory_chip().borrow().memory_bridge();
     let adapter = Rv32HeapAdapter::new(execution_bridge, memory_bridge);
-    let coord_chip = ModularAddSubV2Chip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let coord_chip = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         coord_modulus.clone(),
         tester.memory_chip().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset(),
     );
-    let scalar_chip = ModularAddSubV2Chip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let scalar_chip = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         scalar_modulus.clone(),
         tester.memory_chip().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + 4,
@@ -109,7 +109,7 @@ fn test_modular_addsub() {
             data_as as isize,
         );
 
-        let mut chip_wrapper = MachineChipWrapper::new(adapter.clone(), chip, tester.memory_chip());
+        let mut chip_wrapper = VmChipWrapper::new(adapter.clone(), chip, tester.memory_chip());
         tester.execute(&mut chip_wrapper, instruction);
         let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
 
@@ -129,17 +129,17 @@ fn test_modular_muldiv() {
     setup_tracing();
     let coord_modulus = secp256k1_coord_prime();
     let scalar_modulus = secp256k1_scalar_prime();
-    let mut tester: MachineChipTestBuilder<F> = MachineChipTestBuilder::default();
+    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
 
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
     let memory_bridge = tester.memory_chip().borrow().memory_bridge();
     let adapter = Rv32HeapAdapter::new(execution_bridge, memory_bridge);
-    let coord_chip = ModularMulDivV2Chip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let coord_chip = ModularMulDivV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         coord_modulus.clone(),
         tester.memory_chip().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset(),
     );
-    let scalar_chip = ModularMulDivV2Chip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let scalar_chip = ModularMulDivV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         scalar_modulus.clone(),
         tester.memory_chip().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + 4,
@@ -213,7 +213,7 @@ fn test_modular_muldiv() {
             data_as as isize,
         );
 
-        let mut chip_wrapper = MachineChipWrapper::new(adapter.clone(), chip, tester.memory_chip());
+        let mut chip_wrapper = VmChipWrapper::new(adapter.clone(), chip, tester.memory_chip());
         tester.execute(&mut chip_wrapper, instruction);
         let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
 

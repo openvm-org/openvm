@@ -25,10 +25,6 @@ impl<T> IsLessThanIoCols<T> {
     pub fn flatten(self) -> Vec<T> {
         vec![self.x, self.y, self.less_than]
     }
-
-    pub fn width() -> usize {
-        3
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, new)]

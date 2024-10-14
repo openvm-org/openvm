@@ -13,21 +13,21 @@ use super::{ModularConfig, FIELD_ELEMENT_BITS};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        InstructionOutput, MachineAdapterInterface, MachineIntegration, Result, Rv32HeapAdapter,
-        Rv32HeapAdapterCols, Rv32HeapAdapterInterface,
+        AdapterRuntimeContext, Result, Rv32HeapAdapter, Rv32HeapAdapterCols,
+        Rv32HeapAdapterInterface, VmAdapterInterface, VmCoreChip,
     },
     program::Instruction,
     utils::{biguint_to_limbs, limbs_to_biguint},
 };
 
 #[derive(Clone)]
-pub struct ModularMulDivV2Chip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+pub struct ModularMulDivV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub chip: FieldExprChip,
 
     pub offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2Chip<NUM_LIMBS, LIMB_SIZE> {
+impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2CoreChip<NUM_LIMBS, LIMB_SIZE> {
     pub fn new(
         modulus: BigUint,
         range_checker: Arc<VariableRangeCheckerChip>,
@@ -74,20 +74,19 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2Chip<NUM_LIM
 }
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    MachineIntegration<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
-    for ModularMulDivV2Chip<NUM_LIMBS, LIMB_SIZE>
+    VmCoreChip<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
+    for ModularMulDivV2CoreChip<NUM_LIMBS, LIMB_SIZE>
 {
     type Record = ();
-    type Cols<T> = Vec<T>;
     type Air = FieldExprChip;
 
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
         _from_pc: F,
-        reads: <Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS> as MachineAdapterInterface<F>>::Reads,
+        reads: <Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS> as VmAdapterInterface<F>>::Reads,
     ) -> Result<(
-        InstructionOutput<F, Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS>>,
+        AdapterRuntimeContext<F, Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS>>,
         Self::Record,
     )> {
         let Instruction { opcode, .. } = instruction.clone();
@@ -114,7 +113,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         let z_limbs = biguint_to_limbs::<NUM_LIMBS>(z_biguint, LIMB_SIZE);
 
         Ok((
-            InstructionOutput {
+            AdapterRuntimeContext {
                 to_pc: None,
                 writes: z_limbs.map(|x| F::from_canonical_u32(x)),
             },
@@ -126,27 +125,11 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         "todo".to_string()
     }
 
-    fn generate_trace_row(&self, _row_slice: &mut Self::Cols<F>, _record: Self::Record) {
+    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
         todo!()
     }
 
-    fn eval_primitive<
-        AB: afs_stark_backend::interaction::InteractionBuilder<F = F>
-            + p3_air::PairBuilder
-            + p3_air::AirBuilderWithPublicValues,
-    >(
-        _air: &Self::Air,
-        _builder: &mut AB,
-        _local: &Self::Cols<AB::Var>,
-        _local_adapter: &Rv32HeapAdapterCols<AB::Var, NUM_LIMBS, NUM_LIMBS>,
-    ) -> crate::arch::IntegrationInterface<
-        AB::Expr,
-        Rv32HeapAdapterInterface<AB::Expr, NUM_LIMBS, NUM_LIMBS>,
-    > {
-        todo!()
-    }
-
-    fn air(&self) -> Self::Air {
-        self.chip.clone()
+    fn air(&self) -> &Self::Air {
+        &self.chip
     }
 }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use itertools::izip;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
@@ -7,7 +9,7 @@ use tracing::instrument;
 use crate::{prover::USE_DEBUG_BUILDER, rap::AnyRap};
 
 pub struct AirInfo<SC: StarkGenericConfig> {
-    pub air: Box<dyn AnyRap<SC>>,
+    pub air: Arc<dyn AnyRap<SC>>,
     pub cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
     pub common_trace: RowMajorMatrix<Val<SC>>,
     pub public_values: Vec<Val<SC>>,
@@ -15,7 +17,7 @@ pub struct AirInfo<SC: StarkGenericConfig> {
 
 impl<SC: StarkGenericConfig> AirInfo<SC> {
     pub fn new(
-        air: Box<dyn AnyRap<SC>>,
+        air: Arc<dyn AnyRap<SC>>,
         cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
         common_trace: RowMajorMatrix<Val<SC>>,
         public_values: Vec<Val<SC>>,
@@ -29,7 +31,7 @@ impl<SC: StarkGenericConfig> AirInfo<SC> {
     }
 
     pub fn simple(
-        air: Box<dyn AnyRap<SC>>,
+        air: Arc<dyn AnyRap<SC>>,
         trace: RowMajorMatrix<Val<SC>>,
         public_values: Vec<Val<SC>>,
     ) -> Self {
@@ -37,19 +39,19 @@ impl<SC: StarkGenericConfig> AirInfo<SC> {
     }
 
     pub fn no_pis(
-        air: Box<dyn AnyRap<SC>>,
+        air: Arc<dyn AnyRap<SC>>,
         cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
         common_trace: RowMajorMatrix<Val<SC>>,
     ) -> Self {
         Self::new(air, cached_traces, common_trace, vec![])
     }
 
-    pub fn simple_no_pis(air: Box<dyn AnyRap<SC>>, trace: RowMajorMatrix<Val<SC>>) -> Self {
+    pub fn simple_no_pis(air: Arc<dyn AnyRap<SC>>, trace: RowMajorMatrix<Val<SC>>) -> Self {
         Self::simple(air, trace, vec![])
     }
 
     pub fn multiple_simple(
-        airs: Vec<Box<dyn AnyRap<SC>>>,
+        airs: Vec<Arc<dyn AnyRap<SC>>>,
         traces: Vec<RowMajorMatrix<Val<SC>>>,
         public_values: Vec<Vec<Val<SC>>>,
     ) -> Vec<Self> {
@@ -59,7 +61,7 @@ impl<SC: StarkGenericConfig> AirInfo<SC> {
     }
 
     pub fn multiple_simple_no_pis(
-        airs: Vec<Box<dyn AnyRap<SC>>>,
+        airs: Vec<Arc<dyn AnyRap<SC>>>,
         traces: Vec<RowMajorMatrix<Val<SC>>>,
     ) -> Vec<Self> {
         izip!(airs, traces)

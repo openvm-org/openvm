@@ -1,14 +1,14 @@
 use std::cmp::Reverse;
 
 use afs_compiler::ir::{
-    Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE, LIMB_SIZE,
-    NUM_LIMBS,
+    unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
+    DIGEST_SIZE, LIMB_SIZE, NUM_LIMBS,
 };
 use afs_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
-        types::{Commitments, Proof},
+        types::{AirProofData, Commitments, Proof},
     },
 };
 use ax_ecc_lib::types::{
@@ -25,12 +25,16 @@ use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFr
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
+use p3_util::log2_strict_usize;
 use stark_vm::modular_addsub::big_uint_to_num_limbs;
 
-use crate::types::{
-    AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, OpenedValuesVariable,
-    OpeningProofVariable, StarkProofVariable, TraceWidthVariable, VerifierInput,
-    VerifierInputVariable,
+use crate::{
+    types::{InnerConfig, VerifierInput},
+    vars::{
+        AdjacentOpenedValuesVariable, AirProofDataVariable, CommitmentsVariable,
+        OpenedValuesVariable, OpeningProofVariable, StarkProofVariable, TraceWidthVariable,
+        VerifierInputVariable,
+    },
 };
 
 pub type InnerVal = BabyBear;
@@ -121,6 +125,8 @@ impl VecAutoHintable for AdjacentOpenedValues<InnerChallenge> {}
 impl VecAutoHintable for Vec<AdjacentOpenedValues<InnerChallenge>> {}
 
 impl VecAutoHintable for Vec<Vec<AdjacentOpenedValues<InnerChallenge>>> {}
+
+impl VecAutoHintable for AirProofData<BabyBearPoseidon2Config> {}
 
 impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
     type HintVariable = Array<C, I::HintVariable>;
@@ -285,10 +291,10 @@ impl Hintable<InnerConfig> for TraceWidth {
     type HintVariable = TraceWidthVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let preprocessed = Vec::<usize>::read(builder);
-        let cached_mains = Vec::<usize>::read(builder);
-        let common_main = usize::read(builder);
-        let after_challenge = Vec::<usize>::read(builder);
+        let preprocessed = unsafe_array_transmute(Vec::<usize>::read(builder));
+        let cached_mains = unsafe_array_transmute(Vec::<usize>::read(builder));
+        let common_main = Usize::Var(usize::read(builder));
+        let after_challenge = unsafe_array_transmute(Vec::<usize>::read(builder));
 
         TraceWidthVariable {
             preprocessed,
@@ -316,14 +322,16 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let commitments = Commitments::<BabyBearPoseidon2Config>::read(builder);
         let opening = OpeningProof::<BabyBearPoseidon2Config>::read(builder);
-        let exposed_values_after_challenge = Vec::<Vec<Vec<InnerChallenge>>>::read(builder);
-        let public_values = Vec::<Vec<InnerVal>>::read(builder);
+        let per_air = Vec::<AirProofData<BabyBearPoseidon2Config>>::read(builder);
+        let raw_air_perm_by_height = Vec::<usize>::read(builder);
+        // A hacky way to transmute from Array of Var to Array of Usize.
+        let air_perm_by_height = unsafe_array_transmute(raw_air_perm_by_height);
 
         StarkProofVariable {
             commitments,
             opening,
-            exposed_values_after_challenge,
-            public_values,
+            per_air,
+            air_perm_by_height,
         }
     }
 
@@ -332,6 +340,37 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
 
         stream.extend(self.commitments.write());
         stream.extend(self.opening.write());
+        stream.extend(<Vec<AirProofData<_>> as Hintable<_>>::write(&self.per_air));
+        let air_perm_by_height: Vec<_> = (0..self.per_air.len())
+            .sorted_by_key(|i| Reverse(self.per_air[*i].degree))
+            .collect();
+        stream.extend(air_perm_by_height.write());
+
+        stream
+    }
+}
+
+impl Hintable<InnerConfig> for AirProofData<BabyBearPoseidon2Config> {
+    type HintVariable = AirProofDataVariable<InnerConfig>;
+    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+        let air_id = Usize::Var(usize::read(builder));
+        let log_degree = Usize::Var(usize::read(builder));
+        let exposed_values_after_challenge = Vec::<Vec<InnerChallenge>>::read(builder);
+        let public_values = Vec::<InnerVal>::read(builder);
+        Self::HintVariable {
+            air_id,
+            log_degree,
+            exposed_values_after_challenge,
+            public_values,
+        }
+    }
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
+        let mut stream = Vec::new();
+
+        stream.extend(<usize as Hintable<InnerConfig>>::write(&self.air_id));
+        stream.extend(<usize as Hintable<InnerConfig>>::write(&log2_strict_usize(
+            self.degree,
+        )));
         stream.extend(self.exposed_values_after_challenge.write());
         stream.extend(self.public_values.write());
 

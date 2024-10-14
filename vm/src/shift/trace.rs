@@ -1,13 +1,12 @@
-use std::{array, borrow::BorrowMut};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
 use afs_stark_backend::{
-    config::StarkGenericConfig,
+    config::{StarkGenericConfig, Val},
     rap::{get_air_name, AnyRap},
+    Chip,
 };
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::Domain;
 
 use super::{
     columns::{ShiftAuxCols, ShiftCols, ShiftIoCols},
@@ -16,12 +15,12 @@ use super::{
 use crate::{
     arch::{
         instructions::{U256Opcode, UsizeOpcode},
-        MachineChip,
+        VmChip,
     },
     uint_multiplication::MemoryData,
 };
 
-impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChip<F>
+impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmChip<F>
     for ShiftChip<F, NUM_LIMBS, LIMB_BITS>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
@@ -105,13 +104,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
         RowMajorMatrix::new(rows, width)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(self.air)
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -122,5 +114,15 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineChi
 
     fn trace_width(&self) -> usize {
         ShiftCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+    }
+}
+
+impl<SC: StarkGenericConfig, const NUM_LIMBS: usize, const LIMB_BITS: usize> Chip<SC>
+    for ShiftChip<Val<SC>, NUM_LIMBS, LIMB_BITS>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 }

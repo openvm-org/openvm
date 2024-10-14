@@ -9,7 +9,7 @@ use crate::{
     config::outer::{OuterCompress, OuterConfig, OuterHash},
     halo2::Halo2Prover,
     outer_poseidon2::Poseidon2CircuitBuilder,
-    types::OuterDigestVariable,
+    vars::OuterDigestVariable,
 };
 
 #[test]

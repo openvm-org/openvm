@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use afs_derive::AlignedBorrow;
 
 #[derive(Copy, Clone, Debug, AlignedBorrow, PartialEq, Eq)]
@@ -41,10 +39,6 @@ impl<T: Clone> ProgramCols<T> {
             .chain(vec![self.exec_freq])
             .collect()
     }
-
-    pub fn width() -> usize {
-        ProgramExecutionCols::<T>::width() + 1
-    }
 }
 
 impl<T: Clone> ProgramExecutionCols<T> {
@@ -74,9 +68,5 @@ impl<T: Clone> ProgramExecutionCols<T> {
             self.op_f.clone(),
             self.op_g.clone(),
         ]
-    }
-
-    pub fn width() -> usize {
-        size_of::<ProgramExecutionCols<u8>>()
     }
 }

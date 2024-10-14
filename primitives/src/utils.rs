@@ -3,6 +3,16 @@ use p3_air::VirtualPairCol;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
 
+/// Return either 0 if n is zero or the next power of two of n.
+/// Used to resize the number of rows in a trace matrix.
+pub const fn next_power_of_two_or_zero(n: usize) -> usize {
+    if n == 0 {
+        0
+    } else {
+        n.next_power_of_two()
+    }
+}
+
 // TODO: Ideally upstream PrimeField implements From<T>
 pub trait FieldFrom<T> {
     fn from_val(value: T) -> Self;

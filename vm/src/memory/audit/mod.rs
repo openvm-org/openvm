@@ -1,7 +1,7 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use afs_primitives::var_range::VariableRangeCheckerChip;
-use p3_field::PrimeField32;
+use p3_field::Field;
 
 use self::air::MemoryAuditAir;
 use crate::memory::offline_checker::MemoryBus;
@@ -15,13 +15,13 @@ pub mod trace;
 mod tests;
 
 #[derive(Clone, Debug)]
-pub struct MemoryAuditChip<F: PrimeField32> {
+pub struct MemoryAuditChip<F: Field> {
     pub air: MemoryAuditAir,
-    initial_memory: BTreeMap<(F, F), F>,
+    initial_memory: HashMap<(F, F), F>,
     range_checker: Arc<VariableRangeCheckerChip>,
 }
 
-impl<F: PrimeField32> MemoryAuditChip<F> {
+impl<F: Field> MemoryAuditChip<F> {
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
@@ -37,7 +37,7 @@ impl<F: PrimeField32> MemoryAuditChip<F> {
                 decomp,
                 false,
             ),
-            initial_memory: BTreeMap::new(),
+            initial_memory: HashMap::new(),
             range_checker,
         }
     }
