@@ -11,6 +11,7 @@ use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheck
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip,
 };
 use ax_sdk::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -25,7 +26,7 @@ use rand::{prelude::SliceRandom, thread_rng, Rng};
 
 use super::{MemoryChip, MemoryReadRecord};
 use crate::{
-    arch::MachineChip,
+    arch::VmChip,
     core::RANGE_CHECKER_BUS,
     hashes::poseidon2::Poseidon2Chip,
     memory::{
@@ -203,7 +204,7 @@ fn test_memory_chip() {
         })
         .collect_vec();
 
-    let memory_requester_air = Box::new(MemoryRequesterAir {
+    let memory_requester_air = Arc::new(MemoryRequesterAir {
         memory_bridge: memory_chip.memory_bridge(),
     });
 
@@ -266,9 +267,9 @@ fn test_memory_chip() {
 
     let memory_airs = memory_chip.airs();
     let range_checker_air = range_checker.air();
-    let airs: Vec<Box<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_airs
+    let airs: Vec<Arc<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_airs
         .into_iter()
-        .chain(iter::once(memory_requester_air as Box<dyn AnyRap<_>>))
+        .chain(iter::once(memory_requester_air as Arc<dyn AnyRap<_>>))
         .chain(iter::once(range_checker_air))
         .collect();
 

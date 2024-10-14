@@ -1,6 +1,7 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use ax_sdk::dummy_airs::interaction::{
-    dummy_interaction_air::DummyInteractionAir, verify_interactions,
+use ax_sdk::{
+    any_rap_arc_vec,
+    dummy_airs::interaction::{dummy_interaction_air::DummyInteractionAir, verify_interactions},
 };
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
@@ -50,7 +51,7 @@ fn test_interaction_fib_selector_happy_path() {
     let sender_air = DummyInteractionAir::new(1, true, 0);
     verify_interactions(
         vec![trace, sender_trace],
-        vec![&air, &sender_air],
+        any_rap_arc_vec![air, sender_air],
         vec![pis, vec![]],
     )
     .expect("Verification failed");
@@ -85,7 +86,7 @@ fn test_interaction_stark_multi_rows_happy_path() {
     let receiver_air = DummyInteractionAir::new(1, false, 0);
     verify_interactions(
         vec![sender_trace, receiver_trace],
-        vec![&sender_air, &receiver_air],
+        any_rap_arc_vec![sender_air, receiver_air],
         vec![vec![], vec![]],
     )
     .expect("Verification failed");
@@ -121,7 +122,7 @@ fn test_interaction_stark_multi_rows_neg() {
     });
     let res = verify_interactions(
         vec![sender_trace, receiver_trace],
-        vec![&sender_air, &receiver_air],
+        any_rap_arc_vec![sender_air, receiver_air],
         vec![vec![], vec![]],
     );
     assert_eq!(res, Err(VerificationError::NonZeroCumulativeSum));
@@ -136,8 +137,12 @@ fn test_interaction_stark_all_0_sender_happy_path() {
     //   0  589
     let sender_trace = RowMajorMatrix::new(to_field_vec(vec![0, 1, 0, 5, 0, 4, 0, 889]), 2);
     let sender_air = DummyInteractionAir::new(1, true, 0);
-    verify_interactions(vec![sender_trace], vec![&sender_air], vec![vec![]])
-        .expect("Verification failed");
+    verify_interactions(
+        vec![sender_trace],
+        any_rap_arc_vec![sender_air],
+        vec![vec![]],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -173,7 +178,7 @@ fn test_interaction_stark_multi_senders_happy_path() {
     let receiver_air = DummyInteractionAir::new(1, false, 0);
     verify_interactions(
         vec![sender_trace1, sender_trace2, receiver_trace],
-        vec![&sender_air, &sender_air, &receiver_air],
+        any_rap_arc_vec![sender_air, sender_air, receiver_air],
         vec![vec![]; 3],
     )
     .expect("Verification failed");
@@ -215,7 +220,7 @@ fn test_interaction_stark_multi_senders_neg() {
     });
     let res = verify_interactions(
         vec![sender_trace1, sender_trace2, receiver_trace],
-        vec![&sender_air, &sender_air, &receiver_air],
+        any_rap_arc_vec![sender_air, sender_air, receiver_air],
         vec![vec![]; 3],
     );
     assert_eq!(res, Err(VerificationError::NonZeroCumulativeSum));
@@ -263,7 +268,7 @@ fn test_interaction_stark_multi_sender_receiver_happy_path() {
             receiver_trace1,
             receiver_trace2,
         ],
-        vec![&sender_air, &sender_air, &receiver_air, &receiver_air],
+        any_rap_arc_vec![sender_air, sender_air, receiver_air, receiver_air],
         vec![vec![]; 4],
     )
     .expect("Verification failed");

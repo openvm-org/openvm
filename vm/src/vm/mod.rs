@@ -1,10 +1,12 @@
 use std::{collections::VecDeque, mem::take};
 
+use afs_stark_backend::{
+    config::{Domain, StarkGenericConfig},
+    p3_commit::PolynomialSpace,
+};
 use cycle_tracker::CycleTracker;
 use metrics::VmMetrics;
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 pub use segment::ExecutionSegment;
 
 use crate::{

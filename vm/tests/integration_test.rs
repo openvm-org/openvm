@@ -89,7 +89,7 @@ fn air_test_with_compress_poseidon2(
         // Checking maximum constraint degree across all AIRs
         let mut keygen_builder = engine.keygen_builder();
         for air_info in &air_infos {
-            keygen_builder.add_air(air_info.air.as_ref());
+            keygen_builder.add_air(air_info.air.clone());
         }
         let pk = keygen_builder.generate_pk();
         assert!(pk.max_constraint_degree == poseidon2_max_constraint_degree);

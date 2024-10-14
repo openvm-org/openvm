@@ -1,6 +1,6 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use p3_field::AbstractField;
 
@@ -32,7 +32,7 @@ fn test_is_less_than_bits_chip_lt() {
     let trace = air.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     //let trace = chip.generate_trace(vec![(0, 1)]);
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![air], vec![trace])
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
         .expect("Verification failed");
 }
 
@@ -49,7 +49,7 @@ fn test_is_less_than_negative_1() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![air], vec![trace],)
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace],)
             .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
@@ -72,7 +72,7 @@ fn test_is_less_than_negative_2() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![air], vec![trace],)
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace],)
             .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
@@ -94,7 +94,7 @@ fn test_is_less_than_negative_3() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![air], vec![trace],)
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace],)
             .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"

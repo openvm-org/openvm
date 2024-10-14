@@ -1,9 +1,13 @@
-use afs_stark_backend::rap::{get_air_name, AnyRap};
+use std::sync::Arc;
+
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::{get_air_name, AnyRap},
+    Chip,
+};
 use p3_air::BaseAir;
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::columns::{
     FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols,
@@ -11,7 +15,7 @@ use super::columns::{
 use crate::{
     arch::{
         instructions::{FieldExtensionOpcode, UsizeOpcode},
-        MachineChip,
+        VmChip,
     },
     field_extension::chip::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
@@ -20,7 +24,7 @@ use crate::{
     memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 
-impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
+impl<F: PrimeField32> VmChip<F> for FieldExtensionArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
     fn generate_trace(mut self) -> RowMajorMatrix<F> {
         let curr_height = self.records.len();
@@ -43,13 +47,6 @@ impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
         RowMajorMatrix::new(flattened_trace, width)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(self.air)
-    }
-
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -63,21 +60,30 @@ impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
     }
 }
 
+impl<SC: StarkGenericConfig> Chip<SC> for FieldExtensionArithmeticChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
+    }
+}
+
 impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
     /// Constructs a new set of columns (including auxiliary columns) given inputs.
     fn cols_from_record(
         &self,
         record: FieldExtensionArithmeticRecord<F>,
     ) -> FieldExtensionArithmeticCols<F> {
-        let opcode = FieldExtensionOpcode::from_usize(record.instruction.opcode);
-        let is_add = F::from_bool(opcode == FieldExtensionOpcode::FE4ADD);
-        let is_sub = F::from_bool(opcode == FieldExtensionOpcode::FE4SUB);
-        let is_mul = F::from_bool(opcode == FieldExtensionOpcode::BBE4MUL);
-        let is_div = F::from_bool(opcode == FieldExtensionOpcode::BBE4DIV);
+        let local_opcode_index = FieldExtensionOpcode::from_usize(record.instruction.opcode);
+        let is_add = F::from_bool(local_opcode_index == FieldExtensionOpcode::FE4ADD);
+        let is_sub = F::from_bool(local_opcode_index == FieldExtensionOpcode::FE4SUB);
+        let is_mul = F::from_bool(local_opcode_index == FieldExtensionOpcode::BBE4MUL);
+        let is_div = F::from_bool(local_opcode_index == FieldExtensionOpcode::BBE4DIV);
 
         let FieldExtensionArithmeticRecord { x, y, z, .. } = record;
 
-        let divisor_inv = if opcode == FieldExtensionOpcode::BBE4DIV {
+        let divisor_inv = if local_opcode_index == FieldExtensionOpcode::BBE4DIV {
             FieldExtensionArithmetic::invert(record.y)
         } else {
             [F::zero(); EXT_DEG]

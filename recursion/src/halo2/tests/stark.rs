@@ -8,7 +8,7 @@ use ax_sdk::{
 };
 
 use crate::{
-    config::outer::new_from_outer_multi_vkv2,
+    config::outer::new_from_outer_multi_vk,
     halo2::Halo2Prover,
     stark::outer::build_circuit_verify_operations,
     tests::{fibonacci_stark_for_test, interaction_stark_for_test},
@@ -34,7 +34,7 @@ fn run_recursive_test(stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>
             stark_for_test.air_infos,
         )
         .unwrap();
-    let advice = new_from_outer_multi_vkv2(&vparams.data.vk);
+    let advice = new_from_outer_multi_vk(&vparams.data.vk);
     let proof = vparams.data.proof;
 
     let mut witness = Witness::default();

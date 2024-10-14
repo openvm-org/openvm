@@ -1,6 +1,6 @@
+use afs_stark_backend::config::{StarkGenericConfig, Val};
 use ax_sdk::engine::StarkForTest;
 use p3_field::PrimeField32;
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
     program::Program,

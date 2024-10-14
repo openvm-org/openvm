@@ -1,11 +1,11 @@
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::integration::{solve_eq, BranchEqualIntegration};
+use super::core::{solve_eq, BranchEqualCoreChip};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        MachineIntegration, Rv32BranchAdapter,
+        Rv32BranchAdapter, VmCoreChip,
     },
     program::Instruction,
 };
@@ -15,7 +15,7 @@ type F = BabyBear;
 
 #[test]
 fn execute_pc_increment_sanity_test() {
-    let integration = BranchEqualIntegration::<RV32_NUM_LIMBS>::new(0);
+    let core = BranchEqualCoreChip::<RV32_NUM_LIMBS>::new(0);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchEqualOpcode::BEQ.as_usize(),
@@ -25,18 +25,24 @@ fn execute_pc_increment_sanity_test() {
     let x: [F; RV32_NUM_LIMBS] = [19, 4, 1790, 60].map(F::from_canonical_u32);
     let y: [F; RV32_NUM_LIMBS] = [19, 32, 1804, 60].map(F::from_canonical_u32);
 
-    let result = <BranchEqualIntegration<RV32_NUM_LIMBS> as MachineIntegration<
-        F,
-        Rv32BranchAdapter<F>,
-    >>::execute_instruction(&integration, &instruction, F::zero(), [x, y]);
+    let result =
+        <BranchEqualCoreChip<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
+            &core,
+            &instruction,
+            F::zero(),
+            [x, y],
+        );
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
-    let result = <BranchEqualIntegration<RV32_NUM_LIMBS> as MachineIntegration<
-        F,
-        Rv32BranchAdapter<F>,
-    >>::execute_instruction(&integration, &instruction, F::zero(), [x, y]);
+    let result =
+        <BranchEqualCoreChip<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
+            &core,
+            &instruction,
+            F::zero(),
+            [x, y],
+        );
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());
     assert_eq!(output.to_pc.unwrap(), F::from_canonical_u8(8));

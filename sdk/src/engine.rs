@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 pub use afs_stark_backend::engine::StarkEngine;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
@@ -76,14 +78,14 @@ where
     }
     fn run_simple_test_impl(
         &self,
-        chips: Vec<Box<dyn AnyRap<SC>>>,
+        chips: Vec<Arc<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: Vec<Vec<Val<SC>>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         self.run_test(&AirInfo::multiple_simple(chips, traces, public_values))
     }
     fn run_simple_test_fast(
-        chips: Vec<Box<dyn AnyRap<SC>>>,
+        chips: Vec<Arc<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: Vec<Vec<Val<SC>>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
@@ -91,7 +93,7 @@ where
         StarkFriEngine::<_>::run_simple_test_impl(&engine, chips, traces, public_values)
     }
     fn run_simple_test_no_pis_fast(
-        chips: Vec<Box<dyn AnyRap<SC>>>,
+        chips: Vec<Arc<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         let pis = vec![vec![]; chips.len()];

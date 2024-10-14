@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use afs_derive::AlignedBorrow;
 
 use crate::{
@@ -15,13 +13,6 @@ pub struct ShiftCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub aux: ShiftAuxCols<T, NUM_LIMBS, LIMB_BITS>,
 }
 
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCols<T, NUM_LIMBS, LIMB_BITS> {
-    pub fn width() -> usize {
-        ShiftAuxCols::<T, NUM_LIMBS, LIMB_BITS>::width()
-            + ShiftIoCols::<T, NUM_LIMBS, LIMB_BITS>::width()
-    }
-}
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct ShiftIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -31,12 +22,6 @@ pub struct ShiftIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub z: MemoryData<T, NUM_LIMBS, LIMB_BITS>,
     pub ptr_as: T,
     pub address_as: T,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftIoCols<T, NUM_LIMBS, LIMB_BITS> {
-    pub fn width() -> usize {
-        size_of::<ShiftIoCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }
 
 #[repr(C)]
@@ -70,10 +55,4 @@ pub struct ShiftAuxCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub read_x_aux_cols: MemoryReadAuxCols<T, NUM_LIMBS>,
     pub read_y_aux_cols: MemoryReadAuxCols<T, NUM_LIMBS>,
     pub write_z_aux_cols: MemoryWriteAuxCols<T, NUM_LIMBS>,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftAuxCols<T, NUM_LIMBS, LIMB_BITS> {
-    pub fn width() -> usize {
-        size_of::<ShiftAuxCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }

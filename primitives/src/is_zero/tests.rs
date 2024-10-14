@@ -1,6 +1,6 @@
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -23,7 +23,7 @@ fn test_single_is_zero(x: u32) {
         AbstractField::from_bool(x == AbstractField::zero())
     );
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![chip], vec![trace])
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![chip], vec![trace])
         .expect("Verification failed");
 }
 
@@ -46,7 +46,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
         );
     }
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![chip], vec![trace])
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![chip], vec![trace])
         .expect("Verification failed");
 }
 
@@ -64,7 +64,7 @@ fn test_single_is_zero_fail(x: u32) {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_box_vec![chip], vec![trace])
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![chip], vec![trace])
             .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
@@ -90,7 +90,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
         });
         assert_eq!(
             BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-                any_rap_box_vec![chip],
+                any_rap_arc_vec![chip],
                 vec![trace.clone()]
             )
             .err(),

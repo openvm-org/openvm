@@ -6,6 +6,7 @@ use p3_matrix::Matrix;
 
 use super::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 
+#[derive(Clone, Copy)]
 pub struct FibonacciAir;
 
 impl<F> PartitionedBaseAir<F> for FibonacciAir {}

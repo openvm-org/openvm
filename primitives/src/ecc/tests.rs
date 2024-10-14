@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
-    any_rap_box_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
 };
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
@@ -71,7 +71,7 @@ fn test_ec_add(p1: (BigUint, BigUint), p2: (BigUint, BigUint), expected_p3: (Big
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![air, range_checker.air],
+        any_rap_arc_vec![air, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -110,7 +110,7 @@ fn test_ec_add_fail() {
     disable_debug_builder();
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![air, range_checker.air],
+            any_rap_arc_vec![air, range_checker.air],
             vec![trace, range_trace]
         )
         .err(),
@@ -138,7 +138,7 @@ fn test_ec_double() {
     let range_trace = range_checker.generate_trace();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_box_vec![air, range_checker.air],
+        any_rap_arc_vec![air, range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -160,7 +160,7 @@ fn test_ec_double_wrong_trace() {
     disable_debug_builder();
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_box_vec![air, range_checker.air],
+            any_rap_arc_vec![air, range_checker.air],
             vec![trace, range_trace]
         )
         .err(),

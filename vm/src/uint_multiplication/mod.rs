@@ -38,7 +38,7 @@ pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
 
 #[derive(Clone, Debug)]
 pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: UintMultiplicationAir<NUM_LIMBS, LIMB_BITS>,
+    pub air: UintMultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
@@ -76,7 +76,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            air: UintMultiplicationAir {
+            air: UintMultiplicationCoreAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus: *bus,
@@ -107,8 +107,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction;
-        let opcode = opcode - self.offset;
-        assert!(opcode == U256Opcode::MUL as usize);
+        let local_opcode_index = opcode - self.offset;
+        assert!(local_opcode_index == U256Opcode::MUL as usize);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(

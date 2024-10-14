@@ -1,7 +1,7 @@
 //! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`,
 //! `MemoryReadWithImmediateAuxCols`, and `MemoryWriteAuxCols`.
 
-use std::{array, borrow::Borrow, iter, mem::size_of};
+use std::{array, borrow::Borrow, iter};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::assert_less_than::columns::AssertLessThanAuxCols;
@@ -41,10 +41,6 @@ impl<T> MemoryBaseAuxCols<T> {
             .chain(iter::once(self.prev_timestamp))
             .chain(self.clk_lt_aux.lower_decomp)
             .collect()
-    }
-
-    pub const fn width() -> usize {
-        size_of::<MemoryBaseAuxCols<u8>>()
     }
 }
 
@@ -95,10 +91,6 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
             .chain(self.prev_data)
             .collect()
     }
-
-    pub const fn width() -> usize {
-        size_of::<MemoryWriteAuxCols<u8, N>>()
-    }
 }
 
 impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<F, N> {
@@ -143,10 +135,6 @@ impl<const N: usize, T> MemoryReadAuxCols<T, N> {
     pub fn flatten(self) -> Vec<T> {
         self.base.flatten()
     }
-
-    pub const fn width() -> usize {
-        size_of::<MemoryReadAuxCols<u8, N>>()
-    }
 }
 
 impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<F, N> {
@@ -176,10 +164,6 @@ impl<const N: usize, T: Clone> MemoryHeapReadAuxCols<T, N> {
             .chain(self.address.flatten())
             .chain(self.data.flatten())
             .collect()
-    }
-
-    pub const fn width() -> usize {
-        size_of::<MemoryHeapReadAuxCols<u8, N>>()
     }
 }
 
@@ -282,10 +266,6 @@ impl<T> MemoryReadOrImmediateAuxCols<T> {
             .chain(iter::once(self.is_immediate))
             .chain(iter::once(self.is_zero_aux))
             .collect()
-    }
-
-    pub const fn width() -> usize {
-        size_of::<MemoryReadOrImmediateAuxCols<u8>>()
     }
 }
 

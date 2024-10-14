@@ -9,7 +9,7 @@ use ax_sdk::{
 use snark_verifier_sdk::Snark;
 
 use crate::{
-    config::outer::new_from_outer_multi_vkv2,
+    config::outer::new_from_outer_multi_vk,
     halo2::{
         utils::sort_chips,
         verifier::{
@@ -33,7 +33,7 @@ pub fn run_static_verifier_test(
     info_span.exit();
 
     // Build verification program in eDSL.
-    let advice = new_from_outer_multi_vkv2(&vparams.data.vk);
+    let advice = new_from_outer_multi_vk(&vparams.data.vk);
 
     let info_span = tracing::info_span!(
         "keygen halo2 verifier circuit",

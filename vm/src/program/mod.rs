@@ -1,11 +1,13 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{collections::HashMap, error::Error, fmt::Display, sync::Arc};
 
-use afs_stark_backend::utils::AirInfo;
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    utils::AirInfo,
+};
 use backtrace::Backtrace;
 use bridge::ProgramBus;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
     arch::{
@@ -335,6 +337,6 @@ where
         let air = program_chip.air.clone();
         let cached_trace = program_chip.generate_cached_trace();
         let common_trace = program_chip.generate_trace();
-        AirInfo::no_pis(Box::new(air), vec![cached_trace], common_trace)
+        AirInfo::no_pis(Arc::new(air), vec![cached_trace], common_trace)
     }
 }

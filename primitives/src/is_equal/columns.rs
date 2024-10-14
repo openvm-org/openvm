@@ -33,11 +33,8 @@ impl<T: Clone> IsEqualAuxCols<T> {
     pub fn flatten(&self) -> Vec<T> {
         vec![self.inv.clone()]
     }
-
-    pub fn width() -> usize {
-        1
-    }
 }
+
 impl<T: Clone> IsEqualCols<T> {
     pub const fn new(x: T, y: T, is_equal: T, inv: T) -> IsEqualCols<T> {
         IsEqualCols {

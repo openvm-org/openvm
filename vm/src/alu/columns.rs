@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use afs_derive::AlignedBorrow;
 
 use crate::{
@@ -15,15 +13,6 @@ pub struct ArithmeticLogicCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize
     pub aux: ArithmeticLogicAuxCols<T, NUM_LIMBS, LIMB_BITS>,
 }
 
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ArithmeticLogicCols<T, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn width() -> usize {
-        ArithmeticLogicAuxCols::<T, NUM_LIMBS, LIMB_BITS>::width()
-            + ArithmeticLogicIoCols::<T, NUM_LIMBS, LIMB_BITS>::width()
-    }
-}
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct ArithmeticLogicIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -34,14 +23,6 @@ pub struct ArithmeticLogicIoCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
     pub cmp_result: T,
     pub ptr_as: T,
     pub address_as: T,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ArithmeticLogicIoCols<T, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn width() -> usize {
-        size_of::<ArithmeticLogicIoCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }
 
 #[repr(C)]
@@ -68,12 +49,4 @@ pub struct ArithmeticLogicAuxCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
     pub read_y_aux_cols: MemoryReadAuxCols<T, NUM_LIMBS>,
     pub write_z_aux_cols: MemoryWriteAuxCols<T, NUM_LIMBS>,
     pub write_cmp_aux_cols: MemoryWriteAuxCols<T, 1>,
-}
-
-impl<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ArithmeticLogicAuxCols<T, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn width() -> usize {
-        size_of::<ArithmeticLogicAuxCols<u8, NUM_LIMBS, LIMB_BITS>>()
-    }
 }

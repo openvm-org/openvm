@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use afs_derive::AlignedBorrow;
 use derive_new::new;
 
@@ -8,12 +6,6 @@ use derive_new::new;
 pub struct AssertLessThanIoCols<T> {
     pub x: T,
     pub y: T,
-}
-
-impl<T> AssertLessThanIoCols<T> {
-    pub const fn width() -> usize {
-        size_of::<AssertLessThanIoCols<u8>>()
-    }
 }
 
 impl<T> AssertLessThanIoCols<T> {
@@ -35,12 +27,6 @@ pub struct AssertLessThanAuxCols<T, const AUX_LEN: usize> {
     pub lower_decomp: [T; AUX_LEN],
 }
 
-impl<T, const AUX_LEN: usize> AssertLessThanAuxCols<T, AUX_LEN> {
-    pub const fn width() -> usize {
-        size_of::<AssertLessThanAuxCols<u8, AUX_LEN>>()
-    }
-}
-
 // repr(C) is needed to make sure that the compiler does not reorder the fields
 // we assume the order of the fields when using borrow or borrow_mut
 #[repr(C)]
@@ -48,10 +34,4 @@ impl<T, const AUX_LEN: usize> AssertLessThanAuxCols<T, AUX_LEN> {
 pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
     pub io: AssertLessThanIoCols<T>,
     pub aux: AssertLessThanAuxCols<T, AUX_LEN>,
-}
-
-impl<T: Clone, const AUX_LEN: usize> AssertLessThanCols<T, AUX_LEN> {
-    pub const fn width() -> usize {
-        AssertLessThanIoCols::<T>::width() + AssertLessThanAuxCols::<T, AUX_LEN>::width()
-    }
 }

@@ -477,3 +477,15 @@ impl<C: Config, V: FromConstant<C> + MemVariable<C>> FromConstant<C> for Array<C
         array
     }
 }
+
+/// Unsafe transmute from array of one type to another.
+///
+/// SAFETY: only use this if the memory layout of types `S` and `T` align.
+/// Only usable for `Array::Dyn`, will panic otherwise.
+pub fn unsafe_array_transmute<C: Config, S, T>(arr: Array<C, S>) -> Array<C, T> {
+    if let Array::Dyn(ptr, len) = arr {
+        Array::Dyn(ptr, len)
+    } else {
+        unreachable!()
+    }
+}

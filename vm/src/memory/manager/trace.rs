@@ -1,6 +1,8 @@
 use std::{borrow::BorrowMut, cmp::max, collections::HashMap};
 
-use afs_primitives::is_less_than::columns::IsLessThanAuxColsMut;
+use afs_primitives::{
+    is_less_than::columns::IsLessThanAuxColsMut, utils::next_power_of_two_or_zero,
+};
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -41,7 +43,7 @@ impl<F: PrimeField32> MemoryChip<F> {
         match self.adapter_records.get(&N) {
             None => RowMajorMatrix::new(vec![], width),
             Some(records) => {
-                let height = records.len().next_power_of_two();
+                let height = next_power_of_two_or_zero(records.len());
                 let mut values = vec![F::zero(); height * width];
 
                 for (row, record) in values.chunks_mut(width).zip(records) {

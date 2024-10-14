@@ -4,11 +4,11 @@ use afs_primitives::xor::lookup::XorLookupChip;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::integration::{solve_cmp, BranchLessThanIntegration};
+use super::core::{solve_cmp, BranchLessThanCoreChip};
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        MachineIntegration, Rv32BranchAdapter,
+        Rv32BranchAdapter, VmCoreChip,
     },
     core::BYTE_XOR_BUS,
     program::Instruction,
@@ -21,8 +21,7 @@ type F = BabyBear;
 #[test]
 fn execute_pc_increment_sanity_test() {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_LIMB_BITS>::new(BYTE_XOR_BUS));
-    let integration =
-        BranchLessThanIntegration::<RV32_NUM_LIMBS, RV32_LIMB_BITS>::new(xor_lookup_chip, 0);
+    let core = BranchLessThanCoreChip::<RV32_NUM_LIMBS, RV32_LIMB_BITS>::new(xor_lookup_chip, 0);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchLessThanOpcode::BLT.as_usize(),
@@ -31,20 +30,18 @@ fn execute_pc_increment_sanity_test() {
     };
     let x: [F; RV32_NUM_LIMBS] = [145, 34, 25, 205].map(F::from_canonical_u32);
 
-    let result =
-        <BranchLessThanIntegration<RV32_NUM_LIMBS, RV32_LIMB_BITS> as MachineIntegration<
-            F,
-            Rv32BranchAdapter<F>,
-        >>::execute_instruction(&integration, &instruction, F::zero(), [x, x]);
+    let result = <BranchLessThanCoreChip<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
+        F,
+        Rv32BranchAdapter<F>,
+    >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
     instruction.opcode = BranchLessThanOpcode::BGE.as_usize();
-    let result =
-        <BranchLessThanIntegration<RV32_NUM_LIMBS, RV32_LIMB_BITS> as MachineIntegration<
-            F,
-            Rv32BranchAdapter<F>,
-        >>::execute_instruction(&integration, &instruction, F::zero(), [x, x]);
+    let result = <BranchLessThanCoreChip<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
+        F,
+        Rv32BranchAdapter<F>,
+    >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());
     assert_eq!(output.to_pc.unwrap(), F::from_canonical_u8(8));

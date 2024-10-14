@@ -1,10 +1,10 @@
-mod integration;
+mod core;
 
-pub use integration::*;
+pub use core::*;
 
-use crate::arch::{MachineChipWrapper, Rv32JalrAdapter};
+use crate::arch::{Rv32JalrAdapter, VmChipWrapper};
 
 #[cfg(test)]
 mod tests;
 
-pub type Rv32JalrChip<F> = MachineChipWrapper<F, Rv32JalrAdapter<F>, Rv32JalrIntegration<F>>;
+pub type Rv32JalrChip<F> = VmChipWrapper<F, Rv32JalrAdapter<F>, Rv32JalrCoreChip<F>>;

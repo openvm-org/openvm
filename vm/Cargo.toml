@@ -10,11 +10,9 @@ p3-air = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
 p3-keccak-air = { workspace = true }
-p3-commit = { workspace = true }
 p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
-p3-uni-stark = { workspace = true }
 
 poseidon2-air = { path = "../poseidon2-air", default-features = false }
 afs-primitives = { path = "../primitives", default-features = false }
@@ -44,7 +42,6 @@ metrics = { workspace = true, optional = true }
 inferno = { workspace = true, optional = true }
 
 [dev-dependencies]
-p3-uni-stark = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-challenger = { workspace = true }
 p3-dft = { workspace = true }

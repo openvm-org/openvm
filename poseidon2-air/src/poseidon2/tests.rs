@@ -1,7 +1,7 @@
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ark_ff::PrimeField as _;
 use ax_sdk::{
-    any_rap_box_vec,
+    any_rap_arc_vec,
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -104,7 +104,7 @@ fn test_poseidon2_default() {
     // positive test
     engine
         .run_simple_test_impl(
-            any_rap_box_vec![poseidon2_air.clone(), page_requester],
+            any_rap_arc_vec![poseidon2_air.clone(), page_requester],
             traces,
             vec![vec![]; 2],
         )
@@ -120,7 +120,7 @@ fn test_poseidon2_default() {
         assert_eq!(
             engine
                 .run_simple_test_impl(
-                    any_rap_box_vec![poseidon2_air.clone(), page_requester],
+                    any_rap_arc_vec![poseidon2_air.clone(), page_requester],
                     vec![poseidon2_trace.clone(), dummy_trace.clone()],
                     vec![vec![]; 2],
                 )
@@ -220,7 +220,7 @@ fn test_poseidon2() {
     // positive test
     engine
         .run_simple_test_impl(
-            any_rap_box_vec![poseidon2_air.clone(), page_requester],
+            any_rap_arc_vec![poseidon2_air.clone(), page_requester],
             traces,
             vec![vec![]; 2],
         )
@@ -236,7 +236,7 @@ fn test_poseidon2() {
         assert_eq!(
             engine
                 .run_simple_test_impl(
-                    any_rap_box_vec![poseidon2_air.clone(), page_requester],
+                    any_rap_arc_vec![poseidon2_air.clone(), page_requester],
                     vec![poseidon2_trace.clone(), dummy_trace.clone()],
                     vec![vec![]; 2],
                 )

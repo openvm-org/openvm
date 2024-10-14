@@ -1,7 +1,9 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{engine::VerificationData, utils::AirInfo, verifier::VerificationError};
+use afs_stark_backend::{
+    config::Val, engine::VerificationData, utils::AirInfo, verifier::VerificationError, Chip,
+};
 use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
@@ -14,7 +16,7 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use crate::{
-    arch::{ExecutionState, MachineChip},
+    arch::{ExecutionState, VmChip},
     core::RANGE_CHECKER_BUS,
     memory::{offline_checker::MemoryBus, MemoryChip},
     program::{bridge::ProgramBus, Instruction},
@@ -32,14 +34,14 @@ use super::{ExecutionBus, InstructionExecutor};
 use crate::{hashes::poseidon2::Poseidon2Chip, memory::MemoryChipRef, vm::config::PersistenceType};
 
 #[derive(Clone, Debug)]
-pub struct MachineChipTestBuilder<F: PrimeField32> {
+pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
     rng: StdRng,
 }
 
-impl<F: PrimeField32> MachineChipTestBuilder<F> {
+impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
         memory_chip: MemoryChipRef<F>,
         execution_bus: ExecutionBus,
@@ -115,13 +117,13 @@ impl<F: PrimeField32> MachineChipTestBuilder<F> {
     }
 }
 
-impl MachineChipTestBuilder<BabyBear> {
-    pub fn build(self) -> MachineChipTester {
+impl VmChipTestBuilder<BabyBear> {
+    pub fn build(self) -> VmChipTester {
         self.memory
             .chip
             .borrow_mut()
             .finalize(None::<&mut Poseidon2Chip<BabyBear>>);
-        let tester = MachineChipTester {
+        let tester = VmChipTester {
             memory: Some(self.memory),
             ..Default::default()
         };
@@ -130,7 +132,7 @@ impl MachineChipTestBuilder<BabyBear> {
     }
 }
 
-impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
+impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
         let mem_config = MemoryConfig::new(2, 29, 29, 17, PersistenceType::Volatile);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
@@ -148,25 +150,25 @@ impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
 }
 
 // TODO[jpw]: generic Config
+type SC = BabyBearPoseidon2Config;
+
 #[derive(Default)]
-pub struct MachineChipTester {
-    pub memory: Option<MemoryTester<BabyBear>>,
-    pub air_infos: Vec<AirInfo<BabyBearPoseidon2Config>>,
+pub struct VmChipTester {
+    pub memory: Option<MemoryTester<Val<SC>>>,
+    pub air_infos: Vec<AirInfo<SC>>,
 }
 
-impl MachineChipTester {
-    pub fn load<C: MachineChip<BabyBear>>(mut self, mut chip: C) -> Self {
-        let public_values = chip.generate_public_values_per_air();
-        let airs = chip.airs();
-        let traces = chip.generate_traces();
+impl VmChipTester {
+    pub fn load<C: VmChip<Val<SC>> + Chip<SC>>(mut self, mut chip: C) -> Self {
+        let public_value = chip.generate_public_values();
+        let air = chip.air();
+        let trace = chip.generate_trace();
 
-        for (public_value, air, trace) in izip!(public_values, airs, traces) {
-            if trace.height() > 0 {
-                dbg!(air.name());
-                dbg!(trace.width);
-                self.air_infos
-                    .push(AirInfo::simple(air, trace, public_value));
-            }
+        if trace.height() > 0 {
+            dbg!(air.name());
+            dbg!(trace.width);
+            self.air_infos
+                .push(AirInfo::simple(air, trace, public_value));
         }
 
         self
@@ -174,19 +176,34 @@ impl MachineChipTester {
 
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
-            let manager = memory_tester.chip.clone();
-            let range_checker = manager.borrow().range_checker.clone();
+            let memory_chip = memory_tester.chip.clone();
+            let range_checker = memory_chip.borrow().range_checker.clone();
             self = self.load(memory_tester); // dummy memory interactions
-            self = self.load(manager); // memory initial and final state
+            {
+                let memory = memory_chip.borrow();
+                let public_values = memory.generate_public_values_per_air();
+                let airs = memory.airs();
+                drop(memory);
+                let traces = Rc::try_unwrap(memory_chip)
+                    .unwrap()
+                    .into_inner()
+                    .generate_traces();
+
+                for (pvs, air, trace) in izip!(public_values, airs, traces) {
+                    if trace.height() > 0 {
+                        self.air_infos.push(AirInfo::simple(air, trace, pvs));
+                    }
+                }
+            }
             self = self.load(range_checker); // this must be last because other trace generation mutates its state
         }
         self
     }
 
-    pub fn load_with_custom_trace<C: MachineChip<BabyBear>>(
+    pub fn load_with_custom_trace<C: VmChip<Val<SC>> + Chip<SC>>(
         mut self,
         mut chip: C,
-        trace: RowMajorMatrix<BabyBear>,
+        trace: RowMajorMatrix<Val<SC>>,
     ) -> Self {
         self.air_infos.push(AirInfo::simple(
             chip.air(),
@@ -196,9 +213,7 @@ impl MachineChipTester {
         self
     }
 
-    pub fn simple_test(
-        &self,
-    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
+    pub fn simple_test(&self) -> Result<VerificationData<SC>, VerificationError> {
         self.test(baby_bear_poseidon2::default_engine)
     }
 
@@ -211,10 +226,10 @@ impl MachineChipTester {
     }
     /// Given a function to produce an engine from the max trace height,
     /// runs a simple test on that engine
-    pub fn test<E: StarkEngine<BabyBearPoseidon2Config>, P: Fn(usize) -> E>(
+    pub fn test<E: StarkEngine<SC>, P: Fn(usize) -> E>(
         &self, // do no take ownership so it's easier to prank
         engine_provider: P,
-    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
+    ) -> Result<VerificationData<SC>, VerificationError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
         engine_provider(self.max_trace_height()).run_test_impl(&self.air_infos)
     }

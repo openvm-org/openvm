@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use afs_derive::AlignedBorrow;
 use derive_new::new;
 
@@ -19,12 +17,6 @@ pub struct ModularAddSubCols<T: Clone, const NUM_LIMBS: usize> {
     pub aux: ModularAddSubAuxCols<T, NUM_LIMBS>,
 }
 
-impl<T: Clone, const NUM_LIMBS: usize> ModularAddSubCols<T, NUM_LIMBS> {
-    pub const fn width() -> usize {
-        ModularAddSubIoCols::<T, NUM_LIMBS>::width() + ModularAddSubAuxCols::<T, NUM_LIMBS>::width()
-    }
-}
-
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Debug)]
 pub struct ModularAddSubIoCols<T: Clone, const NUM_LIMBS: usize> {
@@ -32,12 +24,6 @@ pub struct ModularAddSubIoCols<T: Clone, const NUM_LIMBS: usize> {
     pub x: MemoryHeapDataIoCols<T, NUM_LIMBS>,
     pub y: MemoryHeapDataIoCols<T, NUM_LIMBS>,
     pub z: MemoryHeapDataIoCols<T, NUM_LIMBS>,
-}
-
-impl<T: Clone, const NUM_LIMBS: usize> ModularAddSubIoCols<T, NUM_LIMBS> {
-    pub const fn width() -> usize {
-        size_of::<ModularAddSubIoCols<u8, NUM_LIMBS>>()
-    }
 }
 
 // Note: to save a column we assume that is_sub is represented as is_valid - is_add
@@ -54,10 +40,4 @@ pub struct ModularAddSubAuxCols<T: Clone, const NUM_LIMBS: usize> {
     pub carries: [T; NUM_LIMBS],
     pub q: T,
     pub is_add: T,
-}
-
-impl<T: Clone, const NUM_LIMBS: usize> ModularAddSubAuxCols<T, NUM_LIMBS> {
-    pub const fn width() -> usize {
-        size_of::<ModularAddSubAuxCols<u8, NUM_LIMBS>>()
-    }
 }

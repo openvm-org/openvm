@@ -5,7 +5,7 @@ use p3_field::AbstractField;
 
 use super::{EcAddUnequalChip, EcDoubleChip, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS};
 use crate::{
-    arch::{instructions::EccOpcode, testing::MachineChipTestBuilder},
+    arch::{instructions::EccOpcode, testing::VmChipTestBuilder},
     program::Instruction,
     utils::biguint_to_limbs,
 };
@@ -14,7 +14,7 @@ use crate::{
 fn test_ec_add() {
     setup_tracing();
 
-    let mut tester: MachineChipTestBuilder<BabyBear> = MachineChipTestBuilder::default();
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
 
     let mut ec_chip = EcAddUnequalChip::new(
         tester.execution_bus(),
@@ -90,7 +90,7 @@ fn test_ec_add() {
 fn test_ec_double() {
     setup_tracing();
 
-    let mut tester: MachineChipTestBuilder<BabyBear> = MachineChipTestBuilder::default();
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
 
     let mut ec_chip = EcDoubleChip::new(
         tester.execution_bus(),

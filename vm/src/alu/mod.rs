@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_primitives::xor::lookup::XorLookupChip;
-use air::ArithmeticLogicAir;
+use air::ArithmeticLogicCoreAir;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -58,7 +58,7 @@ pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
 
 #[derive(Clone, Debug)]
 pub struct ArithmeticLogicChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>,
+    pub air: ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ArithmeticLogicRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
@@ -78,7 +78,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     ) -> Self {
         let memory_bridge = memory_chip.borrow().memory_bridge();
         Self {
-            air: ArithmeticLogicAir {
+            air: ArithmeticLogicCoreAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bus: xor_lookup_chip.bus(),
@@ -109,7 +109,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        let opcode = U256Opcode::from_usize(opcode - self.offset);
+        let local_opcode_index = U256Opcode::from_usize(opcode - self.offset);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -124,9 +124,9 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
-        let (z, cmp) = solve_alu::<T, NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
+        let (z, cmp) = solve_alu::<T, NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
-        let z_write = if ALU_CMP_INSTRUCTIONS.contains(&opcode) {
+        let z_write = if ALU_CMP_INSTRUCTIONS.contains(&local_opcode_index) {
             WriteRecord::Bool(memory_chip.write_cell(e, z_ptr_read.value(), T::from_bool(cmp)))
         } else {
             WriteRecord::Long(
@@ -146,7 +146,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         let mut x_sign = 0;
         let mut y_sign = 0;
 
-        if opcode == U256Opcode::SLT {
+        if local_opcode_index == U256Opcode::SLT {
             x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             y_sign = y[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             self.xor_lookup_chip
@@ -155,11 +155,11 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
                 .request(y[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
         }
 
-        if ALU_BITWISE_INSTRUCTIONS.contains(&opcode) {
+        if ALU_BITWISE_INSTRUCTIONS.contains(&local_opcode_index) {
             for i in 0..NUM_LIMBS {
                 self.xor_lookup_chip.request(x[i], y[i]);
             }
-        } else if opcode != U256Opcode::EQ {
+        } else if local_opcode_index != U256Opcode::EQ {
             for z_val in &z {
                 self.xor_lookup_chip.request(*z_val, *z_val);
             }
@@ -169,7 +169,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             .push(ArithmeticLogicRecord::<T, NUM_LIMBS, LIMB_BITS> {
                 from_state,
                 instruction: Instruction {
-                    opcode: opcode as usize,
+                    opcode: local_opcode_index as usize,
                     ..instruction
                 },
                 x_ptr_read,
@@ -180,7 +180,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
                 z_write,
                 x_sign: T::from_canonical_u32(x_sign),
                 y_sign: T::from_canonical_u32(y_sign),
-                cmp_buffer: if ALU_CMP_INSTRUCTIONS.contains(&opcode) {
+                cmp_buffer: if ALU_CMP_INSTRUCTIONS.contains(&local_opcode_index) {
                     z.into_iter().map(T::from_canonical_u32).collect()
                 } else {
                     vec![]
@@ -194,17 +194,17 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        let opcode = U256Opcode::from_usize(opcode - self.offset);
-        format!("{opcode:?}<{NUM_LIMBS},{LIMB_BITS}>")
+        let local_opcode_index = U256Opcode::from_usize(opcode - self.offset);
+        format!("{local_opcode_index:?}<{NUM_LIMBS},{LIMB_BITS}>")
     }
 }
 
 fn solve_alu<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    opcode: U256Opcode,
+    local_opcode_index: U256Opcode,
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, bool) {
-    match opcode {
+    match local_opcode_index {
         U256Opcode::ADD => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
         U256Opcode::SUB | U256Opcode::LT => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
         U256Opcode::EQ => solve_eq::<T, NUM_LIMBS, LIMB_BITS>(x, y),

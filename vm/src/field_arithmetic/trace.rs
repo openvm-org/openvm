@@ -1,8 +1,12 @@
-use afs_stark_backend::rap::{get_air_name, AnyRap};
-use p3_commit::PolynomialSpace;
+use std::sync::Arc;
+
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::{get_air_name, AnyRap},
+    Chip,
+};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use super::{
     columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
@@ -11,7 +15,7 @@ use super::{
 use crate::{
     arch::{
         instructions::{FieldArithmeticOpcode, UsizeOpcode},
-        MachineChip,
+        VmChip,
     },
     memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
 };
@@ -82,7 +86,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
+impl<F: PrimeField32> VmChip<F> for FieldArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
@@ -107,18 +111,20 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
         get_air_name(&self.air)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(self.air)
-    }
-
     fn current_trace_height(&self) -> usize {
         self.records.len()
     }
 
     fn trace_width(&self) -> usize {
         FieldArithmeticCols::<F>::get_width()
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for FieldArithmeticChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 }

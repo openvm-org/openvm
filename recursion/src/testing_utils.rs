@@ -30,10 +30,7 @@ pub mod inner {
     use stark_vm::vm::config::VmConfig;
 
     use super::*;
-    use crate::{
-        hints::Hintable,
-        v2::{stark::VerifierProgramV2, types::new_from_inner_multi_vkv2},
-    };
+    use crate::{hints::Hintable, stark::VerifierProgram, types::new_from_inner_multi_vk};
 
     pub fn build_verification_program(
         vparams: VerificationDataWithFriParams<InnerSC>,
@@ -42,13 +39,13 @@ pub mod inner {
         let VerificationDataWithFriParams { data, fri_params } = vparams;
         let VerificationData { proof, vk } = data;
 
-        let advice = new_from_inner_multi_vkv2(&vk);
+        let advice = new_from_inner_multi_vk(&vk);
         cfg_if::cfg_if! {
             if #[cfg(feature = "bench-metrics")] {
                 let start = std::time::Instant::now();
             }
         }
-        let program = VerifierProgramV2::build_with_options(advice, &fri_params, compiler_options);
+        let program = VerifierProgram::build_with_options(advice, &fri_params, compiler_options);
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("verify_program_compile_ms").set(start.elapsed().as_millis() as f64);
 

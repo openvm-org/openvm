@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use itertools::izip;
 use p3_matrix::dense::DenseMatrix;
 use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
@@ -5,30 +8,23 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use crate::{
     config::{Com, PcsProof, PcsProverData},
     keygen::{
-        v2::{
-            types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
-            MultiStarkKeygenBuilderV2,
-        },
+        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
     },
     parizip,
     prover::{
-        trace::{TraceCommitmentBuilder, TraceCommitter},
-        v2::{
-            types::{AirProofInput, CommittedTraceData, ProofInput, ProofV2},
-            MultiTraceStarkProverV2,
-        },
+        types::{AirProofInput, CommittedTraceData, Proof, ProofInput, TraceCommitter},
         MultiTraceStarkProver,
     },
     rap::AnyRap,
     utils::AirInfo,
-    verifier::{v2::MultiTraceStarkVerifierV2, MultiTraceStarkVerifier, VerificationError},
+    verifier::{MultiTraceStarkVerifier, VerificationError},
 };
 
 /// Data for verifying a Stark proof.
 pub struct VerificationData<SC: StarkGenericConfig> {
-    pub vk: MultiStarkVerifyingKeyV2<SC>,
-    pub proof: ProofV2<SC>,
+    pub vk: MultiStarkVerifyingKey<SC>,
+    pub proof: Proof<SC>,
 }
 
 /// Testing engine
@@ -40,43 +36,26 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
     /// them having the same starting state.
     fn new_challenger(&self) -> SC::Challenger;
 
-    fn keygen_builder(&self) -> MultiStarkKeygenBuilderV2<SC> {
-        MultiStarkKeygenBuilderV2::new(self.config())
-    }
-
-    fn keygen_builder_v1(&self) -> MultiStarkKeygenBuilder<SC> {
+    fn keygen_builder(&self) -> MultiStarkKeygenBuilder<SC> {
         MultiStarkKeygenBuilder::new(self.config())
     }
 
-    fn trace_commitment_builder<'a>(&'a self) -> TraceCommitmentBuilder<'a, SC>
-    where
-        SC: 'a,
-    {
-        TraceCommitmentBuilder::new(self.config().pcs())
-    }
-
-    fn prover(&self) -> MultiTraceStarkProverV2<SC> {
-        MultiTraceStarkProverV2::new(self.config())
-    }
-
-    fn prover_v1(&self) -> MultiTraceStarkProver<SC> {
+    fn prover(&self) -> MultiTraceStarkProver<SC> {
         MultiTraceStarkProver::new(self.config())
     }
 
-    fn verifier(&self) -> MultiTraceStarkVerifierV2<SC> {
-        MultiTraceStarkVerifierV2::new(self.config())
-    }
-
-    fn verifier_v1(&self) -> MultiTraceStarkVerifier<SC> {
+    fn verifier(&self) -> MultiTraceStarkVerifier<SC> {
         MultiTraceStarkVerifier::new(self.config())
     }
+
+    // TODO[jpw]: the following does not belong in this crate! dev tooling only
 
     /// Runs a single end-to-end test for a given set of AIRs and traces.
     /// This includes proving/verifying key generation, creating a proof, and verifying the proof.
     /// This function should only be used on AIRs where the main trace is **not** partitioned.
     fn run_simple_test_impl(
         &self,
-        chips: Vec<Box<dyn AnyRap<SC>>>,
+        chips: Vec<Arc<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: Vec<Vec<Val<SC>>>,
     ) -> Result<VerificationData<SC>, VerificationError>
@@ -117,26 +96,26 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
     /// Add AIRs and get AIR IDs
     fn set_up_keygen_builder<'a>(
         &self,
-        keygen_builder: &mut MultiStarkKeygenBuilderV2<'a, SC>,
+        keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
         air_infos: &'a [AirInfo<SC>],
     ) -> Vec<usize> {
         air_infos
             .iter()
             .map(|air_info| {
-                let air = &air_info.air;
+                let air = air_info.air.clone();
                 assert_eq!(air_info.cached_traces.len(), air.cached_main_widths().len());
                 assert_eq!(air_info.common_trace.width, air.common_main_width());
-                keygen_builder.add_air(air.as_ref())
+                keygen_builder.add_air(air)
             })
             .collect()
     }
 
     fn prove(
         &self,
-        pk: &MultiStarkProvingKeyV2<SC>,
+        pk: &MultiStarkProvingKey<SC>,
         air_infos: &[AirInfo<SC>],
         air_ids: Vec<usize>,
-    ) -> ProofV2<SC>
+    ) -> Proof<SC>
     where
         SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
@@ -149,7 +128,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         let committer = TraceCommitter::new(prover.pcs());
 
         // Commit to the cached traces
-        let air_proof_inputs = parizip!(air_ids, air_infos)
+        let air_proof_inputs = izip!(air_ids, air_infos)
             .map(|(air_id, air_info)| {
                 let cached_mains = parizip!(air_info.cached_traces.clone())
                     .map(|trace| CommittedTraceData {
@@ -160,7 +139,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
                 (
                     air_id,
                     AirProofInput {
-                        air: air_info.air.as_ref(),
+                        air: air_info.air.clone(),
                         cached_mains,
                         common_main: Some(air_info.common_trace.clone()),
                         public_values: air_info.public_values.clone(),
@@ -186,8 +165,8 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
 
     fn verify(
         &self,
-        vk: &MultiStarkVerifyingKeyV2<SC>,
-        proof: &ProofV2<SC>,
+        vk: &MultiStarkVerifyingKey<SC>,
+        proof: &Proof<SC>,
     ) -> Result<(), VerificationError> {
         let mut challenger = self.new_challenger();
         let verifier = self.verifier();
