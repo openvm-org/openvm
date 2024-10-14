@@ -14,7 +14,7 @@ use snark_verifier_sdk::snark_verifier::{
     },
     util::arithmetic::PrimeField as _,
 };
-use stark_vm::vm::cycle_tracker::CycleTracker;
+use stark_vm::system::vm::cycle_tracker::CycleTracker;
 
 use super::stats::Halo2Stats;
 use crate::{
