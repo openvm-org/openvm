@@ -18,6 +18,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
 
     // Adapted from the gnark implementation:
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/hints.go#L273
+    // returns c (residueWitness) and s (scalingFactor)
     fn final_exp_hint(&self, f: Fq12) -> (Fq12, Fq12) {
         // 1. get p-th root inverse
         let mut exp = FINAL_EXP_FACTOR.clone() * BigInt::from(27);
@@ -37,6 +38,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
 
         root = f.exp_bigint(exp.clone());
+        // NOTE[yj]: we can probably remove this first check as an optimization since we initizlize order_3rd_power to 0
         if root == Fq12::one() {
             order_3rd_power = 0;
         }
