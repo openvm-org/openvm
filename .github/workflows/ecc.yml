@@ -42,7 +42,7 @@ jobs:
       - name: Run ecc-execution crate tests
         working-directory: lib/ecc-execution
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel
+          cargo nextest run --cargo-profile=fast
 
       - name: Run ecc-circuits crate tests
         working-directory: circuits/ecc
