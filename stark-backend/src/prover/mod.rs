@@ -23,7 +23,8 @@ use crate::{
         opener::OpeningProver,
         quotient::ProverQuotientData,
         trace::{
-            commit_permutation_traces, commit_quotient_traces, ProverTraceData, TraceCommitter,
+            commit_quotient_traces, generate_permutation_traces_and_cumulative_sums,
+            ProverTraceData, TraceCommitter,
         },
         types::{AirProofData, Commitments, Proof, ProofInput},
     },
@@ -166,7 +167,12 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .collect();
 
         let (cumulative_sum_per_air, perm_trace_per_air) =
-            commit_permutation_traces(&mpk, &challenges, &main_views_per_air, &pvs_per_air);
+            generate_permutation_traces_and_cumulative_sums(
+                &mpk,
+                &challenges,
+                &main_views_per_air,
+                &pvs_per_air,
+            );
 
         #[cfg(debug_assertions)]
         debug_constraints_and_interactions(

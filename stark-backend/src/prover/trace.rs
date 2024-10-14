@@ -25,7 +25,7 @@ use crate::{
 };
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-pub(super) fn commit_permutation_traces<SC: StarkGenericConfig>(
+pub(super) fn generate_permutation_traces_and_cumulative_sums<SC: StarkGenericConfig>(
     mpk: &MultiStarkProvingKeyView<SC>,
     challenges: &[Vec<SC::Challenge>],
     main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
