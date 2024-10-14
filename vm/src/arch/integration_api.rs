@@ -352,6 +352,7 @@ where
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
 ///
+#[derive(Clone)]
 pub struct BasicAdapterInterface<
     T,
     const NUM_READS: usize,

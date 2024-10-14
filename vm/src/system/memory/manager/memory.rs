@@ -72,6 +72,18 @@ impl<T: Copy> MemoryReadRecord<T, 1> {
     }
 }
 
+impl<F: PrimeField32, const N: usize> MemoryReadRecord<F, N> {
+    pub fn disabled() -> Self {
+        Self {
+            address_space: F::zero(),
+            pointer: F::zero(),
+            timestamp: 0,
+            prev_timestamp: 0,
+            data: [F::zero(); N],
+        }
+    }
+}
+
 /// The ID of the node corresponding to the block in the binary trie. (See [Memory] for more details.)
 ///
 /// The ID of the root node is 1. The ID of the left child of a node with id `node_id` is `2*node_id`,

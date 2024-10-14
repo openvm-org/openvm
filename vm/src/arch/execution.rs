@@ -177,6 +177,21 @@ impl ExecutionBridge {
         self.execute(opcode, operands, from_state, to_state)
     }
 
+    pub fn execute_and_set_pc_increment<AB: InteractionBuilder>(
+        &self,
+        opcode: impl Into<AB::Expr>,
+        operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
+        from_state: ExecutionState<impl Into<AB::Expr> + Clone>,
+        timestamp_change: impl Into<AB::Expr>,
+        pc_inc: impl Into<AB::Expr>,
+    ) -> ExecutionBridgeInteractor<AB> {
+        let to_state = ExecutionState {
+            pc: from_state.pc.clone().into() + pc_inc.into(),
+            timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
+        };
+        self.execute(opcode, operands, from_state, to_state)
+    }
+
     pub fn execute<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
