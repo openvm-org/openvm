@@ -375,6 +375,36 @@ impl<
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
+pub struct FlatInterface<T, const READ_BYTES: usize, const WRITE_BYTES: usize>(PhantomData<T>);
+
+impl<T: AbstractField, const READ_BYTES: usize, const WRITE_BYTES: usize> VmAdapterInterface<T>
+    for FlatInterface<T, READ_BYTES, WRITE_BYTES>
+{
+    type Reads = [T; READ_BYTES];
+    type Writes = [T; WRITE_BYTES];
+    type ProcessedInstruction = MinimalInstruction<T>;
+}
+
+impl<
+        T: AbstractField,
+        const READ_BYTES: usize,
+        const WRITE_BYTES: usize,
+        const NUM_READS: usize,
+        const NUM_WRITES: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > From<FlatInterface<T, READ_BYTES, WRITE_BYTES>>
+    for BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
+{
+    fn from(
+        _: FlatInterface<T, READ_BYTES, WRITE_BYTES>,
+    ) -> BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE> {
+        assert_eq!(READ_BYTES, NUM_READS * READ_SIZE);
+        assert_eq!(WRITE_BYTES, NUM_WRITES * WRITE_SIZE);
+        BasicAdapterInterface(PhantomData)
+    }
+}
+
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct MinimalInstruction<T> {
