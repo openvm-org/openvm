@@ -142,7 +142,6 @@ pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
     pub writes: I::Writes,
 }
 
-// better name: AdapterRuntimeContext
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<T>,
@@ -257,32 +256,32 @@ where
 // then VmAirWrapper<A::Air, M::Air> is an Air for all AirBuilders needed
 // by stark-backend, which is equivalent to saying it implements AnyRap<SC>
 // The where clauses to achieve this statement is unfortunately really verbose.
-impl<SC, A, M> Chip<SC> for VmChipWrapper<Val<SC>, A, M>
+impl<SC, A, C> Chip<SC> for VmChipWrapper<Val<SC>, A, C>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
     A: VmAdapterChip<Val<SC>>,
-    M: VmCoreChip<Val<SC>, A>,
+    C: VmCoreChip<Val<SC>, A>,
     A::Air: 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
     A::Air: for<'a> VmAdapterAir<DebugConstraintBuilder<'a, SC>>,
-    M::Air: 'static,
-    M::Air: VmCoreAir<
+    C::Air: 'static,
+    C::Air: VmCoreAir<
         SymbolicRapBuilder<Val<SC>>,
         <A::Air as VmAdapterAir<SymbolicRapBuilder<Val<SC>>>>::Interface,
     >,
-    M::Air: for<'a> VmCoreAir<
+    C::Air: for<'a> VmCoreAir<
         ProverConstraintFolder<'a, SC>,
         <A::Air as VmAdapterAir<ProverConstraintFolder<'a, SC>>>::Interface,
     >,
-    M::Air: for<'a> VmCoreAir<
+    C::Air: for<'a> VmCoreAir<
         DebugConstraintBuilder<'a, SC>,
         <A::Air as VmAdapterAir<DebugConstraintBuilder<'a, SC>>>::Interface,
     >,
 {
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        let air: VmAirWrapper<A::Air, M::Air> = VmAirWrapper {
+        let air: VmAirWrapper<A::Air, C::Air> = VmAirWrapper {
             adapter: self.adapter.air().clone(),
             core: self.core.air().clone(),
         };
