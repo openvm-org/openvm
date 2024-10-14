@@ -1,4 +1,4 @@
-use stark_vm::hashes::keccak::hasher::KECCAK_DIGEST_BYTES;
+use stark_vm::intrinsics::hashes::keccak::hasher::KECCAK_DIGEST_BYTES;
 
 use super::{Array, Builder, Config, DslIr, Var};
 

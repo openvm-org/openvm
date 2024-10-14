@@ -2,7 +2,7 @@ use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
 use p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
-use stark_vm::program::DebugInfo;
+use stark_vm::system::program::DebugInfo;
 
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{

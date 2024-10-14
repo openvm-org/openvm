@@ -2,8 +2,10 @@ use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use stark_vm::{
     arch::instructions::*,
-    program::{DebugInfo, Instruction, Program},
-    vm::config::Modulus,
+    system::{
+        program::{DebugInfo, Instruction, Program},
+        vm::config::Modulus,
+    },
 };
 use strum::EnumCount;
 

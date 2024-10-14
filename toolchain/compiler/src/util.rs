@@ -9,8 +9,10 @@ pub const TWO_NUM_LIMBS: usize = 2 * NUM_LIMBS;
 
 use stark_vm::{
     arch::ExecutorName,
-    program::{Instruction, Program},
-    vm::{config::VmConfig, VirtualMachine},
+    system::{
+        program::{Instruction, Program},
+        vm::{config::VmConfig, VirtualMachine},
+    },
 };
 
 pub fn execute_program_with_config(

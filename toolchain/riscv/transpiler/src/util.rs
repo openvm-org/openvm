@@ -2,7 +2,7 @@ use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
 use stark_vm::{
     arch::instructions::CoreOpcode,
-    program::{isize_to_field, Instruction},
+    system::program::{isize_to_field, Instruction},
 };
 
 fn i12_to_u24(imm: i32) -> u32 {

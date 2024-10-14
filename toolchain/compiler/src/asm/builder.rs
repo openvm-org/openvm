@@ -1,5 +1,5 @@
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
-use stark_vm::program::Program;
+use stark_vm::system::program::Program;
 
 use super::{config::AsmConfig, AsmCompiler};
 use crate::{

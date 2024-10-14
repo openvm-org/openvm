@@ -11,7 +11,7 @@ use stark_vm::{
         MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
         Rv32LoadStoreOpcode, ShiftOpcode, UsizeOpcode,
     },
-    program::Instruction,
+    system::program::Instruction,
 };
 
 use crate::util::*;
