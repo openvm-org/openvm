@@ -42,7 +42,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> VmChipTester {
     let mut chip = KeccakVmChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_chip.clone(),
         0,
     );

@@ -31,7 +31,7 @@ fn field_extension_air_test() {
     let mut chip = FieldExtensionArithmeticChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 

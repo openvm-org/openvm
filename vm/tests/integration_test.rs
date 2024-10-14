@@ -177,12 +177,14 @@ fn test_vm_1_persistent() {
         .unwrap();
     assert_eq!(merkle_air_info.public_values.len(), 16);
     assert_eq!(
-        merkle_air_info.public_values[0..8],
-        merkle_air_info.public_values[8..16]
+        merkle_air_info.public_values[..8],
+        merkle_air_info.public_values[8..]
     );
     assert_eq!(
-        merkle_air_info.public_values[0..8],
-        // The Merkle root of all zeros.
+        merkle_air_info.public_values[..8],
+        // The value when you start with zeros and repeatedly hash the value with itself
+        // 13 times. We use 13 because addr_space_max_bits = 1 and pointer_max_bits = 16,
+        // so the height of the tree is 1 + 16 - 3 = 14.
         [
             600046300, 1545134495, 977657425, 1213239099, 417259453, 434928898, 891129211,
             1521571686

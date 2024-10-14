@@ -39,7 +39,7 @@ fn field_arithmetic_air_test() {
     let mut field_arithmetic_chip = FieldArithmeticChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 
@@ -127,7 +127,7 @@ fn field_arithmetic_air_zero_div_zero() {
     let mut field_arithmetic_chip = FieldArithmeticChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
     tester.write_cell(1, 0, BabyBear::zero());
@@ -164,7 +164,7 @@ fn field_arithmetic_air_test_panic() {
     let mut field_arithmetic_chip = FieldArithmeticChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
     tester.write_cell(1, 0, BabyBear::zero());

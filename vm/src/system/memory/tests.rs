@@ -30,7 +30,7 @@ use rand::{
     Rng,
 };
 
-use super::{MemoryAuxColsFactory, MemoryChip, MemoryEquipartition, MemoryReadRecord};
+use super::{MemoryAuxColsFactory, MemoryController, MemoryEquipartition, MemoryReadRecord};
 use crate::{
     arch::{testing::memory::gen_pointer, ExecutionBus, VmChip},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
@@ -224,7 +224,7 @@ fn generate_trace<F: PrimeField32>(
 /// Creates a bunch of random read/write records, used to generate a trace for [MemoryRequesterAir],
 /// which sends reads/writes over [MemoryBridge].
 #[test]
-fn test_memory_chip() {
+fn test_memory_controller() {
     let memory_bus = MemoryBus(1);
     let memory_config = MemoryConfig {
         persistence_type: PersistenceType::Volatile,
@@ -233,18 +233,21 @@ fn test_memory_chip() {
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-    let mut memory_chip =
-        MemoryChip::with_volatile_memory(memory_bus, memory_config.clone(), range_checker.clone());
-    let aux_factory = memory_chip.aux_cols_factory();
+    let mut memory_controller = MemoryController::with_volatile_memory(
+        memory_bus,
+        memory_config.clone(),
+        range_checker.clone(),
+    );
+    let aux_factory = memory_controller.aux_cols_factory();
 
     let mut rng = create_seeded_rng();
-    let records = make_random_accesses(&mut memory_chip, &mut rng);
+    let records = make_random_accesses(&mut memory_controller, &mut rng);
     let memory_requester_trace = generate_trace(records, aux_factory);
 
-    let memory_airs = memory_chip.airs();
+    let memory_airs = memory_controller.airs();
     let range_checker_air = range_checker.air();
     let memory_requester_air = Arc::new(MemoryRequesterAir {
-        memory_bridge: memory_chip.memory_bridge(),
+        memory_bridge: memory_controller.memory_bridge(),
     });
     let airs: Vec<Arc<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_airs
         .into_iter()
@@ -252,9 +255,9 @@ fn test_memory_chip() {
         .chain(iter::once(range_checker_air))
         .collect();
 
-    memory_chip.finalize(None::<&mut Poseidon2Chip<BabyBear>>);
+    memory_controller.finalize(None::<&mut Poseidon2Chip<BabyBear>>);
 
-    let traces = memory_chip
+    let traces = memory_controller
         .generate_traces()
         .into_iter()
         .chain(iter::once(memory_requester_trace))
@@ -266,7 +269,7 @@ fn test_memory_chip() {
 }
 
 #[test]
-fn test_memory_chip_persistent() {
+fn test_memory_controller_persistent() {
     let memory_bus = MemoryBus(1);
     let merkle_bus = MemoryMerkleBus(20);
     let memory_config = MemoryConfig {
@@ -276,24 +279,24 @@ fn test_memory_chip_persistent() {
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-    let mut memory_chip = MemoryChip::with_persistent_memory(
+    let mut memory_controller = MemoryController::with_persistent_memory(
         memory_bus,
         memory_config.clone(),
         range_checker.clone(),
         merkle_bus,
         MemoryEquipartition::new(),
     );
-    let aux_factory = memory_chip.aux_cols_factory();
+    let aux_factory = memory_controller.aux_cols_factory();
 
     let mut rng = create_seeded_rng();
-    let records = make_random_accesses(&mut memory_chip, &mut rng);
+    let records = make_random_accesses(&mut memory_controller, &mut rng);
     let memory_requester_trace = generate_trace(records, aux_factory);
 
     let memory_requester_air = MemoryRequesterAir {
-        memory_bridge: memory_chip.memory_bridge(),
+        memory_bridge: memory_controller.memory_bridge(),
     };
 
-    let dummy_memory_chip = MemoryChip::with_volatile_memory(
+    let dummy_memory_controller = MemoryController::with_volatile_memory(
         MemoryBus(0),
         MemoryConfig::default(),
         Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
@@ -306,15 +309,15 @@ fn test_memory_chip_persistent() {
         3,
         ExecutionBus(0),
         ProgramBus(0),
-        Rc::new(RefCell::new(dummy_memory_chip)),
+        Rc::new(RefCell::new(dummy_memory_controller)),
         0,
     );
 
-    memory_chip.finalize(Some(&mut poseidon_chip));
+    memory_controller.finalize(Some(&mut poseidon_chip));
 
     let poseidon_air = poseidon_chip.air.clone();
     let range_checker_air = range_checker.air();
-    let airs: Vec<Arc<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_chip
+    let airs: Vec<Arc<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_controller
         .airs()
         .into_iter()
         .chain(iter::once(
@@ -324,7 +327,7 @@ fn test_memory_chip_persistent() {
         .chain(iter::once(Arc::new(poseidon_air) as Arc<dyn AnyRap<_>>))
         .collect();
 
-    let pvs = memory_chip
+    let pvs = memory_controller
         .generate_public_values_per_air()
         .into_iter()
         .chain(iter::once(vec![]))
@@ -332,7 +335,7 @@ fn test_memory_chip_persistent() {
         .chain(iter::once(vec![]))
         .collect_vec();
 
-    let traces = memory_chip
+    let traces = memory_controller
         .generate_traces()
         .into_iter()
         .chain(iter::once(memory_requester_trace))
@@ -344,7 +347,7 @@ fn test_memory_chip_persistent() {
 }
 
 fn make_random_accesses<F: PrimeField32>(
-    memory_chip: &mut MemoryChip<F>,
+    memory_controller: &mut MemoryController<F>,
     mut rng: &mut StdRng,
 ) -> Vec<Record<F>> {
     (0..1024)
@@ -355,24 +358,24 @@ fn make_random_accesses<F: PrimeField32>(
                 0 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 1));
                     let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                    Record::Write(memory_chip.write(address_space, pointer, [data]))
+                    Record::Write(memory_controller.write(address_space, pointer, [data]))
                 }
                 1 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 1));
-                    Record::Read(memory_chip.read::<1>(address_space, pointer))
+                    Record::Read(memory_controller.read::<1>(address_space, pointer))
                 }
                 2 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 4));
-                    Record::Read4(memory_chip.read::<4>(address_space, pointer))
+                    Record::Read4(memory_controller.read::<4>(address_space, pointer))
                 }
                 3 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 4));
                     let data = array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..1 << 30)));
-                    Record::Write4(memory_chip.write::<4>(address_space, pointer, data))
+                    Record::Write4(memory_controller.write::<4>(address_space, pointer, data))
                 }
                 4 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, MAX));
-                    Record::ReadMax(memory_chip.read::<MAX>(address_space, pointer))
+                    Record::ReadMax(memory_controller.read::<MAX>(address_space, pointer))
                 }
                 _ => unreachable!(),
             }

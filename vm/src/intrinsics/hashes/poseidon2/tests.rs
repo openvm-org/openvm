@@ -68,7 +68,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester {
         7,
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 

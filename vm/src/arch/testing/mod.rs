@@ -19,7 +19,7 @@ use crate::{
     arch::{ExecutionState, VmChip},
     kernels::core::RANGE_CHECKER_BUS,
     system::{
-        memory::{offline_checker::MemoryBus, MemoryChip},
+        memory::{offline_checker::MemoryBus, MemoryController},
         program::{bridge::ProgramBus, Instruction},
         vm::config::MemoryConfig,
     },
@@ -35,7 +35,7 @@ pub use memory::MemoryTester;
 use super::{ExecutionBus, InstructionExecutor};
 use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
-    system::{memory::MemoryChipRef, vm::config::PersistenceType},
+    system::{memory::MemoryControllerRef, vm::config::PersistenceType},
 };
 
 #[derive(Clone, Debug)]
@@ -48,13 +48,13 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         rng: StdRng,
     ) -> Self {
         Self {
-            memory: MemoryTester::new(memory_chip),
+            memory: MemoryTester::new(memory_controller),
             execution: ExecutionTester::new(execution_bus),
             program: ProgramTester::new(program_bus),
             rng,
@@ -69,7 +69,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     ) {
         let initial_state = ExecutionState {
             pc: self.next_elem_size_usize(),
-            timestamp: self.memory.chip.borrow().timestamp(),
+            timestamp: self.memory.controller.borrow().timestamp(),
         };
         tracing::debug!(?initial_state.timestamp);
 
@@ -117,15 +117,15 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.bus
     }
 
-    pub fn memory_chip(&self) -> MemoryChipRef<F> {
-        self.memory.chip.clone()
+    pub fn memory_controller(&self) -> MemoryControllerRef<F> {
+        self.memory.controller.clone()
     }
 }
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester {
         self.memory
-            .chip
+            .controller
             .borrow_mut()
             .finalize(None::<&mut Poseidon2Chip<BabyBear>>);
         let tester = VmChipTester {
@@ -144,9 +144,10 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let memory_chip = MemoryChip::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
+        let memory_controller =
+            MemoryController::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
         Self {
-            memory: MemoryTester::new(Rc::new(RefCell::new(memory_chip))),
+            memory: MemoryTester::new(Rc::new(RefCell::new(memory_controller))),
             execution: ExecutionTester::new(ExecutionBus(0)),
             program: ProgramTester::new(ProgramBus(2)),
             rng: StdRng::seed_from_u64(0),
@@ -181,15 +182,15 @@ impl VmChipTester {
 
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
-            let memory_chip = memory_tester.chip.clone();
-            let range_checker = memory_chip.borrow().range_checker.clone();
+            let memory_controller = memory_tester.controller.clone();
+            let range_checker = memory_controller.borrow().range_checker.clone();
             self = self.load(memory_tester); // dummy memory interactions
             {
-                let memory = memory_chip.borrow();
+                let memory = memory_controller.borrow();
                 let public_values = memory.generate_public_values_per_air();
                 let airs = memory.airs();
                 drop(memory);
-                let traces = Rc::try_unwrap(memory_chip)
+                let traces = Rc::try_unwrap(memory_controller)
                     .unwrap()
                     .into_inner()
                     .generate_traces();

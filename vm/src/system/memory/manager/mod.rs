@@ -164,12 +164,12 @@ impl<T: Clone, const N: usize> From<MemoryHeapWriteRecord<T, N>> for MemoryHeapD
 }
 
 #[derive(Clone, Debug)]
-pub struct MemoryChipResult<F> {
+pub struct MemoryControllerResult<F> {
     traces: Vec<RowMajorMatrix<F>>,
     public_values: Vec<Vec<F>>,
 }
 
-pub type MemoryChipRef<F> = Rc<RefCell<MemoryChip<F>>>;
+pub type MemoryControllerRef<F> = Rc<RefCell<MemoryController<F>>>;
 
 /// A equipartition of memory, with timestamps and values.
 ///
@@ -196,7 +196,7 @@ fn partition_to_cell_map<F: Field, const N: usize>(
 }
 
 #[derive(Clone, Debug)]
-pub struct MemoryChip<F: Field> {
+pub struct MemoryController<F: Field> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
     pub(crate) mem_config: MemoryConfig,
@@ -210,10 +210,10 @@ pub struct MemoryChip<F: Field> {
     adapter_records: HashMap<usize, Vec<AccessAdapterRecord<F>>>,
 
     // Filled during finalization.
-    result: Option<MemoryChipResult<F>>,
+    result: Option<MemoryControllerResult<F>>,
 }
 
-impl<F: PrimeField32> MemoryChip<F> {
+impl<F: PrimeField32> MemoryController<F> {
     pub fn with_volatile_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
@@ -498,13 +498,12 @@ impl<F: PrimeField32> MemoryChip<F> {
         ]);
         pvs.extend(vec![vec![]; 6]);
 
-        self.result = Some(MemoryChipResult {
+        self.result = Some(MemoryControllerResult {
             traces,
             public_values: pvs,
         });
     }
 
-    // TEMPORARY[jpw]: MemoryChip is not a VmChip: it is not a chip and instead owns multiple AIRs. To be renamed and refactored in the future.
     pub fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
         self.result.as_ref().unwrap().traces.clone()
     }
@@ -538,7 +537,7 @@ impl<F: PrimeField32> MemoryChip<F> {
     }
 
     pub fn air_names(&self) -> Vec<String> {
-        let mut air_names = vec!["MemoryBoundary".to_string()];
+        let mut air_names = vec!["Boundary".to_string()];
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => {}
             MemoryInterface::Persistent { .. } => air_names.push("Merkle".to_string()),
@@ -724,7 +723,7 @@ mod tests {
     use p3_field::AbstractField;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
-    use super::MemoryChip;
+    use super::MemoryController;
     use crate::{
         kernels::core::RANGE_CHECKER_BUS,
         system::{memory::offline_checker::MemoryBus, vm::config::MemoryConfig},
@@ -739,7 +738,7 @@ mod tests {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-        let mut memory_chip = MemoryChip::with_volatile_memory(
+        let mut memory_controller = MemoryController::with_volatile_memory(
             memory_bus,
             memory_config.clone(),
             range_checker.clone(),
@@ -753,11 +752,11 @@ mod tests {
 
             if rng.gen_bool(0.5) {
                 let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                memory_chip.write(address_space, pointer, [data]);
+                memory_controller.write(address_space, pointer, [data]);
             } else {
-                memory_chip.read::<1>(address_space, pointer);
+                memory_controller.read::<1>(address_space, pointer);
             }
         }
-        assert_eq!(memory_chip.adapter_records.len(), 0);
+        assert_eq!(memory_controller.adapter_records.len(), 0);
     }
 }

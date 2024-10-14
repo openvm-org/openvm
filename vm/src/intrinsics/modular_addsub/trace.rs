@@ -31,7 +31,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> VmChip<F>
     for ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         let height = self.data.len();
         let height = height.next_power_of_two();

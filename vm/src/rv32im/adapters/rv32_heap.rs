@@ -13,7 +13,7 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            HeapAddress, MemoryChip, MemoryReadRecord, MemoryWriteRecord,
+            HeapAddress, MemoryController, MemoryReadRecord, MemoryWriteRecord,
         },
         program::Instruction,
     },
@@ -135,7 +135,7 @@ impl<
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -161,7 +161,7 @@ impl<
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: AdapterRuntimeContext<F, Self::Interface>,
@@ -205,7 +205,7 @@ impl<
 
 /// First lookup the heap pointer from register, and then read the data at the pointer.
 pub fn read_heap_from_rv32_register<F: PrimeField32, const N: usize>(
-    memory: &mut MemoryChip<F>,
+    memory: &mut MemoryController<F>,
     ptr_address_space: F,
     data_address_space: F,
     ptr_pointer: F,
@@ -221,7 +221,7 @@ pub fn read_heap_from_rv32_register<F: PrimeField32, const N: usize>(
 
 /// First lookup the heap pointer from register, and then write the data at the pointer.
 pub fn write_heap_from_rv32_register<F: PrimeField32, const N: usize>(
-    memory: &mut MemoryChip<F>,
+    memory: &mut MemoryController<F>,
     ptr_address_space: F,
     data_address_space: F,
     ptr_pointer: F,

@@ -16,7 +16,7 @@ use crate::{
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     system::{
-        memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
+        memory::{MemoryControllerRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
         program::{bridge::ProgramBus, ExecutionError, Instruction},
     },
     utils::{biguint_to_limbs, limbs_to_biguint},
@@ -64,7 +64,7 @@ pub struct ModularAddSubRecord<T, const NUM_LIMBS: usize> {
 pub struct ModularAddSubChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub air: ModularAddSubAir<NUM_LIMBS, LIMB_SIZE>,
     data: Vec<ModularAddSubRecord<T, NUM_LIMBS>>,
-    memory_chip: MemoryChipRef<T>,
+    memory_controller: MemoryControllerRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     modulus: BigUint,
 
@@ -77,12 +77,12 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<T>,
+        memory_controller: MemoryControllerRef<T>,
         modulus: BigUint,
         offset: usize,
     ) -> Self {
-        let range_checker_chip = memory_chip.borrow().range_checker.clone();
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let range_checker_chip = memory_controller.borrow().range_checker.clone();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         let bus = range_checker_chip.bus();
         assert!(
             bus.range_max_bits >= LIMB_SIZE,
@@ -105,7 +105,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
                 offset,
             },
             data: vec![],
-            memory_chip,
+            memory_controller,
             range_checker_chip,
             modulus,
             offset,
@@ -133,14 +133,14 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
         let local_opcode_index = opcode - self.offset;
         assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
 
-        let mut memory_chip = self.memory_chip.borrow_mut();
+        let mut memory_controller = self.memory_controller.borrow_mut();
         debug_assert_eq!(
             from_state.timestamp,
-            memory_chip.timestamp().as_canonical_u32() as usize
+            memory_controller.timestamp().as_canonical_u32() as usize
         );
 
-        let x_array_read = memory_chip.read_heap::<NUM_LIMBS>(d, e, x_address_ptr);
-        let y_array_read = memory_chip.read_heap::<NUM_LIMBS>(d, e, y_address_ptr);
+        let x_array_read = memory_controller.read_heap::<NUM_LIMBS>(d, e, x_address_ptr);
+        let y_array_read = memory_controller.read_heap::<NUM_LIMBS>(d, e, y_address_ptr);
 
         let x = x_array_read.data_read.data.map(|x| x.as_canonical_u32());
         let y = y_array_read.data_read.data.map(|x| x.as_canonical_u32());
@@ -155,7 +155,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
         );
         let z_limbs = biguint_to_limbs(z_biguint, LIMB_SIZE);
 
-        let z_array_write = memory_chip.write_heap::<NUM_LIMBS>(
+        let z_array_write = memory_controller.write_heap::<NUM_LIMBS>(
             d,
             e,
             z_address_ptr,
@@ -175,7 +175,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Instructio
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
         })
     }
 

@@ -89,7 +89,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             [F::zero(); EXT_DEG]
         };
 
-        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {

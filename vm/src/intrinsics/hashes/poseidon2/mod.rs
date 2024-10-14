@@ -18,7 +18,7 @@ use crate::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             tree::HasherChip,
-            MemoryAuxColsFactory, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
+            MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, ExecutionError, Instruction},
     },
@@ -41,7 +41,7 @@ pub const CHUNK: usize = 8;
 #[derive(Debug)]
 pub struct Poseidon2Chip<F: PrimeField32> {
     pub air: Poseidon2VmAir<F>,
-    pub memory_chip: MemoryChipRef<F>,
+    pub memory_controller: MemoryControllerRef<F>,
 
     records: Vec<Poseidon2Record<F>>,
 
@@ -96,7 +96,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
         max_constraint_degree: usize,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
         offset: usize,
     ) -> Self {
         let air = Poseidon2VmAir::<F>::from_poseidon2_config(
@@ -104,13 +104,13 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
             max_constraint_degree,
             execution_bus,
             program_bus,
-            memory_chip.borrow().memory_bridge(),
+            memory_controller.borrow().memory_bridge(),
             offset,
         );
         Self {
             air,
             records: vec![],
-            memory_chip,
+            memory_controller,
             offset,
         }
     }
@@ -236,7 +236,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         instruction: Instruction<F>,
         from_state: ExecutionState<usize>,
     ) -> Result<ExecutionState<usize>, ExecutionError> {
-        let mut memory_chip = self.memory_chip.borrow_mut();
+        let mut memory_controller = self.memory_controller.borrow_mut();
 
         let Instruction {
             opcode,
@@ -256,25 +256,25 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         let chunk_f = F::from_canonical_usize(CHUNK);
 
-        let dst_ptr_read = memory_chip.read_cell(d, op_a);
+        let dst_ptr_read = memory_controller.read_cell(d, op_a);
         let dst_ptr = dst_ptr_read.value();
 
-        let lhs_ptr_read = memory_chip.read_cell(d, op_b);
+        let lhs_ptr_read = memory_controller.read_cell(d, op_b);
         let lhs_ptr = lhs_ptr_read.value();
 
         let (rhs_ptr, rhs_ptr_read) = match local_opcode_index {
             COMP_POS2 => {
-                let rhs_ptr_read = memory_chip.read_cell(d, op_c);
+                let rhs_ptr_read = memory_controller.read_cell(d, op_c);
                 (rhs_ptr_read.value(), Some(rhs_ptr_read))
             }
             PERM_POS2 => {
-                memory_chip.increment_timestamp();
+                memory_controller.increment_timestamp();
                 (lhs_ptr + chunk_f, None)
             }
         };
 
-        let lhs_read = memory_chip.read(e, lhs_ptr);
-        let rhs_read = memory_chip.read(e, rhs_ptr);
+        let lhs_read = memory_controller.read(e, lhs_ptr);
+        let rhs_read = memory_controller.read(e, rhs_ptr);
         let input_state: [F; WIDTH] = array::from_fn(|i| {
             if i < CHUNK {
                 lhs_read.data[i]
@@ -289,13 +289,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         let output1: [F; CHUNK] = array::from_fn(|i| output[i]);
         let output2: [F; CHUNK] = array::from_fn(|i| output[CHUNK + i]);
 
-        let output1_write = memory_chip.write(e, dst_ptr, output1);
+        let output1_write = memory_controller.write(e, dst_ptr, output1);
         let output2_write = match local_opcode_index {
             COMP_POS2 => {
-                memory_chip.increment_timestamp();
+                memory_controller.increment_timestamp();
                 None
             }
-            PERM_POS2 => Some(memory_chip.write(e, dst_ptr + chunk_f, output2)),
+            PERM_POS2 => Some(memory_controller.write(e, dst_ptr + chunk_f, output2)),
         };
 
         self.records.push(Poseidon2Record::FromInstruction {
@@ -317,7 +317,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
         })
     }
 

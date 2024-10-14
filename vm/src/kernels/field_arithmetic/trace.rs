@@ -62,7 +62,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
             F::zero()
         };
 
-        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         FieldArithmeticCols {
             io: FieldArithmeticIoCols {

@@ -15,7 +15,7 @@ use crate::{
     arch::chips::VmChip,
     system::memory::{
         offline_checker::{MemoryBus, MemoryBusInteraction},
-        MemoryAddress, MemoryChipRef,
+        MemoryAddress, MemoryControllerRef,
     },
 };
 
@@ -30,26 +30,26 @@ const WORD_SIZE: usize = 1;
 #[derive(Clone, Debug)]
 pub struct MemoryTester<F: PrimeField32> {
     pub bus: MemoryBus,
-    pub chip: MemoryChipRef<F>,
+    pub controller: MemoryControllerRef<F>,
     /// Log of raw bus messages
     pub records: Vec<MemoryBusInteraction<F>>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
-    pub fn new(chip: MemoryChipRef<F>) -> Self {
-        let bus = chip.borrow().memory_bus;
+    pub fn new(controller: MemoryControllerRef<F>) -> Self {
+        let bus = controller.borrow().memory_bus;
         Self {
             bus,
-            chip,
+            controller,
             records: Vec::new(),
         }
     }
 
-    /// Returns the cell value at the current timestamp according to [MemoryChip].
+    /// Returns the cell value at the current timestamp according to [MemoryController].
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let read = RefCell::borrow_mut(&self.chip).read_cell(addr_space, pointer);
+        let read = RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(
             self.bus
@@ -62,7 +62,7 @@ impl<F: PrimeField32> MemoryTester<F> {
 
     pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let write = RefCell::borrow_mut(&self.chip).write_cell(addr_space, pointer, value);
+        let write = RefCell::borrow_mut(&self.controller).write_cell(addr_space, pointer, value);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(self.bus.receive(
             address,

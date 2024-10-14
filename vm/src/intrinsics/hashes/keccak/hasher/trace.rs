@@ -122,7 +122,7 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
         // Resize with dummy `is_opcode = 0`
         opcode_blocks.resize(num_blocks, Default::default());
 
-        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         // Use unsafe alignment so we can parallely write to the matrix
         let trace_width = self.trace_width();

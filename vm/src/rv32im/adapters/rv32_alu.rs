@@ -14,7 +14,8 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAuxColsFactory, MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
+            MemoryAuxColsFactory, MemoryController, MemoryControllerRef, MemoryReadRecord,
+            MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
@@ -34,11 +35,11 @@ impl<F: PrimeField32> Rv32AluAdapter<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
     ) -> Self {
-        let memory_chip = RefCell::borrow(&memory_chip);
-        let memory_bridge = memory_chip.memory_bridge();
-        let aux_cols_factory = memory_chip.aux_cols_factory();
+        let memory_controller = RefCell::borrow(&memory_controller);
+        let memory_bridge = memory_controller.memory_bridge();
+        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: Rv32AluAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -114,7 +115,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -165,7 +166,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: AdapterRuntimeContext<F, Self::Interface>,

@@ -22,7 +22,7 @@ use crate::{
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     system::{
-        memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+        memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::{bridge::ProgramBus, ExecutionError, Instruction},
     },
 };
@@ -61,7 +61,7 @@ pub struct KeccakVmChip<F: PrimeField32> {
     pub air: KeccakVmAir,
     /// IO and memory data necessary for each opcode call
     pub records: Vec<KeccakRecord<F>>,
-    pub memory_chip: MemoryChipRef<F>,
+    pub memory_controller: MemoryControllerRef<F>,
     pub byte_xor_chip: Arc<XorLookupChip<8>>,
 
     offset: usize,
@@ -93,11 +93,11 @@ impl<F: PrimeField32> KeccakVmChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
         byte_xor_chip: Arc<XorLookupChip<8>>,
         offset: usize,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: KeccakVmAir::new(
                 ExecutionBridge::new(execution_bus, program_bus),
@@ -105,7 +105,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
                 byte_xor_chip.bus(),
                 offset,
             ),
-            memory_chip,
+            memory_controller,
             byte_xor_chip,
             records: Vec::new(),
             offset,
@@ -132,7 +132,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let local_opcode_index = Keccak256Opcode::from_usize(opcode - self.offset);
         debug_assert_eq!(local_opcode_index, Keccak256Opcode::KECCAK256);
 
-        let mut memory = self.memory_chip.borrow_mut();
+        let mut memory = self.memory_controller.borrow_mut();
         debug_assert_eq!(
             from_state.timestamp,
             memory.timestamp().as_canonical_u32() as usize

@@ -11,7 +11,7 @@ use crate::{
         VmAdapterChip, VmAdapterInterface,
     },
     system::{
-        memory::{MemoryChip, MemoryReadRecord, MemoryWriteRecord},
+        memory::{MemoryController, MemoryReadRecord, MemoryWriteRecord},
         program::Instruction,
     },
 };
@@ -101,7 +101,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -117,7 +117,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: AdapterRuntimeContext<F, Self::Interface>,

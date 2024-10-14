@@ -19,7 +19,7 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryChip, MemoryReadRecord, MemoryWriteRecord,
+            MemoryController, MemoryReadRecord, MemoryWriteRecord,
         },
         program::Instruction,
     },
@@ -125,7 +125,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
     #[allow(clippy::type_complexity)]
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -204,7 +204,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: AdapterRuntimeContext<F, Self::Interface>,

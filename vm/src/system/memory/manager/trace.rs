@@ -8,10 +8,11 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::system::memory::{
-    adapter::AccessAdapterCols, manager::memory::AccessAdapterRecordKind, MemoryAddress, MemoryChip,
+    adapter::AccessAdapterCols, manager::memory::AccessAdapterRecordKind, MemoryAddress,
+    MemoryController,
 };
 
-impl<F: PrimeField32> MemoryChip<F> {
+impl<F: PrimeField32> MemoryController<F> {
     pub fn generate_access_adapter_trace<const N: usize>(&self) -> RowMajorMatrix<F> {
         let air = self.access_adapter_air::<N>();
         let width = BaseAir::<F>::width(&air);
