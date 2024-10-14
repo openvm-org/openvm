@@ -72,8 +72,8 @@ pub fn execute_program_with_public_values(
     vm.execute().unwrap()
 }
 
-pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
-    for instruction in program.iter() {
+pub fn display_program<F: PrimeField32>(program: &Program<F>) {
+    for instruction in program.instructions().iter() {
         let Instruction {
             opcode,
             op_a,
@@ -92,8 +92,8 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
     }
 }
 
-pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
-    for (pc, instruction) in program.iter().enumerate() {
+pub fn display_program_with_pc<F: PrimeField32>(program: &Program<F>) {
+    for (pc, instruction) in program.instructions().iter().enumerate() {
         let Instruction {
             opcode,
             op_a,

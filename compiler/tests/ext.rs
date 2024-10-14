@@ -1,7 +1,7 @@
 use afs_compiler::{
     asm::AsmBuilder,
     ir::{Ext, Felt},
-    util::{display_program, display_program_with_pc, execute_program},
+    util::{display_program, execute_program},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
@@ -29,7 +29,7 @@ fn test_ext2felt() {
     builder.halt();
 
     let program = builder.compile_isa();
-    display_program(&program.instructions().cloned().collect::<Vec<_>>());
+    display_program(&program);
     execute_program(program, vec![]);
 }
 
@@ -58,6 +58,6 @@ fn test_ext_from_base_slice() {
     builder.halt();
 
     let program = builder.compile_isa();
-    display_program_with_pc(&program.instructions().cloned().collect::<Vec<_>>());
+    display_program(&program);
     execute_program(program, vec![]);
 }

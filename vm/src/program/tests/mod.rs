@@ -33,7 +33,7 @@ fn test_flatten_fromslice_roundtrip() {
 }
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
-    let instructions = program.instructions().cloned().collect::<Vec<_>>();
+    let instructions = program.instructions();
     let mut chip = ProgramChip::new(program);
     let mut execution_frequencies = vec![0; instructions.len()];
     for pc in execution {

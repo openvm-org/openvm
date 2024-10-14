@@ -48,6 +48,6 @@ fn main() {
     builder.halt();
 
     let program = builder.compile_isa();
-    display_program(&program.instructions().cloned().collect::<Vec<_>>());
+    display_program(&program);
     execute_program(program, vec![]);
 }

@@ -270,18 +270,25 @@ impl<F> Program<F> {
         self.instructions_and_debug_infos.is_empty()
     }
 
-    pub fn instructions(&self) -> impl Iterator<Item = &Instruction<F>> {
+    pub fn instructions(&self) -> Vec<Instruction<F>>
+    where
+        F: Clone,
+    {
         self.instructions_and_debug_infos
             .iter()
             .sorted_by_key(|(pc, _)| *pc)
             .map(|(_, (instruction, _))| instruction)
+            .cloned()
+            .collect()
     }
 
-    pub fn debug_infos(&self) -> impl Iterator<Item = &Option<DebugInfo>> {
+    pub fn debug_infos(&self) -> Vec<Option<DebugInfo>> {
         self.instructions_and_debug_infos
             .iter()
             .sorted_by_key(|(pc, _)| *pc)
             .map(|(_, (_, debug_info))| debug_info)
+            .cloned()
+            .collect()
     }
 }
 
