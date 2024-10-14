@@ -11,8 +11,8 @@ use super::{ModularConfig, FIELD_ELEMENT_BITS};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        AdapterRuntimeContext, Result, Rv32HeapAdapter, Rv32HeapAdapterCols,
-        Rv32HeapAdapterInterface, VmAdapterInterface, VmCoreChip,
+        AdapterRuntimeContext, Result, Rv32HeapAdapter, Rv32HeapAdapterInterface,
+        VmAdapterInterface, VmCoreChip,
     },
     program::Instruction,
     utils::{biguint_to_limbs, limbs_to_biguint},
