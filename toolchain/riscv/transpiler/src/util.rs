@@ -6,17 +6,16 @@ use stark_vm::{
 };
 
 fn i12_to_u24(imm: i32) -> u32 {
-    let imm_u = (imm as u32) & 0xfff;
-    imm_u | ((imm_u & 0x80) * 0x17e)
+    (imm as u32) & 0xffffff
 }
 
 /// Create a new [`Instruction`] from an R-type instruction.
 pub fn from_r_type<F: PrimeField32>(opcode: usize, dec_insn: &RType) -> Instruction<F> {
     Instruction::new(
         opcode,
-        F::from_canonical_usize(dec_insn.rd),
-        F::from_canonical_usize(dec_insn.rs1),
-        F::from_canonical_usize(dec_insn.rs2),
+        F::from_canonical_usize(4 * dec_insn.rd),
+        F::from_canonical_usize(4 * dec_insn.rs1),
+        F::from_canonical_usize(4 * dec_insn.rs2),
         F::one(), // rd and rs1 are registers
         F::one(), // rs2 is a register
         F::zero(),
@@ -29,8 +28,8 @@ pub fn from_r_type<F: PrimeField32>(opcode: usize, dec_insn: &RType) -> Instruct
 pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
     Instruction::new(
         opcode,
-        F::from_canonical_usize(dec_insn.rd),
-        F::from_canonical_usize(dec_insn.rs1),
+        F::from_canonical_usize(4 * dec_insn.rd),
+        F::from_canonical_usize(4 * dec_insn.rs1),
         F::from_canonical_u32(i12_to_u24(dec_insn.imm)),
         F::one(),  // rd and rs1 are registers
         F::zero(), // rs2 is an immediate
@@ -44,8 +43,8 @@ pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruct
 pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
     Instruction::new(
         opcode,
-        F::from_canonical_usize(dec_insn.rd),
-        F::from_canonical_usize(dec_insn.rs1),
+        F::from_canonical_usize(4 * dec_insn.rd),
+        F::from_canonical_usize(4 * dec_insn.rs1),
         if dec_insn.imm < 0 {
             -F::from_canonical_u32(-dec_insn.imm as u32)
         } else {
@@ -64,8 +63,8 @@ pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instructio
 pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) -> Instruction<F> {
     Instruction::new(
         opcode,
-        F::from_canonical_usize(dec_insn.rd),
-        F::from_canonical_usize(dec_insn.rs1),
+        F::from_canonical_usize(4 * dec_insn.rd),
+        F::from_canonical_usize(4 * dec_insn.rs1),
         F::from_canonical_u32(i12_to_u24(dec_insn.shamt as i32)),
         F::one(),  // rd and rs1 are registers
         F::zero(), // rs2 is an immediate
@@ -79,8 +78,8 @@ pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) 
 pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruction<F> {
     Instruction::new(
         opcode,
-        F::from_canonical_usize(dec_insn.rs2),
-        F::from_canonical_usize(dec_insn.rs1),
+        F::from_canonical_usize(4 * dec_insn.rs2),
+        F::from_canonical_usize(4 * dec_insn.rs1),
         F::from_canonical_u32(dec_insn.imm as u32),
         F::one(),
         F::two(),
@@ -96,8 +95,8 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
 pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruction<F> {
     Instruction::new(
         opcode,
-        F::from_canonical_usize(dec_insn.rs1),
-        F::from_canonical_usize(dec_insn.rs2),
+        F::from_canonical_usize(4 * dec_insn.rs1),
+        F::from_canonical_usize(4 * dec_insn.rs2),
         isize_to_field(dec_insn.imm as isize),
         F::one(), // rs1 is a register
         F::one(), // rs2 is a register
@@ -111,10 +110,10 @@ pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruct
 pub fn from_j_type<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruction<F> {
     Instruction::new(
         opcode,
-        F::from_canonical_usize(dec_insn.rd),
+        F::from_canonical_usize(4 * dec_insn.rd),
         F::zero(),
         if dec_insn.imm < 0 {
-            F::from_canonical_u32(-dec_insn.imm as u32)
+            -F::from_canonical_u32(-dec_insn.imm as u32)
         } else {
             F::from_canonical_u32(dec_insn.imm as u32)
         },
@@ -130,7 +129,7 @@ pub fn from_j_type<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruct
 pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruction<F> {
     Instruction::new(
         opcode,
-        F::from_canonical_usize(dec_insn.rd),
+        F::from_canonical_usize(4 * dec_insn.rd),
         F::zero(),
         F::from_canonical_u32((dec_insn.imm as u32) & 0xfffff),
         F::one(), // rd is a register
@@ -145,6 +144,13 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
 pub fn unimp<F: PrimeField32>() -> Instruction<F> {
     Instruction {
         opcode: CoreOpcode::FAIL as usize,
+        ..Default::default()
+    }
+}
+
+pub fn terminate<F: PrimeField32>() -> Instruction<F> {
+    Instruction {
+        opcode: CoreOpcode::TERMINATE as usize,
         ..Default::default()
     }
 }

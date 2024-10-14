@@ -19,7 +19,11 @@ p3-uni-stark = { workspace = true }
 
 axvm-platform = { workspace = true }
 stark-vm = { workspace = true }
+ax-sdk = { workspace = true }
 
 color-eyre = { git = "https://github.com/eyre-rs/eyre.git", rev = "7706273" }
 elf = "0.7.4"
 rrs-lib = "0.1.0"
+
+[features]
+parallel = ["stark-vm/parallel"]

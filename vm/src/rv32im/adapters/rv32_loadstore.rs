@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, mem::size_of, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::VariableRangeCheckerChip;
@@ -48,7 +48,7 @@ pub struct Rv32LoadStoreAdapterAir<F: Field, const NUM_CELLS: usize> {
 
 impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for Rv32LoadStoreAdapterAir<F, NUM_CELLS> {
     fn width(&self) -> usize {
-        todo!()
+        size_of::<Rv32LoadStoreAdapterCols<u8, 4>>() // TODO: NUM_CELLS?
     }
 }
 

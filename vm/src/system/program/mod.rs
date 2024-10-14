@@ -149,7 +149,7 @@ impl<T: Default> Default for Instruction<T> {
 #[derive(Debug)]
 pub enum ExecutionError {
     Fail(usize),
-    PcOutOfBounds(usize, usize),
+    PcOutOfBounds(usize, usize, usize),
     DisabledOperation(usize, usize),
     HintOutOfBounds(usize),
     EndOfInputStream(usize),
@@ -161,10 +161,10 @@ impl Display for ExecutionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExecutionError::Fail(pc) => write!(f, "execution failed at pc = {}", pc),
-            ExecutionError::PcOutOfBounds(pc, program_len) => write!(
+            ExecutionError::PcOutOfBounds(pc, step, program_len) => write!(
                 f,
-                "pc = {} out of bounds for program of length {}",
-                pc, program_len
+                "pc = {} (step {}) out of bounds for program of length {}",
+                pc, step, program_len
             ),
             ExecutionError::DisabledOperation(pc, op) => {
                 write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
@@ -328,10 +328,21 @@ impl<F: PrimeField64> ProgramChip<F> {
         &mut self,
         pc: usize,
     ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
-        if !(0..self.true_program_length).contains(&pc) {
-            return Err(ExecutionError::PcOutOfBounds(pc, self.true_program_length));
+        let step = self.air.program.step;
+        assert!(
+            pc % step == 0,
+            "pc = {} is not a multiple of step = {}",
+            pc,
+            step
+        );
+        if !(0..self.true_program_length).contains(&(pc / step)) {
+            return Err(ExecutionError::PcOutOfBounds(
+                pc,
+                step,
+                self.true_program_length,
+            ));
         }
-        self.execution_frequencies[pc] += 1;
+        self.execution_frequencies[pc / step] += 1;
         Ok(self.air.program.instructions_and_debug_infos[&pc].clone())
     }
 }

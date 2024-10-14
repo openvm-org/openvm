@@ -305,6 +305,22 @@ impl VmConfig {
         .add_default_executor(ExecutorName::Core)
     }
 
+    pub fn rv32() -> Self {
+        Self::core()
+            .add_default_executor(ExecutorName::ArithmeticLogicUnitRv32)
+            .add_default_executor(ExecutorName::LessThanRv32)
+            .add_default_executor(ExecutorName::MultiplicationRv32)
+            .add_default_executor(ExecutorName::MultiplicationHighRv32)
+            .add_default_executor(ExecutorName::DivRemRv32)
+            .add_default_executor(ExecutorName::ShiftRv32)
+            .add_default_executor(ExecutorName::LoadStoreRv32)
+            .add_default_executor(ExecutorName::BranchEqualRv32)
+            .add_default_executor(ExecutorName::BranchLessThanRv32)
+            .add_default_executor(ExecutorName::JalLuiRv32)
+            .add_default_executor(ExecutorName::JalrRv32)
+            .add_default_executor(ExecutorName::AuipcRv32)
+    }
+
     pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
         VmConfig {
             poseidon2_max_constraint_degree,
