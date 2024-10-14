@@ -18,8 +18,8 @@ p3-util = { workspace = true }
 rand = "0.8"
 derive-new = "0.6.0"
 
-afs-stark-backend = { path = "../stark-backend", default-features = false }
-afs-derive = { path = "../derive" }
+afs-stark-backend = { path = "../../stark-backend", default-features = false }
+afs-derive = { path = "../../derive" }
 parking_lot = "0.12.2"
 itertools.workspace = true
 getset = "0.1.2"
@@ -41,7 +41,7 @@ p3-merkle-tree = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-symmetric = { workspace = true }
 test-case = "3.3.1"
-ax-sdk = { path = "../sdk" }
+ax-sdk = { path = "../../sdk" }
 
 [features]
 default = []

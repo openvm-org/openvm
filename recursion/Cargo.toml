@@ -44,7 +44,7 @@ metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 
 [dev-dependencies]
-afs-primitives = { path = "../primitives" }
+afs-primitives = { path = "../circuits/primitives" }
 
 [[bin]]
 name = "verify_fibair"

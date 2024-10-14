@@ -38,7 +38,7 @@ k256 = { workspace = true }
 elliptic-curve = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-afs-primitives = { path = "../../primitives" }
+afs-primitives = { path = "../../circuits/primitives" }
 hex-literal = { workspace = true }
 sha3 = "0.10.8"
 test-log.workspace = true

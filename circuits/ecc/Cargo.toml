@@ -6,7 +6,7 @@ description = "Elliptic curve cryptography building blocks."
 
 [dependencies]
 afs-stark-backend = { path = "../../stark-backend" }
-afs-primitives = { path = "../../primitives" }
+afs-primitives = { path = "../primitives" }
 ax-sdk = { path = "../../sdk" }
 p3-air = { workspace = true }
 p3-field = { workspace = true }
@@ -37,7 +37,7 @@ k256 = { workspace = true }
 elliptic-curve = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-afs-primitives = { path = "../../primitives" }
+afs-primitives = { path = "../primitives" }
 hex-literal = { workspace = true }
 sha3 = "0.10.8"
 

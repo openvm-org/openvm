@@ -1,12 +1,12 @@
 [workspace]
 members = [
-    "primitives",
     "derive",
-    "poseidon2-air",
+    "circuits/ecc",
+    "circuits/hashes/poseidon2-air",
+    "circuits/primitives",
     "recursion",
     "ecc/lib",
     "ecc/execution",
-    "ecc/primitives",
     "stark-backend",
     "sdk",
     "toolchain/compiler",
@@ -62,7 +62,7 @@ axvm-platform = { path = "toolchain/riscv/zkvm/platform", default-features = fal
 axvm = { path = "toolchain/riscv/zkvm/lib", default-features = false }
 afs-compiler = { path = "toolchain/compiler", default-features = false }
 stark-vm = { path = "vm", default-features = false }
-afs-primitives = { path = "primitives", default-features = false }
+afs-primitives = { path = "circuits/primitives", default-features = false }
 afs-stark-backend = { path = "stark-backend", default-features = false }
 afs-derive = { path = "derive", default-features = false }
 ax-sdk = { path = "sdk", default-features = false }
