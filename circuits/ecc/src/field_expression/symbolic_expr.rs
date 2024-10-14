@@ -1,4 +1,7 @@
-use std::cmp::max;
+use std::{
+    cmp::max,
+    ops::{Add, Div, Mul, Sub},
+};
 
 use afs_primitives::bigint::{utils::big_uint_mod_inverse, OverflowInt};
 use num_bigint_dig::{BigInt, BigUint};
@@ -24,6 +27,87 @@ pub enum SymbolicExpr {
     // Select one of the two expressions based on the flag.
     // The two expressions must have the same structure (number of limbs etc), e.g. a+b and a-b.
     Select(usize, Box<SymbolicExpr>, Box<SymbolicExpr>),
+}
+
+impl std::fmt::Display for SymbolicExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            SymbolicExpr::Input(i) => write!(f, "Input({})", i),
+            SymbolicExpr::Var(i) => write!(f, "Var({})", i),
+            SymbolicExpr::Add(lhs, rhs) => write!(f, "({} + {})", lhs, rhs),
+            SymbolicExpr::Sub(lhs, rhs) => write!(f, "({} - {})", lhs, rhs),
+            SymbolicExpr::Mul(lhs, rhs) => write!(f, "({} * {})", lhs, rhs),
+            SymbolicExpr::Div(lhs, rhs) => write!(f, "({} / {})", lhs, rhs),
+            SymbolicExpr::IntMul(lhs, s) => write!(f, "({} x {})", lhs, s),
+            SymbolicExpr::Select(flag_id, lhs, rhs) => {
+                write!(f, "(if {} then {} else {})", flag_id, lhs, rhs)
+            }
+        }
+    }
+}
+
+impl Add for SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        SymbolicExpr::Add(Box::new(self), Box::new(rhs))
+    }
+}
+
+impl Add for &SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn add(self, rhs: &SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Add(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl Sub for SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        SymbolicExpr::Sub(Box::new(self), Box::new(rhs))
+    }
+}
+
+impl Sub for &SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn sub(self, rhs: &SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Sub(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl Mul for SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        SymbolicExpr::Mul(Box::new(self), Box::new(rhs))
+    }
+}
+
+impl Mul for &SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn mul(self, rhs: &SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Mul(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl Div for SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        SymbolicExpr::Div(Box::new(self), Box::new(rhs))
+    }
+}
+
+impl Div for &SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn div(self, rhs: &SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Div(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
 }
 
 impl SymbolicExpr {

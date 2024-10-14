@@ -16,7 +16,7 @@ use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use super::{super::utils::*, ExprBuilder, FieldExprChip, FieldVariableConfig, SymbolicExpr};
+use super::{super::test_utils::*, ExprBuilder, FieldExprChip, FieldVariableConfig, SymbolicExpr};
 use crate::field_expression::FieldVariable;
 
 const LIMB_BITS: usize = 8;
