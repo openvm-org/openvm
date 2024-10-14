@@ -9,8 +9,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{AluOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Reads, Result, VmAdapterChip,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, Writes,
+        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
 };
@@ -94,13 +94,13 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCoreChip<NUM
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, A>
+impl<F, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, I>
     for ArithmeticLogicCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: VmAdapterChip<F>,
-    Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
-    Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
+    I: VmAdapterInterface<F>,
+    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
+    I::Writes: From<[[F; NUM_LIMBS]; 1]>,
 {
     type Record = ArithmeticLogicRecord<F, NUM_LIMBS, LIMB_BITS>;
     type Air = ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>;
@@ -110,8 +110,8 @@ where
         &self,
         instruction: &Instruction<F>,
         _from_pc: F,
-        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
         let local_opcode_index = AluOpcode::from_usize(opcode - self.air.offset);
 
@@ -121,7 +121,7 @@ where
         let a = solve_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
         // Core doesn't modify PC directly, so we let Adapter handle the increment
-        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
+        let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
             to_pc: None,
             writes: [a.map(F::from_canonical_u32)].into(),
         };

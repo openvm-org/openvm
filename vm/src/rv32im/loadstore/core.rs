@@ -10,8 +10,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     system::program::Instruction,
 };
@@ -75,11 +75,11 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreCoreChip<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_CELLS: usize> VmCoreChip<F, A>
+impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
     for LoadStoreCoreChip<F, NUM_CELLS>
 where
-    Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,
-    Writes<F, A::Interface<F>>: From<[F; NUM_CELLS]>,
+    I::Reads: Into<[[F; NUM_CELLS]; 2]>,
+    I::Writes: From<[F; NUM_CELLS]>,
 {
     type Record = ();
     type Air = LoadStoreCoreAir<F, NUM_CELLS>;
@@ -89,17 +89,14 @@ where
         &self,
         instruction: &Instruction<F>,
         _from_pc: F,
-        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index =
             Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
         let data: [[F; NUM_CELLS]; 2] = reads.into();
         let write_data = solve_write_data(local_opcode_index, data[0], data[1]);
 
-        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
-            to_pc: None,
-            writes: write_data.into(),
-        };
+        let output = AdapterRuntimeContext::without_pc(write_data);
 
         Ok((output, ()))
     }

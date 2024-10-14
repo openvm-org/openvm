@@ -9,8 +9,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     system::program::Instruction,
 };
@@ -98,11 +98,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanCoreChip<NUM_
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmCoreChip<F, A> for BranchLessThanCoreChip<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    VmCoreChip<F, I> for BranchLessThanCoreChip<NUM_LIMBS, LIMB_BITS>
 where
-    Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
-    Writes<F, A::Interface<F>>: Default,
+    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
+    I::Writes: Default,
 {
     // TODO: update for trace generation
     type Record = u32;
@@ -113,8 +113,8 @@ where
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction {
             opcode, op_c: imm, ..
         } = *instruction;
@@ -126,12 +126,8 @@ where
         let (cmp_result, _diff_idx, _x_sign, _y_sign) =
             solve_cmp::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
-        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
-            to_pc: if cmp_result {
-                Some(from_pc + imm)
-            } else {
-                None
-            },
+        let output = AdapterRuntimeContext {
+            to_pc: cmp_result.then_some(from_pc + imm),
             writes: Default::default(),
         };
 

@@ -9,7 +9,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{AdapterRuntimeContext, VmCoreChip},
-    rv32im::adapters::{Rv32HeapAdapter, Rv32HeapAdapterInterface},
+    rv32im::adapters::Rv32HeapAdapterInterface,
     utils::{biguint_to_limbs, limbs_to_biguint},
 };
 
@@ -75,7 +75,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM
 }
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    VmCoreChip<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
+    VmCoreChip<F, Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS>>
     for ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE>
 {
     type Record = ();

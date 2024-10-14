@@ -33,9 +33,6 @@ pub trait VmAdapterInterface<T> {
     type ProcessedInstruction;
 }
 
-pub type Reads<T, I> = <I as VmAdapterInterface<T>>::Reads;
-pub type Writes<T, I> = <I as VmAdapterInterface<T>>::Writes;
-
 /// The adapter owns all memory accesses and timestamp changes.
 /// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
 pub trait VmAdapterChip<F: Field> {
@@ -57,7 +54,10 @@ pub trait VmAdapterChip<F: Field> {
         &mut self,
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
-    ) -> Result<(Reads<F, Self::Interface<F>>, Self::ReadRecord)>;
+    ) -> Result<(
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
+        Self::ReadRecord,
+    )>;
 
     /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)` of the full
     /// adapter record for this instruction. This **must** be called after `preprocess`.
@@ -98,7 +98,7 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
 }
 
 /// Trait to be implemented on primitive chip to integrate with the machine.
-pub trait VmCoreChip<F: PrimeField32, A: VmAdapterChip<F>> {
+pub trait VmCoreChip<F: PrimeField32, I: VmAdapterInterface<F>> {
     /// Minimum data that must be recorded to be able to generate trace for one row of `PrimitiveAir`.
     type Record: Send;
     /// The primitive AIR with main constraints that do not depend on memory and other architecture-specifics.
@@ -109,8 +109,8 @@ pub trait VmCoreChip<F: PrimeField32, A: VmAdapterChip<F>> {
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        reads: Reads<F, A::Interface<F>>,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)>;
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)>;
 
     fn get_opcode_name(&self, opcode: usize) -> String;
 
@@ -142,6 +142,16 @@ pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
     pub writes: I::Writes,
 }
 
+impl<T, I: VmAdapterInterface<T>> AdapterRuntimeContext<T, I> {
+    /// Leave `to_pc` as `None` to allow the adapter to decide the `to_pc` automatically.
+    pub fn without_pc(writes: impl Into<I::Writes>) -> Self {
+        Self {
+            to_pc: None,
+            writes: writes.into(),
+        }
+    }
+}
+
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<T>,
@@ -150,8 +160,8 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub instruction: I::ProcessedInstruction,
 }
 
-#[derive(Clone, Debug)]
-pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, C: VmCoreChip<F, A>> {
+#[derive(Clone)]
+pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface<F>>> {
     pub adapter: A,
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
@@ -162,7 +172,7 @@ impl<F, A, C> VmChipWrapper<F, A, C>
 where
     F: PrimeField32,
     A: VmAdapterChip<F>,
-    C: VmCoreChip<F, A>,
+    C: VmCoreChip<F, A::Interface<F>>,
 {
     pub fn new(adapter: A, core: C, memory: MemoryChipRef<F>) -> Self {
         Self {
@@ -178,7 +188,7 @@ impl<F, A, M> InstructionExecutor<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: VmAdapterChip<F>,
-    M: VmCoreChip<F, A>,
+    M: VmCoreChip<F, A::Interface<F>>,
 {
     fn execute(
         &mut self,
@@ -211,7 +221,7 @@ impl<F, A, M> VmChip<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: VmAdapterChip<F> + Sync,
-    M: VmCoreChip<F, A> + Sync,
+    M: VmCoreChip<F, A::Interface<F>> + Sync,
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = next_power_of_two_or_zero(self.records.len());
@@ -261,7 +271,7 @@ where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
     A: VmAdapterChip<Val<SC>>,
-    C: VmCoreChip<Val<SC>, A>,
+    C: VmCoreChip<Val<SC>, A::Interface<Val<SC>>>,
     A::Air: 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,

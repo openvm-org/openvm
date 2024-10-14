@@ -114,7 +114,7 @@ impl<F, C: VmChip<F>> VmChip<F> for Rc<RefCell<C>> {
     }
 }
 
-#[derive(Debug, Clone, EnumDiscriminants)]
+#[derive(Clone, EnumDiscriminants)]
 #[strum_discriminants(derive(Serialize, Deserialize))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
@@ -147,7 +147,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
-#[derive(Debug, Clone, IntoStaticStr, Chip)]
+#[derive(Clone, IntoStaticStr, Chip)]
 #[enum_dispatch(VmChip<F>)]
 pub enum AxVmChip<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),

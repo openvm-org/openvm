@@ -10,8 +10,8 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     rv32im::adapters::{RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS},
     system::program::Instruction,
@@ -73,9 +73,9 @@ impl<F: Field> Rv32JalLuiCoreChip<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32JalLuiCoreChip<F>
+impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32JalLuiCoreChip<F>
 where
-    Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
+    I::Writes: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
     type Air = Rv32JalLuiCoreAir<F>;
@@ -85,8 +85,8 @@ where
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        _reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c;
 
@@ -102,7 +102,7 @@ where
             solve_jal_lui(local_opcode_index, from_pc.as_canonical_u32() as usize, imm);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
+        let output = AdapterRuntimeContext {
             to_pc: Some(F::from_canonical_usize(to_pc)),
             writes: rd_data.into(),
         };

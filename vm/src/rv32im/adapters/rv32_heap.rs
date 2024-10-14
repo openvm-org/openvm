@@ -86,6 +86,7 @@ impl<F, const READ_SIZE: usize, const WRITE_SIZE: usize> BaseAir<F>
     }
 }
 
+// TODO: delete and use BasicAdapterInterface
 pub struct Rv32HeapAdapterInterface<
     T: AbstractField,
     const READ_SIZE: usize,

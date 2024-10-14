@@ -11,7 +11,7 @@ use crate::{
         VmCoreChip,
     },
     kernels::core::BYTE_XOR_BUS,
-    rv32im::adapters::Rv32BranchAdapter,
+    rv32im::adapters::Rv32BranchAdapterInterface,
     system::program::Instruction,
 };
 
@@ -33,7 +33,7 @@ fn execute_pc_increment_sanity_test() {
 
     let result = <BranchLessThanCoreChip<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
         F,
-        Rv32BranchAdapter<F>,
+        Rv32BranchAdapterInterface<F>,
     >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
@@ -41,7 +41,7 @@ fn execute_pc_increment_sanity_test() {
     instruction.opcode = BranchLessThanOpcode::BGE.as_usize();
     let result = <BranchLessThanCoreChip<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
         F,
-        Rv32BranchAdapter<F>,
+        Rv32BranchAdapterInterface<F>,
     >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());

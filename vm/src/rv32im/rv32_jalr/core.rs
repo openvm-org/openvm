@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32JalrOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     rv32im::adapters::{compose, PC_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS},
     system::program::Instruction,
@@ -69,10 +69,10 @@ impl<F: Field> Rv32JalrCoreChip<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32JalrCoreChip<F>
+impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32JalrCoreChip<F>
 where
-    Reads<F, A::Interface<F>>: Into<[F; RV32_REGISTER_NUM_LANES]>,
-    Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
+    I::Reads: Into<[F; RV32_REGISTER_NUM_LANES]>,
+    I::Writes: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
     type Air = Rv32JalrCoreAir<F>;
@@ -82,8 +82,8 @@ where
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction {
             opcode, op_c: c, ..
         } = *instruction;
@@ -98,7 +98,7 @@ where
         let (to_pc, rd_data) = solve_jalr(local_opcode_index, from_pc.as_canonical_u32(), imm, rs1);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
+        let output = AdapterRuntimeContext {
             to_pc: Some(F::from_canonical_u32(to_pc)),
             writes: rd_data.into(),
         };

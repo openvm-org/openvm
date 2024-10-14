@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     rv32im::adapters::RV32_REGISTER_NUM_LANES,
     system::program::Instruction,
@@ -69,9 +69,9 @@ impl<F: Field> Rv32AuipcCoreChip<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32AuipcCoreChip<F>
+impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32AuipcCoreChip<F>
 where
-    Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
+    I::Writes: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
     type Air = Rv32AuipcCoreAir<F>;
@@ -81,17 +81,14 @@ where
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        _reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c.as_canonical_u32();
         let rd_data = solve_auipc(local_opcode_index, from_pc.as_canonical_u32(), c);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
-            to_pc: None,
-            writes: rd_data.into(),
-        };
+        let output = AdapterRuntimeContext::without_pc(rd_data);
 
         // TODO: send XorLookUpChip requests
         // TODO: create Record and return

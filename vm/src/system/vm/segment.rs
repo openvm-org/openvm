@@ -77,7 +77,6 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
     pub program_chip: ProgramChip<F>,
@@ -190,11 +189,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         for (range, executor, offset) in config.clone().executors {
             for opcode in range.clone() {
-                if let Some(old_executor) = executors.get(&opcode) {
-                    panic!(
-                        "Attempting to override an executor for opcode {} ({:?} -> {:?})",
-                        opcode, old_executor, executor
-                    );
+                if executors.contains_key(&opcode) {
+                    panic!("Attempting to override an executor for opcode {opcode}");
                 }
             }
             match executor {
@@ -474,11 +470,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         for (range, executor, offset, modulus) in config.clone().modular_executors {
             for opcode in range.clone() {
-                if let Some(old_executor) = executors.get(&opcode) {
-                    panic!(
-                        "Attempting to override an executor for opcode {} ({:?} -> {:?})",
-                        opcode, old_executor, executor
-                    );
+                if executors.contains_key(&opcode) {
+                    panic!("Attempting to override an executor for opcode {opcode}");
                 }
             }
             match executor {
