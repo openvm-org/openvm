@@ -13,7 +13,7 @@ use rand::{seq::SliceRandom, Rng};
 
 use crate::{
     arch::chips::VmChip,
-    memory::{
+    system::memory::{
         offline_checker::{MemoryBus, MemoryBusInteraction},
         MemoryAddress, MemoryChipRef,
     },

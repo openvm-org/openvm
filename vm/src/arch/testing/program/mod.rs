@@ -11,7 +11,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     arch::{chips::VmChip, ExecutionState},
-    program::{bridge::ProgramBus, columns::ProgramExecutionCols, Instruction},
+    system::program::{bridge::ProgramBus, columns::ProgramExecutionCols, Instruction},
 };
 
 mod air;

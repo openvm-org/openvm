@@ -18,9 +18,11 @@ use stark_vm::{
         },
         ExecutorName,
     },
-    hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
-    program::{Instruction, Program},
-    vm::{config::VmConfig, VirtualMachine},
+    intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
+    system::{
+        program::{Instruction, Program},
+        vm::{config::VmConfig, VirtualMachine},
+    },
 };
 use tracing::Level;
 

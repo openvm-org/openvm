@@ -16,7 +16,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result, VmChip};
-use crate::{
+use crate::system::{
     memory::{MemoryChip, MemoryChipRef},
     program::Instruction,
 };

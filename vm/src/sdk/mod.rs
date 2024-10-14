@@ -2,7 +2,7 @@ use afs_stark_backend::config::{StarkGenericConfig, Val};
 use ax_sdk::engine::StarkForTest;
 use p3_field::PrimeField32;
 
-use crate::{
+use crate::system::{
     program::Program,
     vm::{config::VmConfig, VirtualMachine},
 };
