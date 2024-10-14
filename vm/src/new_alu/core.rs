@@ -10,8 +10,8 @@ use strum::IntoEnumIterator;
 use crate::{
     arch::{
         instructions::{AluOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, MinimalInstruction, Reads, Result, Writes,
+        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Reads, Result, VmAdapterChip,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -33,28 +33,28 @@ pub struct ArithmeticLogicCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct ArithmeticLogicAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ArithmeticLogicCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: XorBus,
     offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegrationAir<AB, I>
-    for ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
+    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
     I::Writes: From<[[AB::Expr; NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
@@ -64,7 +64,7 @@ where
         builder: &mut AB,
         local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &ArithmeticLogicCols<_, NUM_LIMBS, LIMB_BITS> = local.borrow();
         let flags = [
             cols.opcode_add_flag,
@@ -141,7 +141,7 @@ where
             self.bus.send(x, y, x_xor_y).eval(builder, AB::Expr::one());
         }
 
-        IntegrationInterface {
+        AdapterAirContext {
             to_pc: None,
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
             writes: [cols.c.map(Into::into)].into(),
@@ -163,17 +163,15 @@ pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
 }
 
 #[derive(Debug)]
-pub struct ArithmeticLogicIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>,
+pub struct ArithmeticLogicCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ArithmeticLogicIntegration<NUM_LIMBS, LIMB_BITS>
-{
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
         Self {
-            air: ArithmeticLogicAir {
+            air: ArithmeticLogicCoreAir {
                 bus: xor_lookup_chip.bus(),
                 offset,
             },
@@ -182,39 +180,39 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegration<F, A>
-    for ArithmeticLogicIntegration<NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, A>
+    for ArithmeticLogicCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: MachineAdapter<F>,
+    A: VmAdapterChip<F>,
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
 {
     type Record = ArithmeticLogicRecord<F, NUM_LIMBS, LIMB_BITS>;
-    type Air = ArithmeticLogicAir<NUM_LIMBS, LIMB_BITS>;
+    type Air = ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
         _from_pc: F,
-        reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
+        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let opcode = AluOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode_index = AluOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
-        let a = solve_alu::<NUM_LIMBS, LIMB_BITS>(opcode, &b, &c);
+        let a = solve_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
-        // Integration doesn't modify PC directly, so we let Adapter handle the increment
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        // Core doesn't modify PC directly, so we let Adapter handle the increment
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: None,
             writes: [a.map(F::from_canonical_u32)].into(),
         };
 
-        if opcode == AluOpcode::ADD || opcode == AluOpcode::SUB {
+        if local_opcode_index == AluOpcode::ADD || local_opcode_index == AluOpcode::SUB {
             for a_val in a {
                 self.xor_lookup_chip.request(a_val, a_val);
             }
@@ -225,7 +223,7 @@ where
         }
 
         let record = Self::Record {
-            opcode,
+            opcode: local_opcode_index,
             a: a.map(F::from_canonical_u32),
             b: data[0],
             c: data[1],

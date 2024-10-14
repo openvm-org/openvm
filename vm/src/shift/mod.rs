@@ -1,7 +1,7 @@
 use std::{array, sync::Arc};
 
 use afs_primitives::{var_range::VariableRangeCheckerChip, xor::lookup::XorLookupChip};
-use air::ShiftAir;
+use air::ShiftCoreAir;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -39,7 +39,7 @@ pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Clone, Debug)]
 pub struct ShiftChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ShiftAir<NUM_LIMBS, LIMB_BITS>,
+    pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ShiftRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_chip: MemoryChipRef<T>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
@@ -76,7 +76,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         let memory_bridge = memory_chip.borrow().memory_bridge();
         let range_checker_chip = memory_chip.borrow().range_checker.clone();
         Self {
-            air: ShiftAir {
+            air: ShiftCoreAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 range_bus: range_checker_chip.bus(),
@@ -109,8 +109,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             e,
             ..
         } = instruction.clone();
-        let opcode = opcode - self.offset;
-        assert!(U256Opcode::shift_opcodes().any(|op| op as usize == opcode));
+        let local_opcode_index = opcode - self.offset;
+        assert!(U256Opcode::shift_opcodes().any(|op| op as usize == local_opcode_index));
 
         let mut memory_chip = self.memory_chip.borrow_mut();
         debug_assert_eq!(
@@ -126,18 +126,20 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|y| y.as_canonical_u32());
         let (z, limb_shift, bit_shift) =
-            solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, U256Opcode::from_usize(opcode));
+            solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, U256Opcode::from_usize(local_opcode_index));
 
         let carry = x
             .into_iter()
-            .map(|val: u32| match U256Opcode::from_usize(opcode) {
-                U256Opcode::SLL => val >> (LIMB_BITS - bit_shift),
-                _ => val % (1 << bit_shift),
-            })
+            .map(
+                |val: u32| match U256Opcode::from_usize(local_opcode_index) {
+                    U256Opcode::SLL => val >> (LIMB_BITS - bit_shift),
+                    _ => val % (1 << bit_shift),
+                },
+            )
             .collect::<Vec<_>>();
 
         let mut x_sign = 0;
-        if opcode == U256Opcode::SRA as usize {
+        if local_opcode_index == U256Opcode::SRA as usize {
             x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             self.xor_lookup_chip
                 .request(x[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
@@ -163,7 +165,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         self.data.push(ShiftRecord {
             from_state,
             instruction: Instruction {
-                opcode,
+                opcode: local_opcode_index,
                 ..instruction
             },
             x_ptr_read,
@@ -185,8 +187,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        let opcode = U256Opcode::from_usize(opcode - self.offset);
-        format!("{opcode:?}<{NUM_LIMBS},{LIMB_BITS}>")
+        let local_opcode_index = U256Opcode::from_usize(opcode - self.offset);
+        format!("{local_opcode_index:?}<{NUM_LIMBS},{LIMB_BITS}>")
     }
 }
 

@@ -6,8 +6,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -27,80 +27,84 @@ pub struct BranchEqualCols<T, const NUM_LIMBS: usize> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct BranchEqualAir<const NUM_LIMBS: usize> {}
+pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {}
 
-impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualAir<NUM_LIMBS> {
+impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualCoreAir<NUM_LIMBS> {
     fn width(&self) -> usize {
         BranchEqualCols::<F, NUM_LIMBS>::width()
     }
 }
 
-impl<AB: InteractionBuilder, const NUM_LIMBS: usize> Air<AB> for BranchEqualAir<NUM_LIMBS> {
+impl<AB: InteractionBuilder, const NUM_LIMBS: usize> Air<AB> for BranchEqualCoreAir<NUM_LIMBS> {
     fn eval(&self, _builder: &mut AB) {
         todo!();
     }
 }
 
-impl<F: Field, const NUM_LIMBS: usize> BaseAirWithPublicValues<F> for BranchEqualAir<NUM_LIMBS> {}
+impl<F: Field, const NUM_LIMBS: usize> BaseAirWithPublicValues<F>
+    for BranchEqualCoreAir<NUM_LIMBS>
+{
+}
 
-impl<AB, I, const NUM_LIMBS: usize> MachineIntegrationAir<AB, I> for BranchEqualAir<NUM_LIMBS>
+impl<AB, I, const NUM_LIMBS: usize> VmCoreAir<AB, I> for BranchEqualCoreAir<NUM_LIMBS>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct BranchEqualIntegration<const NUM_LIMBS: usize> {
-    pub air: BranchEqualAir<NUM_LIMBS>,
+pub struct BranchEqualCoreChip<const NUM_LIMBS: usize> {
+    pub air: BranchEqualCoreAir<NUM_LIMBS>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize> BranchEqualIntegration<NUM_LIMBS> {
+impl<const NUM_LIMBS: usize> BranchEqualCoreChip<NUM_LIMBS> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: BranchEqualAir {},
+            air: BranchEqualCoreAir {},
             offset,
         }
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_LIMBS: usize> MachineIntegration<F, A>
-    for BranchEqualIntegration<NUM_LIMBS>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize> VmCoreChip<F, A>
+    for BranchEqualCoreChip<NUM_LIMBS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: Default,
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Air = BranchEqualAir<NUM_LIMBS>;
+    type Air = BranchEqualCoreAir<NUM_LIMBS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
+        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction {
             opcode, op_c: imm, ..
         } = *instruction;
-        let opcode = BranchEqualOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = BranchEqualOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
-        let (cmp_result, _diff_idx, _diff_val) = solve_eq::<F, NUM_LIMBS>(opcode, &x, &y);
+        let (cmp_result, _diff_idx, _diff_val) =
+            solve_eq::<F, NUM_LIMBS>(local_opcode_index, &x, &y);
 
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: if cmp_result {
                 Some(from_pc + imm)
             } else {
@@ -130,18 +134,18 @@ where
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
 pub(super) fn solve_eq<F: PrimeField32, const NUM_LIMBS: usize>(
-    opcode: BranchEqualOpcode,
+    local_opcode_index: BranchEqualOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> (bool, usize, F) {
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
             return (
-                opcode == BranchEqualOpcode::BNE,
+                local_opcode_index == BranchEqualOpcode::BNE,
                 i,
                 (F::from_canonical_u32(x[i]) - F::from_canonical_u32(y[i])).inverse(),
             );
         }
     }
-    (opcode == BranchEqualOpcode::BEQ, 0, F::zero())
+    (local_opcode_index == BranchEqualOpcode::BEQ, 0, F::zero())
 }

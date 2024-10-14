@@ -10,7 +10,7 @@ use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
-    arch::{chips::MachineChip, ExecutionState},
+    arch::{chips::VmChip, ExecutionState},
     program::{bridge::ProgramBus, columns::ProgramExecutionCols, Instruction},
 };
 
@@ -51,7 +51,7 @@ impl<F: Field> ProgramTester<F> {
     }
 }
 
-impl<F: Field> MachineChip<F> for ProgramTester<F> {
+impl<F: Field> VmChip<F> for ProgramTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();

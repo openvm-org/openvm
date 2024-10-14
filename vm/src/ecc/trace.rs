@@ -16,7 +16,7 @@ use super::{
     EcDoubleRecord, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS,
 };
 use crate::{
-    arch::{instructions::EccOpcode, MachineChip},
+    arch::{instructions::EccOpcode, VmChip},
     memory::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols, MemoryHeapReadRecord,
@@ -40,7 +40,7 @@ fn load_ec_point<F: PrimeField32>(
     (x, y)
 }
 
-impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
+impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -123,7 +123,7 @@ impl<F: PrimeField32> MachineChip<F> for EcAddUnequalChip<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for EcDoubleChip<F> {
+impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }

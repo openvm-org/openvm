@@ -8,7 +8,7 @@ use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
 use crate::{
-    arch::{InstructionOutput, MachineIntegration, Rv32HeapAdapter, Rv32HeapAdapterInterface},
+    arch::{AdapterRuntimeContext, Rv32HeapAdapter, Rv32HeapAdapterInterface, VmCoreChip},
     utils::{biguint_to_limbs, limbs_to_biguint},
 };
 
@@ -35,12 +35,12 @@ impl<const NUM_LIMBS: usize> FieldVariableConfig for ModularConfig<NUM_LIMBS> {
 }
 
 #[derive(Clone)]
-pub struct ModularAddSubV2Chip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+pub struct ModularAddSubV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub chip: FieldExprChip,
     modulus: BigUint,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2Chip<NUM_LIMBS, LIMB_SIZE> {
+impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE> {
     pub fn new(modulus: BigUint, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         // TODO: assert modulus and NUM_LIMBS are consistent with each other
         let bus = range_checker.bus();
@@ -74,8 +74,8 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2Chip<NUM_LIM
 }
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    MachineIntegration<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
-    for ModularAddSubV2Chip<NUM_LIMBS, LIMB_SIZE>
+    VmCoreChip<F, Rv32HeapAdapter<F, NUM_LIMBS, NUM_LIMBS>>
+    for ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE>
 {
     type Record = ();
     type Air = FieldExprChip;
@@ -84,9 +84,9 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         &self,
         _instruction: &crate::program::Instruction<F>,
         _from_pc: F,
-        reads: <Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS> as crate::arch::MachineAdapterInterface<F>>::Reads,
+        reads: <Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS> as crate::arch::VmAdapterInterface<F>>::Reads,
     ) -> crate::arch::Result<(
-        InstructionOutput<F, Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS>>,
+        AdapterRuntimeContext<F, Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS>>,
         Self::Record,
     )> {
         let (x, y) = reads;
@@ -101,7 +101,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         let z_limbs = biguint_to_limbs::<NUM_LIMBS>(z_biguint, LIMB_SIZE);
 
         Ok((
-            InstructionOutput {
+            AdapterRuntimeContext {
                 to_pc: None,
                 writes: z_limbs.map(|x| F::from_canonical_u32(x)),
             },

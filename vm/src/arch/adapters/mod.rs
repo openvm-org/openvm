@@ -25,11 +25,11 @@ pub const PC_BITS: usize = 30;
 
 use p3_field::PrimeField32;
 
-use super::CommonAdapterInterface;
+use super::BasicAdapterInterface;
 use crate::memory::{MemoryChip, MemoryReadRecord};
 
 pub type Rv32RTypeAdapterInterface<T> =
-    CommonAdapterInterface<T, 2, 1, RV32_REGISTER_NUM_LANES, RV32_REGISTER_NUM_LANES>;
+    BasicAdapterInterface<T, 2, 1, RV32_REGISTER_NUM_LANES, RV32_REGISTER_NUM_LANES>;
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.

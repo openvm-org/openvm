@@ -7,8 +7,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{read_rv32_register, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionState, InstructionOutput, MachineAdapter,
-        MachineAdapterInterface, Result,
+        AdapterRuntimeContext, ExecutionBridge, ExecutionState, Result, VmAdapterChip,
+        VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -92,7 +92,7 @@ pub struct Rv32HeapAdapterInterface<
     _marker: PhantomData<T>,
 }
 
-impl<T: AbstractField, const READ_SIZE: usize, const WRITE_SIZE: usize> MachineAdapterInterface<T>
+impl<T: AbstractField, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapterInterface<T>
     for Rv32HeapAdapterInterface<T, READ_SIZE, WRITE_SIZE>
 {
     type Reads = ([T; READ_SIZE], [T; READ_SIZE]);
@@ -128,7 +128,7 @@ impl<
         // const NUM_WRITES: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > MachineAdapter<F> for Rv32HeapAdapter<F, READ_SIZE, WRITE_SIZE>
+    > VmAdapterChip<F> for Rv32HeapAdapter<F, READ_SIZE, WRITE_SIZE>
 {
     type ReadRecord = [Rv32RegisterHeapReadRecord<F, READ_SIZE>; 2];
     type WriteRecord = [Rv32RegisterHeapWriteRecord<F, WRITE_SIZE>; 1];
@@ -140,7 +140,7 @@ impl<
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -166,7 +166,7 @@ impl<
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction {

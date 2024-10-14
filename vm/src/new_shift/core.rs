@@ -12,8 +12,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{ShiftOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -46,13 +46,13 @@ pub struct ShiftCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct ShiftAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub xor_bus: XorBus,
     pub range_bus: VariableRangeCheckerBus,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         ShiftCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -60,7 +60,7 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, _builder: &mut AB) {
         todo!();
@@ -68,42 +68,42 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegrationAir<AB, I>
-    for ShiftAir<NUM_LIMBS, LIMB_BITS>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
+    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct ShiftIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ShiftAir<NUM_LIMBS, LIMB_BITS>,
+pub struct ShiftCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftIntegration<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
         range_checker_chip: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
         Self {
-            air: ShiftAir {
+            air: ShiftCoreAir {
                 xor_bus: xor_lookup_chip.bus(),
                 range_bus: range_checker_chip.bus(),
             },
@@ -114,33 +114,34 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftIntegration<NUM_LIMBS,
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    MachineIntegration<F, A> for ShiftIntegration<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    VmCoreChip<F, A> for ShiftCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[[F; NUM_LIMBS]; 1]>,
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Air = ShiftAir<NUM_LIMBS, LIMB_BITS>;
+    type Air = ShiftCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
         _from_pc: F,
-        reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
+        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let opcode = ShiftOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = ShiftOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
-        let (z, _limb_shift, _bit_shift) = solve_shift::<NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
+        let (z, _limb_shift, _bit_shift) =
+            solve_shift::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
-        // Integration doesn't modify PC directly, so we let Adapter handle the increment
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        // Core doesn't modify PC directly, so we let Adapter handle the increment
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: None,
             writes: [z.map(F::from_canonical_u32)].into(),
         };

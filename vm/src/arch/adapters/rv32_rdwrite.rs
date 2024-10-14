@@ -7,8 +7,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
-        ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterAir,
-        MachineAdapterInterface, Result,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterAir,
+        VmAdapterChip, VmAdapterInterface,
     },
     memory::{MemoryChip, MemoryWriteRecord},
     program::Instruction,
@@ -41,7 +41,7 @@ pub struct Rv32RdWriteProcessedInstruction<T> {
 }
 
 pub struct Rv32RdWriteAdapterInterface<T>(PhantomData<T>);
-impl<T: AbstractField> MachineAdapterInterface<T> for Rv32RdWriteAdapterInterface<T> {
+impl<T: AbstractField> VmAdapterInterface<T> for Rv32RdWriteAdapterInterface<T> {
     type Reads = ();
     type Writes = [T; RV32_REGISTER_NUM_LANES];
     type ProcessedInstruction = Rv32RdWriteProcessedInstruction<T>;
@@ -74,20 +74,20 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32RdWriteAdapterAir {
     }
 }
 
-impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32RdWriteAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
     type Interface = Rv32RdWriteAdapterInterface<AB::Expr>;
 
     fn eval(
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
-        _ctx: IntegrationInterface<AB::Expr, Self::Interface>,
+        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
         todo!()
     }
 }
 
-impl<F: PrimeField32> MachineAdapter<F> for Rv32RdWriteAdapter<F> {
+impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapter<F> {
     type ReadRecord = ();
     type WriteRecord = Rv32RdWriteWriteRecord<F>;
     type Air = Rv32RdWriteAdapterAir;
@@ -98,7 +98,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32RdWriteAdapter<F> {
         _memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let d = instruction.d;
@@ -112,7 +112,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32RdWriteAdapter<F> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction { op_a: a, d, .. } = *instruction;

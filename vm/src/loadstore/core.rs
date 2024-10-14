@@ -10,8 +10,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -28,43 +28,46 @@ impl<T, const NUM_CELLS: usize> LoadStoreCols<T, NUM_CELLS> {
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreAir<F: Field, const NUM_CELLS: usize> {
+pub struct LoadStoreCoreAir<F: Field, const NUM_CELLS: usize> {
     pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
-impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreAir<F, NUM_CELLS> {
+impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreCoreAir<F, NUM_CELLS> {
     fn width(&self) -> usize {
         LoadStoreCols::<F, NUM_CELLS>::width()
     }
 }
 
-impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F> for LoadStoreAir<F, NUM_CELLS> {}
+impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F>
+    for LoadStoreCoreAir<F, NUM_CELLS>
+{
+}
 
-impl<AB, I, const NUM_CELLS: usize> MachineIntegrationAir<AB, I> for LoadStoreAir<AB::F, NUM_CELLS>
+impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreCoreAir<AB::F, NUM_CELLS>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreIntegration<F: Field, const NUM_CELLS: usize> {
-    pub air: LoadStoreAir<F, NUM_CELLS>,
+pub struct LoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
+    pub air: LoadStoreCoreAir<F, NUM_CELLS>,
 }
 
-impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
+impl<F: Field, const NUM_CELLS: usize> LoadStoreCoreChip<F, NUM_CELLS> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: LoadStoreAir::<F, NUM_CELLS> {
+            air: LoadStoreCoreAir::<F, NUM_CELLS> {
                 _marker: PhantomData,
                 offset,
             },
@@ -72,27 +75,28 @@ impl<F: Field, const NUM_CELLS: usize> LoadStoreIntegration<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_CELLS: usize> MachineIntegration<F, A>
-    for LoadStoreIntegration<F, NUM_CELLS>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_CELLS: usize> VmCoreChip<F, A>
+    for LoadStoreCoreChip<F, NUM_CELLS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_CELLS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_CELLS]>,
 {
     type Record = ();
-    type Air = LoadStoreAir<F, NUM_CELLS>;
+    type Air = LoadStoreCoreAir<F, NUM_CELLS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
         _from_pc: F,
-        reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
-        let opcode = Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
+        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        let local_opcode_index =
+            Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
         let data: [[F; NUM_CELLS]; 2] = reads.into();
-        let write_data = solve_write_data(opcode, data[0], data[1]);
+        let write_data = solve_write_data(local_opcode_index, data[0], data[1]);
 
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: None,
             writes: write_data.into(),
         };

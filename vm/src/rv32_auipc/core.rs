@@ -7,8 +7,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{Rv32AuipcOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes, RV32_REGISTER_NUM_LANES,
     },
     program::Instruction,
 };
@@ -25,42 +25,42 @@ impl<T> Rv32AuipcCols<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32AuipcAir<F: Field> {
+pub struct Rv32AuipcCoreAir<F: Field> {
     pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32AuipcAir<F> {
+impl<F: Field> BaseAir<F> for Rv32AuipcCoreAir<F> {
     fn width(&self) -> usize {
         Rv32AuipcCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcAir<F> {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcCoreAir<F> {}
 
-impl<AB: InteractionBuilder, I> MachineIntegrationAir<AB, I> for Rv32AuipcAir<AB::F>
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32AuipcCoreAir<AB::F>
 where
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32AuipcIntegration<F: Field> {
-    pub air: Rv32AuipcAir<F>,
+pub struct Rv32AuipcCoreChip<F: Field> {
+    pub air: Rv32AuipcCoreAir<F>,
 }
 
-impl<F: Field> Rv32AuipcIntegration<F> {
+impl<F: Field> Rv32AuipcCoreChip<F> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: Rv32AuipcAir::<F> {
+            air: Rv32AuipcCoreAir::<F> {
                 _marker: PhantomData,
                 offset,
             },
@@ -68,26 +68,26 @@ impl<F: Field> Rv32AuipcIntegration<F> {
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32AuipcIntegration<F>
+impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32AuipcCoreChip<F>
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
-    type Air = Rv32AuipcAir<F>;
+    type Air = Rv32AuipcCoreAir<F>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        _reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
-        let opcode = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
+        _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        let local_opcode_index = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c.as_canonical_u32();
-        let rd_data = solve_auipc(opcode, from_pc.as_canonical_u32(), c);
+        let rd_data = solve_auipc(local_opcode_index, from_pc.as_canonical_u32(), c);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: None,
             writes: rd_data.into(),
         };

@@ -10,9 +10,8 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Result, Writes, RV32_REGISTER_NUM_LANES,
-        RV_J_TYPE_IMM_BITS,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS,
     },
     program::Instruction,
 };
@@ -29,43 +28,43 @@ impl<T> Rv32JalLuiCols<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalLuiAir<F: Field> {
+pub struct Rv32JalLuiCoreAir<F: Field> {
     pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32JalLuiAir<F> {
+impl<F: Field> BaseAir<F> for Rv32JalLuiCoreAir<F> {
     fn width(&self) -> usize {
         Rv32JalLuiCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalLuiAir<F> {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalLuiCoreAir<F> {}
 
-impl<AB, I> MachineIntegrationAir<AB, I> for Rv32JalLuiAir<AB::F>
+impl<AB, I> VmCoreAir<AB, I> for Rv32JalLuiCoreAir<AB::F>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalLuiIntegration<F: Field> {
-    pub air: Rv32JalLuiAir<F>,
+pub struct Rv32JalLuiCoreChip<F: Field> {
+    pub air: Rv32JalLuiCoreAir<F>,
 }
 
-impl<F: Field> Rv32JalLuiIntegration<F> {
+impl<F: Field> Rv32JalLuiCoreChip<F> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: Rv32JalLuiAir::<F> {
+            air: Rv32JalLuiCoreAir::<F> {
                 _marker: PhantomData,
                 offset,
             },
@@ -73,24 +72,24 @@ impl<F: Field> Rv32JalLuiIntegration<F> {
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32JalLuiIntegration<F>
+impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32JalLuiCoreChip<F>
 where
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
-    type Air = Rv32JalLuiAir<F>;
+    type Air = Rv32JalLuiCoreAir<F>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        _reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
-        let opcode = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
+        _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        let local_opcode_index = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c;
 
-        let imm = match opcode {
+        let imm = match local_opcode_index {
             JAL => {
                 // Note: immediate is a signed integer and c is a field element
                 (c + F::from_canonical_u32(1 << (RV_J_TYPE_IMM_BITS - 1))).as_canonical_u32() as i32
@@ -98,10 +97,11 @@ where
             }
             LUI => c.as_canonical_u32() as i32,
         };
-        let (to_pc, rd_data) = solve_jal_lui(opcode, from_pc.as_canonical_u32() as usize, imm);
+        let (to_pc, rd_data) =
+            solve_jal_lui(local_opcode_index, from_pc.as_canonical_u32() as usize, imm);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: Some(F::from_canonical_usize(to_pc)),
             writes: rd_data.into(),
         };

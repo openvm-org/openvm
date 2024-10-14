@@ -13,8 +13,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        ExecutionState, InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterAir,
-        MachineAdapterInterface, Result, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterAir,
+        VmAdapterChip, VmAdapterInterface, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -50,7 +50,7 @@ impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for Rv32LoadStoreAdapterAir<F,
     }
 }
 
-impl<AB: InteractionBuilder, const NUM_CELLS: usize> MachineAdapterAir<AB>
+impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
     for Rv32LoadStoreAdapterAir<AB::F, NUM_CELLS>
 {
     type Interface = Rv32LoadStoreAdapterInterface<AB::Expr, NUM_CELLS>;
@@ -59,7 +59,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> MachineAdapterAir<AB>
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
-        _ctx: IntegrationInterface<AB::Expr, Self::Interface>,
+        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
         todo!()
     }
@@ -84,7 +84,7 @@ pub struct Rv32LoadStoreAdapterInterface<T, const NUM_CELLS: usize> {
     _marker: PhantomData<T>,
 }
 
-impl<T, const NUM_CELLS: usize> MachineAdapterInterface<T>
+impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     for Rv32LoadStoreAdapterInterface<T, NUM_CELLS>
 {
     /// `[read_data, prev_data]` where `prev_data` is currenlty only used when this is a STORE instruction.
@@ -112,7 +112,7 @@ impl<F: Field, const NUM_CELLS: usize> Rv32LoadStoreAdapter<F, NUM_CELLS> {
     }
 }
 
-impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
+impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
     for Rv32LoadStoreAdapter<F, NUM_CELLS>
 {
     type ReadRecord = Rv32LoadStoreAdapterReadRecord<F, NUM_CELLS>;
@@ -127,7 +127,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -157,9 +157,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         assert!(imm < (1 << RV_IS_TYPE_IMM_BITS));
         assert!(ptr_val < (1 << addr_bits));
 
-        let opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
-        let read_record = match opcode {
+        let read_record = match local_opcode_index {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                 memory.read::<NUM_CELLS>(e, F::from_canonical_u32(ptr_val))
             }
@@ -168,7 +168,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
 
         // We need to keep values of some cells to keep them unchanged when writing to those cells
         let mut prev_data = [F::zero(); NUM_CELLS];
-        match opcode {
+        match local_opcode_index {
             STOREH => {
                 for (i, cell) in prev_data
                     .iter_mut()
@@ -206,7 +206,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         let Instruction {
@@ -218,9 +218,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> MachineAdapter<F>
             ..
         } = *instruction;
 
-        let opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
-        let write_record = match opcode {
+        let write_record = match local_opcode_index {
             STOREW | STOREH | STOREB => {
                 let ptr = compose(read_record.rs1.data);
                 let imm =

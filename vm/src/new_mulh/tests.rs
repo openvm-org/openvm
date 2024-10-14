@@ -1,4 +1,4 @@
-use super::integration::solve_mulh;
+use super::core::solve_mulh;
 use crate::arch::instructions::MulHOpcode;
 
 const RV32_NUM_LIMBS: usize = 4;

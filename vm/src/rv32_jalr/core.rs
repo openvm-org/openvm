@@ -8,9 +8,8 @@ use crate::{
     arch::{
         compose,
         instructions::{Rv32JalrOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes, PC_BITS,
-        RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes, PC_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
     },
     program::Instruction,
 };
@@ -27,42 +26,42 @@ impl<T> Rv32JalrCols<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalrAir<F: Field> {
+pub struct Rv32JalrCoreAir<F: Field> {
     pub _marker: PhantomData<F>,
     pub offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32JalrAir<F> {
+impl<F: Field> BaseAir<F> for Rv32JalrCoreAir<F> {
     fn width(&self) -> usize {
         Rv32JalrCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalrAir<F> {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalrCoreAir<F> {}
 
-impl<AB: InteractionBuilder, I> MachineIntegrationAir<AB, I> for Rv32JalrAir<AB::F>
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for Rv32JalrCoreAir<AB::F>
 where
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalrIntegration<F: Field> {
-    pub air: Rv32JalrAir<F>,
+pub struct Rv32JalrCoreChip<F: Field> {
+    pub air: Rv32JalrCoreAir<F>,
 }
 
-impl<F: Field> Rv32JalrIntegration<F> {
+impl<F: Field> Rv32JalrCoreChip<F> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: Rv32JalrAir::<F> {
+            air: Rv32JalrCoreAir::<F> {
                 _marker: PhantomData,
                 offset,
             },
@@ -70,25 +69,25 @@ impl<F: Field> Rv32JalrIntegration<F> {
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>> MachineIntegration<F, A> for Rv32JalrIntegration<F>
+impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32JalrCoreChip<F>
 where
     Reads<F, A::Interface<F>>: Into<[F; RV32_REGISTER_NUM_LANES]>,
     Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
-    type Air = Rv32JalrAir<F>;
+    type Air = Rv32JalrCoreAir<F>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
         from_pc: F,
-        reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
+        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction {
             opcode, op_c: c, ..
         } = *instruction;
-        let opcode = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode_index = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
 
         // Note: immediate is a signed integer and c is a field element
         let imm = (c + F::from_canonical_u32(1 << (RV_IS_TYPE_IMM_BITS - 1))).as_canonical_u32()
@@ -96,10 +95,10 @@ where
             - (1 << (RV_IS_TYPE_IMM_BITS - 1));
 
         let rs1 = compose(reads.into());
-        let (to_pc, rd_data) = solve_jalr(opcode, from_pc.as_canonical_u32(), imm, rs1);
+        let (to_pc, rd_data) = solve_jalr(local_opcode_index, from_pc.as_canonical_u32(), imm, rs1);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: Some(F::from_canonical_u32(to_pc)),
             writes: rd_data.into(),
         };

@@ -78,7 +78,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             op_f: y_as,
             ..
         } = instruction;
-        let opcode = opcode - self.offset;
+        let local_opcode_index = FieldArithmeticOpcode::from_usize(opcode - self.offset);
 
         let mut memory_chip = self.memory_chip.borrow_mut();
 
@@ -92,12 +92,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
 
         let x = x_read.value();
         let y = y_read.value();
-        let z = FieldArithmetic::solve(FieldArithmeticOpcode::from_usize(opcode), (x, y)).unwrap();
+        let z = FieldArithmetic::solve(local_opcode_index, (x, y)).unwrap();
 
         let z_write = memory_chip.write_cell(z_as, z_address, z);
 
         self.records.push(FieldArithmeticRecord {
-            opcode,
+            opcode: opcode - self.offset,
             from_state,
             x_read,
             y_read,

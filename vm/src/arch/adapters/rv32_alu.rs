@@ -12,8 +12,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionOutput, IntegrationInterface,
-        MachineAdapter, MachineAdapterAir, MachineAdapterInterface, Result,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -96,14 +96,14 @@ impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
     }
 }
 
-impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32AluAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
     type Interface = Rv32RTypeAdapterInterface<AB::Expr>;
 
     fn eval(
         &self,
         builder: &mut AB,
         local: &[AB::Var],
-        ctx: IntegrationInterface<AB::Expr, Self::Interface>,
+        ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
         let local: &Rv32AluAdapterCols<_> = local.borrow();
         let timestamp = local.from_state.timestamp;
@@ -157,7 +157,7 @@ impl<AB: InteractionBuilder> MachineAdapterAir<AB> for Rv32AluAdapterAir {
     }
 }
 
-impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
+impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
     type ReadRecord = Rv32AluReadRecord<F>;
     type WriteRecord = Rv32AluWriteRecord<F>;
     type Air = Rv32AluAdapterAir;
@@ -168,7 +168,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as MachineAdapterInterface<F>>::Reads,
+        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -219,7 +219,7 @@ impl<F: PrimeField32> MachineAdapter<F> for Rv32AluAdapter<F> {
         memory: &mut MemoryChip<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
-        output: InstructionOutput<F, Self::Interface<F>>,
+        output: AdapterRuntimeContext<F, Self::Interface<F>>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check

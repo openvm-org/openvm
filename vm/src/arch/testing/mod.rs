@@ -16,7 +16,7 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use crate::{
-    arch::{ExecutionState, MachineChip},
+    arch::{ExecutionState, VmChip},
     core::RANGE_CHECKER_BUS,
     memory::{offline_checker::MemoryBus, MemoryChip},
     program::{bridge::ProgramBus, Instruction},
@@ -34,14 +34,14 @@ use super::{ExecutionBus, InstructionExecutor};
 use crate::{hashes::poseidon2::Poseidon2Chip, memory::MemoryChipRef, vm::config::PersistenceType};
 
 #[derive(Clone, Debug)]
-pub struct MachineChipTestBuilder<F: PrimeField32> {
+pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
     rng: StdRng,
 }
 
-impl<F: PrimeField32> MachineChipTestBuilder<F> {
+impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
         memory_chip: MemoryChipRef<F>,
         execution_bus: ExecutionBus,
@@ -117,13 +117,13 @@ impl<F: PrimeField32> MachineChipTestBuilder<F> {
     }
 }
 
-impl MachineChipTestBuilder<BabyBear> {
-    pub fn build(self) -> MachineChipTester {
+impl VmChipTestBuilder<BabyBear> {
+    pub fn build(self) -> VmChipTester {
         self.memory
             .chip
             .borrow_mut()
             .finalize(None::<&mut Poseidon2Chip<BabyBear>>);
-        let tester = MachineChipTester {
+        let tester = VmChipTester {
             memory: Some(self.memory),
             ..Default::default()
         };
@@ -132,7 +132,7 @@ impl MachineChipTestBuilder<BabyBear> {
     }
 }
 
-impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
+impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
         let mem_config = MemoryConfig::new(2, 29, 29, 17, PersistenceType::Volatile);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
@@ -153,13 +153,13 @@ impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
 type SC = BabyBearPoseidon2Config;
 
 #[derive(Default)]
-pub struct MachineChipTester {
+pub struct VmChipTester {
     pub memory: Option<MemoryTester<Val<SC>>>,
     pub air_infos: Vec<AirInfo<SC>>,
 }
 
-impl MachineChipTester {
-    pub fn load<C: MachineChip<Val<SC>> + Chip<SC>>(mut self, mut chip: C) -> Self {
+impl VmChipTester {
+    pub fn load<C: VmChip<Val<SC>> + Chip<SC>>(mut self, mut chip: C) -> Self {
         let public_value = chip.generate_public_values();
         let air = chip.air();
         let trace = chip.generate_trace();
@@ -200,7 +200,7 @@ impl MachineChipTester {
         self
     }
 
-    pub fn load_with_custom_trace<C: MachineChip<Val<SC>> + Chip<SC>>(
+    pub fn load_with_custom_trace<C: VmChip<Val<SC>> + Chip<SC>>(
         mut self,
         mut chip: C,
         trace: RowMajorMatrix<Val<SC>>,

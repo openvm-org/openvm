@@ -14,8 +14,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{DivRemOpcode, UsizeOpcode},
-        InstructionOutput, IntegrationInterface, MachineAdapter, MachineAdapterInterface,
-        MachineIntegration, MachineIntegrationAir, Reads, Result, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, Writes,
     },
     program::Instruction,
 };
@@ -35,12 +35,12 @@ pub struct DivRemCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct DivRemAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct DivRemCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: RangeTupleCheckerBus<2>,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for DivRemAir<NUM_LIMBS, LIMB_BITS>
+    for DivRemCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         DivRemCols::<F, NUM_LIMBS, LIMB_BITS>::width()
@@ -48,45 +48,45 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for DivRemAir<NUM_LIMBS, LIMB_BITS>
+    for DivRemCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for DivRemAir<NUM_LIMBS, LIMB_BITS>
+    for DivRemCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, _builder: &mut AB) {
         todo!();
     }
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> MachineIntegrationAir<AB, I>
-    for DivRemAir<NUM_LIMBS, LIMB_BITS>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
+    for DivRemCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
-    I: MachineAdapterInterface<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
 {
     fn eval(
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
         _local_adapter: &[AB::Var],
-    ) -> IntegrationInterface<AB::Expr, I> {
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }
 
 #[derive(Debug)]
-pub struct DivRemIntegration<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: DivRemAir<NUM_LIMBS, LIMB_BITS>,
+pub struct DivRemCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: DivRemCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemIntegration<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(range_tuple_chip: Arc<RangeTupleCheckerChip<2>>, offset: usize) -> Self {
         Self {
-            air: DivRemAir {
+            air: DivRemCoreAir {
                 bus: *range_tuple_chip.bus(),
             },
             range_tuple_chip,
@@ -95,43 +95,45 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemIntegration<NUM_LIMBS
     }
 }
 
-impl<F: PrimeField32, A: MachineAdapter<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    MachineIntegration<F, A> for DivRemIntegration<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    VmCoreChip<F, A> for DivRemCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
     Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
 {
     // TODO: update for trace generation
     type Record = u32;
-    type Air = DivRemAir<NUM_LIMBS, LIMB_BITS>;
+    type Air = DivRemCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
         _from_pc: F,
-        reads: <A::Interface<F> as MachineAdapterInterface<F>>::Reads,
-    ) -> Result<(InstructionOutput<F, A::Interface<F>>, Self::Record)> {
+        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let opcode = DivRemOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = DivRemOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
         let (q, r, _x_sign, _y_sign) = solve_divrem::<NUM_LIMBS, LIMB_BITS>(
-            opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM,
+            local_opcode_index == DivRemOpcode::DIV || local_opcode_index == DivRemOpcode::REM,
             &x,
             &y,
         );
 
-        let z = if opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::DIVU {
+        let z = if local_opcode_index == DivRemOpcode::DIV
+            || local_opcode_index == DivRemOpcode::DIVU
+        {
             &q
         } else {
             &r
         };
 
-        // Integration doesn't modify PC directly, so we let Adapter handle the increment
-        let output: InstructionOutput<F, A::Interface<F>> = InstructionOutput {
+        // Core doesn't modify PC directly, so we let Adapter handle the increment
+        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
             to_pc: None,
             writes: z.map(F::from_canonical_u32).into(),
         };

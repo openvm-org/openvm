@@ -62,7 +62,7 @@ pub trait InstructionExecutor<F> {
 /// Currently also specialized to AIRs with only a single common main trace matrix and no cached trace.
 /// For proving, the trait [Chip](afs_stark_backend::chip::Chip) must also be implemented.
 #[enum_dispatch]
-pub trait MachineChip<F>: Sized {
+pub trait VmChip<F>: Sized {
     fn generate_trace(self) -> RowMajorMatrix<F>;
     fn air_name(&self) -> String;
     fn generate_public_values(&mut self) -> Vec<F> {
@@ -92,7 +92,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     }
 }
 
-impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
+impl<F, C: VmChip<F>> VmChip<F> for Rc<RefCell<C>> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         match Rc::try_unwrap(self) {
             Ok(ref_cell) => ref_cell.into_inner().generate_trace(),
@@ -121,7 +121,7 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
 #[strum_discriminants(derive(Serialize, Deserialize))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
-pub enum InstructionExecutorVariant<F: PrimeField32> {
+pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
@@ -151,8 +151,8 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
 }
 
 #[derive(Debug, Clone, IntoStaticStr, Chip)]
-#[enum_dispatch(MachineChip<F>)]
-pub enum MachineChipVariant<F: PrimeField32> {
+#[enum_dispatch(VmChip<F>)]
+pub enum AxVmChip<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
@@ -184,7 +184,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
-impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
+impl<F: PrimeField32> VmChip<F> for Arc<VariableRangeCheckerChip> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         VariableRangeCheckerChip::generate_trace(&self)
     }
@@ -202,7 +202,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<VariableRangeCheckerChip> {
     }
 }
 
-impl<F: PrimeField32, const N: usize> MachineChip<F> for Arc<RangeTupleCheckerChip<N>> {
+impl<F: PrimeField32, const N: usize> VmChip<F> for Arc<RangeTupleCheckerChip<N>> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         RangeTupleCheckerChip::generate_trace(&self)
     }
@@ -220,7 +220,7 @@ impl<F: PrimeField32, const N: usize> MachineChip<F> for Arc<RangeTupleCheckerCh
     }
 }
 
-impl<F: PrimeField32, const M: usize> MachineChip<F> for Arc<XorLookupChip<M>> {
+impl<F: PrimeField32, const M: usize> VmChip<F> for Arc<XorLookupChip<M>> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         XorLookupChip::generate_trace(&self)
     }

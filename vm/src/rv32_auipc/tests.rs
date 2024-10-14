@@ -3,14 +3,14 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use rand::{rngs::StdRng, Rng};
 
-use super::{Rv32AuipcChip, Rv32AuipcIntegration};
+use super::{Rv32AuipcChip, Rv32AuipcCoreChip};
 use crate::{
     arch::{
         instructions::{
             Rv32AuipcOpcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, MachineChipTestBuilder},
+        testing::{memory::gen_pointer, VmChipTestBuilder},
         Rv32RdWriteAdapter,
     },
     program::Instruction,
@@ -22,7 +22,7 @@ const IMM_BITS: usize = 24;
 type F = BabyBear;
 
 fn set_and_execute(
-    tester: &mut MachineChipTestBuilder<F>,
+    tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32AuipcChip<F>,
     rng: &mut StdRng,
     opcode: Rv32AuipcOpcode,
@@ -54,9 +54,9 @@ fn set_and_execute(
 #[test]
 fn simple_execute_roundtrip_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32RdWriteAdapter::<F>::new();
-    let inner = Rv32AuipcIntegration::<F>::new(Rv32AuipcOpcode::default_offset());
+    let inner = Rv32AuipcCoreChip::<F>::new(Rv32AuipcOpcode::default_offset());
     let mut chip = Rv32AuipcChip::<F>::new(adapter, inner, tester.memory_chip());
 
     let num_tests: usize = 10;

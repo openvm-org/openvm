@@ -5,14 +5,14 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
-use super::{solve_write_data, LoadStoreIntegration, Rv32LoadStoreChip};
+use super::{solve_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
 use crate::{
     arch::{
         instructions::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, MachineChipTestBuilder},
+        testing::{memory::gen_pointer, VmChipTestBuilder},
         Rv32LoadStoreAdapter,
     },
     program::Instruction,
@@ -29,7 +29,7 @@ fn num_into_limbs(num: u32) -> [F; 4] {
 }
 
 fn set_and_execute(
-    tester: &mut MachineChipTestBuilder<F>,
+    tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32LoadStoreChip<F>,
     rng: &mut StdRng,
     opcode: Rv32LoadStoreOpcode,
@@ -89,12 +89,12 @@ fn set_and_execute(
 #[test]
 fn simple_execute_roundtrip_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = MachineChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32LoadStoreAdapter::<F, RV32_NUM_CELLS>::new(
         tester.memory_chip().borrow().range_checker.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadStoreIntegration::<F, RV32_NUM_CELLS>::new(adapter.offset);
+    let inner = LoadStoreCoreChip::<F, RV32_NUM_CELLS>::new(adapter.offset);
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_chip());
 
     let num_tests: usize = 10;
