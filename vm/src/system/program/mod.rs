@@ -294,14 +294,14 @@ impl<F> Program<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ProgramAir<F> {
-    pub program: Program<F>,
+pub struct ProgramAir {
     bus: ProgramBus,
 }
 
 #[derive(Debug)]
 pub struct ProgramChip<F> {
-    pub air: ProgramAir<F>,
+    pub air: ProgramAir,
+    pub program: Program<F>,
     pub true_program_length: usize,
     pub execution_frequencies: Vec<usize>,
 }
@@ -317,9 +317,9 @@ impl<F: PrimeField64> ProgramChip<F> {
         }
         Self {
             execution_frequencies: vec![0; program.len()],
+            program,
             true_program_length,
             air: ProgramAir {
-                program,
                 bus: ProgramBus(READ_INSTRUCTION_BUS),
             },
         }
@@ -333,7 +333,7 @@ impl<F: PrimeField64> ProgramChip<F> {
             return Err(ExecutionError::PcOutOfBounds(pc, self.true_program_length));
         }
         self.execution_frequencies[pc] += 1;
-        Ok(self.air.program.instructions_and_debug_infos[&pc].clone())
+        Ok(self.program.instructions_and_debug_infos[&pc].clone())
     }
 }
 
