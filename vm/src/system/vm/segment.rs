@@ -394,8 +394,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 ExecutorName::JalLuiRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalLuiChip::new(
-                        Rv32RdWriteAdapter::new(),
-                        Rv32JalLuiCoreChip::new(offset),
+                        Rv32RdWriteAdapter::new(execution_bus, program_bus, memory_chip.clone()),
+                        Rv32JalLuiCoreChip::new(byte_xor_chip.clone(), offset),
                         memory_chip.clone(),
                     )));
                     for opcode in range {
@@ -416,7 +416,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 ExecutorName::AuipcRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32AuipcChip::new(
-                        Rv32RdWriteAdapter::new(),
+                        Rv32RdWriteAdapter::new(execution_bus, program_bus, memory_chip.clone()),
                         Rv32AuipcCoreChip::new(offset),
                         memory_chip.clone(),
                     )));

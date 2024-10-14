@@ -16,6 +16,9 @@ pub use rv32_rdwrite::*;
 /// 32-bit register stored as 4 bytes (4 lanes of 8-bits)
 pub const RV32_REGISTER_NUM_LANES: usize = 4;
 
+/// Each cell should be 8 bits
+pub const RV32_CELL_BITS: usize = 8;
+
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 

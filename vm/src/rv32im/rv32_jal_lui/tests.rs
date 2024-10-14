@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use afs_primitives::xor::lookup::XorLookupChip;
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -10,9 +13,10 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, VmChipTestBuilder},
+        testing::VmChipTestBuilder,
     },
-    rv32im::adapters::Rv32RdWriteAdapter,
+    kernels::core::BYTE_XOR_BUS,
+    rv32im::adapters::{Rv32RdWriteAdapter, RV32_CELL_BITS},
     system::program::Instruction,
 };
 
@@ -32,7 +36,7 @@ fn set_and_execute(
         LUI => imm,
     };
 
-    let a = gen_pointer(rng, 32);
+    let a = rng.gen_range(1..32) << 2;
 
     tester.execute(
         chip,
@@ -71,16 +75,45 @@ fn set_and_execute(
 #[test]
 fn simple_execute_roundtrip_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapter::<F>::new();
-    let inner = Rv32JalLuiCoreChip::<F>::new(Rv32JalLuiOpcode::default_offset());
-    let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_chip());
+    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
+    let mut tester = VmChipTestBuilder::default();
+    let adapter = Rv32RdWriteAdapter::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
+    let inner = Rv32JalLuiCoreChip::new(xor_lookup_chip, Rv32JalLuiOpcode::default_offset());
+    let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_chip());
     let num_tests: usize = 10;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, JAL);
         set_and_execute(&mut tester, &mut chip, &mut rng, LUI);
     }
+}
+
+#[test]
+fn rand_jal_lui_test() {
+    let mut rng = create_seeded_rng();
+    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+
+    let mut tester = VmChipTestBuilder::default();
+    let adapter = Rv32RdWriteAdapter::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_chip(),
+    );
+    let inner = Rv32JalLuiCoreChip::new(xor_lookup_chip.clone(), Rv32JalLuiOpcode::default_offset());
+    let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_chip());
+    let num_tests: usize = 1;
+    for _ in 0..num_tests {
+        // set_and_execute(&mut tester, &mut chip, &mut rng, JAL);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LUI);
+    }
+
+    // println!("{:?}", chip.clone().generate_trace());
+    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    tester.simple_test().expect("Verification failed");
 }
 
 #[test]

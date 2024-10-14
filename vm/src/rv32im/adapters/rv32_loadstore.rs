@@ -15,14 +15,13 @@ use crate::{
         },
         AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterAir,
         VmAdapterChip, VmAdapterInterface,
-    },
-    system::{
+    }, rv32im::adapters::RV32_CELL_BITS, system::{
         memory::{
             offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryChip, MemoryReadRecord, MemoryWriteRecord,
         },
         program::Instruction,
-    },
+    }
 };
 
 #[repr(C)]
@@ -146,7 +145,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         // We constrain that the pointer to the memory has ar most addr_bits
         let addr_bits = memory.mem_config.pointer_max_bits;
-        debug_assert!(addr_bits >= (RV32_REGISTER_NUM_LANES - 1) * 8);
+        debug_assert!(addr_bits >= (RV32_REGISTER_NUM_LANES - 1) * RV32_CELL_BITS);
 
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
         let rs1_val = compose(rs1_record.data);

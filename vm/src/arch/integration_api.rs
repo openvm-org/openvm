@@ -349,6 +349,11 @@ where
     }
 }
 
+// Trait to be implemented on some AdapterIntefraces so CoreAir can get from_pc from local_adapter
+pub trait HasFromPc<T> {
+    fn get_from_pc(local_adapter: &[T]) -> T;
+}
+
 /// The most common adapter interface.
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
