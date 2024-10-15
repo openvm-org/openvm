@@ -7,7 +7,7 @@ use afs_primitives::{
         utils::*,
         OverflowInt,
     },
-    sub_chip::{AirConfig, LocalTraceInstructions},
+    sub_chip::{AirConfig, LocalTraceInstructions, SubAir},
     var_range::VariableRangeCheckerChip,
 };
 use afs_stark_backend::{
@@ -126,14 +126,14 @@ impl ExprBuilder {
 }
 
 #[derive(Clone)]
-pub struct FieldExprAir {
+pub struct FieldExpr {
     pub builder: ExprBuilder,
 
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
-impl Deref for FieldExprAir {
+impl Deref for FieldExpr {
     type Target = ExprBuilder;
 
     fn deref(&self) -> &ExprBuilder {
@@ -141,9 +141,9 @@ impl Deref for FieldExprAir {
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for FieldExprAir {}
-impl<F: Field> PartitionedBaseAir<F> for FieldExprAir {}
-impl<F: Field> BaseAir<F> for FieldExprAir {
+impl<F: Field> BaseAirWithPublicValues<F> for FieldExpr {}
+impl<F: Field> PartitionedBaseAir<F> for FieldExpr {}
+impl<F: Field> BaseAir<F> for FieldExpr {
     fn width(&self) -> usize {
         self.num_limbs * (self.builder.num_input + self.builder.num_variables)
             + self.builder.q_limbs.iter().sum::<usize>()
@@ -153,11 +153,21 @@ impl<F: Field> BaseAir<F> for FieldExprAir {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for FieldExprAir {
+impl<AB: InteractionBuilder> Air<AB> for FieldExpr {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let (is_valid, inputs, vars, q_limbs, carry_limbs, flags) = self.load_vars(&local);
+        let local = local.to_vec();
+        SubAir::eval(self, builder, local, ());
+    }
+}
+
+impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
+    type IoView = Vec<AB::Var>;
+    type AuxView = ();
+
+    fn eval(&self, builder: &mut AB, io: Vec<AB::Var>, _aux: ()) {
+        let (is_valid, inputs, vars, q_limbs, carry_limbs, flags) = self.load_vars(&io);
         let inputs = load_overflow::<AB>(inputs, self.limb_bits);
         let vars = load_overflow::<AB>(vars, self.limb_bits);
 
@@ -196,25 +206,12 @@ type Vecs<T> = Vec<Vec<T>>;
 // is_valid, inputs, vars, q_limbs, carry_limbs, flags
 type AllCols<T> = (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>, Vec<T>);
 
-#[derive(Clone)]
-pub struct FieldExprChip {
-    pub air: FieldExprAir,
-}
-
-impl Deref for FieldExprChip {
-    type Target = FieldExprAir;
-
-    fn deref(&self) -> &FieldExprAir {
-        &self.air
-    }
-}
-
-impl AirConfig for FieldExprChip {
+impl AirConfig for FieldExpr {
     // No column struct.
     type Cols<T> = Vec<T>;
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
+impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExpr {
     type LocalInput = (Vec<BigUint>, Arc<VariableRangeCheckerChip>, Vec<bool>);
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
@@ -313,7 +310,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
     }
 }
 
-impl FieldExprAir {
+impl FieldExpr {
     pub fn execute(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
         let mut vars = vec![BigUint::zero(); self.num_variables];
         for i in 0..self.constraints.len() {

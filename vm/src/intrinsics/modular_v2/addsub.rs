@@ -3,17 +3,18 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerChip,
 };
-use ax_ecc_primitives::field_expression::{
-    ExprBuilder, FieldExprAir, FieldExprChip, FieldVariable,
-};
+use afs_stark_backend::rap::BaseAirWithPublicValues;
+use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldVariable};
 use num_bigint_dig::BigUint;
-use p3_field::PrimeField32;
+use p3_air::{AirBuilder, BaseAir};
+use p3_field::{Field, PrimeField32};
 
 use super::{ModularConfig, FIELD_ELEMENT_BITS};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     rv32im::adapters::Rv32HeapAdapterInterface,
     system::program::Instruction,
@@ -21,17 +22,12 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct ModularAddSubV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
-    pub chip: FieldExprChip,
-    pub offset: usize,
+pub struct ModularAddSubV2CoreAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+    pub expr: FieldExpr,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE> {
-    pub fn new(
-        modulus: BigUint,
-        range_checker: Arc<VariableRangeCheckerChip>,
-        offset: usize,
-    ) -> Self {
+impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE> {
+    pub fn new(modulus: BigUint, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         assert!(modulus.bits() <= NUM_LIMBS * LIMB_SIZE);
         let bus = range_checker.bus();
         let subair = CheckCarryModToZeroSubAir::new(
@@ -57,13 +53,56 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM
         x5.save();
         let builder = builder.borrow().clone();
 
-        let air = FieldExprAir {
+        let expr = FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
             range_checker,
         };
-        let chip = FieldExprChip { air };
-        Self { chip, offset }
+        Self { expr }
+    }
+}
+
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>
+    for ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>
+{
+    fn width(&self) -> usize {
+        BaseAir::<F>::width(&self.expr)
+    }
+}
+
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAirWithPublicValues<F>
+    for ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>
+{
+}
+
+impl<AB: AirBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
+    VmCoreAir<AB, Rv32HeapAdapterInterface<AB::Expr, NUM_LIMBS, NUM_LIMBS>>
+    for ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>
+{
+    fn eval(
+        &self,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _local_adapter: &[AB::Var],
+    ) -> AdapterAirContext<AB::Expr, Rv32HeapAdapterInterface<AB::Expr, NUM_LIMBS, NUM_LIMBS>> {
+        todo!()
+    }
+}
+
+#[derive(Clone)]
+pub struct ModularAddSubV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+    pub air: ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>,
+    pub offset: usize,
+}
+
+impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE> {
+    pub fn new(
+        modulus: BigUint,
+        range_checker: Arc<VariableRangeCheckerChip>,
+        offset: usize,
+    ) -> Self {
+        let air = ModularAddSubV2CoreAir::new(modulus, range_checker);
+        Self { air, offset }
     }
 }
 
@@ -72,7 +111,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     for ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE>
 {
     type Record = ();
-    type Air = FieldExprAir;
+    type Air = ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>;
 
     fn execute_instruction(
         &self,
@@ -84,7 +123,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         Self::Record,
     )> {
         let Instruction { opcode, .. } = instruction.clone();
-        let opcode = opcode - self.offset;
+        let local_opcode_index = opcode - self.offset;
         let (x, y) = reads;
         let x = x.map(|x| x.as_canonical_u32());
         let y = y.map(|x| x.as_canonical_u32());
@@ -92,7 +131,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         let x_biguint = limbs_to_biguint(&x, LIMB_SIZE);
         let y_biguint = limbs_to_biguint(&y, LIMB_SIZE);
 
-        let opcode = ModularArithmeticOpcode::from_usize(opcode);
+        let opcode = ModularArithmeticOpcode::from_usize(local_opcode_index);
         let is_add_flag = match opcode {
             ModularArithmeticOpcode::ADD => true,
             ModularArithmeticOpcode::SUB => false,
@@ -100,7 +139,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         };
 
         let vars = self
-            .chip
+            .air
+            .expr
             .execute(vec![x_biguint, y_biguint], vec![is_add_flag]);
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
@@ -116,7 +156,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {
-        "todo".to_string()
+        "ModularAddSub".to_string()
     }
 
     fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
@@ -124,6 +164,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     }
 
     fn air(&self) -> &Self::Air {
-        &self.chip.air
+        &self.air
     }
 }

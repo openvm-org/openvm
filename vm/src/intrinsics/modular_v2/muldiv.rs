@@ -3,17 +3,18 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerChip,
 };
-use ax_ecc_primitives::field_expression::{
-    ExprBuilder, FieldExprAir, FieldExprChip, FieldVariable, SymbolicExpr,
-};
+use afs_stark_backend::rap::BaseAirWithPublicValues;
+use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldVariable, SymbolicExpr};
 use num_bigint_dig::BigUint;
-use p3_field::PrimeField32;
+use p3_air::{AirBuilder, BaseAir};
+use p3_field::{Field, PrimeField32};
 
 use super::{ModularConfig, FIELD_ELEMENT_BITS};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     rv32im::adapters::Rv32HeapAdapterInterface,
     system::program::Instruction,
@@ -21,17 +22,12 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct ModularMulDivV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
-    pub chip: FieldExprChip,
-    pub offset: usize,
+pub struct ModularMulDivV2CoreAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+    pub expr: FieldExpr,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2CoreChip<NUM_LIMBS, LIMB_SIZE> {
-    pub fn new(
-        modulus: BigUint,
-        range_checker: Arc<VariableRangeCheckerChip>,
-        offset: usize,
-    ) -> Self {
+impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2CoreAir<NUM_LIMBS, LIMB_SIZE> {
+    pub fn new(modulus: BigUint, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         assert!(modulus.bits() <= NUM_LIMBS * LIMB_SIZE);
         let bus = range_checker.bus();
         let subair = CheckCarryModToZeroSubAir::new(
@@ -63,13 +59,56 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2CoreChip<NUM
 
         let builder = builder.borrow().clone();
 
-        let air = FieldExprAir {
+        let expr = FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
             range_checker,
         };
-        let chip = FieldExprChip { air };
-        Self { chip, offset }
+        Self { expr }
+    }
+}
+
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>
+    for ModularMulDivV2CoreAir<NUM_LIMBS, LIMB_SIZE>
+{
+    fn width(&self) -> usize {
+        BaseAir::<F>::width(&self.expr)
+    }
+}
+
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAirWithPublicValues<F>
+    for ModularMulDivV2CoreAir<NUM_LIMBS, LIMB_SIZE>
+{
+}
+
+impl<AB: AirBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
+    VmCoreAir<AB, Rv32HeapAdapterInterface<AB::Expr, NUM_LIMBS, NUM_LIMBS>>
+    for ModularMulDivV2CoreAir<NUM_LIMBS, LIMB_SIZE>
+{
+    fn eval(
+        &self,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _local_adapter: &[AB::Var],
+    ) -> AdapterAirContext<AB::Expr, Rv32HeapAdapterInterface<AB::Expr, NUM_LIMBS, NUM_LIMBS>> {
+        todo!()
+    }
+}
+
+#[derive(Clone)]
+pub struct ModularMulDivV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+    pub air: ModularMulDivV2CoreAir<NUM_LIMBS, LIMB_SIZE>,
+    pub offset: usize,
+}
+
+impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2CoreChip<NUM_LIMBS, LIMB_SIZE> {
+    pub fn new(
+        modulus: BigUint,
+        range_checker: Arc<VariableRangeCheckerChip>,
+        offset: usize,
+    ) -> Self {
+        let air = ModularMulDivV2CoreAir::new(modulus, range_checker);
+        Self { air, offset }
     }
 }
 
@@ -78,7 +117,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     for ModularMulDivV2CoreChip<NUM_LIMBS, LIMB_SIZE>
 {
     type Record = ();
-    type Air = FieldExprAir;
+    type Air = ModularMulDivV2CoreAir<NUM_LIMBS, LIMB_SIZE>;
 
     fn execute_instruction(
         &self,
@@ -106,7 +145,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         };
 
         let vars = self
-            .chip
+            .air
+            .expr
             .execute(vec![x_biguint, y_biguint], vec![is_mul_flag]);
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
@@ -130,6 +170,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     }
 
     fn air(&self) -> &Self::Air {
-        &self.chip.air
+        &self.air
     }
 }

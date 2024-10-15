@@ -73,7 +73,10 @@ fn test_modular_add() {
         assert!(a < modulus);
         assert!(b < modulus);
 
-        let r = chip.chip.execute(vec![a.clone(), b.clone()], vec![op == 0]);
+        let r = chip
+            .air
+            .expr
+            .execute(vec![a.clone(), b.clone()], vec![op == 0]);
         let r = r[0].clone();
 
         // Write to memories
@@ -178,7 +181,10 @@ fn test_modular_muldiv() {
         assert!(a < modulus);
         assert!(b < modulus);
 
-        let r = chip.chip.execute(vec![a.clone(), b.clone()], vec![op == 2]);
+        let r = chip
+            .air
+            .expr
+            .execute(vec![a.clone(), b.clone()], vec![op == 2]);
         let r = r[0].clone();
 
         // Write to memories
