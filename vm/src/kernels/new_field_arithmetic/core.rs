@@ -88,8 +88,6 @@ where
             expected_opcode += flag * AB::Expr::from_canonical_u32(opcode as u32);
             expected_result += flag * result;
         }
-        expected_opcode -= AB::Expr::from_canonical_usize(self.offset);
-
         builder.assert_eq(a, expected_result);
         builder.assert_bool(is_valid.clone());
         builder.assert_eq(cols.is_div, c * cols.divisor_inv);
@@ -100,7 +98,7 @@ where
             writes: [[cols.a.into()]].into(),
             instruction: MinimalInstruction {
                 is_valid,
-                opcode: expected_opcode,
+                opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
             }
             .into(),
         }
