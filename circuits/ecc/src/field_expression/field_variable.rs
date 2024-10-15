@@ -162,6 +162,28 @@ impl FieldVariable {
         }
     }
 
+    pub fn square(&mut self) -> FieldVariable {
+        let builder = self.builder.borrow();
+        let limb_max_abs = self.limb_max_abs * self.limb_max_abs * self.expr_limbs;
+        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
+        let (_, carry_bits) = get_carry_max_abs_and_bits(max_overflow_bits, builder.limb_bits);
+        drop(builder);
+        if carry_bits > self.range_checker_bits {
+            self.save();
+        }
+
+        let limb_max_abs = self.limb_max_abs * self.limb_max_abs * self.expr_limbs;
+        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
+        FieldVariable {
+            expr: SymbolicExpr::Mul(Box::new(self.expr.clone()), Box::new(self.expr.clone())),
+            builder: self.builder.clone(),
+            limb_max_abs,
+            max_overflow_bits,
+            expr_limbs: self.expr_limbs * 2 - 1,
+            range_checker_bits: self.range_checker_bits,
+        }
+    }
+
     pub fn int_mul(&mut self, scalar: isize) -> FieldVariable {
         let builder = self.builder.borrow();
         let max_limb_bits = builder.max_limb_bits;
