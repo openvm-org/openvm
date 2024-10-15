@@ -196,7 +196,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for NativeAdapterChip<F> {
         Ok((
             ExecutionState {
                 pc: from_state.pc + 1,
-                timestamp: memory.timestamp() as u32,
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord {
                 from_state,

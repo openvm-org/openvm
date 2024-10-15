@@ -1,9 +1,6 @@
 use crate::{
     arch::{VmAirWrapper, VmChipWrapper},
-    kernels::{
-        adapters::native_adapter::{NativeAdapterAir, NativeAdapterChip},
-        new_field_arithmetic::{NewFieldArithmeticCoreAir, NewFieldArithmeticCoreChip},
-    },
+    kernels::adapters::native_adapter::{NativeAdapterAir, NativeAdapterChip},
 };
 
 #[cfg(test)]

@@ -1,5 +1,3 @@
-use std::borrow::{Borrow, BorrowMut};
-
 use afs_stark_backend::{
     prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError, Chip,
 };
@@ -12,7 +10,7 @@ use axvm_instructions::UsizeOpcode;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use rand::{rngs::StdRng, Rng};
+use rand::Rng;
 use strum::EnumCount;
 
 use super::{core::NewFieldArithmeticCoreChip, NewFieldArithmeticChip};
@@ -28,8 +26,6 @@ use crate::{
     },
     system::program::Instruction,
 };
-
-type F = BabyBear;
 
 #[test]
 fn new_field_arithmetic_air_test() {
