@@ -25,7 +25,7 @@ use crate::{
         uint_multiplication::UintMultiplicationChip,
     },
     kernels::{
-        core::CoreChip, field_extension::chip::FieldExtensionArithmeticChip,
+        core::CoreChip, field_extension::FieldExtensionArithmeticChip,
         new_field_arithmetic::NewFieldArithmeticChip,
     },
     old::{alu::ArithmeticLogicChip, shift::ShiftChip},

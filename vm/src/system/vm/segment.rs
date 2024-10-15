@@ -49,7 +49,7 @@ use crate::{
             CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
         },
-        field_extension::chip::FieldExtensionArithmeticChip,
+        field_extension::FieldExtensionArithmeticChip,
         new_field_arithmetic::{NewFieldArithmeticChip, NewFieldArithmeticCoreChip},
     },
     old::{alu::ArithmeticLogicChip, shift::ShiftChip},
