@@ -1,8 +1,8 @@
 pub mod adapters;
+pub mod base_alu;
 pub mod branch_eq;
 pub mod branch_lt;
 pub mod loadstore;
-pub mod new_alu;
 pub mod new_divrem;
 pub mod new_lt;
 pub mod new_mul;

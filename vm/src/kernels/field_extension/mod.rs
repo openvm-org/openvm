@@ -1,7 +1,11 @@
-pub mod air;
+mod air;
 mod bridge;
-pub mod chip;
-pub mod columns;
+mod chip;
+mod columns;
 #[cfg(test)]
-pub mod tests;
-pub mod trace;
+mod tests;
+mod trace;
+
+pub use air::*;
+pub use chip::*;
+pub use columns::*;

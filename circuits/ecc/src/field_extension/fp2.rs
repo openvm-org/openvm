@@ -143,20 +143,21 @@ mod tests {
         }
 
         let builder = builder.borrow().clone();
-        let chip = FieldExprChip {
+        let air = FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
             range_checker: range_checker.clone(),
         };
+        let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fp2 = generate_random_fp2();
         let y_fp2 = generate_random_fp2();
         let r_fp2 = fq2_fn(&x_fp2, &y_fp2);
         let inputs = two_fp2_input(&x_fp2, &y_fp2);
 
-        let row = chip.generate_trace_row((inputs, range_checker.clone(), vec![]));
-        let (_, _, vars, _, _, _) = chip.load_vars(&row);
-        let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
+        let row = air.generate_trace_row((inputs, range_checker.clone(), vec![]));
+        let (_, _, vars, _, _, _) = air.load_vars(&row);
+        let trace = RowMajorMatrix::new(row, width);
         let range_trace = range_checker.generate_trace();
         assert_eq!(vars.len(), 2);
         let r_c0 = evaluate_biguint(&vars[0], LIMB_BITS);
@@ -167,7 +168,7 @@ mod tests {
         assert_eq!(r_c1, expected_c1);
 
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![chip, range_checker.air],
+            any_rap_arc_vec![air, range_checker.air],
             vec![trace, range_trace],
         )
         .expect("Verification failed");
@@ -206,11 +207,12 @@ mod tests {
         // no need to save as div auto save.
 
         let builder = builder.borrow().clone();
-        let chip = FieldExprChip {
+        let air = FieldExpr {
             builder: builder.clone(),
             check_carry_mod_to_zero: subair,
             range_checker: range_checker.clone(),
         };
+        let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fp2 = generate_random_fp2();
         let y_fp2 = generate_random_fp2();
@@ -225,9 +227,9 @@ mod tests {
             fq_to_biguint(&z_fp2.c1),
         ];
 
-        let row = chip.generate_trace_row((inputs, range_checker.clone(), vec![]));
-        let (_, _, vars, _, _, _) = chip.load_vars(&row);
-        let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&chip));
+        let row = air.generate_trace_row((inputs, range_checker.clone(), vec![]));
+        let (_, _, vars, _, _, _) = air.load_vars(&row);
+        let trace = RowMajorMatrix::new(row, width);
         let range_trace = range_checker.generate_trace();
         assert_eq!(vars.len(), 2);
         let r_c0 = evaluate_biguint(&vars[0], LIMB_BITS);
@@ -238,7 +240,7 @@ mod tests {
         assert_eq!(r_c1, expected_c1);
 
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![chip, range_checker.air],
+            any_rap_arc_vec![air, range_checker.air],
             vec![trace, range_trace],
         )
         .expect("Verification failed");

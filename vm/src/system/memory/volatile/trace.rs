@@ -3,17 +3,20 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::VolatileBoundaryChip;
-use crate::system::memory::{volatile::columns::VolatileBoundaryCols, MemoryEquipartition};
+use crate::system::memory::{volatile::columns::VolatileBoundaryCols, TimestampedEquipartition};
 
 impl<F: PrimeField32> VolatileBoundaryChip<F> {
-    pub fn generate_trace(&self, final_memory: &MemoryEquipartition<F, 1>) -> RowMajorMatrix<F> {
+    pub fn generate_trace(
+        &self,
+        final_memory: &TimestampedEquipartition<F, 1>,
+    ) -> RowMajorMatrix<F> {
         let trace_height = final_memory.len().next_power_of_two();
         self.generate_trace_with_height(final_memory, trace_height)
     }
 
     pub fn generate_trace_with_height(
         &self,
-        final_memory: &MemoryEquipartition<F, 1>,
+        final_memory: &TimestampedEquipartition<F, 1>,
         trace_height: usize,
     ) -> RowMajorMatrix<F> {
         assert!(trace_height.is_power_of_two());

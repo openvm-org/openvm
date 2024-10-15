@@ -14,7 +14,7 @@ use rand::Rng;
 use crate::{
     kernels::core::RANGE_CHECKER_BUS,
     system::memory::{
-        offline_checker::MemoryBus, volatile::VolatileBoundaryChip, MemoryEquipartition,
+        offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
         TimestampedValues,
     },
 };
@@ -45,7 +45,7 @@ fn boundary_air_test() {
     let boundary_chip =
         VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, DECOMP, range_checker.clone());
 
-    let mut final_memory = MemoryEquipartition::new();
+    let mut final_memory = TimestampedEquipartition::new();
 
     for (addr_space, pointer) in distinct_addresses.iter().cloned() {
         let final_data = Val::from_canonical_usize(rng.gen_range(0..MAX_VAL));

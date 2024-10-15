@@ -15,11 +15,11 @@ use crate::{
 //#[cfg(test)]
 //pub mod tests;
 
-pub mod air;
-pub mod bridge;
-pub mod columns;
-pub mod execute;
-pub mod trace;
+mod air;
+mod bridge;
+mod columns;
+mod execute;
+mod trace;
 
 pub const INST_WIDTH: u32 = 1;
 

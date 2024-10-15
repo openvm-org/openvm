@@ -1,11 +1,15 @@
-use std::{cell::RefCell, mem::size_of};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+};
 
 use afs_derive::AlignedBorrow;
+use afs_primitives::utils;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::BaseAir;
-use p3_field::{Field, PrimeField32};
+use p3_air::{AirBuilder, BaseAir};
+use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{Rv32RTypeAdapterInterface, RV32_REGISTER_NUM_LANES};
+use super::{Rv32RTypeAdapterInterface, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
@@ -14,8 +18,8 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAuxColsFactory, MemoryController, MemoryControllerRef, MemoryReadRecord,
-            MemoryWriteRecord,
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
+            MemoryReadRecord, MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
@@ -24,14 +28,13 @@ use crate::{
 /// Reads instructions of the form OP a, b, c, d, e where [a:4]_d = [b:4]_d op [c:4]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct Rv32AluAdapter<F: Field> {
-    pub air: Rv32AluAdapterAir,
+pub struct Rv32BaseAluAdapterChip<F: Field> {
+    pub air: Rv32BaseAluAdapterAir,
     aux_cols_factory: MemoryAuxColsFactory<F>,
 }
 
-impl<F: PrimeField32> Rv32AluAdapter<F> {
+impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
@@ -41,7 +44,7 @@ impl<F: PrimeField32> Rv32AluAdapter<F> {
         let memory_bridge = memory_controller.memory_bridge();
         let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
-            air: Rv32AluAdapterAir {
+            air: Rv32BaseAluAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
@@ -50,19 +53,20 @@ impl<F: PrimeField32> Rv32AluAdapter<F> {
     }
 }
 
-#[derive(Debug)]
-pub struct Rv32AluReadRecord<F: Field> {
+#[derive(Clone, Debug)]
+pub struct Rv32BaseAluReadRecord<F: Field> {
     /// Read register value from address space d=1
     pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
     /// Either
     /// - read rs2 register value or
-    /// - if `rs2_is_imm` is true, then this is a dummy read where `data` is used for handling of immediate.
-    pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
-    pub rs2_is_imm: bool,
+    /// - if `rs2_is_imm` is true, this is None
+    pub rs2: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>>,
+    /// immediate value of rs2 or 0
+    pub rs2_imm: F,
 }
 
-#[derive(Debug)]
-pub struct Rv32AluWriteRecord<F: Field> {
+#[derive(Clone, Debug)]
+pub struct Rv32BaseAluWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register
     pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
@@ -70,11 +74,12 @@ pub struct Rv32AluWriteRecord<F: Field> {
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct Rv32AluAdapterCols<T> {
+pub struct Rv32BaseAluAdapterCols<T> {
     pub from_state: ExecutionState<T>,
-    pub rd_idx: T,
-    pub rs1_idx: T,
-    pub rs2_idx: T,
+    pub rd_ptr: T,
+    pub rs1_ptr: T,
+    // Pointer if rs2 was a read, immediate value otherwise
+    pub rs2: T,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: T,
     pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>; 2],
@@ -83,34 +88,98 @@ pub struct Rv32AluAdapterCols<T> {
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32AluAdapterAir {
+pub struct Rv32BaseAluAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 }
 
-impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
+impl<F: Field> BaseAir<F> for Rv32BaseAluAdapterAir {
     fn width(&self) -> usize {
-        size_of::<Rv32AluAdapterCols<u8>>()
+        Rv32BaseAluAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
     type Interface = Rv32RTypeAdapterInterface<AB::Expr>;
 
     fn eval(
         &self,
-        _builder: &mut AB,
-        _local: &[AB::Var],
-        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
+        builder: &mut AB,
+        local: &[AB::Var],
+        ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        todo!()
+        let local: &Rv32BaseAluAdapterCols<_> = local.borrow();
+        let timestamp = local.from_state.timestamp;
+        let mut timestamp_delta: usize = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+        };
+
+        // // if rs2 is an immediate value, constrain that its 4-byte representation is correct
+        let rs2_limbs = ctx.reads[1].clone();
+        let rs2_sign = rs2_limbs[2].clone();
+        let rs2_imm = rs2_limbs[0].clone()
+            + rs2_limbs[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS)
+            + rs2_sign.clone() * AB::Expr::from_canonical_usize(1 << (2 * RV32_CELL_BITS));
+        builder.assert_bool(local.rs2_as);
+        let mut rs2_imm_when = builder.when(utils::not(local.rs2_as));
+        rs2_imm_when.assert_eq(local.rs2, rs2_imm);
+        rs2_imm_when.assert_eq(rs2_sign.clone(), rs2_limbs[3].clone());
+        rs2_imm_when.assert_zero(
+            rs2_sign.clone()
+                * (AB::Expr::from_canonical_usize((1 << RV32_CELL_BITS) - 1) - rs2_sign),
+        );
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(AB::Expr::one(), local.rs1_ptr),
+                ctx.reads[0].clone(),
+                timestamp_pp(),
+                &local.reads_aux[0],
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(local.rs2_as, local.rs2),
+                ctx.reads[1].clone(),
+                timestamp_pp(),
+                &local.reads_aux[1],
+            )
+            .eval(builder, local.rs2_as);
+
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(AB::Expr::one(), local.rd_ptr),
+                ctx.writes[0].clone(),
+                timestamp_pp(),
+                &local.writes_aux,
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+
+        self.execution_bridge
+            .execute_and_increment_pc_custom(
+                ctx.instruction.opcode,
+                [
+                    local.rd_ptr.into(),
+                    local.rs1_ptr.into(),
+                    local.rs2.into(),
+                    AB::Expr::one(),
+                    local.rs2_as.into(),
+                ],
+                local.from_state,
+                AB::F::from_canonical_usize(timestamp_delta),
+                AB::Expr::from_canonical_u8(4),
+            )
+            .eval(builder, ctx.instruction.is_valid);
     }
 }
 
-impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
-    type ReadRecord = Rv32AluReadRecord<F>;
-    type WriteRecord = Rv32AluWriteRecord<F>;
-    type Air = Rv32AluAdapterAir;
+impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
+    type ReadRecord = Rv32BaseAluReadRecord<F>;
+    type WriteRecord = Rv32BaseAluWriteRecord<F>;
+    type Air = Rv32BaseAluAdapterAir;
     type Interface = Rv32RTypeAdapterInterface<F>;
 
     fn preprocess(
@@ -133,35 +202,27 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
         debug_assert!(e.as_canonical_u32() <= 1);
 
         let rs1 = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
-        let rs2_is_imm = e.is_zero();
-        let rs2 = if rs2_is_imm {
-            let c_u32 = (c).as_canonical_u32();
+        let (rs2, rs2_data, rs2_imm) = if e.is_zero() {
+            let c_u32 = c.as_canonical_u32();
             debug_assert_eq!(c_u32 >> 24, 0);
-            let c_bytes_le = [
-                c_u32 as u8,
-                (c_u32 >> 8) as u8,
-                (c_u32 >> 16) as u8,
-                (c_u32 >> 16) as u8,
-            ];
-            MemoryReadRecord {
-                address_space: F::zero(),
-                pointer: F::zero(),
-                timestamp: 0,
-                prev_timestamp: 0,
-                data: c_bytes_le.map(F::from_canonical_u8),
-            }
+            memory.increment_timestamp();
+            (
+                None,
+                [
+                    c_u32 as u8,
+                    (c_u32 >> 8) as u8,
+                    (c_u32 >> 16) as u8,
+                    (c_u32 >> 16) as u8,
+                ]
+                .map(F::from_canonical_u8),
+                c,
+            )
         } else {
-            memory.read::<RV32_REGISTER_NUM_LANES>(e, c)
+            let rs2_read = memory.read::<RV32_REGISTER_NUM_LANES>(e, c);
+            (Some(rs2_read.clone()), rs2_read.data, F::zero())
         };
 
-        Ok((
-            [rs1.data, rs2.data],
-            Self::ReadRecord {
-                rs1,
-                rs2,
-                rs2_is_imm,
-            },
-        ))
+        Ok(([rs1.data, rs2_data], Self::ReadRecord { rs1, rs2, rs2_imm }))
     }
 
     fn postprocess(
@@ -172,10 +233,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        // TODO: timestamp delta debug check
-
         let Instruction { op_a: a, d, .. } = *instruction;
         let rd = memory.write(d, a, output.writes[0]);
+
+        let timestamp_delta = memory.timestamp() - from_state.timestamp;
+        debug_assert!(
+            timestamp_delta == 3,
+            "timestamp delta is {}, expected 3",
+            timestamp_delta
+        );
 
         Ok((
             ExecutionState {
@@ -188,11 +254,33 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut [F],
-        _read_record: Self::ReadRecord,
-        _write_record: Self::WriteRecord,
+        row_slice: &mut [F],
+        read_record: Self::ReadRecord,
+        write_record: Self::WriteRecord,
     ) {
-        todo!()
+        let row_slice: &mut Rv32BaseAluAdapterCols<_> = row_slice.borrow_mut();
+        let aux_cols_factory = &self.aux_cols_factory;
+        row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
+        row_slice.rd_ptr = write_record.rd.pointer;
+        row_slice.rs1_ptr = read_record.rs1.pointer;
+        row_slice.rs2 = read_record
+            .rs2
+            .clone()
+            .map(|rs2| rs2.pointer)
+            .unwrap_or(read_record.rs2_imm);
+        row_slice.rs2_as = read_record
+            .rs2
+            .clone()
+            .map(|rs2| rs2.address_space)
+            .unwrap_or(F::zero());
+        row_slice.reads_aux = [
+            aux_cols_factory.make_read_aux_cols(read_record.rs1),
+            match read_record.rs2 {
+                Some(rs2_record) => aux_cols_factory.make_read_aux_cols(rs2_record),
+                None => MemoryReadAuxCols::<F, RV32_REGISTER_NUM_LANES>::disabled(),
+            },
+        ];
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
     }
 
     fn air(&self) -> &Self::Air {
