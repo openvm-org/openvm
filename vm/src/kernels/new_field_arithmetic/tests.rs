@@ -158,7 +158,6 @@ fn new_field_arithmetic_air_zero_div_zero() {
         .1
         .borrow_mut();
     cols.b = BabyBear::zero();
-    let trace = RowMajorMatrix::new(row.to_vec(), width);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
