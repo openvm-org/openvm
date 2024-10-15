@@ -44,8 +44,10 @@ use crate::{
         uint_multiplication::UintMultiplicationChip,
     },
     kernels::{
-        adapters::native_vectorized_adapter::NativeVectorizedAdapterChip,
-        adapters::native_adapter::NativeAdapterChip,
+        adapters::{
+            native_adapter::NativeAdapterChip,
+            native_vectorized_adapter::NativeVectorizedAdapterChip,
+        },
         core::{
             CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
