@@ -12,14 +12,14 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::NativeAdapterInterface;
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryChip, MemoryChipRef, MemoryReadRecord,
-            MemoryWriteRecord,
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
+            MemoryReadRecord, MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
@@ -36,11 +36,11 @@ impl<F: PrimeField32> NativeAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
     ) -> Self {
-        let memory_chip = RefCell::borrow(&memory_chip);
-        let memory_bridge = memory_chip.memory_bridge();
-        let aux_cols_factory = memory_chip.aux_cols_factory();
+        let memory_controller = RefCell::borrow(&memory_controller);
+        let memory_bridge = memory_controller.memory_bridge();
+        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: NativeAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -59,7 +59,7 @@ pub struct NativeReadRecord<F: Field> {
 
 #[derive(Debug)]
 pub struct NativeWriteRecord<F: Field> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub a: MemoryWriteRecord<F, 1>,
 }
 
@@ -159,7 +159,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for NativeAdapterChip<F> {
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -184,19 +184,19 @@ impl<F: PrimeField32> VmAdapterChip<F> for NativeAdapterChip<F> {
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { op_a: a, d, .. } = *instruction;
         let a_val = memory.write(d, a, output.writes[0]);
 
         Ok((
             ExecutionState {
                 pc: from_state.pc + 1,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                timestamp: memory.timestamp() as u32,
             },
             Self::WriteRecord {
                 from_state,
@@ -214,7 +214,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for NativeAdapterChip<F> {
         let row_slice: &mut NativeAdapterCols<_> = row_slice.borrow_mut();
         let aux_cols_factory = &self.aux_cols_factory;
 
-        row_slice.from_state = write_record.from_state.map(F::from_canonical_usize);
+        row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_idx = write_record.a.pointer;
         row_slice.a_as = write_record.a.address_space;
         row_slice.b_idx = read_record.b.pointer;

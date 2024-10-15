@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use itertools::izip;
-use p3_air::{Air, BaseAir};
+use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
@@ -89,7 +89,7 @@ where
             expected_result += flag * result;
         }
         expected_opcode -= AB::Expr::from_canonical_usize(self.offset);
-        builder.assert_eq(cols.a, expected_result);
+        builder.assert_eq(a, expected_result);
         builder.assert_bool(is_valid.clone());
 
         builder.assert_eq(cols.is_div, b * cols.divisor_inv);
@@ -140,7 +140,7 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        _from_pc: F,
+        _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;

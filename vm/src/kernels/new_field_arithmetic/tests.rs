@@ -64,10 +64,10 @@ fn new_field_arithmetic_air_test() {
         NativeAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_chip(),
+            tester.memory_controller(),
         ),
         NewFieldArithmeticCoreChip::new(0),
-        tester.memory_chip(),
+        tester.memory_controller(),
     );
 
     run_test_case(
