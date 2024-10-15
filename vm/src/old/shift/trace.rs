@@ -17,7 +17,7 @@ use crate::{
         instructions::{U256Opcode, UsizeOpcode},
         VmChip,
     },
-    intrinsics::uint_multiplication::MemoryData,
+    old::uint_multiplication::MemoryData,
 };
 
 impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmChip<F>

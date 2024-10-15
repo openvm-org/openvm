@@ -39,9 +39,6 @@ use crate::{
         castf::CastFChip,
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-        modular_addsub::ModularAddSubChip,
-        modular_multdiv::ModularMultDivChip,
-        uint_multiplication::UintMultiplicationChip,
     },
     kernels::{
         adapters::{
@@ -55,7 +52,11 @@ use crate::{
         new_field_arithmetic::{NewFieldArithmeticChip, NewFieldArithmeticCoreChip},
         new_field_extension::{NewFieldExtensionChip, NewFieldExtensionCoreChip},
     },
-    old::{alu::ArithmeticLogicChip, shift::ShiftChip},
+    old::{
+        alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,
+        modular_multdiv::ModularMultDivChip, shift::ShiftChip,
+        uint_multiplication::UintMultiplicationChip,
+    },
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapter, Rv32JalrAdapter, Rv32LoadStoreAdapter,

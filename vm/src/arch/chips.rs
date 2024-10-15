@@ -20,15 +20,16 @@ use crate::{
         castf::CastFChip,
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-        modular_addsub::ModularAddSubChip,
-        modular_multdiv::ModularMultDivChip,
-        uint_multiplication::UintMultiplicationChip,
     },
     kernels::{
         core::CoreChip, new_field_arithmetic::NewFieldArithmeticChip,
         new_field_extension::NewFieldExtensionChip,
     },
-    old::{alu::ArithmeticLogicChip, shift::ShiftChip},
+    old::{
+        alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,
+        modular_multdiv::ModularMultDivChip, shift::ShiftChip,
+        uint_multiplication::UintMultiplicationChip,
+    },
     rv32im::{
         base_alu::Rv32BaseAluChip, branch_eq::Rv32BranchEqualChip,
         branch_lt::Rv32BranchLessThanChip, loadstore::Rv32LoadStoreChip,
