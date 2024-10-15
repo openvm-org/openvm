@@ -129,7 +129,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         Self::Record,
     )> {
         let Instruction { opcode, .. } = instruction.clone();
-        let opcode = opcode - self.offset;
+        let local_opcode_index = opcode - self.offset;
         let (x, y) = reads;
         let x = x.map(|x| x.as_canonical_u32());
         let y = y.map(|x| x.as_canonical_u32());
@@ -137,7 +137,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         let x_biguint = limbs_to_biguint(&x, LIMB_SIZE);
         let y_biguint = limbs_to_biguint(&y, LIMB_SIZE);
 
-        let opcode = ModularArithmeticOpcode::from_usize(opcode);
+        let opcode = ModularArithmeticOpcode::from_usize(local_opcode_index);
         let is_mul_flag = match opcode {
             ModularArithmeticOpcode::MUL => true,
             ModularArithmeticOpcode::DIV => false,
