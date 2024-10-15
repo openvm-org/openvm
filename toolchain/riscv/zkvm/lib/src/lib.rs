@@ -82,12 +82,14 @@
 
 extern crate alloc;
 
-// FIXME: re-enable for std
-// pub mod env;
-// pub mod serde;
+pub mod env;
+pub mod serde;
 
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
+
+#[cfg(target_os = "zkvm")]
+use axvm_platform::rust_rt;
 
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memset.s"));
@@ -162,7 +164,7 @@ unsafe extern "C" fn __start() -> ! {
         main()
     }
 
-    // env::finalize(true, 0);
+    env::finalize(true, 0);
     unreachable!();
 }
 
@@ -208,6 +210,6 @@ pub fn memory_barrier<T>(ptr: *const T) {
 #[cfg(all(target_os = "zkvm", not(feature = "std")))]
 #[panic_handler]
 fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
+    loop {}
     // axvm_platform::rust_rt::panic_fault(panic_info);
-    unreachable!()
 }

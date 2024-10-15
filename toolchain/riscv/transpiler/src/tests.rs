@@ -68,7 +68,7 @@ fn test_tiny_asm_runtime() -> Result<()> {
 #[test]
 fn test_runtime() -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let data = read(dir.join("data/rv32im-exp-from-as"))?;
+    let data = read(dir.join("data/rv32im-fibonacci-program-elf-release-2"))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     let instructions = transpile::<BabyBear>(&elf.instructions);
     setup_tracing();

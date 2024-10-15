@@ -137,6 +137,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_bne(&mut self, dec_insn: BType) -> Self::InstructionResult {
+        dbg!(dec_insn.imm);
         from_b_type(BranchEqualOpcode::BNE.with_default_offset(), &dec_insn)
     }
 
@@ -251,7 +252,8 @@ pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instru
             instructions.push(terminate());
             continue;
         }
-        let instruction = process_instruction(&mut transpiler, *instruction_u32).unwrap();
+        let instruction = process_instruction(&mut transpiler, *instruction_u32)
+            .unwrap_or_else(|| panic!("Failed to transpile instruction {:b}", instruction_u32));
         instructions.push(instruction);
     }
     instructions
