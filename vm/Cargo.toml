@@ -20,6 +20,7 @@ afs-stark-backend = { workspace = true }
 afs-derive = { workspace = true }
 ax-sdk = { workspace = true, optional = true }
 ax-ecc-primitives = { workspace = true }
+axvm-instructions = { workspace = true }
 
 enum-utils = "0.1.1"
 strum = { workspace = true }

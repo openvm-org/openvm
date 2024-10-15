@@ -1,4 +1,4 @@
-use afs_derive::UsizeOpcode;
+use axvm_instructions_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 pub trait UsizeOpcode {

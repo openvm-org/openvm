@@ -599,6 +599,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-instructions"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions-derive",
+ "p3-baby-bear",
+ "p3-field",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
+name = "axvm-instructions-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
@@ -3571,6 +3591,7 @@ dependencies = [
  "ark-ff 0.4.2",
  "ax-ecc-primitives",
  "ax-sdk",
+ "axvm-instructions",
  "backtrace",
  "cfg-if",
  "derive-new",

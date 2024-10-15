@@ -9,6 +9,8 @@ members = [
     "lib/recursion",
     "sdk",
     "stark-backend",
+    "toolchain/instructions",
+    "toolchain/instructions/derive",
     "toolchain/compiler",
     "toolchain/riscv/zkvm/lib",
     "toolchain/riscv/zkvm/platform",
@@ -60,8 +62,10 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
-axvm-platform = { path = "toolchain/riscv/zkvm/platform", default-features = false }
 axvm = { path = "toolchain/riscv/zkvm/lib", default-features = false }
+axvm-instructions = { path = "toolchain/instructions", default-features = false }
+axvm-instructions-derive = { path = "toolchain/instructions/derive", default-features = false }
+axvm-platform = { path = "toolchain/riscv/zkvm/platform", default-features = false }
 afs-stark-backend = { path = "stark-backend", default-features = false }
 afs-compiler = { path = "toolchain/compiler", default-features = false }
 stark-vm = { path = "vm", default-features = false }
