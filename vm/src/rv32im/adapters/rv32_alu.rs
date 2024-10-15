@@ -29,12 +29,12 @@ use crate::{
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
 #[derive(Clone, Debug)]
-pub struct Rv32AluAdapter<F: Field> {
-    pub air: Rv32AluAdapterAir,
+pub struct Rv32BaseAluAdapterChip<F: Field> {
+    pub air: Rv32BaseAluAdapterAir,
     aux_cols_factory: MemoryAuxColsFactory<F>,
 }
 
-impl<F: PrimeField32> Rv32AluAdapter<F> {
+impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
@@ -44,7 +44,7 @@ impl<F: PrimeField32> Rv32AluAdapter<F> {
         let memory_bridge = memory_controller.memory_bridge();
         let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
-            air: Rv32AluAdapterAir {
+            air: Rv32BaseAluAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
@@ -54,7 +54,7 @@ impl<F: PrimeField32> Rv32AluAdapter<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Rv32AluReadRecord<F: Field> {
+pub struct Rv32BaseAluReadRecord<F: Field> {
     /// Read register value from address space d=1
     pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
     /// Either
@@ -66,7 +66,7 @@ pub struct Rv32AluReadRecord<F: Field> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Rv32AluWriteRecord<F: Field> {
+pub struct Rv32BaseAluWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register
     pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
@@ -74,7 +74,7 @@ pub struct Rv32AluWriteRecord<F: Field> {
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct Rv32AluAdapterCols<T> {
+pub struct Rv32BaseAluAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
@@ -88,18 +88,18 @@ pub struct Rv32AluAdapterCols<T> {
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32AluAdapterAir {
+pub struct Rv32BaseAluAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 }
 
-impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
+impl<F: Field> BaseAir<F> for Rv32BaseAluAdapterAir {
     fn width(&self) -> usize {
-        Rv32AluAdapterCols::<F>::width()
+        Rv32BaseAluAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
     type Interface = Rv32RTypeAdapterInterface<AB::Expr>;
 
     fn eval(
@@ -108,7 +108,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local: &Rv32AluAdapterCols<_> = local.borrow();
+        let local: &Rv32BaseAluAdapterCols<_> = local.borrow();
         let timestamp = local.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -176,10 +176,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
     }
 }
 
-impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
-    type ReadRecord = Rv32AluReadRecord<F>;
-    type WriteRecord = Rv32AluWriteRecord<F>;
-    type Air = Rv32AluAdapterAir;
+impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
+    type ReadRecord = Rv32BaseAluReadRecord<F>;
+    type WriteRecord = Rv32BaseAluWriteRecord<F>;
+    type Air = Rv32BaseAluAdapterAir;
     type Interface = Rv32RTypeAdapterInterface<F>;
 
     fn preprocess(
@@ -258,7 +258,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
     ) {
-        let row_slice: &mut Rv32AluAdapterCols<_> = row_slice.borrow_mut();
+        let row_slice: &mut Rv32BaseAluAdapterCols<_> = row_slice.borrow_mut();
         let aux_cols_factory = &self.aux_cols_factory;
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.rd_ptr = write_record.rd.pointer;

@@ -54,13 +54,13 @@ use crate::{
     old::{alu::ArithmeticLogicChip, shift::ShiftChip},
     rv32im::{
         adapters::{
-            Rv32AluAdapter, Rv32BranchAdapter, Rv32JalrAdapter, Rv32LoadStoreAdapter,
+            Rv32BaseAluAdapterChip, Rv32BranchAdapter, Rv32JalrAdapter, Rv32LoadStoreAdapter,
             Rv32MultAdapter, Rv32RdWriteAdapter,
         },
+        base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
         branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
         branch_lt::{BranchLessThanCoreChip, Rv32BranchLessThanChip},
         loadstore::{LoadStoreCoreChip, Rv32LoadStoreChip},
-        new_alu::{ArithmeticLogicCoreChip, Rv32ArithmeticLogicChip},
         new_divrem::{DivRemCoreChip, Rv32DivRemChip},
         new_lt::{LessThanCoreChip, Rv32LessThanChip},
         new_mul::{MultiplicationCoreChip, Rv32MultiplicationChip},
@@ -279,9 +279,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     chips.push(AxVmChip::Keccak256(chip));
                 }
                 ExecutorName::ArithmeticLogicUnitRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32ArithmeticLogicChip::new(
-                        Rv32AluAdapter::new(execution_bus, program_bus, memory_controller.clone()),
-                        ArithmeticLogicCoreChip::new(byte_xor_chip.clone(), offset),
+                    let chip = Rc::new(RefCell::new(Rv32BaseAluChip::new(
+                        Rv32BaseAluAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        BaseAluCoreChip::new(byte_xor_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -306,7 +310,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 ExecutorName::LessThanRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LessThanChip::new(
-                        Rv32AluAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32BaseAluAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         LessThanCoreChip::new(byte_xor_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
@@ -363,7 +371,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 ExecutorName::ShiftRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32ShiftChip::new(
-                        Rv32AluAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32BaseAluAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         ShiftCoreChip::new(byte_xor_chip.clone(), range_checker.clone(), offset),
                         memory_controller.clone(),
                     )));

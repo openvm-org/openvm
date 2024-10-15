@@ -8,7 +8,7 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
-use super::{core::solve_alu, ArithmeticLogicCoreChip, Rv32ArithmeticLogicChip};
+use super::{core::solve_alu, BaseAluCoreChip, Rv32BaseAluChip};
 use crate::{
     arch::{
         instructions::AluOpcode,
@@ -18,10 +18,10 @@ use crate::{
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            test_adapter::Rv32TestAdapter, Rv32AluAdapter, Rv32RTypeAdapterInterface,
+            test_adapter::Rv32TestAdapterChip, Rv32BaseAluAdapterChip, Rv32RTypeAdapterInterface,
             RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
         },
-        new_alu::ArithmeticLogicCols,
+        base_alu::BaseAluCoreCols,
     },
     system::program::Instruction,
 };
@@ -99,13 +99,13 @@ fn run_rv32_alu_rand_test(opcode: AluOpcode, num_ops: usize) {
 
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = Rv32ArithmeticLogicChip::<F>::new(
-        Rv32AluAdapter::new(
+    let mut chip = Rv32BaseAluChip::<F>::new(
+        Rv32BaseAluAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
         ),
-        ArithmeticLogicCoreChip::new(xor_lookup_chip.clone(), 0),
+        BaseAluCoreChip::new(xor_lookup_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -161,8 +161,8 @@ fn rv32_alu_and_rand_test() {
 
 type Rv32ArithmeticLogicTestChip<F> = VmChipWrapper<
     F,
-    Rv32TestAdapter<F, Rv32RTypeAdapterInterface<F>>,
-    ArithmeticLogicCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>,
+    Rv32TestAdapterChip<F, Rv32RTypeAdapterInterface<F>>,
+    BaseAluCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>,
 >;
 
 #[allow(clippy::too_many_arguments)]
@@ -176,11 +176,11 @@ fn run_rv32_alu_negative_test(
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = Rv32ArithmeticLogicTestChip::<F>::new(
-        Rv32TestAdapter::new(
+        Rv32TestAdapterChip::new(
             [b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)],
             None,
         ),
-        ArithmeticLogicCoreChip::new(xor_lookup_chip.clone(), 0),
+        BaseAluCoreChip::new(xor_lookup_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -191,13 +191,13 @@ fn run_rv32_alu_negative_test(
 
     let alu_trace = chip.clone().generate_trace();
     let mut alu_trace_row = alu_trace.row_slice(0).to_vec();
-    let alu_trace_cols: &mut ArithmeticLogicCols<F, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS> =
+    let alu_trace_cols: &mut BaseAluCoreCols<F, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS> =
         (*alu_trace_row).borrow_mut();
 
     alu_trace_cols.a = a.map(F::from_canonical_u32);
     let alu_trace: p3_matrix::dense::DenseMatrix<_> = RowMajorMatrix::new(
         alu_trace_row,
-        ArithmeticLogicCols::<F, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>::width(),
+        BaseAluCoreCols::<F, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>::width(),
     );
 
     disable_debug_builder();

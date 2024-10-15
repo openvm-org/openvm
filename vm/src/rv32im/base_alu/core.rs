@@ -22,7 +22,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct ArithmeticLogicCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
@@ -35,25 +35,25 @@ pub struct ArithmeticLogicCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct ArithmeticLogicCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BaseAluCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: XorBus,
     offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
+    for BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
-        ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+        BaseAluCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
+    for BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>
+    for BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -67,7 +67,7 @@ where
         local_core: &[AB::Var],
         _local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &ArithmeticLogicCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
+        let cols: &BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [
             cols.opcode_add_flag,
             cols.opcode_sub_flag,
@@ -157,7 +157,7 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BaseAluCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode: AluOpcode,
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
@@ -165,15 +165,15 @@ pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
 }
 
 #[derive(Clone, Debug)]
-pub struct ArithmeticLogicCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>,
+pub struct BaseAluCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCoreChip<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
         Self {
-            air: ArithmeticLogicCoreAir {
+            air: BaseAluCoreAir {
                 bus: xor_lookup_chip.bus(),
                 offset,
             },
@@ -183,15 +183,15 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCoreChip<NUM
 }
 
 impl<F, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, I>
-    for ArithmeticLogicCoreChip<NUM_LIMBS, LIMB_BITS>
+    for BaseAluCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     I: VmAdapterInterface<F>,
     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
     I::Writes: From<[[F; NUM_LIMBS]; 1]>,
 {
-    type Record = ArithmeticLogicRecord<F, NUM_LIMBS, LIMB_BITS>;
-    type Air = ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>;
+    type Record = BaseAluCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
+    type Air = BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
@@ -239,7 +239,7 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut ArithmeticLogicCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
+        let row_slice: &mut BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
         row_slice.a = record.a;
         row_slice.b = record.b;
         row_slice.c = record.c;

@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct Rv32TestAdapter<T, I: VmAdapterInterface<T>>
+pub struct Rv32TestAdapterChip<T, I: VmAdapterInterface<T>>
 where
     I::Reads: Clone,
 {
@@ -23,7 +23,7 @@ where
     pub pc_inc: Option<u32>,
 }
 
-impl<T, I: VmAdapterInterface<T>> Rv32TestAdapter<T, I>
+impl<T, I: VmAdapterInterface<T>> Rv32TestAdapterChip<T, I>
 where
     I::Reads: Clone,
 {
@@ -58,7 +58,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32TestAdapterAir {
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F> + Clone> VmAdapterChip<F> for Rv32TestAdapter<F, I>
+impl<F: PrimeField32, I: VmAdapterInterface<F> + Clone> VmAdapterChip<F>
+    for Rv32TestAdapterChip<F, I>
 where
     I::Reads: Clone,
 {
