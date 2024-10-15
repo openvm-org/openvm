@@ -105,7 +105,7 @@ impl<
     fn execute_instruction(
         &self,
         _instruction: &Instruction<F>,
-        _from_pc: F,
+        _from_pc: u32,
         reads: [F; READ_BYTES],
     ) -> Result<(
         AdapterRuntimeContext<F, FlatInterface<F, READ_BYTES, WRITE_BYTES>>,
