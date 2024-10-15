@@ -95,16 +95,16 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmChip<F>
                 opcode_or_flag: F::from_bool(opcode == U256Opcode::OR),
                 opcode_slt_flag: F::from_bool(opcode == U256Opcode::SLT),
                 read_ptr_aux_cols: [z_ptr_read, x_ptr_read, y_ptr_read]
-                    .map(|read| aux_cols_factory.make_read_aux_cols(read.clone())),
-                read_x_aux_cols: aux_cols_factory.make_read_aux_cols(x_read.clone()),
-                read_y_aux_cols: aux_cols_factory.make_read_aux_cols(y_read.clone()),
+                    .map(|read| aux_cols_factory.make_read_aux_cols(read)),
+                read_x_aux_cols: aux_cols_factory.make_read_aux_cols(x_read),
+                read_y_aux_cols: aux_cols_factory.make_read_aux_cols(y_read),
                 write_z_aux_cols: match &z_write {
-                    WriteRecord::Long(z) => aux_cols_factory.make_write_aux_cols(z.clone()),
+                    WriteRecord::Long(z) => aux_cols_factory.make_write_aux_cols(*z),
                     WriteRecord::Bool(_) => MemoryWriteAuxCols::disabled(),
                 },
                 write_cmp_aux_cols: match &z_write {
                     WriteRecord::Long(_) => MemoryWriteAuxCols::disabled(),
-                    WriteRecord::Bool(z) => aux_cols_factory.make_write_aux_cols(z.clone()),
+                    WriteRecord::Bool(z) => aux_cols_factory.make_write_aux_cols(*z),
                 },
             };
         }

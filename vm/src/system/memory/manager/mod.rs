@@ -69,14 +69,14 @@ pub struct TimestampedValues<T, const N: usize> {
 }
 
 /// Represents first reads a pointer, and then a batch read at the pointer.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct MemoryHeapReadRecord<T, const N: usize> {
     pub address_read: MemoryReadRecord<T, 1>,
     pub data_read: MemoryReadRecord<T, N>,
 }
 
 /// Represents first reads a pointer, and then a batch write at the pointer.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct MemoryHeapWriteRecord<T, const N: usize> {
     pub address_read: MemoryReadRecord<T, 1>,
     pub data_write: MemoryWriteRecord<T, N>,
