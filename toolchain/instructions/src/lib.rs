@@ -1,5 +1,10 @@
+//! This crate is intended for use on host machine. This includes usage within procedural macros.
+
 use axvm_instructions_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
+
+pub mod config;
+pub mod utils;
 
 pub trait UsizeOpcode {
     fn default_offset() -> usize;
