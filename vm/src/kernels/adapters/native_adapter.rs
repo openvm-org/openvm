@@ -1,7 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
-    mem::size_of,
 };
 
 use afs_derive::AlignedBorrow;
