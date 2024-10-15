@@ -85,7 +85,7 @@ pub struct NativeAdapterAir {
 
 impl<F: Field> BaseAir<F> for NativeAdapterAir {
     fn width(&self) -> usize {
-        size_of::<NativeAdapterCols<u8>>()
+        NativeAdapterCols::<F>::width()
     }
 }
 
