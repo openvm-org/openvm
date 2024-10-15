@@ -111,7 +111,7 @@ fn run_alu_negative_test(
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -163,7 +163,7 @@ fn alu_add_rand_test() {
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -228,7 +228,7 @@ fn alu_sub_rand_test() {
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -293,7 +293,7 @@ fn alu_sltu_rand_test() {
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -360,7 +360,7 @@ fn alu_eq_rand_test() {
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -399,7 +399,7 @@ fn alu_xor_rand_test() {
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -438,7 +438,7 @@ fn alu_and_rand_test() {
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -477,7 +477,7 @@ fn alu_or_rand_test() {
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -519,7 +519,7 @@ fn alu_slt_rand_test() {
     let mut chip = ArithmeticLogicChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );

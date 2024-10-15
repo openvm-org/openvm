@@ -31,7 +31,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> VmChip<F>
     for ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         let height = self.data.len();
         let height = height.next_power_of_two();
@@ -43,7 +43,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> VmChip<F>
             let row = &mut rows[i];
             let cols: &mut ModularAddSubCols<F, NUM_LIMBS> = row[..].borrow_mut();
             cols.io = ModularAddSubIoCols {
-                from_state: record.from_state.map(F::from_canonical_usize),
+                from_state: record.from_state.map(F::from_canonical_u32),
                 x: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.x_array_read.clone()),
                 y: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.y_array_read.clone()),
                 z: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.z_array_write.clone()),

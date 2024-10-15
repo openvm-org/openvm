@@ -25,7 +25,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmChip<F>
     for ArithmeticLogicChip<F, NUM_LIMBS, LIMB_BITS>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         let width = self.trace_width();
         let height = self.data.len();
@@ -50,7 +50,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmChip<F>
             let row: &mut ArithmeticLogicCols<F, NUM_LIMBS, LIMB_BITS> = row.borrow_mut();
 
             row.io = ArithmeticLogicIoCols {
-                from_state: from_state.map(F::from_canonical_usize),
+                from_state: from_state.map(F::from_canonical_u32),
                 x: MemoryData::<F, NUM_LIMBS, LIMB_BITS> {
                     data: x_read.data,
                     address: x_read.pointer,

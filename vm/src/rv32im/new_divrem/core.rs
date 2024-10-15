@@ -14,8 +14,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{DivRemOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     system::program::Instruction,
 };
@@ -69,7 +69,7 @@ where
     fn eval(
         &self,
         _builder: &mut AB,
-        _local: &[AB::Var],
+        _local_core: &[AB::Var],
         _local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
@@ -95,11 +95,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCoreChip<NUM_LIMBS, L
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmCoreChip<F, A> for DivRemCoreChip<NUM_LIMBS, LIMB_BITS>
+impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    VmCoreChip<F, I> for DivRemCoreChip<NUM_LIMBS, LIMB_BITS>
 where
-    Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
-    Writes<F, A::Interface<F>>: From<[F; NUM_LIMBS]>,
+    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
+    I::Writes: From<[F; NUM_LIMBS]>,
 {
     // TODO: update for trace generation
     type Record = u32;
@@ -109,9 +109,9 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        _from_pc: F,
-        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        _from_pc: u32,
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
         let local_opcode_index = DivRemOpcode::from_usize(opcode - self.offset);
 
@@ -133,10 +133,7 @@ where
         };
 
         // Core doesn't modify PC directly, so we let Adapter handle the increment
-        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
-            to_pc: None,
-            writes: z.map(F::from_canonical_u32).into(),
-        };
+        let output = AdapterRuntimeContext::without_pc(z.map(F::from_canonical_u32));
 
         // TODO: send RangeTupleChecker requests
         // TODO: create Record and return

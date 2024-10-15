@@ -91,11 +91,11 @@ fn simple_execute_roundtrip_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32LoadStoreAdapter::<F, RV32_NUM_CELLS>::new(
-        tester.memory_chip().borrow().range_checker.clone(),
+        tester.memory_controller().borrow().range_checker.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
     let inner = LoadStoreCoreChip::<F, RV32_NUM_CELLS>::new(adapter.offset);
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_chip());
+    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {

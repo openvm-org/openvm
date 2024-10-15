@@ -32,8 +32,8 @@ impl ProgramBus {
     }
 }
 
-impl<F: Field> ProgramAir<F> {
-    pub fn eval_interactions<AB: PartitionedAirBuilder<F = F> + InteractionBuilder>(
+impl ProgramAir {
+    pub fn eval_interactions<F: Field, AB: PartitionedAirBuilder<F = F> + InteractionBuilder>(
         &self,
         builder: &mut AB,
     ) {

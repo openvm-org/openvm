@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, cmp::max, collections::HashMap};
+use std::{borrow::BorrowMut, cmp::max};
 
 use afs_primitives::{
     is_less_than::columns::IsLessThanAuxColsMut, utils::next_power_of_two_or_zero,
@@ -8,34 +8,11 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::system::memory::{
-    adapter::AccessAdapterCols, manager::memory::AccessAdapterRecordKind, AddressSpace,
-    MemoryAddress, MemoryChip, TimestampedValue,
+    adapter::AccessAdapterCols, manager::memory::AccessAdapterRecordKind, MemoryAddress,
+    MemoryController,
 };
 
-impl<F: PrimeField32> MemoryChip<F> {
-    pub fn generate_memory_interface_trace(&self) -> RowMajorMatrix<F> {
-        let all_addresses = self.interface_chip.all_addresses();
-        let mut final_memory = HashMap::new();
-        for (addr_space, pointer) in all_addresses {
-            let (timestamp, &value) = self
-                .memory
-                .get(
-                    AddressSpace(addr_space.as_canonical_u32()),
-                    pointer.as_canonical_u32() as usize,
-                )
-                .unwrap();
-            final_memory.insert(
-                (addr_space, pointer),
-                TimestampedValue {
-                    timestamp: F::from_canonical_u32(timestamp),
-                    value,
-                },
-            );
-        }
-
-        self.interface_chip.generate_trace(final_memory)
-    }
-
+impl<F: PrimeField32> MemoryController<F> {
     pub fn generate_access_adapter_trace<const N: usize>(&self) -> RowMajorMatrix<F> {
         let air = self.access_adapter_air::<N>();
         let width = BaseAir::<F>::width(&air);

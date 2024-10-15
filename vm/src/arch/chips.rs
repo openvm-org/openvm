@@ -26,15 +26,15 @@ use crate::{
     },
     kernels::{
         core::CoreChip, field_arithmetic::FieldArithmeticChip,
-        field_extension::chip::FieldExtensionArithmeticChip,
+        field_extension::FieldExtensionArithmeticChip,
     },
     old::{alu::ArithmeticLogicChip, shift::ShiftChip},
     rv32im::{
-        branch_eq::Rv32BranchEqualChip, branch_lt::Rv32BranchLessThanChip,
-        loadstore::Rv32LoadStoreChip, new_alu::Rv32ArithmeticLogicChip, new_divrem::Rv32DivRemChip,
-        new_lt::Rv32LessThanChip, new_mul::Rv32MultiplicationChip, new_mulh::Rv32MulHChip,
-        new_shift::Rv32ShiftChip, rv32_auipc::Rv32AuipcChip, rv32_jal_lui::Rv32JalLuiChip,
-        rv32_jalr::Rv32JalrChip,
+        base_alu::Rv32BaseAluChip, branch_eq::Rv32BranchEqualChip,
+        branch_lt::Rv32BranchLessThanChip, loadstore::Rv32LoadStoreChip,
+        new_divrem::Rv32DivRemChip, new_lt::Rv32LessThanChip, new_mul::Rv32MultiplicationChip,
+        new_mulh::Rv32MulHChip, new_shift::Rv32ShiftChip, rv32_auipc::Rv32AuipcChip,
+        rv32_jal_lui::Rv32JalLuiChip, rv32_jalr::Rv32JalrChip,
     },
     system::program::{ExecutionError, Instruction},
 };
@@ -46,8 +46,8 @@ pub trait InstructionExecutor<F> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError>;
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError>;
 
     /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
     /// if it is a supported opcode by the present executor.
@@ -79,8 +79,8 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        prev_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        prev_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         self.borrow_mut().execute(instruction, prev_state)
     }
 
@@ -114,7 +114,7 @@ impl<F, C: VmChip<F>> VmChip<F> for Rc<RefCell<C>> {
     }
 }
 
-#[derive(Debug, Clone, EnumDiscriminants)]
+#[derive(Clone, EnumDiscriminants)]
 #[strum_discriminants(derive(Serialize, Deserialize))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
@@ -124,7 +124,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
-    ArithmeticLogicUnitRv32(Rc<RefCell<Rv32ArithmeticLogicChip<F>>>),
+    ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
     MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
@@ -147,7 +147,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
-#[derive(Debug, Clone, IntoStaticStr, Chip)]
+#[derive(Clone, IntoStaticStr, Chip)]
 #[enum_dispatch(VmChip<F>)]
 pub enum AxVmChip<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
@@ -158,7 +158,7 @@ pub enum AxVmChip<F: PrimeField32> {
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ByteXor(Arc<XorLookupChip<8>>),
-    ArithmeticLogicUnitRv32(Rc<RefCell<Rv32ArithmeticLogicChip<F>>>),
+    ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
     MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),

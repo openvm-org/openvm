@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::utils::next_power_of_two_or_zero;
@@ -17,7 +17,7 @@ use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result, VmChip};
 use crate::system::{
-    memory::{MemoryChip, MemoryChipRef},
+    memory::{MemoryController, MemoryControllerRef},
     program::Instruction,
 };
 
@@ -33,9 +33,6 @@ pub trait VmAdapterInterface<T> {
     type ProcessedInstruction;
 }
 
-pub type Reads<T, I> = <I as VmAdapterInterface<T>>::Reads;
-pub type Writes<T, I> = <I as VmAdapterInterface<T>>::Writes;
-
 /// The adapter owns all memory accesses and timestamp changes.
 /// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
 pub trait VmAdapterChip<F: Field> {
@@ -45,7 +42,7 @@ pub trait VmAdapterChip<F: Field> {
     type WriteRecord: Send;
     /// AdapterAir should not have public values
     type Air: BaseAir<F> + Clone;
-    type Interface<T: AbstractField>: VmAdapterInterface<T>;
+    type Interface: VmAdapterInterface<F>;
 
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
     /// This is called at the start of instruction execution.
@@ -55,20 +52,23 @@ pub trait VmAdapterChip<F: Field> {
     #[allow(clippy::type_complexity)]
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-    ) -> Result<(Reads<F, Self::Interface<F>>, Self::ReadRecord)>;
+    ) -> Result<(
+        <Self::Interface as VmAdapterInterface<F>>::Reads,
+        Self::ReadRecord,
+    )>;
 
     /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)` of the full
     /// adapter record for this instruction. This **must** be called after `preprocess`.
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
-        output: AdapterRuntimeContext<F, Self::Interface<F>>,
+        from_state: ExecutionState<u32>,
+        output: AdapterRuntimeContext<F, Self::Interface>,
         read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)>;
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)>;
 
     /// Should mutate `row_slice` to populate with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
@@ -98,7 +98,7 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
 }
 
 /// Trait to be implemented on primitive chip to integrate with the machine.
-pub trait VmCoreChip<F: PrimeField32, A: VmAdapterChip<F>> {
+pub trait VmCoreChip<F: PrimeField32, I: VmAdapterInterface<F>> {
     /// Minimum data that must be recorded to be able to generate trace for one row of `PrimitiveAir`.
     type Record: Send;
     /// The primitive AIR with main constraints that do not depend on memory and other architecture-specifics.
@@ -108,9 +108,9 @@ pub trait VmCoreChip<F: PrimeField32, A: VmAdapterChip<F>> {
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
-        reads: Reads<F, A::Interface<F>>,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)>;
+        from_pc: u32,
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)>;
 
     fn get_opcode_name(&self, opcode: usize) -> String;
 
@@ -131,15 +131,25 @@ where
     fn eval(
         &self,
         builder: &mut AB,
-        local: &[AB::Var],
+        local_core: &[AB::Var],
         local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I>;
 }
 
 pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
-    pub to_pc: Option<T>,
+    pub to_pc: Option<u32>,
     pub writes: I::Writes,
+}
+
+impl<T, I: VmAdapterInterface<T>> AdapterRuntimeContext<T, I> {
+    /// Leave `to_pc` as `None` to allow the adapter to decide the `to_pc` automatically.
+    pub fn without_pc(writes: impl Into<I::Writes>) -> Self {
+        Self {
+            to_pc: None,
+            writes: writes.into(),
+        }
+    }
 }
 
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
@@ -150,21 +160,21 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub instruction: I::ProcessedInstruction,
 }
 
-#[derive(Clone, Debug)]
-pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, C: VmCoreChip<F, A>> {
+#[derive(Clone)]
+pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
     pub adapter: A,
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
-    memory: MemoryChipRef<F>,
+    memory: MemoryControllerRef<F>,
 }
 
 impl<F, A, C> VmChipWrapper<F, A, C>
 where
     F: PrimeField32,
     A: VmAdapterChip<F>,
-    C: VmCoreChip<F, A>,
+    C: VmCoreChip<F, A::Interface>,
 {
-    pub fn new(adapter: A, core: C, memory: MemoryChipRef<F>) -> Self {
+    pub fn new(adapter: A, core: C, memory: MemoryControllerRef<F>) -> Self {
         Self {
             adapter,
             core,
@@ -178,19 +188,18 @@ impl<F, A, M> InstructionExecutor<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: VmAdapterChip<F>,
-    M: VmCoreChip<F, A>,
+    M: VmCoreChip<F, A::Interface>,
 {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
         let mut memory = self.memory.borrow_mut();
         let (reads, read_record) = self.adapter.preprocess(&mut memory, &instruction)?;
-        let from_pc = F::from_canonical_usize(from_state.pc);
-        let (output, core_record) = self
-            .core
-            .execute_instruction(&instruction, from_pc, reads)?;
+        let (output, core_record) =
+            self.core
+                .execute_instruction(&instruction, from_state.pc, reads)?;
         let (to_state, write_record) = self.adapter.postprocess(
             &mut memory,
             &instruction,
@@ -211,7 +220,7 @@ impl<F, A, M> VmChip<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
     A: VmAdapterChip<F> + Sync,
-    M: VmCoreChip<F, A> + Sync,
+    M: VmCoreChip<F, A::Interface> + Sync,
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = next_power_of_two_or_zero(self.records.len());
@@ -261,12 +270,12 @@ where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
     A: VmAdapterChip<Val<SC>>,
-    C: VmCoreChip<Val<SC>, A>,
-    A::Air: 'static,
+    C: VmCoreChip<Val<SC>, A::Interface>,
+    A::Air: Send + Sync + 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
     A::Air: for<'a> VmAdapterAir<DebugConstraintBuilder<'a, SC>>,
-    C::Air: 'static,
+    C::Air: Send + Sync + 'static,
     C::Air: VmCoreAir<
         SymbolicRapBuilder<Val<SC>>,
         <A::Air as VmAdapterAir<SymbolicRapBuilder<Val<SC>>>>::Interface,
@@ -339,10 +348,19 @@ where
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct MinimalInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+}
+
 /// The most common adapter interface.
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
 ///
+#[derive(Clone)]
 pub struct BasicAdapterInterface<
     T,
     const NUM_READS: usize,
@@ -352,7 +370,7 @@ pub struct BasicAdapterInterface<
 >(PhantomData<T>);
 
 impl<
-        T: AbstractField,
+        T,
         const NUM_READS: usize,
         const NUM_WRITES: usize,
         const READ_SIZE: usize,
@@ -365,10 +383,161 @@ impl<
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
-#[repr(C)]
-#[derive(AlignedBorrow)]
-pub struct MinimalInstruction<T> {
-    pub is_valid: T,
-    /// Absolute opcode number
-    pub opcode: T,
+/// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat array for each
+pub struct FlatInterface<T, const READ_CELLS: usize, const WRITE_CELLS: usize>(PhantomData<T>);
+
+impl<T, const READ_CELLS: usize, const WRITE_CELLS: usize> VmAdapterInterface<T>
+    for FlatInterface<T, READ_CELLS, WRITE_CELLS>
+{
+    type Reads = [T; READ_CELLS];
+    type Writes = [T; WRITE_CELLS];
+    type ProcessedInstruction = MinimalInstruction<T>;
+}
+
+impl<
+        T,
+        const NUM_READS: usize,
+        const NUM_WRITES: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+        const READ_CELLS: usize,
+        const WRITE_CELLS: usize,
+    >
+    From<
+        AdapterAirContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >,
+    > for AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>
+{
+    /// ## Panics
+    /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
+    /// This is a runtime assertion until Rust const generics expressions are stabilized.
+    fn from(
+        ctx: AdapterAirContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >,
+    ) -> AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>> {
+        assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
+        assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+        let mut reads_it = ctx.reads.into_iter().flatten();
+        let reads = from_fn(|_| reads_it.next().unwrap());
+        let mut writes_it = ctx.writes.into_iter().flatten();
+        let writes = from_fn(|_| writes_it.next().unwrap());
+        AdapterAirContext {
+            to_pc: ctx.to_pc,
+            reads,
+            writes,
+            instruction: ctx.instruction,
+        }
+    }
+}
+
+impl<
+        T,
+        const NUM_READS: usize,
+        const NUM_WRITES: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+        const READ_CELLS: usize,
+        const WRITE_CELLS: usize,
+    > From<AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+    for AdapterAirContext<T, BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>>
+{
+    /// ## Panics
+    /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
+    /// This is a runtime assertion until Rust const generics expressions are stabilized.
+    fn from(
+        AdapterAirContext {
+            to_pc,
+            reads,
+            writes,
+            instruction,
+        }: AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>,
+    ) -> AdapterAirContext<T, BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>>
+    {
+        assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
+        assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+        let mut reads_it = reads.into_iter();
+        let reads: [[T; READ_SIZE]; NUM_READS] = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
+        let mut writes_it = writes.into_iter();
+        let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
+            from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
+        AdapterAirContext {
+            to_pc,
+            reads,
+            writes,
+            instruction,
+        }
+    }
+}
+
+impl<
+        T,
+        const NUM_READS: usize,
+        const NUM_WRITES: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+        const READ_CELLS: usize,
+        const WRITE_CELLS: usize,
+    >
+    From<
+        AdapterRuntimeContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >,
+    > for AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>
+{
+    /// ## Panics
+    /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
+    /// This is a runtime assertion until Rust const generics expressions are stabilized.
+    fn from(
+        ctx: AdapterRuntimeContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >,
+    ) -> AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>> {
+        assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+        let mut writes_it = ctx.writes.into_iter().flatten();
+        let writes = from_fn(|_| writes_it.next().unwrap());
+        AdapterRuntimeContext {
+            to_pc: ctx.to_pc,
+            writes,
+        }
+    }
+}
+
+impl<
+        T: AbstractField,
+        const NUM_READS: usize,
+        const NUM_WRITES: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+        const READ_CELLS: usize,
+        const WRITE_CELLS: usize,
+    > From<AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+    for AdapterRuntimeContext<
+        T,
+        BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+    >
+{
+    /// ## Panics
+    /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
+    /// This is a runtime assertion until Rust const generics expressions are stabilized.
+    fn from(
+        ctx: AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>,
+    ) -> AdapterRuntimeContext<
+        T,
+        BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+    > {
+        assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+        let mut writes_it = ctx.writes.into_iter();
+        let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
+            from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
+        AdapterRuntimeContext {
+            to_pc: ctx.to_pc,
+            writes,
+        }
+    }
 }

@@ -2,13 +2,13 @@ use afs_compiler::{
     asm::AsmBuilder,
     ir::{Array, Var, PERMUTATION_WIDTH},
     prelude::RVar,
-    util::execute_program,
 };
 use ax_sdk::config::baby_bear_poseidon2::default_perm;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_symmetric::Permutation;
 use rand::{thread_rng, Rng};
+use stark_vm::system::program::util::execute_program;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

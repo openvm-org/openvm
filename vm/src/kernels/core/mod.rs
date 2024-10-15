@@ -9,19 +9,19 @@ use crate::{
         instructions::CoreOpcode::{self, *},
         ExecutionBridge, ExecutionBus,
     },
-    system::{memory::MemoryChipRef, program::bridge::ProgramBus},
+    system::{memory::MemoryControllerRef, program::bridge::ProgramBus},
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
 //pub mod tests;
 
-pub mod air;
-pub mod bridge;
-pub mod columns;
-pub mod execute;
-pub mod trace;
+mod air;
+mod bridge;
+mod columns;
+mod execute;
+mod trace;
 
-pub const INST_WIDTH: usize = 1;
+pub const INST_WIDTH: u32 = 1;
 
 pub const READ_INSTRUCTION_BUS: usize = 8;
 pub const RANGE_CHECKER_BUS: usize = 4;
@@ -32,7 +32,7 @@ pub const CORE_MAX_READS_PER_CYCLE: usize = 3;
 pub const CORE_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CORE_MAX_ACCESSES_PER_CYCLE: usize = CORE_MAX_READS_PER_CYCLE + CORE_MAX_WRITES_PER_CYCLE;
 
-fn timestamp_delta(opcode: CoreOpcode) -> usize {
+fn timestamp_delta(opcode: CoreOpcode) -> u32 {
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,
@@ -57,13 +57,13 @@ pub struct CoreOptions {
 #[derive(Clone, Copy, Debug)]
 pub struct CoreState {
     pub clock_cycle: usize,
-    pub timestamp: usize,
-    pub pc: usize,
+    pub timestamp: u32,
+    pub pc: u32,
     pub is_done: bool,
 }
 
 impl CoreState {
-    pub fn initial(pc_start: usize) -> Self {
+    pub fn initial(pc_start: u32) -> Self {
         CoreState {
             clock_cycle: 0,
             timestamp: 1,
@@ -88,7 +88,7 @@ pub struct CoreChip<F: PrimeField32> {
     /// Program counter at the start of the current segment.
     pub start_state: CoreState,
     pub public_values: Vec<Option<F>>,
-    pub memory_chip: MemoryChipRef<F>,
+    pub memory_controller: MemoryControllerRef<F>,
 
     // TODO[jpw] Unclear Core should own this
     pub streams: Streams<F>,
@@ -101,7 +101,7 @@ impl<F: PrimeField32> CoreChip<F> {
         options: CoreOptions,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
         offset: usize,
         pc_start: usize,
     ) -> Self {
@@ -109,8 +109,8 @@ impl<F: PrimeField32> CoreChip<F> {
             options,
             execution_bus,
             program_bus,
-            memory_chip,
-            CoreState::initial(pc_start),
+            memory_controller,
+            CoreState::initial(pc_start as u32),
             offset,
         )
     }
@@ -125,11 +125,11 @@ impl<F: PrimeField32> CoreChip<F> {
         options: CoreOptions,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
         state: CoreState,
         offset: usize,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: CoreAir {
                 options,
@@ -141,7 +141,7 @@ impl<F: PrimeField32> CoreChip<F> {
             state,
             start_state: state,
             public_values: vec![None; options.num_public_values],
-            memory_chip,
+            memory_controller,
             streams: Default::default(),
             offset,
         }

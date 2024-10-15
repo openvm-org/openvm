@@ -4,7 +4,6 @@ use afs_compiler::{
     asm::AsmBuilder,
     conversion::CompilerOptions,
     ir::{Array, Var},
-    util::execute_and_prove_program,
 };
 use ax_sdk::{
     config::{
@@ -18,7 +17,7 @@ use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     arch::ExecutorName,
     intrinsics::hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
-    system::vm::config::VmConfig,
+    system::{program::util::execute_and_prove_program, vm::config::VmConfig},
 };
 use tracing::Level;
 

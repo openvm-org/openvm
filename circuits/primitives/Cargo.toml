@@ -10,24 +10,22 @@ p3-air = { workspace = true }
 p3-baby-bear = { workspace = true, optional = true }
 p3-field = { workspace = true }
 p3-keccak = { workspace = true }
-p3-keccak-air = { workspace = true }
 p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-util = { workspace = true }
-rand = "0.8"
-derive-new = "0.6.0"
 
-afs-stark-backend = { path = "../../stark-backend", default-features = false }
-afs-derive = { path = "../../derive" }
-parking_lot = "0.12.2"
+afs-stark-backend = { workspace = true }
+afs-derive = { workspace = true }
+
+parking_lot.workspace = true
+rand.workspace = true
+derive-new.workspace = true
 itertools.workspace = true
-getset = "0.1.2"
-num-bigint-dig = "0.8.4"
-num-traits = "0.2.19"
-num-integer = "0.1.45"
-prime_factorization = "1.0.4"
-lazy_static = "1.5.0"
+num-bigint-dig.workspace = true
+num-traits.workspace = true
+num-integer.workspace = true
+lazy_static.workspace = true
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }
@@ -44,6 +42,6 @@ test-case = "3.3.1"
 ax-sdk = { path = "../../sdk" }
 
 [features]
-default = []
+default = ["parallel"]
 test-traits = ["p3-baby-bear"]            # traits for testing
 parallel = ["afs-stark-backend/parallel"]

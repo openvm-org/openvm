@@ -5,8 +5,8 @@ use p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
-    SymbolicFelt, SymbolicVar, Usize, Var, Variable, LIMB_SIZE,
+    utils::LIMB_SIZE, Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar,
+    SymbolicExt, SymbolicFelt, SymbolicVar, Usize, Var, Variable,
 };
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending

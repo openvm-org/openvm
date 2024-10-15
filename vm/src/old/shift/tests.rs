@@ -111,7 +111,7 @@ fn run_shift_negative_test(
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -178,7 +178,7 @@ fn shift_sll_rand_test() {
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -357,7 +357,7 @@ fn shift_srl_rand_test() {
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -482,7 +482,7 @@ fn shift_sra_rand_test() {
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );
@@ -577,7 +577,7 @@ fn shift_overflow_test() {
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_lookup_chip.clone(),
         0,
     );

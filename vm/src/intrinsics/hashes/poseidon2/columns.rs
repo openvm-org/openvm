@@ -26,7 +26,8 @@ pub struct Poseidon2VmCols<T> {
 #[derive(Clone, Copy, Debug)]
 pub struct Poseidon2VmIoCols<T> {
     pub is_opcode: T,
-    pub is_direct: T,
+    pub is_compress_opcode: T,
+    pub is_compress_direct: T,
     pub pc: T,
     pub timestamp: T,
     pub a: T,
@@ -34,7 +35,6 @@ pub struct Poseidon2VmIoCols<T> {
     pub c: T,
     pub d: T,
     pub e: T,
-    pub cmp: T,
 }
 
 /// Auxiliary columns for Poseidon2Chip.
@@ -94,7 +94,7 @@ impl<T: Clone> Poseidon2VmIoCols<T> {
     pub fn flatten(&self) -> Vec<T> {
         vec![
             self.is_opcode.clone(),
-            self.is_direct.clone(),
+            self.is_compress_direct.clone(),
             self.pc.clone(),
             self.timestamp.clone(),
             self.a.clone(),
@@ -102,14 +102,14 @@ impl<T: Clone> Poseidon2VmIoCols<T> {
             self.c.clone(),
             self.d.clone(),
             self.e.clone(),
-            self.cmp.clone(),
+            self.is_compress_opcode.clone(),
         ]
     }
 
     pub fn from_slice(slice: &[T]) -> Self {
         Self {
             is_opcode: slice[0].clone(),
-            is_direct: slice[1].clone(),
+            is_compress_direct: slice[1].clone(),
             pc: slice[2].clone(),
             timestamp: slice[3].clone(),
             a: slice[4].clone(),
@@ -117,7 +117,7 @@ impl<T: Clone> Poseidon2VmIoCols<T> {
             c: slice[6].clone(),
             d: slice[7].clone(),
             e: slice[8].clone(),
-            cmp: slice[9].clone(),
+            is_compress_opcode: slice[9].clone(),
         }
     }
 }
@@ -125,7 +125,7 @@ impl<T: Field> Poseidon2VmIoCols<T> {
     pub fn blank_row() -> Self {
         Self {
             is_opcode: T::zero(),
-            is_direct: T::zero(),
+            is_compress_direct: T::zero(),
             pc: T::zero(),
             timestamp: T::zero(),
             a: T::zero(),
@@ -133,14 +133,14 @@ impl<T: Field> Poseidon2VmIoCols<T> {
             c: T::zero(),
             d: T::one(),
             e: T::one(),
-            cmp: T::zero(),
+            is_compress_opcode: T::zero(),
         }
     }
 
     pub fn direct_io_cols(timestamp: T) -> Self {
         Self {
             is_opcode: T::zero(),
-            is_direct: T::one(),
+            is_compress_direct: T::one(),
             pc: T::zero(),
             timestamp,
             a: T::zero(),
@@ -148,7 +148,7 @@ impl<T: Field> Poseidon2VmIoCols<T> {
             c: T::zero(),
             d: T::one(),
             e: T::one(),
-            cmp: T::zero(),
+            is_compress_opcode: T::zero(),
         }
     }
 }

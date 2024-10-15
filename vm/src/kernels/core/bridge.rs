@@ -25,8 +25,7 @@ impl CoreAir {
                         + operation_flags
                             .iter()
                             .map(|(op, flag)| {
-                                AB::Expr::from_canonical_usize(timestamp_delta(*op))
-                                    * (*flag).into()
+                                AB::Expr::from_canonical_u32(timestamp_delta(*op)) * (*flag).into()
                             })
                             .fold(AB::Expr::zero(), |x, y| x + y),
                 ),

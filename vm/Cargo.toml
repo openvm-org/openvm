@@ -14,20 +14,20 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 
-poseidon2-air = { path = "../circuits/hashes/poseidon2-air", default-features = false }
-afs-primitives = { path = "../circuits/primitives", default-features = false }
-afs-stark-backend = { path = "../stark-backend", default-features = false }
-afs-derive = { path = "../derive" }
-ax-sdk = { path = "../sdk", default-features = false, optional = true }
-ax-ecc-primitives = { path = "../circuits/ecc", default-features = false }
+poseidon2-air = { workspace = true }
+afs-primitives = { workspace = true }
+afs-stark-backend = { workspace = true }
+afs-derive = { workspace = true }
+ax-sdk = { workspace = true, optional = true }
+ax-ecc-primitives = { workspace = true }
+axvm-instructions = { workspace = true }
 
-toml = "0.8.14"
 enum-utils = "0.1.1"
 strum = { workspace = true }
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
-num-bigint-dig = "0.8.4"
-num-traits = "0.2.19"
-enum_dispatch = "0.3.13"
+num-bigint-dig.workspace = true
+num-traits.workspace = true
+enum_dispatch.workspace = true
 itertools.workspace = true
 tracing.workspace = true
 strum_macros.workspace = true
@@ -35,6 +35,7 @@ derive-new.workspace = true
 backtrace.workspace = true
 rand.workspace = true
 serde.workspace = true
+toml.workspace = true
 hex-literal.workspace = true
 once_cell.workspace = true
 cfg-if.workspace = true
@@ -58,7 +59,7 @@ test-case.workspace = true
 test-log.workspace = true
 
 [features]
-default = []
+default = ["parallel", "mimalloc"]
 parallel = ["afs-stark-backend/parallel"]
 sdk = ["dep:ax-sdk"]
 bench-metrics = [
@@ -67,3 +68,6 @@ bench-metrics = [
     "dep:inferno",
     "afs-stark-backend/bench-metrics",
 ]
+mimalloc = ["afs-stark-backend/mimalloc"]
+jemalloc = ["afs-stark-backend/jemalloc"]
+jemalloc-prof = ["afs-stark-backend/jemalloc-prof"]

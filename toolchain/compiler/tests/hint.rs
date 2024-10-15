@@ -1,10 +1,10 @@
 use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, RVar, Var},
-    util::{display_program, execute_program},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField, Field};
+use stark_vm::system::program::util::execute_program;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -31,7 +31,7 @@ fn test_hint_bits_felt() {
     builder.halt();
 
     let program = builder.compile_isa();
-    display_program(&program);
+    println!("{}", program);
     execute_program(program, vec![]);
 }
 
@@ -57,6 +57,6 @@ fn test_hint_bits_var() {
     builder.halt();
 
     let program = builder.compile_isa();
-    display_program(&program);
+    println!("{}", program);
     execute_program(program, vec![]);
 }

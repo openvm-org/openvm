@@ -13,8 +13,12 @@ pub use rv32_jalr::*;
 pub use rv32_loadstore::*;
 pub use rv32_mul::*;
 pub use rv32_rdwrite::*;
+
+pub mod test_adapter;
+
 /// 32-bit register stored as 4 bytes (4 lanes of 8-bits)
 pub const RV32_REGISTER_NUM_LANES: usize = 4;
+pub const RV32_CELL_BITS: usize = 8;
 
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
@@ -27,7 +31,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::BasicAdapterInterface,
-    system::memory::{MemoryChip, MemoryReadRecord},
+    system::memory::{MemoryController, MemoryReadRecord},
 };
 
 pub type Rv32RTypeAdapterInterface<T> =
@@ -44,7 +48,7 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; 4]) -> u32 {
 }
 
 pub fn read_rv32_register<F: PrimeField32>(
-    memory: &mut MemoryChip<F>,
+    memory: &mut MemoryController<F>,
     address_space: F,
     pointer: F,
 ) -> (MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>, u32) {

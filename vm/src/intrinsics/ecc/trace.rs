@@ -54,7 +54,7 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let aux_cols_factory = self.config.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.config.memory_controller.borrow().aux_cols_factory();
 
         let rows = self
             .data
@@ -70,7 +70,7 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
                 assert_eq!(instruction.opcode, EccOpcode::EC_ADD_NE as usize);
 
                 let io = EcAddUnequalIoCols {
-                    from_state: from_state.map(F::from_canonical_usize),
+                    from_state: from_state.map(F::from_canonical_u32),
                     p1: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p1_array_read.clone()),
                     p2: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p2_array_read.clone()),
                     p3: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p3_array_write.clone()),
@@ -137,7 +137,7 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let aux_cols_factory = self.config.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.config.memory_controller.borrow().aux_cols_factory();
 
         let rows = self
             .data
@@ -152,7 +152,7 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
                 assert_eq!(instruction.opcode, EccOpcode::EC_DOUBLE as usize);
 
                 let io = EcDoubleIoCols {
-                    from_state: from_state.map(F::from_canonical_usize),
+                    from_state: from_state.map(F::from_canonical_u32),
                     p1: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p1_array_read.clone()),
                     p2: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p2_array_write.clone()),
                 };

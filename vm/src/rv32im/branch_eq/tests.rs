@@ -7,7 +7,7 @@ use crate::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
         VmCoreChip,
     },
-    rv32im::adapters::Rv32BranchAdapter,
+    rv32im::adapters::Rv32BranchAdapterInterface,
     system::program::Instruction,
 };
 
@@ -26,27 +26,21 @@ fn execute_pc_increment_sanity_test() {
     let x: [F; RV32_NUM_LIMBS] = [19, 4, 1790, 60].map(F::from_canonical_u32);
     let y: [F; RV32_NUM_LIMBS] = [19, 32, 1804, 60].map(F::from_canonical_u32);
 
-    let result =
-        <BranchEqualCoreChip<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
-            &core,
-            &instruction,
-            F::zero(),
-            [x, y],
-        );
+    let result = <BranchEqualCoreChip<RV32_NUM_LIMBS> as VmCoreChip<
+        F,
+        Rv32BranchAdapterInterface<F>,
+    >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
-    let result =
-        <BranchEqualCoreChip<RV32_NUM_LIMBS> as VmCoreChip<F, Rv32BranchAdapter<F>>>::execute_instruction(
-            &core,
-            &instruction,
-            F::zero(),
-            [x, y],
-        );
+    let result = <BranchEqualCoreChip<RV32_NUM_LIMBS> as VmCoreChip<
+        F,
+        Rv32BranchAdapterInterface<F>,
+    >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());
-    assert_eq!(output.to_pc.unwrap(), F::from_canonical_u8(8));
+    assert_eq!(output.to_pc.unwrap(), 8);
 }
 
 #[test]

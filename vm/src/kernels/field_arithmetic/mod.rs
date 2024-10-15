@@ -7,7 +7,7 @@ use crate::{
     },
     kernels::field_arithmetic::columns::Operand,
     system::{
-        memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+        memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::{bridge::ProgramBus, ExecutionError, Instruction},
     },
 };
@@ -25,7 +25,7 @@ pub use air::FieldArithmeticAir;
 #[derive(Clone, Debug)]
 pub struct FieldArithmeticRecord<F> {
     pub opcode: usize,
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub x_read: MemoryReadRecord<F, 1>,
     pub y_read: MemoryReadRecord<F, 1>,
     pub z_write: MemoryWriteRecord<F, 1>,
@@ -36,7 +36,7 @@ pub struct FieldArithmeticChip<F: PrimeField32> {
     pub air: FieldArithmeticAir,
     pub records: Vec<FieldArithmeticRecord<F>>,
 
-    pub memory_chip: MemoryChipRef<F>,
+    pub memory_controller: MemoryControllerRef<F>,
 
     offset: usize,
 }
@@ -46,10 +46,10 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
         offset: usize,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: FieldArithmeticAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -57,7 +57,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 offset,
             },
             records: vec![],
-            memory_chip,
+            memory_controller,
             offset,
         }
     }
@@ -67,8 +67,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: z_address,
@@ -81,21 +81,18 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
         } = instruction;
         let local_opcode_index = FieldArithmeticOpcode::from_usize(opcode - self.offset);
 
-        let mut memory_chip = self.memory_chip.borrow_mut();
+        let mut memory_controller = self.memory_controller.borrow_mut();
 
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory_chip.timestamp().as_canonical_u32() as usize
-        );
+        debug_assert_eq!(from_state.timestamp, memory_controller.timestamp());
 
-        let x_read = memory_chip.read_cell(x_as, x_address);
-        let y_read = memory_chip.read_cell(y_as, y_address);
+        let x_read = memory_controller.read_cell(x_as, x_address);
+        let y_read = memory_controller.read_cell(y_as, y_address);
 
         let x = x_read.value();
         let y = y_read.value();
         let z = FieldArithmetic::solve(local_opcode_index, (x, y)).unwrap();
 
-        let z_write = memory_chip.write_cell(z_as, z_address, z);
+        let z_write = memory_controller.write_cell(z_as, z_address, z);
 
         self.records.push(FieldArithmeticRecord {
             opcode: opcode - self.offset,

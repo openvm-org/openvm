@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -44,7 +46,8 @@ impl<AB: InteractionBuilder + PairBuilder> Air<AB> for VmConnectorAir {
 #[derive(Debug)]
 pub struct VmConnectorChip<F: PrimeField32> {
     pub air: VmConnectorAir,
-    pub boundary_states: [Option<ExecutionState<F>>; 2],
+    pub boundary_states: [Option<ExecutionState<u32>>; 2],
+    _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32> VmConnectorChip<F> {
@@ -52,14 +55,15 @@ impl<F: PrimeField32> VmConnectorChip<F> {
         Self {
             air: VmConnectorAir { execution_bus },
             boundary_states: [None, None],
+            _marker: PhantomData,
         }
     }
 
-    pub fn begin(&mut self, state: ExecutionState<F>) {
+    pub fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(state);
     }
 
-    pub fn end(&mut self, state: ExecutionState<F>) {
+    pub fn end(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[1] = Some(state);
     }
 
@@ -68,9 +72,8 @@ impl<F: PrimeField32> VmConnectorChip<F> {
         RowMajorMatrix::new(
             self.boundary_states
                 .iter()
-                .map(|state| state.unwrap().flatten().to_vec())
-                .collect::<Vec<Vec<F>>>()
-                .concat(),
+                .flat_map(|state| state.unwrap().map(F::from_canonical_u32).flatten())
+                .collect::<Vec<F>>(),
             2,
         )
     }

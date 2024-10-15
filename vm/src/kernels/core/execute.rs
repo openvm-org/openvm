@@ -27,15 +27,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
-        let mut timestamp = from_state.timestamp;
-        let pc = F::from_canonical_usize(from_state.pc);
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
+        let ExecutionState { pc, mut timestamp } = from_state;
 
         let core_options = self.air.options;
         let num_public_values = core_options.num_public_values;
-
-        let pc_usize = pc.as_canonical_u64() as usize;
 
         let local_opcode_index = instruction.opcode - self.offset;
         let a = instruction.op_a;
@@ -47,8 +44,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         let g = instruction.op_g;
 
         let io = CoreIoCols {
-            timestamp: F::from_canonical_usize(timestamp),
-            pc,
+            timestamp: F::from_canonical_u32(timestamp),
+            pc: F::from_canonical_u32(pc),
             opcode: F::from_canonical_usize(local_opcode_index),
             op_a: a,
             op_b: b,
@@ -59,7 +56,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             op_g: g,
         };
 
-        let mut next_pc = pc + F::one();
+        let mut next_pc = pc + 1;
 
         let mut write_records = vec![];
         let mut read_records = vec![];
@@ -68,7 +65,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             ($addr_space: expr, $pointer: expr) => {{
                 assert!(read_records.len() < CORE_MAX_READS_PER_CYCLE);
                 read_records.push(
-                    self.memory_chip
+                    self.memory_controller
                         .borrow_mut()
                         .read_cell($addr_space, $pointer),
                 );
@@ -79,7 +76,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         macro_rules! write {
             ($addr_space: expr, $pointer: expr, $data: expr) => {{
                 assert!(write_records.len() < CORE_MAX_WRITES_PER_CYCLE);
-                write_records.push(self.memory_chip.borrow_mut().write_cell(
+                write_records.push(self.memory_controller.borrow_mut().write_cell(
                     $addr_space,
                     $pointer,
                     $data,
@@ -121,15 +118,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             }
             // d[a] <- pc + INST_WIDTH, pc <- pc + b
             JAL => {
-                write!(d, a, pc + F::from_canonical_usize(INST_WIDTH));
-                next_pc = pc + b;
+                write!(d, a, F::from_canonical_u32(pc + INST_WIDTH));
+                next_pc = (F::from_canonical_u32(pc) + b).as_canonical_u32();
             }
             // If d[a] = e[b], pc <- pc + c
             BEQ => {
                 let left = read!(d, a);
                 let right = read!(e, b);
                 if left == right {
-                    next_pc = pc + c;
+                    next_pc = (F::from_canonical_u32(pc) + c).as_canonical_u32();
                 }
             }
             // If d[a] != e[b], pc <- pc + c
@@ -137,7 +134,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let left = read!(d, a);
                 let right = read!(e, b);
                 if left != right {
-                    next_pc = pc + c;
+                    next_pc = (F::from_canonical_u32(pc) + c).as_canonical_u32();
                 }
             }
             TERMINATE | NOP => {
@@ -148,7 +145,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let value = read!(e, b);
                 if public_value_index >= num_public_values {
                     return Err(ExecutionError::PublicValueIndexOutOfBounds(
-                        pc_usize,
+                        pc,
                         num_public_values,
                         public_value_index,
                     ));
@@ -158,12 +155,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let public_values = &mut self.public_values;
                 match public_values[public_value_index] {
                     None => public_values[public_value_index] = Some(value),
-                    Some(exising_value) => {
-                        if value != exising_value {
+                    Some(existing_value) => {
+                        if value != existing_value {
                             return Err(ExecutionError::PublicValueNotEqual(
-                                pc_usize,
+                                pc,
                                 public_value_index,
-                                exising_value.as_canonical_u64() as usize,
+                                existing_value.as_canonical_u64() as usize,
                                 value.as_canonical_u64() as usize,
                             ));
                         }
@@ -178,7 +175,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let hint = match self.streams.input_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
-                        return Err(ExecutionError::EndOfInputStream(pc_usize));
+                        return Err(ExecutionError::EndOfInputStream(pc));
                     }
                 };
                 hint_stream.clear();
@@ -186,7 +183,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 hint_stream.extend(hint);
             }
             HINT_BITS => {
-                let val = self.memory_chip.borrow().unsafe_read_cell(d, a);
+                let val = self.memory_controller.borrow().unsafe_read_cell(d, a);
                 let mut val = val.as_canonical_u32();
 
                 let len = c.as_canonical_u32();
@@ -197,7 +194,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 }
             }
             HINT_BYTES => {
-                let val = self.memory_chip.borrow().unsafe_read_cell(d, a);
+                let val = self.memory_controller.borrow().unsafe_read_cell(d, a);
                 let mut val = val.as_canonical_u32();
 
                 let len = c.as_canonical_u32();
@@ -212,7 +209,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let hint = match hint_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
-                        return Err(ExecutionError::HintOutOfBounds(pc_usize));
+                        return Err(ExecutionError::HintOutOfBounds(pc));
                     }
                 };
                 let base_pointer = read!(d, a);
@@ -229,7 +226,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
         // and move this logic into generate_trace().
         {
-            let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+            let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
             let read_cols = array::from_fn(|i| {
                 read_records
@@ -286,7 +283,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 is_equal_aux,
                 reads_aux_cols,
                 writes_aux_cols,
-                next_pc,
+                next_pc: F::from_canonical_u32(next_pc),
             };
 
             let cols = CoreCols { io, aux };
@@ -297,14 +294,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         self.set_state(CoreState {
             clock_cycle: self.state.clock_cycle + 1,
             timestamp,
-            pc: next_pc.as_canonical_u64() as usize,
+            pc: next_pc,
             is_done: local_opcode_index == TERMINATE,
         });
 
-        Ok(ExecutionState::new(
-            next_pc.as_canonical_u64() as usize,
-            timestamp,
-        ))
+        Ok(ExecutionState::new(next_pc, timestamp))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

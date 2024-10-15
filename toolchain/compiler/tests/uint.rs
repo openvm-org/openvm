@@ -1,19 +1,19 @@
 use std::iter;
 
-use afs_compiler::{
-    asm::AsmBuilder,
-    conversion::CompilerOptions,
-    ir::Var,
-    util::{execute_program, execute_program_with_config},
-};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var};
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{Rng, RngCore};
-use stark_vm::{arch::ExecutorName, system::vm::config::VmConfig};
-
+use stark_vm::{
+    arch::ExecutorName,
+    system::{
+        program::util::{execute_program, execute_program_with_config},
+        vm::config::VmConfig,
+    },
+};
 #[test]
 fn test_compiler_256_add_sub() {
     let num_digits = 8;

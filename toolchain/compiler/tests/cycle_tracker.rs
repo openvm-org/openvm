@@ -1,11 +1,7 @@
-use afs_compiler::{
-    asm::AsmBuilder,
-    conversion::CompilerOptions,
-    ir::Var,
-    util::{display_program, execute_program},
-};
+use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
+use stark_vm::system::program::util::execute_program;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -51,6 +47,6 @@ fn test_cycle_tracker() {
         println!("debug_info {}: {:?}", i, debug_info);
     }
 
-    display_program(&program);
+    println!("{}", program);
     execute_program(program, vec![]);
 }

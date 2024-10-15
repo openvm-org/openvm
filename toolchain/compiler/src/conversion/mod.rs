@@ -954,14 +954,14 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
     instructions_and_debug_infos.insert(0, (init_register_0, init_debug_info));
     for block in program.blocks.iter() {
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
-            let cur_size = instructions_and_debug_infos.len();
+            let cur_size = instructions_and_debug_infos.len() as u32;
 
             let labels =
                 |label: F| F::from_canonical_usize(block_start[label.as_canonical_u64() as usize]);
             let result = convert_instruction(
                 instruction.clone(),
                 debug_info.clone(),
-                F::from_canonical_usize(cur_size),
+                F::from_canonical_u32(cur_size),
                 labels,
                 &options,
             );

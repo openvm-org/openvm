@@ -277,7 +277,7 @@ impl<F: PrimeField32> CoreAuxCols<F> {
             is_equal_aux: is_equal_cols.aux,
             reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
-            next_pc: F::from_canonical_usize(chip.state.pc),
+            next_pc: F::from_canonical_u32(chip.state.pc),
         }
     }
 }

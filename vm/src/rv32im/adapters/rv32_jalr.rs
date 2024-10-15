@@ -2,7 +2,7 @@ use std::{marker::PhantomData, mem::size_of};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
+use p3_field::{Field, PrimeField32};
 
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
         VmAdapterChip, VmAdapterInterface,
     },
     system::{
-        memory::{MemoryChip, MemoryReadRecord, MemoryWriteRecord},
+        memory::{MemoryController, MemoryReadRecord, MemoryWriteRecord},
         program::Instruction,
     },
 };
@@ -47,7 +47,7 @@ pub struct Rv32JalrProcessedInstruction<T> {
 }
 
 pub struct Rv32JalrAdapterInterface<T>(PhantomData<T>);
-impl<T: AbstractField> VmAdapterInterface<T> for Rv32JalrAdapterInterface<T> {
+impl<T> VmAdapterInterface<T> for Rv32JalrAdapterInterface<T> {
     type Reads = [T; RV32_REGISTER_NUM_LANES];
     type Writes = [T; RV32_REGISTER_NUM_LANES];
     type ProcessedInstruction = Rv32JalrProcessedInstruction<T>;
@@ -97,14 +97,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
     type ReadRecord = Rv32JalrReadRecord<F>;
     type WriteRecord = Rv32JalrWriteRecord<F>;
     type Air = Rv32JalrAdapterAir;
-    type Interface<T: AbstractField> = Rv32JalrAdapterInterface<T>;
+    type Interface = Rv32JalrAdapterInterface<F>;
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
+        <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction { op_b: b, d, .. } = *instruction;
@@ -117,22 +117,19 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
-        output: AdapterRuntimeContext<F, Self::Interface<F>>,
+        from_state: ExecutionState<u32>,
+        output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { op_a: a, d, .. } = *instruction;
         let rd = memory.write(d, a, output.writes);
 
         Ok((
             ExecutionState {
-                pc: output
-                    .to_pc
-                    .unwrap_or(F::from_canonical_usize(from_state.pc + 4))
-                    .as_canonical_u32() as usize,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                pc: output.to_pc.unwrap_or(from_state.pc + 4),
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord { rd },
         ))

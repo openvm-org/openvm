@@ -10,8 +10,8 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     rv32im::adapters::{RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS},
     system::program::Instruction,
@@ -50,7 +50,7 @@ where
     fn eval(
         &self,
         _builder: &mut AB,
-        _local: &[AB::Var],
+        _local_core: &[AB::Var],
         _local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
@@ -73,9 +73,9 @@ impl<F: Field> Rv32JalLuiCoreChip<F> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>> VmCoreChip<F, A> for Rv32JalLuiCoreChip<F>
+impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32JalLuiCoreChip<F>
 where
-    Writes<F, A::Interface<F>>: From<[F; RV32_REGISTER_NUM_LANES]>,
+    I::Writes: From<[F; RV32_REGISTER_NUM_LANES]>,
 {
     type Record = ();
     type Air = Rv32JalLuiCoreAir<F>;
@@ -84,9 +84,9 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
-        _reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        from_pc: u32,
+        _reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
         let c = instruction.op_c;
 
@@ -98,12 +98,11 @@ where
             }
             LUI => c.as_canonical_u32() as i32,
         };
-        let (to_pc, rd_data) =
-            solve_jal_lui(local_opcode_index, from_pc.as_canonical_u32() as usize, imm);
+        let (to_pc, rd_data) = solve_jal_lui(local_opcode_index, from_pc, imm);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
-            to_pc: Some(F::from_canonical_usize(to_pc)),
+        let output = AdapterRuntimeContext {
+            to_pc: Some(to_pc),
             writes: rd_data.into(),
         };
 
@@ -129,15 +128,15 @@ where
 // returns (to_pc, rd_data)
 pub(super) fn solve_jal_lui(
     opcode: Rv32JalLuiOpcode,
-    pc: usize,
+    pc: u32,
     imm: i32,
-) -> (usize, [u32; RV32_REGISTER_NUM_LANES]) {
+) -> (u32, [u32; RV32_REGISTER_NUM_LANES]) {
     match opcode {
         JAL => {
-            let rd_data = array::from_fn(|i| ((pc as u32 + 4) >> (8 * i)) & 255);
+            let rd_data = array::from_fn(|i| ((pc + 4) >> (8 * i)) & 255);
             let next_pc = pc as i32 + imm;
             assert!(next_pc >= 0);
-            (next_pc as usize, rd_data)
+            (next_pc as u32, rd_data)
         }
         LUI => {
             let imm = imm as u32;

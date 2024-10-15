@@ -1,4 +1,4 @@
-use afs_compiler::{conversion::CompilerOptions, util::execute_and_prove_program};
+use afs_compiler::conversion::CompilerOptions;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::VerificationData,
@@ -6,13 +6,16 @@ use afs_stark_backend::{
 };
 use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    engine::{StarkForTest, StarkFriEngine, VerificationDataWithFriParams},
+    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
 };
 use inner::build_verification_program;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use stark_vm::system::{program::Program, vm::config::VmConfig};
+use stark_vm::system::{
+    program::{util::execute_and_prove_program, Program},
+    vm::config::VmConfig,
+};
 
 use crate::hints::InnerVal;
 
@@ -62,13 +65,15 @@ pub mod inner {
     ///
     /// This is a convenience function with default configs for testing purposes only.
     pub fn run_recursive_test(
-        stark_for_test: StarkForTest<BabyBearPoseidon2Config>,
+        test_proof_input: ProofInputForTest<BabyBearPoseidon2Config>,
         fri_params: FriParameters,
     ) {
-        let StarkForTest { air_infos } = stark_for_test;
+        let ProofInputForTest {
+            per_air: air_proof_inputs,
+        } = test_proof_input;
         let vparams =
             <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_test_fast(
-                air_infos,
+                air_proof_inputs,
             )
             .unwrap();
 

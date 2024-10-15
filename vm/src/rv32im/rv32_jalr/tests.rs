@@ -85,7 +85,7 @@ fn simple_execute_roundtrip_test() {
     let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32JalrAdapter::<F>::new();
     let inner = Rv32JalrCoreChip::<F>::new(Rv32JalrOpcode::default_offset());
-    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.memory_chip());
+    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.memory_controller());
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {

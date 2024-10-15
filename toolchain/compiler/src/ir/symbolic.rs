@@ -13,8 +13,7 @@ use std::{
 
 use p3_field::{AbstractField, ExtensionField, Field, FieldArray, PrimeField};
 
-use super::{Ext, Felt, Usize, Var};
-use crate::util::prime_field_to_usize;
+use super::{utils::prime_field_to_usize, Ext, Felt, Usize, Var};
 
 const NUM_RANDOM_ELEMENTS: usize = 4;
 

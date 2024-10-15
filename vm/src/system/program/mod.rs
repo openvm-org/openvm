@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, fmt::Display, sync::Arc};
 
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
-    utils::AirInfo,
+    prover::{helper::AirProofInputTestHelper, types::AirProofInput},
 };
 use backtrace::Backtrace;
 use bridge::ProgramBus;
@@ -24,6 +24,7 @@ pub mod air;
 pub mod bridge;
 pub mod columns;
 pub mod trace;
+pub mod util;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -148,13 +149,13 @@ impl<T: Default> Default for Instruction<T> {
 
 #[derive(Debug)]
 pub enum ExecutionError {
-    Fail(usize),
-    PcOutOfBounds(usize, usize, usize, usize),
-    DisabledOperation(usize, usize),
-    HintOutOfBounds(usize),
-    EndOfInputStream(usize),
-    PublicValueIndexOutOfBounds(usize, usize, usize),
-    PublicValueNotEqual(usize, usize, usize, usize),
+    Fail(u32),
+    PcOutOfBounds(u32, u32, u32, usize),
+    DisabledOperation(u32, usize),
+    HintOutOfBounds(u32),
+    EndOfInputStream(u32),
+    PublicValueIndexOutOfBounds(u32, usize, usize),
+    PublicValueNotEqual(u32, usize, usize, usize),
 }
 
 impl Display for ExecutionError {
@@ -216,20 +217,20 @@ pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.
-    pub instructions_and_debug_infos: HashMap<usize, (Instruction<F>, Option<DebugInfo>)>,
-    pub step: usize,
+    pub instructions_and_debug_infos: HashMap<u32, (Instruction<F>, Option<DebugInfo>)>,
+    pub step: u32,
 
     // these two are needed to calculate the index for execution_frequencies
-    pub pc_start: usize,
-    pub pc_base: usize,
+    pub pc_start: u32,
+    pub pc_base: u32,
 }
 
 impl<F> Program<F> {
     pub fn from_instructions_and_step(
         instructions: &[Instruction<F>],
-        step: usize,
-        pc_start: usize,
-        pc_base: usize,
+        step: u32,
+        pc_start: u32,
+        pc_base: u32,
     ) -> Self
     where
         F: Clone,
@@ -239,7 +240,10 @@ impl<F> Program<F> {
                 .iter()
                 .enumerate()
                 .map(|(index, instruction)| {
-                    (index * step + pc_base, ((*instruction).clone(), None))
+                    (
+                        index as u32 * step + pc_base,
+                        ((*instruction).clone(), None),
+                    )
                 })
                 .collect(),
             step,
@@ -262,7 +266,10 @@ impl<F> Program<F> {
                 .zip(debug_infos.iter())
                 .enumerate()
                 .map(|(index, (instruction, debug_info))| {
-                    (index, ((*instruction).clone(), (*debug_info).clone()))
+                    (
+                        index as u32,
+                        ((*instruction).clone(), (*debug_info).clone()),
+                    )
                 })
                 .collect(),
             step: 1,
@@ -309,14 +316,14 @@ impl<F> Program<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ProgramAir<F> {
-    pub program: Program<F>,
+pub struct ProgramAir {
     bus: ProgramBus,
 }
 
 #[derive(Debug)]
 pub struct ProgramChip<F> {
-    pub air: ProgramAir<F>,
+    pub air: ProgramAir,
+    pub program: Program<F>,
     pub true_program_length: usize,
     pub execution_frequencies: Vec<usize>,
 }
@@ -326,15 +333,15 @@ impl<F: PrimeField64> ProgramChip<F> {
         let true_program_length = program.len();
         while !program.len().is_power_of_two() {
             program.instructions_and_debug_infos.insert(
-                program.len() * program.step,
+                program.len() as u32 * program.step,
                 (Instruction::from_isize(FAIL as usize, 0, 0, 0, 0, 0), None),
             );
         }
         Self {
             execution_frequencies: vec![0; program.len()],
+            program,
             true_program_length,
             air: ProgramAir {
-                program,
                 bus: ProgramBus(READ_INSTRUCTION_BUS),
             },
         }
@@ -342,17 +349,17 @@ impl<F: PrimeField64> ProgramChip<F> {
 
     pub fn get_instruction(
         &mut self,
-        pc: usize,
+        pc: u32,
     ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
-        let step = self.air.program.step;
-        let pc_base = self.air.program.pc_base;
+        let step = self.program.step;
+        let pc_base = self.program.pc_base;
         assert!(
             (pc - pc_base) % step == 0,
             "pc = {} is not a multiple of step = {}",
             pc,
             step
         );
-        let pc_index = (pc - pc_base) / step;
+        let pc_index = ((pc - pc_base) / step) as usize;
         if !(0..self.true_program_length).contains(&pc_index) {
             return Err(ExecutionError::PcOutOfBounds(
                 pc,
@@ -362,11 +369,11 @@ impl<F: PrimeField64> ProgramChip<F> {
             ));
         }
         self.execution_frequencies[pc_index] += 1;
-        Ok(self.air.program.instructions_and_debug_infos[&pc].clone())
+        Ok(self.program.instructions_and_debug_infos[&pc].clone())
     }
 }
 
-impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirInfo<SC>
+impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirProofInput<SC>
 where
     Val<SC>: PrimeField64,
 {
@@ -374,6 +381,6 @@ where
         let air = program_chip.air.clone();
         let cached_trace = program_chip.generate_cached_trace();
         let common_trace = program_chip.generate_trace();
-        AirInfo::no_pis(Arc::new(air), vec![cached_trace], common_trace)
+        AirProofInput::cached_traces_no_pis(Arc::new(air), vec![cached_trace], common_trace)
     }
 }

@@ -4,34 +4,36 @@ use ax_sdk::{
         baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
         setup_tracing,
     },
-    engine::{StarkForTest, StarkFriEngine},
+    engine::{ProofInputForTest, StarkFriEngine},
 };
 
 use crate::{
     config::outer::new_from_outer_multi_vk,
     halo2::Halo2Prover,
     stark::outer::build_circuit_verify_operations,
-    tests::{fibonacci_stark_for_test, interaction_stark_for_test},
+    tests::{fibonacci_test_proof_input, interaction_test_proof_input},
     witness::Witnessable,
 };
 
 #[test]
 fn test_fibonacci() {
     setup_tracing();
-    run_recursive_test(fibonacci_stark_for_test::<BabyBearPoseidon2OuterConfig>(16))
+    run_recursive_test(fibonacci_test_proof_input::<BabyBearPoseidon2OuterConfig>(
+        16,
+    ))
 }
 
 #[test]
 fn test_interactions() {
     // Please make sure kzg trusted params are downloaded before running the test.
     setup_tracing();
-    run_recursive_test(interaction_stark_for_test::<BabyBearPoseidon2OuterConfig>())
+    run_recursive_test(interaction_test_proof_input::<BabyBearPoseidon2OuterConfig>())
 }
 
-fn run_recursive_test(stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>) {
+fn run_recursive_test(test_proof_input: ProofInputForTest<BabyBearPoseidon2OuterConfig>) {
     let vparams =
         <BabyBearPoseidon2OuterEngine as StarkFriEngine<BabyBearPoseidon2OuterConfig>>::run_test_fast(
-            stark_for_test.air_infos,
+            test_proof_input.per_air,
         )
         .unwrap();
     let advice = new_from_outer_multi_vk(&vparams.data.vk);

@@ -3,7 +3,7 @@ use std::{marker::PhantomData, mem::size_of};
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
+use p3_field::{Field, PrimeField32};
 
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols},
-            MemoryChip, MemoryChipRef, MemoryReadRecord,
+            MemoryController, MemoryControllerRef, MemoryReadRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
@@ -32,9 +32,9 @@ impl<F: PrimeField32> Rv32BranchAdapter<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             _marker: PhantomData,
             air: Rv32BranchAdapterAir {
@@ -55,7 +55,7 @@ pub struct Rv32BranchReadRecord<F: Field> {
 
 #[derive(Debug)]
 pub struct Rv32BranchWriteRecord {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
 }
 
 pub struct Rv32BranchAdapterInterface<T>(PhantomData<T>);
@@ -69,7 +69,7 @@ pub struct Rv32BranchProcessedInstruction<T> {
     pub pc_inc: T,
 }
 
-impl<T: AbstractField> VmAdapterInterface<T> for Rv32BranchAdapterInterface<T> {
+impl<T> VmAdapterInterface<T> for Rv32BranchAdapterInterface<T> {
     type Reads = [[T; RV32_REGISTER_NUM_LANES]; 2];
     type Writes = ();
     type ProcessedInstruction = Rv32BranchProcessedInstruction<T>;
@@ -120,14 +120,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapter<F> {
     type ReadRecord = Rv32BranchReadRecord<F>;
     type WriteRecord = Rv32BranchWriteRecord;
     type Air = Rv32BranchAdapterAir;
-    type Interface<T: AbstractField> = Rv32BranchAdapterInterface<T>;
+    type Interface = Rv32BranchAdapterInterface<F>;
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
+        <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -149,23 +149,20 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapter<F> {
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         _instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
-        output: AdapterRuntimeContext<F, Self::Interface<F>>,
+        from_state: ExecutionState<u32>,
+        output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check
 
-        let to_pc = output
-            .to_pc
-            .map(|x| x.as_canonical_u32() as usize)
-            .unwrap_or(from_state.pc + 4);
+        let to_pc = output.to_pc.unwrap_or(from_state.pc + 4);
 
         Ok((
             ExecutionState {
                 pc: to_pc,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state },
         ))

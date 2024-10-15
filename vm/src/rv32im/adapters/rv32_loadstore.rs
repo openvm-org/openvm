@@ -4,7 +4,7 @@ use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::VariableRangeCheckerChip;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
+use p3_field::{Field, PrimeField32};
 
 use super::{compose, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS};
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryChip, MemoryReadRecord, MemoryWriteRecord,
+            MemoryController, MemoryReadRecord, MemoryWriteRecord,
         },
         program::Instruction,
     },
@@ -120,16 +120,15 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
     type ReadRecord = Rv32LoadStoreAdapterReadRecord<F, NUM_CELLS>;
     type WriteRecord = Rv32LoadStoreAdapterWriteRecord<F, NUM_CELLS>;
     type Air = Rv32LoadStoreAdapterAir<F, NUM_CELLS>;
-
-    type Interface<T: AbstractField> = Rv32LoadStoreAdapterInterface<T, NUM_CELLS>;
+    type Interface = Rv32LoadStoreAdapterInterface<F, NUM_CELLS>;
 
     #[allow(clippy::type_complexity)]
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
-        <Self::Interface<F> as VmAdapterInterface<F>>::Reads,
+        <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
         let Instruction {
@@ -207,12 +206,12 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
-        output: AdapterRuntimeContext<F, Self::Interface<F>>,
+        from_state: ExecutionState<u32>,
+        output: AdapterRuntimeContext<F, Self::Interface>,
         read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
             opcode,
             op_a: a,
@@ -243,11 +242,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         Ok((
             ExecutionState {
-                pc: output
-                    .to_pc
-                    .unwrap_or(F::from_canonical_usize(from_state.pc + 4))
-                    .as_canonical_u32() as usize,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                pc: output.to_pc.unwrap_or(from_state.pc + 4),
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord {
                 write: write_record,

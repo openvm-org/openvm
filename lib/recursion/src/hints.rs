@@ -562,10 +562,10 @@ mod test {
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
         prelude::*,
-        util::execute_program,
     };
     use afs_derive::{DslVariable, Hintable};
     use p3_field::AbstractField;
+    use stark_vm::system::program::util::execute_program;
 
     use crate::{
         hints::{Hintable, InnerChallenge, InnerVal},

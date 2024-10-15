@@ -6,8 +6,8 @@ use p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Reads, Result, VmAdapterChip, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, Writes,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
     system::program::Instruction,
 };
@@ -54,7 +54,7 @@ where
     fn eval(
         &self,
         _builder: &mut AB,
-        _local: &[AB::Var],
+        _local_core: &[AB::Var],
         _local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
@@ -76,11 +76,11 @@ impl<const NUM_LIMBS: usize> BranchEqualCoreChip<NUM_LIMBS> {
     }
 }
 
-impl<F: PrimeField32, A: VmAdapterChip<F>, const NUM_LIMBS: usize> VmCoreChip<F, A>
+impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize> VmCoreChip<F, I>
     for BranchEqualCoreChip<NUM_LIMBS>
 where
-    Reads<F, A::Interface<F>>: Into<[[F; NUM_LIMBS]; 2]>,
-    Writes<F, A::Interface<F>>: Default,
+    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
+    I::Writes: Default,
 {
     // TODO: update for trace generation
     type Record = u32;
@@ -90,9 +90,9 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
-        reads: <A::Interface<F> as VmAdapterInterface<F>>::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)> {
+        from_pc: u32,
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction {
             opcode, op_c: imm, ..
         } = *instruction;
@@ -104,12 +104,8 @@ where
         let (cmp_result, _diff_idx, _diff_val) =
             solve_eq::<F, NUM_LIMBS>(local_opcode_index, &x, &y);
 
-        let output: AdapterRuntimeContext<F, A::Interface<F>> = AdapterRuntimeContext {
-            to_pc: if cmp_result {
-                Some(from_pc + imm)
-            } else {
-                None
-            },
+        let output = AdapterRuntimeContext {
+            to_pc: cmp_result.then_some(from_pc + imm.as_canonical_u32()),
             writes: Default::default(),
         };
 

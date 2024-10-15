@@ -8,7 +8,6 @@ pub mod asm;
 pub mod constraints;
 pub mod conversion;
 pub mod ir;
-pub mod util;
 
 pub mod prelude {
     pub use afs_derive::DslVariable;

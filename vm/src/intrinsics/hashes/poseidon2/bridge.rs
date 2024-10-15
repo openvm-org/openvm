@@ -21,7 +21,7 @@ impl<F: Field> Poseidon2VmAir<F> {
         internal_io: Poseidon2IoCols<WIDTH, AB::Var>,
         timestamp_delta: AB::Expr,
     ) {
-        let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
+        let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.is_compress_opcode;
 
         self.execution_bridge
             .execute_and_increment_pc(
@@ -34,13 +34,13 @@ impl<F: Field> Poseidon2VmAir<F> {
 
         // DIRECT
         if self.direct {
-            let expand_fields = internal_io
+            let fields = internal_io
                 .flatten()
                 .into_iter()
                 .take(WIDTH + WIDTH / 2)
                 .collect::<Vec<AB::Var>>();
 
-            builder.push_receive(POSEIDON2_DIRECT_BUS, expand_fields, io.is_direct);
+            builder.push_receive(POSEIDON2_DIRECT_BUS, fields, io.is_compress_direct);
         }
     }
 }

@@ -69,7 +69,7 @@ fn castf_rand_test() {
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
     let num_tests: usize = 10;
@@ -89,7 +89,7 @@ fn negative_castf_overflow_test() {
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 
@@ -124,7 +124,7 @@ fn negative_castf_memread_test() {
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 
@@ -159,7 +159,7 @@ fn negative_castf_memwrite_test() {
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 
@@ -194,7 +194,7 @@ fn negative_castf_as_test() {
     let mut chip = CastFChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 

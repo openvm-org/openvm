@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use itertools::Itertools;
+use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
@@ -84,12 +85,20 @@ pub struct CommittedTraceData<SC: StarkGenericConfig> {
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct AirProofInput<SC: StarkGenericConfig> {
     pub air: Arc<dyn AnyRap<SC>>,
+    /// Prover data for cached main traces
+    pub cached_mains_pdata: Vec<ProverTraceData<SC>>,
+    pub raw: AirProofRawInput<Val<SC>>,
+}
+
+/// Raw input for proving a single AIR.
+#[derive(Clone, Debug)]
+pub struct AirProofRawInput<F: Field> {
     /// Cached main trace matrices
-    pub cached_mains: Vec<CommittedTraceData<SC>>,
+    pub cached_mains: Vec<Arc<RowMajorMatrix<F>>>,
     /// Common main trace matrix
-    pub common_main: Option<RowMajorMatrix<Val<SC>>>,
+    pub common_main: Option<RowMajorMatrix<F>>,
     /// Public values
-    pub public_values: Vec<Val<SC>>,
+    pub public_values: Vec<F>,
 }
 
 impl<SC: StarkGenericConfig> Proof<SC> {

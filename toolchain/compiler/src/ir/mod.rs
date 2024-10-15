@@ -9,9 +9,8 @@ pub use ref_ptr::*;
 pub use select::*;
 pub use symbolic::*;
 pub use types::*;
+pub use utils::{LIMB_SIZE, NUM_LIMBS};
 pub use var::*;
-
-pub use crate::util::{LIMB_SIZE, NUM_LIMBS};
 
 mod bits;
 mod builder;

@@ -42,12 +42,7 @@ fn test_tiny_asm_runtime() -> Result<()> {
     for instruction in instructions.iter() {
         println!("{:?}", instruction);
     }
-    let program = Program::from_instructions_and_step(
-        &instructions,
-        4,
-        elf.pc_start as usize,
-        elf.pc_base as usize,
-    );
+    let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
     let config = VmConfig::rv32();
     let vm = VirtualMachine::new(config, program, vec![]);
 
@@ -77,12 +72,7 @@ fn test_runtime() -> Result<()> {
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     let instructions = transpile::<BabyBear>(&elf.instructions);
     setup_tracing();
-    let program = Program::from_instructions_and_step(
-        &instructions,
-        4,
-        elf.pc_start as usize,
-        elf.pc_base as usize,
-    );
+    let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
     let config = VmConfig::rv32();
     let vm = VirtualMachine::new(config, program, vec![]);
 
