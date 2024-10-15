@@ -10,6 +10,7 @@ use afs_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
+use itertools::Itertools;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -459,7 +460,17 @@ impl<
     {
         assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
         assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
-        todo!()
+        let mut reads_it = reads.into_iter();
+        let reads: [[T; READ_SIZE]; NUM_READS] = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
+        let mut writes_it = writes.into_iter();
+        let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
+            from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
+        AdapterAirContext {
+            to_pc,
+            reads,
+            writes,
+            instruction,
+        }
     }
 }
 
@@ -469,15 +480,15 @@ impl<
         const NUM_WRITES: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-        const READ_BYTES: usize,
-        const WRITE_BYTES: usize,
+        const READ_CELLS: usize,
+        const WRITE_CELLS: usize,
     >
     From<
         AdapterRuntimeContext<
             T,
             BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         >,
-    > for AdapterRuntimeContext<T, FlatInterface<T, READ_BYTES, WRITE_BYTES>>
+    > for AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>
 {
     /// ## Panics
     /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
@@ -487,8 +498,8 @@ impl<
             T,
             BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         >,
-    ) -> AdapterRuntimeContext<T, FlatInterface<T, READ_BYTES, WRITE_BYTES>> {
-        assert_eq!(WRITE_BYTES, NUM_WRITES * WRITE_SIZE);
+    ) -> AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>> {
+        assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
         let mut writes_it = ctx.writes.into_iter().flatten();
         let writes = from_fn(|_| writes_it.next().unwrap());
         AdapterRuntimeContext {
@@ -522,6 +533,12 @@ impl<
         BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
     > {
         assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
-        todo!();
+        let mut writes_it = ctx.writes.into_iter();
+        let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
+            from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
+        AdapterRuntimeContext {
+            to_pc: ctx.to_pc,
+            writes,
+        }
     }
 }
