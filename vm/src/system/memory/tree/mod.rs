@@ -1,12 +1,10 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 use p3_field::PrimeField32;
 use MemoryNode::*;
 
 use super::manager::dimensions::MemoryDimensions;
+use crate::system::memory::Equipartition;
 
 pub trait HasherChip<const CHUNK: usize, F> {
     /// Statelessly compresses two chunks of data into a single chunk.
@@ -69,22 +67,19 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     }
 
     fn from_memory(
-        memory: &BTreeMap<usize, F>,
+        memory: &BTreeMap<usize, [F; CHUNK]>,
         height: usize,
         from: usize,
         hasher: &impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
-        let mut range = memory.range(from..from + (CHUNK << height));
+        let mut range = memory.range(from..from + (1 << height));
         if height == 0 {
-            let mut values = [F::zero(); CHUNK];
-            for (&address, &value) in range {
-                values[address - from] = value;
-            }
+            let values = *memory.get(&from).unwrap_or(&[F::zero(); CHUNK]);
             MemoryNode::new_leaf(values)
         } else if range.next().is_none() {
             MemoryNode::construct_all_zeros(height, hasher)
         } else {
-            let midpoint = from + (CHUNK << (height - 1));
+            let midpoint = from + (1 << (height - 1));
             let left = Self::from_memory(memory, height - 1, from, hasher);
             let right = Self::from_memory(memory, height - 1, midpoint, hasher);
             NonLeaf {
@@ -97,16 +92,18 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
 
     pub fn tree_from_memory(
         memory_dimensions: MemoryDimensions,
-        memory: &HashMap<(F, F), F>,
+        memory: &Equipartition<F, CHUNK>,
         hasher: &impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
+        // Construct a BTreeMap that includes the address space in the label calculation,
+        // representing the entire memory tree.
         let mut memory_modified = BTreeMap::new();
-        for (&(address_space, address), &value) in memory {
-            let complete_address = (((address_space.as_canonical_u32() as usize)
+        for (&(address_space, address_label), &values) in memory {
+            let label = (((address_space.as_canonical_u32() as usize)
                 - memory_dimensions.as_offset)
-                * (CHUNK << memory_dimensions.address_height))
-                + (address.as_canonical_u32() as usize);
-            memory_modified.insert(complete_address, value);
+                << memory_dimensions.address_height)
+                + address_label;
+            memory_modified.insert(label, values);
         }
         Self::from_memory(
             &memory_modified,

@@ -6,7 +6,7 @@ use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::system::memory::expand::{columns::MemoryMerkleCols, MemoryDimensions, MemoryMerkleBus};
+use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleBus, MemoryMerkleCols};
 
 #[derive(Clone, Debug)]
 pub struct MemoryMerkleAir<const CHUNK: usize> {

@@ -5,7 +5,7 @@ use p3_field::AbstractField;
 
 use crate::{
     kernels::core::POSEIDON2_DIRECT_BUS,
-    system::memory::expand::{air::MemoryMerkleAir, columns::MemoryMerkleCols},
+    system::memory::merkle::{MemoryMerkleAir, MemoryMerkleCols},
 };
 
 #[derive(Copy, Clone, Debug)]

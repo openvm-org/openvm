@@ -1,7 +1,7 @@
 use p3_field::PrimeField32;
 
 use crate::system::memory::{
-    expand::MemoryMerkleChip, persistent::PersistentBoundaryChip, volatile::VolatileBoundaryChip,
+    merkle::MemoryMerkleChip, persistent::PersistentBoundaryChip, volatile::VolatileBoundaryChip,
     CHUNK,
 };
 

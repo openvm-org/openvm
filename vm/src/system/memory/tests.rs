@@ -30,14 +30,14 @@ use rand::{
     Rng,
 };
 
-use super::{MemoryAuxColsFactory, MemoryController, MemoryEquipartition, MemoryReadRecord};
+use super::{MemoryAuxColsFactory, MemoryController, MemoryReadRecord, TimestampedEquipartition};
 use crate::{
     arch::{testing::memory::gen_pointer, ExecutionBus, VmChip},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     kernels::core::RANGE_CHECKER_BUS,
     system::{
         memory::{
-            expand::MemoryMerkleBus,
+            merkle::MemoryMerkleBus,
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryWriteRecord,
         },
@@ -284,7 +284,7 @@ fn test_memory_controller_persistent() {
         memory_config.clone(),
         range_checker.clone(),
         merkle_bus,
-        MemoryEquipartition::new(),
+        TimestampedEquipartition::new(),
     );
     let aux_factory = memory_controller.aux_cols_factory();
 

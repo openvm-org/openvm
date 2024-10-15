@@ -72,8 +72,8 @@ use crate::{
     },
     system::{
         memory::{
-            expand::MemoryMerkleBus, offline_checker::MemoryBus, MemoryController,
-            MemoryControllerRef, MemoryEquipartition, CHUNK,
+            merkle::MemoryMerkleBus, offline_checker::MemoryBus, MemoryController,
+            MemoryControllerRef, TimestampedEquipartition, CHUNK,
         },
         program::{bridge::ProgramBus, DebugInfo, ExecutionError, Program, ProgramChip},
         vm::config::PersistenceType,
@@ -152,7 +152,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     config.memory_config.clone(),
                     range_checker.clone(),
                     merkle_bus,
-                    MemoryEquipartition::<F, CHUNK>::new(),
+                    TimestampedEquipartition::<F, CHUNK>::new(),
                 )))
             }
         };
