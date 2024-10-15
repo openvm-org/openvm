@@ -388,21 +388,85 @@ impl<T: AbstractField, const READ_BYTES: usize, const WRITE_BYTES: usize> VmAdap
 
 impl<
         T: AbstractField,
-        const READ_BYTES: usize,
-        const WRITE_BYTES: usize,
         const NUM_READS: usize,
         const NUM_WRITES: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > From<FlatInterface<T, READ_BYTES, WRITE_BYTES>>
-    for BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
+        const READ_BYTES: usize,
+        const WRITE_BYTES: usize,
+    >
+    From<
+        AdapterAirContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >,
+    > for AdapterAirContext<T, FlatInterface<T, READ_BYTES, WRITE_BYTES>>
 {
     fn from(
-        _: FlatInterface<T, READ_BYTES, WRITE_BYTES>,
-    ) -> BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE> {
+        AdapterAirContext {
+            to_pc,
+            reads,
+            writes,
+            instruction,
+        }: AdapterAirContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >,
+    ) -> AdapterAirContext<T, FlatInterface<T, READ_BYTES, WRITE_BYTES>> {
         assert_eq!(READ_BYTES, NUM_READS * READ_SIZE);
         assert_eq!(WRITE_BYTES, NUM_WRITES * WRITE_SIZE);
-        BasicAdapterInterface(PhantomData)
+        AdapterAirContext {
+            to_pc,
+            reads: reads
+                .iter()
+                .flat_map(|x| x.clone())
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
+            writes: writes
+                .iter()
+                .flat_map(|x| x.clone())
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
+            instruction,
+        }
+    }
+}
+
+impl<
+        T: AbstractField,
+        const NUM_READS: usize,
+        const NUM_WRITES: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+        const READ_BYTES: usize,
+        const WRITE_BYTES: usize,
+    >
+    From<
+        AdapterRuntimeContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >,
+    > for AdapterRuntimeContext<T, FlatInterface<T, READ_BYTES, WRITE_BYTES>>
+{
+    fn from(
+        AdapterRuntimeContext { to_pc, writes }: AdapterRuntimeContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >,
+    ) -> AdapterRuntimeContext<T, FlatInterface<T, READ_BYTES, WRITE_BYTES>> {
+        assert_eq!(READ_BYTES, NUM_READS * READ_SIZE);
+        assert_eq!(WRITE_BYTES, NUM_WRITES * WRITE_SIZE);
+        AdapterRuntimeContext {
+            to_pc,
+            writes: writes
+                .iter()
+                .flat_map(|x| x.clone())
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
+        }
     }
 }
 
