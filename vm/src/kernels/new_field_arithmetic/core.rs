@@ -45,12 +45,6 @@ impl<F: Field> BaseAir<F> for NewFieldArithmeticCoreAir {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for NewFieldArithmeticCoreAir {
-    fn eval(&self, _builder: &mut AB) {
-        todo!()
-    }
-}
-
 impl<F: Field> BaseAirWithPublicValues<F> for NewFieldArithmeticCoreAir {}
 
 impl<AB, I> VmCoreAir<AB, I> for NewFieldArithmeticCoreAir
