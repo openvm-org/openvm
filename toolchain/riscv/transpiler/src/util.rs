@@ -124,7 +124,7 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
         F::zero(),
-        F::from_canonical_u32((dec_insn.imm as u32) & 0xfffff),
+        F::from_canonical_u32((dec_insn.imm as u32 >> 12) & 0xfffff),
         F::one(), // rd is a register
         F::zero(),
         F::zero(),
