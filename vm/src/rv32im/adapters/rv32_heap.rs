@@ -163,10 +163,10 @@ impl<
         &mut self,
         memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
             op_a: z_address_ptr,
             d,
@@ -183,7 +183,7 @@ impl<
         Ok((
             ExecutionState {
                 pc: from_state.pc + 4,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                timestamp: memory.timestamp(),
             },
             [z_write],
         ))

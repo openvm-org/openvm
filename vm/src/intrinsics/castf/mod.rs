@@ -27,7 +27,7 @@ pub use columns::*;
 
 #[derive(Debug)]
 pub struct CastFRecord<T> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<T>,
 
     pub x_write: MemoryWriteRecord<T, 4>,
@@ -81,8 +81,8 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
     fn execute(
         &mut self,
         instruction: Instruction<T>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -95,10 +95,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
 
         let mut memory_controller = self.memory_controller.borrow_mut();
 
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory_controller.timestamp().as_canonical_u32() as usize
-        );
+        debug_assert_eq!(from_state.timestamp, memory_controller.timestamp());
 
         let y_read = memory_controller.read_cell(e, b);
         let y = y_read.data[0].as_canonical_u32();
@@ -124,7 +121,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 

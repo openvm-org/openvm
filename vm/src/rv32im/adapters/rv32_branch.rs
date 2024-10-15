@@ -55,7 +55,7 @@ pub struct Rv32BranchReadRecord<F: Field> {
 
 #[derive(Debug)]
 pub struct Rv32BranchWriteRecord {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
 }
 
 pub struct Rv32BranchAdapterInterface<T>(PhantomData<T>);
@@ -151,21 +151,18 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapter<F> {
         &mut self,
         memory: &mut MemoryController<F>,
         _instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check
 
-        let to_pc = output
-            .to_pc
-            .map(|x| x.as_canonical_u32() as usize)
-            .unwrap_or(from_state.pc + 4);
+        let to_pc = output.to_pc.unwrap_or(from_state.pc + 4);
 
         Ok((
             ExecutionState {
                 pc: to_pc,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state },
         ))

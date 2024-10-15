@@ -300,7 +300,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 address_space,
                 pointer,
                 timestamp,
-                prev_timestamp: F::zero(),
+                prev_timestamp: 0,
                 data: array::from_fn(|_| pointer),
             };
         }
@@ -418,19 +418,17 @@ impl<F: PrimeField32> MemoryController<F> {
         self.memory.increment_timestamp();
     }
 
-    pub fn increment_timestamp_by(&mut self, change: F) {
-        self.memory
-            .increment_timestamp_by(change.as_canonical_u32());
+    pub fn increment_timestamp_by(&mut self, change: u32) {
+        self.memory.increment_timestamp_by(change);
     }
 
-    pub fn increase_timestamp_to(&mut self, timestamp: F) {
-        let timestamp = timestamp.as_canonical_u32();
+    pub fn increase_timestamp_to(&mut self, timestamp: u32) {
         self.memory
             .increment_timestamp_by(timestamp - self.memory.timestamp());
     }
 
-    pub fn timestamp(&self) -> F {
-        F::from_canonical_u32(self.memory.timestamp())
+    pub fn timestamp(&self) -> u32 {
+        self.memory.timestamp()
     }
 
     pub fn access_adapter_air<const N: usize>(&self) -> AccessAdapterAir<N> {
@@ -678,7 +676,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
             self.generate_timestamp_lt_cols(read.prev_timestamp, read.timestamp);
 
         MemoryReadOrImmediateAuxCols::new(
-            read.prev_timestamp,
+            F::from_canonical_u32(read.prev_timestamp),
             addr_space_is_zero_cols.io.is_zero,
             addr_space_is_zero_cols.inv,
             timestamp_lt_cols,
@@ -691,22 +689,22 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
     ) -> MemoryWriteAuxCols<F, N> {
         MemoryWriteAuxCols::new(
             write.prev_data,
-            write.prev_timestamp,
+            F::from_canonical_u32(write.prev_timestamp),
             self.generate_timestamp_lt_cols(write.prev_timestamp, write.timestamp),
         )
     }
 
     fn generate_timestamp_lt_cols(
         &self,
-        prev_timestamp: F,
-        timestamp: F,
+        prev_timestamp: u32,
+        timestamp: u32,
     ) -> AssertLessThanAuxCols<F, AUX_LEN> {
-        debug_assert!(prev_timestamp.as_canonical_u32() < timestamp.as_canonical_u32());
+        debug_assert!(prev_timestamp < timestamp);
         let mut aux: AssertLessThanAuxCols<F, AUX_LEN> =
             AssertLessThanAuxCols::<F, AUX_LEN>::new([F::zero(); AUX_LEN]);
         self.timestamp_lt_air.generate_trace_row_aux(
-            prev_timestamp.as_canonical_u32(),
-            timestamp.as_canonical_u32(),
+            prev_timestamp,
+            timestamp,
             &self.range_checker,
             &mut aux,
         );

@@ -84,7 +84,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     fn execute_instruction(
         &self,
         _instruction: &crate::system::program::Instruction<F>,
-        _from_pc: F,
+        _from_pc: u32,
         reads: <Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS> as crate::arch::VmAdapterInterface<F>>::Reads,
     ) -> crate::arch::Result<(
         AdapterRuntimeContext<F, Rv32HeapAdapterInterface<F, NUM_LIMBS, NUM_LIMBS>>,

@@ -43,7 +43,7 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
             let row = &mut rows[i];
             let cols: &mut ModularMultDivCols<F, CARRY_LIMBS, NUM_LIMBS> = row[..].borrow_mut();
             cols.io = ModularMultDivIoCols {
-                from_state: record.from_state.map(F::from_canonical_usize),
+                from_state: record.from_state.map(F::from_canonical_u32),
                 x: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.x_array_read.clone()),
                 y: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.y_array_read.clone()),
                 z: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.z_array_write.clone()),

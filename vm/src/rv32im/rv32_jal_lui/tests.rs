@@ -52,7 +52,7 @@ fn set_and_execute(
         .unwrap()
         .initial_state
         .pc
-        .as_canonical_u32() as usize;
+        .as_canonical_u32();
     let final_pc = tester
         .execution
         .records
@@ -60,7 +60,7 @@ fn set_and_execute(
         .unwrap()
         .final_state
         .pc
-        .as_canonical_u32() as usize;
+        .as_canonical_u32();
 
     let (next_pc, rd_data) = solve_jal_lui(opcode, initial_pc, imm);
 

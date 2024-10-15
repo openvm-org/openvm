@@ -128,7 +128,7 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        _from_pc: F,
+        _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;

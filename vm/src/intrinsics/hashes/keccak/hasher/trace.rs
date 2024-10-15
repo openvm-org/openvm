@@ -64,7 +64,7 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
                 pc: record.pc,
                 is_enabled: F::one(),
                 is_enabled_first_round: F::zero(),
-                start_timestamp: record.start_timestamp(),
+                start_timestamp: F::from_canonical_u32(record.start_timestamp()),
                 a,
                 b,
                 c,

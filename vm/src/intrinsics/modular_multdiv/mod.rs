@@ -49,7 +49,7 @@ pub static SECP256K1_SCALAR_PRIME: Lazy<BigUint> = Lazy::new(|| {
 
 #[derive(Debug, Clone)]
 pub struct ModularMultDivRecord<T, const NUM_LIMBS: usize> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<T>,
 
     pub x_array_read: MemoryHeapReadRecord<T, NUM_LIMBS>,
@@ -125,8 +125,8 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
     fn execute(
         &mut self,
         instruction: Instruction<T>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: z_address_ptr,
@@ -141,10 +141,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
 
         let mut memory_controller = self.memory_controller.borrow_mut();
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory_controller.timestamp().as_canonical_u32() as usize
-        );
+        debug_assert_eq!(from_state.timestamp, memory_controller.timestamp());
 
         let x_array_read = memory_controller.read_heap::<NUM_LIMBS>(d, e, x_address_ptr);
         let y_array_read = memory_controller.read_heap::<NUM_LIMBS>(d, e, y_address_ptr);
@@ -182,7 +179,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 

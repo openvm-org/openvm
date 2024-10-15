@@ -26,7 +26,7 @@ pub struct FieldArithmeticAir {
 }
 
 impl FieldArithmeticAir {
-    pub const TIMESTAMP_DELTA: usize = 3;
+    pub const TIMESTAMP_DELTA: u32 = 3;
 }
 
 impl AirConfig for FieldArithmeticAir {
