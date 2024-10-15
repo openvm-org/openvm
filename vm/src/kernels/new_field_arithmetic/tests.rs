@@ -11,7 +11,7 @@ use ax_sdk::{
 use axvm_instructions::UsizeOpcode;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 use strum::EnumCount;
 
