@@ -69,25 +69,21 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         instruction: Instruction<F>,
     ) {
         let initial_state = ExecutionState {
-            pc: self.next_elem_size_usize(),
+            pc: self.next_elem_size_u32(),
             timestamp: self.memory.controller.borrow().timestamp(),
         };
         tracing::debug!(?initial_state.timestamp);
 
         let final_state = executor
-            .execute(
-                instruction.clone(),
-                initial_state.map(|x| x.as_canonical_u32() as usize),
-            )
-            .expect("Expected the execution not to fail")
-            .map(F::from_canonical_usize);
+            .execute(instruction.clone(), initial_state)
+            .expect("Expected the execution not to fail");
 
         self.program.execute(instruction, &initial_state);
         self.execution.execute(initial_state, final_state);
     }
 
-    fn next_elem_size_usize(&mut self) -> F {
-        F::from_canonical_u32(self.rng.next_u32() % (1 << (F::bits() - 2)))
+    fn next_elem_size_u32(&mut self) -> u32 {
+        self.rng.next_u32() % (1 << (F::bits() - 2))
     }
 
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {

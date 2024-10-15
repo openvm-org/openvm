@@ -48,7 +48,7 @@ impl<F: PrimeField32> Rv32RdWriteAdapter<F> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32RdWriteWriteRecord<F: Field> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
 }
 
@@ -178,20 +178,17 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapter<F> {
         &mut self,
         memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { op_a: a, d, .. } = *instruction;
         let rd = memory.write(d, a, output.writes);
 
-        let to_pc = output
-            .to_pc
-            .unwrap_or(F::from_canonical_usize(from_state.pc + 4));
         Ok((
             ExecutionState {
-                pc: to_pc.as_canonical_u32() as usize,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                pc: output.to_pc.unwrap_or(from_state.pc + 4),
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state, rd },
         ))
@@ -204,7 +201,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapter<F> {
         write_record: Self::WriteRecord,
     ) {
         let adapter_cols: &mut Rv32RdWriteAdapterCols<F> = row_slice.borrow_mut();
-        adapter_cols.from_state = write_record.from_state.map(F::from_canonical_usize);
+        adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         adapter_cols.a = write_record.rd.pointer;
         adapter_cols.rd_aux_cols = self
             .aux_cols_factory

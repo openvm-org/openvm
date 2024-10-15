@@ -112,7 +112,7 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
+        from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction {
@@ -127,7 +127,7 @@ where
             solve_cmp::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
         let output = AdapterRuntimeContext {
-            to_pc: cmp_result.then_some(from_pc + imm),
+            to_pc: cmp_result.then_some(from_pc + imm.as_canonical_u32()),
             writes: Default::default(),
         };
 

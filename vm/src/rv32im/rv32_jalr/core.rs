@@ -81,7 +81,7 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
+        from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction {
@@ -95,11 +95,11 @@ where
             - (1 << (RV_IS_TYPE_IMM_BITS - 1));
 
         let rs1 = compose(reads.into());
-        let (to_pc, rd_data) = solve_jalr(local_opcode_index, from_pc.as_canonical_u32(), imm, rs1);
+        let (to_pc, rd_data) = solve_jalr(local_opcode_index, from_pc, imm, rs1);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
         let output = AdapterRuntimeContext {
-            to_pc: Some(F::from_canonical_u32(to_pc)),
+            to_pc: Some(to_pc),
             writes: rd_data.into(),
         };
 

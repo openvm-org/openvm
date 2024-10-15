@@ -41,8 +41,8 @@ pub struct AccessAdapterRecord<T> {
 pub struct MemoryWriteRecord<T, const N: usize> {
     pub address_space: T,
     pub pointer: T,
-    pub timestamp: T,
-    pub prev_timestamp: T,
+    pub timestamp: u32,
+    pub prev_timestamp: u32,
     pub data: [T; N],
     pub prev_data: [T; N],
 }
@@ -61,8 +61,8 @@ impl<T: Copy> MemoryWriteRecord<T, 1> {
 pub struct MemoryReadRecord<T, const N: usize> {
     pub address_space: T,
     pub pointer: T,
-    pub timestamp: T,
-    pub prev_timestamp: T,
+    pub timestamp: u32,
+    pub prev_timestamp: u32,
     pub data: [T; N],
 }
 
@@ -168,8 +168,8 @@ impl<F: PrimeField32> Memory<F> {
             let record = MemoryWriteRecord {
                 address_space,
                 pointer: F::from_canonical_usize(start_index),
-                timestamp: F::from_canonical_u32(self.timestamp),
-                prev_timestamp: F::from_canonical_u32(prev_timestamp),
+                timestamp: self.timestamp,
+                prev_timestamp,
                 data: values,
                 prev_data: prev_data.try_into().unwrap(),
             };
@@ -207,8 +207,8 @@ impl<F: PrimeField32> Memory<F> {
             let record = MemoryReadRecord {
                 address_space,
                 pointer: F::from_canonical_usize(start_index),
-                timestamp: F::from_canonical_u32(self.timestamp),
-                prev_timestamp: F::from_canonical_u32(prev_timestamp),
+                timestamp: self.timestamp,
+                prev_timestamp,
                 data: data.clone().try_into().unwrap(),
             };
 
@@ -577,8 +577,8 @@ mod tests {
             MemoryWriteRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
-                timestamp: bb!(1),
-                prev_timestamp: bb!(0),
+                timestamp: 1,
+                prev_timestamp: 0,
                 data: bba![1, 2, 3, 4],
                 prev_data: bba![0, 0, 0, 0],
             }
@@ -593,8 +593,8 @@ mod tests {
             MemoryReadRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
-                timestamp: bb!(2),
-                prev_timestamp: bb!(1),
+                timestamp: 2,
+                prev_timestamp: 1,
                 data: bba![1, 2, 3, 4],
             }
         );
@@ -620,8 +620,8 @@ mod tests {
             MemoryWriteRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
-                timestamp: bb!(3),
-                prev_timestamp: bb!(2),
+                timestamp: 3,
+                prev_timestamp: 2,
                 data: bba![10, 11],
                 prev_data: bba![1, 2],
             }
@@ -648,8 +648,8 @@ mod tests {
             MemoryReadRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
-                timestamp: bb!(4),
-                prev_timestamp: bb!(3),
+                timestamp: 4,
+                prev_timestamp: 3,
                 data: bba![10, 11, 3, 4],
             }
         );
@@ -680,8 +680,8 @@ mod tests {
             MemoryWriteRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
-                timestamp: bb!(1),
-                prev_timestamp: bb!(0),
+                timestamp: 1,
+                prev_timestamp: 0,
                 data: bba![1, 2, 3, 4],
                 prev_data: bba![0, 0, 0, 0],
             }
@@ -696,8 +696,8 @@ mod tests {
             MemoryReadRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
-                timestamp: bb!(2),
-                prev_timestamp: bb!(1),
+                timestamp: 2,
+                prev_timestamp: 1,
                 data: bba![1, 2, 3, 4],
             }
         );
@@ -723,8 +723,8 @@ mod tests {
             MemoryWriteRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
-                timestamp: bb!(3),
-                prev_timestamp: bb!(2),
+                timestamp: 3,
+                prev_timestamp: 2,
                 data: bba![10, 11],
                 prev_data: bba![1, 2],
             }
@@ -751,8 +751,8 @@ mod tests {
             MemoryReadRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
-                timestamp: bb!(4),
-                prev_timestamp: bb!(3),
+                timestamp: 4,
+                prev_timestamp: 3,
                 data: bba![10, 11, 3, 4],
             }
         );

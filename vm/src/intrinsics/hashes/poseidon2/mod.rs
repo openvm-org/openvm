@@ -156,8 +156,8 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
                     io: Poseidon2VmIoCols {
                         is_opcode: F::one(),
                         is_compress_direct: F::zero(),
-                        pc: F::from_canonical_usize(from_state.pc),
-                        timestamp: F::from_canonical_usize(from_state.timestamp),
+                        pc: F::from_canonical_u32(from_state.pc),
+                        timestamp: F::from_canonical_u32(from_state.timestamp),
                         a: instruction.op_a,
                         b: instruction.op_b,
                         c: instruction.op_c,
@@ -207,7 +207,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
 enum Poseidon2Record<F> {
     FromInstruction {
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         internal_cols: Poseidon2Cols<WIDTH, F>,
         dst_ptr_read: MemoryReadRecord<F, 1>,
         lhs_ptr_read: MemoryReadRecord<F, 1>,
@@ -234,8 +234,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let mut memory_controller = self.memory_controller.borrow_mut();
 
         let Instruction {
@@ -317,7 +317,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 

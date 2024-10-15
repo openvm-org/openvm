@@ -71,7 +71,7 @@ fn write_ec_points<T: PrimeField32>(
 
 #[derive(Clone, Debug)]
 pub struct EcAddUnequalRecord<T: PrimeField32> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<T>,
 
     // Each limb is 8 bits (byte), 32 limbs for 256 bits, 2 coordinates for each point..
@@ -152,8 +152,8 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
     fn execute(
         &mut self,
         instruction: Instruction<T>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode: _,
             op_a: p3_address_ptr,
@@ -206,7 +206,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
         let memory_controller = self.config.memory_controller.borrow();
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 
@@ -217,7 +217,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
 
 #[derive(Clone, Debug)]
 pub struct EcDoubleRecord<T: PrimeField32> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<T>,
 
     // Each limb is 8 bits (byte), 32 limbs for 256 bits, 2 coordinates for each point..
@@ -265,8 +265,8 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcDoubleChip<T> {
     fn execute(
         &mut self,
         instruction: Instruction<T>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode: _,
             op_a: p2_address_ptr,
@@ -311,7 +311,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcDoubleChip<T> {
         let memory_controller = self.config.memory_controller.borrow();
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 

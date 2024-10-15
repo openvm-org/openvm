@@ -117,8 +117,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -133,10 +133,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         debug_assert_eq!(local_opcode_index, Keccak256Opcode::KECCAK256);
 
         let mut memory = self.memory_controller.borrow_mut();
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory.timestamp().as_canonical_u32() as usize
-        );
+        debug_assert_eq!(from_state.timestamp, memory.timestamp());
 
         let dst_read = memory.read(d, a);
         let src_read = memory.read(d, b);
@@ -154,7 +151,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
 
         for block_idx in 0..num_blocks {
             if block_idx != 0 {
-                memory.increment_timestamp_by(F::from_canonical_usize(KECCAK_EXECUTION_READS));
+                memory.increment_timestamp_by(KECCAK_EXECUTION_READS as u32);
             }
             let mut reads = Vec::with_capacity(KECCAK_RATE_BYTES);
 
@@ -216,7 +213,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         tracing::trace!("[runtime] keccak256 output: {:?}", output);
 
         let record = KeccakRecord {
-            pc: F::from_canonical_usize(from_state.pc),
+            pc: F::from_canonical_u32(from_state.pc),
             dst_read,
             src_read,
             len_read,
@@ -227,9 +224,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         // Add the events to chip state for later trace generation usage
         self.records.push(record);
 
-        let timestamp_change = KeccakVmAir::timestamp_change::<F>(len).as_canonical_u32() as usize;
+        let timestamp_change = KeccakVmAir::timestamp_change::<F>(len).as_canonical_u32();
         let to_timestamp = from_state.timestamp + timestamp_change;
-        memory.increase_timestamp_to(F::from_canonical_usize(to_timestamp));
+        memory.increase_timestamp_to(to_timestamp);
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
@@ -269,7 +266,7 @@ impl<F: Copy> KeccakRecord<F> {
         [a, b, c, d, e, f]
     }
 
-    pub fn start_timestamp(&self) -> F {
+    pub fn start_timestamp(&self) -> u32 {
         self.dst_read.timestamp
     }
 

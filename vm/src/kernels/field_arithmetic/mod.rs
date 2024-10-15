@@ -25,7 +25,7 @@ pub use air::FieldArithmeticAir;
 #[derive(Clone, Debug)]
 pub struct FieldArithmeticRecord<F> {
     pub opcode: usize,
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub x_read: MemoryReadRecord<F, 1>,
     pub y_read: MemoryReadRecord<F, 1>,
     pub z_write: MemoryWriteRecord<F, 1>,
@@ -67,8 +67,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: z_address,
@@ -83,10 +83,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
 
         let mut memory_controller = self.memory_controller.borrow_mut();
 
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory_controller.timestamp().as_canonical_u32() as usize
-        );
+        debug_assert_eq!(from_state.timestamp, memory_controller.timestamp());
 
         let x_read = memory_controller.read_cell(x_as, x_address);
         let y_read = memory_controller.read_cell(y_as, y_address);

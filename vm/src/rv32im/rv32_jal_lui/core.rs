@@ -166,7 +166,7 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
+        from_pc: u32,
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
@@ -181,7 +181,7 @@ where
             LUI => c.as_canonical_u32() as i32,
         };
         let (to_pc, rd_data) =
-            solve_jal_lui(local_opcode_index, from_pc.as_canonical_u32() as usize, imm);
+            solve_jal_lui(local_opcode_index, from_pc, imm);
 
         self.xor_lookup_chip.request(rd_data[1], rd_data[2]);
         if local_opcode_index == JAL {
@@ -197,7 +197,7 @@ where
         let rd_data = rd_data.map(F::from_canonical_u32);
 
         let output = AdapterRuntimeContext {
-            to_pc: Some(F::from_canonical_usize(to_pc)),
+            to_pc: Some(to_pc),
             writes: rd_data.into(),
         };
 
@@ -238,15 +238,15 @@ where
 // returns (to_pc, rd_data)
 pub(super) fn solve_jal_lui(
     opcode: Rv32JalLuiOpcode,
-    pc: usize,
+    pc: u32,
     imm: i32,
-) -> (usize, [u32; RV32_REGISTER_NUM_LANES]) {
+) -> (u32, [u32; RV32_REGISTER_NUM_LANES]) {
     match opcode {
         JAL => {
-            let rd_data = array::from_fn(|i| ((pc as u32 + 4) >> (RV32_CELL_BITS * i)) & 255);
+            let rd_data = array::from_fn(|i| ((pc + 4) >> (8 * i)) & 255);
             let next_pc = pc as i32 + imm;
             assert!(next_pc >= 0);
-            (next_pc as usize, rd_data)
+            (next_pc as u32, rd_data)
         }
         LUI => {
             let imm = imm as u32;

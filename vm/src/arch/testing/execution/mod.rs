@@ -27,11 +27,15 @@ impl<F: PrimeField32> ExecutionTester<F> {
         }
     }
 
-    pub fn execute(&mut self, initial_state: ExecutionState<F>, final_state: ExecutionState<F>) {
+    pub fn execute(
+        &mut self,
+        initial_state: ExecutionState<u32>,
+        final_state: ExecutionState<u32>,
+    ) {
         self.records.push(DummyExecutionInteractionCols {
             count: F::neg_one(), // send
-            initial_state,
-            final_state,
+            initial_state: initial_state.map(F::from_canonical_u32),
+            final_state: final_state.map(F::from_canonical_u32),
         })
     }
 

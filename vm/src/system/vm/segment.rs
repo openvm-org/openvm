@@ -573,8 +573,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
     /// Stopping is triggered by should_segment()
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        let mut timestamp: usize = self.core_chip.borrow().state.timestamp;
-        let mut pc = F::from_canonical_usize(self.core_chip.borrow().state.pc);
+        let mut timestamp = self.core_chip.borrow().state.timestamp;
+        let mut pc = self.core_chip.borrow().state.pc;
 
         let mut collect_metrics = self.config.collect_metrics;
         // The backtrace for the previous instruction, if any.
@@ -586,13 +586,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         };
 
         self.connector_chip
-            .begin(ExecutionState::new(pc, F::from_canonical_usize(timestamp)));
+            .begin(ExecutionState::new(pc, timestamp));
 
         loop {
-            let pc_usize = pc.as_canonical_u64() as usize;
-
-            let (instruction, debug_info) = self.program_chip.get_instruction(pc_usize)?;
-            tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
+            let (instruction, debug_info) = self.program_chip.get_instruction(pc)?;
+            tracing::trace!("pc: {pc} | time: {timestamp} | {:?}", instruction);
 
             let (dsl_instr, trace) = debug_info.map_or(
                 (None, None),
@@ -614,7 +612,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 } else {
                     eprintln!("eDSL program failure; no backtrace");
                 }
-                return Err(ExecutionError::Fail(pc_usize));
+                return Err(ExecutionError::Fail(pc));
             }
             if opcode == CoreOpcode::CT_START as usize {
                 self.update_chip_metrics();
@@ -632,10 +630,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 match InstructionExecutor::execute(
                     executor,
                     instruction,
-                    ExecutionState::new(pc_usize, timestamp),
+                    ExecutionState::new(pc, timestamp),
                 ) {
                     Ok(next_state) => {
-                        pc = F::from_canonical_usize(next_state.pc);
+                        pc = next_state.pc;
                         timestamp = next_state.timestamp;
                     }
                     Err(e) => return Err(e),
@@ -644,7 +642,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     opcode_name = Some(executor.get_opcode_name(opcode));
                 }
             } else {
-                return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
+                return Err(ExecutionError::DisabledOperation(pc, opcode));
             }
 
             if collect_metrics {
@@ -684,8 +682,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
         }
 
-        self.connector_chip
-            .end(ExecutionState::new(pc, F::from_canonical_usize(timestamp)));
+        self.connector_chip.end(ExecutionState::new(pc, timestamp));
 
         let streams = mem::take(&mut self.core_chip.borrow_mut().streams);
         self.hint_stream = streams.hint_stream;

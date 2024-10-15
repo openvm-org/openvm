@@ -51,12 +51,16 @@ impl<F: PrimeField32> MemoryTester<F> {
         // core::BorrowMut confuses compiler
         let read = RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
         let address = MemoryAddress::new(addr_space, pointer);
-        self.records.push(
-            self.bus
-                .receive(address, read.data.to_vec(), read.prev_timestamp),
-        );
-        self.records
-            .push(self.bus.send(address, read.data.to_vec(), read.timestamp));
+        self.records.push(self.bus.receive(
+            address,
+            read.data.to_vec(),
+            F::from_canonical_u32(read.prev_timestamp),
+        ));
+        self.records.push(self.bus.send(
+            address,
+            read.data.to_vec(),
+            F::from_canonical_u32(read.timestamp),
+        ));
         read.value()
     }
 
@@ -67,10 +71,13 @@ impl<F: PrimeField32> MemoryTester<F> {
         self.records.push(self.bus.receive(
             address,
             write.prev_data.to_vec(),
-            write.prev_timestamp,
+            F::from_canonical_u32(write.prev_timestamp),
         ));
-        self.records
-            .push(self.bus.send(address, write.data.to_vec(), write.timestamp));
+        self.records.push(self.bus.send(
+            address,
+            write.data.to_vec(),
+            F::from_canonical_u32(write.timestamp),
+        ));
     }
 
     pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {

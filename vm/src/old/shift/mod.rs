@@ -25,7 +25,7 @@ mod tests;
 
 #[derive(Clone, Debug)]
 pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<T>,
     pub x_ptr_read: MemoryReadRecord<T, 1>,
     pub y_ptr_read: MemoryReadRecord<T, 1>,
@@ -100,8 +100,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     fn execute(
         &mut self,
         instruction: Instruction<T>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -115,10 +115,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         assert!(U256Opcode::shift_opcodes().any(|op| op as usize == local_opcode_index));
 
         let mut memory_controller = self.memory_controller.borrow_mut();
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory_controller.timestamp().as_canonical_u32() as usize
-        );
+        debug_assert_eq!(from_state.timestamp, memory_controller.timestamp());
 
         let [z_ptr_read, x_ptr_read, y_ptr_read] =
             [a, b, c].map(|ptr_of_ptr| memory_controller.read_cell(d, ptr_of_ptr));
@@ -184,7 +181,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 

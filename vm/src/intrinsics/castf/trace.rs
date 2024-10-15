@@ -26,7 +26,7 @@ impl<F: PrimeField32> VmChip<F> for CastFChip<F> {
             let row = &mut rows[i];
             let cols: &mut CastFCols<F> = row[..].borrow_mut();
             cols.io = CastFIoCols {
-                from_state: record.from_state.map(F::from_canonical_usize),
+                from_state: record.from_state.map(F::from_canonical_u32),
                 op_a: record.instruction.op_a,
                 op_b: record.instruction.op_b,
                 d: record.instruction.d,

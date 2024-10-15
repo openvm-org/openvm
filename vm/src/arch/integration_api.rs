@@ -65,10 +65,10 @@ pub trait VmAdapterChip<F: Field> {
         &mut self,
         memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)>;
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)>;
 
     /// Should mutate `row_slice` to populate with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
@@ -108,7 +108,7 @@ pub trait VmCoreChip<F: PrimeField32, I: VmAdapterInterface<F>> {
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
+        from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)>;
 
@@ -138,7 +138,7 @@ where
 
 pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
-    pub to_pc: Option<T>,
+    pub to_pc: Option<u32>,
     pub writes: I::Writes,
 }
 
@@ -193,14 +193,13 @@ where
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
         let mut memory = self.memory.borrow_mut();
         let (reads, read_record) = self.adapter.preprocess(&mut memory, &instruction)?;
-        let from_pc = F::from_canonical_usize(from_state.pc);
-        let (output, core_record) = self
-            .core
-            .execute_instruction(&instruction, from_pc, reads)?;
+        let (output, core_record) =
+            self.core
+                .execute_instruction(&instruction, from_state.pc, reads)?;
         let (to_state, write_record) = self.adapter.postprocess(
             &mut memory,
             &instruction,

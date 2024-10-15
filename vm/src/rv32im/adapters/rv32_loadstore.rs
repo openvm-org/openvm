@@ -205,10 +205,10 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         &mut self,
         memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
             opcode,
             op_a: a,
@@ -239,11 +239,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         Ok((
             ExecutionState {
-                pc: output
-                    .to_pc
-                    .unwrap_or(F::from_canonical_usize(from_state.pc + 4))
-                    .as_canonical_u32() as usize,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                pc: output.to_pc.unwrap_or(from_state.pc + 4),
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord {
                 write: write_record,

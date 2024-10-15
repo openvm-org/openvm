@@ -51,7 +51,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let main = builder.main();
         // TODO: move these public values to the connector chip?
 
-        let inst_width = AB::F::from_canonical_usize(INST_WIDTH);
+        let inst_width = AB::F::from_canonical_u32(INST_WIDTH);
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();

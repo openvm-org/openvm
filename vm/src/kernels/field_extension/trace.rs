@@ -93,8 +93,8 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
-                pc: F::from_canonical_usize(record.pc),
-                timestamp: F::from_canonical_usize(record.timestamp),
+                pc: F::from_canonical_u32(record.from_state.pc),
+                timestamp: F::from_canonical_u32(record.from_state.timestamp),
                 op_a: record.instruction.op_a,
                 op_b: record.instruction.op_b,
                 op_c: record.instruction.op_c,

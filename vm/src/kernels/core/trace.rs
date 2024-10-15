@@ -24,8 +24,8 @@ impl<F: PrimeField32> CoreChip<F> {
 
     /// This must be called for each blank row and results should never be cloned; see [CoreCols::nop_row].
     fn make_blank_row(&self) -> CoreCols<F> {
-        let pc = F::from_canonical_usize(self.state.pc);
-        let timestamp = F::from_canonical_usize(self.state.timestamp);
+        let pc = F::from_canonical_u32(self.state.pc);
+        let timestamp = F::from_canonical_u32(self.state.timestamp);
         CoreCols::nop_row(self, pc, timestamp)
     }
 }
@@ -45,8 +45,8 @@ impl<F: PrimeField32> VmChip<F> for CoreChip<F> {
         let first_row_pc = self.start_state.pc;
         let last_row_pc = self.state.pc;
         let mut result = vec![
-            F::from_canonical_usize(first_row_pc),
-            F::from_canonical_usize(last_row_pc),
+            F::from_canonical_u32(first_row_pc),
+            F::from_canonical_u32(last_row_pc),
         ];
         result.extend(self.public_values.iter().map(|pv| pv.unwrap_or(F::zero())));
         result

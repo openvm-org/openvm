@@ -50,7 +50,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmChip<F>
             let row: &mut ShiftCols<F, NUM_LIMBS, LIMB_BITS> = row.borrow_mut();
 
             row.io = ShiftIoCols {
-                from_state: from_state.map(F::from_canonical_usize),
+                from_state: from_state.map(F::from_canonical_u32),
                 x: MemoryData::<F, NUM_LIMBS, LIMB_BITS> {
                     data: x_read.data,
                     address: x_read.pointer,

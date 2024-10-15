@@ -63,7 +63,7 @@ pub struct Rv32AluReadRecord<F: Field> {
 
 #[derive(Debug)]
 pub struct Rv32AluWriteRecord<F: Field> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     /// Write to destination register
     pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
 }
@@ -146,8 +146,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
             MemoryReadRecord {
                 address_space: F::zero(),
                 pointer: F::zero(),
-                timestamp: F::zero(),
-                prev_timestamp: F::zero(),
+                timestamp: 0,
+                prev_timestamp: 0,
                 data: c_bytes_le.map(F::from_canonical_u8),
             }
         } else {
@@ -168,10 +168,10 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
         &mut self,
         memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check
 
         let Instruction { op_a: a, d, .. } = *instruction;
@@ -180,7 +180,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
         Ok((
             ExecutionState {
                 pc: from_state.pc + 4,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state, rd },
         ))

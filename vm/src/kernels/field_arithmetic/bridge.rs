@@ -33,7 +33,7 @@ impl FieldArithmeticAir {
                     operand2.address_space,
                 ],
                 from_state,
-                AB::F::from_canonical_usize(Self::TIMESTAMP_DELTA),
+                AB::F::from_canonical_u32(Self::TIMESTAMP_DELTA),
             )
             .eval(builder, is_valid);
 

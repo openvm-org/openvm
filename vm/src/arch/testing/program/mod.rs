@@ -30,9 +30,9 @@ impl<F: PrimeField32> ProgramTester<F> {
         }
     }
 
-    pub fn execute(&mut self, instruction: Instruction<F>, initial_state: &ExecutionState<F>) {
+    pub fn execute(&mut self, instruction: Instruction<F>, initial_state: &ExecutionState<u32>) {
         self.records.push(ProgramExecutionCols {
-            pc: initial_state.pc,
+            pc: F::from_canonical_u32(initial_state.pc),
             opcode: F::from_canonical_u8(instruction.opcode as u8),
             op_a: instruction.op_a,
             op_b: instruction.op_b,

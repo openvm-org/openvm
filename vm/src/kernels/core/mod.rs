@@ -21,7 +21,7 @@ pub mod columns;
 pub mod execute;
 pub mod trace;
 
-pub const INST_WIDTH: usize = 1;
+pub const INST_WIDTH: u32 = 1;
 
 pub const READ_INSTRUCTION_BUS: usize = 8;
 pub const RANGE_CHECKER_BUS: usize = 4;
@@ -32,7 +32,7 @@ pub const CORE_MAX_READS_PER_CYCLE: usize = 3;
 pub const CORE_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CORE_MAX_ACCESSES_PER_CYCLE: usize = CORE_MAX_READS_PER_CYCLE + CORE_MAX_WRITES_PER_CYCLE;
 
-fn timestamp_delta(opcode: CoreOpcode) -> usize {
+fn timestamp_delta(opcode: CoreOpcode) -> u32 {
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,
@@ -57,8 +57,8 @@ pub struct CoreOptions {
 #[derive(Clone, Copy, Debug)]
 pub struct CoreState {
     pub clock_cycle: usize,
-    pub timestamp: usize,
-    pub pc: usize,
+    pub timestamp: u32,
+    pub pc: u32,
     pub is_done: bool,
 }
 
