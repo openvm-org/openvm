@@ -1,3 +1,5 @@
+use std::borrow::BorrowMut;
+
 use afs_stark_backend::{
     prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError, Chip,
 };
@@ -21,7 +23,7 @@ use crate::{
         VmChip,
     },
     kernels::{
-        adapters::native_adapter::NativeAdapterChip,
+        adapters::native_adapter::{NativeAdapterChip, NativeAdapterCols},
         new_field_arithmetic::{NewFieldArithmetic, NewFieldArithmeticCoreCols},
     },
     system::program::Instruction,
@@ -148,11 +150,15 @@ fn new_field_arithmetic_air_zero_div_zero() {
 
     let air = chip.air();
     let width = chip.trace_width();
-    let trace = chip.generate_trace();
+    let mut trace = chip.generate_trace();
     // set the value of [c]_f to zero, necessary to bypass trace gen checks
-    let mut row = trace.row_slice(0).to_vec();
-    row[24] = BabyBear::zero();
-    let trace = RowMajorMatrix::new(row, width);
+    let row = trace.row_mut(0);
+    let cols: &mut NewFieldArithmeticCoreCols<BabyBear> = row
+        .split_at_mut(NativeAdapterCols::<BabyBear>::width())
+        .1
+        .borrow_mut();
+    cols.b = BabyBear::zero();
+    let trace = RowMajorMatrix::new(row.to_vec(), width);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
