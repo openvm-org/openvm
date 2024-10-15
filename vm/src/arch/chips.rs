@@ -17,12 +17,12 @@ use strum_macros::IntoStaticStr;
 use crate::{
     arch::ExecutionState,
     intrinsics::{
-        castf::CastFChip,
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     },
     kernels::{
-        core::CoreChip, field_arithmetic::FieldArithmeticChip, field_extension::FieldExtensionChip,
+        castf::CastFChip, core::CoreChip, field_arithmetic::FieldArithmeticChip,
+        field_extension::FieldExtensionChip,
     },
     old::{
         alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,

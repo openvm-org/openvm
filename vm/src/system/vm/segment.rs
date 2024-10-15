@@ -36,7 +36,6 @@ use crate::{
         ExecutorName, InstructionExecutor, VmChip,
     },
     intrinsics::{
-        castf::CastFChip,
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     },
@@ -45,6 +44,7 @@ use crate::{
             native_adapter::NativeAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
+        castf::CastFChip,
         core::{
             CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
