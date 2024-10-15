@@ -2,19 +2,25 @@ use std::sync::Arc;
 
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
+    prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::*, Poseidon2Chip};
-use crate::arch::VmChip;
 
-impl<F: PrimeField32> VmChip<F> for Poseidon2Chip<F> {
-    /// Generates final Poseidon2VmAir trace from cached rows.
-    fn generate_trace(self) -> RowMajorMatrix<F> {
+impl<SC: StarkGenericConfig> Chip<SC> for Poseidon2Chip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let Self {
             air,
             memory_controller,
@@ -32,30 +38,24 @@ impl<F: PrimeField32> VmChip<F> for Poseidon2Chip<F> {
             .flat_map(|record| Self::record_to_cols(&aux_cols_factory, record).flatten())
             .collect();
         for _ in 0..diff {
-            flat_rows.extend(Poseidon2VmCols::<F>::blank_row(&air).flatten());
+            flat_rows.extend(Poseidon2VmCols::<Val<SC>>::blank_row(&air).flatten());
         }
 
-        RowMajorMatrix::new(flat_rows, air.width())
-    }
-
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.records.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        self.air.width()
+        AirProofInput::simple_no_pis(
+            Arc::new(air.clone()),
+            RowMajorMatrix::new(flat_rows, air.width()),
+        )
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for Poseidon2Chip<Val<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        Arc::new(self.air.clone())
+impl<F: PrimeField32> ChipUsageGetter for Poseidon2Chip<F> {
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+    fn current_trace_height(&self) -> usize {
+        self.records.len()
+    }
+    fn trace_width(&self) -> usize {
+        self.air.width()
     }
 }

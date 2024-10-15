@@ -207,6 +207,12 @@ pub struct TraceCommitter<'pcs, SC: StarkGenericConfig> {
     pcs: &'pcs SC::Pcs,
 }
 
+impl<'pcs, SC: StarkGenericConfig> Clone for TraceCommitter<'pcs, SC> {
+    fn clone(&self) -> Self {
+        Self { pcs: self.pcs }
+    }
+}
+
 impl<'pcs, SC: StarkGenericConfig> TraceCommitter<'pcs, SC> {
     pub fn new(pcs: &'pcs SC::Pcs) -> Self {
         Self { pcs }

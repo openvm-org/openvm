@@ -11,7 +11,7 @@ use afs_stark_backend::{
     interaction::{InteractionBuilder, InteractionType},
     prover::types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use itertools::izip;
 use p3_air::{Air, BaseAir};
@@ -123,6 +123,16 @@ pub struct DummyInteractionChip<'a, SC: StarkGenericConfig> {
     pub air: DummyInteractionAir,
 }
 
+impl<'pcs, SC: StarkGenericConfig> Clone for DummyInteractionChip<'pcs, SC> {
+    fn clone(&self) -> Self {
+        Self {
+            trace_committer: self.trace_committer.clone(),
+            data: self.data.clone(),
+            air: self.air,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DummyInteractionData {
     pub count: Vec<u32>,
@@ -228,7 +238,7 @@ impl<'a, SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'a, SC> {
         Arc::new(self.air)
     }
 
-    fn generate_air_proof_input(&self) -> AirProofInput<SC> {
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
         assert!(self.data.is_some());
         let data = self.data.clone().unwrap();
         if self.trace_committer.is_some() {
@@ -254,5 +264,22 @@ impl<'a, SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'a, SC> {
                 },
             }
         }
+    }
+}
+
+impl<'a, SC: StarkGenericConfig> ChipUsageGetter for DummyInteractionChip<'a, SC> {
+    fn air_name(&self) -> String {
+        "DummyInteractionAir".to_string()
+    }
+    fn current_trace_height(&self) -> usize {
+        if let Some(data) = &self.data {
+            data.count.len()
+        } else {
+            0
+        }
+    }
+
+    fn trace_width(&self) -> usize {
+        self.air.field_width + 1
     }
 }

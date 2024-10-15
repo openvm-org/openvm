@@ -7,11 +7,12 @@ use afs_primitives::bigint::{
 };
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
+    prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use num_bigint_dig::{BigInt, BigUint, Sign};
-use p3_field::PrimeField32;
+use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
@@ -19,34 +20,37 @@ use super::{
     ModularAddSubChip,
 };
 use crate::{
-    arch::{
-        instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        VmChip,
-    },
+    arch::instructions::{ModularArithmeticOpcode, UsizeOpcode},
     system::memory::MemoryHeapDataIoCols,
     utils::limbs_to_biguint,
 };
 
-impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> VmChip<F>
-    for ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE>
+impl<SC: StarkGenericConfig, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Chip<SC>
+    for ModularAddSubChip<Val<SC>, NUM_LIMBS, LIMB_SIZE>
+where
+    Val<SC>: PrimeField32,
 {
-    fn generate_trace(self) -> RowMajorMatrix<F> {
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         let height = self.data.len();
         let height = height.next_power_of_two();
 
-        let blank_row = vec![F::zero(); ModularAddSubCols::<F, NUM_LIMBS>::width()];
+        let blank_row = vec![Val::<SC>::zero(); ModularAddSubCols::<Val::<SC>, NUM_LIMBS>::width()];
         let mut rows = vec![blank_row; height];
 
         for (i, record) in self.data.iter().enumerate() {
             let row = &mut rows[i];
-            let cols: &mut ModularAddSubCols<F, NUM_LIMBS> = row[..].borrow_mut();
+            let cols: &mut ModularAddSubCols<Val<SC>, NUM_LIMBS> = row[..].borrow_mut();
             cols.io = ModularAddSubIoCols {
-                from_state: record.from_state.map(F::from_canonical_u32),
-                x: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.x_array_read),
-                y: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.y_array_read),
-                z: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.z_array_write),
+                from_state: record.from_state.map(Val::<SC>::from_canonical_u32),
+                x: MemoryHeapDataIoCols::<Val<SC>, NUM_LIMBS>::from(record.x_array_read),
+                y: MemoryHeapDataIoCols::<Val<SC>, NUM_LIMBS>::from(record.y_array_read),
+                z: MemoryHeapDataIoCols::<Val<SC>, NUM_LIMBS>::from(record.z_array_write),
             };
             let x = limbs_to_biguint(
                 &record
@@ -84,39 +88,38 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> VmChip<F>
                 self.generate_aux_cols_sub(cols.aux.borrow_mut(), x, y, r);
             }
 
-            cols.aux.is_valid = F::one();
+            cols.aux.is_valid = Val::<SC>::one();
             cols.aux.read_x_aux_cols =
                 aux_cols_factory.make_heap_read_aux_cols(record.x_array_read);
             cols.aux.read_y_aux_cols =
                 aux_cols_factory.make_heap_read_aux_cols(record.y_array_read);
             cols.aux.write_z_aux_cols =
                 aux_cols_factory.make_heap_write_aux_cols(record.z_array_write);
-            cols.aux.is_add = F::from_bool(is_add);
+            cols.aux.is_add = Val::<SC>::from_bool(is_add);
         }
 
-        RowMajorMatrix::new(rows.concat(), ModularAddSubCols::<F, NUM_LIMBS>::width())
+        AirProofInput::simple_no_pis(
+            self.air(),
+            RowMajorMatrix::new(
+                rows.concat(),
+                ModularAddSubCols::<Val<SC>, NUM_LIMBS>::width(),
+            ),
+        )
     }
+}
 
+impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> ChipUsageGetter
+    for ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE>
+{
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
-
     fn current_trace_height(&self) -> usize {
         self.data.len()
     }
 
     fn trace_width(&self) -> usize {
         ModularAddSubCols::<F, NUM_LIMBS>::width()
-    }
-}
-
-impl<SC: StarkGenericConfig, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Chip<SC>
-    for ModularAddSubChip<Val<SC>, NUM_LIMBS, LIMB_SIZE>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        Arc::new(self.air.clone())
     }
 }
 

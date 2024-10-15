@@ -3,20 +3,18 @@ use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, s
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionType,
+    prover::types::AirProofInput,
     rap::AnyRap,
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
-use p3_field::PrimeField32;
+use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::{seq::SliceRandom, Rng};
 
-use crate::{
-    arch::chips::VmChip,
-    system::memory::{
-        offline_checker::{MemoryBus, MemoryBusInteraction},
-        MemoryAddress, MemoryControllerRef,
-    },
+use crate::system::memory::{
+    offline_checker::{MemoryBus, MemoryBusInteraction},
+    MemoryAddress, MemoryControllerRef,
 };
 
 pub mod air;
@@ -97,45 +95,45 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 }
 
-impl<F: PrimeField32> VmChip<F> for MemoryTester<F> {
-    fn generate_trace(self) -> RowMajorMatrix<F> {
-        let height = self.records.len().next_power_of_two();
-        let width = self.trace_width();
-        let mut values = vec![F::zero(); height * width];
-        // This zip only goes through records. The padding rows between records.len()..height
-        // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, record) in values.chunks_mut(width).zip(self.records) {
-            let row: &mut DummyMemoryInteractionCols<F, WORD_SIZE> = row.borrow_mut();
-            row.address = record.address;
-            row.data = record.data.try_into().unwrap();
-            row.timestamp = record.timestamp;
-            row.count = match record.interaction_type {
-                InteractionType::Send => F::one(),
-                InteractionType::Receive => -F::one(),
-            };
-        }
-        RowMajorMatrix::new(values, width)
-    }
-
-    fn air_name(&self) -> String {
-        "MemoryDummyAir".to_string()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.records.len() / self.trace_width()
-    }
-
-    fn trace_width(&self) -> usize {
-        size_of::<DummyMemoryInteractionCols<u8, WORD_SIZE>>()
-    }
-}
-
 impl<SC: StarkGenericConfig> Chip<SC> for MemoryTester<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
         Arc::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let air = self.air();
+        let height = self.records.len().next_power_of_two();
+        let width = self.trace_width();
+        let mut values = vec![Val::<SC>::zero(); height * width];
+        // This zip only goes through records. The padding rows between records.len()..height
+        // are filled with zeros - in particular count = 0 so nothing is added to bus.
+        for (row, record) in values.chunks_mut(width).zip(self.records) {
+            let row: &mut DummyMemoryInteractionCols<Val<SC>, WORD_SIZE> = row.borrow_mut();
+            row.address = record.address;
+            row.data = record.data.try_into().unwrap();
+            row.timestamp = record.timestamp;
+            row.count = match record.interaction_type {
+                InteractionType::Send => Val::<SC>::one(),
+                InteractionType::Receive => -Val::<SC>::one(),
+            };
+        }
+        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
+    }
+}
+
+impl<F: PrimeField32> ChipUsageGetter for MemoryTester<F> {
+    fn air_name(&self) -> String {
+        "MemoryDummyAir".to_string()
+    }
+    fn current_trace_height(&self) -> usize {
+        self.records.len() / self.trace_width()
+    }
+
+    fn trace_width(&self) -> usize {
+        size_of::<DummyMemoryInteractionCols<u8, WORD_SIZE>>()
     }
 }
 

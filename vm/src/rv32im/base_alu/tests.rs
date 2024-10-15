@@ -1,7 +1,7 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -13,7 +13,7 @@ use crate::{
     arch::{
         instructions::AluOpcode,
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        InstructionExecutor, VmChip, VmChipWrapper,
+        InstructionExecutor, VmChipWrapper,
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
@@ -185,13 +185,14 @@ fn run_rv32_alu_negative_test(
         Instruction::from_usize(opcode as usize, [0, 0, 0, 1, 1]),
     );
 
-    let alu_trace = chip.clone().generate_trace();
+    let mut air_proof_input = chip.generate_air_proof_input();
+    let alu_trace = air_proof_input.raw.common_main.as_mut().unwrap();
     let mut alu_trace_row = alu_trace.row_slice(0).to_vec();
     let alu_trace_cols: &mut BaseAluCoreCols<F, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS> =
         (*alu_trace_row).borrow_mut();
 
     alu_trace_cols.a = a.map(F::from_canonical_u32);
-    let alu_trace: p3_matrix::dense::DenseMatrix<_> = RowMajorMatrix::new(
+    *alu_trace = RowMajorMatrix::new(
         alu_trace_row,
         BaseAluCoreCols::<F, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>::width(),
     );
@@ -199,7 +200,7 @@ fn run_rv32_alu_negative_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_with_custom_trace(chip, alu_trace)
+        .load_air_proof_input(air_proof_input)
         .load(xor_lookup_chip)
         .finalize();
     let msg = format!(

@@ -16,7 +16,7 @@ use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::AirProofInput,
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use backtrace::Backtrace;
 use itertools::{izip, zip_eq};
@@ -33,7 +33,7 @@ use super::{
 use crate::{
     arch::{
         instructions::*, AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutionState,
-        ExecutorName, InstructionExecutor, VmChip,
+        ExecutorName, InstructionExecutor,
     },
     intrinsics::{
         ecc::{EcAddUnequalChip, EcDoubleChip},
@@ -760,16 +760,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             metrics: self.collected_metrics,
         };
 
-        for mut chip in self.chips {
-            let height = chip.current_trace_height();
-            let air = chip.air();
-            let public_values = chip.generate_public_values();
-            let trace = chip.generate_trace();
-
-            if height != 0 {
+        for chip in self.chips {
+            if chip.current_trace_height() != 0 {
                 result
                     .air_proof_inputs
-                    .push(AirProofInput::simple(air, trace, public_values));
+                    .push(chip.generate_air_proof_input());
             }
         }
         // System chips required by architecture: memory and connector
@@ -781,15 +776,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 .into_inner();
             let range_checker = memory_controller.range_checker.clone();
             let heights = memory_controller.current_trace_heights();
-            let airs = memory_controller.airs();
-            let public_values = memory_controller.generate_public_values_per_air();
-            let traces = memory_controller.generate_traces();
-
-            for (height, air, public_values, trace) in izip!(heights, airs, public_values, traces) {
+            let air_proof_inputs = memory_controller.generate_air_proof_inputs();
+            for (height, air_proof_input) in izip!(heights, air_proof_inputs) {
                 if height != 0 {
-                    result
-                        .air_proof_inputs
-                        .push(AirProofInput::simple(air, trace, public_values));
+                    result.air_proof_inputs.push(air_proof_input);
                 }
             }
             // range checker

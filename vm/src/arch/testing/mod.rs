@@ -17,7 +17,7 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use crate::{
-    arch::{ExecutionState, VmChip},
+    arch::ExecutionState,
     kernels::core::RANGE_CHECKER_BUS,
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
@@ -164,16 +164,11 @@ pub struct VmChipTester {
 }
 
 impl VmChipTester {
-    pub fn load<C: VmChip<Val<SC>> + Chip<SC>>(mut self, mut chip: C) -> Self {
-        let public_value = chip.generate_public_values();
-        let air = chip.air();
-        let trace = chip.generate_trace();
-
-        if trace.height() > 0 {
-            dbg!(air.name());
-            dbg!(trace.width);
-            self.air_proof_inputs
-                .push(AirProofInput::simple(air, trace, public_value));
+    pub fn load<C: Chip<SC>>(mut self, chip: C) -> Self {
+        if chip.current_trace_height() > 0 {
+            let air_proof_input = chip.generate_air_proof_input();
+            dbg!(air_proof_input.air.name());
+            self.air_proof_inputs.push(air_proof_input);
         }
 
         self
@@ -205,17 +200,19 @@ impl VmChipTester {
         }
         self
     }
+    pub fn load_air_proof_input(mut self, air_proof_input: AirProofInput<SC>) -> Self {
+        self.air_proof_inputs.push(air_proof_input);
+        self
+    }
 
-    pub fn load_with_custom_trace<C: VmChip<Val<SC>> + Chip<SC>>(
+    pub fn load_with_custom_trace<C: Chip<SC>>(
         mut self,
-        mut chip: C,
+        chip: C,
         trace: RowMajorMatrix<Val<SC>>,
     ) -> Self {
-        self.air_proof_inputs.push(AirProofInput::simple(
-            chip.air(),
-            trace,
-            chip.generate_public_values(),
-        ));
+        let mut air_proof_input = chip.generate_air_proof_input();
+        air_proof_input.raw.common_main = Some(trace);
+        self.air_proof_inputs.push(air_proof_input);
         self
     }
 

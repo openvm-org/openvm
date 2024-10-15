@@ -3,11 +3,12 @@ use std::sync::Arc;
 use afs_primitives::{ecc::EcAuxCols as EcPrimitiveAuxCols, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
+    prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use num_bigint_dig::BigUint;
-use p3_field::PrimeField32;
+use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
@@ -16,7 +17,7 @@ use super::{
     EcDoubleRecord, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS,
 };
 use crate::{
-    arch::{instructions::EccOpcode, VmChip},
+    arch::instructions::EccOpcode,
     system::memory::{
         offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
         MemoryHeapDataIoCols, MemoryHeapReadRecord,
@@ -40,20 +41,15 @@ fn load_ec_point<F: PrimeField32>(
     (x, y)
 }
 
-impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
+impl<SC: StarkGenericConfig> Chip<SC> for EcAddUnequalChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
     }
 
-    fn current_trace_height(&self) -> usize {
-        self.data.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        EcAddUnequalCols::<F>::width(&self.air.air.config)
-    }
-
-    fn generate_trace(self) -> RowMajorMatrix<F> {
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let aux_cols_factory = self.config.memory_controller.borrow().aux_cols_factory();
 
         let rows = self
@@ -73,10 +69,10 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
                 );
 
                 let io = EcAddUnequalIoCols {
-                    from_state: from_state.map(F::from_canonical_u32),
-                    p1: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p1_array_read),
-                    p2: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p2_array_read),
-                    p3: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p3_array_write),
+                    from_state: from_state.map(Val::<SC>::from_canonical_u32),
+                    p1: MemoryHeapDataIoCols::<Val<SC>, TWO_NUM_LIMBS>::from(*p1_array_read),
+                    p2: MemoryHeapDataIoCols::<Val<SC>, TWO_NUM_LIMBS>::from(*p2_array_read),
+                    p3: MemoryHeapDataIoCols::<Val<SC>, TWO_NUM_LIMBS>::from(*p3_array_write),
                 };
 
                 let (p1_x, p1_y) = load_ec_point(p1_array_read);
@@ -92,7 +88,7 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
                     read_p2_aux_cols: aux_cols_factory.make_heap_read_aux_cols(*p2_array_read),
                     write_p3_aux_cols: aux_cols_factory.make_heap_write_aux_cols(*p3_array_write),
                     aux: EcPrimitiveAuxCols {
-                        is_valid: F::one(),
+                        is_valid: Val::<SC>::one(),
                         lambda: primitive_row.aux.lambda,
                         lambda_check: primitive_row.aux.lambda_check,
                         x3_check: primitive_row.aux.x3_check,
@@ -106,10 +102,10 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
         let height = rows.len();
         let mut padded_rows = rows;
         let padded_height = height.next_power_of_two();
-        let width = EcAddUnequalCols::<F>::width(&self.air.air.config);
+        let width = EcAddUnequalCols::<Val<SC>>::width(&self.air.air.config);
 
         const IO_WIDTH: usize = EcAddUnequalIoCols::<u8>::width();
-        let dummy_io = [F::zero(); IO_WIDTH];
+        let dummy_io = [Val::<SC>::zero(); IO_WIDTH];
         let dummy_aux: EcAddUnequalAuxCols<_> = EcAddUnequalAuxCols {
             read_p1_aux_cols: MemoryHeapReadAuxCols::disabled(),
             read_p2_aux_cols: MemoryHeapReadAuxCols::disabled(),
@@ -119,11 +115,10 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
         let blank_row = [dummy_io.to_vec(), dummy_aux.flatten()].concat();
         padded_rows.extend(std::iter::repeat(blank_row).take(padded_height - height));
 
-        RowMajorMatrix::new(padded_rows.concat(), width)
+        AirProofInput::simple_no_pis(self.air(), RowMajorMatrix::new(padded_rows.concat(), width))
     }
 }
-
-impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
+impl<F: PrimeField32> ChipUsageGetter for EcAddUnequalChip<F> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -135,8 +130,17 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
     fn trace_width(&self) -> usize {
         EcDoubleCols::<F>::width(&self.air.air.config)
     }
+}
 
-    fn generate_trace(self) -> RowMajorMatrix<F> {
+impl<SC: StarkGenericConfig> Chip<SC> for EcDoubleChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let aux_cols_factory = self.config.memory_controller.borrow().aux_cols_factory();
 
         let rows = self
@@ -155,9 +159,9 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
                 );
 
                 let io = EcDoubleIoCols {
-                    from_state: from_state.map(F::from_canonical_u32),
-                    p1: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p1_array_read),
-                    p2: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p2_array_write),
+                    from_state: from_state.map(Val::<SC>::from_canonical_u32),
+                    p1: MemoryHeapDataIoCols::<Val<SC>, TWO_NUM_LIMBS>::from(*p1_array_read),
+                    p2: MemoryHeapDataIoCols::<Val<SC>, TWO_NUM_LIMBS>::from(*p2_array_write),
                 };
                 let (p1_x, p1_y) = load_ec_point(p1_array_read);
 
@@ -170,7 +174,7 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
                     read_p1_aux_cols: aux_cols_factory.make_heap_read_aux_cols(*p1_array_read),
                     write_p2_aux_cols: aux_cols_factory.make_heap_write_aux_cols(*p2_array_write),
                     aux: EcPrimitiveAuxCols {
-                        is_valid: F::one(),
+                        is_valid: Val::<SC>::one(),
                         lambda: primitive_row.aux.lambda,
                         lambda_check: primitive_row.aux.lambda_check,
                         x3_check: primitive_row.aux.x3_check,
@@ -184,10 +188,10 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
         let height = rows.len();
         let mut padded_rows = rows;
         let padded_height = height.next_power_of_two();
-        let width = EcDoubleCols::<F>::width(&self.air.air.config);
+        let width = EcDoubleCols::<Val<SC>>::width(&self.air.air.config);
 
         const IO_WIDTH: usize = EcDoubleIoCols::<u8>::width();
-        let dummy_io = [F::zero(); IO_WIDTH];
+        let dummy_io = [Val::<SC>::zero(); IO_WIDTH];
         let dummy_aux: EcDoubleAuxCols<_> = EcDoubleAuxCols {
             read_p1_aux_cols: MemoryHeapReadAuxCols::disabled(),
             write_p2_aux_cols: MemoryHeapWriteAuxCols::disabled(),
@@ -196,24 +200,19 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
         let blank_row = [dummy_io.to_vec(), dummy_aux.flatten()].concat();
         padded_rows.extend(std::iter::repeat(blank_row).take(padded_height - height));
 
-        RowMajorMatrix::new(padded_rows.concat(), width)
+        AirProofInput::simple_no_pis(self.air(), RowMajorMatrix::new(padded_rows.concat(), width))
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for EcAddUnequalChip<Val<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        Arc::new(self.air.clone())
+impl<F: PrimeField32> ChipUsageGetter for EcDoubleChip<F> {
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
     }
-}
+    fn current_trace_height(&self) -> usize {
+        self.data.len()
+    }
 
-impl<SC: StarkGenericConfig> Chip<SC> for EcDoubleChip<Val<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        Arc::new(self.air.clone())
+    fn trace_width(&self) -> usize {
+        EcDoubleCols::<F>::width(&self.air.air.config)
     }
 }

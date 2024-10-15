@@ -1,7 +1,9 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use afs_stark_backend::{
+    utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
+};
 use ax_sdk::utils::create_seeded_rng;
 use axvm_instructions::UsizeOpcode;
 use p3_air::BaseAir;
@@ -15,7 +17,7 @@ use crate::{
     arch::{
         instructions::Rv32JalLuiOpcode::{self, *},
         testing::VmChipTestBuilder,
-        VmAdapterChip, VmChip,
+        VmAdapterChip,
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
@@ -141,7 +143,9 @@ fn run_negative_jal_lui_test(
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, initial_imm);
 
-    let jal_lui_trace = chip.clone().generate_trace();
+    let jal_lui_trace_width = chip.trace_width();
+    let mut chip_input = chip.generate_air_proof_input();
+    let jal_lui_trace = chip_input.raw.common_main.as_mut().unwrap();
     let mut trace_row = jal_lui_trace.row_slice(0).to_vec();
 
     let adapter_width = BaseAir::<F>::width(adapter.air());
@@ -167,13 +171,12 @@ fn run_negative_jal_lui_test(
         core_cols.is_lui = F::from_bool(is_lui);
     }
 
-    let trace: p3_matrix::dense::DenseMatrix<_> =
-        RowMajorMatrix::new(trace_row, chip.trace_width());
+    *jal_lui_trace = RowMajorMatrix::new(trace_row, jal_lui_trace_width);
 
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_with_custom_trace(chip, trace)
+        .load_air_proof_input(chip_input)
         .load(xor_lookup_chip)
         .finalize();
     let msg = format!(

@@ -2,11 +2,12 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
+    prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use p3_air::BaseAir;
-use p3_field::PrimeField32;
+use p3_field::{AbstractField, PrimeField32};
 use p3_keccak_air::{
     generate_trace_rows, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, NUM_ROUNDS, U64_LIMBS,
 };
@@ -16,7 +17,6 @@ use tiny_keccak::keccakf;
 
 use super::{KeccakVmChip, KECCAK_DIGEST_WRITES, KECCAK_WORD_SIZE};
 use crate::{
-    arch::VmChip,
     intrinsics::hashes::keccak::hasher::{
         columns::{KeccakOpcodeCols, KeccakVmCols},
         KECCAK_ABSORB_READS, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
@@ -24,10 +24,18 @@ use crate::{
     system::memory::{MemoryReadRecord, MemoryWriteRecord},
 };
 
-impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
-    /// This should only be called once. It takes all records from the chip state.
-    fn generate_trace(mut self) -> RowMajorMatrix<F> {
-        let records = std::mem::take(&mut self.records);
+impl<SC: StarkGenericConfig> Chip<SC> for KeccakVmChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let air = self.air();
+        let trace_width = self.trace_width();
+        let records = self.records;
         let total_num_blocks: usize = records.iter().map(|r| r.input_blocks.len()).sum();
         let mut states = Vec::with_capacity(total_num_blocks);
         let mut opcode_blocks = Vec::with_capacity(total_num_blocks);
@@ -62,9 +70,9 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
             let [a, b, c, d, e, f] = record.operands();
             let mut opcode = KeccakOpcodeCols {
                 pc: record.pc,
-                is_enabled: F::one(),
-                is_enabled_first_round: F::zero(),
-                start_timestamp: F::from_canonical_u32(record.start_timestamp()),
+                is_enabled: Val::<SC>::one(),
+                is_enabled_first_round: Val::<SC>::zero(),
+                start_timestamp: Val::<SC>::from_canonical_u32(record.start_timestamp()),
                 a,
                 b,
                 c,
@@ -103,14 +111,14 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
                     digest_writes,
                 };
                 opcode_blocks.push((opcode, diff, block));
-                opcode.len -= F::from_canonical_usize(KECCAK_RATE_BYTES);
-                opcode.src += F::from_canonical_usize(KECCAK_RATE_BYTES);
+                opcode.len -= Val::<SC>::from_canonical_usize(KECCAK_RATE_BYTES);
+                opcode.src += Val::<SC>::from_canonical_usize(KECCAK_RATE_BYTES);
                 opcode.start_timestamp +=
-                    F::from_canonical_usize(KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS);
+                    Val::<SC>::from_canonical_usize(KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS);
             }
         }
 
-        let p3_keccak_trace: RowMajorMatrix<F> = generate_trace_rows(states);
+        let p3_keccak_trace: RowMajorMatrix<Val<SC>> = generate_trace_rows(states);
         let num_rows = p3_keccak_trace.height();
         // Every `NUM_ROUNDS` rows corresponds to one input block
         let num_blocks = (num_rows + NUM_ROUNDS - 1) / NUM_ROUNDS;
@@ -120,8 +128,8 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
         let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         // Use unsafe alignment so we can parallely write to the matrix
-        let trace_width = self.trace_width();
-        let mut trace = RowMajorMatrix::new(vec![F::zero(); num_rows * trace_width], trace_width);
+        let mut trace =
+            RowMajorMatrix::new(vec![Val::<SC>::zero(); num_rows * trace_width], trace_width);
 
         trace
             .values
@@ -137,7 +145,7 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
                 let partial_read_data = if let Some(partial_read_idx) = block.partial_read_idx {
                     block.reads[partial_read_idx].data
                 } else {
-                    [F::zero(); KECCAK_WORD_SIZE]
+                    [Val::<SC>::zero(); KECCAK_WORD_SIZE]
                 };
                 for (row, p3_keccak_row) in rows
                     .chunks_exact_mut(trace_width)
@@ -145,21 +153,22 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
                 {
                     // Safety: `KeccakPermCols` **must** be the first field in `KeccakVmCols`
                     row[..NUM_KECCAK_PERM_COLS].copy_from_slice(p3_keccak_row);
-                    let row_mut: &mut KeccakVmCols<F> = row.borrow_mut();
+                    let row_mut: &mut KeccakVmCols<Val<SC>> = row.borrow_mut();
                     row_mut.opcode = opcode;
 
-                    row_mut.sponge.block_bytes = block.padded_bytes.map(F::from_canonical_u8);
+                    row_mut.sponge.block_bytes =
+                        block.padded_bytes.map(Val::<SC>::from_canonical_u8);
                     row_mut
                         .mem_oc
                         .partial_block
                         .copy_from_slice(&partial_read_data[1..]);
                     for (i, is_padding) in row_mut.sponge.is_padding_byte.iter_mut().enumerate() {
-                        *is_padding = F::from_bool(i >= block.remaining_len);
+                        *is_padding = Val::<SC>::from_bool(i >= block.remaining_len);
                     }
                 }
-                let first_row: &mut KeccakVmCols<F> = rows[..trace_width].borrow_mut();
-                first_row.sponge.is_new_start = F::from_bool(block.is_new_start);
-                first_row.sponge.state_hi = diff.pre_hi.map(F::from_canonical_u8);
+                let first_row: &mut KeccakVmCols<Val<SC>> = rows[..trace_width].borrow_mut();
+                first_row.sponge.is_new_start = Val::<SC>::from_bool(block.is_new_start);
+                first_row.sponge.state_hi = diff.pre_hi.map(Val::<SC>::from_canonical_u8);
                 first_row.opcode.is_enabled_first_round = first_row.opcode.is_enabled;
                 // Make memory access aux columns. Any aux column not explicitly defined defaults to all 0s
                 if let Some(op_reads) = diff.op_reads {
@@ -173,11 +182,11 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
                     first_row.mem_oc.absorb_reads[i] = aux_cols_factory.make_read_aux_cols(record);
                 }
 
-                let last_row: &mut KeccakVmCols<F> =
+                let last_row: &mut KeccakVmCols<Val<SC>> =
                     rows[(height - 1) * trace_width..].borrow_mut();
-                last_row.sponge.state_hi = diff.post_hi.map(F::from_canonical_u8);
-                last_row.inner.export =
-                    opcode.is_enabled * F::from_bool(block.remaining_len < KECCAK_RATE_BYTES);
+                last_row.sponge.state_hi = diff.post_hi.map(Val::<SC>::from_canonical_u8);
+                last_row.inner.export = opcode.is_enabled
+                    * Val::<SC>::from_bool(block.remaining_len < KECCAK_RATE_BYTES);
                 if let Some(digest_writes) = diff.digest_writes {
                     for (i, record) in digest_writes.into_iter().enumerate() {
                         // TODO: these aux columns are only used for the last row - can we share them with aux reads in first row?
@@ -187,28 +196,20 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
                 }
             });
 
-        trace
+        AirProofInput::simple_no_pis(air, trace)
     }
+}
 
+impl<F: PrimeField32> ChipUsageGetter for KeccakVmChip<F> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
-
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-
     fn current_trace_height(&self) -> usize {
         let num_blocks: usize = self.records.iter().map(|r| r.input_blocks.len()).sum();
         num_blocks * NUM_ROUNDS
     }
-}
 
-impl<SC: StarkGenericConfig> Chip<SC> for KeccakVmChip<Val<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        Arc::new(self.air)
+    fn trace_width(&self) -> usize {
+        BaseAir::<F>::width(&self.air)
     }
 }

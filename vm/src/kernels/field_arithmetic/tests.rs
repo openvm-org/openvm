@@ -18,7 +18,6 @@ use crate::{
     arch::{
         instructions::FieldArithmeticOpcode,
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        VmChip,
     },
     kernels::{
         adapters::native_adapter::{NativeAdapterChip, NativeAdapterCols},
@@ -143,10 +142,9 @@ fn new_field_arithmetic_air_zero_div_zero() {
         Instruction::from_usize(FieldArithmeticOpcode::DIV as usize, [5, 6, 7, 1, 1, 1]),
     );
 
-    let air = chip.air();
-    let mut trace = chip.generate_trace();
+    let mut chip_input = chip.generate_air_proof_input();
     // set the value of [c]_f to zero, necessary to bypass trace gen checks
-    let row = trace.row_mut(0);
+    let row = chip_input.raw.common_main.as_mut().unwrap().row_mut(0);
     let cols: &mut FieldArithmeticCoreCols<BabyBear> = row
         .split_at_mut(NativeAdapterCols::<BabyBear>::width())
         .1
@@ -158,7 +156,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
     });
 
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(vec![air], vec![trace]).err(),
+        BabyBearPoseidon2Engine::run_test_fast(vec![chip_input]).err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
