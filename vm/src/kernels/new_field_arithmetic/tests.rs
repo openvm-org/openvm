@@ -11,7 +11,6 @@ use ax_sdk::{
 use axvm_instructions::UsizeOpcode;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 use strum::EnumCount;
 
@@ -149,7 +148,6 @@ fn new_field_arithmetic_air_zero_div_zero() {
     );
 
     let air = chip.air();
-    let width = chip.trace_width();
     let mut trace = chip.generate_trace();
     // set the value of [c]_f to zero, necessary to bypass trace gen checks
     let row = trace.row_mut(0);
