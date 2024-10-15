@@ -10,7 +10,7 @@ use crate::{
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     system::{
-        memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+        memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::{bridge::ProgramBus, ExecutionError, Instruction},
     },
 };
@@ -25,7 +25,7 @@ mod tests;
 
 #[derive(Clone, Debug)]
 pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<T>,
     pub x_ptr_read: MemoryReadRecord<T, 1>,
     pub y_ptr_read: MemoryReadRecord<T, 1>,
@@ -43,7 +43,7 @@ pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 pub struct ShiftChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ShiftRecord<T, NUM_LIMBS, LIMB_BITS>>,
-    memory_chip: MemoryChipRef<T>,
+    memory_controller: MemoryControllerRef<T>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 
@@ -56,7 +56,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<T>,
+        memory_controller: MemoryControllerRef<T>,
         xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
         offset: usize,
     ) -> Self {
@@ -75,8 +75,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             NUM_LIMBS * LIMB_BITS,
             LIMB_BITS
         );
-        let memory_bridge = memory_chip.borrow().memory_bridge();
-        let range_checker_chip = memory_chip.borrow().range_checker.clone();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
+        let range_checker_chip = memory_controller.borrow().range_checker.clone();
         Self {
             air: ShiftCoreAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -86,7 +86,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
                 offset,
             },
             data: vec![],
-            memory_chip,
+            memory_controller,
             range_checker_chip,
             xor_lookup_chip,
             offset,
@@ -100,8 +100,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     fn execute(
         &mut self,
         instruction: Instruction<T>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -114,16 +114,13 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         let local_opcode_index = opcode - self.offset;
         assert!(U256Opcode::shift_opcodes().any(|op| op as usize == local_opcode_index));
 
-        let mut memory_chip = self.memory_chip.borrow_mut();
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory_chip.timestamp().as_canonical_u32() as usize
-        );
+        let mut memory_controller = self.memory_controller.borrow_mut();
+        debug_assert_eq!(from_state.timestamp, memory_controller.timestamp());
 
         let [z_ptr_read, x_ptr_read, y_ptr_read] =
-            [a, b, c].map(|ptr_of_ptr| memory_chip.read_cell(d, ptr_of_ptr));
-        let x_read = memory_chip.read::<NUM_LIMBS>(e, x_ptr_read.value());
-        let y_read = memory_chip.read::<NUM_LIMBS>(e, y_ptr_read.value());
+            [a, b, c].map(|ptr_of_ptr| memory_controller.read_cell(d, ptr_of_ptr));
+        let x_read = memory_controller.read::<NUM_LIMBS>(e, x_ptr_read.value());
+        let y_read = memory_controller.read::<NUM_LIMBS>(e, y_ptr_read.value());
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|y| y.as_canonical_u32());
@@ -154,7 +151,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             self.range_checker_chip.add_count(*carry_val, bit_shift);
         }
 
-        let z_write = memory_chip.write::<NUM_LIMBS>(
+        let z_write = memory_controller.write::<NUM_LIMBS>(
             e,
             z_ptr_read.value(),
             z.into_iter()
@@ -184,7 +181,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 

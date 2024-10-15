@@ -66,6 +66,7 @@ pub trait AnyRap<SC: StarkGenericConfig>:
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
     + BaseAirWithPublicValues<Val<SC>>
     + PartitionedBaseAir<Val<SC>>
+    + Send + Sync
 {
     fn as_any(&self) -> &dyn Any;
     /// Name for display purposes
@@ -80,6 +81,8 @@ where
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
         + BaseAirWithPublicValues<Val<SC>>
         + PartitionedBaseAir<Val<SC>>
+        + Send
+        + Sync
         + 'static,
 {
     fn as_any(&self) -> &dyn Any {

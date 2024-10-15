@@ -7,20 +7,20 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::system::memory::{
-    expand::{columns::ExpandCols, ExpandChip},
+    expand::{columns::MemoryMerkleCols, MemoryMerkleChip},
     manager::dimensions::MemoryDimensions,
     tree::{
-        Hasher,
+        HasherChip,
         MemoryNode::{self, NonLeaf},
     },
 };
 
-impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
+impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     pub fn generate_trace_and_final_tree(
         &mut self,
+        initial_tree: &MemoryNode<CHUNK, F>,
         final_memory: &HashMap<(F, F), F>,
-        trace_degree: usize,
-        hasher: &mut impl Hasher<CHUNK, F>,
+        hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> (RowMajorMatrix<F>, MemoryNode<CHUNK, F>) {
         // there needs to be a touched node with `height_section` = 0
         // shouldn't be a leaf because
@@ -38,45 +38,44 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
         };
         let final_tree = tree_helper.recur(
             self.air.memory_dimensions.overall_height(),
-            self.initial_tree.clone(),
+            initial_tree,
             0,
             0,
             hasher,
         );
-        assert!(rows.len() <= trace_degree);
-        while rows.len() != trace_degree {
+        while !rows.len().is_power_of_two() {
             rows.push(unused_row::<CHUNK, F>());
         }
         // important that this sort be stable,
         // because we need the initial root to be first and the final root to be second
         rows.sort_by_key(|row| -(row.parent_height.as_canonical_u64() as i32));
         let trace = RowMajorMatrix::new(
-            rows.iter().flat_map(ExpandCols::flatten).collect(),
-            ExpandCols::<CHUNK, F>::get_width(),
+            rows.iter().flat_map(MemoryMerkleCols::flatten).collect(),
+            MemoryMerkleCols::<CHUNK, F>::get_width(),
         );
         (trace, final_tree)
     }
 }
 
-fn unused_row<const CHUNK: usize, F: PrimeField32>() -> ExpandCols<CHUNK, F> {
-    ExpandCols::from_slice(&vec![F::zero(); ExpandCols::<CHUNK, F>::get_width()])
+fn unused_row<const CHUNK: usize, F: PrimeField32>() -> MemoryMerkleCols<CHUNK, F> {
+    MemoryMerkleCols::from_slice(&vec![F::zero(); MemoryMerkleCols::<CHUNK, F>::get_width()])
 }
 
 struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     memory_dimensions: MemoryDimensions,
     final_memory: &'a HashMap<(F, F), F>,
     touched_nodes: &'a HashSet<(usize, usize, usize)>,
-    trace_rows: &'a mut Vec<ExpandCols<CHUNK, F>>,
+    trace_rows: &'a mut Vec<MemoryMerkleCols<CHUNK, F>>,
 }
 
 impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
     fn recur(
         &mut self,
         height: usize,
-        initial_node: MemoryNode<CHUNK, F>,
+        initial_node: &MemoryNode<CHUNK, F>,
         as_label: usize,
         address_label: usize,
-        hasher: &mut impl Hasher<CHUNK, F>,
+        hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
             let address_space = F::from_canonical_usize(
@@ -98,7 +97,8 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
             ..
         } = initial_node.clone()
         {
-            hasher.hash(initial_left_node.hash(), initial_right_node.hash());
+            // Tell the hasher about this hash.
+            hasher.hash_and_record(initial_left_node.hash(), initial_right_node.hash());
 
             let left_as_label = 2 * as_label;
             let left_address_label = 2 * address_label;
@@ -111,7 +111,7 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
             } else {
                 Arc::new(self.recur(
                     height - 1,
-                    (*initial_left_node).clone(),
+                    &initial_left_node,
                     left_as_label,
                     left_address_label,
                     hasher,
@@ -139,7 +139,7 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
             } else {
                 Arc::new(self.recur(
                     height - 1,
-                    (*initial_right_node).clone(),
+                    &initial_right_node,
                     right_as_label,
                     right_address_label,
                     hasher,
@@ -152,7 +152,7 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 height,
                 as_label,
                 address_label,
-                final_node.clone(),
+                &final_node,
                 Some([left_is_final, right_is_final]),
             );
             final_node
@@ -167,13 +167,13 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
         parent_height: usize,
         as_label: usize,
         address_label: usize,
-        node: MemoryNode<CHUNK, F>,
+        node: &MemoryNode<CHUNK, F>,
         direction_changes: Option<[bool; 2]>,
     ) {
         let [left_direction_change, right_direction_change] =
             direction_changes.unwrap_or([false; 2]);
         let cols = if let NonLeaf { hash, left, right } = node {
-            ExpandCols {
+            MemoryMerkleCols {
                 expand_direction: if direction_changes.is_none() {
                     F::one()
                 } else {
@@ -184,7 +184,7 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 is_root: F::from_bool(parent_height == self.memory_dimensions.overall_height()),
                 parent_as_label: F::from_canonical_usize(as_label),
                 parent_address_label: F::from_canonical_usize(address_label),
-                parent_hash: hash,
+                parent_hash: *hash,
                 left_child_hash: left.hash(),
                 right_child_hash: right.hash(),
                 left_direction_different: F::from_bool(left_direction_change),

@@ -68,7 +68,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester {
         7,
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 
@@ -151,7 +151,7 @@ fn poseidon2_negative_test() {
     // test is slow, avoid too many repetitions
     for _ in 0..5 {
         // TODO: better way to modify existing traces in tester
-        let trace = &mut tester.air_infos[2].common_trace;
+        let trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
         let original_trace = trace.clone();
 
         // avoid pranking IO cols or dst,lhs,rhs
@@ -170,7 +170,7 @@ fn poseidon2_negative_test() {
             Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
-        tester.air_infos[2].common_trace = original_trace;
+        tester.air_proof_inputs[2].raw.common_main = Some(original_trace);
     }
 }
 

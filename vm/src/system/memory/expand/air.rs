@@ -1,30 +1,40 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::system::memory::expand::{columns::ExpandCols, MemoryDimensions};
+use crate::system::memory::expand::{columns::MemoryMerkleCols, MemoryDimensions, MemoryMerkleBus};
 
-pub struct ExpandAir<const CHUNK: usize> {
+#[derive(Clone, Debug)]
+pub struct MemoryMerkleAir<const CHUNK: usize> {
     pub memory_dimensions: MemoryDimensions,
+    pub merkle_bus: MemoryMerkleBus,
 }
 
-impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for ExpandAir<CHUNK> {}
-impl<const CHUNK: usize, F: Field> BaseAir<F> for ExpandAir<CHUNK> {
+impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<CHUNK> {}
+impl<const CHUNK: usize, F: Field> BaseAir<F> for MemoryMerkleAir<CHUNK> {
     fn width(&self) -> usize {
-        ExpandCols::<CHUNK, F>::get_width()
+        MemoryMerkleCols::<CHUNK, F>::get_width()
+    }
+}
+impl<const CHUNK: usize, F: Field> BaseAirWithPublicValues<F> for MemoryMerkleAir<CHUNK> {
+    fn num_public_values(&self) -> usize {
+        2 * CHUNK
     }
 }
 
 impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
-    for ExpandAir<CHUNK>
+    for MemoryMerkleAir<CHUNK>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local = ExpandCols::<CHUNK, AB::Var>::from_slice(&local);
+        let local = MemoryMerkleCols::<CHUNK, AB::Var>::from_slice(&local);
         let next = main.row_slice(1);
-        let next = ExpandCols::<CHUNK, AB::Var>::from_slice(&next);
+        let next = MemoryMerkleCols::<CHUNK, AB::Var>::from_slice(&next);
 
         // `expand_direction` should be -1, 0, 1
         builder.assert_eq(

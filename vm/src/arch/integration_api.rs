@@ -17,7 +17,7 @@ use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result, VmChip};
 use crate::system::{
-    memory::{MemoryChip, MemoryChipRef},
+    memory::{MemoryController, MemoryControllerRef},
     program::Instruction,
 };
 
@@ -52,7 +52,7 @@ pub trait VmAdapterChip<F: Field> {
     #[allow(clippy::type_complexity)]
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -63,12 +63,12 @@ pub trait VmAdapterChip<F: Field> {
     /// adapter record for this instruction. This **must** be called after `preprocess`.
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)>;
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)>;
 
     /// Should mutate `row_slice` to populate with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
@@ -108,7 +108,7 @@ pub trait VmCoreChip<F: PrimeField32, I: VmAdapterInterface<F>> {
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        from_pc: F,
+        from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)>;
 
@@ -138,7 +138,7 @@ where
 
 pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
-    pub to_pc: Option<T>,
+    pub to_pc: Option<u32>,
     pub writes: I::Writes,
 }
 
@@ -165,7 +165,7 @@ pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, C: VmCoreChip<F, 
     pub adapter: A,
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
-    memory: MemoryChipRef<F>,
+    memory: MemoryControllerRef<F>,
 }
 
 impl<F, A, C> VmChipWrapper<F, A, C>
@@ -174,7 +174,7 @@ where
     A: VmAdapterChip<F>,
     C: VmCoreChip<F, A::Interface>,
 {
-    pub fn new(adapter: A, core: C, memory: MemoryChipRef<F>) -> Self {
+    pub fn new(adapter: A, core: C, memory: MemoryControllerRef<F>) -> Self {
         Self {
             adapter,
             core,
@@ -193,14 +193,13 @@ where
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
         let mut memory = self.memory.borrow_mut();
         let (reads, read_record) = self.adapter.preprocess(&mut memory, &instruction)?;
-        let from_pc = F::from_canonical_usize(from_state.pc);
-        let (output, core_record) = self
-            .core
-            .execute_instruction(&instruction, from_pc, reads)?;
+        let (output, core_record) =
+            self.core
+                .execute_instruction(&instruction, from_state.pc, reads)?;
         let (to_state, write_record) = self.adapter.postprocess(
             &mut memory,
             &instruction,
@@ -272,11 +271,11 @@ where
     Val<SC>: PrimeField32,
     A: VmAdapterChip<Val<SC>>,
     C: VmCoreChip<Val<SC>, A::Interface>,
-    A::Air: 'static,
+    A::Air: Send + Sync + 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
     A::Air: for<'a> VmAdapterAir<DebugConstraintBuilder<'a, SC>>,
-    C::Air: 'static,
+    C::Air: Send + Sync + 'static,
     C::Air: VmCoreAir<
         SymbolicRapBuilder<Val<SC>>,
         <A::Air as VmAdapterAir<SymbolicRapBuilder<Val<SC>>>>::Interface,

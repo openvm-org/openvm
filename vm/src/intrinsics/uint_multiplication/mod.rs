@@ -9,7 +9,7 @@ use crate::{
         InstructionExecutor,
     },
     system::{
-        memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+        memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::{bridge::ProgramBus, ExecutionError, Instruction},
     },
 };
@@ -27,7 +27,7 @@ pub mod tests;
 
 #[derive(Clone, Debug)]
 pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<T>,
     pub x_ptr_read: MemoryReadRecord<T, 1>,
     pub y_ptr_read: MemoryReadRecord<T, 1>,
@@ -42,7 +42,7 @@ pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
 pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: UintMultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,
-    memory_chip: MemoryChipRef<T>,
+    memory_controller: MemoryControllerRef<T>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
 
     offset: usize,
@@ -54,7 +54,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<T>,
+        memory_controller: MemoryControllerRef<T>,
         range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
         offset: usize,
     ) -> Self {
@@ -76,7 +76,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             NUM_LIMBS * (1 << LIMB_BITS)
         );
 
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: UintMultiplicationCoreAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -85,7 +85,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
                 offset,
             },
             data: vec![],
-            memory_chip,
+            memory_controller,
             range_tuple_chip,
             offset,
         }
@@ -98,8 +98,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     fn execute(
         &mut self,
         instruction: Instruction<T>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -112,16 +112,13 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         let local_opcode_index = opcode - self.offset;
         assert!(local_opcode_index == U256Opcode::MUL as usize);
 
-        let mut memory_chip = self.memory_chip.borrow_mut();
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory_chip.timestamp().as_canonical_u32() as usize
-        );
+        let mut memory_controller = self.memory_controller.borrow_mut();
+        debug_assert_eq!(from_state.timestamp, memory_controller.timestamp());
 
         let [z_ptr_read, x_ptr_read, y_ptr_read] =
-            [a, b, c].map(|ptr_of_ptr| memory_chip.read_cell(d, ptr_of_ptr));
-        let x_read = memory_chip.read::<NUM_LIMBS>(e, x_ptr_read.value());
-        let y_read = memory_chip.read::<NUM_LIMBS>(e, y_ptr_read.value());
+            [a, b, c].map(|ptr_of_ptr| memory_controller.read_cell(d, ptr_of_ptr));
+        let x_read = memory_controller.read::<NUM_LIMBS>(e, x_ptr_read.value());
+        let y_read = memory_controller.read::<NUM_LIMBS>(e, y_ptr_read.value());
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
@@ -131,7 +128,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             self.range_tuple_chip.add_count(&[*z_val, *carry_val]);
         }
 
-        let z_write = memory_chip.write::<NUM_LIMBS>(
+        let z_write = memory_controller.write::<NUM_LIMBS>(
             e,
             z_ptr_read.value(),
             z.into_iter()
@@ -155,7 +152,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 

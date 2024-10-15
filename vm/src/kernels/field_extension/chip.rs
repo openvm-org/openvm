@@ -12,7 +12,7 @@ use crate::{
     },
     kernels::field_extension::air::FieldExtensionArithmeticAir,
     system::{
-        memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+        memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::{bridge::ProgramBus, ExecutionError, Instruction},
     },
 };
@@ -23,10 +23,7 @@ pub const EXT_DEG: usize = 4;
 /// Records an arithmetic operation that happened at run-time.
 #[derive(Clone, Debug)]
 pub(crate) struct FieldExtensionArithmeticRecord<F> {
-    /// Program counter
-    pub(crate) pc: usize,
-    /// Timestamp at start of instruction
-    pub(crate) timestamp: usize,
+    pub(crate) from_state: ExecutionState<u32>,
     pub(crate) instruction: Instruction<F>,
     pub(crate) x: [F; EXT_DEG],
     pub(crate) y: [F; EXT_DEG],
@@ -44,7 +41,7 @@ pub(crate) struct FieldExtensionArithmeticRecord<F> {
 #[derive(Clone, Debug)]
 pub struct FieldExtensionArithmeticChip<F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir,
-    pub(crate) memory_chip: MemoryChipRef<F>,
+    pub(crate) memory_controller: MemoryControllerRef<F>,
     pub(crate) records: Vec<FieldExtensionArithmeticRecord<F>>,
 
     offset: usize,
@@ -54,8 +51,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
     fn execute(
         &mut self,
         instruction: Instruction<F>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a,
@@ -70,12 +67,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
         assert_ne!(d, F::zero());
         assert_ne!(e, F::zero());
 
-        let mut memory_chip = self.memory_chip.borrow_mut();
+        let mut memory_controller = self.memory_controller.borrow_mut();
 
-        let x_read = memory_chip.read(d, op_b);
+        let x_read = memory_controller.read(d, op_b);
         let x: [F; EXT_DEG] = x_read.data;
 
-        let y_read = memory_chip.read(e, op_c);
+        let y_read = memory_controller.read(e, op_c);
         let y: [F; EXT_DEG] = y_read.data;
 
         let z = FieldExtensionArithmetic::solve(
@@ -84,11 +81,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
             y,
         )
         .unwrap();
-        let z_write = memory_chip.write(d, op_a, z);
+        let z_write = memory_controller.write(d, op_a, z);
 
         self.records.push(FieldExtensionArithmeticRecord {
-            timestamp: from_state.timestamp,
-            pc: from_state.pc,
+            from_state,
             instruction: Instruction {
                 opcode: opcode - self.offset,
                 ..instruction
@@ -103,7 +99,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 
@@ -119,7 +115,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory: MemoryChipRef<F>,
+        memory: MemoryControllerRef<F>,
         offset: usize,
     ) -> Self {
         let air = FieldExtensionArithmeticAir::new(
@@ -130,7 +126,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         Self {
             air,
             records: vec![],
-            memory_chip: memory,
+            memory_controller: memory,
             offset,
         }
     }

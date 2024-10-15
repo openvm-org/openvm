@@ -19,6 +19,7 @@ rand.workspace = true
 num-bigint-dig.workspace = true
 num-traits.workspace = true
 tracing.workspace = true
+halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git" }
 
 [dev-dependencies]
 afs-primitives = { path = "../primitives" }

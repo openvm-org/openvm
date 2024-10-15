@@ -60,15 +60,20 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
             cols.aux.internal.aux.into_expr::<AB>(),
         );
 
-        // boolean constraints for alloc/cmp markers
-        // these constraints hold for current trace generation mechanism but are in actuality not necessary
         builder.assert_bool(cols.io.is_opcode);
-        builder.assert_bool(cols.io.is_direct);
-        builder.assert_bool(cols.io.cmp);
-        // can only be comparing if row is allocated
-        builder.assert_eq(cols.io.is_opcode * cols.io.cmp, cols.io.cmp);
-        // if io.cmp is false, then constrain rhs = lhs + CHUNK
-        builder.when(cols.io.is_opcode - cols.io.cmp).assert_eq(
+        builder.assert_bool(cols.io.is_compress_opcode);
+        builder.assert_bool(cols.io.is_compress_direct);
+
+        // Both opcode and compress_direct cannot be true
+        builder.assert_zero(cols.io.is_opcode * cols.io.is_compress_direct);
+
+        builder
+            .when(cols.io.is_compress_opcode)
+            .assert_one(cols.io.is_opcode);
+        let is_permute_opcode = cols.io.is_opcode - cols.io.is_compress_opcode;
+
+        // if permute instruction, the rhs_ptr should be contiguous with lhs_ptr
+        builder.when(is_permute_opcode.clone()).assert_eq(
             cols.aux.rhs_ptr,
             cols.aux.lhs_ptr + AB::F::from_canonical_usize(CHUNK),
         );
@@ -87,7 +92,11 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
         for (io_addr, aux_addr, count, mem_aux) in izip!(
             [cols.io.a, cols.io.b, cols.io.c],
             [cols.aux.dst_ptr, cols.aux.lhs_ptr, cols.aux.rhs_ptr],
-            [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp],
+            [
+                cols.io.is_opcode,
+                cols.io.is_opcode,
+                cols.io.is_compress_opcode
+            ],
             &cols.aux.ptr_aux_cols,
         ) {
             self.memory_bridge
@@ -142,7 +151,7 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
                 timestamp_pp(),
                 &output2_aux_cols,
             )
-            .eval(builder, cols.io.is_opcode - cols.io.cmp);
+            .eval(builder, is_permute_opcode);
 
         self.eval_interactions(
             builder,

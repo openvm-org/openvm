@@ -1,9 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use afs_primitives::var_range::VariableRangeCheckerChip;
-use p3_field::Field;
+use p3_field::PrimeField32;
 
-use self::air::MemoryAuditAir;
+use self::air::VolatileBoundaryAir;
 use crate::system::memory::offline_checker::MemoryBus;
 
 pub mod air;
@@ -15,13 +15,13 @@ pub mod trace;
 mod tests;
 
 #[derive(Clone, Debug)]
-pub struct MemoryAuditChip<F: Field> {
-    pub air: MemoryAuditAir,
-    initial_memory: HashMap<(F, F), F>,
+pub struct VolatileBoundaryChip<F> {
+    pub air: VolatileBoundaryAir,
+    touched_addresses: HashSet<(F, F)>,
     range_checker: Arc<VariableRangeCheckerChip>,
 }
 
-impl<F: Field> MemoryAuditChip<F> {
+impl<F: PrimeField32> VolatileBoundaryChip<F> {
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
@@ -30,29 +30,27 @@ impl<F: Field> MemoryAuditChip<F> {
         range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         Self {
-            air: MemoryAuditAir::new(
+            air: VolatileBoundaryAir::new(
                 memory_bus,
                 addr_space_max_bits,
                 pointer_max_bits,
                 decomp,
                 false,
             ),
-            initial_memory: HashMap::new(),
+            touched_addresses: HashSet::new(),
             range_checker,
         }
     }
 
-    pub fn touch_address(&mut self, addr_space: F, pointer: F, old_data: F) {
-        self.initial_memory
-            .entry((addr_space, pointer))
-            .or_insert(old_data);
+    pub fn touch_address(&mut self, addr_space: F, pointer: F) {
+        self.touched_addresses.insert((addr_space, pointer));
     }
 
     pub fn all_addresses(&self) -> Vec<(F, F)> {
-        self.initial_memory.keys().cloned().collect()
+        self.touched_addresses.iter().cloned().collect()
     }
 
     pub fn current_height(&self) -> usize {
-        self.initial_memory.len()
+        self.touched_addresses.len()
     }
 }

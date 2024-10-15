@@ -8,8 +8,12 @@ use MemoryNode::*;
 
 use super::manager::dimensions::MemoryDimensions;
 
-pub trait Hasher<const CHUNK: usize, F> {
-    fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
+pub trait HasherChip<const CHUNK: usize, F> {
+    /// Statelessly compresses two chunks of data into a single chunk.
+    fn hash(&self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
+
+    /// Stateful version of `hash` for recording the event in the chip.
+    fn hash_and_record(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -39,10 +43,10 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     pub fn new_nonleaf(
         left: Arc<MemoryNode<CHUNK, F>>,
         right: Arc<MemoryNode<CHUNK, F>>,
-        hasher: &mut impl Hasher<CHUNK, F>,
+        hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> Self {
         NonLeaf {
-            hash: hasher.hash(left.hash(), right.hash()),
+            hash: hasher.hash_and_record(left.hash(), right.hash()),
             left,
             right,
         }
@@ -50,13 +54,17 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
 
     pub fn construct_all_zeros(
         height: usize,
-        hasher: &mut impl Hasher<CHUNK, F>,
+        hasher: &impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
             Self::new_leaf([F::zero(); CHUNK])
         } else {
             let child = Arc::new(Self::construct_all_zeros(height - 1, hasher));
-            Self::new_nonleaf(child.clone(), child, hasher)
+            NonLeaf {
+                hash: hasher.hash(child.hash(), child.hash()),
+                left: child.clone(),
+                right: child,
+            }
         }
     }
 
@@ -64,7 +72,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         memory: &BTreeMap<usize, F>,
         height: usize,
         from: usize,
-        hasher: &mut impl Hasher<CHUNK, F>,
+        hasher: &impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         let mut range = memory.range(from..from + (CHUNK << height));
         if height == 0 {
@@ -79,21 +87,25 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             let midpoint = from + (CHUNK << (height - 1));
             let left = Self::from_memory(memory, height - 1, from, hasher);
             let right = Self::from_memory(memory, height - 1, midpoint, hasher);
-            MemoryNode::new_nonleaf(Arc::new(left), Arc::new(right), hasher)
+            NonLeaf {
+                hash: hasher.hash(left.hash(), right.hash()),
+                left: Arc::new(left),
+                right: Arc::new(right),
+            }
         }
     }
 
     pub fn tree_from_memory(
         memory_dimensions: MemoryDimensions,
         memory: &HashMap<(F, F), F>,
-        hasher: &mut impl Hasher<CHUNK, F>,
+        hasher: &impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         let mut memory_modified = BTreeMap::new();
         for (&(address_space, address), &value) in memory {
-            let complete_address = (((address_space.as_canonical_u64() as usize)
+            let complete_address = (((address_space.as_canonical_u32() as usize)
                 - memory_dimensions.as_offset)
                 * (CHUNK << memory_dimensions.address_height))
-                + (address.as_canonical_u64() as usize);
+                + (address.as_canonical_u32() as usize);
             memory_modified.insert(complete_address, value);
         }
         Self::from_memory(

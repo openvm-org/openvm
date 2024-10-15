@@ -9,7 +9,7 @@ use crate::{
         InstructionExecutor,
     },
     system::{
-        memory::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
+        memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::{bridge::ProgramBus, ExecutionError, Instruction},
     },
 };
@@ -27,7 +27,7 @@ pub use columns::*;
 
 #[derive(Debug)]
 pub struct CastFRecord<T> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<T>,
 
     pub x_write: MemoryWriteRecord<T, 4>,
@@ -38,7 +38,7 @@ pub struct CastFRecord<T> {
 pub struct CastFChip<T: PrimeField32> {
     pub air: CastFAir,
     data: Vec<CastFRecord<T>>,
-    memory_chip: MemoryChipRef<T>,
+    memory_controller: MemoryControllerRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 
     offset: usize,
@@ -48,11 +48,11 @@ impl<T: PrimeField32> CastFChip<T> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<T>,
+        memory_controller: MemoryControllerRef<T>,
         offset: usize,
     ) -> Self {
-        let range_checker_chip = memory_chip.borrow().range_checker.clone();
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let range_checker_chip = memory_controller.borrow().range_checker.clone();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let bus = range_checker_chip.bus();
 
@@ -70,7 +70,7 @@ impl<T: PrimeField32> CastFChip<T> {
                 offset,
             },
             data: vec![],
-            memory_chip,
+            memory_controller,
             range_checker_chip,
             offset,
         }
@@ -81,8 +81,8 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
     fn execute(
         &mut self,
         instruction: Instruction<T>,
-        from_state: ExecutionState<usize>,
-    ) -> Result<ExecutionState<usize>, ExecutionError> {
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
             op_a: a,
@@ -93,14 +93,11 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
         } = instruction.clone();
         assert_eq!(opcode - self.offset, CastfOpcode::CASTF as usize);
 
-        let mut memory_chip = self.memory_chip.borrow_mut();
+        let mut memory_controller = self.memory_controller.borrow_mut();
 
-        debug_assert_eq!(
-            from_state.timestamp,
-            memory_chip.timestamp().as_canonical_u32() as usize
-        );
+        debug_assert_eq!(from_state.timestamp, memory_controller.timestamp());
 
-        let y_read = memory_chip.read_cell(e, b);
+        let y_read = memory_controller.read_cell(e, b);
         let y = y_read.data[0].as_canonical_u32();
 
         let x = Self::solve(y);
@@ -113,7 +110,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
         }
 
         let x = x.map(T::from_canonical_u32);
-        let x_write = memory_chip.write::<4>(d, a, x);
+        let x_write = memory_controller.write::<4>(d, a, x);
 
         self.data.push(CastFRecord {
             from_state,
@@ -124,7 +121,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for CastFChip<T> {
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp(),
         })
     }
 

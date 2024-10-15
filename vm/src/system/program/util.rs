@@ -113,7 +113,7 @@ mod sdk {
     use p3_field::PrimeField32;
 
     use crate::{
-        sdk::gen_vm_program_stark_for_test,
+        sdk::gen_vm_program_test_proof_input,
         system::{program::Program, vm::config::VmConfig},
     };
 
@@ -136,13 +136,13 @@ mod sdk {
         PcsProof<SC>: Send + Sync,
     {
         let span = tracing::info_span!("execute_and_prove_program").entered();
-        let stark_for_test = gen_vm_program_stark_for_test(program, input_stream, config);
-        let pvs = stark_for_test
-            .air_infos
+        let test_proof_input = gen_vm_program_test_proof_input(program, input_stream, config);
+        let pvs = test_proof_input
+            .per_air
             .iter()
-            .map(|air| air.public_values.clone())
+            .map(|air| air.raw.public_values.clone())
             .collect();
-        let vparams = stark_for_test.run_test(engine)?;
+        let vparams = test_proof_input.run_test(engine)?;
         span.exit();
         Ok((vparams, pvs))
     }

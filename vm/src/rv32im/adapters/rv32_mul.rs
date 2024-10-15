@@ -14,7 +14,7 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryChip, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord,
+            MemoryController, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
@@ -32,9 +32,9 @@ impl<F: PrimeField32> Rv32MultAdapter<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             _marker: PhantomData,
             air: Rv32MultAdapterAir {
@@ -54,7 +54,7 @@ pub struct Rv32MultReadRecord<F: Field> {
 
 #[derive(Debug)]
 pub struct Rv32MultWriteRecord<F: Field> {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
     /// Write to destination register
     pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
 }
@@ -124,7 +124,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapter<F> {
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -147,12 +147,12 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapter<F> {
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check
 
         let Instruction { op_a: a, d, .. } = *instruction;
@@ -161,7 +161,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapter<F> {
         Ok((
             ExecutionState {
                 pc: from_state.pc + 4,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state, rd },
         ))

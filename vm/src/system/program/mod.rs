@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, fmt::Display, sync::Arc};
 
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
-    utils::AirInfo,
+    prover::{helper::AirProofInputTestHelper, types::AirProofInput},
 };
 use backtrace::Backtrace;
 use bridge::ProgramBus;
@@ -149,13 +149,13 @@ impl<T: Default> Default for Instruction<T> {
 
 #[derive(Debug)]
 pub enum ExecutionError {
-    Fail(usize),
-    PcOutOfBounds(usize, usize),
-    DisabledOperation(usize, usize),
-    HintOutOfBounds(usize),
-    EndOfInputStream(usize),
-    PublicValueIndexOutOfBounds(usize, usize, usize),
-    PublicValueNotEqual(usize, usize, usize, usize),
+    Fail(u32),
+    PcOutOfBounds(u32, usize),
+    DisabledOperation(u32, usize),
+    HintOutOfBounds(u32),
+    EndOfInputStream(u32),
+    PublicValueIndexOutOfBounds(u32, usize, usize),
+    PublicValueNotEqual(u32, usize, usize, usize),
 }
 
 impl Display for ExecutionError {
@@ -327,17 +327,18 @@ impl<F: PrimeField64> ProgramChip<F> {
 
     pub fn get_instruction(
         &mut self,
-        pc: usize,
+        pc: u32,
     ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
-        if !(0..self.true_program_length).contains(&pc) {
+        let pc_usize = pc as usize;
+        if !(0..self.true_program_length).contains(&pc_usize) {
             return Err(ExecutionError::PcOutOfBounds(pc, self.true_program_length));
         }
-        self.execution_frequencies[pc] += 1;
-        Ok(self.program.instructions_and_debug_infos[&pc].clone())
+        self.execution_frequencies[pc_usize] += 1;
+        Ok(self.program.instructions_and_debug_infos[&pc_usize].clone())
     }
 }
 
-impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirInfo<SC>
+impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirProofInput<SC>
 where
     Val<SC>: PrimeField64,
 {
@@ -345,6 +346,6 @@ where
         let air = program_chip.air.clone();
         let cached_trace = program_chip.generate_cached_trace();
         let common_trace = program_chip.generate_trace();
-        AirInfo::no_pis(Arc::new(air), vec![cached_trace], common_trace)
+        AirProofInput::cached_traces_no_pis(Arc::new(air), vec![cached_trace], common_trace)
     }
 }

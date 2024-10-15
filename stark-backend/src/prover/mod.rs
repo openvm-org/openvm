@@ -31,6 +31,7 @@ use crate::{
     rap::AnyRap,
 };
 
+pub mod helper;
 /// Metrics about trace and other statistics related to prover performance
 pub mod metrics;
 /// Polynomial opening proofs
@@ -90,19 +91,23 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         let pcs = self.config.pcs();
 
         let (air_ids, air_inputs): (Vec<_>, Vec<_>) = multiunzip(proof_input.per_air.into_iter());
-        let (airs, cached_mains_per_air, common_main_per_air, pvs_per_air): (
-            Vec<_>,
-            Vec<_>,
-            Vec<_>,
-            Vec<_>,
-        ) = multiunzip(air_inputs.into_iter().map(|input| {
-            (
-                input.air,
-                input.cached_mains,
-                input.common_main,
-                input.public_values,
-            )
-        }));
+        let (
+            airs,
+            cached_mains_pdata_per_air,
+            cached_mains_per_air,
+            common_main_per_air,
+            pvs_per_air,
+        ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
+            multiunzip(air_inputs.into_iter().map(|input| {
+                (
+                    input.air,
+                    input.cached_mains_pdata,
+                    input.raw.cached_mains,
+                    input.raw.common_main,
+                    input.raw.public_values,
+                )
+            }));
+        assert_eq!(cached_mains_pdata_per_air.len(), cached_mains_per_air.len());
 
         let num_air = air_ids.len();
         // Ignore unused AIRs.
@@ -133,10 +138,10 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         //   - for each cached main trace
         //     - 1 commitment
         // - 1 commitment of all common main traces
-        let main_trace_commitments: Vec<_> = cached_mains_per_air
+        let main_trace_commitments: Vec<_> = cached_mains_pdata_per_air
             .iter()
             .flatten()
-            .map(|cm| &cm.prover_data.commit)
+            .map(|pdata| &pdata.commit)
             .chain(iter::once(&common_main_prover_data.commit))
             .cloned()
             .collect();
@@ -150,10 +155,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         let mut degree_per_air = Vec::with_capacity(num_air);
         let mut main_views_per_air = Vec::with_capacity(num_air);
         for (pk, cached_mains) in mpk.per_air.iter().zip(&cached_mains_per_air) {
-            let mut main_views: Vec<_> = cached_mains
-                .iter()
-                .map(|cm| cm.raw_data.as_view())
-                .collect();
+            let mut main_views: Vec<_> = cached_mains.iter().map(|m| m.as_view()).collect();
             if pk.vk.has_common_main() {
                 main_views.push(common_main_trace_views[common_main_idx].as_view());
                 common_main_idx += 1;
@@ -210,16 +212,15 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             airs,
             &pvs_per_air,
             domain_per_air.clone(),
-            &cached_mains_per_air,
+            &cached_mains_pdata_per_air,
             &common_main_prover_data,
             &perm_prover_data,
             cumulative_sum_per_air.clone(),
         );
 
-        let main_prover_data: Vec<_> = cached_mains_per_air
+        let main_prover_data: Vec<_> = cached_mains_pdata_per_air
             .into_iter()
             .flatten()
-            .map(|cm| cm.prover_data)
             .chain(iter::once(common_main_prover_data))
             .collect();
         prove_raps_with_committed_traces(

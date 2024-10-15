@@ -1,0 +1,16 @@
+[package]
+name = "axvm-instructions"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+p3-field.workspace = true
+axvm-instructions-derive.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+
+[dev-dependencies]
+p3-baby-bear = { workspace = true }

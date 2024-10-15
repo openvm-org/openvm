@@ -14,7 +14,7 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols},
-            MemoryChip, MemoryChipRef, MemoryReadRecord,
+            MemoryController, MemoryControllerRef, MemoryReadRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
@@ -32,9 +32,9 @@ impl<F: PrimeField32> Rv32BranchAdapter<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             _marker: PhantomData,
             air: Rv32BranchAdapterAir {
@@ -55,7 +55,7 @@ pub struct Rv32BranchReadRecord<F: Field> {
 
 #[derive(Debug)]
 pub struct Rv32BranchWriteRecord {
-    pub from_state: ExecutionState<usize>,
+    pub from_state: ExecutionState<u32>,
 }
 
 pub struct Rv32BranchAdapterInterface<T>(PhantomData<T>);
@@ -124,7 +124,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapter<F> {
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -149,23 +149,20 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapter<F> {
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         _instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check
 
-        let to_pc = output
-            .to_pc
-            .map(|x| x.as_canonical_u32() as usize)
-            .unwrap_or(from_state.pc + 4);
+        let to_pc = output.to_pc.unwrap_or(from_state.pc + 4);
 
         Ok((
             ExecutionState {
                 pc: to_pc,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state },
         ))

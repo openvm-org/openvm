@@ -5,7 +5,7 @@ use std::{array, borrow::Borrow, iter};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::assert_less_than::columns::AssertLessThanAuxCols;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 
 use crate::system::memory::offline_checker::bridge::AUX_LEN;
 
@@ -106,11 +106,11 @@ pub struct MemoryReadAuxCols<T, const N: usize> {
     pub(super) base: MemoryBaseAuxCols<T>,
 }
 
-impl<const N: usize, T> MemoryReadAuxCols<T, N> {
-    pub fn new(prev_timestamp: T, clk_lt_aux: AssertLessThanAuxCols<T, AUX_LEN>) -> Self {
+impl<const N: usize, F: PrimeField32> MemoryReadAuxCols<F, N> {
+    pub fn new(prev_timestamp: u32, clk_lt_aux: AssertLessThanAuxCols<F, AUX_LEN>) -> Self {
         Self {
             base: MemoryBaseAuxCols {
-                prev_timestamp,
+                prev_timestamp: F::from_canonical_u32(prev_timestamp),
                 clk_lt_aux,
             },
         }

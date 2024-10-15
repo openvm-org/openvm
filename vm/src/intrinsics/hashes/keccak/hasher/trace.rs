@@ -64,7 +64,7 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
                 pc: record.pc,
                 is_enabled: F::one(),
                 is_enabled_first_round: F::zero(),
-                start_timestamp: record.start_timestamp(),
+                start_timestamp: F::from_canonical_u32(record.start_timestamp()),
                 a,
                 b,
                 c,
@@ -122,7 +122,7 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
         // Resize with dummy `is_opcode = 0`
         opcode_blocks.resize(num_blocks, Default::default());
 
-        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         // Use unsafe alignment so we can parallely write to the matrix
         let trace_width = self.trace_width();

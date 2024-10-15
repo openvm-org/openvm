@@ -34,7 +34,7 @@ fn execute_pc_increment_sanity_test() {
     let result = <BranchLessThanCoreChip<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
         F,
         Rv32BranchAdapterInterface<F>,
-    >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
+    >>::execute_instruction(&core, &instruction, 0, [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
@@ -42,10 +42,10 @@ fn execute_pc_increment_sanity_test() {
     let result = <BranchLessThanCoreChip<RV32_NUM_LIMBS, RV32_LIMB_BITS> as VmCoreChip<
         F,
         Rv32BranchAdapterInterface<F>,
-    >>::execute_instruction(&core, &instruction, F::zero(), [x, x]);
+    >>::execute_instruction(&core, &instruction, 0, [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());
-    assert_eq!(output.to_pc.unwrap(), F::from_canonical_u8(8));
+    assert_eq!(output.to_pc.unwrap(), 8);
 }
 
 #[test]

@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub struct ExpandCols<const CHUNK: usize, T> {
+pub struct MemoryMerkleCols<const CHUNK: usize, T> {
     // `expand_direction` =  1 corresponds to initial memory state
     // `expand_direction` = -1 corresponds to final memory state
     // `expand_direction` =  0 corresponds to irrelevant row (all interactions multiplicity 0)
@@ -24,7 +24,7 @@ pub struct ExpandCols<const CHUNK: usize, T> {
     pub right_direction_different: T,
 }
 
-impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
+impl<const CHUNK: usize, T: Clone> MemoryMerkleCols<CHUNK, T> {
     pub fn from_slice(slc: &[T]) -> Self {
         let mut iter = slc.iter();
         let mut take = || iter.next().unwrap().clone();

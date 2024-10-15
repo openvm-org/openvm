@@ -67,9 +67,10 @@ impl<T: AbstractField> MemoryBusInteraction<T> {
     {
         // Chain 1 at the end to ensure that different length interactions are always distinct.
         let fields = iter::empty()
-            .chain([self.address.address_space, self.address.pointer])
+            .chain(iter::once(self.address.address_space))
+            .chain(iter::once(self.address.pointer))
             .chain(self.data)
-            .chain([self.timestamp])
+            .chain(iter::once(self.timestamp))
             .chain(iter::once(AB::Expr::one()));
 
         builder.push_interaction(self.bus_index, fields, count, self.interaction_type);

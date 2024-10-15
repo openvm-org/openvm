@@ -1,6 +1,5 @@
 use std::{
     fs::{self, File},
-    iter,
     sync::Arc,
     time::Instant,
 };
@@ -8,8 +7,9 @@ use std::{
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkVerifyingKey,
-    prover::types::{AirProofInput, CommittedTraceData, Proof, ProofInput},
+    prover::types::{Proof, ProofInput},
     utils::disable_debug_builder,
+    Chip,
 };
 use ax_sdk::{
     config::{
@@ -17,12 +17,12 @@ use ax_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    dummy_airs::interaction::dummy_interaction_air::{
+        DummyInteractionAir, DummyInteractionChip, DummyInteractionData,
+    },
     engine::StarkEngine,
 };
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
@@ -46,42 +46,14 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    let mut air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
-    air.partition = partition;
-    let air = Arc::new(air);
-
-    // Single row major matrix for |count|fields[..]|
-    let nopart_trace = RowMajorMatrix::new(
-        trace
-            .iter()
-            .cloned()
-            .flat_map(|(count, fields)| {
-                assert_eq!(fields.len(), air.field_width());
-                iter::once(count).chain(fields)
-            })
-            .map(Val::<SC>::from_wrapped_u32)
-            .collect(),
-        air.field_width() + 1,
-    );
+    let mut chip =
+        DummyInteractionChip::new_with_partition(engine.config().pcs(), trace[0].1.len(), false, 0);
     let (count, fields): (Vec<_>, Vec<_>) = trace.into_iter().unzip();
-    let part_count_trace = RowMajorMatrix::new(
-        count.into_iter().map(Val::<SC>::from_wrapped_u32).collect(),
-        1,
-    );
-    let part_fields_trace = RowMajorMatrix::new(
-        fields
-            .into_iter()
-            .flat_map(|fields| {
-                assert_eq!(fields.len(), air.field_width());
-                fields
-            })
-            .map(Val::<SC>::from_wrapped_u32)
-            .collect(),
-        air.field_width(),
-    );
+    let data = DummyInteractionData { count, fields };
+    chip.load_data(data);
 
     let mut keygen_builder = engine.keygen_builder();
-    let air_id = keygen_builder.add_air(air.clone());
+    let air_id = keygen_builder.add_air(chip.air());
     let pk = keygen_builder.generate_pk();
     let vk = pk.get_vk();
 
@@ -90,31 +62,16 @@ where
     // Must add trace matrices in the same order as above
     let mut start;
     let air_proof_input = if partition {
-        let committer = prover.committer();
         start = Instant::now();
         // Receiver fields table is cached
-        let cached_trace_data = committer.commit(vec![part_fields_trace.clone()]);
+        let ret = chip.generate_air_proof_input_with_id(air_id);
         benchmarks.cached_commit_time = start.elapsed().as_micros();
-        let cached_mains = vec![CommittedTraceData {
-            raw_data: part_fields_trace,
-            prover_data: cached_trace_data,
-        }];
-        AirProofInput {
-            air: air.clone(),
-            cached_mains,
-            common_main: Some(part_count_trace),
-            public_values: vec![],
-        }
+        ret
     } else {
-        AirProofInput {
-            air: air.clone(),
-            cached_mains: vec![],
-            common_main: Some(nopart_trace),
-            public_values: vec![],
-        }
+        chip.generate_air_proof_input_with_id(air_id)
     };
     let proof_input = ProofInput {
-        per_air: vec![(air_id, air_proof_input)],
+        per_air: vec![air_proof_input],
     };
     start = Instant::now();
 
@@ -124,7 +81,7 @@ where
     let proof = prover.prove(&mut challenger, &pk, proof_input);
     benchmarks.prove_time_without_trace_gen = start.elapsed().as_micros();
 
-    (vk, air, proof, benchmarks)
+    (vk, Arc::new(chip.air), proof, benchmarks)
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]

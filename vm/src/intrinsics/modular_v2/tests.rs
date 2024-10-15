@@ -25,15 +25,15 @@ fn test_modular_add() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
 
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    let memory_bridge = tester.memory_chip().borrow().memory_bridge();
+    let memory_bridge = tester.memory_controller().borrow().memory_bridge();
     let adapter = Rv32HeapAdapter::new(execution_bridge, memory_bridge);
     let coord_chip = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         coord_modulus.clone(),
-        tester.memory_chip().borrow().range_checker.clone(),
+        tester.memory_controller().borrow().range_checker.clone(),
     );
     let scalar_chip = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         scalar_modulus.clone(),
-        tester.memory_chip().borrow().range_checker.clone(),
+        tester.memory_controller().borrow().range_checker.clone(),
     );
     let mut rng = create_seeded_rng();
     let num_tests = 100;
@@ -118,7 +118,8 @@ fn test_modular_add() {
         } else {
             coord_chip.clone()
         };
-        let mut chip_wrapper = VmChipWrapper::new(adapter.clone(), chip, tester.memory_chip());
+        let mut chip_wrapper =
+            VmChipWrapper::new(adapter.clone(), chip, tester.memory_controller());
         tester.execute(&mut chip_wrapper, instruction);
         let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
 

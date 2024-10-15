@@ -2,7 +2,8 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
-    config::Val, engine::VerificationData, utils::AirInfo, verifier::VerificationError, Chip,
+    config::Val, engine::VerificationData, prover::types::AirProofInput,
+    verifier::VerificationError, Chip,
 };
 use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
@@ -19,7 +20,7 @@ use crate::{
     arch::{ExecutionState, VmChip},
     kernels::core::RANGE_CHECKER_BUS,
     system::{
-        memory::{offline_checker::MemoryBus, MemoryChip},
+        memory::{offline_checker::MemoryBus, MemoryController},
         program::{bridge::ProgramBus, Instruction},
         vm::config::MemoryConfig,
     },
@@ -35,7 +36,7 @@ pub use memory::MemoryTester;
 use super::{ExecutionBus, InstructionExecutor};
 use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
-    system::{memory::MemoryChipRef, vm::config::PersistenceType},
+    system::{memory::MemoryControllerRef, vm::config::PersistenceType},
 };
 
 #[derive(Clone, Debug)]
@@ -48,13 +49,13 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         rng: StdRng,
     ) -> Self {
         Self {
-            memory: MemoryTester::new(memory_chip),
+            memory: MemoryTester::new(memory_controller),
             execution: ExecutionTester::new(execution_bus),
             program: ProgramTester::new(program_bus),
             rng,
@@ -68,25 +69,21 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         instruction: Instruction<F>,
     ) {
         let initial_state = ExecutionState {
-            pc: self.next_elem_size_usize(),
-            timestamp: self.memory.chip.borrow().timestamp(),
+            pc: self.next_elem_size_u32(),
+            timestamp: self.memory.controller.borrow().timestamp(),
         };
         tracing::debug!(?initial_state.timestamp);
 
         let final_state = executor
-            .execute(
-                instruction.clone(),
-                initial_state.map(|x| x.as_canonical_u32() as usize),
-            )
-            .expect("Expected the execution not to fail")
-            .map(F::from_canonical_usize);
+            .execute(instruction.clone(), initial_state)
+            .expect("Expected the execution not to fail");
 
         self.program.execute(instruction, &initial_state);
         self.execution.execute(initial_state, final_state);
     }
 
-    fn next_elem_size_usize(&mut self) -> F {
-        F::from_canonical_u32(self.rng.next_u32() % (1 << (F::bits() - 2)))
+    fn next_elem_size_u32(&mut self) -> u32 {
+        self.rng.next_u32() % (1 << (F::bits() - 2))
     }
 
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
@@ -117,15 +114,15 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.bus
     }
 
-    pub fn memory_chip(&self) -> MemoryChipRef<F> {
-        self.memory.chip.clone()
+    pub fn memory_controller(&self) -> MemoryControllerRef<F> {
+        self.memory.controller.clone()
     }
 }
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester {
         self.memory
-            .chip
+            .controller
             .borrow_mut()
             .finalize(None::<&mut Poseidon2Chip<BabyBear>>);
         let tester = VmChipTester {
@@ -144,9 +141,10 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let memory_chip = MemoryChip::new(MemoryBus(1), mem_config, range_checker);
+        let memory_controller =
+            MemoryController::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
         Self {
-            memory: MemoryTester::new(Rc::new(RefCell::new(memory_chip))),
+            memory: MemoryTester::new(Rc::new(RefCell::new(memory_controller))),
             execution: ExecutionTester::new(ExecutionBus(0)),
             program: ProgramTester::new(ProgramBus(2)),
             rng: StdRng::seed_from_u64(0),
@@ -160,7 +158,7 @@ type SC = BabyBearPoseidon2Config;
 #[derive(Default)]
 pub struct VmChipTester {
     pub memory: Option<MemoryTester<Val<SC>>>,
-    pub air_infos: Vec<AirInfo<SC>>,
+    pub air_proof_inputs: Vec<AirProofInput<SC>>,
 }
 
 impl VmChipTester {
@@ -172,8 +170,8 @@ impl VmChipTester {
         if trace.height() > 0 {
             dbg!(air.name());
             dbg!(trace.width);
-            self.air_infos
-                .push(AirInfo::simple(air, trace, public_value));
+            self.air_proof_inputs
+                .push(AirProofInput::simple(air, trace, public_value));
         }
 
         self
@@ -181,22 +179,23 @@ impl VmChipTester {
 
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
-            let memory_chip = memory_tester.chip.clone();
-            let range_checker = memory_chip.borrow().range_checker.clone();
+            let memory_controller = memory_tester.controller.clone();
+            let range_checker = memory_controller.borrow().range_checker.clone();
             self = self.load(memory_tester); // dummy memory interactions
             {
-                let memory = memory_chip.borrow();
+                let memory = memory_controller.borrow();
                 let public_values = memory.generate_public_values_per_air();
                 let airs = memory.airs();
                 drop(memory);
-                let traces = Rc::try_unwrap(memory_chip)
+                let traces = Rc::try_unwrap(memory_controller)
                     .unwrap()
                     .into_inner()
                     .generate_traces();
 
                 for (pvs, air, trace) in izip!(public_values, airs, traces) {
                     if trace.height() > 0 {
-                        self.air_infos.push(AirInfo::simple(air, trace, pvs));
+                        self.air_proof_inputs
+                            .push(AirProofInput::simple(air, trace, pvs));
                     }
                 }
             }
@@ -210,7 +209,7 @@ impl VmChipTester {
         mut chip: C,
         trace: RowMajorMatrix<Val<SC>>,
     ) -> Self {
-        self.air_infos.push(AirInfo::simple(
+        self.air_proof_inputs.push(AirProofInput::simple(
             chip.air(),
             trace,
             chip.generate_public_values(),
@@ -223,9 +222,15 @@ impl VmChipTester {
     }
 
     fn max_trace_height(&self) -> usize {
-        self.air_infos
+        self.air_proof_inputs
             .iter()
-            .map(|air_info| air_info.common_trace.height())
+            .flat_map(|air_proof_input| {
+                air_proof_input
+                    .raw
+                    .common_main
+                    .as_ref()
+                    .map(|trace| trace.height())
+            })
             .max()
             .unwrap()
     }
@@ -236,6 +241,6 @@ impl VmChipTester {
         engine_provider: P,
     ) -> Result<VerificationData<SC>, VerificationError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
-        engine_provider(self.max_trace_height()).run_test_impl(&self.air_infos)
+        engine_provider(self.max_trace_height()).run_test_impl(self.air_proof_inputs.clone())
     }
 }

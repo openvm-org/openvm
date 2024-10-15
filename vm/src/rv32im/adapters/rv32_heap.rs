@@ -13,12 +13,11 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            HeapAddress, MemoryChip, MemoryReadRecord, MemoryWriteRecord,
+            HeapAddress, MemoryController, MemoryReadRecord, MemoryWriteRecord,
         },
         program::Instruction,
     },
 };
-
 // Assuming two reads 1 write.
 
 /// Reads `NUM_READS` register values and uses each register value as a pointer to batch read `READ_SIZE` memory cells from
@@ -136,7 +135,7 @@ impl<
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -162,12 +161,12 @@ impl<
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<usize>,
+        from_state: ExecutionState<u32>,
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<usize>, Self::WriteRecord)> {
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
             op_a: z_address_ptr,
             d,
@@ -184,7 +183,7 @@ impl<
         Ok((
             ExecutionState {
                 pc: from_state.pc + 4,
-                timestamp: memory.timestamp().as_canonical_u32() as usize,
+                timestamp: memory.timestamp(),
             },
             [z_write],
         ))
@@ -206,7 +205,7 @@ impl<
 
 /// First lookup the heap pointer from register, and then read the data at the pointer.
 pub fn read_heap_from_rv32_register<F: PrimeField32, const N: usize>(
-    memory: &mut MemoryChip<F>,
+    memory: &mut MemoryController<F>,
     ptr_address_space: F,
     data_address_space: F,
     ptr_pointer: F,
@@ -222,7 +221,7 @@ pub fn read_heap_from_rv32_register<F: PrimeField32, const N: usize>(
 
 /// First lookup the heap pointer from register, and then write the data at the pointer.
 pub fn write_heap_from_rv32_register<F: PrimeField32, const N: usize>(
-    memory: &mut MemoryChip<F>,
+    memory: &mut MemoryController<F>,
     ptr_address_space: F,
     data_address_space: F,
     ptr_pointer: F,
