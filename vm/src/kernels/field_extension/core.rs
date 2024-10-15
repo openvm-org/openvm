@@ -28,7 +28,7 @@ pub const EXT_DEG: usize = 4;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct NewFieldExtensionCoreCols<T> {
+pub struct FieldExtensionCoreCols<T> {
     pub x: [T; EXT_DEG],
     pub y: [T; EXT_DEG],
     pub z: [T; EXT_DEG],
@@ -42,19 +42,19 @@ pub struct NewFieldExtensionCoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct NewFieldExtensionCoreAir {
+pub struct FieldExtensionCoreAir {
     offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for NewFieldExtensionCoreAir {
+impl<F: Field> BaseAir<F> for FieldExtensionCoreAir {
     fn width(&self) -> usize {
-        NewFieldExtensionCoreCols::<F>::width()
+        FieldExtensionCoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for NewFieldExtensionCoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for FieldExtensionCoreAir {}
 
-impl<AB, I> VmCoreAir<AB, I> for NewFieldExtensionCoreAir
+impl<AB, I> VmCoreAir<AB, I> for FieldExtensionCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -68,15 +68,15 @@ where
         local_core: &[AB::Var],
         _local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &NewFieldExtensionCoreCols<_> = local_core.borrow();
+        let cols: &FieldExtensionCoreCols<_> = local_core.borrow();
 
         let flags = [cols.is_add, cols.is_sub, cols.is_mul, cols.is_div];
         let opcodes = [FE4ADD, FE4SUB, BBE4MUL, BBE4DIV];
         let results = [
-            NewFieldExtension::add(cols.y, cols.z),
-            NewFieldExtension::subtract(cols.y, cols.z),
-            NewFieldExtension::multiply(cols.y, cols.z),
-            NewFieldExtension::multiply(cols.y, cols.divisor_inv),
+            FieldExtension::add(cols.y, cols.z),
+            FieldExtension::subtract(cols.y, cols.z),
+            FieldExtension::multiply(cols.y, cols.z),
+            FieldExtension::multiply(cols.y, cols.divisor_inv),
         ];
 
         // Imposing the following constraints:
@@ -111,7 +111,7 @@ where
         builder.assert_bool(is_valid.clone());
 
         // constrain aux.divisor_inv: z * z^(-1) = 1
-        let z_times_z_inv = NewFieldExtension::multiply(cols.z, cols.divisor_inv);
+        let z_times_z_inv = FieldExtension::multiply(cols.z, cols.divisor_inv);
         for (i, prod_i) in z_times_z_inv.into_iter().enumerate() {
             if i == 0 {
                 builder.assert_eq(cols.is_div, prod_i);
@@ -134,7 +134,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct NewFieldExtensionRecord<F> {
+pub struct FieldExtensionRecord<F> {
     pub opcode: FieldExtensionOpcode,
     pub x: [F; EXT_DEG],
     pub y: [F; EXT_DEG],
@@ -142,25 +142,25 @@ pub struct NewFieldExtensionRecord<F> {
 }
 
 #[derive(Debug)]
-pub struct NewFieldExtensionCoreChip {
-    pub air: NewFieldExtensionCoreAir,
+pub struct FieldExtensionCoreChip {
+    pub air: FieldExtensionCoreAir,
 }
 
-impl NewFieldExtensionCoreChip {
+impl FieldExtensionCoreChip {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: NewFieldExtensionCoreAir { offset },
+            air: FieldExtensionCoreAir { offset },
         }
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for NewFieldExtensionCoreChip
+impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for FieldExtensionCoreChip
 where
     I::Reads: Into<[[F; EXT_DEG]; 2]>,
     I::Writes: From<[[F; EXT_DEG]; 1]>,
 {
-    type Record = NewFieldExtensionRecord<F>;
-    type Air = NewFieldExtensionCoreAir;
+    type Record = FieldExtensionRecord<F>;
+    type Air = FieldExtensionCoreAir;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
@@ -176,9 +176,8 @@ where
         let y: [F; EXT_DEG] = data[0];
         let z: [F; EXT_DEG] = data[1];
 
-        let x =
-            NewFieldExtension::solve(FieldExtensionOpcode::from_usize(local_opcode_index), y, z)
-                .unwrap();
+        let x = FieldExtension::solve(FieldExtensionOpcode::from_usize(local_opcode_index), y, z)
+            .unwrap();
 
         let output = AdapterRuntimeContext {
             to_pc: None,
@@ -203,8 +202,8 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let NewFieldExtensionRecord { opcode, x, y, z } = record;
-        let cols: &mut NewFieldExtensionCoreCols<_> = row_slice.borrow_mut();
+        let FieldExtensionRecord { opcode, x, y, z } = record;
+        let cols: &mut FieldExtensionCoreCols<_> = row_slice.borrow_mut();
         cols.x = x;
         cols.y = y;
         cols.z = z;
@@ -213,7 +212,7 @@ where
         cols.is_mul = F::from_bool(opcode == FieldExtensionOpcode::BBE4MUL);
         cols.is_div = F::from_bool(opcode == FieldExtensionOpcode::BBE4DIV);
         cols.divisor_inv = if opcode == FieldExtensionOpcode::BBE4DIV {
-            NewFieldExtension::invert(z)
+            FieldExtension::invert(z)
         } else {
             [F::zero(); EXT_DEG]
         };
@@ -224,8 +223,8 @@ where
     }
 }
 
-pub struct NewFieldExtension;
-impl NewFieldExtension {
+pub struct FieldExtension;
+impl FieldExtension {
     pub(super) fn solve<F: Field>(
         opcode: FieldExtensionOpcode,
         x: [F; EXT_DEG],

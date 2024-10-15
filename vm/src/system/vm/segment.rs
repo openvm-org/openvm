@@ -49,8 +49,8 @@ use crate::{
             CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
         },
-        new_field_arithmetic::{NewFieldArithmeticChip, NewFieldArithmeticCoreChip},
-        new_field_extension::{NewFieldExtensionChip, NewFieldExtensionCoreChip},
+        field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
+        field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
     },
     old::{
         alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,
@@ -241,13 +241,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     chips.push(AxVmChip::Core(core_chip.clone().unwrap()));
                 }
                 ExecutorName::FieldArithmetic => {
-                    let chip = Rc::new(RefCell::new(NewFieldArithmeticChip::new(
+                    let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
                         NativeAdapterChip::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        NewFieldArithmeticCoreChip::new(offset),
+                        FieldArithmeticCoreChip::new(offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -256,13 +256,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     chips.push(AxVmChip::FieldArithmetic(chip));
                 }
                 ExecutorName::FieldExtension => {
-                    let chip = Rc::new(RefCell::new(NewFieldExtensionChip::new(
+                    let chip = Rc::new(RefCell::new(FieldExtensionChip::new(
                         NativeVectorizedAdapterChip::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        NewFieldExtensionCoreChip::new(offset),
+                        FieldExtensionCoreChip::new(offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {

@@ -21,7 +21,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct NewFieldArithmeticCoreCols<T> {
+pub struct FieldArithmeticCoreCols<T> {
     pub a: T,
     pub b: T,
     pub c: T,
@@ -35,19 +35,19 @@ pub struct NewFieldArithmeticCoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct NewFieldArithmeticCoreAir {
+pub struct FieldArithmeticCoreAir {
     offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for NewFieldArithmeticCoreAir {
+impl<F: Field> BaseAir<F> for FieldArithmeticCoreAir {
     fn width(&self) -> usize {
-        NewFieldArithmeticCoreCols::<F>::width()
+        FieldArithmeticCoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for NewFieldArithmeticCoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for FieldArithmeticCoreAir {}
 
-impl<AB, I> VmCoreAir<AB, I> for NewFieldArithmeticCoreAir
+impl<AB, I> VmCoreAir<AB, I> for FieldArithmeticCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -61,7 +61,7 @@ where
         local_core: &[AB::Var],
         _local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &NewFieldArithmeticCoreCols<_> = local_core.borrow();
+        let cols: &FieldArithmeticCoreCols<_> = local_core.borrow();
 
         let a = cols.a;
         let b = cols.b;
@@ -106,7 +106,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct NewFieldArithmeticRecord<F> {
+pub struct FieldArithmeticRecord<F> {
     pub opcode: FieldArithmeticOpcode,
     pub a: F,
     pub b: F,
@@ -114,25 +114,25 @@ pub struct NewFieldArithmeticRecord<F> {
 }
 
 #[derive(Debug)]
-pub struct NewFieldArithmeticCoreChip {
-    pub air: NewFieldArithmeticCoreAir,
+pub struct FieldArithmeticCoreChip {
+    pub air: FieldArithmeticCoreAir,
 }
 
-impl NewFieldArithmeticCoreChip {
+impl FieldArithmeticCoreChip {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: NewFieldArithmeticCoreAir { offset },
+            air: FieldArithmeticCoreAir { offset },
         }
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for NewFieldArithmeticCoreChip
+impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for FieldArithmeticCoreChip
 where
     I::Reads: Into<[[F; 1]; 2]>,
     I::Writes: From<[[F; 1]; 1]>,
 {
-    type Record = NewFieldArithmeticRecord<F>;
-    type Air = NewFieldArithmeticCoreAir;
+    type Record = FieldArithmeticRecord<F>;
+    type Air = FieldArithmeticCoreAir;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
@@ -147,7 +147,7 @@ where
         let data: [[F; 1]; 2] = reads.into();
         let b = data[0][0];
         let c = data[1][0];
-        let a = NewFieldArithmetic::solve_field_arithmetic(local_opcode_index, b, c).unwrap();
+        let a = FieldArithmetic::solve_field_arithmetic(local_opcode_index, b, c).unwrap();
 
         let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
             to_pc: None,
@@ -172,8 +172,8 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let NewFieldArithmeticRecord { opcode, a, b, c } = record;
-        let row_slice: &mut NewFieldArithmeticCoreCols<_> = row_slice.borrow_mut();
+        let FieldArithmeticRecord { opcode, a, b, c } = record;
+        let row_slice: &mut FieldArithmeticCoreCols<_> = row_slice.borrow_mut();
         row_slice.a = a;
         row_slice.b = b;
         row_slice.c = c;
@@ -194,8 +194,8 @@ where
     }
 }
 
-pub struct NewFieldArithmetic;
-impl NewFieldArithmetic {
+pub struct FieldArithmetic;
+impl FieldArithmetic {
     pub(super) fn solve_field_arithmetic<F: Field>(
         opcode: FieldArithmeticOpcode,
         b: F,
