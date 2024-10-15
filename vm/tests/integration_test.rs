@@ -170,18 +170,18 @@ fn test_vm_1_persistent() {
 
     let segment_result = result.segment_results.into_iter().next().unwrap();
 
-    let merkle_air_info = segment_result
-        .air_infos
+    let merkle_air_proof_input = segment_result
+        .air_proof_inputs
         .iter()
         .find(|info| info.air.name() == "MemoryMerkleAir<8>")
         .unwrap();
-    assert_eq!(merkle_air_info.public_values.len(), 16);
+    assert_eq!(merkle_air_proof_input.raw.public_values.len(), 16);
     assert_eq!(
-        merkle_air_info.public_values[..8],
-        merkle_air_info.public_values[8..]
+        merkle_air_proof_input.raw.public_values[..8],
+        merkle_air_proof_input.raw.public_values[8..]
     );
     assert_eq!(
-        merkle_air_info.public_values[..8],
+        merkle_air_proof_input.raw.public_values[..8],
         // The value when you start with zeros and repeatedly hash the value with itself
         // 13 times. We use 13 because addr_space_max_bits = 1 and pointer_max_bits = 16,
         // so the height of the tree is 1 + 16 - 3 = 14.
@@ -194,7 +194,7 @@ fn test_vm_1_persistent() {
 
     let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
     engine
-        .run_test_impl(&segment_result.air_infos)
+        .run_test_impl(segment_result.air_proof_inputs)
         .expect("Verification failed");
 }
 
