@@ -149,7 +149,7 @@ impl<T: Default> Default for Instruction<T> {
 #[derive(Debug)]
 pub enum ExecutionError {
     Fail(usize),
-    PcOutOfBounds(usize, usize, usize),
+    PcOutOfBounds(usize, usize, usize, usize),
     DisabledOperation(usize, usize),
     HintOutOfBounds(usize),
     EndOfInputStream(usize),
@@ -161,10 +161,10 @@ impl Display for ExecutionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExecutionError::Fail(pc) => write!(f, "execution failed at pc = {}", pc),
-            ExecutionError::PcOutOfBounds(pc, step, program_len) => write!(
+            ExecutionError::PcOutOfBounds(pc, step, pc_base, program_len) => write!(
                 f,
-                "pc = {} (step {}) out of bounds for program of length {}",
-                pc, step, program_len
+                "pc = {} out of bounds for program of length {}, with pc_base = {} and step = {}",
+                pc, program_len, pc_base, step
             ),
             ExecutionError::DisabledOperation(pc, op) => {
                 write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
@@ -218,10 +218,19 @@ pub struct Program<F> {
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.
     pub instructions_and_debug_infos: HashMap<usize, (Instruction<F>, Option<DebugInfo>)>,
     pub step: usize,
+
+    // these two are needed to calculate the index for execution_frequencies
+    pub pc_start: usize,
+    pub pc_base: usize,
 }
 
 impl<F> Program<F> {
-    pub fn from_instructions_and_step(instructions: &[Instruction<F>], step: usize) -> Self
+    pub fn from_instructions_and_step(
+        instructions: &[Instruction<F>],
+        step: usize,
+        pc_start: usize,
+        pc_base: usize,
+    ) -> Self
     where
         F: Clone,
     {
@@ -229,12 +238,17 @@ impl<F> Program<F> {
             instructions_and_debug_infos: instructions
                 .iter()
                 .enumerate()
-                .map(|(index, instruction)| (index * step, ((*instruction).clone(), None)))
+                .map(|(index, instruction)| {
+                    (index * step + pc_base, ((*instruction).clone(), None))
+                })
                 .collect(),
             step,
+            pc_start,
+            pc_base,
         }
     }
 
+    // We assume that pc_start = pc_base = 0 everywhere except the RISC-V programs, until we need otherwise
     pub fn from_instructions_and_debug_infos(
         instructions: &[Instruction<F>],
         debug_infos: &[Option<DebugInfo>],
@@ -252,6 +266,8 @@ impl<F> Program<F> {
                 })
                 .collect(),
             step: 1,
+            pc_start: 0,
+            pc_base: 0,
         }
     }
 
@@ -259,7 +275,7 @@ impl<F> Program<F> {
     where
         F: Clone,
     {
-        Self::from_instructions_and_step(instructions, 1)
+        Self::from_instructions_and_step(instructions, 1, 0, 0)
     }
 
     pub fn len(&self) -> usize {
@@ -329,20 +345,23 @@ impl<F: PrimeField64> ProgramChip<F> {
         pc: usize,
     ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
         let step = self.air.program.step;
+        let pc_base = self.air.program.pc_base;
         assert!(
-            pc % step == 0,
+            (pc - pc_base) % step == 0,
             "pc = {} is not a multiple of step = {}",
             pc,
             step
         );
-        if !(0..self.true_program_length).contains(&(pc / step)) {
+        let pc_index = (pc - pc_base) / step;
+        if !(0..self.true_program_length).contains(&pc_index) {
             return Err(ExecutionError::PcOutOfBounds(
                 pc,
                 step,
+                pc_base,
                 self.true_program_length,
             ));
         }
-        self.execution_frequencies[pc / step] += 1;
+        self.execution_frequencies[pc_index] += 1;
         Ok(self.air.program.instructions_and_debug_infos[&pc].clone())
     }
 }
