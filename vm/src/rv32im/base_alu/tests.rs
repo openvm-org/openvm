@@ -18,8 +18,8 @@ use crate::{
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            test_adapter::Rv32TestAdapterChip, Rv32BaseAluAdapterChip, Rv32RTypeAdapterInterface,
-            RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+            test_adapter::TestAdapterChip, Rv32BaseAluAdapterChip, RV32_CELL_BITS,
+            RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
         },
         base_alu::BaseAluCoreCols,
     },
@@ -156,12 +156,12 @@ fn rv32_alu_and_rand_test() {
 ///
 /// Given a fake trace of a single operation, setup a chip and run the test. We replace
 /// the write part of the trace and check that the core chip throws the expected error.
-/// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
+/// A dummy adapter is used so memory interactions don't indirectly cause false passes.
 ///////////////////////////////////////////////////////////////////////////////////////
 
-type Rv32ArithmeticLogicTestChip<F> = VmChipWrapper<
+type Rv32BaseAluTestChip<F> = VmChipWrapper<
     F,
-    Rv32TestAdapterChip<F, Rv32RTypeAdapterInterface<F>>,
+    TestAdapterChip<F, Rv32BaseAluAdapterChip<F>>,
     BaseAluCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>,
 >;
 
@@ -175,8 +175,8 @@ fn run_rv32_alu_negative_test(
 ) {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let mut chip = Rv32ArithmeticLogicTestChip::<F>::new(
-        Rv32TestAdapterChip::new(
+    let mut chip = Rv32BaseAluTestChip::<F>::new(
+        TestAdapterChip::new(
             [b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)],
             None,
         ),

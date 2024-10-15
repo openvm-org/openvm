@@ -1,8 +1,9 @@
+use std::{fmt::Debug, marker::PhantomData};
+
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32};
 
-use super::Rv32RTypeAdapterInterface;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterAir,
@@ -11,62 +12,47 @@ use crate::{
     system::{memory::MemoryController, program::Instruction},
 };
 
+// Replaces A: VmAdapterChip while testing VmCoreChip functionality, as it has no
+// constraints and thus cannot cause a failure.
 #[derive(Clone, Debug)]
-pub struct Rv32TestAdapterChip<T, I: VmAdapterInterface<T>>
+pub struct TestAdapterChip<F: Field, A: VmAdapterChip<F>>
 where
-    I::Reads: Clone,
+    A::Interface: VmAdapterInterface<F>,
+    <A::Interface as VmAdapterInterface<F>>::Reads: Clone + Debug,
 {
-    pub air: Rv32TestAdapterAir,
+    pub air: TestAdapterAir<F, A::Air>,
     // What the test adapter will pass to core chip after preprocess
-    pub reads: I::Reads,
+    pub reads: <A::Interface as VmAdapterInterface<F>>::Reads,
     // Amount to increment PC by, 4 by default
     pub pc_inc: Option<u32>,
 }
 
-impl<T, I: VmAdapterInterface<T>> Rv32TestAdapterChip<T, I>
+impl<F: Field, A: VmAdapterChip<F>> TestAdapterChip<F, A>
 where
-    I::Reads: Clone,
+    A::Interface: VmAdapterInterface<F>,
+    <A::Interface as VmAdapterInterface<F>>::Reads: Clone + Debug,
 {
-    pub fn new(reads: I::Reads, pc_inc: Option<u32>) -> Self {
+    pub fn new(reads: <A::Interface as VmAdapterInterface<F>>::Reads, pc_inc: Option<u32>) -> Self {
         Self {
-            air: Rv32TestAdapterAir {},
+            air: TestAdapterAir {
+                _marker_air: PhantomData,
+                _marker_field: PhantomData,
+            },
             reads,
             pc_inc,
         }
     }
 }
 
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32TestAdapterAir {}
-
-impl<F: Field> BaseAir<F> for Rv32TestAdapterAir {
-    fn width(&self) -> usize {
-        0
-    }
-}
-
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32TestAdapterAir {
-    type Interface = Rv32RTypeAdapterInterface<AB::Expr>;
-
-    fn eval(
-        &self,
-        _builder: &mut AB,
-        _local: &[AB::Var],
-        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
-    ) {
-    }
-}
-
-impl<F: PrimeField32, I: VmAdapterInterface<F> + Clone> VmAdapterChip<F>
-    for Rv32TestAdapterChip<F, I>
+impl<F: PrimeField32, A: VmAdapterChip<F>> VmAdapterChip<F> for TestAdapterChip<F, A>
 where
-    I::Reads: Clone,
+    A::Interface: VmAdapterInterface<F>,
+    <A::Interface as VmAdapterInterface<F>>::Reads: Clone + Debug,
 {
     type ReadRecord = ();
     type WriteRecord = ();
-    type Air = Rv32TestAdapterAir;
-    type Interface = I;
+    type Air = TestAdapterAir<F, A::Air>;
+    type Interface = A::Interface;
 
     fn preprocess(
         &mut self,
@@ -106,5 +92,32 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+#[derive(Clone, Copy, Debug, derive_new::new)]
+pub struct TestAdapterAir<F: Field, B: BaseAir<F>> {
+    _marker_field: PhantomData<F>,
+    _marker_air: PhantomData<B>,
+}
+
+impl<F: Field, B: BaseAir<F>> BaseAir<F> for TestAdapterAir<F, B> {
+    fn width(&self) -> usize {
+        0
+    }
+}
+
+impl<AB: InteractionBuilder, B: BaseAir<AB::F>> VmAdapterAir<AB> for TestAdapterAir<AB::F, B>
+where
+    B: VmAdapterAir<AB>,
+{
+    type Interface = B::Interface;
+
+    fn eval(
+        &self,
+        _builder: &mut AB,
+        _local: &[AB::Var],
+        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
+    ) {
     }
 }
