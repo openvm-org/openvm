@@ -154,7 +154,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         // Note: c is a field element and immediate is a signed integer
         let imm = (c + F::from_canonical_u32(1 << (RV_IS_TYPE_IMM_BITS - 1))).as_canonical_u32();
-        let ptr_val = rs1_val + imm - (1 << (RV_IS_TYPE_IMM_BITS - 1));
+        let ptr_val = rs1_val
+            .wrapping_add(imm)
+            .wrapping_sub(1 << (RV_IS_TYPE_IMM_BITS - 1));
 
         assert!(imm < (1 << RV_IS_TYPE_IMM_BITS));
         assert!(ptr_val < (1 << addr_bits));
