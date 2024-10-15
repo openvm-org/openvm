@@ -138,9 +138,9 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         let height = next_power_of_two_or_zero(2 * self.touched_labels.len());
         let mut rows = vec![F::zero(); height * width];
 
-        for (row, &(address_space, label)) in rows
-            .chunks_mut(2 * width)
-            .zip(self.touched_labels.iter()) {
+        for (row, &(address_space, label)) in
+            rows.chunks_mut(2 * width).zip(self.touched_labels.iter())
+        {
             let (initial_row, final_row) = row.split_at_mut(width);
             *initial_row.borrow_mut() = match self.initial_memory.get(&(address_space, label)) {
                 Some(initial) => PersistentBoundaryCols {
