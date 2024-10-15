@@ -208,5 +208,6 @@ pub fn memory_barrier<T>(ptr: *const T) {
 #[cfg(all(target_os = "zkvm", not(feature = "std")))]
 #[panic_handler]
 fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
-    axvm_platform::rust_rt::panic_fault(panic_info);
+    // axvm_platform::rust_rt::panic_fault(panic_info);
+    unreachable!()
 }
