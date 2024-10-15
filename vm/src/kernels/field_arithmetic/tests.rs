@@ -2,9 +2,7 @@ use afs_stark_backend::{
     prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError,
 };
 use ax_sdk::{
-    any_rap_arc_vec,
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing},
-    engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -29,7 +27,6 @@ use crate::{
 
 #[test]
 fn field_arithmetic_air_test() {
-    setup_tracing();
     let num_ops = 3; // non-power-of-2 to also test padding
     let elem_range = || 1..=100;
     let z_address_space_range = || 1usize..=2;

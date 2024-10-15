@@ -17,7 +17,6 @@ use crate::{
 
 #[test]
 fn test_fibonacci() {
-    setup_tracing();
     run_recursive_test(fibonacci_test_proof_input::<BabyBearPoseidon2OuterConfig>(
         16,
     ))
@@ -26,7 +25,6 @@ fn test_fibonacci() {
 #[test]
 fn test_interactions() {
     // Please make sure kzg trusted params are downloaded before running the test.
-    setup_tracing();
     run_recursive_test(interaction_test_proof_input::<BabyBearPoseidon2OuterConfig>())
 }
 

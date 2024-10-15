@@ -2,7 +2,7 @@ use ax_sdk::{
     config::{
         baby_bear_poseidon2::{default_perm, engine_from_perm, random_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
-        setup_tracing_with_log_level, FriParameters,
+        FriParameters,
     },
     engine::StarkEngine,
     utils::create_seeded_rng,
@@ -27,7 +27,6 @@ use stark_vm::{
         },
     },
 };
-use tracing::Level;
 
 const LIMB_BITS: usize = 29;
 
@@ -112,8 +111,6 @@ fn air_test_with_compress_poseidon2(
 
 #[test]
 fn test_vm_1() {
-    setup_tracing_with_log_level(Level::TRACE);
-
     let n = 6;
     /*
     Instruction 0 assigns word[0]_1 to n.
@@ -143,8 +140,6 @@ fn test_vm_1() {
 
 #[test]
 fn test_vm_1_persistent() {
-    setup_tracing_with_log_level(Level::TRACE);
-
     let n = 6;
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
@@ -282,8 +277,6 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
 #[test]
 fn test_vm_field_extension_arithmetic() {
-    setup_tracing_with_log_level(Level::DEBUG);
-
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 2, 1, 0, 0, 1),
@@ -314,8 +307,6 @@ fn test_vm_field_extension_arithmetic() {
 
 #[test]
 fn test_vm_field_extension_arithmetic_persistent() {
-    setup_tracing_with_log_level(Level::DEBUG);
-
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 2, 1, 0, 0, 1),
@@ -559,7 +550,6 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
 
 #[test]
 fn test_vm_keccak() {
-    setup_tracing_with_log_level(Level::TRACE);
     let inputs = [
         vec![],
         (0u8..1).collect::<Vec<_>>(),
@@ -592,7 +582,6 @@ fn test_vm_keccak() {
 // This test dones one keccak in 24 rows, and then there are 8 dummy padding rows which don't make up a full round
 #[test]
 fn test_vm_keccak_non_full_round() {
-    setup_tracing_with_log_level(Level::TRACE);
     let inputs = [[[0u8; 32], [1u8; 32]].concat()];
     let mut instructions = inputs
         .iter()
