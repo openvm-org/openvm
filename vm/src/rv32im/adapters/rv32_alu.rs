@@ -1,7 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
-    mem::size_of,
 };
 
 use afs_derive::AlignedBorrow;
@@ -77,8 +76,9 @@ pub struct Rv32AluWriteRecord<F: Field> {
 #[derive(AlignedBorrow)]
 pub struct Rv32AluAdapterCols<T> {
     pub from_state: ExecutionState<T>,
-    pub rd: T,
-    pub rs1: T,
+    pub rd_ptr: T,
+    pub rs1_ptr: T,
+    // Pointer if rs2 was a read, immediate value otherwise
     pub rs2: T,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: T,
@@ -95,7 +95,7 @@ pub struct Rv32AluAdapterAir {
 
 impl<F: Field> BaseAir<F> for Rv32AluAdapterAir {
     fn width(&self) -> usize {
-        size_of::<Rv32AluAdapterCols<u8>>()
+        Rv32AluAdapterCols::<F>::width()
     }
 }
 
@@ -133,7 +133,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::one(), local.rs1),
+                MemoryAddress::new(AB::Expr::one(), local.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local.reads_aux[0],
@@ -151,7 +151,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::one(), local.rd),
+                MemoryAddress::new(AB::Expr::one(), local.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local.writes_aux,
@@ -162,8 +162,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
             .execute_and_increment_pc_custom(
                 ctx.instruction.opcode,
                 [
-                    local.rd.into(),
-                    local.rs1.into(),
+                    local.rd_ptr.into(),
+                    local.rs1_ptr.into(),
                     local.rs2.into(),
                     AB::Expr::one(),
                     local.rs2_as.into(),
@@ -261,8 +261,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
         let row_slice: &mut Rv32AluAdapterCols<_> = row_slice.borrow_mut();
         let aux_cols_factory = &self.aux_cols_factory;
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.rd = write_record.rd.pointer;
-        row_slice.rs1 = read_record.rs1.pointer;
+        row_slice.rd_ptr = write_record.rd.pointer;
+        row_slice.rs1_ptr = read_record.rs1.pointer;
         row_slice.rs2 = read_record
             .rs2
             .clone()

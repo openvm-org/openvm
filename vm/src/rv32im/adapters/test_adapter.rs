@@ -19,7 +19,7 @@ where
     pub air: Rv32TestAdapterAir,
     // What the test adapter will pass to core chip after preprocess
     pub reads: I::Reads,
-    // What the test adapter will return after preprocess
+    // Amount to increment PC by, 4 by default
     pub pc_inc: Option<u32>,
 }
 
