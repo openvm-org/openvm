@@ -26,7 +26,7 @@ use crate::{
     },
     kernels::{
         core::CoreChip, field_arithmetic::FieldArithmeticChip,
-        field_extension::chip::FieldExtensionArithmeticChip,
+        field_extension::FieldExtensionArithmeticChip,
     },
     old::{alu::ArithmeticLogicChip, shift::ShiftChip},
     rv32im::{

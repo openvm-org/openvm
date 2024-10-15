@@ -49,7 +49,7 @@ use crate::{
             READ_INSTRUCTION_BUS,
         },
         field_arithmetic::FieldArithmeticChip,
-        field_extension::chip::FieldExtensionArithmeticChip,
+        field_extension::FieldExtensionArithmeticChip,
     },
     old::{alu::ArithmeticLogicChip, shift::ShiftChip},
     rv32im::{
