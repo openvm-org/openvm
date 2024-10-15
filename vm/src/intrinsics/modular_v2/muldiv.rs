@@ -3,7 +3,9 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerChip,
 };
-use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExprAir, FieldVariable, SymbolicExpr};
+use ax_ecc_primitives::field_expression::{
+    ExprBuilder, FieldExprAir, FieldExprChip, FieldVariable, SymbolicExpr,
+};
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
@@ -20,8 +22,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct ModularMulDivV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
-    pub air: FieldExprAir,
-
+    pub chip: FieldExprChip,
     pub offset: usize,
 }
 
@@ -62,12 +63,13 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2CoreChip<NUM
 
         let builder = builder.borrow().clone();
 
-        let chip = FieldExprAir {
+        let air = FieldExprAir {
             builder,
             check_carry_mod_to_zero: subair,
             range_checker,
         };
-        Self { air: chip, offset }
+        let chip = FieldExprChip { air };
+        Self { chip, offset }
     }
 }
 
@@ -104,7 +106,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         };
 
         let vars = self
-            .air
+            .chip
             .execute(vec![x_biguint, y_biguint], vec![is_mul_flag]);
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
@@ -128,6 +130,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     }
 
     fn air(&self) -> &Self::Air {
-        &self.air
+        &self.chip.air
     }
 }

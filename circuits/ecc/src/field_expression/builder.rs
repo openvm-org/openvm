@@ -196,6 +196,7 @@ type Vecs<T> = Vec<Vec<T>>;
 // is_valid, inputs, vars, q_limbs, carry_limbs, flags
 type AllCols<T> = (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>, Vec<T>);
 
+#[derive(Clone)]
 pub struct FieldExprChip {
     pub air: FieldExprAir,
 }

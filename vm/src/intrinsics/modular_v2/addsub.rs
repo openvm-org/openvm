@@ -3,7 +3,9 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerChip,
 };
-use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExprAir, FieldVariable};
+use ax_ecc_primitives::field_expression::{
+    ExprBuilder, FieldExprAir, FieldExprChip, FieldVariable,
+};
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
@@ -20,8 +22,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct ModularAddSubV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
-    pub air: FieldExprAir,
-
+    pub chip: FieldExprChip,
     pub offset: usize,
 }
 
@@ -56,12 +57,13 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM
         x5.save();
         let builder = builder.borrow().clone();
 
-        let chip = FieldExprAir {
+        let air = FieldExprAir {
             builder,
             check_carry_mod_to_zero: subair,
             range_checker,
         };
-        Self { air: chip, offset }
+        let chip = FieldExprChip { air };
+        Self { chip, offset }
     }
 }
 
@@ -98,7 +100,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         };
 
         let vars = self
-            .air
+            .chip
             .execute(vec![x_biguint, y_biguint], vec![is_add_flag]);
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
@@ -122,6 +124,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
     }
 
     fn air(&self) -> &Self::Air {
-        &self.air
+        &self.chip.air
     }
 }
