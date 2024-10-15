@@ -44,9 +44,9 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> VmChip<F>
             let cols: &mut ModularAddSubCols<F, NUM_LIMBS> = row[..].borrow_mut();
             cols.io = ModularAddSubIoCols {
                 from_state: record.from_state.map(F::from_canonical_u32),
-                x: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.x_array_read.clone()),
-                y: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.y_array_read.clone()),
-                z: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.z_array_write.clone()),
+                x: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.x_array_read),
+                y: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.y_array_read),
+                z: MemoryHeapDataIoCols::<F, NUM_LIMBS>::from(record.z_array_write),
             };
             let x = limbs_to_biguint(
                 &record
@@ -86,11 +86,11 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize> VmChip<F>
 
             cols.aux.is_valid = F::one();
             cols.aux.read_x_aux_cols =
-                aux_cols_factory.make_heap_read_aux_cols(record.x_array_read.clone());
+                aux_cols_factory.make_heap_read_aux_cols(record.x_array_read);
             cols.aux.read_y_aux_cols =
-                aux_cols_factory.make_heap_read_aux_cols(record.y_array_read.clone());
+                aux_cols_factory.make_heap_read_aux_cols(record.y_array_read);
             cols.aux.write_z_aux_cols =
-                aux_cols_factory.make_heap_write_aux_cols(record.z_array_write.clone());
+                aux_cols_factory.make_heap_write_aux_cols(record.z_array_write);
             cols.aux.is_add = F::from_bool(is_add);
         }
 

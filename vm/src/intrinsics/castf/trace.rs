@@ -35,8 +35,8 @@ impl<F: PrimeField32> VmChip<F> for CastFChip<F> {
             };
             cols.aux = CastFAuxCols {
                 is_valid: F::one(),
-                write_x_aux_cols: aux_cols_factory.make_write_aux_cols(record.x_write.clone()),
-                read_y_aux_cols: aux_cols_factory.make_read_aux_cols(record.y_read.clone()),
+                write_x_aux_cols: aux_cols_factory.make_write_aux_cols(record.x_write),
+                read_y_aux_cols: aux_cols_factory.make_read_aux_cols(record.y_read),
             };
         }
         RowMajorMatrix::new(rows.concat(), CastFCols::<F>::width())

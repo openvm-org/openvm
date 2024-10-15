@@ -1,3 +1,4 @@
+pub mod native_adapter;
 pub mod native_vectorized_adapter;
 
 use crate::arch::BasicAdapterInterface;

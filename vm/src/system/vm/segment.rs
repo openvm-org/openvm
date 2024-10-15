@@ -45,11 +45,12 @@ use crate::{
     },
     kernels::{
         adapters::native_vectorized_adapter::NativeVectorizedAdapterChip,
+        adapters::native_adapter::NativeAdapterChip,
         core::{
             CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
         },
-        field_arithmetic::FieldArithmeticChip,
+        new_field_arithmetic::{NewFieldArithmeticChip, NewFieldArithmeticCoreChip},
         new_field_extension::{NewFieldExtensionChip, NewFieldExtensionCoreChip},
     },
     old::{alu::ArithmeticLogicChip, shift::ShiftChip},
@@ -237,11 +238,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     chips.push(AxVmChip::Core(core_chip.clone().unwrap()));
                 }
                 ExecutorName::FieldArithmetic => {
-                    let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
-                        execution_bus,
-                        program_bus,
+                    let chip = Rc::new(RefCell::new(NewFieldArithmeticChip::new(
+                        NativeAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        NewFieldArithmeticCoreChip::new(offset),
                         memory_controller.clone(),
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());

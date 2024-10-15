@@ -37,7 +37,7 @@ pub struct AccessAdapterRecord<T> {
 
 /// Represents a single or batch memory write operation.
 /// Can be used to generate [MemoryWriteAuxCols].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MemoryWriteRecord<T, const N: usize> {
     pub address_space: T,
     pub pointer: T,
@@ -57,7 +57,7 @@ impl<T: Copy> MemoryWriteRecord<T, 1> {
 ///
 /// Also used for "reads" from address space 0 (immediates).
 /// Can be used to generate [MemoryReadAuxCols] or [MemoryReadOrImmediateAuxCols].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MemoryReadRecord<T, const N: usize> {
     pub address_space: T,
     pub pointer: T,
