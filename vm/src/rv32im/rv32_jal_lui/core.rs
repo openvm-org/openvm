@@ -228,7 +228,6 @@ where
         let x = core_cols.rd[1].as_canonical_u32();
         let y = core_cols.rd[2].as_canonical_u32();
         core_cols.xor_res = F::from_canonical_u32(x ^ y);
-        println!("{:?}", core_cols);
     }
 
     fn air(&self) -> &Self::Air {

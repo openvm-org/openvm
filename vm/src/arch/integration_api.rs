@@ -349,7 +349,11 @@ where
     }
 }
 
-// Trait to be implemented on some AdapterIntefraces so CoreAir can get from_pc from local_adapter
+/// Trait to be implemented on some AdapterIntefraces so CoreAir can get `from_pc` from a `local_adapter` row slice.
+///
+/// WARNING: this trait should not be implemented on general purpose interfaces.
+/// It should only be implemented on protected interfaces which will only be associated with adapter columns
+/// that satisfy the trait implementation.
 pub trait HasFromPc<T> {
     fn get_from_pc(local_adapter: &[T]) -> T;
 }

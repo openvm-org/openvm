@@ -55,7 +55,7 @@ pub struct Rv32RdWriteWriteRecord<F: Field> {
 #[derive(Debug, Clone)]
 pub struct Rv32RdWriteProcessedInstruction<T> {
     pub is_valid: T,
-    pub expected_opcode: T,
+    pub opcode: T,
     pub c: T,
 }
 
@@ -64,7 +64,7 @@ impl<T> From<(T, T, T)> for Rv32RdWriteProcessedInstruction<T> {
     fn from(tuple: (T, T, T)) -> Self {
         Rv32RdWriteProcessedInstruction {
             is_valid: tuple.0,
-            expected_opcode: tuple.1,
+            opcode: tuple.1,
             c: tuple.2,
         }
     }
@@ -135,7 +135,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
             .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(4));
         self.execution_bridge
             .execute(
-                ctx.instruction.expected_opcode,
+                ctx.instruction.opcode,
                 [
                     local_cols.a.into(),
                     AB::Expr::zero(),
@@ -209,7 +209,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapter<F> {
         adapter_cols.rd_aux_cols = self
             .aux_cols_factory
             .make_write_aux_cols(write_record.rd.clone());
-        println!("{:?}", adapter_cols);
     }
 
     fn air(&self) -> &Self::Air {

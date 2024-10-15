@@ -41,7 +41,7 @@ fn set_and_execute(
     tester.execute(
         chip,
         Instruction::from_isize(
-            opcode as usize + Rv32JalLuiOpcode::default_offset(),
+            opcode as usize,
             a as isize,
             0,
             imm as isize,
@@ -104,15 +104,14 @@ fn rand_jal_lui_test() {
         tester.memory_controller(),
     );
     let inner =
-        Rv32JalLuiCoreChip::new(xor_lookup_chip.clone(), Rv32JalLuiOpcode::default_offset());
+        Rv32JalLuiCoreChip::new(xor_lookup_chip.clone(), 0);
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_controller());
-    let num_tests: usize = 1;
+    let num_tests: usize = 100;
     for _ in 0..num_tests {
-        // set_and_execute(&mut tester, &mut chip, &mut rng, JAL);
+        set_and_execute(&mut tester, &mut chip, &mut rng, JAL);
         set_and_execute(&mut tester, &mut chip, &mut rng, LUI);
     }
 
-    // println!("{:?}", chip.clone().generate_trace());
     let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
