@@ -104,7 +104,6 @@ where
                 expected_result[j] += flag * result_part;
             }
         }
-        expected_opcode -= AB::Expr::from_canonical_usize(self.offset);
 
         for (x_j, expected_result_j) in izip!(cols.x, expected_result) {
             builder.assert_eq(x_j, expected_result_j);
@@ -127,7 +126,7 @@ where
             writes: [cols.x.map(Into::into)].into(),
             instruction: MinimalInstruction {
                 is_valid,
-                opcode: expected_opcode,
+                opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
             }
             .into(),
         }
