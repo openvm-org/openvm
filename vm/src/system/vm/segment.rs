@@ -561,7 +561,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let pc_usize = pc.as_canonical_u64() as usize;
 
             let (instruction, debug_info) = self.program_chip.get_instruction(pc_usize)?;
-            tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
+            tracing::trace!("pc: {pc_usize:#x} | time: {timestamp} | {:?}", instruction);
 
             let (dsl_instr, trace) = debug_info.map_or(
                 (None, None),
