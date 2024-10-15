@@ -1,122 +1,44 @@
-use std::{iter, sync::Arc};
-
 use afs_stark_backend::{
-    keygen::MultiStarkKeygenBuilder,
-    prover::{
-        types::{AirProofInput, AirProofRawInput, ProofInput, TraceCommitter},
-        MultiTraceStarkProver, USE_DEBUG_BUILDER,
-    },
-    verifier::{MultiTraceStarkVerifier, VerificationError},
+    engine::StarkEngine, prover::USE_DEBUG_BUILDER, verifier::VerificationError, Chip,
 };
-use ax_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
+use ax_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    dummy_airs::interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
+    engine::StarkFriEngine,
+};
 use p3_uni_stark::StarkGenericConfig;
-use p3_util::log2_ceil_usize;
-
-use crate::config;
 
 mod instrumented;
 pub mod prove;
-
-type Val = BabyBear;
 
 // Lookup table is cached, everything else (including counts) is committed together
 pub fn prove_and_verify_indexless_lookups(
     sender: Vec<(u32, Vec<u32>)>,
     receiver: Vec<(u32, Vec<u32>)>,
 ) -> Result<(), VerificationError> {
-    let sender_degree = sender.len();
-    let receiver_degree = receiver.len();
-    let [sender_log_degree, receiver_log_degree] =
-        [sender_degree, receiver_degree].map(log2_ceil_usize);
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
 
-    let perm = config::baby_bear_poseidon2::random_perm();
-    let config = config::baby_bear_poseidon2::default_config(
-        &perm,
-        sender_log_degree.max(receiver_log_degree),
-    );
-
-    let sender_air = DummyInteractionAir::new(sender[0].1.len(), true, 0);
-    let receiver_air = DummyInteractionAir::new(receiver[0].1.len(), false, 0).partition();
-
-    // Single row major matrix for |count|fields[..]|
-    let sender_trace = RowMajorMatrix::new(
-        sender
-            .into_iter()
-            .flat_map(|(count, fields)| {
-                assert_eq!(fields.len(), sender_air.field_width());
-                iter::once(count).chain(fields)
-            })
-            .map(Val::from_wrapped_u32)
-            .collect(),
-        sender_air.field_width() + 1,
-    );
-    let (recv_count, recv_fields): (Vec<_>, Vec<_>) = receiver.into_iter().unzip();
-    let recv_count_trace = RowMajorMatrix::new(
-        recv_count.into_iter().map(Val::from_wrapped_u32).collect(),
-        1,
-    );
-    let recv_fields_trace = RowMajorMatrix::new(
-        recv_fields
-            .into_iter()
-            .flat_map(|fields| {
-                assert_eq!(fields.len(), receiver_air.field_width());
-                fields
-            })
-            .map(Val::from_wrapped_u32)
-            .collect(),
-        receiver_air.field_width(),
+    let mut sender_chip = DummyInteractionChip::new_without_partition(sender[0].1.len(), true, 0);
+    let mut receiver_chip = DummyInteractionChip::new_with_partition(
+        engine.config().pcs(),
+        receiver[0].1.len(),
+        false,
+        0,
     );
     {
-        let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
-        let receiver_air_id = keygen_builder.add_air(Arc::new(receiver_air));
-        // Auto-adds sender matrix
-        let sender_air_id = keygen_builder.add_air(Arc::new(sender_air));
-        let pk = keygen_builder.generate_pk();
-        let committer = TraceCommitter::new(config.pcs());
-        let cached_trace_data = committer.commit(vec![recv_fields_trace.clone()]);
-        let proof_input = ProofInput {
-            per_air: vec![
-                (
-                    receiver_air_id,
-                    AirProofInput {
-                        air: Arc::new(receiver_air),
-                        cached_mains_pdata: vec![cached_trace_data],
-                        raw: AirProofRawInput {
-                            cached_mains: vec![Arc::new(recv_fields_trace)],
-                            common_main: Some(recv_count_trace),
-                            public_values: vec![],
-                        },
-                    },
-                ),
-                (
-                    sender_air_id,
-                    AirProofInput {
-                        air: Arc::new(sender_air),
-                        cached_mains_pdata: vec![],
-                        raw: AirProofRawInput {
-                            cached_mains: vec![],
-                            common_main: Some(sender_trace),
-                            public_values: vec![],
-                        },
-                    },
-                ),
-            ],
-        };
-
-        let prover = MultiTraceStarkProver::new(&config);
-
-        let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
-        let proof = prover.prove(&mut challenger, &pk, proof_input);
-
-        // Verify the proof:
-        // Start from clean challenger
-        let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
-        let verifier = MultiTraceStarkVerifier::new(prover.config);
-        verifier.verify(&mut challenger, &pk.get_vk(), &proof)
+        let (count, fields): (Vec<_>, Vec<_>) = sender.into_iter().unzip();
+        sender_chip.load_data(DummyInteractionData { count, fields });
     }
+    {
+        let (count, fields): (Vec<_>, Vec<_>) = receiver.into_iter().unzip();
+        receiver_chip.load_data(DummyInteractionData { count, fields });
+    }
+    engine
+        .run_test(vec![
+            receiver_chip.generate_air_proof_input(),
+            sender_chip.generate_air_proof_input(),
+        ])
+        .map(|_| ())
 }
 
 /// tests for cached_lookup

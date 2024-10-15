@@ -4,7 +4,7 @@ use afs_primitives::{
     sum::SumChip,
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use afs_stark_backend::{prover::types::AirProofInput, utils::disable_debug_builder};
+use afs_stark_backend::{prover::types::AirProofInput, utils::disable_debug_builder, Chip};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -18,10 +18,10 @@ use ax_sdk::{
         },
     },
     engine::{ProofInputForTest, StarkFriEngine},
-    utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
+    utils::to_field_vec,
 };
-use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_field::PrimeField32;
+use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use stark_vm::{sdk::gen_vm_program_test_proof_input, system::vm::config::VmConfig};
 
@@ -36,15 +36,9 @@ where
 {
     setup_tracing();
 
-    let fib_air = Arc::new(FibonacciAir {});
-    let trace = generate_fib_trace_rows::<Val<SC>>(n);
-    let pvs = vec![
-        Val::<SC>::from_canonical_u32(0),
-        Val::<SC>::from_canonical_u32(1),
-        trace.get(n - 1, 1),
-    ];
+    let fib_chip = FibonacciChip::new(0, 1, n);
     ProofInputForTest {
-        per_air: vec![AirProofInput::simple(fib_air, trace, pvs)],
+        per_air: vec![fib_chip.generate_air_proof_input()],
     }
 }
 

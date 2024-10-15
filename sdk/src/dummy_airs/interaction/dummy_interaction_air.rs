@@ -120,7 +120,7 @@ pub struct DummyInteractionChip<'a, SC: StarkGenericConfig> {
     trace_committer: Option<TraceCommitter<'a, SC>>,
     // common_main: Option<RowMajorMatrix<Val<SC>>>,
     data: Option<DummyInteractionData>,
-    air: DummyInteractionAir,
+    pub air: DummyInteractionAir,
 }
 
 #[derive(Debug, Clone)]
