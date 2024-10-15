@@ -153,10 +153,6 @@ impl<F: Field> BaseAir<F> for FieldExprAir {
     }
 }
 
-type Vecs<T> = Vec<Vec<T>>;
-// is_valid, inputs, vars, q_limbs, carry_limbs, flags
-type AllCols<T> = (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>, Vec<T>);
-
 impl<AB: InteractionBuilder> Air<AB> for FieldExprAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -196,12 +192,28 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExprAir {
     }
 }
 
-impl AirConfig for FieldExprAir {
+type Vecs<T> = Vec<Vec<T>>;
+// is_valid, inputs, vars, q_limbs, carry_limbs, flags
+type AllCols<T> = (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>, Vec<T>);
+
+pub struct FieldExprChip {
+    pub air: FieldExprAir,
+}
+
+impl Deref for FieldExprChip {
+    type Target = FieldExprAir;
+
+    fn deref(&self) -> &FieldExprAir {
+        &self.air
+    }
+}
+
+impl AirConfig for FieldExprChip {
     // No column struct.
     type Cols<T> = Vec<T>;
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprAir {
+impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
     type LocalInput = (Vec<BigUint>, Arc<VariableRangeCheckerChip>, Vec<bool>);
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
