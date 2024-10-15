@@ -4,7 +4,7 @@ use afs_primitives::{
     sum::SumChip,
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use afs_stark_backend::utils::{disable_debug_builder, AirInfo};
+use afs_stark_backend::{prover::types::AirProofInput, utils::disable_debug_builder};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -17,20 +17,20 @@ use ax_sdk::{
             DummyInteractionAir, DummyInteractionChip, DummyInteractionData,
         },
     },
-    engine::{StarkForTest, StarkFriEngine},
+    engine::{ProofInputForTest, StarkFriEngine},
     utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
 };
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
-use stark_vm::{sdk::gen_vm_program_stark_for_test, system::vm::config::VmConfig};
+use stark_vm::{sdk::gen_vm_program_test_proof_input, system::vm::config::VmConfig};
 
 use crate::{
     hints::Hintable, stark::VerifierProgram, testing_utils::inner::run_recursive_test,
     types::new_from_inner_multi_vk,
 };
 
-pub fn fibonacci_stark_for_test<SC: StarkGenericConfig>(n: usize) -> StarkForTest<SC>
+pub fn fibonacci_test_proof_input<SC: StarkGenericConfig>(n: usize) -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
 {
@@ -43,12 +43,12 @@ where
         Val::<SC>::from_canonical_u32(1),
         trace.get(n - 1, 1),
     ];
-    StarkForTest {
-        air_infos: vec![AirInfo::simple(fib_air, trace, pvs)],
+    ProofInputForTest {
+        per_air: vec![AirProofInput::simple(fib_air, trace, pvs)],
     }
 }
 
-pub fn interaction_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC>
+pub fn interaction_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
 {
@@ -98,22 +98,23 @@ where
     let receiver_air = Arc::new(receiver_air);
     let range_checker_air = Arc::new(sum_chip.range_checker.air);
 
-    let range_checker_air_info = AirInfo::simple_no_pis(range_checker_air, range_checker_trace);
-    let sum_air_info = AirInfo::simple_no_pis(sum_air, sum_trace);
-    let sender_air_info = AirInfo::simple_no_pis(sender_air, sender_trace);
-    let receiver_air_info = AirInfo::simple_no_pis(receiver_air, receiver_trace);
+    let range_checker_air_proof_input =
+        AirProofInput::simple_no_pis(range_checker_air, range_checker_trace);
+    let sum_air_proof_input = AirProofInput::simple_no_pis(sum_air, sum_trace);
+    let sender_air_proof_input = AirProofInput::simple_no_pis(sender_air, sender_trace);
+    let receiver_air_proof_input = AirProofInput::simple_no_pis(receiver_air, receiver_trace);
 
-    StarkForTest {
-        air_infos: vec![
-            range_checker_air_info,
-            sum_air_info,
-            sender_air_info,
-            receiver_air_info,
+    ProofInputForTest {
+        per_air: vec![
+            range_checker_air_proof_input,
+            sum_air_proof_input,
+            sender_air_proof_input,
+            receiver_air_proof_input,
         ],
     }
 }
 
-pub fn unordered_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC>
+pub fn unordered_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
 {
@@ -131,11 +132,12 @@ where
         receiver_air.field_width() + 1,
     );
 
-    let sender_air_info = AirInfo::simple_no_pis(Arc::new(sender_air), sender_trace);
-    let receiver_air_info = AirInfo::simple_no_pis(Arc::new(receiver_air), receiver_trace);
+    let sender_air_proof_input = AirProofInput::simple_no_pis(Arc::new(sender_air), sender_trace);
+    let receiver_air_proof_input =
+        AirProofInput::simple_no_pis(Arc::new(receiver_air), receiver_trace);
 
-    StarkForTest {
-        air_infos: vec![sender_air_info, receiver_air_info],
+    ProofInputForTest {
+        per_air: vec![sender_air_proof_input, receiver_air_proof_input],
     }
 }
 
@@ -144,7 +146,7 @@ fn test_fibonacci_small() {
     setup_tracing();
 
     run_recursive_test(
-        fibonacci_stark_for_test::<BabyBearPoseidon2Config>(1 << 5),
+        fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 5),
         standard_fri_params_with_100_bits_conjectured_security(3),
     )
 }
@@ -155,7 +157,7 @@ fn test_fibonacci() {
 
     // test lde = 27
     run_recursive_test(
-        fibonacci_stark_for_test::<BabyBearPoseidon2Config>(1 << 24),
+        fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 24),
         FriParameters {
             log_blowup: 3,
             num_queries: 2,
@@ -169,7 +171,7 @@ fn test_interactions() {
     setup_tracing();
 
     run_recursive_test(
-        interaction_stark_for_test::<BabyBearPoseidon2Config>(),
+        interaction_test_proof_input::<BabyBearPoseidon2Config>(),
         standard_fri_params_with_100_bits_conjectured_security(3),
     )
 }
@@ -179,7 +181,7 @@ fn test_unordered() {
     setup_tracing();
 
     run_recursive_test(
-        unordered_stark_for_test::<BabyBearPoseidon2Config>(),
+        unordered_test_proof_input::<BabyBearPoseidon2Config>(),
         standard_fri_params_with_100_bits_conjectured_security(3),
     )
 }
@@ -241,7 +243,7 @@ fn test_optional_air() {
             .verify(&mut challenger, &pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
-        gen_vm_program_stark_for_test::<BabyBearPoseidon2Config>(
+        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config>(
             program.clone(),
             proof.write(),
             vm_config.clone(),
@@ -273,7 +275,7 @@ fn test_optional_air() {
             .verify(&mut challenger, &pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
-        gen_vm_program_stark_for_test::<BabyBearPoseidon2Config>(
+        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config>(
             program.clone(),
             proof.write(),
             vm_config.clone(),
@@ -300,7 +302,7 @@ fn test_optional_air() {
             .is_err());
         // The VM program should panic when the proof cannot be verified.
         let unwind_res = catch_unwind(|| {
-            gen_vm_program_stark_for_test::<BabyBearPoseidon2Config>(
+            gen_vm_program_test_proof_input::<BabyBearPoseidon2Config>(
                 program.clone(),
                 proof.write(),
                 vm_config.clone(),

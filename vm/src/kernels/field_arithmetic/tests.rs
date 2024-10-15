@@ -103,7 +103,7 @@ fn field_arithmetic_air_test() {
     // negative test pranking each IO value
     for height in 0..num_ops {
         // TODO: better way to modify existing traces in tester
-        let arith_trace = &mut tester.air_infos[2].common_trace;
+        let arith_trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
         let old_trace = arith_trace.clone();
         for width in 0..FieldArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
@@ -117,7 +117,7 @@ fn field_arithmetic_air_test() {
             "Expected constraint to fail"
         );
 
-        tester.air_infos[2].common_trace = old_trace;
+        tester.air_proof_inputs[2].raw.common_main = Some(old_trace);
     }
 }
 

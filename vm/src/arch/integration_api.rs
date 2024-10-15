@@ -272,11 +272,11 @@ where
     Val<SC>: PrimeField32,
     A: VmAdapterChip<Val<SC>>,
     C: VmCoreChip<Val<SC>, A::Interface>,
-    A::Air: 'static,
+    A::Air: Send + Sync + 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
     A::Air: for<'a> VmAdapterAir<DebugConstraintBuilder<'a, SC>>,
-    C::Air: 'static,
+    C::Air: Send + Sync + 'static,
     C::Air: VmCoreAir<
         SymbolicRapBuilder<Val<SC>>,
         <A::Air as VmAdapterAir<SymbolicRapBuilder<Val<SC>>>>::Interface,

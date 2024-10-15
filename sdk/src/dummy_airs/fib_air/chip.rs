@@ -1,6 +1,10 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{prover::types::AirProofInput, rap::AnyRap, Chip};
+use afs_stark_backend::{
+    prover::types::{AirProofInput, AirProofRawInput},
+    rap::AnyRap,
+    Chip,
+};
 use p3_field::{AbstractField, PrimeField32};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
@@ -33,12 +37,15 @@ where
     fn generate_air_proof_input(&self) -> AirProofInput<SC> {
         AirProofInput {
             air: self.air(),
-            cached_mains: vec![],
-            common_main: Some(generate_trace_rows::<Val<SC>>(self.a, self.b, self.n)),
-            public_values: [self.a, self.b, get_fib_number(self.n)]
-                .into_iter()
-                .map(Val::<SC>::from_canonical_u32)
-                .collect(),
+            cached_mains_pdata: vec![],
+            raw: AirProofRawInput {
+                cached_mains: vec![],
+                common_main: Some(generate_trace_rows::<Val<SC>>(self.a, self.b, self.n)),
+                public_values: [self.a, self.b, get_fib_number(self.n)]
+                    .into_iter()
+                    .map(Val::<SC>::from_canonical_u32)
+                    .collect(),
+            },
         }
     }
 }

@@ -6,7 +6,7 @@ use afs_stark_backend::{
 };
 use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    engine::{StarkForTest, StarkFriEngine, VerificationDataWithFriParams},
+    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
 };
 use inner::build_verification_program;
 use p3_baby_bear::BabyBear;
@@ -65,13 +65,15 @@ pub mod inner {
     ///
     /// This is a convenience function with default configs for testing purposes only.
     pub fn run_recursive_test(
-        stark_for_test: StarkForTest<BabyBearPoseidon2Config>,
+        test_proof_input: ProofInputForTest<BabyBearPoseidon2Config>,
         fri_params: FriParameters,
     ) {
-        let StarkForTest { air_infos } = stark_for_test;
+        let ProofInputForTest {
+            per_air: air_proof_inputs,
+        } = test_proof_input;
         let vparams =
             <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_test_fast(
-                air_infos,
+                air_proof_inputs,
             )
             .unwrap();
 

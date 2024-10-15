@@ -11,13 +11,11 @@ use crate::{
         types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
     },
-    parizip,
     prover::{
-        types::{AirProofInput, CommittedTraceData, Proof, ProofInput, TraceCommitter},
+        types::{AirProofInput, Proof, ProofInput, TraceCommitter},
         MultiTraceStarkProver,
     },
     rap::AnyRap,
-    utils::AirInfo,
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
 
@@ -67,14 +65,14 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        self.run_test_impl(&AirInfo::multiple_simple(chips, traces, public_values))
+        self.run_test_impl(AirProofInput::multiple_simple(chips, traces, public_values))
     }
 
     /// Runs a single end-to-end test for a given set of chips and traces partitions.
     /// This includes proving/verifying key generation, creating a proof, and verifying the proof.
     fn run_test_impl(
         &self,
-        air_infos: &[AirInfo<SC>],
+        air_proof_inputs: Vec<AirProofInput<SC>>,
     ) -> Result<VerificationData<SC>, VerificationError>
     where
         SC::Pcs: Sync,
@@ -85,37 +83,46 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         PcsProof<SC>: Send + Sync,
     {
         let mut keygen_builder = self.keygen_builder();
-        let air_ids = self.set_up_keygen_builder(&mut keygen_builder, air_infos);
+        let air_ids = self.set_up_keygen_builder(&mut keygen_builder, &air_proof_inputs);
+        let proof_input = ProofInput {
+            per_air: izip!(air_ids, air_proof_inputs).collect(),
+        };
         let pk = keygen_builder.generate_pk();
         let vk = pk.get_vk();
-        let proof = self.prove(&pk, air_infos, air_ids);
+        let proof = self.prove(&pk, proof_input);
         self.verify(&vk, &proof)?;
         Ok(VerificationData { vk, proof })
     }
 
     /// Add AIRs and get AIR IDs
-    fn set_up_keygen_builder<'a>(
+    fn set_up_keygen_builder(
         &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
-        air_infos: &'a [AirInfo<SC>],
+        keygen_builder: &mut MultiStarkKeygenBuilder<'_, SC>,
+        air_proof_inputs: &[AirProofInput<SC>],
     ) -> Vec<usize> {
-        air_infos
+        air_proof_inputs
             .iter()
-            .map(|air_info| {
-                let air = air_info.air.clone();
-                assert_eq!(air_info.cached_traces.len(), air.cached_main_widths().len());
-                assert_eq!(air_info.common_trace.width, air.common_main_width());
+            .map(|air_proof_input| {
+                let air = air_proof_input.air.clone();
+                assert_eq!(
+                    air_proof_input.raw.cached_mains.len(),
+                    air.cached_main_widths().len()
+                );
+                let common_main_width = air.common_main_width();
+                if common_main_width == 0 {
+                    assert!(air_proof_input.raw.common_main.is_none());
+                } else {
+                    assert_eq!(
+                        air_proof_input.raw.common_main.as_ref().unwrap().width,
+                        air.common_main_width()
+                    );
+                }
                 keygen_builder.add_air(air)
             })
             .collect()
     }
 
-    fn prove(
-        &self,
-        pk: &MultiStarkProvingKey<SC>,
-        air_infos: &[AirInfo<SC>],
-        air_ids: Vec<usize>,
-    ) -> Proof<SC>
+    fn prove(&self, pk: &MultiStarkProvingKey<SC>, proof_input: ProofInput<SC>) -> Proof<SC>
     where
         SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
@@ -127,24 +134,27 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         let prover = self.prover();
         let committer = TraceCommitter::new(prover.pcs());
 
-        // Commit to the cached traces
-        let air_proof_inputs = izip!(air_ids, air_infos)
-            .map(|(air_id, air_info)| {
-                let cached_mains = parizip!(air_info.cached_traces.clone())
-                    .map(|trace| CommittedTraceData {
-                        raw_data: trace.clone(),
-                        prover_data: committer.commit(vec![trace]),
-                    })
-                    .collect();
-                (
-                    air_id,
-                    AirProofInput {
-                        air: air_info.air.clone(),
-                        cached_mains,
-                        common_main: Some(air_info.common_trace.clone()),
-                        public_values: air_info.public_values.clone(),
-                    },
-                )
+        let air_proof_inputs = proof_input
+            .per_air
+            .into_par_iter()
+            .map(|(air_id, mut air_proof_input)| {
+                // Commit cached traces if they are not provided
+                if air_proof_input.cached_mains_pdata.is_empty()
+                    && !air_proof_input.raw.cached_mains.is_empty()
+                {
+                    air_proof_input.cached_mains_pdata = air_proof_input
+                        .raw
+                        .cached_mains
+                        .par_iter()
+                        .map(|trace| committer.commit(vec![trace.as_ref().clone()]))
+                        .collect();
+                } else {
+                    assert_eq!(
+                        air_proof_input.cached_mains_pdata.len(),
+                        air_proof_input.raw.cached_mains.len()
+                    );
+                }
+                (air_id, air_proof_input)
             })
             .collect();
         let proof_input = ProofInput {

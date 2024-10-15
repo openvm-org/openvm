@@ -8,7 +8,7 @@ use std::{
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkVerifyingKey,
-    prover::types::{AirProofInput, CommittedTraceData, Proof, ProofInput},
+    prover::types::{AirProofInput, AirProofRawInput, Proof, ProofInput},
     utils::disable_debug_builder,
 };
 use ax_sdk::{
@@ -95,22 +95,24 @@ where
         // Receiver fields table is cached
         let cached_trace_data = committer.commit(vec![part_fields_trace.clone()]);
         benchmarks.cached_commit_time = start.elapsed().as_micros();
-        let cached_mains = vec![CommittedTraceData {
-            raw_data: part_fields_trace,
-            prover_data: cached_trace_data,
-        }];
         AirProofInput {
             air: air.clone(),
-            cached_mains,
-            common_main: Some(part_count_trace),
-            public_values: vec![],
+            cached_mains_pdata: vec![cached_trace_data],
+            raw: AirProofRawInput {
+                cached_mains: vec![Arc::new(part_fields_trace)],
+                common_main: Some(part_count_trace),
+                public_values: vec![],
+            },
         }
     } else {
         AirProofInput {
             air: air.clone(),
-            cached_mains: vec![],
-            common_main: Some(nopart_trace),
-            public_values: vec![],
+            cached_mains_pdata: vec![],
+            raw: AirProofRawInput {
+                cached_mains: vec![],
+                common_main: Some(nopart_trace),
+                public_values: vec![],
+            },
         }
     };
     let proof_input = ProofInput {

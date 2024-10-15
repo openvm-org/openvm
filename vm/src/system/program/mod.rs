@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, fmt::Display, sync::Arc};
 
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
-    utils::AirInfo,
+    prover::{helper::AirProofInputTestHelper, types::AirProofInput},
 };
 use backtrace::Backtrace;
 use bridge::ProgramBus;
@@ -337,7 +337,7 @@ impl<F: PrimeField64> ProgramChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirInfo<SC>
+impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirProofInput<SC>
 where
     Val<SC>: PrimeField64,
 {
@@ -345,6 +345,6 @@ where
         let air = program_chip.air.clone();
         let cached_trace = program_chip.generate_cached_trace();
         let common_trace = program_chip.generate_trace();
-        AirInfo::no_pis(Arc::new(air), vec![cached_trace], common_trace)
+        AirProofInput::cached_traces_no_pis(Arc::new(air), vec![cached_trace], common_trace)
     }
 }

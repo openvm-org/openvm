@@ -3,7 +3,7 @@ use std::{iter, sync::Arc};
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{
-        types::{AirProofInput, CommittedTraceData, ProofInput, TraceCommitter},
+        types::{AirProofInput, AirProofRawInput, ProofInput, TraceCommitter},
         MultiTraceStarkProver, USE_DEBUG_BUILDER,
     },
     verifier::{MultiTraceStarkVerifier, VerificationError},
@@ -83,21 +83,24 @@ pub fn prove_and_verify_indexless_lookups(
                     receiver_air_id,
                     AirProofInput {
                         air: Arc::new(receiver_air),
-                        cached_mains: vec![CommittedTraceData {
-                            raw_data: recv_fields_trace,
-                            prover_data: cached_trace_data,
-                        }],
-                        common_main: Some(recv_count_trace),
-                        public_values: vec![],
+                        cached_mains_pdata: vec![cached_trace_data],
+                        raw: AirProofRawInput {
+                            cached_mains: vec![Arc::new(recv_fields_trace)],
+                            common_main: Some(recv_count_trace),
+                            public_values: vec![],
+                        },
                     },
                 ),
                 (
                     sender_air_id,
                     AirProofInput {
                         air: Arc::new(sender_air),
-                        cached_mains: vec![],
-                        common_main: Some(sender_trace),
-                        public_values: vec![],
+                        cached_mains_pdata: vec![],
+                        raw: AirProofRawInput {
+                            cached_mains: vec![],
+                            common_main: Some(sender_trace),
+                            public_values: vec![],
+                        },
                     },
                 ),
             ],

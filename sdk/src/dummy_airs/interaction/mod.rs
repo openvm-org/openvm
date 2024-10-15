@@ -3,7 +3,7 @@ use std::sync::Arc;
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{
-        types::{AirProofInput, ProofInput},
+        types::{AirProofInput, AirProofRawInput, ProofInput},
         MultiTraceStarkProver,
     },
     rap::AnyRap,
@@ -42,9 +42,12 @@ pub fn verify_interactions(
                 air_id,
                 AirProofInput {
                     air,
-                    cached_mains: vec![],
-                    common_main: Some(trace),
-                    public_values: pvs,
+                    cached_mains_pdata: vec![],
+                    raw: AirProofRawInput {
+                        cached_mains: vec![],
+                        common_main: Some(trace),
+                        public_values: pvs,
+                    },
                 },
             )
         })

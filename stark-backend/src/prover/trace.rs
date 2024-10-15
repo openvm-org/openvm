@@ -17,10 +17,7 @@ use crate::{
     config::{Com, PcsProof, PcsProverData},
     interaction::trace::generate_permutation_trace,
     keygen::{types::StarkProvingKey, view::MultiStarkProvingKeyView},
-    prover::{
-        quotient::{helper::QuotientVkDataHelper, ProverQuotientData, QuotientCommitter},
-        types::CommittedTraceData,
-    },
+    prover::quotient::{helper::QuotientVkDataHelper, ProverQuotientData, QuotientCommitter},
     rap::AnyRap,
 };
 
@@ -64,7 +61,7 @@ pub(super) fn commit_quotient_traces<'a, SC: StarkGenericConfig>(
     raps: Vec<impl AsRef<dyn AnyRap<SC>>>,
     public_values_per_air: &[Vec<Val<SC>>],
     domain_per_air: Vec<Domain<SC>>,
-    cached_mains_per_air: &'a [Vec<CommittedTraceData<SC>>],
+    cached_mains_pdata_per_air: &'a [Vec<ProverTraceData<SC>>],
     common_main_prover_data: &'a ProverTraceData<SC>,
     perm_prover_data: &'a Option<ProverTraceData<SC>>,
     cumulative_sum_per_air: Vec<Option<SC::Challenge>>,
@@ -79,7 +76,7 @@ where
 {
     let trace_views = create_trace_view_per_air(
         domain_per_air,
-        cached_mains_per_air,
+        cached_mains_pdata_per_air,
         mpk,
         cumulative_sum_per_air,
         common_main_prover_data,
@@ -147,7 +144,7 @@ fn extract_cumulative_sums<SC: StarkGenericConfig>(
 
 fn create_trace_view_per_air<'a, SC: StarkGenericConfig>(
     domain_per_air: Vec<Domain<SC>>,
-    cached_mains_per_air: &'a [Vec<CommittedTraceData<SC>>],
+    cached_mains_pdata_per_air: &'a [Vec<ProverTraceData<SC>>],
     mpk: &'a MultiStarkProvingKeyView<SC>,
     cumulative_sum_per_air: Vec<Option<SC::Challenge>>,
     common_main_prover_data: &'a ProverTraceData<SC>,
@@ -157,19 +154,19 @@ fn create_trace_view_per_air<'a, SC: StarkGenericConfig>(
     let mut after_challenge_idx = 0;
     izip!(
         domain_per_air,
-        cached_mains_per_air,
+        cached_mains_pdata_per_air,
         &mpk.per_air,
         cumulative_sum_per_air,
     )
-    .map(|(domain, cached_mains, pk, cumulative_sum)| {
+    .map(|(domain, cached_mains_pdata, pk, cumulative_sum)| {
         // The AIR will be treated as the full RAP with virtual columns after this
         let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
             // TODO: currently assuming each chip has it's own preprocessed commitment
             CommittedSingleMatrixView::<SC>::new(p.data.as_ref(), 0)
         });
-        let mut partitioned_main: Vec<_> = cached_mains
+        let mut partitioned_main: Vec<_> = cached_mains_pdata
             .iter()
-            .map(|cm| CommittedSingleMatrixView::new(cm.prover_data.data.as_ref(), 0))
+            .map(|pdata| CommittedSingleMatrixView::new(pdata.data.as_ref(), 0))
             .collect();
         if pk.vk.has_common_main() {
             partitioned_main.push(CommittedSingleMatrixView::new(

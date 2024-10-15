@@ -1,6 +1,6 @@
 use std::{cmp::Reverse, sync::Arc};
 
-use afs_stark_backend::utils::AirInfo;
+use afs_stark_backend::prover::types::AirProofInput;
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use p3_matrix::Matrix;
@@ -96,7 +96,18 @@ pub(crate) fn read_params(k: u32) -> Arc<ParamsKZG<Bn256>> {
 /// static-verifier because a dynamic verifier should support any AIR order.
 /// This is related to an implementation detail of FieldMerkleTreeMMCS which is used in most configs.
 /// Reference: https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53
-pub fn sort_chips<SC: StarkGenericConfig>(mut air_infos: Vec<AirInfo<SC>>) -> Vec<AirInfo<SC>> {
-    air_infos.sort_by_key(|air_info| Reverse(air_info.common_trace.height()));
-    air_infos
+pub fn sort_chips<SC: StarkGenericConfig>(
+    mut air_proof_inputs: Vec<AirProofInput<SC>>,
+) -> Vec<AirProofInput<SC>> {
+    air_proof_inputs.sort_by_key(|air_proof_input| {
+        Reverse(
+            air_proof_input
+                .raw
+                .common_main
+                .as_ref()
+                .map(|trace| trace.height())
+                .unwrap_or(0),
+        )
+    });
+    air_proof_inputs
 }

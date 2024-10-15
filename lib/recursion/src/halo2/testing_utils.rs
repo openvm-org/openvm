@@ -4,7 +4,7 @@ use ax_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
-    engine::{StarkForTest, StarkFriEngine},
+    engine::{ProofInputForTest, StarkFriEngine},
 };
 use snark_verifier_sdk::Snark;
 
@@ -19,16 +19,16 @@ use crate::{
 };
 
 pub fn run_static_verifier_test(
-    stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>,
+    test_proof_input: ProofInputForTest<BabyBearPoseidon2OuterConfig>,
     fri_params: FriParameters,
 ) -> (Halo2VerifierCircuit, Snark) {
-    let stark_for_test = StarkForTest {
-        air_infos: sort_chips(stark_for_test.air_infos),
+    let test_proof_input = ProofInputForTest {
+        per_air: sort_chips(test_proof_input.per_air),
     };
     let info_span =
         tracing::info_span!("prove outer stark to verify", step = "outer_stark_prove").entered();
     let engine = BabyBearPoseidon2OuterEngine::new(fri_params);
-    let vparams = stark_for_test.run_test(&engine).unwrap();
+    let vparams = test_proof_input.run_test(&engine).unwrap();
 
     info_span.exit();
 
@@ -55,11 +55,11 @@ pub fn run_static_verifier_test(
 }
 
 pub fn run_evm_verifier_e2e_test(
-    stark_for_test: StarkForTest<BabyBearPoseidon2OuterConfig>,
+    test_proof_input: ProofInputForTest<BabyBearPoseidon2OuterConfig>,
     fri_params: Option<FriParameters>,
 ) {
     let (stark_verifier_circuit, static_verifier_snark) = run_static_verifier_test(
-        stark_for_test,
+        test_proof_input,
         fri_params.unwrap_or(standard_fri_params_with_100_bits_conjectured_security(3)),
     );
 

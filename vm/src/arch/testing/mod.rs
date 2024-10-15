@@ -2,7 +2,8 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
-    config::Val, engine::VerificationData, utils::AirInfo, verifier::VerificationError, Chip,
+    config::Val, engine::VerificationData, prover::types::AirProofInput,
+    verifier::VerificationError, Chip,
 };
 use ax_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
@@ -160,7 +161,7 @@ type SC = BabyBearPoseidon2Config;
 #[derive(Default)]
 pub struct VmChipTester {
     pub memory: Option<MemoryTester<Val<SC>>>,
-    pub air_infos: Vec<AirInfo<SC>>,
+    pub air_proof_inputs: Vec<AirProofInput<SC>>,
 }
 
 impl VmChipTester {
@@ -172,8 +173,8 @@ impl VmChipTester {
         if trace.height() > 0 {
             dbg!(air.name());
             dbg!(trace.width);
-            self.air_infos
-                .push(AirInfo::simple(air, trace, public_value));
+            self.air_proof_inputs
+                .push(AirProofInput::simple(air, trace, public_value));
         }
 
         self
@@ -196,7 +197,8 @@ impl VmChipTester {
 
                 for (pvs, air, trace) in izip!(public_values, airs, traces) {
                     if trace.height() > 0 {
-                        self.air_infos.push(AirInfo::simple(air, trace, pvs));
+                        self.air_proof_inputs
+                            .push(AirProofInput::simple(air, trace, pvs));
                     }
                 }
             }
@@ -210,7 +212,7 @@ impl VmChipTester {
         mut chip: C,
         trace: RowMajorMatrix<Val<SC>>,
     ) -> Self {
-        self.air_infos.push(AirInfo::simple(
+        self.air_proof_inputs.push(AirProofInput::simple(
             chip.air(),
             trace,
             chip.generate_public_values(),
@@ -223,9 +225,15 @@ impl VmChipTester {
     }
 
     fn max_trace_height(&self) -> usize {
-        self.air_infos
+        self.air_proof_inputs
             .iter()
-            .map(|air_info| air_info.common_trace.height())
+            .flat_map(|air_proof_input| {
+                air_proof_input
+                    .raw
+                    .common_main
+                    .as_ref()
+                    .map(|trace| trace.height())
+            })
             .max()
             .unwrap()
     }
@@ -236,6 +244,6 @@ impl VmChipTester {
         engine_provider: P,
     ) -> Result<VerificationData<SC>, VerificationError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
-        engine_provider(self.max_trace_height()).run_test_impl(&self.air_infos)
+        engine_provider(self.max_trace_height()).run_test_impl(self.air_proof_inputs.clone())
     }
 }

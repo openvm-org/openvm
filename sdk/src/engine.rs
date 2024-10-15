@@ -4,8 +4,8 @@ pub use afs_stark_backend::engine::StarkEngine;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::VerificationData,
+    prover::types::AirProofInput,
     rap::AnyRap,
-    utils::AirInfo,
     verifier::VerificationError,
 };
 use p3_matrix::dense::DenseMatrix;
@@ -24,14 +24,12 @@ pub struct VerificationDataWithFriParams<SC: StarkGenericConfig> {
     pub fri_params: FriParameters,
 }
 
-/// A struct that contains all the necessary data to:
-/// - generate proving and verifying keys for AIRs,
-/// - commit to trace matrices and generate STARK proofs
-pub struct StarkForTest<SC: StarkGenericConfig> {
-    pub air_infos: Vec<AirInfo<SC>>,
+/// `stark-backend::prover::types::ProofInput` without specifying AIR IDs.
+pub struct ProofInputForTest<SC: StarkGenericConfig> {
+    pub per_air: Vec<AirProofInput<SC>>,
 }
 
-impl<SC: StarkGenericConfig> StarkForTest<SC> {
+impl<SC: StarkGenericConfig> ProofInputForTest<SC> {
     pub fn run_test(
         self,
         engine: &impl StarkFriEngine<SC>,
@@ -44,7 +42,7 @@ impl<SC: StarkGenericConfig> StarkForTest<SC> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        engine.run_test(&self.air_infos)
+        engine.run_test(self.per_air)
     }
 }
 
@@ -62,27 +60,36 @@ where
     fn fri_params(&self) -> FriParameters;
     fn run_test(
         &self,
-        air_infos: &[AirInfo<SC>],
-    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        let data = <Self as StarkEngine<_>>::run_test_impl(self, air_infos)?;
+        air_proof_inputs: Vec<AirProofInput<SC>>,
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError>
+    where
+        AirProofInput<SC>: Send + Sync,
+    {
+        let data = <Self as StarkEngine<_>>::run_test_impl(self, air_proof_inputs)?;
         Ok(VerificationDataWithFriParams {
             data,
             fri_params: self.fri_params(),
         })
     }
     fn run_test_fast(
-        air_infos: Vec<AirInfo<SC>>,
-    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
+        air_proof_inputs: Vec<AirProofInput<SC>>,
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError>
+    where
+        AirProofInput<SC>: Send + Sync,
+    {
         let engine = Self::new(FriParameters::standard_fast());
-        engine.run_test(&air_infos)
+        engine.run_test(air_proof_inputs)
     }
     fn run_simple_test_impl(
         &self,
         chips: Vec<Arc<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: Vec<Vec<Val<SC>>>,
-    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        self.run_test(&AirInfo::multiple_simple(chips, traces, public_values))
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError>
+    where
+        AirProofInput<SC>: Send + Sync,
+    {
+        self.run_test(AirProofInput::multiple_simple(chips, traces, public_values))
     }
     fn run_simple_test_fast(
         chips: Vec<Arc<dyn AnyRap<SC>>>,

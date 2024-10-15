@@ -9,7 +9,7 @@ use std::{iter, sync::Arc};
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder,
     interaction::{InteractionBuilder, InteractionType},
-    prover::types::{AirProofInput, CommittedTraceData, TraceCommitter},
+    prover::types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
@@ -235,17 +235,23 @@ impl<'a, SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'a, SC> {
             let (common_main, cached_main) = self.generate_traces_with_partition(data);
             AirProofInput {
                 air: self.air(),
-                cached_mains: vec![cached_main],
-                common_main: Some(common_main),
-                public_values: vec![],
+                cached_mains_pdata: vec![cached_main.prover_data],
+                raw: AirProofRawInput {
+                    cached_mains: vec![Arc::new(cached_main.raw_data)],
+                    common_main: Some(common_main),
+                    public_values: vec![],
+                },
             }
         } else {
             let common_main = self.generate_traces_without_partition(data);
             AirProofInput {
                 air: self.air(),
-                cached_mains: vec![],
-                common_main: Some(common_main),
-                public_values: vec![],
+                cached_mains_pdata: vec![],
+                raw: AirProofRawInput {
+                    cached_mains: vec![],
+                    common_main: Some(common_main),
+                    public_values: vec![],
+                },
             }
         }
     }

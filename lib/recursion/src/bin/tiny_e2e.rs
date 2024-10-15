@@ -12,7 +12,7 @@ use ax_sdk::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
-    engine::{StarkForTest, StarkFriEngine},
+    engine::{ProofInputForTest, StarkFriEngine},
 };
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
@@ -20,7 +20,7 @@ use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
 use stark_vm::{
     arch::ExecutorName,
-    sdk::gen_vm_program_stark_for_test,
+    sdk::gen_vm_program_test_proof_input,
     system::{program::Program, vm::config::VmConfig},
 };
 use tracing::info_span;
@@ -46,25 +46,25 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     builder.compile_isa()
 }
 
-pub(crate) fn fibonacci_program_stark_for_test<SC: StarkGenericConfig>(
+pub(crate) fn fibonacci_program_test_proof_input<SC: StarkGenericConfig>(
     a: u32,
     b: u32,
     n: u32,
-) -> StarkForTest<SC>
+) -> ProofInputForTest<SC>
 where
     Domain<SC>: PolynomialSpace<Val = BabyBear>,
 {
     let fib_program = fibonacci_program(a, b, n);
 
     let vm_config = VmConfig::core().add_default_executor(ExecutorName::FieldArithmetic);
-    gen_vm_program_stark_for_test(fib_program, vec![], vm_config)
+    gen_vm_program_test_proof_input(fib_program, vec![], vm_config)
 }
 
 fn main() {
     run_with_metric_collection("OUTPUT_PATH", || {
         let span =
             info_span!("Fibonacci Program Inner", group = "fibonacci_program_inner").entered();
-        let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
+        let fib_program_stark = fibonacci_program_test_proof_input(0, 1, 32);
         let engine =
             BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
         let vdata = fib_program_stark.run_test(&engine).unwrap();
@@ -77,7 +77,7 @@ fn main() {
         #[cfg(feature = "static-verifier")]
         info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
             let (program, witness_stream) = build_verification_program(vdata, compiler_options);
-            let inner_verifier_sft = gen_vm_program_stark_for_test(
+            let inner_verifier_sft = gen_vm_program_test_proof_input(
                 program,
                 witness_stream,
                 VmConfig {

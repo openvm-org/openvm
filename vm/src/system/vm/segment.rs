@@ -15,7 +15,7 @@ use afs_primitives::{
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    utils::AirInfo,
+    prover::types::AirProofInput,
     Chip,
 };
 use backtrace::Backtrace;
@@ -99,15 +99,21 @@ pub struct ExecutionSegment<F: PrimeField32> {
 }
 
 pub struct SegmentResult<SC: StarkGenericConfig> {
-    pub air_infos: Vec<AirInfo<SC>>,
+    pub air_proof_inputs: Vec<AirProofInput<SC>>,
     pub metrics: VmMetrics,
 }
 
 impl<SC: StarkGenericConfig> SegmentResult<SC> {
     pub fn max_log_degree(&self) -> usize {
-        self.air_infos
+        self.air_proof_inputs
             .iter()
-            .map(|air_info| air_info.common_trace.height())
+            .flat_map(|air_proof_input| {
+                air_proof_input
+                    .raw
+                    .common_main
+                    .as_ref()
+                    .map(|trace| trace.height())
+            })
             .map(log2_strict_usize)
             .max()
             .unwrap()
@@ -684,7 +690,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         drop(self.persistent_memory_hasher);
 
         let mut result = SegmentResult {
-            air_infos: vec![self.program_chip.into()],
+            air_proof_inputs: vec![self.program_chip.into()],
             metrics: self.collected_metrics,
         };
 
@@ -696,8 +702,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
             if height != 0 {
                 result
-                    .air_infos
-                    .push(AirInfo::simple(air, trace, public_values));
+                    .air_proof_inputs
+                    .push(AirProofInput::simple(air, trace, public_values));
             }
         }
         // System chips required by architecture: memory and connector
@@ -716,19 +722,21 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             for (height, air, public_values, trace) in izip!(heights, airs, public_values, traces) {
                 if height != 0 {
                     result
-                        .air_infos
-                        .push(AirInfo::simple(air, trace, public_values));
+                        .air_proof_inputs
+                        .push(AirProofInput::simple(air, trace, public_values));
                 }
             }
             // range checker
             let chip = range_checker;
             let air = chip.air();
             let trace = chip.generate_trace();
-            result.air_infos.push(AirInfo::simple(air, trace, vec![]));
+            result
+                .air_proof_inputs
+                .push(AirProofInput::simple(air, trace, vec![]));
         }
 
         let trace = self.connector_chip.generate_trace();
-        result.air_infos.push(AirInfo::simple_no_pis(
+        result.air_proof_inputs.push(AirProofInput::simple_no_pis(
             Arc::new(self.connector_chip.air),
             trace,
         ));
