@@ -26,7 +26,7 @@ use crate::{
     },
     kernels::{
         core::CoreChip, field_arithmetic::FieldArithmeticChip,
-        field_extension::FieldExtensionArithmeticChip,
+        new_field_extension::NewFieldExtensionChip,
     },
     old::{alu::ArithmeticLogicChip, shift::ShiftChip},
     rv32im::{
@@ -121,7 +121,7 @@ impl<F, C: VmChip<F>> VmChip<F> for Rc<RefCell<C>> {
 pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
-    FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
+    FieldExtension(Rc<RefCell<NewFieldExtensionChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
@@ -152,7 +152,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
 pub enum AxVmChip<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
-    FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
+    FieldExtension(Rc<RefCell<NewFieldExtensionChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
