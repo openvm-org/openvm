@@ -176,6 +176,10 @@ where
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let NewFieldArithmeticRecord { opcode, a, b, c } = record;
         let row_slice: &mut NewFieldArithmeticCols<_> = row_slice.borrow_mut();
+        row_slice.a = a;
+        row_slice.b = b;
+        row_slice.c = c;
+
         row_slice.is_add = F::from_bool(opcode == FieldArithmeticOpcode::ADD);
         row_slice.is_sub = F::from_bool(opcode == FieldArithmeticOpcode::SUB);
         row_slice.is_mul = F::from_bool(opcode == FieldArithmeticOpcode::MUL);
