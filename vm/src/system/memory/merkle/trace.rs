@@ -1,25 +1,23 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::system::memory::{
-    expand::{columns::MemoryMerkleCols, MemoryMerkleChip},
     manager::dimensions::MemoryDimensions,
+    merkle::{MemoryMerkleChip, MemoryMerkleCols},
     tree::{
         HasherChip,
         MemoryNode::{self, NonLeaf},
     },
+    Equipartition,
 };
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     pub fn generate_trace_and_final_tree(
         &mut self,
         initial_tree: &MemoryNode<CHUNK, F>,
-        final_memory: &HashMap<(F, F), F>,
+        final_memory: &Equipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> (RowMajorMatrix<F>, MemoryNode<CHUNK, F>) {
         // there needs to be a touched node with `height_section` = 0
@@ -63,7 +61,7 @@ fn unused_row<const CHUNK: usize, F: PrimeField32>() -> MemoryMerkleCols<CHUNK, 
 
 struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     memory_dimensions: MemoryDimensions,
-    final_memory: &'a HashMap<(F, F), F>,
+    final_memory: &'a Equipartition<F, CHUNK>,
     touched_nodes: &'a HashSet<(usize, usize, usize)>,
     trace_rows: &'a mut Vec<MemoryMerkleCols<CHUNK, F>>,
 }
@@ -82,15 +80,11 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 (as_label >> self.memory_dimensions.address_height)
                     + self.memory_dimensions.as_offset,
             );
-            MemoryNode::new_leaf(std::array::from_fn(|i| {
-                *self
-                    .final_memory
-                    .get(&(
-                        address_space,
-                        F::from_canonical_usize((CHUNK * address_label) + i),
-                    ))
-                    .unwrap_or(&F::zero())
-            }))
+            let leaf_values = *self
+                .final_memory
+                .get(&(address_space, address_label))
+                .unwrap_or(&[F::zero(); CHUNK]);
+            MemoryNode::new_leaf(leaf_values)
         } else if let NonLeaf {
             left: initial_left_node,
             right: initial_right_node,

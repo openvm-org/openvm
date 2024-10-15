@@ -7,7 +7,7 @@ use afs_primitives::{
         utils::*,
         OverflowInt,
     },
-    sub_chip::{AirConfig, LocalTraceInstructions},
+    sub_chip::{AirConfig, LocalTraceInstructions, SubAir},
     var_range::VariableRangeCheckerChip,
 };
 use afs_stark_backend::{
@@ -103,17 +103,37 @@ impl ExprBuilder {
         self.num_flags += 1;
         self.num_flags - 1
     }
+
+    // Below functions are used when adding variables and constraints manually, need to be careful.
+    // Number of variables, constraints and computes should be consistent,
+    // so there should be same number of calls to the new_var, add_constraint and add_compute.
+    pub fn new_var(&mut self) -> SymbolicExpr {
+        self.num_variables += 1;
+        SymbolicExpr::Var(self.num_variables - 1)
+    }
+
+    pub fn add_constraint(&mut self, constraint: SymbolicExpr) {
+        let (q_limbs, carry_limbs) =
+            constraint.constraint_limbs(&self.prime, self.limb_bits, self.num_limbs);
+        self.constraints.push(constraint);
+        self.q_limbs.push(q_limbs);
+        self.carry_limbs.push(carry_limbs);
+    }
+
+    pub fn add_compute(&mut self, compute: SymbolicExpr) {
+        self.computes.push(compute);
+    }
 }
 
 #[derive(Clone)]
-pub struct FieldExprChip {
+pub struct FieldExpr {
     pub builder: ExprBuilder,
 
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
-impl Deref for FieldExprChip {
+impl Deref for FieldExpr {
     type Target = ExprBuilder;
 
     fn deref(&self) -> &ExprBuilder {
@@ -121,9 +141,9 @@ impl Deref for FieldExprChip {
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for FieldExprChip {}
-impl<F: Field> PartitionedBaseAir<F> for FieldExprChip {}
-impl<F: Field> BaseAir<F> for FieldExprChip {
+impl<F: Field> BaseAirWithPublicValues<F> for FieldExpr {}
+impl<F: Field> PartitionedBaseAir<F> for FieldExpr {}
+impl<F: Field> BaseAir<F> for FieldExpr {
     fn width(&self) -> usize {
         self.num_limbs * (self.builder.num_input + self.builder.num_variables)
             + self.builder.q_limbs.iter().sum::<usize>()
@@ -133,15 +153,21 @@ impl<F: Field> BaseAir<F> for FieldExprChip {
     }
 }
 
-type Vecs<T> = Vec<Vec<T>>;
-// is_valid, inputs, vars, q_limbs, carry_limbs, flags
-type AllCols<T> = (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>, Vec<T>);
-
-impl<AB: InteractionBuilder> Air<AB> for FieldExprChip {
+impl<AB: InteractionBuilder> Air<AB> for FieldExpr {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let (is_valid, inputs, vars, q_limbs, carry_limbs, flags) = self.load_vars(&local);
+        let local = local.to_vec();
+        SubAir::eval(self, builder, local, ());
+    }
+}
+
+impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
+    type IoView = Vec<AB::Var>;
+    type AuxView = ();
+
+    fn eval(&self, builder: &mut AB, io: Vec<AB::Var>, _aux: ()) {
+        let (is_valid, inputs, vars, q_limbs, carry_limbs, flags) = self.load_vars(&io);
         let inputs = load_overflow::<AB>(inputs, self.limb_bits);
         let vars = load_overflow::<AB>(vars, self.limb_bits);
 
@@ -176,12 +202,16 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExprChip {
     }
 }
 
-impl AirConfig for FieldExprChip {
+type Vecs<T> = Vec<Vec<T>>;
+// is_valid, inputs, vars, q_limbs, carry_limbs, flags
+type AllCols<T> = (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>, Vec<T>);
+
+impl AirConfig for FieldExpr {
     // No column struct.
     type Cols<T> = Vec<T>;
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
+impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExpr {
     type LocalInput = (Vec<BigUint>, Arc<VariableRangeCheckerChip>, Vec<bool>);
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
@@ -216,10 +246,15 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
             vars[i] = r.clone();
             vars_bigint[i] = BigInt::from_biguint(Sign::Plus, r);
             vars_overflow[i] = to_overflow_int(&vars_bigint[i], self.num_limbs, self.limb_bits);
+        }
+        // We need to have all variables computed first because, e.g. constraints[2] might need variables[3].
+        for i in 0..self.constraints.len() {
             // expr = q * p
             let expr_bigint =
                 self.constraints[i].evaluate_bigint(&input_bigint, &vars_bigint, &flags);
-            let q = expr_bigint / &self.prime_bigint;
+            let q = &expr_bigint / &self.prime_bigint;
+            // If this is not true then the evaluated constraint is not divisible by p.
+            debug_assert_eq!(expr_bigint, &q * &self.prime_bigint);
             let q_limbs = big_int_to_num_limbs(&q, limb_bits, self.q_limbs[i]);
             assert_eq!(q_limbs.len(), self.q_limbs[i]); // If this fails, the q_limbs estimate is wrong.
             for &q in q_limbs.iter() {
@@ -275,7 +310,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExprChip {
     }
 }
 
-impl FieldExprChip {
+impl FieldExpr {
     pub fn execute(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
         let mut vars = vec![BigUint::zero(); self.num_variables];
         for i in 0..self.constraints.len() {

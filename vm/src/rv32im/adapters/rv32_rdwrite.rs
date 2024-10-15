@@ -36,14 +36,17 @@ impl<F: PrimeField32> Rv32RdWriteAdapter<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controler: MemoryControllerRef<F>,
+        memory_controller: MemoryControllerRef<F>,
     ) -> Self {
+        let memory_controller = RefCell::borrow(&memory_controller);
+        let memory_bridge = memory_controller.memory_bridge();
+        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: Rv32RdWriteAdapterAir {
-                memory_bridge: RefCell::borrow(&memory_controler).memory_bridge(),
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
             },
-            aux_cols_factory: RefCell::borrow(&memory_controler).aux_cols_factory(),
+            aux_cols_factory,
         }
     }
 }
@@ -58,7 +61,7 @@ pub struct Rv32RdWriteWriteRecord<F: Field> {
 pub struct Rv32RdWriteProcessedInstruction<T> {
     pub is_valid: T,
     pub opcode: T,
-    pub c: T,
+    pub imm: T,
 }
 
 // This is used by the CoreAir to pass the necessary fields to AdapterAir
@@ -67,11 +70,12 @@ impl<T> From<(T, T, T)> for Rv32RdWriteProcessedInstruction<T> {
         Rv32RdWriteProcessedInstruction {
             is_valid: tuple.0,
             opcode: tuple.1,
-            c: tuple.2,
+            imm: tuple.2,
         }
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Rv32RdWriteAdapterInterface<T>(PhantomData<T>);
 impl<T> VmAdapterInterface<T> for Rv32RdWriteAdapterInterface<T> {
     type Reads = ();
@@ -90,7 +94,7 @@ impl<T: Clone> HasFromPc<T> for Rv32RdWriteAdapterInterface<T> {
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv32RdWriteAdapterCols<T> {
     pub from_state: ExecutionState<T>,
-    pub a: T,
+    pub rd_ptr: T,
     pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
 }
 
@@ -102,7 +106,7 @@ pub struct Rv32RdWriteAdapterAir {
 
 impl<F: Field> BaseAir<F> for Rv32RdWriteAdapterAir {
     fn width(&self) -> usize {
-        Rv32RdWriteAdapterCols::<u8>::width()
+        Rv32RdWriteAdapterCols::<F>::width()
     }
 }
 
@@ -125,7 +129,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
         };
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::one(), local_cols.a),
+                MemoryAddress::new(AB::Expr::one(), local_cols.rd_ptr),
                 ctx.writes,
                 timestamp_pp(),
                 &local_cols.rd_aux_cols,
@@ -139,9 +143,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
             .execute(
                 ctx.instruction.opcode,
                 [
-                    local_cols.a.into(),
+                    local_cols.rd_ptr.into(),
                     AB::Expr::zero(),
-                    ctx.instruction.c,
+                    ctx.instruction.imm,
                     AB::Expr::one(),
                     AB::Expr::zero(),
                 ],
@@ -204,7 +208,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapter<F> {
     ) {
         let adapter_cols: &mut Rv32RdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
-        adapter_cols.a = write_record.rd.pointer;
+        adapter_cols.rd_ptr = write_record.rd.pointer;
         adapter_cols.rd_aux_cols = self
             .aux_cols_factory
             .make_write_aux_cols(write_record.rd.clone());

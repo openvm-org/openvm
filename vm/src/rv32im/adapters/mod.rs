@@ -13,10 +13,11 @@ pub use rv32_jalr::*;
 pub use rv32_loadstore::*;
 pub use rv32_mul::*;
 pub use rv32_rdwrite::*;
+
+pub mod test_adapter;
+
 /// 32-bit register stored as 4 bytes (4 lanes of 8-bits)
 pub const RV32_REGISTER_NUM_LANES: usize = 4;
-
-/// Each cell should be 8 bits
 pub const RV32_CELL_BITS: usize = 8;
 
 // For soundness, should be <= 16

@@ -14,8 +14,8 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::system::memory::{
-    dimensions::MemoryDimensions, expand::MemoryMerkleBus, offline_checker::MemoryBus,
-    MemoryAddress, MemoryEquipartition,
+    dimensions::MemoryDimensions, merkle::MemoryMerkleBus, offline_checker::MemoryBus,
+    MemoryAddress, TimestampedEquipartition,
 };
 
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
@@ -101,7 +101,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
     touched_labels: HashSet<(F, usize)>,
-    initial_memory: MemoryEquipartition<F, CHUNK>,
+    initial_memory: TimestampedEquipartition<F, CHUNK>,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
@@ -117,7 +117,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 merkle_bus,
             },
             touched_labels: HashSet::new(),
-            initial_memory: MemoryEquipartition::new(),
+            initial_memory: TimestampedEquipartition::new(),
         }
     }
 
@@ -132,7 +132,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     pub fn generate_trace(
         &self,
-        final_memory: &MemoryEquipartition<F, CHUNK>,
+        final_memory: &TimestampedEquipartition<F, CHUNK>,
     ) -> RowMajorMatrix<F> {
         let width = PersistentBoundaryCols::<F, CHUNK>::width();
         let height = next_power_of_two_or_zero(2 * self.touched_labels.len());
