@@ -89,10 +89,10 @@ where
             expected_result += flag * result;
         }
         expected_opcode -= AB::Expr::from_canonical_usize(self.offset);
+
         builder.assert_eq(a, expected_result);
         builder.assert_bool(is_valid.clone());
-
-        builder.assert_eq(cols.is_div, b * cols.divisor_inv);
+        builder.assert_eq(cols.is_div, c * cols.divisor_inv);
 
         AdapterAirContext {
             to_pc: None,
@@ -149,7 +149,7 @@ where
         let data: [[F; 1]; 2] = reads.into();
         let b = data[0][0];
         let c = data[1][0];
-        let a = solve_field_arithmetic(local_opcode_index, b, c).unwrap();
+        let a = NewFieldArithmetic::solve_field_arithmetic(local_opcode_index, b, c).unwrap();
 
         let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
             to_pc: None,
@@ -196,20 +196,23 @@ where
     }
 }
 
-pub(super) fn solve_field_arithmetic<F: Field>(
-    opcode: FieldArithmeticOpcode,
-    b: F,
-    c: F,
-) -> Option<F> {
-    match opcode {
-        FieldArithmeticOpcode::ADD => Some(b + c),
-        FieldArithmeticOpcode::SUB => Some(b - c),
-        FieldArithmeticOpcode::MUL => Some(b * c),
-        FieldArithmeticOpcode::DIV => {
-            if c.is_zero() {
-                None
-            } else {
-                Some(b * c.inverse())
+pub struct NewFieldArithmetic;
+impl NewFieldArithmetic {
+    pub(super) fn solve_field_arithmetic<F: Field>(
+        opcode: FieldArithmeticOpcode,
+        b: F,
+        c: F,
+    ) -> Option<F> {
+        match opcode {
+            FieldArithmeticOpcode::ADD => Some(b + c),
+            FieldArithmeticOpcode::SUB => Some(b - c),
+            FieldArithmeticOpcode::MUL => Some(b * c),
+            FieldArithmeticOpcode::DIV => {
+                if c.is_zero() {
+                    None
+                } else {
+                    Some(b * c.inverse())
+                }
             }
         }
     }

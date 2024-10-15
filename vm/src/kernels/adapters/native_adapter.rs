@@ -17,7 +17,7 @@ use crate::{
     },
     system::{
         memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+            offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
@@ -73,7 +73,7 @@ pub struct NativeAdapterCols<T> {
     pub b_as: T,
     pub c_idx: T,
     pub c_as: T,
-    pub reads_aux: [MemoryReadAuxCols<T, 1>; 2],
+    pub reads_aux: [MemoryReadOrImmediateAuxCols<T>; 2],
     pub writes_aux: [MemoryWriteAuxCols<T, 1>; 1],
 }
 
@@ -107,18 +107,18 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for NativeAdapterAir {
         };
 
         self.memory_bridge
-            .read(
+            .read_or_immediate(
                 MemoryAddress::new(cols.b_as, cols.b_idx),
-                ctx.reads[0].clone(),
+                ctx.reads[0][0].clone(),
                 timestamp_pp(),
                 &cols.reads_aux[0],
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.memory_bridge
-            .read(
+            .read_or_immediate(
                 MemoryAddress::new(cols.c_as, cols.c_idx),
-                ctx.reads[1].clone(),
+                ctx.reads[1][0].clone(),
                 timestamp_pp(),
                 &cols.reads_aux[1],
             )
@@ -223,8 +223,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for NativeAdapterChip<F> {
         row_slice.c_as = read_record.c.address_space;
 
         row_slice.reads_aux = [
-            aux_cols_factory.make_read_aux_cols(read_record.b),
-            aux_cols_factory.make_read_aux_cols(read_record.c),
+            aux_cols_factory.make_read_or_immediate_aux_cols(read_record.b),
+            aux_cols_factory.make_read_or_immediate_aux_cols(read_record.c),
         ];
         row_slice.writes_aux = [aux_cols_factory.make_write_aux_cols(write_record.a)];
     }
