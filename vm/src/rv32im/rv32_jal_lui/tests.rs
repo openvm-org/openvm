@@ -81,10 +81,10 @@ fn simple_execute_roundtrip_test() {
     let adapter = Rv32RdWriteAdapter::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
     );
     let inner = Rv32JalLuiCoreChip::new(xor_lookup_chip, Rv32JalLuiOpcode::default_offset());
-    let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_chip());
+    let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_controller());
     let num_tests: usize = 10;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, JAL);
@@ -101,10 +101,11 @@ fn rand_jal_lui_test() {
     let adapter = Rv32RdWriteAdapter::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
     );
-    let inner = Rv32JalLuiCoreChip::new(xor_lookup_chip.clone(), Rv32JalLuiOpcode::default_offset());
-    let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_chip());
+    let inner =
+        Rv32JalLuiCoreChip::new(xor_lookup_chip.clone(), Rv32JalLuiOpcode::default_offset());
+    let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_controller());
     let num_tests: usize = 1;
     for _ in 0..num_tests {
         // set_and_execute(&mut tester, &mut chip, &mut rng, JAL);

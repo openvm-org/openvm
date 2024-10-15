@@ -14,17 +14,17 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use super::columns::AuditCols;
+use super::columns::VolatileBoundaryCols;
 use crate::{kernels::core::RANGE_CHECKER_BUS, system::memory::offline_checker::MemoryBus};
 
 #[derive(Clone, Debug)]
-pub struct MemoryAuditAir {
+pub struct VolatileBoundaryAir {
     pub memory_bus: MemoryBus,
     pub addr_lt_air: IsLessThanTupleAir,
     pub for_testing: bool,
 }
 
-impl MemoryAuditAir {
+impl VolatileBoundaryAir {
     // TODO[jpw]: pass in range bus
     pub fn new(
         memory_bus: MemoryBus,
@@ -44,25 +44,25 @@ impl MemoryAuditAir {
     }
 
     pub fn air_width(&self) -> usize {
-        AuditCols::<usize>::width(self)
+        VolatileBoundaryCols::<usize>::width(self)
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for MemoryAuditAir {}
-impl<F: Field> PartitionedBaseAir<F> for MemoryAuditAir {}
-impl<F: Field> BaseAir<F> for MemoryAuditAir {
+impl<F: Field> BaseAirWithPublicValues<F> for VolatileBoundaryAir {}
+impl<F: Field> PartitionedBaseAir<F> for VolatileBoundaryAir {}
+impl<F: Field> BaseAir<F> for VolatileBoundaryAir {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for MemoryAuditAir {
+impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let [local, next] = [0, 1].map(|i| {
             let row = main.row_slice(i);
-            AuditCols::<AB::Var>::from_slice(&row, self)
+            VolatileBoundaryCols::<AB::Var>::from_slice(&row, self)
         });
 
         // TODO[jpw]: ideally make this work for testing too

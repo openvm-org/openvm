@@ -30,7 +30,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::BasicAdapterInterface,
-    system::memory::{MemoryChip, MemoryReadRecord},
+    system::memory::{MemoryController, MemoryReadRecord},
 };
 
 pub type Rv32RTypeAdapterInterface<T> =
@@ -47,7 +47,7 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; 4]) -> u32 {
 }
 
 pub fn read_rv32_register<F: PrimeField32>(
-    memory: &mut MemoryChip<F>,
+    memory: &mut MemoryController<F>,
     address_space: F,
     pointer: F,
 ) -> (MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>, u32) {

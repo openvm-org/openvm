@@ -9,7 +9,7 @@ use crate::{
         instructions::CoreOpcode::{self, *},
         ExecutionBridge, ExecutionBus,
     },
-    system::{memory::MemoryChipRef, program::bridge::ProgramBus},
+    system::{memory::MemoryControllerRef, program::bridge::ProgramBus},
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
@@ -88,7 +88,7 @@ pub struct CoreChip<F: PrimeField32> {
     /// Program counter at the start of the current segment.
     pub start_state: CoreState,
     pub public_values: Vec<Option<F>>,
-    pub memory_chip: MemoryChipRef<F>,
+    pub memory_controller: MemoryControllerRef<F>,
 
     // TODO[jpw] Unclear Core should own this
     pub streams: Streams<F>,
@@ -101,14 +101,14 @@ impl<F: PrimeField32> CoreChip<F> {
         options: CoreOptions,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
         offset: usize,
     ) -> Self {
         Self::from_state(
             options,
             execution_bus,
             program_bus,
-            memory_chip,
+            memory_controller,
             CoreState::initial(),
             offset,
         )
@@ -124,11 +124,11 @@ impl<F: PrimeField32> CoreChip<F> {
         options: CoreOptions,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
         state: CoreState,
         offset: usize,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: CoreAir {
                 options,
@@ -140,7 +140,7 @@ impl<F: PrimeField32> CoreChip<F> {
             state,
             start_state: state,
             public_values: vec![None; options.num_public_values],
-            memory_chip,
+            memory_controller,
             streams: Default::default(),
             offset,
         }

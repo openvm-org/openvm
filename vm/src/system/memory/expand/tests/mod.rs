@@ -2,20 +2,21 @@ use std::collections::{HashMap, HashSet};
 
 use afs_stark_backend::interaction::InteractionType;
 use ax_sdk::{
-    config::baby_bear_poseidon2::run_simple_test,
-    interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+    utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField64};
+use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::RngCore;
 
-use crate::{
-    kernels::core::EXPAND_BUS,
-    system::memory::{
-        expand::{columns::ExpandCols, tests::util::HashTestChip, ExpandChip, MemoryDimensions},
-        tree::MemoryNode,
+use crate::system::memory::{
+    expand::{
+        columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions, MemoryMerkleBus,
+        MemoryMerkleChip,
     },
+    tree::MemoryNode,
 };
 
 mod util;
@@ -24,10 +25,10 @@ const DEFAULT_CHUNK: usize = 8;
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
-    let num_cols = ExpandCols::<DEFAULT_CHUNK, usize>::get_width();
+    let num_cols = MemoryMerkleCols::<DEFAULT_CHUNK, usize>::get_width();
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let cols_numbered = ExpandCols::<DEFAULT_CHUNK, _>::from_slice(&all_cols);
+    let cols_numbered = MemoryMerkleCols::<DEFAULT_CHUNK, _>::from_slice(&all_cols);
     let flattened = cols_numbered.flatten();
 
     for (i, col) in flattened.iter().enumerate() {
@@ -48,10 +49,12 @@ fn test<const CHUNK: usize>(
         address_height,
         as_offset,
     } = memory_dimensions;
+    let merkle_bus = MemoryMerkleBus(20);
+
     // checking validity of test data
     for (address, value) in final_memory {
-        assert!((address.0.as_canonical_u64() as usize) - as_offset < (1 << as_height));
-        assert!((address.1.as_canonical_u64() as usize) < (CHUNK << address_height));
+        assert!((address.0.as_canonical_u32() as usize) - as_offset < (1 << as_height));
+        assert!((address.1.as_canonical_u32() as usize) < (CHUNK << address_height));
         if initial_memory.get(address) != Some(value) {
             assert!(touched_addresses.contains(address));
         }
@@ -63,25 +66,25 @@ fn test<const CHUNK: usize>(
         assert!(final_memory.contains_key(address));
     }
 
-    let initial_tree =
-        MemoryNode::tree_from_memory(memory_dimensions, initial_memory, &mut HashTestChip::new());
-    let final_tree_check =
-        MemoryNode::tree_from_memory(memory_dimensions, final_memory, &mut HashTestChip::new());
+    let mut hash_test_chip = HashTestChip::new();
 
-    let mut chip = ExpandChip::<CHUNK, _>::new(memory_dimensions, initial_tree.clone());
+    let initial_tree =
+        MemoryNode::tree_from_memory(memory_dimensions, initial_memory, &hash_test_chip);
+    let final_tree_check =
+        MemoryNode::tree_from_memory(memory_dimensions, final_memory, &hash_test_chip);
+
+    let mut chip = MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus);
     for &(address_space, address) in touched_addresses.iter() {
         chip.touch_address(address_space, address);
     }
 
-    println!("trace height = {}", chip.get_trace_height());
-    let trace_degree = chip.get_trace_height().next_power_of_two();
-    let mut hash_test_chip = HashTestChip::new();
+    println!("trace height = {}", chip.current_height());
     let (trace, final_tree) =
-        chip.generate_trace_and_final_tree(final_memory, trace_degree, &mut hash_test_chip);
+        chip.generate_trace_and_final_tree(&initial_tree, final_memory, &mut hash_test_chip);
 
     assert_eq!(final_tree, final_tree_check);
 
-    let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, EXPAND_BUS);
+    let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.0);
     let mut dummy_interaction_trace_rows = vec![];
     let mut interaction = |interaction_type: InteractionType,
                            is_compress: bool,
@@ -111,8 +114,8 @@ fn test<const CHUNK: usize>(
         .iter()
         .map(|(address_space, address)| {
             (
-                ((address_space.as_canonical_u64() as usize) - as_offset) << address_height,
-                (address.as_canonical_u64() as usize) / CHUNK,
+                ((address_space.as_canonical_u32() as usize) - as_offset) << address_height,
+                (address.as_canonical_u32() as usize) / CHUNK,
             )
         })
         .collect();
@@ -165,8 +168,9 @@ fn test<const CHUNK: usize>(
     public_values[0].extend(initial_tree.hash());
     public_values[0].extend(final_tree_check.hash());
 
-    run_simple_test(
-        vec![&chip.air, &dummy_interaction_air, &hash_test_chip.air()],
+    let hash_test_chip_air = hash_test_chip.air();
+    BabyBearPoseidon2Engine::run_simple_test_fast(
+        any_rap_arc_vec![chip.air, dummy_interaction_air, hash_test_chip_air],
         vec![trace, dummy_interaction_trace, hash_test_chip.trace()],
         public_values,
     )
@@ -243,26 +247,27 @@ fn expand_test_no_accesses() {
         address_height: 1,
         as_offset: 7,
     };
+    let mut hash_test_chip = HashTestChip::new();
 
     let memory = HashMap::new();
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
         &memory,
-        &mut HashTestChip::new(),
+        &hash_test_chip,
     );
 
-    let mut chip = ExpandChip::new(memory_dimensions, tree.clone());
+    let mut chip: MemoryMerkleChip<DEFAULT_CHUNK, _> =
+        MemoryMerkleChip::new(memory_dimensions, MemoryMerkleBus(20));
 
-    let trace_degree = 16;
-    let mut hash_test_chip = HashTestChip::new();
-    let (trace, _) = chip.generate_trace_and_final_tree(&memory, trace_degree, &mut hash_test_chip);
+    let (trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
 
     let mut public_values = vec![vec![]; 2];
     public_values[0].extend(tree.hash());
     public_values[0].extend(tree.hash());
 
-    run_simple_test(
-        vec![&chip.air, &hash_test_chip.air()],
+    let hash_test_chip_air = hash_test_chip.air();
+    BabyBearPoseidon2Engine::run_simple_test_fast(
+        any_rap_arc_vec![chip.air, hash_test_chip_air],
         vec![trace, hash_test_chip.trace()],
         public_values,
     )
@@ -278,37 +283,41 @@ fn expand_test_negative() {
         as_offset: 7,
     };
 
+    let mut hash_test_chip = HashTestChip::new();
+
     let memory = HashMap::new();
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
         &memory,
-        &mut HashTestChip::new(),
+        &hash_test_chip,
     );
 
-    let mut chip = ExpandChip::new(memory_dimensions, tree.clone());
+    let mut chip =
+        MemoryMerkleChip::<DEFAULT_CHUNK, _>::new(memory_dimensions, MemoryMerkleBus(20));
 
-    let trace_degree = 16;
-    let mut hash_test_chip = HashTestChip::new();
-    let (trace, _) = chip.generate_trace_and_final_tree(&memory, trace_degree, &mut hash_test_chip);
+    let (trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
     let mut new_rows = vec![];
     for i in 0..trace.height() {
         let row: Vec<_> = trace.row(i).collect();
-        let mut cols = ExpandCols::<DEFAULT_CHUNK, _>::from_slice(&row);
+        let mut cols = MemoryMerkleCols::<DEFAULT_CHUNK, _>::from_slice(&row);
         if cols.expand_direction == BabyBear::neg_one() {
             cols.left_direction_different = BabyBear::zero();
             cols.right_direction_different = BabyBear::zero();
         }
         new_rows.extend(cols.flatten());
     }
-    let new_trace =
-        RowMajorMatrix::new(new_rows, ExpandCols::<DEFAULT_CHUNK, BabyBear>::get_width());
+    let new_trace = RowMajorMatrix::new(
+        new_rows,
+        MemoryMerkleCols::<DEFAULT_CHUNK, BabyBear>::get_width(),
+    );
 
     let mut public_values = vec![vec![]; 2];
     public_values[0].extend(tree.hash());
     public_values[0].extend(tree.hash());
 
-    run_simple_test(
-        vec![&chip.air, &hash_test_chip.air()],
+    let hash_test_chip_air = hash_test_chip.air();
+    BabyBearPoseidon2Engine::run_simple_test_fast(
+        any_rap_arc_vec![chip.air, hash_test_chip_air],
         vec![new_trace, hash_test_chip.trace()],
         public_values,
     )

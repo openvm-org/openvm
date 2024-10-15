@@ -68,7 +68,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             ($addr_space: expr, $pointer: expr) => {{
                 assert!(read_records.len() < CORE_MAX_READS_PER_CYCLE);
                 read_records.push(
-                    self.memory_chip
+                    self.memory_controller
                         .borrow_mut()
                         .read_cell($addr_space, $pointer),
                 );
@@ -79,7 +79,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         macro_rules! write {
             ($addr_space: expr, $pointer: expr, $data: expr) => {{
                 assert!(write_records.len() < CORE_MAX_WRITES_PER_CYCLE);
-                write_records.push(self.memory_chip.borrow_mut().write_cell(
+                write_records.push(self.memory_controller.borrow_mut().write_cell(
                     $addr_space,
                     $pointer,
                     $data,
@@ -186,7 +186,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 hint_stream.extend(hint);
             }
             HINT_BITS => {
-                let val = self.memory_chip.borrow().unsafe_read_cell(d, a);
+                let val = self.memory_controller.borrow().unsafe_read_cell(d, a);
                 let mut val = val.as_canonical_u32();
 
                 let len = c.as_canonical_u32();
@@ -197,7 +197,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 }
             }
             HINT_BYTES => {
-                let val = self.memory_chip.borrow().unsafe_read_cell(d, a);
+                let val = self.memory_controller.borrow().unsafe_read_cell(d, a);
                 let mut val = val.as_canonical_u32();
 
                 let len = c.as_canonical_u32();
@@ -229,7 +229,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
         // and move this logic into generate_trace().
         {
-            let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+            let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
             let read_cols = array::from_fn(|i| {
                 read_records

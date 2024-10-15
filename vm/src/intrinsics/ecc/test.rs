@@ -19,7 +19,7 @@ fn test_ec_add() {
     let mut ec_chip = EcAddUnequalChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 
@@ -95,7 +95,7 @@ fn test_ec_double() {
     let mut ec_chip = EcDoubleChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 

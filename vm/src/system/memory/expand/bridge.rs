@@ -4,20 +4,23 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use crate::{
-    kernels::core::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS},
-    system::memory::expand::{air::ExpandAir, columns::ExpandCols},
+    kernels::core::POSEIDON2_DIRECT_BUS,
+    system::memory::expand::{air::MemoryMerkleAir, columns::MemoryMerkleCols},
 };
 
-impl<const CHUNK: usize> ExpandAir<CHUNK> {
+#[derive(Copy, Clone, Debug)]
+pub struct MemoryMerkleBus(pub usize);
+
+impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: ExpandCols<CHUNK, AB::Var>,
+        local: MemoryMerkleCols<CHUNK, AB::Var>,
     ) {
         // interaction does not occur for first two rows;
         // for those, parent hash value comes from public values
         builder.push_send(
-            EXPAND_BUS,
+            self.merkle_bus.0,
             [
                 local.expand_direction.into(),
                 local.parent_height.into(),
@@ -31,7 +34,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         );
 
         builder.push_receive(
-            EXPAND_BUS,
+            self.merkle_bus.0,
             [
                 local.expand_direction + (local.left_direction_different * AB::F::two()),
                 local.parent_height - AB::F::one(),
@@ -44,7 +47,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         );
 
         builder.push_receive(
-            EXPAND_BUS,
+            self.merkle_bus.0,
             [
                 local.expand_direction + (local.right_direction_different * AB::F::two()),
                 local.parent_height - AB::F::one(),
@@ -63,7 +66,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
             .chain(local.parent_hash);
         // TODO: do not hardcode the hash bus
         builder.push_send(
-            POSEIDON2_DIRECT_REQUEST_BUS,
+            POSEIDON2_DIRECT_BUS,
             hash_fields,
             local.expand_direction * local.expand_direction,
         );

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_stark_backend::{
     prover::{
-        types::{AirProofInput, CommittedTraceData, ProofInput},
+        types::{AirProofInput, AirProofRawInput, ProofInput},
         USE_DEBUG_BUILDER,
     },
     verifier::VerificationError,
@@ -45,16 +45,15 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let prover = engine.prover();
     // Demonstrate y is cached
     let y_data = prover.committer().commit(vec![y_trace.clone()]);
-    let cached_main = CommittedTraceData {
-        raw_data: y_trace,
-        prover_data: y_data,
-    };
     // Load x normally
     let air_proof_input = AirProofInput {
         air,
-        cached_mains: vec![cached_main],
-        common_main: Some(x_trace),
-        public_values: vec![],
+        cached_mains_pdata: vec![y_data],
+        raw: AirProofRawInput {
+            cached_mains: vec![Arc::new(y_trace)],
+            common_main: Some(x_trace),
+            public_values: vec![],
+        },
     };
     let proof_input = ProofInput::new(vec![(air_id, air_proof_input)]);
 

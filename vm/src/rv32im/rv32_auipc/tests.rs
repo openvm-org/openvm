@@ -57,10 +57,10 @@ fn simple_execute_roundtrip_test() {
     let adapter = Rv32RdWriteAdapter::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
     );
     let inner = Rv32AuipcCoreChip::<F>::new(Rv32AuipcOpcode::default_offset());
-    let mut chip = Rv32AuipcChip::<F>::new(adapter, inner, tester.memory_chip());
+    let mut chip = Rv32AuipcChip::<F>::new(adapter, inner, tester.memory_controller());
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {

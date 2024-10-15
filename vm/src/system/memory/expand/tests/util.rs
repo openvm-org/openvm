@@ -1,11 +1,11 @@
 use std::array::from_fn;
 
-use ax_sdk::interaction::dummy_interaction_air::DummyInteractionAir;
+use ax_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_air::BaseAir;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::{kernels::core::POSEIDON2_DIRECT_REQUEST_BUS, system::memory::tree::Hasher};
+use crate::{kernels::core::POSEIDON2_DIRECT_BUS, system::memory::tree::HasherChip};
 
 pub fn test_hash_sum<const CHUNK: usize, F: Field>(
     left: [F; CHUNK],
@@ -24,7 +24,7 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
     }
 
     pub fn air(&self) -> DummyInteractionAir {
-        DummyInteractionAir::new(3 * CHUNK, false, POSEIDON2_DIRECT_REQUEST_BUS)
+        DummyInteractionAir::new(3 * CHUNK, false, POSEIDON2_DIRECT_BUS)
     }
 
     pub fn trace(&self) -> RowMajorMatrix<F> {
@@ -41,10 +41,14 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
     }
 }
 
-impl<const CHUNK: usize, F: Field> Hasher<CHUNK, F> for HashTestChip<CHUNK, F> {
-    fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
+impl<const CHUNK: usize, F: Field> HasherChip<CHUNK, F> for HashTestChip<CHUNK, F> {
+    fn hash_and_record(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
         let result = test_hash_sum(left, right);
         self.requests.push([left, right, result]);
         result
+    }
+
+    fn hash(&self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
+        test_hash_sum(left, right)
     }
 }

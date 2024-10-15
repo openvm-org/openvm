@@ -19,7 +19,7 @@ use ax_sdk::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
-    engine::{StarkForTest, StarkFriEngine},
+    engine::{ProofInputForTest, StarkFriEngine},
 };
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
@@ -28,7 +28,7 @@ use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
 use stark_vm::{
     arch::ExecutorName,
-    sdk::gen_vm_program_stark_for_test,
+    sdk::gen_vm_program_test_proof_input,
     system::{program::Program, vm::config::VmConfig},
 };
 use tracing::info_span;
@@ -104,7 +104,7 @@ fn bench_program() -> Program<BabyBear> {
     })
 }
 
-fn bench_program_stark_for_test<SC: StarkGenericConfig>() -> StarkForTest<SC>
+fn bench_program_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest<SC>
 where
     Domain<SC>: PolynomialSpace<Val = BabyBear>,
 {
@@ -115,14 +115,14 @@ where
     }
     .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
     .add_default_executor(ExecutorName::Shift256);
-    gen_vm_program_stark_for_test(program, vec![], vm_config)
+    gen_vm_program_test_proof_input(program, vec![], vm_config)
 }
 
 fn main() {
     run_with_metric_collection("OUTPUT_PATH", || {
         let vdata =
             info_span!("Bench Program Inner", group = "bench_program_inner").in_scope(|| {
-                let program_stark = bench_program_stark_for_test();
+                let program_stark = bench_program_test_proof_input();
                 program_stark
                     .run_test(&BabyBearPoseidon2Engine::new(
                         standard_fri_params_with_100_bits_conjectured_security(4),
@@ -137,7 +137,7 @@ fn main() {
         let vdata = info_span!("Inner Verifier", group = "inner_verifier").in_scope(|| {
             let (program, witness_stream) =
                 build_verification_program(vdata, compiler_options.clone());
-            let inner_verifier_stf = gen_vm_program_stark_for_test(
+            let inner_verifier_stf = gen_vm_program_test_proof_input(
                 program,
                 witness_stream,
                 VmConfig {
@@ -157,7 +157,7 @@ fn main() {
         info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
             let (program, witness_stream) =
                 build_verification_program(vdata, compiler_options.clone());
-            let outer_verifier_sft = gen_vm_program_stark_for_test(
+            let outer_verifier_sft = gen_vm_program_test_proof_input(
                 program,
                 witness_stream,
                 VmConfig {

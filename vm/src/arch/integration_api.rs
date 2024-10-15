@@ -17,7 +17,7 @@ use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result, VmChip};
 use crate::system::{
-    memory::{MemoryChip, MemoryChipRef},
+    memory::{MemoryController, MemoryControllerRef},
     program::Instruction,
 };
 
@@ -52,7 +52,7 @@ pub trait VmAdapterChip<F: Field> {
     #[allow(clippy::type_complexity)]
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -63,7 +63,7 @@ pub trait VmAdapterChip<F: Field> {
     /// adapter record for this instruction. This **must** be called after `preprocess`.
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: AdapterRuntimeContext<F, Self::Interface>,
@@ -131,7 +131,7 @@ where
     fn eval(
         &self,
         builder: &mut AB,
-        local: &[AB::Var],
+        local_core: &[AB::Var],
         local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I>;
 }
@@ -165,7 +165,7 @@ pub struct VmChipWrapper<F: PrimeField32, A: VmAdapterChip<F>, C: VmCoreChip<F, 
     pub adapter: A,
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
-    memory: MemoryChipRef<F>,
+    memory: MemoryControllerRef<F>,
 }
 
 impl<F, A, C> VmChipWrapper<F, A, C>
@@ -174,7 +174,7 @@ where
     A: VmAdapterChip<F>,
     C: VmCoreChip<F, A::Interface>,
 {
-    pub fn new(adapter: A, core: C, memory: MemoryChipRef<F>) -> Self {
+    pub fn new(adapter: A, core: C, memory: MemoryControllerRef<F>) -> Self {
         Self {
             adapter,
             core,
@@ -272,11 +272,11 @@ where
     Val<SC>: PrimeField32,
     A: VmAdapterChip<Val<SC>>,
     C: VmCoreChip<Val<SC>, A::Interface>,
-    A::Air: 'static,
+    A::Air: Send + Sync + 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
     A::Air: for<'a> VmAdapterAir<DebugConstraintBuilder<'a, SC>>,
-    C::Air: 'static,
+    C::Air: Send + Sync + 'static,
     C::Air: VmCoreAir<
         SymbolicRapBuilder<Val<SC>>,
         <A::Air as VmAdapterAir<SymbolicRapBuilder<Val<SC>>>>::Interface,

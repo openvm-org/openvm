@@ -17,7 +17,7 @@ impl<F: PrimeField32> VmChip<F> for Poseidon2Chip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let Self {
             air,
-            memory_chip,
+            memory_controller,
             records,
             offset: _,
         } = self;
@@ -26,7 +26,7 @@ impl<F: PrimeField32> VmChip<F> for Poseidon2Chip<F> {
         let correct_len = row_len.next_power_of_two();
         let diff = correct_len - row_len;
 
-        let aux_cols_factory = memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = memory_controller.borrow().aux_cols_factory();
         let mut flat_rows: Vec<_> = records
             .into_iter()
             .flat_map(|record| Self::record_to_cols(&aux_cols_factory, record).flatten())

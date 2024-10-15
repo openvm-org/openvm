@@ -54,7 +54,7 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let aux_cols_factory = self.config.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.config.memory_controller.borrow().aux_cols_factory();
 
         let rows = self
             .data
@@ -137,7 +137,7 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let aux_cols_factory = self.config.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.config.memory_controller.borrow().aux_cols_factory();
 
         let rows = self
             .data

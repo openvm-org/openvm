@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, fmt::Display, sync::Arc};
 
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
-    utils::AirInfo,
+    prover::{helper::AirProofInputTestHelper, types::AirProofInput},
 };
 use backtrace::Backtrace;
 use bridge::ProgramBus;
@@ -294,14 +294,14 @@ impl<F> Program<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ProgramAir<F> {
-    pub program: Program<F>,
+pub struct ProgramAir {
     bus: ProgramBus,
 }
 
 #[derive(Debug)]
 pub struct ProgramChip<F> {
-    pub air: ProgramAir<F>,
+    pub air: ProgramAir,
+    pub program: Program<F>,
     pub true_program_length: usize,
     pub execution_frequencies: Vec<usize>,
 }
@@ -317,9 +317,9 @@ impl<F: PrimeField64> ProgramChip<F> {
         }
         Self {
             execution_frequencies: vec![0; program.len()],
+            program,
             true_program_length,
             air: ProgramAir {
-                program,
                 bus: ProgramBus(READ_INSTRUCTION_BUS),
             },
         }
@@ -333,11 +333,11 @@ impl<F: PrimeField64> ProgramChip<F> {
             return Err(ExecutionError::PcOutOfBounds(pc, self.true_program_length));
         }
         self.execution_frequencies[pc] += 1;
-        Ok(self.air.program.instructions_and_debug_infos[&pc].clone())
+        Ok(self.program.instructions_and_debug_infos[&pc].clone())
     }
 }
 
-impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirInfo<SC>
+impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirProofInput<SC>
 where
     Val<SC>: PrimeField64,
 {
@@ -345,6 +345,6 @@ where
         let air = program_chip.air.clone();
         let cached_trace = program_chip.generate_cached_trace();
         let common_trace = program_chip.generate_trace();
-        AirInfo::no_pis(Arc::new(air), vec![cached_trace], common_trace)
+        AirProofInput::cached_traces_no_pis(Arc::new(air), vec![cached_trace], common_trace)
     }
 }

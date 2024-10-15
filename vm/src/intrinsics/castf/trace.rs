@@ -16,7 +16,7 @@ use crate::arch::VmChip;
 
 impl<F: PrimeField32> VmChip<F> for CastFChip<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         let height = self.data.len();
         let padded_height = height.next_power_of_two();

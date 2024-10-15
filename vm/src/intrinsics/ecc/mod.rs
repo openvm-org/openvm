@@ -17,7 +17,7 @@ use crate::{
         InstructionExecutor,
     },
     intrinsics::modular_addsub::{FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
-    system::memory::{MemoryChipRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
+    system::memory::{MemoryControllerRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
     system::program::{bridge::ProgramBus, ExecutionError, Instruction},
     utils::{biguint_to_limbs, limbs_to_biguint},
 };
@@ -38,13 +38,13 @@ const LIMB_SIZE: usize = 8;
 const TWO_NUM_LIMBS: usize = NUM_LIMBS * 2;
 
 fn read_ec_points<T: PrimeField32>(
-    memory_chip: MemoryChipRef<T>,
+    memory_controller: MemoryControllerRef<T>,
     ptr_as: T,
     data_as: T,
     ptr_pointer: T,
 ) -> (BigUint, BigUint, MemoryHeapReadRecord<T, TWO_NUM_LIMBS>) {
-    let mut memory_chip = memory_chip.borrow_mut();
-    let array_read = memory_chip.read_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer);
+    let mut memory_controller = memory_controller.borrow_mut();
+    let array_read = memory_controller.read_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer);
     let u32_array = array_read.data_read.data.map(|x| x.as_canonical_u32());
     let x = limbs_to_biguint(&u32_array[..NUM_LIMBS], LIMB_SIZE);
     let y = limbs_to_biguint(&u32_array[NUM_LIMBS..], LIMB_SIZE);
@@ -52,21 +52,21 @@ fn read_ec_points<T: PrimeField32>(
 }
 
 fn write_ec_points<T: PrimeField32>(
-    memory_chip: MemoryChipRef<T>,
+    memory_controller: MemoryControllerRef<T>,
     x: BigUint,
     y: BigUint,
     ptr_as: T,
     data_as: T,
     ptr_pointer: T,
 ) -> MemoryHeapWriteRecord<T, TWO_NUM_LIMBS> {
-    let mut memory_chip = memory_chip.borrow_mut();
+    let mut memory_controller = memory_controller.borrow_mut();
     let x_limbs = biguint_to_limbs::<NUM_LIMBS>(x, LIMB_SIZE);
     let y_limbs = biguint_to_limbs::<NUM_LIMBS>(y, LIMB_SIZE);
     let mut array = [0; 64];
     array[..NUM_LIMBS].copy_from_slice(&x_limbs);
     array[NUM_LIMBS..].copy_from_slice(&y_limbs);
     let array: [T; 64] = array.map(|x| T::from_canonical_u32(x));
-    memory_chip.write_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer, array)
+    memory_controller.write_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer, array)
 }
 
 #[derive(Clone, Debug)]
@@ -82,7 +82,7 @@ pub struct EcAddUnequalRecord<T: PrimeField32> {
 
 #[derive(Clone, Debug)]
 pub struct EcChipConfig<T: PrimeField32> {
-    memory_chip: MemoryChipRef<T>,
+    memory_controller: MemoryControllerRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
     prime: BigUint,
 }
@@ -96,8 +96,8 @@ pub struct EcAddUnequalChip<T: PrimeField32> {
     _offset: usize,
 }
 
-fn make_ec_config<T: PrimeField32>(memory_chip: &MemoryChipRef<T>) -> EcAirConfig {
-    let range_checker_chip = memory_chip.borrow().range_checker.clone();
+fn make_ec_config<T: PrimeField32>(memory_controller: &MemoryControllerRef<T>) -> EcAirConfig {
+    let range_checker_chip = memory_controller.borrow().range_checker.clone();
     let prime = SECP256K1_COORD_PRIME.clone();
     EcAirConfig::new(
         prime.clone(),
@@ -109,11 +109,13 @@ fn make_ec_config<T: PrimeField32>(memory_chip: &MemoryChipRef<T>) -> EcAirConfi
     )
 }
 
-fn make_ec_chip_config<T: PrimeField32>(memory_chip: MemoryChipRef<T>) -> EcChipConfig<T> {
-    let range_checker_chip = memory_chip.borrow().range_checker.clone();
+fn make_ec_chip_config<T: PrimeField32>(
+    memory_controller: MemoryControllerRef<T>,
+) -> EcChipConfig<T> {
+    let range_checker_chip = memory_controller.borrow().range_checker.clone();
     let prime = SECP256K1_COORD_PRIME.clone();
     EcChipConfig {
-        memory_chip,
+        memory_controller,
         range_checker_chip,
         prime,
     }
@@ -123,19 +125,19 @@ impl<T: PrimeField32> EcAddUnequalChip<T> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<T>,
+        memory_controller: MemoryControllerRef<T>,
         offset: usize,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
 
-        let ec_config = make_ec_config(&memory_chip);
+        let ec_config = make_ec_config(&memory_controller);
         let air = EcAddUnequalVmAir {
             air: EcAddUnequalAir { config: ec_config },
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             offset,
         };
-        let config = make_ec_chip_config(memory_chip);
+        let config = make_ec_chip_config(memory_controller);
 
         Self {
             air,
@@ -162,10 +164,18 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
             ..
         } = instruction.clone();
 
-        let (p1_x, p1_y, p1_array_read) =
-            read_ec_points(Rc::clone(&self.config.memory_chip), d, e, p1_address_ptr);
-        let (p2_x, p2_y, p2_array_read) =
-            read_ec_points(Rc::clone(&self.config.memory_chip), d, e, p2_address_ptr);
+        let (p1_x, p1_y, p1_array_read) = read_ec_points(
+            Rc::clone(&self.config.memory_controller),
+            d,
+            e,
+            p1_address_ptr,
+        );
+        let (p2_x, p2_y, p2_array_read) = read_ec_points(
+            Rc::clone(&self.config.memory_controller),
+            d,
+            e,
+            p2_address_ptr,
+        );
 
         let prime = self.config.prime.clone();
         let dx = &prime + &p1_x - &p2_x;
@@ -176,7 +186,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
         let p3_y: BigUint = (&lambda * (&prime + &p1_x - &p3_x) + &prime - &p1_y) % &prime;
 
         let p3_array_write = write_ec_points(
-            Rc::clone(&self.config.memory_chip),
+            Rc::clone(&self.config.memory_controller),
             p3_x,
             p3_y,
             d,
@@ -193,10 +203,10 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
         };
         self.data.push(record);
 
-        let memory_chip = self.config.memory_chip.borrow();
+        let memory_controller = self.config.memory_controller.borrow();
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
         })
     }
 
@@ -228,19 +238,19 @@ impl<T: PrimeField32> EcDoubleChip<T> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<T>,
+        memory_controller: MemoryControllerRef<T>,
         offset: usize,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
 
-        let ec_config = make_ec_config(&memory_chip);
+        let ec_config = make_ec_config(&memory_controller);
         let air = EcDoubleVmAir {
             air: EcDoubleAir { config: ec_config },
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             offset,
         };
-        let config = make_ec_chip_config(memory_chip);
+        let config = make_ec_chip_config(memory_controller);
 
         Self {
             air,
@@ -266,8 +276,12 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcDoubleChip<T> {
             ..
         } = instruction.clone();
 
-        let (p1_x, p1_y, p1_array_read) =
-            read_ec_points(Rc::clone(&self.config.memory_chip), d, e, p1_address_ptr);
+        let (p1_x, p1_y, p1_array_read) = read_ec_points(
+            Rc::clone(&self.config.memory_controller),
+            d,
+            e,
+            p1_address_ptr,
+        );
 
         let prime = self.config.prime.clone();
         let two_y = &p1_y + &p1_y;
@@ -278,7 +292,7 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcDoubleChip<T> {
         let p3_y: BigUint = (&lambda * (&prime + &p1_x - &p3_x) + &prime - &p1_y) % &prime;
 
         let p2_array_write = write_ec_points(
-            Rc::clone(&self.config.memory_chip),
+            Rc::clone(&self.config.memory_controller),
             p3_x,
             p3_y,
             d,
@@ -294,10 +308,10 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcDoubleChip<T> {
         };
         self.data.push(record);
 
-        let memory_chip = self.config.memory_chip.borrow();
+        let memory_controller = self.config.memory_controller.borrow();
         Ok(ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: memory_chip.timestamp().as_canonical_u32() as usize,
+            timestamp: memory_controller.timestamp().as_canonical_u32() as usize,
         })
     }
 

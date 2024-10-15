@@ -2,7 +2,7 @@ use afs_compiler::{asm::AsmBuilder, ir::Felt};
 use afs_recursion::testing_utils::inner::run_recursive_test;
 use ax_sdk::{
     config::{fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing},
-    engine::StarkForTest,
+    engine::ProofInputForTest,
 };
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
@@ -39,11 +39,11 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     builder.compile_isa()
 }
 
-pub(crate) fn fibonacci_program_stark_for_test<SC: StarkGenericConfig>(
+pub(crate) fn fibonacci_program_test_proof_input<SC: StarkGenericConfig>(
     a: u32,
     b: u32,
     n: u32,
-) -> StarkForTest<SC>
+) -> ProofInputForTest<SC>
 where
     Domain<SC>: PolynomialSpace<Val = BabyBear>,
 {
@@ -63,15 +63,17 @@ where
 
     let mut result = vm.execute_and_generate().unwrap();
     assert_eq!(result.segment_results.len(), 1, "unexpected continuation");
-    let air_infos = result.segment_results.remove(0).air_infos;
-    StarkForTest { air_infos }
+    let air_proof_inputs = result.segment_results.remove(0).air_proof_inputs;
+    ProofInputForTest {
+        per_air: air_proof_inputs,
+    }
 }
 
 #[test]
 fn test_fibonacci_program_verify() {
     setup_tracing();
 
-    let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
+    let fib_program_stark = fibonacci_program_test_proof_input(0, 1, 32);
     run_recursive_test(
         fib_program_stark,
         standard_fri_params_with_100_bits_conjectured_security(3),
@@ -84,7 +86,7 @@ fn test_fibonacci_program_halo2_verify() {
     use afs_recursion::halo2::testing_utils::run_static_verifier_test;
     setup_tracing();
 
-    let fib_program_stark = fibonacci_program_stark_for_test(0, 1, 32);
+    let fib_program_stark = fibonacci_program_test_proof_input(0, 1, 32);
     run_static_verifier_test(
         fib_program_stark,
         standard_fri_params_with_100_bits_conjectured_security(3),

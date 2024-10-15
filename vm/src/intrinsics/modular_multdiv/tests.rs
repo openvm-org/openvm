@@ -30,7 +30,7 @@ fn test_modular_multdiv() {
         ModularMultDivChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_chip(),
+            tester.memory_controller(),
             secp256k1_coord_prime(),
             0,
         );
@@ -38,7 +38,7 @@ fn test_modular_multdiv() {
         ModularMultDivChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_chip(),
+            tester.memory_controller(),
             secp256k1_scalar_prime(),
             4,
         );

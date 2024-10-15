@@ -42,7 +42,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> VmChipTester {
     let mut chip = KeccakVmChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         xor_chip.clone(),
         0,
     );
@@ -87,7 +87,7 @@ fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> VmChipTester {
     }
     let mut tester = tester.build().load(chip).load(xor_chip).finalize();
 
-    let keccak_trace = &mut tester.air_infos[2].common_trace;
+    let keccak_trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
     let mut row = 0;
     for (input, output) in io {
         let num_blocks = num_keccak_f(input.len());

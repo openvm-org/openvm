@@ -17,23 +17,20 @@ use crate::{
     config::{Com, PcsProof, PcsProverData},
     interaction::trace::generate_permutation_trace,
     keygen::{types::StarkProvingKey, view::MultiStarkProvingKeyView},
-    prover::{
-        commit_perm_traces,
-        quotient::{helper::QuotientVkDataHelper, ProverQuotientData, QuotientCommitter},
-        types::CommittedTraceData,
-    },
+    prover::quotient::{helper::QuotientVkDataHelper, ProverQuotientData, QuotientCommitter},
     rap::AnyRap,
 };
 
-#[allow(clippy::too_many_arguments)]
-pub(super) fn commit_permutation_traces<SC: StarkGenericConfig>(
-    pcs: &SC::Pcs,
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(super) fn generate_permutation_traces_and_cumulative_sums<SC: StarkGenericConfig>(
     mpk: &MultiStarkProvingKeyView<SC>,
     challenges: &[Vec<SC::Challenge>],
     main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
     public_values_per_air: &[Vec<Val<SC>>],
-    domain_per_air: Vec<Domain<SC>>,
-) -> (Vec<Option<SC::Challenge>>, Option<ProverTraceData<SC>>)
+) -> (
+    Vec<Option<SC::Challenge>>,
+    Vec<Option<RowMajorMatrix<SC::Challenge>>>,
+)
 where
     SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
@@ -51,12 +48,8 @@ where
         )
     });
     let cumulative_sum_per_air = extract_cumulative_sums::<SC>(&perm_trace_per_air);
-    // Commit to permutation traces: this means only 1 challenge round right now
-    // One shared commit for all permutation traces
-    let perm_prover_data = tracing::info_span!("commit to permutation traces")
-        .in_scope(|| commit_perm_traces::<SC>(pcs, perm_trace_per_air, &domain_per_air));
 
-    (cumulative_sum_per_air, perm_prover_data)
+    (cumulative_sum_per_air, perm_trace_per_air)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -68,7 +61,7 @@ pub(super) fn commit_quotient_traces<'a, SC: StarkGenericConfig>(
     raps: Vec<impl AsRef<dyn AnyRap<SC>>>,
     public_values_per_air: &[Vec<Val<SC>>],
     domain_per_air: Vec<Domain<SC>>,
-    cached_mains_per_air: &'a [Vec<CommittedTraceData<SC>>],
+    cached_mains_pdata_per_air: &'a [Vec<ProverTraceData<SC>>],
     common_main_prover_data: &'a ProverTraceData<SC>,
     perm_prover_data: &'a Option<ProverTraceData<SC>>,
     cumulative_sum_per_air: Vec<Option<SC::Challenge>>,
@@ -83,7 +76,7 @@ where
 {
     let trace_views = create_trace_view_per_air(
         domain_per_air,
-        cached_mains_per_air,
+        cached_mains_pdata_per_air,
         mpk,
         cumulative_sum_per_air,
         common_main_prover_data,
@@ -151,7 +144,7 @@ fn extract_cumulative_sums<SC: StarkGenericConfig>(
 
 fn create_trace_view_per_air<'a, SC: StarkGenericConfig>(
     domain_per_air: Vec<Domain<SC>>,
-    cached_mains_per_air: &'a [Vec<CommittedTraceData<SC>>],
+    cached_mains_pdata_per_air: &'a [Vec<ProverTraceData<SC>>],
     mpk: &'a MultiStarkProvingKeyView<SC>,
     cumulative_sum_per_air: Vec<Option<SC::Challenge>>,
     common_main_prover_data: &'a ProverTraceData<SC>,
@@ -161,19 +154,19 @@ fn create_trace_view_per_air<'a, SC: StarkGenericConfig>(
     let mut after_challenge_idx = 0;
     izip!(
         domain_per_air,
-        cached_mains_per_air,
+        cached_mains_pdata_per_air,
         &mpk.per_air,
         cumulative_sum_per_air,
     )
-    .map(|(domain, cached_mains, pk, cumulative_sum)| {
+    .map(|(domain, cached_mains_pdata, pk, cumulative_sum)| {
         // The AIR will be treated as the full RAP with virtual columns after this
         let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
             // TODO: currently assuming each chip has it's own preprocessed commitment
             CommittedSingleMatrixView::<SC>::new(p.data.as_ref(), 0)
         });
-        let mut partitioned_main: Vec<_> = cached_mains
+        let mut partitioned_main: Vec<_> = cached_mains_pdata
             .iter()
-            .map(|cm| CommittedSingleMatrixView::new(cm.prover_data.data.as_ref(), 0))
+            .map(|pdata| CommittedSingleMatrixView::new(pdata.data.as_ref(), 0))
             .collect();
         if pk.vk.has_common_main() {
             partitioned_main.push(CommittedSingleMatrixView::new(

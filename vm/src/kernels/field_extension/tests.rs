@@ -31,7 +31,7 @@ fn field_extension_air_test() {
     let mut chip = FieldExtensionArithmeticChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         0,
     );
 
@@ -76,7 +76,7 @@ fn field_extension_air_test() {
     // negative test pranking each IO value
     for height in [0, num_ops - 1] {
         // TODO: better way to modify existing traces in tester
-        let extension_trace = &mut tester.air_infos[2].common_trace;
+        let extension_trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
         let original_trace = extension_trace.clone();
         for width in 0..FieldExtensionArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
@@ -88,7 +88,7 @@ fn field_extension_air_test() {
             Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
-        tester.air_infos[2].common_trace = original_trace;
+        tester.air_proof_inputs[2].raw.common_main = Some(original_trace);
     }
 }
 

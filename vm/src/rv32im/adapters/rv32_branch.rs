@@ -14,7 +14,7 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols},
-            MemoryChip, MemoryChipRef, MemoryReadRecord,
+            MemoryController, MemoryControllerRef, MemoryReadRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
@@ -32,9 +32,9 @@ impl<F: PrimeField32> Rv32BranchAdapter<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_chip: MemoryChipRef<F>,
+        memory_controller: MemoryControllerRef<F>,
     ) -> Self {
-        let memory_bridge = memory_chip.borrow().memory_bridge();
+        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             _marker: PhantomData,
             air: Rv32BranchAdapterAir {
@@ -124,7 +124,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapter<F> {
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(
         <Self::Interface as VmAdapterInterface<F>>::Reads,
@@ -149,7 +149,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapter<F> {
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         _instruction: &Instruction<F>,
         from_state: ExecutionState<usize>,
         output: AdapterRuntimeContext<F, Self::Interface>,

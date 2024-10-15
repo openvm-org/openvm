@@ -27,14 +27,14 @@ fn test_modular_addsub() {
     let mut coord_chip: ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE> = ModularAddSubChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         secp256k1_coord_prime(),
         0,
     );
     let mut scalar_chip: ModularAddSubChip<F, NUM_LIMBS, LIMB_SIZE> = ModularAddSubChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_chip(),
+        tester.memory_controller(),
         secp256k1_scalar_prime(),
         4,
     );

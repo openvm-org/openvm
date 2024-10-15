@@ -24,7 +24,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmChip<F>
     for ShiftChip<F, NUM_LIMBS, LIMB_BITS>
 {
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let aux_cols_factory = self.memory_chip.borrow().aux_cols_factory();
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         let width = self.trace_width();
         let height = self.data.len();
