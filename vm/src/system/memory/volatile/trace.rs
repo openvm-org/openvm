@@ -24,6 +24,8 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
                        final_timestamp: F,
                        initial_data: F,
                        is_extra: F| {
+            println!("prev_idx: {:?}", prev_idx);
+            println!("cur_idx: {:?}", cur_idx);
             let lt_cols = LocalTraceInstructions::generate_trace_row(
                 &self.air.addr_lt_air,
                 (

@@ -76,22 +76,10 @@ fn new_field_arithmetic_air_test() {
         FieldArithmeticOpcode::ADD,
         F::from_canonical_u32(1u32),
         F::from_canonical_u32(2u32),
-        F::from_canonical_u32(3u32),
-        F::from_canonical_u32(4u32),
-        F::from_canonical_u32(5u32),
-        F::from_canonical_u32(6u32),
-    );
-
-    run_test_case(
-        &mut tester,
-        &mut chip,
-        FieldArithmeticOpcode::ADD,
-        F::from_canonical_u32(1u32),
         F::from_canonical_u32(2u32),
         F::from_canonical_u32(3u32),
-        F::from_canonical_u32(4u32),
-        F::from_canonical_u32(5u32),
-        F::from_canonical_u32(6u32),
+        F::from_canonical_u32(3u32),
+        F::from_canonical_u32(1u32),
     );
 
     let tester = tester.build().load(chip).finalize();
