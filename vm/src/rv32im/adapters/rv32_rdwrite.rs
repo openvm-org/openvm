@@ -17,7 +17,9 @@ use crate::{
     },
     system::{
         memory::{
-            offline_checker::{MemoryBridge, MemoryWriteAuxCols}, MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef, MemoryWriteRecord
+            offline_checker::{MemoryBridge, MemoryWriteAuxCols},
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
+            MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
@@ -80,7 +82,7 @@ impl<T> VmAdapterInterface<T> for Rv32RdWriteAdapterInterface<T> {
 impl<T: Clone> HasFromPc<T> for Rv32RdWriteAdapterInterface<T> {
     fn get_from_pc(local_adapter: &[T]) -> T {
         let adapter_cols: &Rv32RdWriteAdapterCols<T> = (*local_adapter).borrow();
-        return adapter_cols.from_state.pc.clone()
+        adapter_cols.from_state.pc.clone()
     }
 }
 
@@ -139,7 +141,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
                 [
                     local_cols.a.into(),
                     AB::Expr::zero(),
-                    ctx.instruction.c.into(),
+                    ctx.instruction.c,
                     AB::Expr::one(),
                     AB::Expr::zero(),
                 ],

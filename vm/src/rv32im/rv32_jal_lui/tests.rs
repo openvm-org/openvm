@@ -9,10 +9,7 @@ use rand::{rngs::StdRng, Rng};
 use super::{solve_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreChip};
 use crate::{
     arch::{
-        instructions::{
-            Rv32JalLuiOpcode::{self, *},
-            UsizeOpcode,
-        },
+        instructions::Rv32JalLuiOpcode::{self, *},
         testing::VmChipTestBuilder,
     },
     kernels::core::BYTE_XOR_BUS,
@@ -40,14 +37,7 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        Instruction::from_isize(
-            opcode as usize,
-            a as isize,
-            0,
-            imm as isize,
-            1,
-            0,
-        ),
+        Instruction::from_isize(opcode as usize, a as isize, 0, imm as isize, 1, 0),
     );
     let initial_pc = tester
         .execution
@@ -83,7 +73,7 @@ fn simple_execute_roundtrip_test() {
         tester.program_bus(),
         tester.memory_controller(),
     );
-    let inner = Rv32JalLuiCoreChip::new(xor_lookup_chip, Rv32JalLuiOpcode::default_offset());
+    let inner = Rv32JalLuiCoreChip::new(xor_lookup_chip, 0);
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_controller());
     let num_tests: usize = 10;
     for _ in 0..num_tests {
@@ -103,8 +93,7 @@ fn rand_jal_lui_test() {
         tester.program_bus(),
         tester.memory_controller(),
     );
-    let inner =
-        Rv32JalLuiCoreChip::new(xor_lookup_chip.clone(), 0);
+    let inner = Rv32JalLuiCoreChip::new(xor_lookup_chip.clone(), 0);
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, inner, tester.memory_controller());
     let num_tests: usize = 100;
     for _ in 0..num_tests {

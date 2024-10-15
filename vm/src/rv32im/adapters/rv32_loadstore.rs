@@ -15,13 +15,15 @@ use crate::{
         },
         AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterAir,
         VmAdapterChip, VmAdapterInterface,
-    }, rv32im::adapters::RV32_CELL_BITS, system::{
+    },
+    rv32im::adapters::RV32_CELL_BITS,
+    system::{
         memory::{
             offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryController, MemoryReadRecord, MemoryWriteRecord,
         },
         program::Instruction,
-    }
+    },
 };
 
 #[repr(C)]

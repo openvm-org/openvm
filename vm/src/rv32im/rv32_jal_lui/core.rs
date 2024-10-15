@@ -27,7 +27,7 @@ use crate::{
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv32JalLuiCols<T> {
     pub c: T,
-    pub rd: [T; RV32_REGISTER_NUM_LANES],
+    pub rd_data: [T; RV32_REGISTER_NUM_LANES],
     pub is_jal: T,
     pub is_lui: T,
     pub xor_res: T,
@@ -67,7 +67,7 @@ where
         let cols: &Rv32JalLuiCols<AB::Var> = (*local_core).borrow();
         let Rv32JalLuiCols::<AB::Var> {
             c,
-            rd,
+            rd_data: rd,
             is_jal,
             is_lui,
             xor_res,
@@ -131,7 +131,7 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Rv32JalLuiCoreRecord<F: Field> {
-    pub rd: [F; RV32_REGISTER_NUM_LANES],
+    pub rd_data: [F; RV32_REGISTER_NUM_LANES],
     pub c: F,
     pub is_jal: bool,
     pub is_lui: bool,
@@ -180,8 +180,7 @@ where
             }
             LUI => c.as_canonical_u32() as i32,
         };
-        let (to_pc, rd_data) =
-            solve_jal_lui(local_opcode_index, from_pc, imm);
+        let (to_pc, rd_data) = solve_jal_lui(local_opcode_index, from_pc, imm);
 
         self.xor_lookup_chip.request(rd_data[1], rd_data[2]);
         if local_opcode_index == JAL {
@@ -189,8 +188,7 @@ where
             let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LANES - 1);
             let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1 << x));
             self.xor_lookup_chip.request(rd_data[3], additional_bits);
-        }
-        else if local_opcode_index == LUI {
+        } else if local_opcode_index == LUI {
             self.xor_lookup_chip.request(0, rd_data[3]);
         }
 
@@ -204,8 +202,8 @@ where
         Ok((
             output,
             Rv32JalLuiCoreRecord {
-                rd: rd_data,
-                c: c,
+                rd_data,
+                c,
                 is_jal: local_opcode_index == JAL,
                 is_lui: local_opcode_index == LUI,
             },
@@ -221,12 +219,12 @@ where
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let core_cols: &mut Rv32JalLuiCols<F> = row_slice.borrow_mut();
-        core_cols.rd = record.rd;
+        core_cols.rd_data = record.rd_data;
         core_cols.c = record.c;
         core_cols.is_jal = F::from_bool(record.is_jal);
         core_cols.is_lui = F::from_bool(record.is_lui);
-        let x = core_cols.rd[1].as_canonical_u32();
-        let y = core_cols.rd[2].as_canonical_u32();
+        let x = core_cols.rd_data[1].as_canonical_u32();
+        let y = core_cols.rd_data[2].as_canonical_u32();
         core_cols.xor_res = F::from_canonical_u32(x ^ y);
     }
 
