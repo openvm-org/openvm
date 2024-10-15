@@ -21,7 +21,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct NewFieldArithmeticCols<T> {
+pub struct NewFieldArithmeticCoreCols<T> {
     pub a: T,
     pub b: T,
     pub c: T,
@@ -41,7 +41,7 @@ pub struct NewFieldArithmeticCoreAir {
 
 impl<F: Field> BaseAir<F> for NewFieldArithmeticCoreAir {
     fn width(&self) -> usize {
-        NewFieldArithmeticCols::<F>::width()
+        NewFieldArithmeticCoreCols::<F>::width()
     }
 }
 
@@ -61,7 +61,7 @@ where
         local_core: &[AB::Var],
         _local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &NewFieldArithmeticCols<_> = local_core.borrow();
+        let cols: &NewFieldArithmeticCoreCols<_> = local_core.borrow();
 
         let a = cols.a;
         let b = cols.b;
@@ -175,7 +175,7 @@ where
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let NewFieldArithmeticRecord { opcode, a, b, c } = record;
-        let row_slice: &mut NewFieldArithmeticCols<_> = row_slice.borrow_mut();
+        let row_slice: &mut NewFieldArithmeticCoreCols<_> = row_slice.borrow_mut();
         row_slice.a = a;
         row_slice.b = b;
         row_slice.c = c;

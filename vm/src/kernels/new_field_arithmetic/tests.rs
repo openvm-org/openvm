@@ -24,7 +24,7 @@ use crate::{
     },
     kernels::{
         adapters::native_adapter::NativeAdapterChip,
-        new_field_arithmetic::{NewFieldArithmetic, NewFieldArithmeticCols},
+        new_field_arithmetic::{NewFieldArithmetic, NewFieldArithmeticCoreCols},
     },
     system::program::Instruction,
 };
@@ -114,7 +114,7 @@ fn new_field_arithmetic_air_test() {
         // TODO: better way to modify existing traces in tester
         let arith_trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
         let old_trace = arith_trace.clone();
-        for width in 0..NewFieldArithmeticCols::<BabyBear>::width() {
+        for width in 0..NewFieldArithmeticCoreCols::<BabyBear>::width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
             arith_trace.row_mut(height)[width] = prank_value;
         }
@@ -153,8 +153,8 @@ fn new_field_arithmetic_air_zero_div_zero() {
     let air = chip.air();
     let width = chip.trace_width();
     let trace = chip.generate_trace();
-    let mut row = trace.row_slice(0).to_vec();
     // set the value of [c]_f to zero, necessary to bypass trace gen checks
+    let mut row = trace.row_slice(0).to_vec();
     row[24] = BabyBear::zero();
     let trace = RowMajorMatrix::new(row, width);
 
