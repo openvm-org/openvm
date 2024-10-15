@@ -4,6 +4,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
+use afs_primitives::utils::next_power_of_two_or_zero;
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -65,6 +66,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.expand_direction * local.expand_direction * local.expand_direction,
         );
 
+        // TODO[zach]: Make bus interface.
         // Interactions.
         let mut expand_fields = vec![
             // direction =  1 => is_final = 0
@@ -133,12 +135,12 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         final_memory: &MemoryEquipartition<F, CHUNK>,
     ) -> RowMajorMatrix<F> {
         let width = PersistentBoundaryCols::<F, CHUNK>::width();
-        let height = (2 * self.touched_labels.len()).next_power_of_two();
+        let height = next_power_of_two_or_zero(2 * self.touched_labels.len());
         let mut rows = vec![F::zero(); height * width];
 
-        for (row, &(address_space, label)) in
-            rows.chunks_mut(2 * width).zip(self.touched_labels.iter())
-        {
+        for (row, &(address_space, label)) in rows
+            .chunks_mut(2 * width)
+            .zip(self.touched_labels.iter()) {
             let (initial_row, final_row) = row.split_at_mut(width);
             *initial_row.borrow_mut() = match self.initial_memory.get(&(address_space, label)) {
                 Some(initial) => PersistentBoundaryCols {

@@ -9,8 +9,11 @@ use MemoryNode::*;
 use super::manager::dimensions::MemoryDimensions;
 
 pub trait HasherChip<const CHUNK: usize, F> {
-    fn hash_and_record(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
+    /// Statelessly compresses two chunks of data into a single chunk.
     fn hash(&self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
+
+    /// Stateful version of `hash` for recording the event in the chip.
+    fn hash_and_record(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
 }
 
 #[derive(Clone, Debug, PartialEq)]

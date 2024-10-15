@@ -430,10 +430,10 @@ impl<F: PrimeField32> Memory<F> {
         (final_memory, adapter_records)
     }
 
-    /// Retrieves the value and timestamp at a specific memory index within an address space.
-    pub fn get(&self, address_space: F, index: usize) -> Option<(u32, &F)> {
+    /// Retrieves the value and timestamp at a specific memory address within an address space.
+    pub fn get(&self, address_space: F, address: usize) -> Option<(u32, &F)> {
         let mut block_len = self.initial_block_len;
-        let mut block_id = self.block_id(index, block_len);
+        let mut block_id = self.block_id(address, block_len);
 
         while let Some(block) = self.blocks.get(&(address_space, block_id)) {
             match block {
@@ -442,11 +442,11 @@ impl<F: PrimeField32> Memory<F> {
                     block_len *= 2;
                 }
                 Block::Active { data, timestamp } => {
-                    let index_in_block = index & (block_len - 1);
+                    let index_in_block = address & (block_len - 1);
                     return Some((*timestamp, data.get(index_in_block)?));
                 }
                 Block::ContainsActive => {
-                    let index_in_block = index & (block_len - 1);
+                    let index_in_block = address & (block_len - 1);
                     if index_in_block < block_len / 2 {
                         block_id *= 2;
                     } else {
@@ -460,7 +460,6 @@ impl<F: PrimeField32> Memory<F> {
     }
 }
 
-// TODO: Fix tests for other starting partition sizes.
 #[cfg(test)]
 mod tests {
     use p3_baby_bear::BabyBear;

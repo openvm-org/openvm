@@ -17,6 +17,7 @@ use afs_stark_backend::{
 use ax_sdk::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
     engine::StarkFriEngine,
+    utils::create_seeded_rng,
 };
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
@@ -25,8 +26,8 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::{
-    prelude::{SliceRandom, ThreadRng},
-    thread_rng, Rng,
+    prelude::{SliceRandom, StdRng},
+    Rng,
 };
 
 use super::{MemoryAuxColsFactory, MemoryChip, MemoryEquipartition, MemoryReadRecord};
@@ -236,7 +237,7 @@ fn test_memory_chip() {
         MemoryChip::with_volatile_memory(memory_bus, memory_config.clone(), range_checker.clone());
     let aux_factory = memory_chip.aux_cols_factory();
 
-    let mut rng = thread_rng();
+    let mut rng = create_seeded_rng();
     let records = make_random_accesses(&mut memory_chip, &mut rng);
     let memory_requester_trace = generate_trace(records, aux_factory);
 
@@ -284,7 +285,7 @@ fn test_memory_chip_persistent() {
     );
     let aux_factory = memory_chip.aux_cols_factory();
 
-    let mut rng = thread_rng();
+    let mut rng = create_seeded_rng();
     let records = make_random_accesses(&mut memory_chip, &mut rng);
     let memory_requester_trace = generate_trace(records, aux_factory);
 
@@ -344,7 +345,7 @@ fn test_memory_chip_persistent() {
 
 fn make_random_accesses<F: PrimeField32>(
     memory_chip: &mut MemoryChip<F>,
-    mut rng: &mut ThreadRng,
+    mut rng: &mut StdRng,
 ) -> Vec<Record<F>> {
     (0..1024)
         .map(|_| {

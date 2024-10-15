@@ -146,39 +146,54 @@ fn test_vm_1_persistent() {
     setup_tracing_with_log_level(Level::TRACE);
 
     let n = 6;
-    /*
-    Instruction 0 assigns word[0]_1 to n.
-    Instruction 4 terminates
-    The remainder is a loop that decrements word[0]_1 until it reaches 0, then terminates.
-    Instruction 1 checks if word[0]_1 is 0 yet, and if so sets pc to 5 in order to terminate
-    Instruction 2 decrements word[0]_1 (using word[1]_1)
-    Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
-     */
     let instructions = vec![
-        // word[0]_1 <- word[n]_0
         Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
-        // if word[0]_1 == 0 then pc += 3
-        Instruction::from_isize(BEQ.with_default_offset(), 0, 0, 3, 1, 0),
-        // word[0]_1 <- word[0]_1 - word[1]_0
         Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
-        // word[2]_1 <- pc + 1, pc -= 2
-        Instruction::from_isize(JAL.with_default_offset(), 2, -2, 0, 1, 0),
-        // terminate
+        Instruction::from_isize(BNE.with_default_offset(), 0, 0, -1, 1, 0),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(
-        VmConfig {
-            poseidon2_max_constraint_degree: 3,
-            memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
-            ..VmConfig::core()
-        }
-        .add_default_executor(ExecutorName::FieldArithmetic),
-        program,
-        vec![],
+    let config = VmConfig {
+        poseidon2_max_constraint_degree: 3,
+        memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
+        ..VmConfig::core()
+    }
+    .add_default_executor(ExecutorName::FieldArithmetic);
+    let vm = VirtualMachine::new(config, program, vec![]);
+
+    let perm = default_perm();
+    let fri_params = FriParameters::standard_fast();
+
+    let result = vm.execute_and_generate().unwrap();
+
+    let segment_result = result.segment_results.into_iter().next().unwrap();
+
+    let merkle_air_info = segment_result
+        .air_infos
+        .iter()
+        .find(|info| info.air.name() == "MemoryMerkleAir<8>")
+        .unwrap();
+    assert_eq!(merkle_air_info.public_values.len(), 16);
+    assert_eq!(
+        merkle_air_info.public_values[0..8],
+        merkle_air_info.public_values[8..16]
     );
+    assert_eq!(
+        merkle_air_info.public_values[0..8],
+        // The Merkle root of all zeros.
+        [
+            600046300, 1545134495, 977657425, 1213239099, 417259453, 434928898, 891129211,
+            1521571686
+        ]
+        .map(BabyBear::from_canonical_u32)
+    );
+
+    let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
+    engine
+        .run_test_impl(&segment_result.air_infos)
+        .expect("Verification failed");
 }
 
 #[test]
