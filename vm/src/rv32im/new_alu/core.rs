@@ -91,7 +91,7 @@ where
             .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
             })
-            - AB::Expr::from_canonical_usize(self.offset);
+            + AB::Expr::from_canonical_usize(self.offset);
 
         let a = &cols.a;
         let b = &cols.b;

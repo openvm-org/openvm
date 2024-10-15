@@ -647,17 +647,6 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         )
     }
 
-    pub fn make_read_option_aux_cols<const N: usize>(
-        &self,
-        read: MemoryReadRecord<F, N>,
-    ) -> MemoryReadAuxCols<F, N> {
-        if read.address_space.is_zero() {
-            MemoryReadAuxCols::<F, N>::disabled()
-        } else {
-            self.make_read_aux_cols(read)
-        }
-    }
-
     pub fn make_heap_read_aux_cols<const N: usize>(
         &self,
         read: MemoryHeapReadRecord<F, N>,

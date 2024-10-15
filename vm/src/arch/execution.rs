@@ -177,7 +177,7 @@ impl ExecutionBridge {
         self.execute(opcode, operands, from_state, to_state)
     }
 
-    pub fn execute_and_set_pc_increment<AB: InteractionBuilder>(
+    pub fn execute_and_increment_pc_custom<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
         operands: impl IntoIterator<Item = impl Into<AB::Expr>>,

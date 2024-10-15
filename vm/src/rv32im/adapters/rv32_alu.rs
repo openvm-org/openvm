@@ -10,7 +10,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{Rv32RTypeAdapterInterface, RV32_REGISTER_LANE_BITS, RV32_REGISTER_NUM_LANES};
+use super::{Rv32RTypeAdapterInterface, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
@@ -60,8 +60,8 @@ pub struct Rv32AluReadRecord<F: Field> {
     pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
     /// Either
     /// - read rs2 register value or
-    /// - if `rs2_is_imm` is true, then this is a dummy read
-    pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+    /// - if `rs2_is_imm` is true, this is None
+    pub rs2: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>>,
     /// immediate value of rs2 or 0
     pub rs2_imm: F,
 }
@@ -120,15 +120,15 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
         let rs2_limbs = ctx.reads[1].clone();
         let rs2_sign = rs2_limbs[2].clone();
         let rs2_imm = rs2_limbs[0].clone()
-            + rs2_limbs[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_REGISTER_LANE_BITS)
-            + rs2_sign.clone() * AB::Expr::from_canonical_usize(1 << (2 * RV32_REGISTER_LANE_BITS));
+            + rs2_limbs[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS)
+            + rs2_sign.clone() * AB::Expr::from_canonical_usize(1 << (2 * RV32_CELL_BITS));
         builder.assert_bool(local.rs2_as);
         let mut rs2_imm_when = builder.when(utils::not(local.rs2_as));
         rs2_imm_when.assert_eq(local.rs2, rs2_imm);
         rs2_imm_when.assert_eq(rs2_sign.clone(), rs2_limbs[3].clone());
         rs2_imm_when.assert_zero(
             rs2_sign.clone()
-                * (AB::Expr::from_canonical_usize((1 << RV32_REGISTER_LANE_BITS) - 1) - rs2_sign),
+                * (AB::Expr::from_canonical_usize((1 << RV32_CELL_BITS) - 1) - rs2_sign),
         );
 
         self.memory_bridge
@@ -159,7 +159,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32AluAdapterAir {
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.execution_bridge
-            .execute_and_set_pc_increment(
+            .execute_and_increment_pc_custom(
                 ctx.instruction.opcode,
                 [
                     local.rd.into(),
@@ -207,7 +207,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
             debug_assert_eq!(c_u32 >> 24, 0);
             memory.increment_timestamp();
             (
-                MemoryReadRecord::disabled(),
+                None,
                 [
                     c_u32 as u8,
                     (c_u32 >> 8) as u8,
@@ -219,7 +219,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
             )
         } else {
             let rs2_read = memory.read::<RV32_REGISTER_NUM_LANES>(e, c);
-            (rs2_read.clone(), rs2_read.data, F::zero())
+            (Some(rs2_read.clone()), rs2_read.data, F::zero())
         };
 
         Ok(([rs1.data, rs2_data], Self::ReadRecord { rs1, rs2, rs2_imm }))
@@ -263,15 +263,22 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32AluAdapter<F> {
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.rd = write_record.rd.pointer;
         row_slice.rs1 = read_record.rs1.pointer;
-        row_slice.rs2 = if read_record.rs2.address_space.is_zero() {
-            read_record.rs2_imm
-        } else {
-            read_record.rs2.pointer
-        };
-        row_slice.rs2_as = read_record.rs2.address_space;
+        row_slice.rs2 = read_record
+            .rs2
+            .clone()
+            .map(|rs2| rs2.pointer)
+            .unwrap_or(read_record.rs2_imm);
+        row_slice.rs2_as = read_record
+            .rs2
+            .clone()
+            .map(|rs2| rs2.address_space)
+            .unwrap_or(F::zero());
         row_slice.reads_aux = [
             aux_cols_factory.make_read_aux_cols(read_record.rs1),
-            aux_cols_factory.make_read_option_aux_cols(read_record.rs2),
+            match read_record.rs2 {
+                Some(rs2_record) => aux_cols_factory.make_read_aux_cols(rs2_record),
+                None => MemoryReadAuxCols::<F, RV32_REGISTER_NUM_LANES>::disabled(),
+            },
         ];
         row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
     }
