@@ -136,12 +136,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for NativeAdapterAir {
             .execute_and_increment_pc(
                 ctx.instruction.opcode,
                 [
-                    cols.a_idx.into(),
-                    cols.b_idx.into(),
-                    cols.c_idx.into(),
-                    cols.a_as.into(),
-                    cols.b_as.into(),
-                    cols.c_as.into(),
+                    cols.a_idx, cols.b_idx, cols.c_idx, cols.a_as, cols.b_as, cols.c_as,
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
