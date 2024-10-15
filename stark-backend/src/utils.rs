@@ -1,72 +1,7 @@
-use itertools::izip;
 use p3_field::Field;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::instrument;
 
-use crate::{prover::USE_DEBUG_BUILDER, rap::AnyRap};
-
-pub struct AirInfo<SC: StarkGenericConfig> {
-    pub air: Box<dyn AnyRap<SC>>,
-    pub cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
-    pub common_trace: RowMajorMatrix<Val<SC>>,
-    pub public_values: Vec<Val<SC>>,
-}
-
-impl<SC: StarkGenericConfig> AirInfo<SC> {
-    pub fn new(
-        air: Box<dyn AnyRap<SC>>,
-        cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
-        common_trace: RowMajorMatrix<Val<SC>>,
-        public_values: Vec<Val<SC>>,
-    ) -> Self {
-        Self {
-            air,
-            cached_traces,
-            common_trace,
-            public_values,
-        }
-    }
-
-    pub fn simple(
-        air: Box<dyn AnyRap<SC>>,
-        trace: RowMajorMatrix<Val<SC>>,
-        public_values: Vec<Val<SC>>,
-    ) -> Self {
-        Self::new(air, vec![], trace, public_values)
-    }
-
-    pub fn no_pis(
-        air: Box<dyn AnyRap<SC>>,
-        cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
-        common_trace: RowMajorMatrix<Val<SC>>,
-    ) -> Self {
-        Self::new(air, cached_traces, common_trace, vec![])
-    }
-
-    pub fn simple_no_pis(air: Box<dyn AnyRap<SC>>, trace: RowMajorMatrix<Val<SC>>) -> Self {
-        Self::simple(air, trace, vec![])
-    }
-
-    pub fn multiple_simple(
-        airs: Vec<Box<dyn AnyRap<SC>>>,
-        traces: Vec<RowMajorMatrix<Val<SC>>>,
-        public_values: Vec<Vec<Val<SC>>>,
-    ) -> Vec<Self> {
-        izip!(airs, traces, public_values)
-            .map(|(air, trace, pis)| AirInfo::simple(air, trace, pis))
-            .collect()
-    }
-
-    pub fn multiple_simple_no_pis(
-        airs: Vec<Box<dyn AnyRap<SC>>>,
-        traces: Vec<RowMajorMatrix<Val<SC>>>,
-    ) -> Vec<Self> {
-        izip!(airs, traces)
-            .map(|(air, trace)| AirInfo::simple_no_pis(air, trace))
-            .collect()
-    }
-}
+use crate::prover::USE_DEBUG_BUILDER;
 
 // Copied from valida-util
 /// Calculates and returns the multiplicative inverses of each field element, with zero

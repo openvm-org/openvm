@@ -4,16 +4,14 @@
 //! Chip will either send or receive the fields with multiplicity count.
 //! The main Air has no constraints, the only constraints are specified by the Chip trait
 
-use std::iter;
+use std::{iter, sync::Arc};
 
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder,
     interaction::{InteractionBuilder, InteractionType},
-    prover::{
-        trace::TraceCommitter,
-        v2::types::{AirProofInput, Chip, CommittedTraceData},
-    },
+    prover::types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip,
 };
 use itertools::izip;
 use p3_air::{Air, BaseAir};
@@ -122,7 +120,7 @@ pub struct DummyInteractionChip<'a, SC: StarkGenericConfig> {
     trace_committer: Option<TraceCommitter<'a, SC>>,
     // common_main: Option<RowMajorMatrix<Val<SC>>>,
     data: Option<DummyInteractionData>,
-    air: DummyInteractionAir,
+    pub air: DummyInteractionAir,
 }
 
 #[derive(Debug, Clone)]
@@ -226,8 +224,8 @@ where
 }
 
 impl<'a, SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'a, SC> {
-    fn air(&self) -> &dyn AnyRap<SC> {
-        &self.air
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
     }
 
     fn generate_air_proof_input(&self) -> AirProofInput<SC> {
@@ -237,17 +235,23 @@ impl<'a, SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'a, SC> {
             let (common_main, cached_main) = self.generate_traces_with_partition(data);
             AirProofInput {
                 air: self.air(),
-                cached_mains: vec![cached_main],
-                common_main: Some(common_main),
-                public_values: vec![],
+                cached_mains_pdata: vec![cached_main.prover_data],
+                raw: AirProofRawInput {
+                    cached_mains: vec![Arc::new(cached_main.raw_data)],
+                    common_main: Some(common_main),
+                    public_values: vec![],
+                },
             }
         } else {
             let common_main = self.generate_traces_without_partition(data);
             AirProofInput {
                 air: self.air(),
-                cached_mains: vec![],
-                common_main: Some(common_main),
-                public_values: vec![],
+                cached_mains_pdata: vec![],
+                raw: AirProofRawInput {
+                    cached_mains: vec![],
+                    common_main: Some(common_main),
+                    public_values: vec![],
+                },
             }
         }
     }

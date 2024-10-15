@@ -1,6 +1,8 @@
 use std::fs::{self, File};
 
-use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
+use afs_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey, prover::types::Proof, verifier::VerificationError,
+};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{self, engine_from_perm},
@@ -26,17 +28,20 @@ use crate::{
 fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumentation<SC>>(
     engine: &mut E,
     vk: MultiStarkVerifyingKey<SC>,
-    air: DummyInteractionAir,
+    air: &DummyInteractionAir,
     proof: Proof<SC>,
 ) -> StarkHashStatistics<BenchParams> {
-    let degree = proof.degrees[0];
+    let degree = proof.per_air[0].degree;
     let log_degree = log2_ceil_usize(degree);
 
     engine.clear_instruments();
     let mut challenger = engine.new_challenger();
-    let verifier = engine.verifier_v1();
+    let verifier = engine.verifier();
     // Do not check cumulative sum
-    verifier.verify_raps(&mut challenger, &vk, &proof).unwrap();
+    let res = verifier.verify(&mut challenger, &vk, &proof);
+    if matches!(res, Err(ref err) if err != &VerificationError::NonZeroCumulativeSum) {
+        panic!("{res:?}");
+    };
 
     let bench_params = BenchParams {
         field_width: air.field_width(),
@@ -68,7 +73,7 @@ fn instrumented_prove_and_verify(
 
     let (vk, air, proof, _) = prove(&engine, trace, partition);
     engine.perm.is_on = true;
-    instrumented_verify(&mut engine, vk, air, proof)
+    instrumented_verify(&mut engine, vk, &air, proof)
 }
 
 fn instrumented_verifier_comparison(

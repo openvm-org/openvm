@@ -18,9 +18,14 @@ use stark_vm::{
         },
         ExecutorName,
     },
-    hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
-    program::{Instruction, Program},
-    vm::{config::VmConfig, VirtualMachine},
+    intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
+    system::{
+        program::{Instruction, Program},
+        vm::{
+            config::{MemoryConfig, PersistenceType, VmConfig},
+            VirtualMachine,
+        },
+    },
 };
 use tracing::Level;
 
@@ -49,7 +54,7 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
     for segment_result in result.segment_results {
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
         engine
-            .run_test_impl(&segment_result.air_infos)
+            .run_test_impl(segment_result.air_proof_inputs)
             .expect("Verification failed");
     }
 }
@@ -58,10 +63,15 @@ fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Ve
 fn air_test_with_compress_poseidon2(
     poseidon2_max_constraint_degree: usize,
     program: Program<BabyBear>,
+    memory_persistence: PersistenceType,
 ) {
     let vm = VirtualMachine::new(
         VmConfig {
             poseidon2_max_constraint_degree,
+            memory_config: MemoryConfig {
+                persistence_type: memory_persistence,
+                ..Default::default()
+            },
             ..VmConfig::core()
         }
         .add_default_executor(ExecutorName::Poseidon2),
@@ -84,18 +94,18 @@ fn air_test_with_compress_poseidon2(
 
     for segment_result in result.segment_results {
         let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        let air_infos = segment_result.air_infos;
+        let air_proof_inputs = segment_result.air_proof_inputs;
 
         // Checking maximum constraint degree across all AIRs
         let mut keygen_builder = engine.keygen_builder();
-        for air_info in &air_infos {
-            keygen_builder.add_air(air_info.air.as_ref());
+        for air_proof_input in &air_proof_inputs {
+            keygen_builder.add_air(air_proof_input.air.clone());
         }
         let pk = keygen_builder.generate_pk();
         assert!(pk.max_constraint_degree == poseidon2_max_constraint_degree);
 
         engine
-            .run_test_impl(&air_infos)
+            .run_test_impl(air_proof_inputs)
             .expect("Verification failed");
     }
 }
@@ -126,12 +136,66 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; 5],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(vm_config_with_field_arithmetic(), program, vec![]);
+}
+
+#[test]
+fn test_vm_1_persistent() {
+    setup_tracing_with_log_level(Level::TRACE);
+
+    let n = 6;
+    let instructions = vec![
+        Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
+        Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
+        Instruction::from_isize(BNE.with_default_offset(), 0, 0, -1, 1, 0),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+
+    let config = VmConfig {
+        poseidon2_max_constraint_degree: 3,
+        memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
+        ..VmConfig::core()
+    }
+    .add_default_executor(ExecutorName::FieldArithmetic);
+    let vm = VirtualMachine::new(config, program, vec![]);
+
+    let perm = default_perm();
+    let fri_params = FriParameters::standard_fast();
+
+    let result = vm.execute_and_generate().unwrap();
+
+    let segment_result = result.segment_results.into_iter().next().unwrap();
+
+    let merkle_air_proof_input = segment_result
+        .air_proof_inputs
+        .iter()
+        .find(|info| info.air.name() == "MemoryMerkleAir<8>")
+        .unwrap();
+    assert_eq!(merkle_air_proof_input.raw.public_values.len(), 16);
+    assert_eq!(
+        merkle_air_proof_input.raw.public_values[..8],
+        merkle_air_proof_input.raw.public_values[8..]
+    );
+    assert_eq!(
+        merkle_air_proof_input.raw.public_values[..8],
+        // The value when you start with zeros and repeatedly hash the value with itself
+        // 13 times. We use 13 because addr_space_max_bits = 1 and pointer_max_bits = 16,
+        // so the height of the tree is 1 + 16 - 3 = 14.
+        [
+            600046300, 1545134495, 977657425, 1213239099, 417259453, 434928898, 891129211,
+            1521571686
+        ]
+        .map(BabyBear::from_canonical_u32)
+    );
+
+    let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
+    engine
+        .run_test_impl(segment_result.air_proof_inputs)
+        .expect("Verification failed");
 }
 
 #[test]
@@ -156,10 +220,7 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ.with_default_offset(), 0, 5, -1, 1, 0),
     ];
 
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; 5],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(VmConfig::core(), program, vec![]);
 }
@@ -182,12 +243,7 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(vm_config_with_field_arithmetic(), program.clone(), vec![]);
 }
@@ -219,18 +275,15 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(vm_config_with_field_arithmetic(), program.clone(), vec![]);
 }
 
 #[test]
 fn test_vm_field_extension_arithmetic() {
+    setup_tracing_with_log_level(Level::DEBUG);
+
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 2, 1, 0, 0, 1),
@@ -241,24 +294,55 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(STOREW.with_default_offset(), 1, 6, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 2, 7, 0, 0, 1),
         Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
-        // Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
         Instruction::from_isize(FE4SUB.with_default_offset(), 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4MUL.with_default_offset(), 12, 0, 4, 1, 1),
         Instruction::from_isize(BBE4DIV.with_default_offset(), 12, 0, 4, 1, 1),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(
         VmConfig::core()
             .add_default_executor(ExecutorName::FieldArithmetic)
             .add_default_executor(ExecutorName::FieldExtension),
+        program,
+        vec![],
+    );
+}
+
+#[test]
+fn test_vm_field_extension_arithmetic_persistent() {
+    setup_tracing_with_log_level(Level::DEBUG);
+
+    let instructions = vec![
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 1, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 2, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 3, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 4, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 5, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 6, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 7, 0, 0, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4MUL.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4DIV.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+
+    air_test(
+        VmConfig {
+            poseidon2_max_constraint_degree: 3,
+            memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
+            ..VmConfig::core()
+        }
+        .add_default_executor(ExecutorName::FieldArithmetic)
+        .add_default_executor(ExecutorName::FieldExtension),
         program,
         vec![],
     );
@@ -288,12 +372,7 @@ fn test_vm_hint() {
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     type F = BabyBear;
 
@@ -379,15 +458,12 @@ fn test_vm_compress_poseidon2_as2() {
         0,
     ));
 
-    let program_len = instructions.len();
+    let program = Program::from_instructions(&instructions);
 
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
-
-    air_test_with_compress_poseidon2(7, program.clone());
-    air_test_with_compress_poseidon2(3, program);
+    air_test_with_compress_poseidon2(7, program.clone(), PersistenceType::Volatile);
+    air_test_with_compress_poseidon2(3, program.clone(), PersistenceType::Volatile);
+    air_test_with_compress_poseidon2(7, program.clone(), PersistenceType::Persistent);
+    air_test_with_compress_poseidon2(3, program.clone(), PersistenceType::Persistent);
 }
 
 /// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output
@@ -504,12 +580,7 @@ fn test_vm_keccak() {
         0,
     ));
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(
         VmConfig::core().add_default_executor(ExecutorName::Keccak256),
@@ -536,12 +607,7 @@ fn test_vm_keccak_non_full_round() {
         0,
     ));
 
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
+    let program = Program::from_instructions(&instructions);
 
     air_test(
         VmConfig::core().add_default_executor(ExecutorName::Keccak256),

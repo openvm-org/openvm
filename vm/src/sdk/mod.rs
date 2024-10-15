@@ -1,8 +1,8 @@
-use ax_sdk::engine::StarkForTest;
+use afs_stark_backend::config::{StarkGenericConfig, Val};
+use ax_sdk::engine::ProofInputForTest;
 use p3_field::PrimeField32;
-use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::{
+use crate::system::{
     program::Program,
     vm::{config::VmConfig, VirtualMachine},
 };
@@ -11,11 +11,11 @@ use crate::{
 /// do any proving. Output is the payload of everything the prover needs.
 ///
 /// The output AIRs and traces are sorted by height in descending order.
-pub fn gen_vm_program_stark_for_test<SC: StarkGenericConfig>(
+pub fn gen_vm_program_test_proof_input<SC: StarkGenericConfig>(
     program: Program<Val<SC>>,
     input_stream: Vec<Vec<Val<SC>>>,
     config: VmConfig,
-) -> StarkForTest<SC>
+) -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
 {
@@ -52,7 +52,7 @@ where
         metrics::gauge!("trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
     }
 
-    StarkForTest {
-        air_infos: result.air_infos,
+    ProofInputForTest {
+        per_air: result.air_proof_inputs,
     }
 }

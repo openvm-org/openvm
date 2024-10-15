@@ -6,10 +6,7 @@ extern crate proc_macro;
 use hints::create_new_struct_and_impl_hintable;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{
-    parse_macro_input, Data, DeriveInput, Fields, GenericParam, ItemStruct, Lit, Meta,
-    MetaNameValue,
-};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam, ItemStruct};
 
 mod hints;
 
@@ -76,6 +73,86 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(methods)
+}
+
+#[proc_macro_derive(Chip)]
+pub fn chip_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (_, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(_) => unimplemented!("Structs are not supported yet"),
+        Data::Enum(e) => {
+            let variants = e
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident;
+
+                    let mut fields = variant.fields.iter();
+                    let field = fields.next().unwrap();
+                    assert!(fields.next().is_none(), "Only one field is supported");
+                    (variant_name, field)
+                })
+                .collect::<Vec<_>>();
+
+            let (air_arms, _arms): (Vec<_>, Vec<_>) = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                let air_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as afs_stark_backend::Chip<SC>>::air(x)
+                };
+                let generate_air_proof_input_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as afs_stark_backend::Chip<SC>>::generate_air_proof_input(x)
+                };
+                let generate_air_proof_input_with_id_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as afs_stark_backend::Chip<SC>>::generate_air_proof_input_with_id(x, air_id)
+                };
+                (air_arm, (generate_air_proof_input_arm, generate_air_proof_input_with_id_arm))
+            }).unzip();
+            let (generate_air_proof_input_arms, generate_air_proof_input_with_id_arms): (
+                Vec<_>,
+                Vec<_>,
+            ) = _arms.into_iter().unzip();
+
+            // Attach an extra generic SC: StarkGenericConfig to the impl_generics
+            let generics = &ast.generics;
+            let mut new_generics = generics.clone();
+            new_generics
+                .params
+                .push(syn::parse_quote! { SC: afs_stark_backend::config::StarkGenericConfig });
+
+            let (impl_generics, _, _) = new_generics.split_for_impl();
+
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause.predicates.push(syn::parse_quote! { afs_stark_backend::config::Domain<SC>: afs_stark_backend::p3_commit::PolynomialSpace<Val = F>
+            });
+
+            quote! {
+                impl #impl_generics afs_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
+                    fn air(&self) -> std::sync::Arc<dyn afs_stark_backend::rap::AnyRap<SC>> {
+                        match self {
+                            #(#air_arms,)*
+                        }
+                    }
+                    fn generate_air_proof_input(&self) -> afs_stark_backend::prover::types::AirProofInput<SC> {
+                        match self {
+                            #(#generate_air_proof_input_arms,)*
+                        }
+                    }
+                    fn generate_air_proof_input_with_id(&self, air_id: usize) -> (usize, afs_stark_backend::prover::types::AirProofInput<SC>) {
+                        match self {
+                            #(#generate_air_proof_input_with_id_arms,)*
+                        }
+                    }
+                }
+            }.into()
+        }
+        Data::Union(_) => unimplemented!("Unions are not supported"),
+    }
 }
 
 #[proc_macro_derive(DslVariable)]
@@ -230,44 +307,4 @@ pub fn hintable_derive(input: TokenStream) -> TokenStream {
         Ok(new_struct) => new_struct.into(),
         Err(err) => err.into(),
     }
-}
-
-#[proc_macro_derive(UsizeOpcode, attributes(opcode_offset))]
-pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(input as DeriveInput);
-    let name = &ast.ident;
-
-    let mut offset = None;
-    for attr in ast.attrs {
-        if let Ok(Meta::NameValue(MetaNameValue {
-            path,
-            lit: Lit::Int(lit_int),
-            ..
-        })) = attr.parse_meta()
-        {
-            if path.is_ident("opcode_offset") {
-                offset = Some(lit_int.base10_parse::<usize>().unwrap());
-            }
-        }
-    }
-    let offset = offset.expect("opcode_offset attribute not found");
-
-    let methods = quote! {
-        impl UsizeOpcode for #name {
-            fn default_offset() -> usize {
-                #offset
-            }
-
-            fn from_usize(value: usize) -> Self {
-                Self::from_repr(value.try_into().unwrap())
-                    .unwrap_or_else(|| panic!("Failed to convert usize {} to opcode {}", value, stringify!(#name)))
-            }
-
-            fn as_usize(&self) -> usize {
-                *self as usize
-            }
-        }
-    };
-
-    TokenStream::from(methods)
 }

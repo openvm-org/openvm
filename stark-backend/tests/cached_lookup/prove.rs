@@ -1,13 +1,15 @@
 use std::{
     fs::{self, File},
-    iter,
+    sync::Arc,
     time::Instant,
 };
 
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkVerifyingKey,
-    prover::{trace::TraceCommitmentBuilder, types::Proof, USE_DEBUG_BUILDER},
+    prover::types::{Proof, ProofInput},
+    utils::disable_debug_builder,
+    Chip,
 };
 use ax_sdk::{
     config::{
@@ -15,12 +17,12 @@ use ax_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    dummy_airs::interaction::dummy_interaction_air::{
+        DummyInteractionAir, DummyInteractionChip, DummyInteractionData,
+    },
     engine::StarkEngine,
 };
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +34,7 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     partition: bool,
 ) -> (
     MultiStarkVerifyingKey<SC>,
-    DummyInteractionAir,
+    Arc<DummyInteractionAir>,
     Proof<SC>,
     ProverBenchmarks,
 )
@@ -44,93 +46,49 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    // tracing_setup();
-
-    let mut air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
-    air.partition = partition;
-
-    // Single row major matrix for |count|fields[..]|
-    let nopart_trace = RowMajorMatrix::new(
-        trace
-            .iter()
-            .cloned()
-            .flat_map(|(count, fields)| {
-                assert_eq!(fields.len(), air.field_width());
-                iter::once(count).chain(fields)
-            })
-            .map(Val::<SC>::from_wrapped_u32)
-            .collect(),
-        air.field_width() + 1,
-    );
+    let mut chip =
+        DummyInteractionChip::new_with_partition(engine.config().pcs(), trace[0].1.len(), false, 0);
     let (count, fields): (Vec<_>, Vec<_>) = trace.into_iter().unzip();
-    let part_count_trace = RowMajorMatrix::new(
-        count.into_iter().map(Val::<SC>::from_wrapped_u32).collect(),
-        1,
-    );
-    let part_fields_trace = RowMajorMatrix::new(
-        fields
-            .into_iter()
-            .flat_map(|fields| {
-                assert_eq!(fields.len(), air.field_width());
-                fields
-            })
-            .map(Val::<SC>::from_wrapped_u32)
-            .collect(),
-        air.field_width(),
-    );
+    let data = DummyInteractionData { count, fields };
+    chip.load_data(data);
 
-    let mut keygen_builder = engine.keygen_builder_v1();
-    if partition {
-        let fields_ptr = keygen_builder.add_cached_main_matrix(air.field_width());
-        let count_ptr = keygen_builder.add_main_matrix(1);
-        keygen_builder.add_partitioned_air(&air, vec![count_ptr, fields_ptr]);
-    } else {
-        keygen_builder.add_air(&air);
-    }
+    let mut keygen_builder = engine.keygen_builder();
+    let air_id = keygen_builder.add_air(chip.air());
     let pk = keygen_builder.generate_pk();
-    let vk = pk.vk();
+    let vk = pk.get_vk();
 
     let mut benchmarks = ProverBenchmarks::default();
-    let prover = engine.prover_v1();
+    let prover = engine.prover();
     // Must add trace matrices in the same order as above
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     let mut start;
-    if partition {
+    let air_proof_input = if partition {
         start = Instant::now();
         // Receiver fields table is cached
-        let cached_trace_data = trace_builder
-            .committer
-            .commit(vec![part_fields_trace.clone()]);
-        trace_builder.load_cached_trace(part_fields_trace, cached_trace_data);
+        let ret = chip.generate_air_proof_input_with_id(air_id);
         benchmarks.cached_commit_time = start.elapsed().as_micros();
-        trace_builder.load_trace(part_count_trace);
+        ret
     } else {
-        trace_builder.load_trace(nopart_trace);
-    }
+        chip.generate_air_proof_input_with_id(air_id)
+    };
+    let proof_input = ProofInput {
+        per_air: vec![air_proof_input],
+    };
     start = Instant::now();
-    trace_builder.commit_current();
-    benchmarks.main_commit_time = start.elapsed().as_micros();
-
-    start = Instant::now();
-    let main_trace_data = trace_builder.view(&vk, vec![&air]);
-    let pis = vec![vec![]];
 
     // Disable debug prover since we don't balance the buses
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
-    benchmarks.prove_time = start.elapsed().as_micros();
+    let proof = prover.prove(&mut challenger, &pk, proof_input);
+    benchmarks.prove_time_without_trace_gen = start.elapsed().as_micros();
 
-    (vk, air, proof, benchmarks)
+    (vk, Arc::new(chip.air), proof, benchmarks)
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct ProverBenchmarks {
     pub cached_commit_time: u128,
-    pub main_commit_time: u128,
-    pub prove_time: u128,
+    /// Includes common main trace commitment time.
+    pub prove_time_without_trace_gen: u128,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

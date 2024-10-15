@@ -1,18 +1,21 @@
-use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of};
+use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, sync::Arc};
 
-use afs_stark_backend::{interaction::InteractionType, rap::AnyRap};
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    interaction::InteractionType,
+    rap::AnyRap,
+    Chip,
+};
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
-use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
-    arch::chips::MachineChip,
-    memory::{
+    arch::chips::VmChip,
+    system::memory::{
         offline_checker::{MemoryBus, MemoryBusInteraction},
-        MemoryAddress, MemoryChipRef,
+        MemoryAddress, MemoryControllerRef,
     },
 };
 
@@ -27,26 +30,26 @@ const WORD_SIZE: usize = 1;
 #[derive(Clone, Debug)]
 pub struct MemoryTester<F: PrimeField32> {
     pub bus: MemoryBus,
-    pub chip: MemoryChipRef<F>,
+    pub controller: MemoryControllerRef<F>,
     /// Log of raw bus messages
     pub records: Vec<MemoryBusInteraction<F>>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
-    pub fn new(chip: MemoryChipRef<F>) -> Self {
-        let bus = chip.borrow().memory_bus;
+    pub fn new(controller: MemoryControllerRef<F>) -> Self {
+        let bus = controller.borrow().memory_bus;
         Self {
             bus,
-            chip,
+            controller,
             records: Vec::new(),
         }
     }
 
-    /// Returns the cell value at the current timestamp according to [MemoryChip].
+    /// Returns the cell value at the current timestamp according to [MemoryController].
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let read = RefCell::borrow_mut(&self.chip).read_cell(addr_space, pointer);
+        let read = RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(
             self.bus
@@ -59,7 +62,7 @@ impl<F: PrimeField32> MemoryTester<F> {
 
     pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let write = RefCell::borrow_mut(&self.chip).write_cell(addr_space, pointer, value);
+        let write = RefCell::borrow_mut(&self.controller).write_cell(addr_space, pointer, value);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(self.bus.receive(
             address,
@@ -87,7 +90,7 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
+impl<F: PrimeField32> VmChip<F> for MemoryTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
@@ -107,13 +110,6 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
         RowMajorMatrix::new(values, width)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
-    }
-
     fn air_name(&self) -> String {
         "MemoryDummyAir".to_string()
     }
@@ -124,6 +120,15 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
 
     fn trace_width(&self) -> usize {
         size_of::<DummyMemoryInteractionCols<u8, WORD_SIZE>>()
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for MemoryTester<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
     }
 }
 

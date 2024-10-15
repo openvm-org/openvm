@@ -77,7 +77,7 @@ jobs:
           cache-on-failure: true
 
       - name: Setup halo2
-        working-directory: recursion # We only ever run halo2 for recursion
+        working-directory: lib/recursion # We only ever run halo2 for recursion
         run: |
           if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]; then
             echo "Adding static-verifier feature flag"
@@ -89,34 +89,34 @@ jobs:
       # Run a different benchmark based on benchmark_name:
       - name: Run benchmark
         if: inputs.benchmark_name == 'vm_verify_fibair'
-        working-directory: recursion
+        working-directory: lib/recursion
         run: |
           BIN_NAME="verify_fibair"
-          python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'tiny_e2e'
-        working-directory: recursion
+        working-directory: lib/recursion
         run: |
           BIN_NAME="tiny_e2e"
-          python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'alu256_e2e'
-        working-directory: recursion
+        working-directory: lib/recursion
         run: |
           BIN_NAME="alu256_e2e"
-          python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'small_e2e'
-        working-directory: recursion
+        working-directory: lib/recursion
         run: |
           BIN_NAME="small_e2e"
-          python3 ../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       ######################################################

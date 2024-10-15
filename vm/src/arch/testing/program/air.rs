@@ -7,7 +7,7 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::ProgramTester;
-use crate::program::bridge::ProgramBus;
+use crate::system::program::bridge::ProgramBus;
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct ProgramDummyAir {

@@ -7,10 +7,10 @@ on:
     branches: ["main"]
     paths:
       - "stark-backend/**"
-      - "primitives/**"
+      - "circuits/primitives/**"
       - "vm/**"
-      - "compiler/**"
-      - "recursion/**"
+      - "toolchain/compiler/**"
+      - "lib/recursion/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -37,7 +37,7 @@ jobs:
           version: v0.8.19
 
       - name: Run recursion crate tests
-        working-directory: recursion
+        working-directory: lib/recursion
         run: |
           cargo nextest run --cargo-profile=fast --features parallel
           cargo nextest run --cargo-profile=fast --features parallel,static-verifier -- halo2::tests

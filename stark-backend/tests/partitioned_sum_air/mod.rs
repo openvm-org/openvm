@@ -1,5 +1,10 @@
+use std::sync::Arc;
+
 use afs_stark_backend::{
-    prover::{trace::TraceCommitmentBuilder, USE_DEBUG_BUILDER},
+    prover::{
+        types::{AirProofInput, AirProofRawInput, ProofInput},
+        USE_DEBUG_BUILDER,
+    },
     verifier::VerificationError,
 };
 use ax_sdk::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
@@ -30,35 +35,35 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let y_width = ys[0].len();
     let y_trace = RowMajorMatrix::new(ys.into_iter().flatten().collect_vec(), y_width);
 
-    let air = SumAir(y_width);
+    let air = Arc::new(SumAir(y_width));
 
-    let mut keygen_builder = engine.keygen_builder_v1();
-    let y_ptr = keygen_builder.add_cached_main_matrix(y_width);
-    let x_ptr = keygen_builder.add_main_matrix(1);
-    keygen_builder.add_partitioned_air(&air, vec![y_ptr, x_ptr]);
+    let mut keygen_builder = engine.keygen_builder();
+    let air_id = keygen_builder.add_air(air.clone());
     let pk = keygen_builder.generate_pk();
-    let vk = pk.vk();
+    let vk = pk.get_vk();
 
-    let prover = engine.prover_v1();
-    // Must add trace matrices in the same order as above
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+    let prover = engine.prover();
     // Demonstrate y is cached
-    let y_data = trace_builder.committer.commit(vec![y_trace.clone()]);
-    trace_builder.load_cached_trace(y_trace, y_data);
+    let y_data = prover.committer().commit(vec![y_trace.clone()]);
     // Load x normally
-    trace_builder.load_trace(x_trace);
-    trace_builder.commit_current();
-
-    let main_trace_data = trace_builder.view(&vk, vec![&air]);
-    let pis = vec![vec![]];
+    let air_proof_input = AirProofInput {
+        air,
+        cached_mains_pdata: vec![y_data],
+        raw: AirProofRawInput {
+            cached_mains: vec![Arc::new(y_trace)],
+            common_main: Some(x_trace),
+            public_values: vec![],
+        },
+    };
+    let proof_input = ProofInput::new(vec![(air_id, air_proof_input)]);
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, &pk, proof_input);
 
     // Verify the proof:
     // Start from clean challenger
     let mut challenger = engine.new_challenger();
-    let verifier = engine.verifier_v1();
+    let verifier = engine.verifier();
     verifier.verify(&mut challenger, &vk, &proof)
 }
 

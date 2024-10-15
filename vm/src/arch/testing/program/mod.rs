@@ -1,15 +1,17 @@
-use std::{borrow::BorrowMut, mem::size_of};
+use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::AnyRap,
+    Chip,
+};
 use air::ProgramDummyAir;
-use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use crate::{
-    arch::{chips::MachineChip, ExecutionState},
-    program::{bridge::ProgramBus, columns::ProgramExecutionCols, Instruction},
+    arch::{chips::VmChip, ExecutionState},
+    system::program::{bridge::ProgramBus, columns::ProgramExecutionCols, Instruction},
 };
 
 mod air;
@@ -49,7 +51,7 @@ impl<F: Field> ProgramTester<F> {
     }
 }
 
-impl<F: Field> MachineChip<F> for ProgramTester<F> {
+impl<F: Field> VmChip<F> for ProgramTester<F> {
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
@@ -63,13 +65,6 @@ impl<F: Field> MachineChip<F> for ProgramTester<F> {
         RowMajorMatrix::new(values, width)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        Box::new(ProgramDummyAir::new(self.bus))
-    }
-
     fn air_name(&self) -> String {
         "ProgramDummyAir".to_string()
     }
@@ -80,5 +75,11 @@ impl<F: Field> MachineChip<F> for ProgramTester<F> {
 
     fn trace_width(&self) -> usize {
         Self::width()
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for ProgramTester<Val<SC>> {
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(ProgramDummyAir::new(self.bus))
     }
 }
