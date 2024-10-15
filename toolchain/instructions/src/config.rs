@@ -16,5 +16,25 @@ pub struct IntrinsicsOpConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FieldArithmeticOpConfig {
     /// **Ordered** list of enabled prime moduli.
-    pub prime: Vec<String>,
+    pub primes: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serialize_toml() {
+        let config = CustomOpConfig {
+            intrinsics: IntrinsicsOpConfig {
+                field_arithmetic: FieldArithmeticOpConfig {
+                    primes: vec![
+                        "0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC"
+                            .to_string(),
+                    ],
+                },
+            },
+        };
+        println!("{}", toml::to_string(&config).unwrap());
+    }
 }
