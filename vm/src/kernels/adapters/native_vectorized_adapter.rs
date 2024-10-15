@@ -8,7 +8,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{NativeAdapterInterface, NativeVectorizedAdapterInterface};
+use super::NativeVectorizedAdapterInterface;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,

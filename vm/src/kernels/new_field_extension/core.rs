@@ -109,7 +109,7 @@ where
         for (x_j, expected_result_j) in izip!(cols.x, expected_result) {
             builder.assert_eq(x_j, expected_result_j);
         }
-        builder.assert_bool(is_valid);
+        builder.assert_bool(is_valid.clone());
 
         // constrain aux.divisor_inv: z * z^(-1) = 1
         let z_times_z_inv = NewFieldExtension::multiply(cols.z, cols.divisor_inv);
@@ -123,8 +123,8 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            reads: [cols.y.into(), cols.z.into()].into(),
-            writes: [cols.x.into()].into(),
+            reads: [cols.y.map(Into::into), cols.z.map(Into::into)].into(),
+            writes: [cols.x.map(Into::into)].into(),
             instruction: MinimalInstruction {
                 is_valid,
                 opcode: expected_opcode,
@@ -170,26 +170,15 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction {
-            opcode,
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
-            ..
-        } = instruction;
+        let Instruction { opcode, .. } = instruction;
         let local_opcode_index = opcode - self.air.offset;
-
-        assert_ne!(*d, F::zero());
-        assert_ne!(*e, F::zero());
 
         let data: [[F; EXT_DEG]; 2] = reads.into();
         let y: [F; EXT_DEG] = data[0];
         let z: [F; EXT_DEG] = data[1];
 
         let x =
-            NewFieldExtension::solve(FieldExtensionOpcode::from_usize(local_opcode_index), x, y)
+            NewFieldExtension::solve(FieldExtensionOpcode::from_usize(local_opcode_index), y, z)
                 .unwrap();
 
         let output = AdapterRuntimeContext {
