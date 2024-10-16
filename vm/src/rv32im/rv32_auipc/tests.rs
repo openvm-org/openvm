@@ -255,10 +255,10 @@ fn overflow_negative_tests() {
     );
     run_negative_auipc_test(
         AUIPC,
-        None,
+        Some(0),
         Some(255),
-        None,
-        None,
+        Some([F::neg_one().as_canonical_u32(), 1, 0, 0]),
+        Some([0, 0, 0]),
         Some([1, 0, 0]),
         VerificationError::NonZeroCumulativeSum,
     );
