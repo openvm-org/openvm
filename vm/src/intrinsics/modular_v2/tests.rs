@@ -156,7 +156,7 @@ fn test_modular_addsub() {
         */
 
         let instruction = Instruction::from_isize(
-            chip.core.offset + op,
+            chip.core.air.offset + op,
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,
