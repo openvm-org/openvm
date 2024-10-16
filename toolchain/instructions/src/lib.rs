@@ -4,6 +4,8 @@ use axvm_instructions_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 pub mod config;
+/// Module with traits and constants for RISC-V instruction definitions for custom axVM instructions.
+pub mod riscv;
 pub mod utils;
 
 pub trait UsizeOpcode {
