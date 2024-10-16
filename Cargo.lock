@@ -66,6 +66,7 @@ dependencies = [
 name = "afs-derive"
 version = "0.1.0"
 dependencies = [
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -604,10 +605,14 @@ name = "axvm-instructions"
 version = "0.1.0"
 dependencies = [
  "axvm-instructions-derive",
+ "num-bigint 0.4.6",
+ "num-traits",
  "p3-baby-bear",
  "p3-field",
+ "serde",
  "strum",
  "strum_macros",
+ "toml",
 ]
 
 [[package]]

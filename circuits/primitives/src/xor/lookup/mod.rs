@@ -4,10 +4,15 @@ pub mod trace;
 
 use std::sync::{atomic::AtomicU32, Arc};
 
-use afs_stark_backend::{config::StarkGenericConfig, rap::AnyRap, Chip};
+use afs_stark_backend::{
+    config::StarkGenericConfig, p3_uni_stark::Val, prover::types::AirProofInput, rap::AnyRap, Chip,
+    ChipUsageGetter,
+};
 use air::XorLookupAir;
+use p3_field::PrimeField32;
 
 use super::bus::XorBus;
+use crate::xor::lookup::columns::NUM_XOR_LOOKUP_COLS;
 
 /// This chip gets requests to compute the xor of two numbers x and y of at most M bits.
 /// It generates a preprocessed table with a row for each possible triple (x, y, x^y)
@@ -59,8 +64,29 @@ impl<const M: usize> XorLookupChip<M> {
     }
 }
 
-impl<SC: StarkGenericConfig, const M: usize> Chip<SC> for XorLookupChip<M> {
+impl<SC: StarkGenericConfig, const M: usize> Chip<SC> for XorLookupChip<M>
+where
+    Val<SC>: PrimeField32,
+{
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
         Arc::new(self.air)
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let trace = self.generate_trace::<Val<SC>>();
+        AirProofInput::simple_no_pis(Arc::new(self.air), trace)
+    }
+}
+
+impl<const M: usize> ChipUsageGetter for XorLookupChip<M> {
+    fn air_name(&self) -> String {
+        "XorLookupAir".to_string()
+    }
+    fn current_trace_height(&self) -> usize {
+        1 << (2 * M)
+    }
+
+    fn trace_width(&self) -> usize {
+        NUM_XOR_LOOKUP_COLS
     }
 }

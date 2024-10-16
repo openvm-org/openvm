@@ -3,14 +3,16 @@ use std::sync::Arc;
 use afs_stark_backend::{
     prover::types::{AirProofInput, AirProofRawInput},
     rap::AnyRap,
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::{air::FibonacciAir, trace::generate_trace_rows};
+use crate::dummy_airs::fib_air::columns::NUM_FIBONACCI_COLS;
 
+#[derive(Clone, Debug)]
 pub struct FibonacciChip {
     /// The 0th number in the fibonacci sequence.
     pub a: u32,
@@ -35,7 +37,7 @@ where
         Arc::new(FibonacciAir)
     }
 
-    fn generate_air_proof_input(&self) -> AirProofInput<SC> {
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let common_main = generate_trace_rows::<Val<SC>>(self.a, self.b, self.n);
         let a = common_main.get(0, 0);
         let b = common_main.get(0, 1);
@@ -49,5 +51,17 @@ where
                 public_values: vec![a, b, last_val],
             },
         }
+    }
+}
+
+impl ChipUsageGetter for FibonacciChip {
+    fn air_name(&self) -> String {
+        "FibonacciAir".to_string()
+    }
+    fn current_trace_height(&self) -> usize {
+        self.n
+    }
+    fn trace_width(&self) -> usize {
+        NUM_FIBONACCI_COLS
     }
 }

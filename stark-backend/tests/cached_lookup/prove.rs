@@ -59,6 +59,7 @@ where
 
     let mut benchmarks = ProverBenchmarks::default();
     let prover = engine.prover();
+    let air = Arc::new(chip.air);
     // Must add trace matrices in the same order as above
     let mut start;
     let air_proof_input = if partition {
@@ -81,7 +82,7 @@ where
     let proof = prover.prove(&mut challenger, &pk, proof_input);
     benchmarks.prove_time_without_trace_gen = start.elapsed().as_micros();
 
-    (vk, Arc::new(chip.air), proof, benchmarks)
+    (vk, air, proof, benchmarks)
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]

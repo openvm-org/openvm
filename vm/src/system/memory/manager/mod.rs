@@ -19,9 +19,10 @@ use afs_primitives::{
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
+    prover::types::AirProofInput,
     rap::AnyRap,
 };
-use itertools::zip_eq;
+use itertools::{izip, zip_eq};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32};
@@ -508,8 +509,22 @@ impl<F: PrimeField32> MemoryController<F> {
         });
     }
 
+    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let airs = self.airs();
+        let MemoryControllerResult {
+            traces,
+            public_values,
+        } = self.result.unwrap();
+        izip!(airs, traces, public_values)
+            .map(|(air, trace, pvs)| AirProofInput::simple(air, trace, pvs))
+            .collect()
+    }
+
     pub fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
-        self.result.as_ref().unwrap().traces.clone()
+        self.result.unwrap().traces
     }
 
     pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>

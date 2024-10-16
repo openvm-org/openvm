@@ -16,7 +16,7 @@ use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::AirProofInput,
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use backtrace::Backtrace;
 use itertools::{izip, zip_eq};
@@ -33,18 +33,18 @@ use super::{
 use crate::{
     arch::{
         instructions::*, AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutionState,
-        ExecutorName, InstructionExecutor, VmChip,
+        ExecutorName, InstructionExecutor,
     },
     intrinsics::{
-        castf::CastFChip,
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     },
     kernels::{
         adapters::{
-            native_adapter::NativeAdapterChip,
+            convert_adapter::ConvertAdapterChip, native_adapter::NativeAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
+        castf::{CastFChip, CastFCoreChip},
         core::{
             CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
@@ -451,8 +451,12 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 ExecutorName::JalLuiRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalLuiChip::new(
-                        Rv32RdWriteAdapter::new(),
-                        Rv32JalLuiCoreChip::new(offset),
+                        Rv32RdWriteAdapter::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        Rv32JalLuiCoreChip::new(byte_xor_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -473,7 +477,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 ExecutorName::AuipcRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32AuipcChip::new(
-                        Rv32RdWriteAdapter::new(),
+                        Rv32RdWriteAdapter::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         Rv32AuipcCoreChip::new(offset),
                         memory_controller.clone(),
                     )));
@@ -484,10 +492,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 ExecutorName::CastF => {
                     let chip = Rc::new(RefCell::new(CastFChip::new(
-                        execution_bus,
-                        program_bus,
+                        ConvertAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        CastFCoreChip::new(
+                            memory_controller.borrow().range_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -746,16 +760,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             metrics: self.collected_metrics,
         };
 
-        for mut chip in self.chips {
-            let height = chip.current_trace_height();
-            let air = chip.air();
-            let public_values = chip.generate_public_values();
-            let trace = chip.generate_trace();
-
-            if height != 0 {
+        for chip in self.chips {
+            if chip.current_trace_height() != 0 {
                 result
                     .air_proof_inputs
-                    .push(AirProofInput::simple(air, trace, public_values));
+                    .push(chip.generate_air_proof_input());
             }
         }
         // System chips required by architecture: memory and connector
@@ -767,15 +776,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 .into_inner();
             let range_checker = memory_controller.range_checker.clone();
             let heights = memory_controller.current_trace_heights();
-            let airs = memory_controller.airs();
-            let public_values = memory_controller.generate_public_values_per_air();
-            let traces = memory_controller.generate_traces();
-
-            for (height, air, public_values, trace) in izip!(heights, airs, public_values, traces) {
+            let air_proof_inputs = memory_controller.generate_air_proof_inputs();
+            for (height, air_proof_input) in izip!(heights, air_proof_inputs) {
                 if height != 0 {
-                    result
-                        .air_proof_inputs
-                        .push(AirProofInput::simple(air, trace, public_values));
+                    result.air_proof_inputs.push(air_proof_input);
                 }
             }
             // range checker

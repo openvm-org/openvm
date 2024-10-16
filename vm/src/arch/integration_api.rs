@@ -7,15 +7,16 @@ use afs_stark_backend::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
     },
     config::{StarkGenericConfig, Val},
+    prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
-use super::{ExecutionState, InstructionExecutor, Result, VmChip};
+use super::{ExecutionState, InstructionExecutor, Result};
 use crate::system::{
     memory::{MemoryController, MemoryControllerRef},
     program::Instruction,
@@ -33,6 +34,7 @@ pub trait VmAdapterInterface<T> {
     type ProcessedInstruction;
 
     /// Given the local row slice of the adapter AIR, return the `from_pc` expression, if it can be obtained.
+    // S is intended to be AB::Var
     fn from_pc<S: Into<T> + Clone>(_local_adapter: &[S]) -> Option<T> {
         None
     }
@@ -47,6 +49,8 @@ pub trait VmAdapterChip<F: Field> {
     type WriteRecord: Send;
     /// AdapterAir should not have public values
     type Air: BaseAir<F> + Clone;
+    /// WARNING: the associated `Interface` type must have a `from_pc` implementation that is compatible with
+    /// the adapter AIR's column structure.
     type Interface: VmAdapterInterface<F>;
 
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
@@ -88,6 +92,8 @@ pub trait VmAdapterChip<F: Field> {
 }
 
 pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
+    /// WARNING: the associated `Interface` type must have a `from_pc` implementation that is compatible with
+    /// the adapter AIR's column structure.
     type Interface: VmAdapterInterface<AB::Expr>;
 
     /// [Air](p3_air::Air) constraints owned by the adapter.
@@ -192,8 +198,8 @@ where
 impl<F, A, M> InstructionExecutor<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
-    A: VmAdapterChip<F>,
-    M: VmCoreChip<F, A::Interface>,
+    A: VmAdapterChip<F> + Send + Sync,
+    M: VmCoreChip<F, A::Interface> + Send + Sync,
 {
     fn execute(
         &mut self,
@@ -221,49 +227,6 @@ where
     }
 }
 
-impl<F, A, M> VmChip<F> for VmChipWrapper<F, A, M>
-where
-    F: PrimeField32,
-    A: VmAdapterChip<F> + Sync,
-    M: VmCoreChip<F, A::Interface> + Sync,
-{
-    fn generate_trace(self) -> RowMajorMatrix<F> {
-        let height = next_power_of_two_or_zero(self.records.len());
-        let core_width = self.core.air().width();
-        let adapter_width = self.adapter.air().width();
-        let width = core_width + adapter_width;
-        let mut values = vec![F::zero(); height * width];
-        // This zip only goes through records.
-        // The padding rows between records.len()..height are filled with zeros.
-        values
-            .par_chunks_mut(width)
-            .zip(self.records.into_par_iter())
-            .for_each(|(row_slice, record)| {
-                let (adapter_row, core_row) = row_slice.split_at_mut(adapter_width);
-                self.adapter
-                    .generate_trace_row(adapter_row, record.0, record.1);
-                self.core.generate_trace_row(core_row, record.2);
-            });
-        RowMajorMatrix::new(values, width)
-    }
-
-    fn air_name(&self) -> String {
-        format!(
-            "<{},{}>",
-            get_air_name(self.adapter.air()),
-            get_air_name(self.core.air())
-        )
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.records.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        self.adapter.air().width() + self.core.air().width()
-    }
-}
-
 // Note[jpw]: the statement we want is:
 // - when A::Air is an AdapterAir for all AirBuilders needed by stark-backend
 // - and when M::Air is an CoreAir for all AirBuilders needed by stark-backend,
@@ -274,8 +237,8 @@ impl<SC, A, C> Chip<SC> for VmChipWrapper<Val<SC>, A, C>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
-    A: VmAdapterChip<Val<SC>>,
-    C: VmCoreChip<Val<SC>, A::Interface>,
+    A: VmAdapterChip<Val<SC>> + Send + Sync,
+    C: VmCoreChip<Val<SC>, A::Interface> + Send + Sync,
     A::Air: Send + Sync + 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
@@ -300,6 +263,48 @@ where
             core: self.core.air().clone(),
         };
         Arc::new(air)
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let air = self.air();
+        let height = next_power_of_two_or_zero(self.records.len());
+        let core_width = self.core.air().width();
+        let adapter_width = self.adapter.air().width();
+        let width = core_width + adapter_width;
+        let mut values = vec![Val::<SC>::zero(); height * width];
+        // This zip only goes through records.
+        // The padding rows between records.len()..height are filled with zeros.
+        values
+            .par_chunks_mut(width)
+            .zip(self.records.into_par_iter())
+            .for_each(|(row_slice, record)| {
+                let (adapter_row, core_row) = row_slice.split_at_mut(adapter_width);
+                self.adapter
+                    .generate_trace_row(adapter_row, record.0, record.1);
+                self.core.generate_trace_row(core_row, record.2);
+            });
+        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
+    }
+}
+
+impl<F, A, M> ChipUsageGetter for VmChipWrapper<F, A, M>
+where
+    F: PrimeField32,
+    A: VmAdapterChip<F> + Sync,
+    M: VmCoreChip<F, A::Interface> + Sync,
+{
+    fn air_name(&self) -> String {
+        format!(
+            "<{},{}>",
+            get_air_name(self.adapter.air()),
+            get_air_name(self.core.air())
+        )
+    }
+    fn current_trace_height(&self) -> usize {
+        self.records.len()
+    }
+    fn trace_width(&self) -> usize {
+        self.adapter.air().width() + self.core.air().width()
     }
 }
 

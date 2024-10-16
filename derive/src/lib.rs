@@ -4,6 +4,7 @@ extern crate alloc;
 extern crate proc_macro;
 
 use hints::create_new_struct_and_impl_hintable;
+use itertools::multiunzip;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam, ItemStruct};
@@ -99,7 +100,8 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 })
                 .collect::<Vec<_>>();
 
-            let (air_arms, _arms): (Vec<_>, Vec<_>) = variants.iter().map(|(variant_name, field)| {
+            let (air_arms, generate_air_proof_input_arms, generate_air_proof_input_with_id_arms): (Vec<_>, Vec<_>, Vec<_>) =
+                multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let air_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as afs_stark_backend::Chip<SC>>::air(x)
@@ -110,12 +112,8 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 let generate_air_proof_input_with_id_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as afs_stark_backend::Chip<SC>>::generate_air_proof_input_with_id(x, air_id)
                 };
-                (air_arm, (generate_air_proof_input_arm, generate_air_proof_input_with_id_arm))
-            }).unzip();
-            let (generate_air_proof_input_arms, generate_air_proof_input_with_id_arms): (
-                Vec<_>,
-                Vec<_>,
-            ) = _arms.into_iter().unzip();
+                (air_arm, generate_air_proof_input_arm, generate_air_proof_input_with_id_arm)
+            }));
 
             // Attach an extra generic SC: StarkGenericConfig to the impl_generics
             let generics = &ast.generics;
@@ -138,18 +136,70 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                             #(#air_arms,)*
                         }
                     }
-                    fn generate_air_proof_input(&self) -> afs_stark_backend::prover::types::AirProofInput<SC> {
+                    fn generate_air_proof_input(self) -> afs_stark_backend::prover::types::AirProofInput<SC> {
                         match self {
                             #(#generate_air_proof_input_arms,)*
                         }
                     }
-                    fn generate_air_proof_input_with_id(&self, air_id: usize) -> (usize, afs_stark_backend::prover::types::AirProofInput<SC>) {
+                    fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, afs_stark_backend::prover::types::AirProofInput<SC>) {
                         match self {
                             #(#generate_air_proof_input_with_id_arms,)*
                         }
                     }
                 }
             }.into()
+        }
+        Data::Union(_) => unimplemented!("Unions are not supported"),
+    }
+}
+
+#[proc_macro_derive(ChipUsageGetter)]
+pub fn chip_usage_getter_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (impl_generics, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(_) => unimplemented!("Structs are not supported yet"),
+        Data::Enum(e) => {
+            let (air_name_arms, current_trace_height_arms, trace_width_arms): (Vec<_>, Vec<_>, Vec<_>) =
+                multiunzip(e.variants.iter().map(|variant| {
+                    let variant_name = &variant.ident;
+                    let air_name_arm = quote! {
+                    #name::#variant_name(x) => afs_stark_backend::ChipUsageGetter::air_name(x)
+                };
+                    let current_trace_height_arm = quote! {
+                    #name::#variant_name(x) => afs_stark_backend::ChipUsageGetter::current_trace_height(x)
+                };
+                    let trace_width_arm = quote! {
+                    #name::#variant_name(x) => afs_stark_backend::ChipUsageGetter::trace_width(x)
+                };
+                    (air_name_arm, current_trace_height_arm, trace_width_arm)
+                }));
+
+            quote! {
+                impl #impl_generics afs_stark_backend::ChipUsageGetter for #name #ty_generics {
+                    fn air_name(&self) -> String {
+                        match self {
+                            #(#air_name_arms,)*
+                        }
+                    }
+                    fn current_trace_height(&self) -> usize {
+                        match self {
+                            #(#current_trace_height_arms,)*
+                        }
+                    }
+                    fn trace_width(&self) -> usize {
+                        match self {
+                            #(#trace_width_arms,)*
+                        }
+                    }
+
+                }
+            }
+            .into()
         }
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }

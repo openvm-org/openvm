@@ -1,7 +1,7 @@
 use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -15,7 +15,6 @@ use crate::{
     arch::{
         instructions::U256Opcode,
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        VmChip,
     },
     kernels::core::BYTE_XOR_BUS,
     old::alu::solve_alu,
@@ -126,7 +125,8 @@ fn run_alu_negative_test(
         &mut rng,
     );
 
-    let alu_trace = chip.clone().generate_trace();
+    let mut chip_input = chip.generate_air_proof_input();
+    let alu_trace = chip_input.raw.common_main.as_mut().unwrap();
     let mut alu_trace_row = alu_trace.row_slice(0).to_vec();
     let alu_trace_cols: &mut ArithmeticLogicCols<F, 32, 8> = (*alu_trace_row).borrow_mut();
 
@@ -134,7 +134,7 @@ fn run_alu_negative_test(
     alu_trace_cols.io.cmp_result = F::from_bool(cmp_result);
     alu_trace_cols.aux.x_sign = F::from_canonical_u32(x_sign);
     alu_trace_cols.aux.y_sign = F::from_canonical_u32(y_sign);
-    let alu_trace: p3_matrix::dense::DenseMatrix<_> = RowMajorMatrix::new(
+    *alu_trace = RowMajorMatrix::new(
         alu_trace_row,
         ArithmeticLogicCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
     );
@@ -142,7 +142,7 @@ fn run_alu_negative_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_with_custom_trace(chip, alu_trace)
+        .load_air_proof_input(chip_input)
         .load(xor_lookup_chip)
         .finalize();
     let msg = format!(

@@ -33,7 +33,7 @@ pub mod utils;
 /// Verifier implementation
 pub mod verifier;
 
-pub use chip::Chip;
+pub use chip::{Chip, ChipUsageGetter};
 
 // Use jemalloc as global allocator for performance
 #[cfg(all(feature = "jemalloc", unix))]
