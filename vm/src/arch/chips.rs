@@ -37,7 +37,7 @@ use crate::{
 };
 
 #[enum_dispatch]
-pub trait InstructionExecutor<F>: afs_stark_backend::ChipUsageGetter {
+pub trait InstructionExecutor<F> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
@@ -65,7 +65,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     }
 }
 
-#[derive(Clone, EnumDiscriminants, ChipUsageGetter)]
+#[derive(Clone, EnumDiscriminants)]
 #[strum_discriminants(derive(Serialize, Deserialize))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
