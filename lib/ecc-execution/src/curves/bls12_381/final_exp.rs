@@ -10,13 +10,13 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         let (c, s) = self.final_exp_hint(f);
         let c_inv = c.invert().unwrap();
 
-        // u = 0xd201000000010000
-        // f * scalingFactor * == c^{q - u}
-        // f * s = c^q * c^-u
-        // f * c^u * c^-q * s == 1, where fc == f * c^u (embedded miller loop with c)
+        // f * s = c^{q - x}
+        // f * s = c^q * c^-x
+        // f * c^x * c^-q * s == 1,
+        //   where fc == f * c^x (embedded miller loop with c) & x = -0xd201000000010000
         let c_q_inv = c_inv.frobenius_map();
 
-        let fc = self.multi_miller_loop_embedded_exp(P, Q, Some(c));
+        let fc = self.multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
 
         assert_eq!(fc * c_q_inv * s, Fq12::one());
     }

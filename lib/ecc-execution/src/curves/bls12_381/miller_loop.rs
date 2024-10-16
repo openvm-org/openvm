@@ -94,14 +94,11 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         f: Fq12,
         Q_acc: Vec<EcPoint<Fq2>>,
         _Q: &[EcPoint<Fq2>],
-        c: Option<Fq12>,
+        _c: Option<Fq12>,
         _x_over_ys: Vec<Fq>,
         _y_invs: Vec<Fq>,
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
-        let mut f = f;
-        // if c == None {
-        f = f.conjugate();
-        // }
+        let f = f.conjugate();
         (f, Q_acc)
     }
 }

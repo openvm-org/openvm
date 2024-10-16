@@ -13,6 +13,10 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         let (c, u) = self.final_exp_hint(f);
         let c_inv = c.invert().unwrap();
 
+        // f * u == c^λ
+        // f * u == c^{6x + 2 + q^3 - q^2 + q}
+        // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
+        // where fc == f * c^-{6x + 2}
         // c_mul = c^-{q^3 - q^2 + q}
         let c_q3 = c_inv.frobenius_map(Some(3));
         let c_q2 = c_inv.frobenius_map(Some(2));
