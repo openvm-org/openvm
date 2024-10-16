@@ -1,0 +1,9 @@
+[workspace]
+[package]
+version = "0.1.0"
+name = "axvm-fibonacci-program"
+edition = "2021"
+
+[dependencies]
+axvm = { path = "../../../zkvm/lib" }
+axvm-macros = { path = "../../../zkvm/macros" }
