@@ -4,7 +4,7 @@ use afs_primitives::xor::lookup::XorLookupChip;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
 use super::{core::solve_alu, BaseAluCoreChip, Rv32BaseAluChip};
@@ -157,10 +157,12 @@ fn rv32_alu_and_rand_test() {
 /// A dummy adapter is used so memory interactions don't indirectly cause false passes.
 ///////////////////////////////////////////////////////////////////////////////////////
 
+#[allow(dead_code)]
 type Rv32BaseAluTestChip<F> =
     VmChipWrapper<F, TestAdapterChip<F>, BaseAluCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>>;
 
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 fn run_rv32_alu_negative_test(
     opcode: AluOpcode,
     a: [u32; RV32_REGISTER_NUM_LANES],
