@@ -98,6 +98,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         _x_over_ys: Vec<Fq>,
         _y_invs: Vec<Fq>,
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
+        // Conjugate for negative component of the seed
         let f = f.conjugate();
         (f, Q_acc)
     }

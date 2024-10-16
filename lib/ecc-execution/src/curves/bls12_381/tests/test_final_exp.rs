@@ -4,7 +4,7 @@ use num::{BigInt, Num};
 
 use crate::{
     common::{AffineCoords, EcPoint, ExpBigInt, FinalExp, MultiMillerLoop},
-    curves::bls12_381::{Bls12_381, T},
+    curves::bls12_381::{Bls12_381, SEED_NEG},
 };
 
 #[test]
@@ -21,7 +21,7 @@ fn test_bls12_381_final_exp_hint() {
         "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
         16,
     ).unwrap();
-    let c_qt = c.exp_bigint(q) * c.exp_bigint(T.clone());
+    let c_qt = c.exp_bigint(q) * c.exp_bigint(SEED_NEG.clone());
 
     assert_eq!(f * s, c_qt);
 }
