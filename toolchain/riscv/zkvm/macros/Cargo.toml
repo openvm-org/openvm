@@ -1,0 +1,17 @@
+[package]
+name = "axvm-macros"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "1.0", features = ["parsing"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+axvm-instructions.workspace = true
