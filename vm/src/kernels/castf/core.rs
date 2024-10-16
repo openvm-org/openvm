@@ -26,26 +26,26 @@ pub(crate) const FINAL_LIMB_SIZE: usize = 6;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct NewCastFCoreCols<T> {
+pub struct CastFCoreCols<T> {
     pub in_val: T,
     pub out_val: [T; RV32_REGISTER_NUM_LANES],
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct NewCastFCoreAir {
+pub struct CastFCoreAir {
     pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
     offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for NewCastFCoreAir {
+impl<F: Field> BaseAir<F> for CastFCoreAir {
     fn width(&self) -> usize {
-        NewCastFCoreCols::<F>::width()
+        CastFCoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for NewCastFCoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for CastFCoreAir {}
 
-impl<AB, I> VmCoreAir<AB, I> for NewCastFCoreAir
+impl<AB, I> VmCoreAir<AB, I> for CastFCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -59,7 +59,7 @@ where
         local_core: &[AB::Var],
         _local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &NewCastFCoreCols<_> = local_core.borrow();
+        let cols: &CastFCoreCols<_> = local_core.borrow();
 
         let intermed_val = cols
             .out_val
@@ -96,21 +96,21 @@ where
 }
 
 #[derive(Debug)]
-pub struct NewCastFRecord<F> {
+pub struct CastFRecord<F> {
     pub in_val: F,
     pub out_val: [F; RV32_REGISTER_NUM_LANES],
 }
 
 #[derive(Debug)]
-pub struct NewCastFCoreChip {
-    pub air: NewCastFCoreAir,
+pub struct CastFCoreChip {
+    pub air: CastFCoreAir,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
-impl NewCastFCoreChip {
+impl CastFCoreChip {
     pub fn new(range_checker_chip: Arc<VariableRangeCheckerChip>, offset: usize) -> Self {
         Self {
-            air: NewCastFCoreAir {
+            air: CastFCoreAir {
                 bus: range_checker_chip.bus(),
                 offset,
             },
@@ -119,13 +119,13 @@ impl NewCastFCoreChip {
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for NewCastFCoreChip
+impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for CastFCoreChip
 where
     I::Reads: Into<[[F; 1]; 1]>,
     I::Writes: From<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
 {
-    type Record = NewCastFRecord<F>;
-    type Air = NewCastFCoreAir;
+    type Record = CastFRecord<F>;
+    type Air = CastFCoreAir;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
@@ -140,7 +140,7 @@ where
 
         let y = reads.into()[0][0];
 
-        let x = NewCastF::solve(y.as_canonical_u32());
+        let x = CastF::solve(y.as_canonical_u32());
         for (i, limb) in x.iter().enumerate() {
             if i == 3 {
                 self.range_checker_chip.add_count(*limb, FINAL_LIMB_SIZE);
@@ -154,7 +154,7 @@ where
             writes: [x.map(F::from_canonical_u32)].into(),
         };
 
-        let record = NewCastFRecord {
+        let record = CastFRecord {
             in_val: y,
             out_val: x.map(F::from_canonical_u32),
         };
@@ -167,7 +167,7 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let cols: &mut NewCastFCoreCols<F> = row_slice.borrow_mut();
+        let cols: &mut CastFCoreCols<F> = row_slice.borrow_mut();
         cols.in_val = record.in_val;
         cols.out_val = record.out_val;
     }
@@ -177,8 +177,8 @@ where
     }
 }
 
-pub struct NewCastF;
-impl NewCastF {
+pub struct CastF;
+impl CastF {
     pub(super) fn solve(y: u32) -> [u32; RV32_REGISTER_NUM_LANES] {
         let mut x = [0; 4];
         for (i, limb) in x.iter_mut().enumerate() {
