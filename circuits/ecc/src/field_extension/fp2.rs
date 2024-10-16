@@ -146,7 +146,8 @@ mod tests {
         let air = FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
-            range_checker: range_checker.clone(),
+            range_bus: range_checker.bus().index,
+            range_max_bits: range_checker.range_max_bits(),
         };
         let width = BaseAir::<BabyBear>::width(&air);
 
@@ -210,7 +211,8 @@ mod tests {
         let air = FieldExpr {
             builder: builder.clone(),
             check_carry_mod_to_zero: subair,
-            range_checker: range_checker.clone(),
+            range_bus: range_checker.bus().index,
+            range_max_bits: range_checker.range_max_bits(),
         };
         let width = BaseAir::<BabyBear>::width(&air);
 

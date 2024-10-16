@@ -84,7 +84,8 @@ fn test_add() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -122,7 +123,8 @@ fn test_div() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -167,7 +169,8 @@ fn test_auto_carry_mul() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
@@ -212,7 +215,8 @@ fn test_auto_carry_intmul() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
@@ -266,7 +270,8 @@ fn test_auto_carry_add() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -312,7 +317,8 @@ fn test_ec_add() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
     let (x1, y1) = SampleEcPoints[0].clone();
@@ -357,7 +363,8 @@ fn test_ec_double() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -403,7 +410,8 @@ fn test_select() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -448,7 +456,8 @@ fn test_select2() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 

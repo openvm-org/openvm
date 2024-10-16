@@ -130,7 +130,9 @@ pub struct FieldExpr {
     pub builder: ExprBuilder,
 
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
-    pub range_checker: Arc<VariableRangeCheckerChip>,
+
+    pub range_bus: usize,
+    pub range_max_bits: usize,
 }
 
 impl Deref for FieldExpr {
@@ -198,8 +200,8 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             for limb in var.limbs.iter() {
                 range_check(
                     builder,
-                    self.range_checker.bus().index,
-                    self.range_checker.range_max_bits(),
+                    self.range_bus,
+                    self.range_max_bits,
                     self.limb_bits,
                     limb.clone(),
                     is_valid,
