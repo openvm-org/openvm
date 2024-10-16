@@ -12,7 +12,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         // f * s = c^{q - x}
         // f * s = c^q * c^-x
         // f * c^x * c^-q * s = 1,
-        //   where fc = f * c'^x (embedded miller loop with c conjugate inverse),
+        //   where fc = f * c'^x (embedded Miller loop with c conjugate inverse),
         //   and the curve seed x = -0xd201000000010000
         //   the miller loop computation includes a conjugation at the end because the value of the
         //   seed is negative, so we need to conjugate the miller loop input c as c'. We then substitute
@@ -21,6 +21,10 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         let c_inv = c.invert().unwrap();
         let c_conj_inv = c.conjugate().invert().unwrap();
         let c_q_inv = c_inv.frobenius_map();
+
+        // fc = f_{Miller,x,Q}(P) * c^{x}
+        // where
+        //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
         let fc = self.multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
 
         assert_eq!(fc * c_q_inv * s, Fq12::one());

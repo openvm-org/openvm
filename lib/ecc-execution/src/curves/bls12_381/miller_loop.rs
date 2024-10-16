@@ -37,6 +37,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         f
     }
 
+    /// The expected output of this function when running the Miller loop with embedded exponent is c^3 * l_{3Q}
     fn pre_loop(
         &self,
         f: Fq12,
@@ -49,12 +50,15 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         let mut f = f;
 
         if c.is_some() {
+            // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
+            // will multiply by c again due to the last two values of the pseudo-binary encoding (BN12_381_PBE) being 1.
+            // Therefore, the final value of f at the end of this block is c^3.
             f = fp12_square(f) * c.unwrap();
         }
 
         let mut Q_acc = Q_acc;
 
-        // Special case the first iteration of the miller loop with pseudo_binary_encoding = 1:
+        // Special case the first iteration of the Miller loop with pseudo_binary_encoding = 1:
         // this means that the first step is a double and add, but we need to separate the two steps since the optimized
         // `miller_double_and_add_step` will fail because Q_acc is equal to Q_signed on the first iteration
         let (Q_out_double, lines_2S) = Q_acc
@@ -89,6 +93,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         (f, Q_acc)
     }
 
+    /// After running the main body of the Miller loop, we conjugate f due to the curve seed x being negative.
     fn post_loop(
         &self,
         f: Fq12,

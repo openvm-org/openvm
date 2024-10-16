@@ -20,10 +20,9 @@ lazy_static! {
 }
 
 // curve seed x = -0xd201000000010000
-pub const BLS12_381_SEED: u64 = 0xd201000000010000;
-pub const BLS12_381_SEED_NEG: bool = true;
+pub const BLS12_381_SEED_ABS: u64 = 0xd201000000010000;
 
-// BLS12-381 pseudo-binary encoding
+// BLS12-381 pseudo-binary encoding. This encoding represents the absolute value of the curve seed.
 // from gnark implementation: https://github.com/Consensys/gnark/blob/42dcb0c3673b2394bf1fd82f5128f7a121d7d48e/std/algebra/emulated/sw_bls12381/pairing.go#L322
 pub const BLS12_381_PBE_BITS: usize = 64;
 pub const BLS12_381_PBE: [i8; BLS12_381_PBE_BITS] = [
@@ -39,7 +38,7 @@ impl Bls12_381 {
     }
 
     pub fn seed() -> u64 {
-        BLS12_381_SEED
+        BLS12_381_SEED_ABS
     }
 
     pub fn pseudo_binary_encoding() -> [i8; BLS12_381_PBE_BITS] {
