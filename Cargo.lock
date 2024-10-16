@@ -636,6 +636,7 @@ name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [
  "ax-sdk",
+ "axvm-instructions",
  "axvm-platform",
  "color-eyre",
  "elf",
@@ -643,6 +644,7 @@ dependencies = [
  "p3-field",
  "rrs-lib",
  "stark-vm",
+ "test-case",
 ]
 
 [[package]]

@@ -137,7 +137,6 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_bne(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        dbg!(dec_insn.imm);
         from_b_type(BranchEqualOpcode::BNE.with_default_offset(), &dec_insn)
     }
 

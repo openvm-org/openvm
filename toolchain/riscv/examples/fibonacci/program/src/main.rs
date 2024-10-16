@@ -14,7 +14,9 @@ pub fn main() {
         b = sum;
         n -= 1;
         x += 1;
+        // use a beq between registers until the x0 problem is fixed
         if n == x {
+            // this ecall is mostly to trick compiler to not compile everything away
             unsafe {
                 core::arch::asm!(
                     "ecall",

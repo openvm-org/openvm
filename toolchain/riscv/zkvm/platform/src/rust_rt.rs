@@ -29,10 +29,9 @@ extern crate alloc;
 /// panic! implementation for use in no_std guest programs.
 #[cfg_attr(feature = "panic-handler", panic_handler)]
 pub fn panic_fault(panic_info: &PanicInfo) -> ! {
-    // let msg = alloc::format!("{}", panic_info);
-    // let msg_bytes = msg.as_bytes();
-    // unsafe { sys_panic(msg.as_ptr(), msg.len()) }
-    unreachable!()
+    let msg = alloc::format!("{}", panic_info);
+    let msg_bytes = msg.as_bytes();
+    unsafe { sys_panic(msg.as_ptr(), msg.len()) }
 }
 
 #[cfg(feature = "entrypoint")]

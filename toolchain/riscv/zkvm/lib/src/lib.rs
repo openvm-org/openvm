@@ -88,7 +88,9 @@ pub mod serde;
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
 
+// always include rust_rt so the memory allocator is enabled
 #[cfg(target_os = "zkvm")]
+#[allow(unused_imports)]
 use axvm_platform::rust_rt;
 
 #[cfg(target_os = "zkvm")]
@@ -184,7 +186,7 @@ _start:
     .option norelax;
     la gp, __global_pointer$;
     .option pop;
-    lui sp, 0x200
+    lui sp, 0x200 // ATTENTION: this hardcodes the stack size, undo this once initial memory image is supported
     call __start;
 "#,
     // sym STACK_TOP
@@ -210,6 +212,5 @@ pub fn memory_barrier<T>(ptr: *const T) {
 #[cfg(all(target_os = "zkvm", not(feature = "std")))]
 #[panic_handler]
 fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
-    loop {}
-    // axvm_platform::rust_rt::panic_fault(panic_info);
+    axvm_platform::rust_rt::panic_fault(panic_info);
 }
