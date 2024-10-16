@@ -2,7 +2,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Expr, GenericArgument, Ident, Pat, PathArguments, Stmt, Type};
+use syn::{parse_macro_input, Expr, GenericArgument, Ident, Pat, PathArguments, Stmt};
 
 #[proc_macro_attribute]
 pub fn axvm(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -10,16 +10,16 @@ pub fn axvm(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let stmt = parse_macro_input!(item as Stmt);
 
     // Variables to hold the extracted identifiers
-    let mut var_name: Option<Ident> = None;
+    let mut rd_name: Option<Ident> = None;
     let mut func_name: Option<Ident> = None;
     let mut generic_param: Option<Expr> = None;
-    let mut arg1: Option<Ident> = None;
-    let mut arg2: Option<Ident> = None;
+    let mut rs1_name: Option<Ident> = None;
+    let mut rs2_name: Option<Ident> = None;
 
     if let Stmt::Local(local) = stmt {
         // Extract the variable name from the pattern
         if let Pat::Ident(pat_ident) = &local.pat {
-            var_name = Some(pat_ident.ident.clone());
+            rd_name = Some(pat_ident.ident.clone());
         }
 
         // Extract the initialization expression
@@ -50,31 +50,40 @@ pub fn axvm(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 let args = &expr_call.args;
                 let mut args_iter = args.iter();
 
-                if let Some(Expr::Path(arg1_path)) = args_iter.next() {
-                    if let Some(arg1_segment) = arg1_path.path.segments.last() {
-                        arg1 = Some(arg1_segment.ident.clone());
+                if let Some(Expr::Path(rs1_path)) = args_iter.next() {
+                    if let Some(rs1_segment) = rs1_path.path.segments.last() {
+                        rs1_name = Some(rs1_segment.ident.clone());
                     }
                 }
 
-                if let Some(Expr::Path(arg2_path)) = args_iter.next() {
-                    if let Some(arg2_segment) = arg2_path.path.segments.last() {
-                        arg2 = Some(arg2_segment.ident.clone());
+                if let Some(Expr::Path(rs2_path)) = args_iter.next() {
+                    if let Some(rs2_segment) = rs2_path.path.segments.last() {
+                        rs2_name = Some(rs2_segment.ident.clone());
                     }
                 }
             }
         }
     }
 
-    // Now you have the identifiers: var_name, func_name, generic_param, arg1, arg2
-    // You can use them as needed in your macro logic
-
     let output = quote! {
-        // Debug output
-        println!("var_name: {:?}", stringify!(#var_name));
-        println!("func_name: {:?}", stringify!(#func_name));
-        println!("generic_param: {:?}", stringify!(#generic_param));
-        println!("arg1: {:?}", stringify!(#arg1));
-        println!("arg2: {:?}", stringify!(#arg2));
+        // #[cfg(target_os = "zkvm")]
+        // unsafe {
+        //     core::arch::asm!(
+        //         ".insn r 0b0101011 0b000 0x00 {rd} {rs1} {rs2}",
+        //         rd = in(reg) #rd_name,
+        //         rs1 = in(reg) #rs1_name,
+        //         rs2 = in(reg) #rs2_name,
+        //     )
+        // }
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            // Debug output
+            println!("rd_name: {:?}", stringify!(#rd_name));
+            println!("func_name: {:?}", stringify!(#func_name));
+            println!("generic_param: {:?}", stringify!(#generic_param));
+            println!("rs1_name: {:?}", stringify!(#rs1_name));
+            println!("rs2_name: {:?}", stringify!(#rs2_name));
+        }
     };
 
     // Convert the quoted tokens back to proc_macro::TokenStream
