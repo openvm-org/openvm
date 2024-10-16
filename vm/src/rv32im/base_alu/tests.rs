@@ -5,7 +5,6 @@ use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationErro
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
 use super::{core::solve_alu, BaseAluCoreChip, Rv32BaseAluChip};
