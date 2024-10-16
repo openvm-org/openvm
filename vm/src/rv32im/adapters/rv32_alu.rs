@@ -219,7 +219,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
             )
         } else {
             let rs2_read = memory.read::<RV32_REGISTER_NUM_LANES>(e, c);
-            (Some(rs2_read.clone()), rs2_read.data, F::zero())
+            (Some(rs2_read), rs2_read.data, F::zero())
         };
 
         Ok(([rs1.data, rs2_data], Self::ReadRecord { rs1, rs2, rs2_imm }))
@@ -265,12 +265,10 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         row_slice.rs1_ptr = read_record.rs1.pointer;
         row_slice.rs2 = read_record
             .rs2
-            .clone()
             .map(|rs2| rs2.pointer)
             .unwrap_or(read_record.rs2_imm);
         row_slice.rs2_as = read_record
             .rs2
-            .clone()
             .map(|rs2| rs2.address_space)
             .unwrap_or(F::zero());
         row_slice.reads_aux = [

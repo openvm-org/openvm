@@ -7,8 +7,8 @@ use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 use crate::{
     arch::{instructions::*, ExecutorName},
-    intrinsics::modular_addsub::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     kernels::core::CoreOptions,
+    old::modular_addsub::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
 };
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;

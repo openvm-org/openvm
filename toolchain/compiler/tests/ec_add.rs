@@ -12,7 +12,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     arch::ExecutorName,
-    intrinsics::modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
+    old::modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
     system::{program::util::execute_program_with_config, vm::config::VmConfig},
 };
 

@@ -71,9 +71,9 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
 
                 let io = EcAddUnequalIoCols {
                     from_state: from_state.map(F::from_canonical_u32),
-                    p1: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p1_array_read.clone()),
-                    p2: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p2_array_read.clone()),
-                    p3: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p3_array_write.clone()),
+                    p1: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p1_array_read),
+                    p2: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p2_array_read),
+                    p3: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p3_array_write),
                 };
 
                 let (p1_x, p1_y) = load_ec_point(p1_array_read);
@@ -85,12 +85,9 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
                 ));
 
                 let aux = EcAddUnequalAuxCols {
-                    read_p1_aux_cols: aux_cols_factory
-                        .make_heap_read_aux_cols(p1_array_read.clone()),
-                    read_p2_aux_cols: aux_cols_factory
-                        .make_heap_read_aux_cols(p2_array_read.clone()),
-                    write_p3_aux_cols: aux_cols_factory
-                        .make_heap_write_aux_cols(p3_array_write.clone()),
+                    read_p1_aux_cols: aux_cols_factory.make_heap_read_aux_cols(*p1_array_read),
+                    read_p2_aux_cols: aux_cols_factory.make_heap_read_aux_cols(*p2_array_read),
+                    write_p3_aux_cols: aux_cols_factory.make_heap_write_aux_cols(*p3_array_write),
                     aux: EcPrimitiveAuxCols {
                         is_valid: F::one(),
                         lambda: primitive_row.aux.lambda,
@@ -153,8 +150,8 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
 
                 let io = EcDoubleIoCols {
                     from_state: from_state.map(F::from_canonical_u32),
-                    p1: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p1_array_read.clone()),
-                    p2: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(p2_array_write.clone()),
+                    p1: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p1_array_read),
+                    p2: MemoryHeapDataIoCols::<F, TWO_NUM_LIMBS>::from(*p2_array_write),
                 };
                 let (p1_x, p1_y) = load_ec_point(p1_array_read);
 
@@ -164,10 +161,8 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
                     .generate_trace_row(((p1_x, p1_y), self.config.range_checker_chip.clone()));
 
                 let aux = EcDoubleAuxCols {
-                    read_p1_aux_cols: aux_cols_factory
-                        .make_heap_read_aux_cols(p1_array_read.clone()),
-                    write_p2_aux_cols: aux_cols_factory
-                        .make_heap_write_aux_cols(p2_array_write.clone()),
+                    read_p1_aux_cols: aux_cols_factory.make_heap_read_aux_cols(*p1_array_read),
+                    write_p2_aux_cols: aux_cols_factory.make_heap_write_aux_cols(*p2_array_write),
                     aux: EcPrimitiveAuxCols {
                         is_valid: F::one(),
                         lambda: primitive_row.aux.lambda,

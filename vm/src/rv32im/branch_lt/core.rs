@@ -127,7 +127,7 @@ where
             solve_cmp::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
         let output = AdapterRuntimeContext {
-            to_pc: cmp_result.then_some(from_pc + imm.as_canonical_u32()),
+            to_pc: cmp_result.then_some((F::from_canonical_u32(from_pc) + imm).as_canonical_u32()),
             writes: Default::default(),
         };
 
