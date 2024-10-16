@@ -14,6 +14,7 @@ members = [
     "toolchain/compiler",
     "toolchain/riscv/zkvm/lib",
     "toolchain/riscv/zkvm/platform",
+    "toolchain/riscv/zkvm/macros",
     "toolchain/riscv/transpiler",
     "vm",
 ]
@@ -63,6 +64,7 @@ lto = "thin"
 
 [workspace.dependencies]
 axvm = { path = "toolchain/riscv/zkvm/lib", default-features = false }
+axvm-macros = { path = "toolchain/riscv/zkvm/macros", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }
 axvm-instructions-derive = { path = "toolchain/instructions/derive", default-features = false }
 axvm-platform = { path = "toolchain/riscv/zkvm/platform", default-features = false }

@@ -620,6 +620,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-macros"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
