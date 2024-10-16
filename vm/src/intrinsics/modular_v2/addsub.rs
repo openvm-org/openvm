@@ -25,10 +25,15 @@ use crate::{
 #[derive(Clone)]
 pub struct ModularAddSubV2CoreAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub expr: FieldExpr,
+    pub offset: usize,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE> {
-    pub fn new(modulus: BigUint, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
+    pub fn new(
+        modulus: BigUint,
+        range_checker: Arc<VariableRangeCheckerChip>,
+        offset: usize,
+    ) -> Self {
         assert!(modulus.bits() <= NUM_LIMBS * LIMB_SIZE);
         let bus = range_checker.bus();
         let subair = CheckCarryModToZeroSubAir::new(
@@ -59,7 +64,7 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreAir<NUM_
             check_carry_mod_to_zero: subair,
             range_checker,
         };
-        Self { expr }
+        Self { expr, offset }
     }
 }
 
@@ -114,7 +119,7 @@ where
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
-            opcode: expected_opcode,
+            opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
         };
 
         AdapterAirContext {
@@ -129,7 +134,6 @@ where
 #[derive(Clone)]
 pub struct ModularAddSubV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub air: ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>,
-    pub offset: usize,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE> {
@@ -138,8 +142,8 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
-        let air = ModularAddSubV2CoreAir::new(modulus, range_checker);
-        Self { air, offset }
+        let air = ModularAddSubV2CoreAir::new(modulus, range_checker, offset);
+        Self { air }
     }
 }
 
@@ -166,7 +170,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction.clone();
-        let local_opcode_index = opcode - self.offset;
+        let local_opcode_index = opcode - self.air.offset;
         let data: Vec<F> = reads.into();
         assert_eq!(data.len(), 2 * NUM_LIMBS);
         let x = data[..NUM_LIMBS]
