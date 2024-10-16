@@ -31,6 +31,11 @@ pub trait VmAdapterInterface<T> {
     /// May include the `to_pc`.
     /// Typically this should not include address spaces.
     type ProcessedInstruction;
+
+    /// Given the local row slice of the adapter AIR, return the `from_pc` expression, if it can be obtained.
+    fn from_pc<S: Into<T>>(_local_adapter: &[S]) -> Option<T> {
+        None
+    }
 }
 
 /// The adapter owns all memory accesses and timestamp changes.
