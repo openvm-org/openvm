@@ -2,15 +2,15 @@ use afs_primitives::bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prim
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
 
 use super::{ModularAddSubV2CoreChip, ModularMulDivV2CoreChip};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        testing::VmChipTestBuilder,
-        ExecutionBridge, VmChipWrapper,
+        testing::{TestAdapterChip, VmChipTestBuilder},
+        ExecutionBridge, FlatInterface, VmChipWrapper,
     },
     rv32im::adapters::Rv32HeapAdapter,
     system::program::Instruction,
@@ -20,40 +20,54 @@ use crate::{
 const NUM_LIMBS: usize = 32;
 const LIMB_SIZE: usize = 8;
 type F = BabyBear;
+const READ_CELLS: usize = 64;
+type TestInterface = FlatInterface<BabyBear, READ_CELLS, NUM_LIMBS>;
 
 #[test]
-fn test_modular_add() {
+fn test_modular_addsub() {
     let coord_modulus = secp256k1_coord_prime();
     let scalar_modulus = secp256k1_scalar_prime();
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
 
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
     let memory_bridge = tester.memory_controller().borrow().memory_bridge();
-    let adapter = Rv32HeapAdapter::new(execution_bridge, memory_bridge);
-    let coord_chip = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let mut coord_core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         coord_modulus.clone(),
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset(),
     );
-    let scalar_chip = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let mut coord_adapter = TestAdapterChip::new(vec![], vec![None]);
+    let mut scalar_core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         scalar_modulus.clone(),
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + 4,
     );
+    let mut scalar_adapter = TestAdapterChip::new(vec![], vec![None]);
     let mut rng = create_seeded_rng();
     let num_tests = 100;
+    let mut all_ops = vec![];
+    let mut all_scalar = vec![];
+    let mut all_a = vec![];
+    let mut all_b = vec![];
 
+    // First loop: generate all random test data.
     for _ in 0..num_tests {
-        let a_digits = (0..NUM_LIMBS)
+        let a_digits: Vec<_> = (0..NUM_LIMBS)
             .map(|_| rng.gen_range(0..(1 << LIMB_SIZE)))
             .collect();
-        let mut a = BigUint::new(a_digits);
-        let b_digits = (0..NUM_LIMBS)
+        let mut a = BigUint::new(a_digits.clone());
+        let b_digits: Vec<_> = (0..NUM_LIMBS)
             .map(|_| rng.gen_range(0..(1 << LIMB_SIZE)))
             .collect();
-        let mut b = BigUint::new(b_digits);
+        let mut b = BigUint::new(b_digits.clone());
+        let interface_reads: [BabyBear; READ_CELLS] = [a_digits, b_digits]
+            .concat()
+            .into_iter()
+            .map(BabyBear::from_canonical_u32)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
 
-        // let opcode = rng.gen_range(0..2);
         let op = rng.gen_range(0..2); // 0 for add, 1 for sub
         let is_scalar = rng.gen_bool(0.5);
         let modulus = if is_scalar {
@@ -61,23 +75,57 @@ fn test_modular_add() {
         } else {
             coord_modulus.clone()
         };
-        let chip = if is_scalar {
-            scalar_chip.clone()
-        } else {
-            coord_chip.clone()
-        };
-
         a %= modulus.clone();
         b %= modulus.clone();
+
+        all_ops.push(op);
+        all_scalar.push(is_scalar);
+        all_a.push(a.clone());
+        all_b.push(b.clone());
+        if is_scalar {
+            scalar_adapter
+                .prank_reads
+                .push_back(interface_reads.to_vec());
+        } else {
+            coord_adapter
+                .prank_reads
+                .push_back(interface_reads.to_vec());
+        }
+    }
+    let mut coord_chip = VmChipWrapper::new(coord_adapter, coord_core, tester.memory_controller());
+    let mut scalar_chip =
+        VmChipWrapper::new(scalar_adapter, scalar_core, tester.memory_controller());
+    // Second loop: actually run the tests.
+    for i in 0..num_tests {
+        let op = all_ops[i];
+        let is_scalar = all_scalar[i];
+        let a = all_a[i].clone();
+        let b = all_b[i].clone();
+        let chip = if is_scalar {
+            &mut scalar_chip
+        } else {
+            &mut coord_chip
+        };
+        let modulus = if is_scalar {
+            scalar_modulus.clone()
+        } else {
+            coord_modulus.clone()
+        };
         assert!(a < modulus);
         assert!(b < modulus);
+        let expected_answer = if op == 0 {
+            (&a + &b) % &modulus
+        } else {
+            (&a + &modulus - &b) % &modulus
+        };
 
         let r = chip
+            .core
             .air
             .expr
             .execute(vec![a.clone(), b.clone()], vec![op == 0]);
         let r = r[0].clone();
-
+        assert_eq!(expected_answer, r);
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:
         // 1. address_ptr which stores the actual address
@@ -89,10 +137,12 @@ fn test_modular_add() {
         let addr_ptr3 = 24;
 
         let data_as = 2;
-        let address1 = 0;
-        let address2 = 128;
-        let address3 = 256;
+        let _address1 = 0;
+        let _address2 = 128;
+        let _address3 = 256;
 
+        // TODO: uncomment memory part when switch to vectorized adapter
+        /*
         tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
         tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
         tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
@@ -103,9 +153,10 @@ fn test_modular_add() {
         let b_limbs: [BabyBear; NUM_LIMBS] =
             biguint_to_limbs(b.clone(), LIMB_SIZE).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address2, b_limbs);
+        */
 
         let instruction = Instruction::from_isize(
-            chip.offset + op,
+            chip.core.offset + op,
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,
@@ -113,20 +164,23 @@ fn test_modular_add() {
             data_as as isize,
         );
 
-        let mut chip_wrapper =
-            VmChipWrapper::new(adapter.clone(), chip, tester.memory_controller());
-        tester.execute(&mut chip_wrapper, instruction);
-        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
+        // let mut chip_wrapper =
+        //     VmChipWrapper::new(adapter.clone(), chip, tester.memory_controller());
+        tester.execute(chip, instruction);
 
+        // TODO: uncomment when switch to vectorized adapter
+        /*
+        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
         for (i, &elem) in r_limbs.iter().enumerate() {
             let address = address3 + i;
             let read_val = tester.read_cell(data_as, address);
             assert_eq!(BabyBear::from_canonical_u32(elem), read_val);
         }
+        */
     }
-    // let tester = tester.build().load(coord_chip).load(scalar_chip).finalize();
+    let tester = tester.build().load(coord_chip).load(scalar_chip).finalize();
 
-    // tester.simple_test().expect("Verification failed");
+    tester.simple_test().expect("Verification failed");
 }
 
 #[test]
