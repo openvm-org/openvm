@@ -27,22 +27,16 @@ pub struct ModularMulDivV2CoreAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2CoreAir<NUM_LIMBS, LIMB_SIZE> {
-    pub fn new(modulus: BigUint, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
+    pub fn new(modulus: BigUint, range_bus: usize, range_max_bits: usize) -> Self {
         assert!(modulus.bits() <= NUM_LIMBS * LIMB_SIZE);
-        let bus = range_checker.bus();
         let subair = CheckCarryModToZeroSubAir::new(
             modulus.clone(),
             LIMB_SIZE,
-            bus.index,
-            bus.range_max_bits,
+            range_bus,
+            range_max_bits,
             FIELD_ELEMENT_BITS,
         );
-        let builder = ExprBuilder::new(
-            modulus,
-            LIMB_SIZE,
-            NUM_LIMBS,
-            range_checker.range_max_bits(),
-        );
+        let builder = ExprBuilder::new(modulus, LIMB_SIZE, NUM_LIMBS, range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
         let x = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
         let y = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
@@ -62,7 +56,8 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2CoreAir<NUM_
         let expr = FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
-            range_checker,
+            range_bus,
+            range_max_bits,
         };
         Self { expr }
     }
@@ -107,7 +102,11 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularMulDivV2CoreChip<NUM
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
-        let air = ModularMulDivV2CoreAir::new(modulus, range_checker);
+        let air = ModularMulDivV2CoreAir::new(
+            modulus,
+            range_checker.bus().index,
+            range_checker.range_max_bits(),
+        );
         Self { air, offset }
     }
 }

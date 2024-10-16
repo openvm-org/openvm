@@ -23,29 +23,31 @@ type F = BabyBear;
 const READ_CELLS: usize = 64;
 
 #[test]
-fn test_modular_addsub() {
-    let coord_modulus = secp256k1_coord_prime();
-    let scalar_modulus = secp256k1_scalar_prime();
-    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+fn test_coord_addsub() {
+    let opcode_offset = 0;
+    let modulus = secp256k1_coord_prime();
+    test_addsub(opcode_offset, modulus);
+}
 
+#[test]
+fn test_scalar_addsub() {
+    let opcode_offset = 4;
+    let modulus = secp256k1_scalar_prime();
+    test_addsub(opcode_offset, modulus);
+}
+
+fn test_addsub(opcode_offset: usize, modulus: BigUint) {
+    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    // let memory_bridge = tester.memory_controller().borrow().memory_bridge();
-    let coord_core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
-        coord_modulus.clone(),
+    let core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
+        modulus.clone(),
         tester.memory_controller().borrow().range_checker.clone(),
-        ModularArithmeticOpcode::default_offset(),
+        ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
-    let mut coord_adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
-    let scalar_core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
-        scalar_modulus.clone(),
-        tester.memory_controller().borrow().range_checker.clone(),
-        ModularArithmeticOpcode::default_offset() + 4,
-    );
-    let mut scalar_adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
+    let mut adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
     let mut rng = create_seeded_rng();
-    let num_tests = 100;
+    let num_tests = 50;
     let mut all_ops = vec![];
-    let mut all_scalar = vec![];
     let mut all_a = vec![];
     let mut all_b = vec![];
 
@@ -68,48 +70,20 @@ fn test_modular_addsub() {
             .unwrap();
 
         let op = rng.gen_range(0..2); // 0 for add, 1 for sub
-        let is_scalar = rng.gen_bool(0.5);
-        let modulus = if is_scalar {
-            scalar_modulus.clone()
-        } else {
-            coord_modulus.clone()
-        };
         a %= modulus.clone();
         b %= modulus.clone();
 
         all_ops.push(op);
-        all_scalar.push(is_scalar);
         all_a.push(a.clone());
         all_b.push(b.clone());
-        if is_scalar {
-            scalar_adapter
-                .prank_reads
-                .push_back(interface_reads.to_vec());
-        } else {
-            coord_adapter
-                .prank_reads
-                .push_back(interface_reads.to_vec());
-        }
+        adapter.prank_reads.push_back(interface_reads.to_vec());
     }
-    let mut coord_chip = VmChipWrapper::new(coord_adapter, coord_core, tester.memory_controller());
-    let mut scalar_chip =
-        VmChipWrapper::new(scalar_adapter, scalar_core, tester.memory_controller());
+    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     // Second loop: actually run the tests.
     for i in 0..num_tests {
         let op = all_ops[i];
-        let is_scalar = all_scalar[i];
         let a = all_a[i].clone();
         let b = all_b[i].clone();
-        let chip = if is_scalar {
-            &mut scalar_chip
-        } else {
-            &mut coord_chip
-        };
-        let modulus = if is_scalar {
-            scalar_modulus.clone()
-        } else {
-            coord_modulus.clone()
-        };
         assert!(a < modulus);
         assert!(b < modulus);
         let expected_answer = if op == 0 {
@@ -165,7 +139,7 @@ fn test_modular_addsub() {
 
         // let mut chip_wrapper =
         //     VmChipWrapper::new(adapter.clone(), chip, tester.memory_controller());
-        tester.execute(chip, instruction);
+        tester.execute(&mut chip, instruction);
 
         // TODO: uncomment when switch to vectorized adapter
         /*
@@ -177,7 +151,7 @@ fn test_modular_addsub() {
         }
         */
     }
-    let tester = tester.build().load(coord_chip).load(scalar_chip).finalize();
+    let tester = tester.build().load(chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }
