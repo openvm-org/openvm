@@ -41,16 +41,16 @@ use crate::{
     },
     kernels::{
         adapters::{
-            native_adapter::NativeAdapterChip,
+            convert_adapter::ConvertAdapterChip, native_adapter::NativeAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
-        castf::CastFChip,
         core::{
             CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
         },
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
+        new_castf::{NewCastFChip, NewCastFCoreChip},
     },
     old::{
         alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,
@@ -483,11 +483,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     chips.push(AxVmChip::AuipcRv32(chip));
                 }
                 ExecutorName::CastF => {
-                    let chip = Rc::new(RefCell::new(CastFChip::new(
-                        execution_bus,
-                        program_bus,
+                    let chip = Rc::new(RefCell::new(NewCastFChip::new(
+                        ConvertAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        NewCastFCoreChip::new(
+                            memory_controller.borrow().range_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
