@@ -8,6 +8,7 @@ use stark_vm::system::{
     program::Program,
     vm::{config::VmConfig, VirtualMachine},
 };
+use test_case::test_case;
 
 use crate::{elf::Elf, rrs::transpile};
 
@@ -25,7 +26,6 @@ fn test_generate_program() -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join("data/rv32im-fib-from-as"))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    dbg!(elf.pc_start / 4 - elf.pc_base / 4, elf.instructions.len());
     let program = transpile::<BabyBear>(&elf.instructions);
     for instruction in program {
         println!("{:?}", instruction);
@@ -65,10 +65,11 @@ fn test_tiny_asm_runtime() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_runtime() -> Result<()> {
+#[test_case("data/rv32im-fibonacci-program-elf-release")]
+#[test_case("data/rv32im-exp-from-as")]
+fn test_runtime(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let data = read(dir.join("data/rv32im-exp-from-as"))?;
+    let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     let instructions = transpile::<BabyBear>(&elf.instructions);
     setup_tracing();

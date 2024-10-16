@@ -6,3 +6,7 @@ edition = "2021"
 
 [dependencies]
 axvm = { path = "../../../zkvm/lib" }
+
+[profile.release]
+panic = "abort"
+#strip = "symbols"

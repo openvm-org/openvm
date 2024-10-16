@@ -251,7 +251,8 @@ pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instru
             instructions.push(terminate());
             continue;
         }
-        let instruction = process_instruction(&mut transpiler, *instruction_u32).unwrap();
+        let instruction = process_instruction(&mut transpiler, *instruction_u32)
+            .unwrap_or_else(|| panic!("Failed to transpile instruction {:b}", instruction_u32));
         instructions.push(instruction);
     }
     instructions
