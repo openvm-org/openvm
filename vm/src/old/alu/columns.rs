@@ -2,7 +2,7 @@ use afs_derive::AlignedBorrow;
 
 use crate::{
     arch::ExecutionState,
-    intrinsics::uint_multiplication::MemoryData,
+    old::uint_multiplication::MemoryData,
     system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 

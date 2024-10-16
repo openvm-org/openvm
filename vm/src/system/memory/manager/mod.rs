@@ -55,7 +55,7 @@ mod trace;
 
 use crate::system::memory::{
     dimensions::MemoryDimensions,
-    expand::{MemoryMerkleBus, MemoryMerkleChip},
+    merkle::{MemoryMerkleBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
     tree::{HasherChip, MemoryNode},
 };
@@ -69,14 +69,14 @@ pub struct TimestampedValues<T, const N: usize> {
 }
 
 /// Represents first reads a pointer, and then a batch read at the pointer.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct MemoryHeapReadRecord<T, const N: usize> {
     pub address_read: MemoryReadRecord<T, 1>,
     pub data_read: MemoryReadRecord<T, N>,
 }
 
 /// Represents first reads a pointer, and then a batch write at the pointer.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct MemoryHeapWriteRecord<T, const N: usize> {
     pub address_read: MemoryReadRecord<T, 1>,
     pub data_write: MemoryWriteRecord<T, N>,
@@ -174,26 +174,19 @@ pub type MemoryControllerRef<F> = Rc<RefCell<MemoryController<F>>>;
 /// A equipartition of memory, with timestamps and values.
 ///
 /// The key is a pair `(address_space, label)`, where `label` is the index of the block in the
-/// partition. I.e., the start of the block is `(address_space, label * N)`.
+/// partition. I.e., the starting address of the block is `(address_space, label * N)`.
 ///
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
-pub type MemoryEquipartition<F, const N: usize> = BTreeMap<(F, usize), TimestampedValues<F, N>>;
+pub type TimestampedEquipartition<F, const N: usize> =
+    BTreeMap<(F, usize), TimestampedValues<F, N>>;
 
-// TODO[zach]: We shouldn't need this; other functions should take a MemoryEquipartition instead of a HashMap.
-fn partition_to_cell_map<F: Field, const N: usize>(
-    partition: &MemoryEquipartition<F, N>,
-) -> HashMap<(F, F), F> {
-    let mut map = HashMap::new();
-    for ((address_space, label), ts_values) in partition.iter() {
-        for (i, value) in ts_values.values.iter().enumerate() {
-            map.insert(
-                (*address_space, F::from_canonical_usize(label * N + i)),
-                *value,
-            );
-        }
-    }
-    map
-}
+/// A equipartition of memory values.
+///
+/// The key is a pair `(address_space, label)`, where `label` is the index of the block in the
+/// partition. I.e., the starting address of the block is `(address_space, label * N)`.
+///
+/// If a key is not present in the map, then the block is uninitialized (and therefore zero).
+pub type Equipartition<F, const N: usize> = BTreeMap<(F, usize), [F; N]>;
 
 #[derive(Clone, Debug)]
 pub struct MemoryController<F: Field> {
@@ -202,7 +195,7 @@ pub struct MemoryController<F: Field> {
     pub(crate) mem_config: MemoryConfig,
     pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
 
-    initial_memory: Option<MemoryEquipartition<F, CHUNK>>,
+    initial_memory: TimestampedEquipartition<F, CHUNK>,
 
     // addr_space -> Memory data structure
     memory: Memory<F>,
@@ -232,12 +225,12 @@ impl<F: PrimeField32> MemoryController<F> {
                 ),
             },
             memory: Memory::new(
-                &MemoryEquipartition::<_, 1>::new(),
+                &TimestampedEquipartition::<_, 1>::new(),
                 mem_config.pointer_max_bits,
             ),
             adapter_records: HashMap::new(),
             range_checker,
-            initial_memory: None,
+            initial_memory: TimestampedEquipartition::new(),
             result: None,
         }
     }
@@ -247,7 +240,7 @@ impl<F: PrimeField32> MemoryController<F> {
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
         merkle_bus: MemoryMerkleBus,
-        initial_memory: MemoryEquipartition<F, CHUNK>,
+        initial_memory: TimestampedEquipartition<F, CHUNK>,
     ) -> Self {
         let memory_dims = MemoryDimensions {
             as_height: mem_config.addr_space_max_bits,
@@ -265,7 +258,7 @@ impl<F: PrimeField32> MemoryController<F> {
             memory: Memory::new(&initial_memory, mem_config.pointer_max_bits),
             adapter_records: HashMap::new(),
             range_checker,
-            initial_memory: Some(initial_memory),
+            initial_memory,
             result: None,
         }
     }
@@ -343,11 +336,13 @@ impl<F: PrimeField32> MemoryController<F> {
     ///
     /// Any value returned is unconstrained.
     pub fn unsafe_read_cell(&self, addr_space: F, pointer: F) -> F {
-        let (_, &value) = self
+        match self
             .memory
             .get(addr_space, pointer.as_canonical_u32() as usize)
-            .unwrap();
-        value
+        {
+            Some((_, &value)) => value,
+            None => F::zero(),
+        }
     }
 
     pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<F, 1> {
@@ -462,15 +457,26 @@ impl<F: PrimeField32> MemoryController<F> {
 
                 let hasher = hasher.unwrap();
 
-                let initial_memory = partition_to_cell_map(self.initial_memory.as_ref().unwrap());
+                let initial_memory_values = self
+                    .initial_memory
+                    .iter()
+                    .map(|(key, value)| (*key, value.values))
+                    .collect();
+                let final_memory_values = final_partition
+                    .iter()
+                    .map(|(key, value)| (*key, value.values))
+                    .collect();
+
                 let initial_node = MemoryNode::tree_from_memory(
                     merkle_chip.air.memory_dimensions,
-                    &initial_memory,
+                    &initial_memory_values,
                     hasher,
                 );
-                let final_memory = partition_to_cell_map(&final_partition);
-                let (expand_trace, final_node) =
-                    merkle_chip.generate_trace_and_final_tree(&initial_node, &final_memory, hasher);
+                let (expand_trace, final_node) = merkle_chip.generate_trace_and_final_tree(
+                    &initial_node,
+                    &final_memory_values,
+                    hasher,
+                );
                 traces.push(expand_trace);
                 let mut expand_pvs = vec![];
                 expand_pvs.extend(initial_node.hash());

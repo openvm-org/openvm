@@ -1,4 +1,4 @@
-name: ECC Tests
+name: Toolchain Tests
 
 on:
   push:
@@ -6,13 +6,8 @@ on:
   pull_request:
     branches: ["main"]
     paths:
-      - "stark-backend/**"
-      - "circuits/primitives/**"
       - "vm/**"
-      - "toolchain/compiler/**"
-      - "circuits/ecc/**"
-      - "lib/ecc/**"
-      - "lib/ecc-execution/**"
+      - "toolchain/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -24,9 +19,7 @@ env:
 
 jobs:
   tests:
-    runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=32cpu-linux-arm64
+    runs-on: ubuntu-arm64-16core-64ram
 
     steps:
       - uses: actions/checkout@v4
@@ -36,17 +29,12 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ecc-lib crate tests
-        working-directory: lib/ecc
-        run: |
-          cargo nextest run --cargo-profile=fast --features parallel
-
-      - name: Run ecc-execution crate tests
-        working-directory: lib/ecc-execution
+      - name: Run transpiler tests
+        working-directory: toolchain/riscv/transpiler
         run: |
           cargo nextest run --cargo-profile=fast
 
-      - name: Run ecc-circuits crate tests
-        working-directory: circuits/ecc
+      - name: Run compiler tests
+        working-directory: toolchain/compiler
         run: |
           cargo nextest run --cargo-profile=fast --features parallel

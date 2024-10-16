@@ -10,9 +10,7 @@ use crate::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
         testing::VmChipTestBuilder,
     },
-    intrinsics::modular_multdiv::{
-        ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
-    },
+    old::modular_multdiv::{ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     system::program::Instruction,
     utils::biguint_to_limbs,
 };

@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, mem::size_of, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::VariableRangeCheckerChip;
@@ -48,7 +48,7 @@ pub struct Rv32LoadStoreAdapterAir<F: Field, const NUM_CELLS: usize> {
 
 impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for Rv32LoadStoreAdapterAir<F, NUM_CELLS> {
     fn width(&self) -> usize {
-        todo!()
+        size_of::<Rv32LoadStoreAdapterCols<u8, 4>>() // TODO: NUM_CELLS?
     }
 }
 
@@ -153,7 +153,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         // Note: c is a field element and immediate is a signed integer
         let imm = (c + F::from_canonical_u32(1 << (RV_IS_TYPE_IMM_BITS - 1))).as_canonical_u32();
-        let ptr_val = rs1_val + imm - (1 << (RV_IS_TYPE_IMM_BITS - 1));
+        let ptr_val = rs1_val
+            .wrapping_add(imm)
+            .wrapping_sub(1 << (RV_IS_TYPE_IMM_BITS - 1));
 
         assert!(imm < (1 << RV_IS_TYPE_IMM_BITS));
         assert!(ptr_val < (1 << addr_bits));

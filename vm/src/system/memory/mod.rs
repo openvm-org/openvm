@@ -1,8 +1,8 @@
 use afs_derive::AlignedBorrow;
 
 mod adapter;
-pub mod expand;
 mod manager;
+pub mod merkle;
 pub mod offline_checker;
 mod persistent;
 #[cfg(test)]
