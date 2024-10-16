@@ -2,7 +2,7 @@ use afs_primitives::bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prim
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::AbstractField;
 use rand::Rng;
 
 use super::{ModularAddSubV2CoreChip, ModularMulDivV2CoreChip};
@@ -10,7 +10,7 @@ use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
         testing::{TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, FlatInterface, VmChipWrapper,
+        ExecutionBridge, VmChipWrapper,
     },
     rv32im::adapters::Rv32HeapAdapter,
     system::program::Instruction,
@@ -21,7 +21,6 @@ const NUM_LIMBS: usize = 32;
 const LIMB_SIZE: usize = 8;
 type F = BabyBear;
 const READ_CELLS: usize = 64;
-type TestInterface = FlatInterface<BabyBear, READ_CELLS, NUM_LIMBS>;
 
 #[test]
 fn test_modular_addsub() {
@@ -30,19 +29,19 @@ fn test_modular_addsub() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
 
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    let memory_bridge = tester.memory_controller().borrow().memory_bridge();
-    let mut coord_core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
+    // let memory_bridge = tester.memory_controller().borrow().memory_bridge();
+    let coord_core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         coord_modulus.clone(),
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset(),
     );
-    let mut coord_adapter = TestAdapterChip::new(vec![], vec![None]);
-    let mut scalar_core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let mut coord_adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
+    let scalar_core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         scalar_modulus.clone(),
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + 4,
     );
-    let mut scalar_adapter = TestAdapterChip::new(vec![], vec![None]);
+    let mut scalar_adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
     let mut rng = create_seeded_rng();
     let num_tests = 100;
     let mut all_ops = vec![];

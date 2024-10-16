@@ -613,6 +613,15 @@ mod conversions {
         }
     }
 
+    impl<T: Clone> From<DynArray<T>> for MinimalInstruction<T> {
+        fn from(m: DynArray<T>) -> Self {
+            MinimalInstruction {
+                is_valid: m.0[0].clone(),
+                opcode: m.0[1].clone(),
+            }
+        }
+    }
+
     // AdapterAirContext: BasicInterface -> DynInterface
     impl<
             T,

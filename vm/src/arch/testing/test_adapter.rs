@@ -1,13 +1,14 @@
 use std::{borrow::Borrow, collections::VecDeque, fmt::Debug};
 
 use afs_derive::AlignedBorrow;
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilder, BaseAir};
-use p3_field::{Field, PrimeField32};
+use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, ExecutionState,
-        Result, VmAdapterAir, VmAdapterChip,
+        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, ExecutionBridge,
+        ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
     },
     system::{memory::MemoryController, program::Instruction},
 };
@@ -21,21 +22,34 @@ pub struct TestAdapterChip<F> {
     /// List of `pc_inc` to use in `postprocess` on each sequential call.
     /// Defaults to `4` if not provided.
     pub prank_pc_inc: VecDeque<Option<u32>>,
+
+    pub air: TestAdapterAir,
 }
 
 impl<F> TestAdapterChip<F> {
-    pub fn new(prank_reads: Vec<Vec<F>>, prank_pc_inc: Vec<Option<u32>>) -> Self {
+    pub fn new(
+        prank_reads: Vec<Vec<F>>,
+        prank_pc_inc: Vec<Option<u32>>,
+        execution_bridge: ExecutionBridge,
+    ) -> Self {
         Self {
             prank_reads: prank_reads.into(),
             prank_pc_inc: prank_pc_inc.into(),
+            air: TestAdapterAir { execution_bridge },
         }
     }
 }
 
+#[derive(Clone)]
+pub struct TestAdapterRecord<T> {
+    pub operands: [T; 5],
+    pub from_pc: u32,
+}
+
 impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
     type ReadRecord = ();
-    type WriteRecord = ();
-    type Air = EmptyAir;
+    type WriteRecord = TestAdapterRecord<F>;
+    type Air = TestAdapterAir;
     type Interface = DynAdapterInterface<F>;
 
     fn preprocess(
@@ -55,7 +69,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
     fn postprocess(
         &mut self,
         memory: &mut MemoryController<F>,
-        _instruction: &Instruction<F>,
+        instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
         _output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
@@ -70,25 +84,38 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
                 pc: from_state.pc + pc_inc,
                 timestamp: memory.timestamp(),
             },
-            (),
+            TestAdapterRecord {
+                operands: [
+                    instruction.op_a,
+                    instruction.op_b,
+                    instruction.op_c,
+                    instruction.d,
+                    instruction.e,
+                ],
+                from_pc: from_state.pc,
+            },
         ))
     }
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut [F],
+        row_slice: &mut [F],
         _read_record: Self::ReadRecord,
-        _write_record: Self::WriteRecord,
+        write_record: Self::WriteRecord,
     ) {
+        row_slice[..5].copy_from_slice(&write_record.operands);
+        row_slice[5] = F::from_canonical_u32(write_record.from_pc);
     }
 
     fn air(&self) -> &Self::Air {
-        &EmptyAir
+        &self.air
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct EmptyAir;
+pub struct TestAdapterAir {
+    pub execution_bridge: ExecutionBridge,
+}
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -96,26 +123,38 @@ pub struct EmptyAirCols<T> {
     pub dummy: T,
 }
 
-impl<F: Field> BaseAir<F> for EmptyAir {
+impl<F: Field> BaseAir<F> for TestAdapterAir {
     fn width(&self) -> usize {
-        1
+        6
     }
 }
 
-impl<AB: AirBuilder> VmAdapterAir<AB> for EmptyAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
     type Interface = DynAdapterInterface<AB::Expr>;
-
-    fn eval(
-        &self,
-        _builder: &mut AB,
-        local: &[AB::Var],
-        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
-    ) {
-        let _cols: &EmptyAirCols<_> = local.borrow();
-    }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
         // TODO: This is a hack to make the code compile, as it is not used anywhere
         local[0]
+    }
+
+    fn eval(
+        &self,
+        builder: &mut AB,
+        local: &[AB::Var],
+        ctx: AdapterAirContext<AB::Expr, Self::Interface>,
+    ) {
+        let processed_instruction: MinimalInstruction<AB::Expr> = ctx.instruction.into();
+        self.execution_bridge
+            .execute_and_increment_pc_custom(
+                processed_instruction.opcode,
+                local[0..5].to_vec(),
+                ExecutionState {
+                    pc: local[5].into(),
+                    timestamp: AB::Expr::one(),
+                },
+                AB::Expr::zero(),
+                AB::Expr::from_canonical_u32(4),
+            )
+            .eval(builder, processed_instruction.is_valid);
     }
 }
