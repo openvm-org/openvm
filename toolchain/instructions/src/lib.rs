@@ -30,8 +30,6 @@ pub enum CoreOpcode {
     LOADW2,
     STOREW2,
     JAL,
-    BEQ,
-    BNE,
     TERMINATE,
     PUBLISH,
     FAIL,
@@ -50,6 +48,17 @@ pub enum CoreOpcode {
     CT_START,
     /// Phantom instruction to end tracing
     CT_END,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x40]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum ControlFlowOpcode {
+    BEQ,
+    BNE,
 }
 
 #[derive(
