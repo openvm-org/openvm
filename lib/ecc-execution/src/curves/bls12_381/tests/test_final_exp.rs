@@ -21,9 +21,9 @@ fn test_bls12_381_final_exp_hint() {
         "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
         16,
     ).unwrap();
-    let c_q = c.exp_bigint(q) * c.exp_bigint(T.clone());
+    let c_qt = c.exp_bigint(q) * c.exp_bigint(T.clone());
 
-    assert_eq!(f * s, c_q);
+    assert_eq!(f * s, c_qt);
 }
 
 #[test]

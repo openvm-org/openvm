@@ -13,12 +13,12 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         // u = 0xd201000000010000
         // f * scalingFactor * == c^{q - u}
         // f * s = c^q * c^-u
-        // f * c^u * s = c^q, where fc == f * c^u (embedded miller loop with c)
-        let c_q = c.frobenius_map();
+        // f * c^u * c^-q * s == 1, where fc == f * c^u (embedded miller loop with c)
+        let c_q_inv = c_inv.frobenius_map();
 
         let fc = self.multi_miller_loop_embedded_exp(P, Q, Some(c));
 
-        assert_eq!(fc * s, c_q);
+        assert_eq!(fc * c_q_inv * s, Fq12::one());
     }
 
     // Adapted from the gnark implementation:
