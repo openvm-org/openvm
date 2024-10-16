@@ -33,3 +33,8 @@ jobs:
         working-directory: toolchain/riscv/transpiler
         run: |
           cargo nextest run --cargo-profile=fast
+
+      - name: Run compiler tests
+        working-directory: toolchain/compiler
+        run: |
+          cargo nextest run --cargo-profile=fast --features parallel
