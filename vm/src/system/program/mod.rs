@@ -212,7 +212,7 @@ impl DebugInfo {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
@@ -328,8 +328,27 @@ pub struct ProgramChip<F> {
     pub execution_frequencies: Vec<usize>,
 }
 
+impl<F: PrimeField64> Default for ProgramChip<F> {
+    fn default() -> Self {
+        Self {
+            execution_frequencies: vec![],
+            program: Program::default(),
+            true_program_length: 0,
+            air: ProgramAir {
+                bus: ProgramBus(READ_INSTRUCTION_BUS),
+            },
+        }
+    }
+}
+
 impl<F: PrimeField64> ProgramChip<F> {
-    pub fn new(mut program: Program<F>) -> Self {
+    pub fn new_with_program(program: Program<F>) -> Self {
+        let mut ret = Self::default();
+        ret.set_program(program);
+        ret
+    }
+
+    pub fn set_program(&mut self, mut program: Program<F>) {
         let true_program_length = program.len();
         while !program.len().is_power_of_two() {
             program.instructions_and_debug_infos.insert(
@@ -337,14 +356,9 @@ impl<F: PrimeField64> ProgramChip<F> {
                 (Instruction::from_isize(FAIL as usize, 0, 0, 0, 0, 0), None),
             );
         }
-        Self {
-            execution_frequencies: vec![0; program.len()],
-            program,
-            true_program_length,
-            air: ProgramAir {
-                bus: ProgramBus(READ_INSTRUCTION_BUS),
-            },
-        }
+        self.true_program_length = true_program_length;
+        self.execution_frequencies = vec![0; program.len()];
+        self.program = program;
     }
 
     pub fn get_instruction(
@@ -353,8 +367,11 @@ impl<F: PrimeField64> ProgramChip<F> {
     ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
         let step = self.program.step;
         let pc_base = self.program.pc_base;
-        assert!(
-            (pc - pc_base) % step == 0,
+        println!("pc = {} pc_base = {} step = {}", pc, pc_base, step);
+
+        assert_eq!(
+            (pc - pc_base) % step,
+            0,
             "pc = {} is not a multiple of step = {}",
             pc,
             step

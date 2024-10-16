@@ -115,8 +115,14 @@ impl<F: PrimeField32> CoreChip<F> {
         )
     }
 
+    /// Sets the start state of the Core.
+    pub fn set_start_state(&mut self, state: CoreState) {
+        self.start_state = state;
+        self.state = state;
+    }
+
     /// Sets the current state of the Core.
-    pub fn set_state(&mut self, state: CoreState) {
+    pub fn set_current_state(&mut self, state: CoreState) {
         self.state = state;
     }
 
