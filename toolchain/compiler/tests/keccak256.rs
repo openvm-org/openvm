@@ -6,9 +6,7 @@ use afs_compiler::{
     ir::{Array, Var},
 };
 use ax_sdk::{
-    config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing_with_log_level, FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
 };
 use hex::FromHex;
@@ -19,7 +17,6 @@ use stark_vm::{
     intrinsics::hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
     system::{program::util::execute_and_prove_program, vm::config::VmConfig},
 };
-use tracing::Level;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -69,7 +66,6 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
 // KAT includes inputs at the bit level; we only include the ones that are bytes
 #[test]
 fn test_compiler_keccak_kat_vectors() {
-    setup_tracing_with_log_level(Level::DEBUG);
     // input, output, Len in bits
     let test_vectors = vec![
         ("", "C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470"), // ShortMsgKAT_256 Len = 0

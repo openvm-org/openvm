@@ -9,7 +9,6 @@ on:
       - "stark-backend/**"
       - "circuits/primitives/**"
       - "vm/**"
-      - "toolchain/compiler/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -21,7 +20,9 @@ env:
 
 jobs:
   tests:
-    runs-on: ubuntu-arm64-16core-64ram
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=64cpu-linux-arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -33,10 +34,5 @@ jobs:
 
       - name: Run vm crate tests
         working-directory: vm
-        run: |
-          cargo nextest run --cargo-profile=fast --features parallel
-
-      - name: Run compiler crate tests
-        working-directory: toolchain/compiler
         run: |
           cargo nextest run --cargo-profile=fast --features parallel

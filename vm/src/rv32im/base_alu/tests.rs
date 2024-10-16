@@ -12,14 +12,13 @@ use super::{core::solve_alu, BaseAluCoreChip, Rv32BaseAluChip};
 use crate::{
     arch::{
         instructions::AluOpcode,
-        testing::{memory::gen_pointer, VmChipTestBuilder},
+        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
         InstructionExecutor, VmChip, VmChipWrapper,
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            test_adapter::Rv32TestAdapterChip, Rv32BaseAluAdapterChip, Rv32RTypeAdapterInterface,
-            RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+            Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
         },
         base_alu::BaseAluCoreCols,
     },
@@ -156,14 +155,11 @@ fn rv32_alu_and_rand_test() {
 ///
 /// Given a fake trace of a single operation, setup a chip and run the test. We replace
 /// the write part of the trace and check that the core chip throws the expected error.
-/// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
+/// A dummy adapter is used so memory interactions don't indirectly cause false passes.
 ///////////////////////////////////////////////////////////////////////////////////////
 
-type Rv32ArithmeticLogicTestChip<F> = VmChipWrapper<
-    F,
-    Rv32TestAdapterChip<F, Rv32RTypeAdapterInterface<F>>,
-    BaseAluCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>,
->;
+type Rv32BaseAluTestChip<F> =
+    VmChipWrapper<F, TestAdapterChip<F>, BaseAluCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>>;
 
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_alu_negative_test(
@@ -175,10 +171,10 @@ fn run_rv32_alu_negative_test(
 ) {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let mut chip = Rv32ArithmeticLogicTestChip::<F>::new(
-        Rv32TestAdapterChip::new(
-            [b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)],
-            None,
+    let mut chip = Rv32BaseAluTestChip::<F>::new(
+        TestAdapterChip::new(
+            vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
+            vec![None],
         ),
         BaseAluCoreChip::new(xor_lookup_chip.clone(), 0),
         tester.memory_controller(),

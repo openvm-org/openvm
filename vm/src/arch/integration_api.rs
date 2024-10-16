@@ -31,6 +31,11 @@ pub trait VmAdapterInterface<T> {
     /// May include the `to_pc`.
     /// Typically this should not include address spaces.
     type ProcessedInstruction;
+
+    /// Given the local row slice of the adapter AIR, return the `from_pc` expression, if it can be obtained.
+    fn from_pc<S: Into<T>>(_local_adapter: &[S]) -> Option<T> {
+        None
+    }
 }
 
 /// The adapter owns all memory accesses and timestamp changes.
@@ -403,150 +408,278 @@ impl<T, const READ_CELLS: usize, const WRITE_CELLS: usize> VmAdapterInterface<T>
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
-impl<
-        T,
-        const NUM_READS: usize,
-        const NUM_WRITES: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-        const READ_CELLS: usize,
-        const WRITE_CELLS: usize,
-    >
-    From<
-        AdapterAirContext<
-            T,
-            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >,
-    > for AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>
-{
-    /// ## Panics
-    /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-    /// This is a runtime assertion until Rust const generics expressions are stabilized.
-    fn from(
-        ctx: AdapterAirContext<
-            T,
-            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >,
-    ) -> AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>> {
-        assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
-        assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
-        let mut reads_it = ctx.reads.into_iter().flatten();
-        let reads = from_fn(|_| reads_it.next().unwrap());
-        let mut writes_it = ctx.writes.into_iter().flatten();
-        let writes = from_fn(|_| writes_it.next().unwrap());
-        AdapterAirContext {
-            to_pc: ctx.to_pc,
-            reads,
-            writes,
-            instruction: ctx.instruction,
-        }
-    }
+/// An interface that is fully determined during runtime. This should **only** be used as a last resort when static
+/// compile-time guarantees cannot be made.
+pub struct DynAdapterInterface<T>(PhantomData<T>);
+
+impl<T> VmAdapterInterface<T> for DynAdapterInterface<T> {
+    /// Any reads can be flattened into a single vector.
+    type Reads = DynArray<T>;
+    /// Any writes can be flattened into a single vector.
+    type Writes = DynArray<T>;
+    /// Any processed instruction can be flattened into a single vector.
+    type ProcessedInstruction = DynArray<T>;
 }
 
-impl<
-        T,
-        const NUM_READS: usize,
-        const NUM_WRITES: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-        const READ_CELLS: usize,
-        const WRITE_CELLS: usize,
-    > From<AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
-    for AdapterAirContext<T, BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>>
-{
-    /// ## Panics
-    /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-    /// This is a runtime assertion until Rust const generics expressions are stabilized.
-    fn from(
-        AdapterAirContext {
-            to_pc,
-            reads,
-            writes,
-            instruction,
-        }: AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>,
-    ) -> AdapterAirContext<T, BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>>
+/// Newtype to implement `From`.
+#[derive(Clone, Debug)]
+pub struct DynArray<T>(pub Vec<T>);
+
+// =================================================================================================
+// Conversions between adapter interfaces
+// =================================================================================================
+
+mod conversions {
+    use super::*;
+
+    impl<
+            T,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+            const READ_CELLS: usize,
+            const WRITE_CELLS: usize,
+        >
+        From<
+            AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        > for AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>
     {
-        assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
-        assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
-        let mut reads_it = reads.into_iter();
-        let reads: [[T; READ_SIZE]; NUM_READS] = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
-        let mut writes_it = writes.into_iter();
-        let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
-            from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
-        AdapterAirContext {
-            to_pc,
-            reads,
-            writes,
-            instruction,
+        /// ## Panics
+        /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
+        /// This is a runtime assertion until Rust const generics expressions are stabilized.
+        fn from(
+            ctx: AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        ) -> AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>> {
+            assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
+            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+            let mut reads_it = ctx.reads.into_iter().flatten();
+            let reads = from_fn(|_| reads_it.next().unwrap());
+            let mut writes_it = ctx.writes.into_iter().flatten();
+            let writes = from_fn(|_| writes_it.next().unwrap());
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads,
+                writes,
+                instruction: ctx.instruction,
+            }
         }
     }
-}
 
-impl<
-        T,
-        const NUM_READS: usize,
-        const NUM_WRITES: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-        const READ_CELLS: usize,
-        const WRITE_CELLS: usize,
-    >
-    From<
-        AdapterRuntimeContext<
+    impl<
+            T,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+            const READ_CELLS: usize,
+            const WRITE_CELLS: usize,
+        > From<AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+        for AdapterAirContext<
             T,
             BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >,
-    > for AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>
-{
-    /// ## Panics
-    /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-    /// This is a runtime assertion until Rust const generics expressions are stabilized.
-    fn from(
-        ctx: AdapterRuntimeContext<
+        >
+    {
+        /// ## Panics
+        /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
+        /// This is a runtime assertion until Rust const generics expressions are stabilized.
+        fn from(
+            AdapterAirContext {
+                to_pc,
+                reads,
+                writes,
+                instruction,
+            }: AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>,
+        ) -> AdapterAirContext<
             T,
             BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >,
-    ) -> AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>> {
-        assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
-        let mut writes_it = ctx.writes.into_iter().flatten();
-        let writes = from_fn(|_| writes_it.next().unwrap());
-        AdapterRuntimeContext {
-            to_pc: ctx.to_pc,
-            writes,
+        > {
+            assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
+            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+            let mut reads_it = reads.into_iter();
+            let reads: [[T; READ_SIZE]; NUM_READS] =
+                from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
+            let mut writes_it = writes.into_iter();
+            let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
+                from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
+            AdapterAirContext {
+                to_pc,
+                reads,
+                writes,
+                instruction,
+            }
         }
     }
-}
 
-impl<
-        T: AbstractField,
-        const NUM_READS: usize,
-        const NUM_WRITES: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-        const READ_CELLS: usize,
-        const WRITE_CELLS: usize,
-    > From<AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
-    for AdapterRuntimeContext<
-        T,
-        BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-    >
-{
-    /// ## Panics
-    /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-    /// This is a runtime assertion until Rust const generics expressions are stabilized.
-    fn from(
-        ctx: AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>,
-    ) -> AdapterRuntimeContext<
-        T,
-        BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-    > {
-        assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
-        let mut writes_it = ctx.writes.into_iter();
-        let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
-            from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
-        AdapterRuntimeContext {
-            to_pc: ctx.to_pc,
-            writes,
+    impl<
+            T,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+            const READ_CELLS: usize,
+            const WRITE_CELLS: usize,
+        >
+        From<
+            AdapterRuntimeContext<
+                T,
+                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        > for AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>
+    {
+        /// ## Panics
+        /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
+        /// This is a runtime assertion until Rust const generics expressions are stabilized.
+        fn from(
+            ctx: AdapterRuntimeContext<
+                T,
+                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        ) -> AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>> {
+            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+            let mut writes_it = ctx.writes.into_iter().flatten();
+            let writes = from_fn(|_| writes_it.next().unwrap());
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes,
+            }
+        }
+    }
+
+    impl<
+            T: AbstractField,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+            const READ_CELLS: usize,
+            const WRITE_CELLS: usize,
+        > From<AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+        for AdapterRuntimeContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        /// ## Panics
+        /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
+        /// This is a runtime assertion until Rust const generics expressions are stabilized.
+        fn from(
+            ctx: AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>,
+        ) -> AdapterRuntimeContext<
+            T,
+            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        > {
+            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+            let mut writes_it = ctx.writes.into_iter();
+            let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
+                from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes,
+            }
+        }
+    }
+
+    impl<T> From<Vec<T>> for DynArray<T> {
+        fn from(v: Vec<T>) -> Self {
+            Self(v)
+        }
+    }
+
+    impl<T, const N: usize, const M: usize> From<[[T; N]; M]> for DynArray<T> {
+        fn from(v: [[T; N]; M]) -> Self {
+            Self(v.into_iter().flatten().collect())
+        }
+    }
+
+    impl<T, const N: usize, const M: usize> From<DynArray<T>> for [[T; N]; M] {
+        fn from(v: DynArray<T>) -> Self {
+            assert_eq!(v.0.len(), N * M, "Incorrect vector length {}", v.0.len());
+            let mut it = v.0.into_iter();
+            from_fn(|_| from_fn(|_| it.next().unwrap()))
+        }
+    }
+
+    impl<T> From<MinimalInstruction<T>> for DynArray<T> {
+        fn from(m: MinimalInstruction<T>) -> Self {
+            Self(vec![m.is_valid, m.opcode])
+        }
+    }
+
+    impl<
+            T,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        >
+        From<
+            AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        > for AdapterAirContext<T, DynAdapterInterface<T>>
+    {
+        fn from(
+            ctx: AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        ) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx
+                    .reads
+                    .into_iter()
+                    .flat_map(|x| x.into_iter())
+                    .collect::<Vec<_>>()
+                    .into(),
+                writes: ctx
+                    .writes
+                    .into_iter()
+                    .flat_map(|x| x.into_iter())
+                    .collect::<Vec<_>>()
+                    .into(),
+                instruction: vec![ctx.instruction.is_valid, ctx.instruction.opcode].into(),
+            }
+        }
+    }
+
+    impl<
+            T,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        >
+        From<
+            AdapterRuntimeContext<
+                T,
+                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        > for AdapterRuntimeContext<T, DynAdapterInterface<T>>
+    {
+        fn from(
+            ctx: AdapterRuntimeContext<
+                T,
+                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        ) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx
+                    .writes
+                    .into_iter()
+                    .flat_map(|x| x.into_iter())
+                    .collect::<Vec<_>>()
+                    .into(),
+            }
         }
     }
 }

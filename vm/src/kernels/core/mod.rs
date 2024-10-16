@@ -15,11 +15,11 @@ use crate::{
 //#[cfg(test)]
 //pub mod tests;
 
-pub mod air;
-pub mod bridge;
-pub mod columns;
-pub mod execute;
-pub mod trace;
+mod air;
+mod bridge;
+mod columns;
+mod execute;
+mod trace;
 
 pub const INST_WIDTH: u32 = 1;
 
@@ -63,11 +63,11 @@ pub struct CoreState {
 }
 
 impl CoreState {
-    pub fn initial() -> Self {
+    pub fn initial(pc_start: u32) -> Self {
         CoreState {
             clock_cycle: 0,
             timestamp: 1,
-            pc: 0,
+            pc: pc_start,
             is_done: false,
         }
     }
@@ -103,13 +103,14 @@ impl<F: PrimeField32> CoreChip<F> {
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
         offset: usize,
+        pc_start: usize,
     ) -> Self {
         Self::from_state(
             options,
             execution_bus,
             program_bus,
             memory_controller,
-            CoreState::initial(),
+            CoreState::initial(pc_start as u32),
             offset,
         )
     }

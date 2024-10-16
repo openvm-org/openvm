@@ -17,12 +17,13 @@ use ax_sdk::{
 use stark_vm::system::vm::config::VmConfig;
 
 fn main() {
-    let n = 16; // STARK to calculate 16th Fibonacci number.
-    let fib_chip = FibonacciChip::new(0, 1, n);
-    let vdata =
-        BabyBearPoseidon2Engine::run_test_fast(vec![fib_chip.generate_air_proof_input()]).unwrap();
-
     run_with_metric_collection("OUTPUT_PATH", || {
+        let n = 16; // STARK to calculate 16th Fibonacci number.
+        let fib_chip = FibonacciChip::new(0, 1, n);
+        let vdata =
+            BabyBearPoseidon2Engine::run_test_fast(vec![fib_chip.generate_air_proof_input()])
+                .unwrap();
+
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()

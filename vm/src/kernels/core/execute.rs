@@ -232,14 +232,14 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 read_records
                     .get(i)
                     .map_or_else(CoreMemoryAccessCols::disabled, |read| {
-                        CoreMemoryAccessCols::from_read_record(read.clone())
+                        CoreMemoryAccessCols::from_read_record(*read)
                     })
             });
             let reads_aux_cols = array::from_fn(|i| {
                 read_records
                     .get(i)
                     .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
-                        aux_cols_factory.make_read_or_immediate_aux_cols(read.clone())
+                        aux_cols_factory.make_read_or_immediate_aux_cols(*read)
                     })
             });
 
@@ -247,14 +247,14 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 write_records
                     .get(i)
                     .map_or_else(CoreMemoryAccessCols::disabled, |write| {
-                        CoreMemoryAccessCols::from_write_record(write.clone())
+                        CoreMemoryAccessCols::from_write_record(*write)
                     })
             });
             let writes_aux_cols = array::from_fn(|i| {
                 write_records
                     .get(i)
                     .map_or_else(MemoryWriteAuxCols::disabled, |write| {
-                        aux_cols_factory.make_write_aux_cols(write.clone())
+                        aux_cols_factory.make_write_aux_cols(*write)
                     })
             });
 

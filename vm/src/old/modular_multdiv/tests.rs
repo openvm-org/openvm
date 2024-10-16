@@ -1,5 +1,5 @@
 use afs_primitives::bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prime};
-use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};
+use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -10,9 +10,7 @@ use crate::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
         testing::VmChipTestBuilder,
     },
-    intrinsics::modular_multdiv::{
-        ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME,
-    },
+    old::modular_multdiv::{ModularMultDivChip, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     system::program::Instruction,
     utils::biguint_to_limbs,
 };
@@ -23,8 +21,6 @@ type F = BabyBear;
 
 #[test]
 fn test_modular_multdiv() {
-    setup_tracing();
-
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let mut coord_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
         ModularMultDivChip::new(

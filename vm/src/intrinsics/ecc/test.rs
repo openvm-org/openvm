@@ -1,5 +1,4 @@
 use afs_primitives::ecc::SampleEcPoints;
-use ax_sdk::config::setup_tracing;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
@@ -12,8 +11,6 @@ use crate::{
 
 #[test]
 fn test_ec_add() {
-    setup_tracing();
-
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
 
     let mut ec_chip = EcAddUnequalChip::new(
@@ -88,8 +85,6 @@ fn test_ec_add() {
 
 #[test]
 fn test_ec_double() {
-    setup_tracing();
-
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
 
     let mut ec_chip = EcDoubleChip::new(

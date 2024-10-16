@@ -20,7 +20,9 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-arm64-16core-64ram
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=32cpu-linux-arm64
 
     steps:
       - uses: actions/checkout@v4
