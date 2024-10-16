@@ -11,10 +11,17 @@ p3-field.workspace = true
 axvm-instructions-derive.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
-serde = { workspace = true, features = ["derive"] }
-num-bigint.workspace = true
-num-traits.workspace = true
+serde.workspace = true
+num-bigint = { workspace = true, optional = true }
+num-traits = { workspace = true, optional = true }
+serde_with = { workspace = true, optional = true }
 
 [dev-dependencies]
 p3-baby-bear.workspace = true
 toml.workspace = true
+serde_json.workspace = true
+
+[features]
+default = ["config"]
+std = ["serde/std", "strum/std"]
+config = ["std", "dep:num-bigint", "dep:num-traits", "dep:serde_with"]
