@@ -12,7 +12,7 @@ use crate::{
         testing::VmChipTestBuilder,
         ExecutionBridge, VmChipWrapper,
     },
-    rv32im::adapters::Rv32HeapAdapter,
+    rv32im::adapters::{Rv32HeapAdapter, Rv32VecHeapAdapter},
     system::program::Instruction,
     utils::biguint_to_limbs,
 };
@@ -247,7 +247,7 @@ fn test_vec_heap_adapter() {
 
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
     let memory_bridge = tester.memory_controller().borrow().memory_bridge();
-    let adapter = Rv32HeapAdapter::new(execution_bridge, memory_bridge);
+    let adapter = Rv32VecHeapAdapter::new(execution_bridge, memory_bridge);
     let coord_chip = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
         coord_modulus.clone(),
         tester.memory_controller().borrow().range_checker.clone(),

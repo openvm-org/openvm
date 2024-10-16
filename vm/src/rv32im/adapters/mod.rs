@@ -59,3 +59,23 @@ pub fn read_rv32_register<F: PrimeField32>(
     let val = compose(record.data);
     (record, val)
 }
+
+pub fn batch_read_rv32_registers<
+    F: PrimeField32,
+    const NUM_READS: usize,
+    const NUM_CELLS: usize,
+>(
+    memory: &mut MemoryController<F>,
+    address_space: F,
+    pointer: F,
+) -> (MemoryReadRecord<F, NUM_CELLS>, [u32; NUM_READS]) {
+    debug_assert_eq!(address_space, F::one());
+    let record = memory.read::<NUM_CELLS>(address_space, pointer);
+    let vals = record
+        .data
+        .chunks(RV32_REGISTER_NUM_LANES)
+        .map(|x| compose(x.try_into().unwrap()))
+        .collect::<Vec<_>>();
+    let vals: [u32; NUM_READS] = vals.try_into().unwrap();
+    (record, vals)
+}
