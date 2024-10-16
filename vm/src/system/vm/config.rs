@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use derive_new::new;
 use num_bigint_dig::BigUint;
 use serde::{Deserialize, Serialize};
@@ -194,11 +192,4 @@ impl Modulus {
     pub fn all() -> Vec<Self> {
         Modulus::iter().collect()
     }
-}
-
-#[allow(dead_code)]
-fn shift_range(r: &Range<usize>, x: usize) -> Range<usize> {
-    let start = r.start + x;
-    let end = r.end + x;
-    start..end
 }
