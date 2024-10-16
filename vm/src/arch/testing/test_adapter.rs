@@ -1,4 +1,8 @@
-use std::{borrow::Borrow, collections::VecDeque, fmt::Debug};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    collections::VecDeque,
+    fmt::Debug,
+};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
@@ -43,7 +47,7 @@ impl<F> TestAdapterChip<F> {
 #[derive(Clone)]
 pub struct TestAdapterRecord<T> {
     pub from_pc: u32,
-    pub operands: [T; 5],
+    pub operands: [T; 7],
 }
 
 impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
@@ -91,6 +95,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
                     instruction.op_c,
                     instruction.d,
                     instruction.e,
+                    instruction.op_f,
+                    instruction.op_g,
                 ],
                 from_pc: from_state.pc,
             },
@@ -103,8 +109,11 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
     ) {
-        row_slice[0] = F::from_canonical_u32(write_record.from_pc);
-        row_slice[1..].copy_from_slice(&write_record.operands);
+        let cols: &mut TestAdapterCols<F> = row_slice.borrow_mut();
+        cols.from_pc = F::from_canonical_u32(write_record.from_pc);
+        cols.operands = write_record.operands;
+        // row_slice[0] = F::from_canonical_u32(write_record.from_pc);
+        // row_slice[1..].copy_from_slice(&write_record.operands);
     }
 
     fn air(&self) -> &Self::Air {
@@ -121,7 +130,7 @@ pub struct TestAdapterAir {
 #[derive(AlignedBorrow)]
 pub struct TestAdapterCols<T> {
     pub from_pc: T,
-    pub operands: [T; 5],
+    pub operands: [T; 7],
 }
 
 impl<F: Field> BaseAir<F> for TestAdapterAir {
@@ -156,7 +165,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        // TODO: This is a hack to make the code compile, as it is not used anywhere
-        local[0]
+        let cols: &TestAdapterCols<AB::Var> = local.borrow();
+        cols.from_pc
     }
 }
