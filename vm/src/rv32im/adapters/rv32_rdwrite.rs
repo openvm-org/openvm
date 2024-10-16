@@ -13,7 +13,7 @@ use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        HasFromPc, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -81,12 +81,10 @@ impl<T> VmAdapterInterface<T> for Rv32RdWriteAdapterInterface<T> {
     type Reads = ();
     type Writes = [T; RV32_REGISTER_NUM_LANES];
     type ProcessedInstruction = Rv32RdWriteProcessedInstruction<T>;
-}
 
-impl<T: Clone> HasFromPc<T> for Rv32RdWriteAdapterInterface<T> {
-    fn get_from_pc(local_adapter: &[T]) -> T {
-        let adapter_cols: &Rv32RdWriteAdapterCols<T> = (*local_adapter).borrow();
-        adapter_cols.from_state.pc.clone()
+    fn from_pc<S: Into<T> + Clone>(local_adapter: &[S]) -> Option<T> {
+        let adapter_cols: &Rv32RdWriteAdapterCols<S> = (*local_adapter).borrow();
+        Some(adapter_cols.from_state.pc.clone().into())
     }
 }
 
@@ -209,9 +207,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapter<F> {
         let adapter_cols: &mut Rv32RdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         adapter_cols.rd_ptr = write_record.rd.pointer;
-        adapter_cols.rd_aux_cols = self
-            .aux_cols_factory
-            .make_write_aux_cols(write_record.rd.clone());
+        adapter_cols.rd_aux_cols = self.aux_cols_factory.make_write_aux_cols(write_record.rd);
     }
 
     fn air(&self) -> &Self::Air {

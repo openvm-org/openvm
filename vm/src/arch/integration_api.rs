@@ -33,7 +33,8 @@ pub trait VmAdapterInterface<T> {
     type ProcessedInstruction;
 
     /// Given the local row slice of the adapter AIR, return the `from_pc` expression, if it can be obtained.
-    fn from_pc<S: Into<T>>(_local_adapter: &[S]) -> Option<T> {
+    // S is intended to be AB::Var
+    fn from_pc<S: Into<T> + Clone>(_local_adapter: &[S]) -> Option<T> {
         None
     }
 }
@@ -47,6 +48,8 @@ pub trait VmAdapterChip<F: Field> {
     type WriteRecord: Send;
     /// AdapterAir should not have public values
     type Air: BaseAir<F> + Clone;
+    /// WARNING: the associated `Interface` type must have a `from_pc` implementation that is compatible with
+    /// the adapter AIR's column structure.
     type Interface: VmAdapterInterface<F>;
 
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
@@ -88,6 +91,8 @@ pub trait VmAdapterChip<F: Field> {
 }
 
 pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
+    /// WARNING: the associated `Interface` type must have a `from_pc` implementation that is compatible with
+    /// the adapter AIR's column structure.
     type Interface: VmAdapterInterface<AB::Expr>;
 
     /// [Air](p3_air::Air) constraints owned by the adapter.
@@ -351,15 +356,6 @@ where
         let ctx = self.core.eval(builder, local_core, local_adapter);
         self.adapter.eval(builder, local_adapter, ctx);
     }
-}
-
-/// Trait to be implemented on some AdapterIntefraces so CoreAir can get `from_pc` from a `local_adapter` row slice.
-///
-/// WARNING: this trait should not be implemented on general purpose interfaces.
-/// It should only be implemented on protected interfaces which will only be associated with adapter columns
-/// that satisfy the trait implementation.
-pub trait HasFromPc<T> {
-    fn get_from_pc(local_adapter: &[T]) -> T;
 }
 
 #[repr(C)]

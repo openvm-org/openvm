@@ -16,7 +16,7 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, HasFromPc, Result, VmAdapterInterface, VmCoreAir,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
         VmCoreChip,
     },
     rv32im::adapters::{PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS},
@@ -51,7 +51,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalLuiCoreAir {}
 impl<AB, I> VmCoreAir<AB, I> for Rv32JalLuiCoreAir
 where
     AB: InteractionBuilder,
-    I: VmAdapterInterface<AB::Expr> + HasFromPc<AB::Expr>,
+    I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<()>,
     I::Writes: From<[AB::Expr; RV32_REGISTER_NUM_LANES]>,
     I::ProcessedInstruction: From<(AB::Expr, AB::Expr, AB::Expr)>,
@@ -63,7 +63,7 @@ where
         local_adapter: &[AB::Var],
     ) -> AdapterAirContext<AB::Expr, I> {
         let local_adapter: Vec<AB::Expr> = local_adapter.iter().map(|x| (*x).into()).collect();
-        let from_pc = I::get_from_pc(&local_adapter);
+        let from_pc = I::from_pc(&local_adapter).expect("from_pc must be defined");
 
         let cols: &Rv32JalLuiCols<AB::Var> = (*local_core).borrow();
         let Rv32JalLuiCols::<AB::Var> {
