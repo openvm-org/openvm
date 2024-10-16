@@ -9,7 +9,7 @@ use crate::{
 
 #[test]
 #[allow(non_snake_case)]
-fn test_final_exp_hint() {
+fn test_bls12_381_final_exp_hint() {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) =
         generate_test_points_bls12_381(&[Fr::from(3), Fr::from(6)], &[Fr::from(8), Fr::from(4)]);
 
@@ -28,13 +28,13 @@ fn test_final_exp_hint() {
 
 #[test]
 #[allow(non_snake_case)]
-fn test_assert_final_exp_is_one_scalar_ones() {
+fn test_bls12_381_assert_final_exp_is_one_scalar_ones() {
     assert_final_exp_one(&[Fr::from(1), Fr::from(1)], &[Fr::from(1), Fr::from(1)]);
 }
 
 #[test]
 #[allow(non_snake_case)]
-fn test_assert_final_exp_is_one_scalar_other() {
+fn test_bls12_381_assert_final_exp_is_one_scalar_other() {
     assert_final_exp_one(&[Fr::from(5), Fr::from(2)], &[Fr::from(10), Fr::from(25)]);
 }
 

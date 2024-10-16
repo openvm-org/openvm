@@ -1,25 +1,36 @@
-use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
+use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, Gt, MillerLoopResult};
 use num::BigInt;
 
-use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR, T};
-use crate::common::{EcPoint, ExpBigInt, FinalExp};
+use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
+use crate::common::{EcPoint, ExpBigInt, FinalExp, MultiMillerLoop};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
-    fn assert_final_exp_is_one(&self, f: Fq12, _P: &[EcPoint<Fq>], _Q: &[EcPoint<Fq2>]) {
+    fn assert_final_exp_is_one(&self, f: Fq12, P: &[EcPoint<Fq>], Q: &[EcPoint<Fq2>]) {
         let (c, s) = self.final_exp_hint(f);
+        let c_inv = c.invert().unwrap();
 
+        // u = 0xd201000000010000
+        // f * scalingFactor * == c^{q - u}
+        // f * s = c^q * c^-u
+        // f * c^u * s = c^q, where fc == f * c^u (embedded miller loop with c)
         let c_q = c.frobenius_map();
-        let c_exp = c.exp_bigint(T.clone());
-        let c_mul = c_q * c_exp;
 
-        assert_eq!(f * s, c_mul);
+        let fc = self.multi_miller_loop_embedded_exp(P, Q, Some(c));
+
+        assert_eq!(fc * s, c_q);
     }
 
     // Adapted from the gnark implementation:
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/hints.go#L273
     // returns c (residueWitness) and s (scalingFactor)
     fn final_exp_hint(&self, f: Fq12) -> (Fq12, Fq12) {
+        debug_assert_eq!(
+            MillerLoopResult(f).final_exponentiation(),
+            Gt(Fq12::one()),
+            "Trying to call final_exp_hint on {f:?} which does not final exponentiate to 1."
+        );
+
         // 1. get p-th root inverse
         let mut exp = FINAL_EXP_FACTOR.clone() * BigInt::from(27);
         let mut root = f.exp_bigint(exp.clone());

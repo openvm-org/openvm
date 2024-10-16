@@ -2,7 +2,9 @@ use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use itertools::izip;
 
 use super::{mul_023_by_023, mul_by_023, mul_by_02345, Bls12_381, BLS12_381_PBE_BITS};
-use crate::common::{miller_add_step, miller_double_step, EcPoint, EvaluatedLine, MultiMillerLoop};
+use crate::common::{
+    fp12_square, miller_add_step, miller_double_step, EcPoint, EvaluatedLine, MultiMillerLoop,
+};
 
 #[allow(non_snake_case)]
 impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
@@ -40,10 +42,16 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         f: Fq12,
         Q_acc: Vec<EcPoint<Fq2>>,
         Q: &[EcPoint<Fq2>],
+        c: Option<Fq12>,
         x_over_ys: Vec<Fq>,
         y_invs: Vec<Fq>,
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
         let mut f = f;
+
+        if c != None {
+            f = fp12_square(f);
+        }
+
         let mut Q_acc = Q_acc;
 
         // Special case the first iteration of the miller loop with pseudo_binary_encoding = 1:
@@ -86,10 +94,14 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         f: Fq12,
         Q_acc: Vec<EcPoint<Fq2>>,
         _Q: &[EcPoint<Fq2>],
+        c: Option<Fq12>,
         _x_over_ys: Vec<Fq>,
         _y_invs: Vec<Fq>,
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
-        let res = f.conjugate();
-        (res, Q_acc)
+        let mut f = f;
+        if c == None {
+            f = f.conjugate();
+        }
+        (f, Q_acc)
     }
 }
