@@ -156,7 +156,7 @@ mod tests {
         let inputs = two_fp2_input(&x_fp2, &y_fp2);
 
         let row = air.generate_trace_row((inputs, range_checker.clone(), vec![]));
-        let (_, _, vars, _, _, _) = air.load_vars(&row);
+        let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);
         let range_trace = range_checker.generate_trace();
         assert_eq!(vars.len(), 2);
@@ -228,7 +228,7 @@ mod tests {
         ];
 
         let row = air.generate_trace_row((inputs, range_checker.clone(), vec![]));
-        let (_, _, vars, _, _, _) = air.load_vars(&row);
+        let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);
         let range_trace = range_checker.generate_trace();
         assert_eq!(vars.len(), 2);
