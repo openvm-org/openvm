@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Debug};
+use std::{borrow::Borrow, collections::VecDeque, fmt::Debug};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
@@ -119,14 +119,14 @@ pub struct TestAdapterAir {
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct EmptyAirCols<T> {
-    pub dummy: T,
+pub struct TestAdapterCols<T> {
+    pub from_pc: T,
+    pub operands: [T; 5],
 }
 
 impl<F: Field> BaseAir<F> for TestAdapterAir {
     fn width(&self) -> usize {
-        // from_pc, 5 operands
-        6
+        TestAdapterCols::<F>::width()
     }
 }
 
@@ -140,12 +140,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
         let processed_instruction: MinimalInstruction<AB::Expr> = ctx.instruction.into();
+        let cols: &TestAdapterCols<AB::Var> = local.borrow();
         self.execution_bridge
             .execute_and_increment_pc_custom(
                 processed_instruction.opcode,
-                local[1..].to_vec(),
+                cols.operands.to_vec(),
                 ExecutionState {
-                    pc: local[0].into(),
+                    pc: cols.from_pc.into(),
                     timestamp: AB::Expr::one(),
                 },
                 AB::Expr::zero(),
