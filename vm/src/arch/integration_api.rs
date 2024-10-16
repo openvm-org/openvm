@@ -33,7 +33,7 @@ pub trait VmAdapterInterface<T> {
     type ProcessedInstruction;
 
     /// Given the local row slice of the adapter AIR, return the `from_pc` expression, if it can be obtained.
-    fn from_pc<S: Into<T>>(_local_adapter: &[S]) -> Option<T> {
+    fn from_pc<S: Into<T> + Clone>(_local_adapter: &[S]) -> Option<T> {
         None
     }
 }
