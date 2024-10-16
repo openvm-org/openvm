@@ -42,8 +42,8 @@ impl<F> TestAdapterChip<F> {
 
 #[derive(Clone)]
 pub struct TestAdapterRecord<T> {
-    pub operands: [T; 5],
     pub from_pc: u32,
+    pub operands: [T; 5],
 }
 
 impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
@@ -133,11 +133,6 @@ impl<F: Field> BaseAir<F> for TestAdapterAir {
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
     type Interface = DynAdapterInterface<AB::Expr>;
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        // TODO: This is a hack to make the code compile, as it is not used anywhere
-        local[0]
-    }
-
     fn eval(
         &self,
         builder: &mut AB,
@@ -157,5 +152,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
                 AB::Expr::from_canonical_u32(4),
             )
             .eval(builder, processed_instruction.is_valid);
+    }
+
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+        // TODO: This is a hack to make the code compile, as it is not used anywhere
+        local[0]
     }
 }
