@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 /// These parameters are supplied by the front-end user **before** the program is compiled.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CustomOpConfig {
+    /// Configuration parameters for custom opcodes used in intrinsics.
     pub intrinsics: IntrinsicsOpConfig,
+    // In the future, we will add config for kernel opcodes.
 }
 
 /// Configuration parameters for the intrinsics opcodes.
