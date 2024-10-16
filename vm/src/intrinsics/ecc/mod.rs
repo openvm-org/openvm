@@ -93,7 +93,7 @@ pub struct EcAddUnequalChip<T: PrimeField32> {
     pub data: Vec<EcAddUnequalRecord<T>>,
     pub config: EcChipConfig<T>,
 
-    _offset: usize,
+    pub offset: usize,
 }
 
 fn make_ec_config<T: PrimeField32>(memory_controller: &MemoryControllerRef<T>) -> EcAirConfig {
@@ -143,7 +143,7 @@ impl<T: PrimeField32> EcAddUnequalChip<T> {
             air,
             config,
             data: vec![],
-            _offset: offset,
+            offset,
         }
     }
 }
@@ -231,7 +231,7 @@ pub struct EcDoubleChip<T: PrimeField32> {
     pub data: Vec<EcDoubleRecord<T>>,
     pub config: EcChipConfig<T>,
 
-    _offset: usize,
+    pub offset: usize,
 }
 
 impl<T: PrimeField32> EcDoubleChip<T> {
@@ -256,7 +256,7 @@ impl<T: PrimeField32> EcDoubleChip<T> {
             air,
             config,
             data: vec![],
-            _offset: offset,
+            offset,
         }
     }
 }

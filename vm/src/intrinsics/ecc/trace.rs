@@ -67,7 +67,10 @@ impl<F: PrimeField32> VmChip<F> for EcAddUnequalChip<F> {
                     p2_array_read,
                     p3_array_write,
                 } = record;
-                assert_eq!(instruction.opcode, EccOpcode::EC_ADD_NE as usize);
+                assert_eq!(
+                    instruction.opcode,
+                    EccOpcode::EC_ADD_NE as usize + self.offset
+                );
 
                 let io = EcAddUnequalIoCols {
                     from_state: from_state.map(F::from_canonical_u32),
@@ -130,7 +133,7 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
     }
 
     fn trace_width(&self) -> usize {
-        EcAddUnequalCols::<F>::width(&self.air.air.config)
+        EcDoubleCols::<F>::width(&self.air.air.config)
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
@@ -146,7 +149,10 @@ impl<F: PrimeField32> VmChip<F> for EcDoubleChip<F> {
                     p1_array_read,
                     p2_array_write,
                 } = record;
-                assert_eq!(instruction.opcode, EccOpcode::EC_DOUBLE as usize);
+                assert_eq!(
+                    instruction.opcode,
+                    EccOpcode::EC_DOUBLE as usize + self.offset
+                );
 
                 let io = EcDoubleIoCols {
                     from_state: from_state.map(F::from_canonical_u32),

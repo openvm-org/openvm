@@ -36,15 +36,15 @@ use crate::{
         ExecutorName, InstructionExecutor, VmChip,
     },
     intrinsics::{
-        castf::CastFChip,
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     },
     kernels::{
         adapters::{
-            native_adapter::NativeAdapterChip,
+            convert_adapter::ConvertAdapterChip, native_adapter::NativeAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
+        castf::{CastFChip, CastFCoreChip},
         core::{
             CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
@@ -492,10 +492,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 ExecutorName::CastF => {
                     let chip = Rc::new(RefCell::new(CastFChip::new(
-                        execution_bus,
-                        program_bus,
+                        ConvertAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        CastFCoreChip::new(
+                            memory_controller.borrow().range_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
