@@ -1,4 +1,4 @@
-use crate::{arch::VmChipWrapper, rv32im::adapters::Rv32AluAdapter};
+use crate::{arch::VmChipWrapper, rv32im::adapters::Rv32BaseAluAdapterChip};
 
 mod core;
 pub use core::*;
@@ -7,4 +7,4 @@ pub use core::*;
 mod tests;
 
 // TODO: Replace current ALU less than commands upon completion
-pub type Rv32LessThanChip<F> = VmChipWrapper<F, Rv32AluAdapter<F>, LessThanCoreChip<4, 8>>;
+pub type Rv32LessThanChip<F> = VmChipWrapper<F, Rv32BaseAluAdapterChip<F>, LessThanCoreChip<4, 8>>;

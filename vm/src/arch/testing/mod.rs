@@ -29,9 +29,11 @@ use crate::{
 pub mod execution;
 pub mod memory;
 pub mod program;
+pub mod test_adapter;
 
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
+pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
 use crate::{

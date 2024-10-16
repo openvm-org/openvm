@@ -16,7 +16,7 @@ use crate::{
         ExecutionState, // instructions::Opcode,
         InstructionExecutor,
     },
-    intrinsics::modular_addsub::{FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
+    old::modular_addsub::{FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
     system::memory::{MemoryControllerRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
     system::program::{bridge::ProgramBus, ExecutionError, Instruction},
     utils::{biguint_to_limbs, limbs_to_biguint},

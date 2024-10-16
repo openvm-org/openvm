@@ -82,12 +82,16 @@
 
 extern crate alloc;
 
-// FIXME: re-enable for std
-// pub mod env;
-// pub mod serde;
+pub mod env;
+pub mod serde;
 
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
+
+// always include rust_rt so the memory allocator is enabled
+#[cfg(target_os = "zkvm")]
+#[allow(unused_imports)]
+use axvm_platform::rust_rt;
 
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memset.s"));
@@ -162,12 +166,12 @@ unsafe extern "C" fn __start() -> ! {
         main()
     }
 
-    // env::finalize(true, 0);
+    env::finalize(true, 0);
     unreachable!();
 }
 
 #[cfg(target_os = "zkvm")]
-static STACK_TOP: u32 = axvm_platform::memory::STACK_TOP;
+// static STACK_TOP: u32 = axvm_platform::memory::STACK_TOP;
 
 // Entry point; sets up global pointer and stack pointer and passes
 // to zkvm_start.  TODO: when asm_const is stabilized, use that here
@@ -182,11 +186,10 @@ _start:
     .option norelax;
     la gp, __global_pointer$;
     .option pop;
-    la sp, {0}
-    lw sp, 0(sp)
+    lui sp, 0x200 // ATTENTION: this hardcodes the stack size, undo this once initial memory image is supported
     call __start;
 "#,
-    sym STACK_TOP
+    // sym STACK_TOP
 );
 
 /// Require that accesses to behind the given pointer before the memory

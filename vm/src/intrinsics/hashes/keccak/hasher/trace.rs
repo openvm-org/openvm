@@ -93,14 +93,9 @@ impl<F: PrimeField32> VmChip<F> for KeccakVmChip<F> {
                 keccakf(&mut state);
                 let post_hi: [u8; KECCAK_RATE_U16S] =
                     from_fn(|i| (state[i / U64_LIMBS] >> ((i % U64_LIMBS) * 16 + 8)) as u8);
-                let op_reads = (idx == 0).then(|| {
-                    [
-                        record.dst_read.clone(),
-                        record.src_read.clone(),
-                        record.len_read.clone(),
-                    ]
-                });
-                let digest_writes = (idx == num_blocks - 1).then(|| record.digest_writes.clone());
+                let op_reads =
+                    (idx == 0).then_some([record.dst_read, record.src_read, record.len_read]);
+                let digest_writes = (idx == num_blocks - 1).then_some(record.digest_writes);
                 let diff = StateDiff {
                     pre_hi,
                     post_hi,
