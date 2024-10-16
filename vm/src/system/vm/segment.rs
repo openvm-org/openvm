@@ -39,19 +39,24 @@ use crate::{
         castf::CastFChip,
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-        modular_addsub::ModularAddSubChip,
-        modular_multdiv::ModularMultDivChip,
-        uint_multiplication::UintMultiplicationChip,
     },
     kernels::{
+        adapters::{
+            native_adapter::NativeAdapterChip,
+            native_vectorized_adapter::NativeVectorizedAdapterChip,
+        },
         core::{
             CoreChip, Streams, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
         },
-        field_arithmetic::FieldArithmeticChip,
-        field_extension::FieldExtensionArithmeticChip,
+        field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
+        field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
     },
-    old::{alu::ArithmeticLogicChip, shift::ShiftChip},
+    old::{
+        alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,
+        modular_multdiv::ModularMultDivChip, shift::ShiftChip,
+        uint_multiplication::UintMultiplicationChip,
+    },
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapter, Rv32JalrAdapter, Rv32LoadStoreAdapter,
@@ -237,10 +242,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
                 ExecutorName::FieldArithmetic => {
                     let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
-                        execution_bus,
-                        program_bus,
+                        NativeAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        FieldArithmeticCoreChip::new(offset),
                         memory_controller.clone(),
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -248,11 +256,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     chips.push(AxVmChip::FieldArithmetic(chip));
                 }
                 ExecutorName::FieldExtension => {
-                    let chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
-                        execution_bus,
-                        program_bus,
+                    let chip = Rc::new(RefCell::new(FieldExtensionChip::new(
+                        NativeVectorizedAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        FieldExtensionCoreChip::new(offset),
                         memory_controller.clone(),
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -602,7 +613,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         loop {
             let (instruction, debug_info) = self.program_chip.get_instruction(pc)?;
-            tracing::trace!("pc: {pc} | time: {timestamp} | {:?}", instruction);
+            tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
 
             let (dsl_instr, trace) = debug_info.map_or(
                 (None, None),

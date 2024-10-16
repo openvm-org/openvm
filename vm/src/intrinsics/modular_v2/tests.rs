@@ -1,5 +1,5 @@
 use afs_primitives::bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prime};
-use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};
+use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -23,7 +23,6 @@ type F = BabyBear;
 
 #[test]
 fn test_modular_add() {
-    setup_tracing();
     let coord_modulus = secp256k1_coord_prime();
     let scalar_modulus = secp256k1_scalar_prime();
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
@@ -132,7 +131,6 @@ fn test_modular_add() {
 
 #[test]
 fn test_modular_muldiv() {
-    setup_tracing();
     let coord_modulus = secp256k1_coord_prime();
     let scalar_modulus = secp256k1_scalar_prime();
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();

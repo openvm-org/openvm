@@ -1,11 +1,17 @@
-mod air;
-mod bridge;
-mod chip;
-mod columns;
-#[cfg(test)]
-mod tests;
-mod trace;
+use crate::{
+    arch::{VmAirWrapper, VmChipWrapper},
+    kernels::adapters::native_vectorized_adapter::{
+        NativeVectorizedAdapterAir, NativeVectorizedAdapterChip,
+    },
+};
 
-pub use air::*;
-pub use chip::*;
-pub use columns::*;
+#[cfg(test)]
+pub mod tests;
+
+mod core;
+pub use core::*;
+
+pub type FieldExtensionAir =
+    VmAirWrapper<NativeVectorizedAdapterAir<EXT_DEG>, FieldExtensionCoreAir>;
+pub type FieldExtensionChip<F> =
+    VmChipWrapper<F, NativeVectorizedAdapterChip<F, EXT_DEG>, FieldExtensionCoreChip>;

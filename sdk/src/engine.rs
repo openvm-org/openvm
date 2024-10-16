@@ -10,8 +10,9 @@ use afs_stark_backend::{
 };
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use tracing::Level;
 
-use crate::config::{instrument::StarkHashStatistics, FriParameters};
+use crate::config::{instrument::StarkHashStatistics, setup_tracing_with_log_level, FriParameters};
 
 pub trait StarkEngineWithHashInstrumentation<SC: StarkGenericConfig>: StarkEngine<SC> {
     fn clear_instruments(&mut self);
@@ -65,6 +66,7 @@ where
     where
         AirProofInput<SC>: Send + Sync,
     {
+        setup_tracing_with_log_level(Level::WARN);
         let data = <Self as StarkEngine<_>>::run_test_impl(self, air_proof_inputs)?;
         Ok(VerificationDataWithFriParams {
             data,

@@ -9,7 +9,7 @@ use ax_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
-        setup_tracing, FriParameters,
+        FriParameters,
     },
     dummy_airs::{
         fib_air::chip::FibonacciChip,
@@ -34,8 +34,6 @@ pub fn fibonacci_test_proof_input<SC: StarkGenericConfig>(n: usize) -> ProofInpu
 where
     Val<SC>: PrimeField32,
 {
-    setup_tracing();
-
     let fib_chip = FibonacciChip::new(0, 1, n);
     ProofInputForTest {
         per_air: vec![fib_chip.generate_air_proof_input()],
@@ -137,8 +135,6 @@ where
 
 #[test]
 fn test_fibonacci_small() {
-    setup_tracing();
-
     run_recursive_test(
         fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 5),
         standard_fri_params_with_100_bits_conjectured_security(3),
@@ -147,8 +143,6 @@ fn test_fibonacci_small() {
 
 #[test]
 fn test_fibonacci() {
-    setup_tracing();
-
     // test lde = 27
     run_recursive_test(
         fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 24),
@@ -162,8 +156,6 @@ fn test_fibonacci() {
 
 #[test]
 fn test_interactions() {
-    setup_tracing();
-
     run_recursive_test(
         interaction_test_proof_input::<BabyBearPoseidon2Config>(),
         standard_fri_params_with_100_bits_conjectured_security(3),
@@ -172,8 +164,6 @@ fn test_interactions() {
 
 #[test]
 fn test_unordered() {
-    setup_tracing();
-
     run_recursive_test(
         unordered_test_proof_input::<BabyBearPoseidon2Config>(),
         standard_fri_params_with_100_bits_conjectured_security(3),
@@ -183,8 +173,6 @@ fn test_unordered() {
 #[test]
 fn test_optional_air() {
     use afs_stark_backend::{engine::StarkEngine, prover::types::ProofInput, Chip};
-    setup_tracing();
-
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
     let engine = BabyBearPoseidon2Engine::new(fri_params);
     let fib_chip = FibonacciChip::new(0, 1, 8);

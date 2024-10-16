@@ -10,7 +10,6 @@ use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, Abstra
 use rand::Rng;
 use strum::EnumCount;
 
-use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
     arch::{
         instructions::{FieldExtensionOpcode, UsizeOpcode},
@@ -18,22 +17,30 @@ use crate::{
             memory::{gen_address_space, gen_pointer},
             VmChipTestBuilder,
         },
+        VmChip,
     },
-    kernels::field_extension::chip::{FieldExtensionArithmetic, FieldExtensionArithmeticChip},
+    kernels::{
+        adapters::native_vectorized_adapter::NativeVectorizedAdapterChip,
+        field_extension::{FieldExtension, FieldExtensionChip, FieldExtensionCoreChip},
+    },
     system::program::Instruction,
 };
 
 #[test]
-fn field_extension_air_test() {
+fn new_field_extension_air_test() {
     type F = BabyBear;
 
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = FieldExtensionArithmeticChip::new(
-        tester.execution_bus(),
-        tester.program_bus(),
+    let mut chip = FieldExtensionChip::new(
+        NativeVectorizedAdapterChip::new(
+            tester.execution_bus(),
+            tester.program_bus(),
+            tester.memory_controller(),
+        ),
+        FieldExtensionCoreChip::new(0),
         tester.memory_controller(),
-        0,
     );
+    let trace_width = chip.trace_width();
 
     let mut rng = create_seeded_rng();
     let num_ops: usize = 7; // test padding with dummy row
@@ -56,7 +63,7 @@ fn field_extension_air_test() {
         tester.write(as_d, address1, operand1);
         tester.write(as_e, address2, operand2);
 
-        let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
+        let result = FieldExtension::solve(opcode, operand1, operand2).unwrap();
 
         tester.execute(
             &mut chip,
@@ -78,7 +85,7 @@ fn field_extension_air_test() {
         // TODO: better way to modify existing traces in tester
         let extension_trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
         let original_trace = extension_trace.clone();
-        for width in 0..FieldExtensionArithmeticIoCols::<BabyBear>::get_width() {
+        for width in 0..trace_width {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
             extension_trace.row_mut(height)[width] = prank_value;
         }
@@ -93,7 +100,7 @@ fn field_extension_air_test() {
 }
 
 #[test]
-fn field_extension_consistency_test() {
+fn new_field_extension_consistency_test() {
     type F = BabyBear;
     type EF = BinomialExtensionField<F, 4>;
 
@@ -118,10 +125,10 @@ fn field_extension_consistency_test() {
         let plonky_mul = a_ext.mul(b_ext);
         let plonky_div = a_ext.div(b_ext);
 
-        let my_add = FieldExtensionArithmetic::add(a, b);
-        let my_sub = FieldExtensionArithmetic::subtract(a, b);
-        let my_mul = FieldExtensionArithmetic::multiply(a, b);
-        let my_div = FieldExtensionArithmetic::divide(a, b);
+        let my_add = FieldExtension::add(a, b);
+        let my_sub = FieldExtension::subtract(a, b);
+        let my_mul = FieldExtension::multiply(a, b);
+        let my_div = FieldExtension::divide(a, b);
 
         assert_eq!(my_add, plonky_add.as_base_slice());
         assert_eq!(my_sub, plonky_sub.as_base_slice());

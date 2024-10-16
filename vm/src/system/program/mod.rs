@@ -150,7 +150,7 @@ impl<T: Default> Default for Instruction<T> {
 #[derive(Debug)]
 pub enum ExecutionError {
     Fail(u32),
-    PcOutOfBounds(u32, usize),
+    PcOutOfBounds(u32, u32, u32, usize),
     DisabledOperation(u32, usize),
     HintOutOfBounds(u32),
     EndOfInputStream(u32),
@@ -162,10 +162,10 @@ impl Display for ExecutionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExecutionError::Fail(pc) => write!(f, "execution failed at pc = {}", pc),
-            ExecutionError::PcOutOfBounds(pc, program_len) => write!(
+            ExecutionError::PcOutOfBounds(pc, step, pc_base, program_len) => write!(
                 f,
-                "pc = {} out of bounds for program of length {}",
-                pc, program_len
+                "pc = {} out of bounds for program of length {}, with pc_base = {} and step = {}",
+                pc, program_len, pc_base, step
             ),
             ExecutionError::DisabledOperation(pc, op) => {
                 write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
@@ -217,12 +217,21 @@ pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.
-    pub instructions_and_debug_infos: HashMap<usize, (Instruction<F>, Option<DebugInfo>)>,
-    pub step: usize,
+    pub instructions_and_debug_infos: HashMap<u32, (Instruction<F>, Option<DebugInfo>)>,
+    pub step: u32,
+
+    // these two are needed to calculate the index for execution_frequencies
+    pub pc_start: u32,
+    pub pc_base: u32,
 }
 
 impl<F> Program<F> {
-    pub fn from_instructions_and_step(instructions: &[Instruction<F>], step: usize) -> Self
+    pub fn from_instructions_and_step(
+        instructions: &[Instruction<F>],
+        step: u32,
+        pc_start: u32,
+        pc_base: u32,
+    ) -> Self
     where
         F: Clone,
     {
@@ -230,12 +239,20 @@ impl<F> Program<F> {
             instructions_and_debug_infos: instructions
                 .iter()
                 .enumerate()
-                .map(|(index, instruction)| (index * step, ((*instruction).clone(), None)))
+                .map(|(index, instruction)| {
+                    (
+                        index as u32 * step + pc_base,
+                        ((*instruction).clone(), None),
+                    )
+                })
                 .collect(),
             step,
+            pc_start,
+            pc_base,
         }
     }
 
+    // We assume that pc_start = pc_base = 0 everywhere except the RISC-V programs, until we need otherwise
     pub fn from_instructions_and_debug_infos(
         instructions: &[Instruction<F>],
         debug_infos: &[Option<DebugInfo>],
@@ -249,10 +266,15 @@ impl<F> Program<F> {
                 .zip(debug_infos.iter())
                 .enumerate()
                 .map(|(index, (instruction, debug_info))| {
-                    (index, ((*instruction).clone(), (*debug_info).clone()))
+                    (
+                        index as u32,
+                        ((*instruction).clone(), (*debug_info).clone()),
+                    )
                 })
                 .collect(),
             step: 1,
+            pc_start: 0,
+            pc_base: 0,
         }
     }
 
@@ -260,7 +282,7 @@ impl<F> Program<F> {
     where
         F: Clone,
     {
-        Self::from_instructions_and_step(instructions, 1)
+        Self::from_instructions_and_step(instructions, 1, 0, 0)
     }
 
     pub fn len(&self) -> usize {
@@ -311,7 +333,7 @@ impl<F: PrimeField64> ProgramChip<F> {
         let true_program_length = program.len();
         while !program.len().is_power_of_two() {
             program.instructions_and_debug_infos.insert(
-                program.len() * program.step,
+                program.len() as u32 * program.step,
                 (Instruction::from_isize(FAIL as usize, 0, 0, 0, 0, 0), None),
             );
         }
@@ -329,12 +351,25 @@ impl<F: PrimeField64> ProgramChip<F> {
         &mut self,
         pc: u32,
     ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
-        let pc_usize = pc as usize;
-        if !(0..self.true_program_length).contains(&pc_usize) {
-            return Err(ExecutionError::PcOutOfBounds(pc, self.true_program_length));
+        let step = self.program.step;
+        let pc_base = self.program.pc_base;
+        assert!(
+            (pc - pc_base) % step == 0,
+            "pc = {} is not a multiple of step = {}",
+            pc,
+            step
+        );
+        let pc_index = ((pc - pc_base) / step) as usize;
+        if !(0..self.true_program_length).contains(&pc_index) {
+            return Err(ExecutionError::PcOutOfBounds(
+                pc,
+                step,
+                pc_base,
+                self.true_program_length,
+            ));
         }
-        self.execution_frequencies[pc_usize] += 1;
-        Ok(self.program.instructions_and_debug_infos[&pc_usize].clone())
+        self.execution_frequencies[pc_index] += 1;
+        Ok(self.program.instructions_and_debug_infos[&pc].clone())
     }
 }
 

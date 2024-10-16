@@ -5,7 +5,7 @@ use afs_stark_backend::{utils::disable_debug_builder, Chip};
 /// Test utils
 use ax_sdk::{
     any_rap_arc_vec, config,
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     dummy_airs::{
         fib_air::chip::FibonacciChip,
         interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
@@ -135,7 +135,6 @@ fn test_double_fib_starks() {
 #[test]
 fn test_optional_air() {
     use afs_stark_backend::{engine::StarkEngine, prover::types::ProofInput};
-    setup_tracing();
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let fib_chip = FibonacciChip::new(0, 1, 8);
