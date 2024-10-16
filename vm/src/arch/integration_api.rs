@@ -32,12 +32,6 @@ pub trait VmAdapterInterface<T> {
     /// May include the `to_pc`.
     /// Typically this should not include address spaces.
     type ProcessedInstruction;
-
-    /// Given the local row slice of the adapter AIR, return the `from_pc` expression, if it can be obtained.
-    // S is intended to be AB::Var
-    fn from_pc<S: Into<T> + Clone>(_local_adapter: &[S]) -> Option<T> {
-        None
-    }
 }
 
 /// The adapter owns all memory accesses and timestamp changes.
@@ -49,8 +43,7 @@ pub trait VmAdapterChip<F: Field> {
     type WriteRecord: Send;
     /// AdapterAir should not have public values
     type Air: BaseAir<F> + Clone;
-    /// WARNING: the associated `Interface` type must have a `from_pc` implementation that is compatible with
-    /// the adapter AIR's column structure.
+
     type Interface: VmAdapterInterface<F>;
 
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
@@ -92,8 +85,6 @@ pub trait VmAdapterChip<F: Field> {
 }
 
 pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
-    /// WARNING: the associated `Interface` type must have a `from_pc` implementation that is compatible with
-    /// the adapter AIR's column structure.
     type Interface: VmAdapterInterface<AB::Expr>;
 
     /// [Air](p3_air::Air) constraints owned by the adapter.
@@ -106,6 +97,9 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
         local: &[AB::Var],
         interface: AdapterAirContext<AB::Expr, Self::Interface>,
     );
+
+    /// Return the `from_pc` expression.
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
 }
 
 /// Trait to be implemented on primitive chip to integrate with the machine.
@@ -138,12 +132,11 @@ where
     I: VmAdapterInterface<AB::Expr>,
 {
     /// Returns `(to_pc, interface)`.
-    // `local_adapter` provided for flexibility - likely only needed for `from_pc` and `is_valid`
     fn eval(
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        local_adapter: &[AB::Var],
+        from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I>;
 }
 
@@ -353,7 +346,9 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let (local_adapter, local_core) = local.split_at(self.adapter.width());
 
-        let ctx = self.core.eval(builder, local_core, local_adapter);
+        let ctx = self
+            .core
+            .eval(builder, local_core, self.adapter.get_from_pc(local_adapter));
         self.adapter.eval(builder, local_adapter, ctx);
     }
 }

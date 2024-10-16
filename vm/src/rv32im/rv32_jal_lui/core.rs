@@ -60,11 +60,8 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        local_adapter: &[AB::Var],
+        from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let local_adapter: Vec<AB::Expr> = local_adapter.iter().map(|x| (*x).into()).collect();
-        let from_pc = I::from_pc(&local_adapter).expect("from_pc must be defined");
-
         let cols: &Rv32JalLuiCols<AB::Var> = (*local_core).borrow();
         let Rv32JalLuiCols::<AB::Var> {
             imm,
@@ -112,7 +109,7 @@ where
         let intermed_val = rd[0] + intermed_val * AB::Expr::from_canonical_u32(1 << RV32_CELL_BITS);
         builder
             .when(is_jal)
-            .assert_eq(intermed_val, from_pc.clone() + AB::F::from_canonical_u32(4));
+            .assert_eq(intermed_val, from_pc + AB::F::from_canonical_u32(4));
 
         let to_pc = from_pc + is_lui * AB::F::from_canonical_u32(4) + is_jal * imm;
 

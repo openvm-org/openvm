@@ -66,6 +66,10 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
     ) {
         todo!()
     }
+
+    fn get_from_pc(&self, _local: &[AB::Var]) -> AB::Var {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone)]

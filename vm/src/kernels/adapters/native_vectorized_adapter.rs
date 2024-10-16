@@ -140,6 +140,11 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
             )
             .eval(builder, ctx.instruction.is_valid);
     }
+
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+        let cols: &NativeVectorizedAdapterCols<_, N> = local.borrow();
+        cols.from_state.pc
+    }
 }
 
 impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapterChip<F, N> {

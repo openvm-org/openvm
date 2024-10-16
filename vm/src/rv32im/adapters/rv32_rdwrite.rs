@@ -81,11 +81,6 @@ impl<T> VmAdapterInterface<T> for Rv32RdWriteAdapterInterface<T> {
     type Reads = ();
     type Writes = [T; RV32_REGISTER_NUM_LANES];
     type ProcessedInstruction = Rv32RdWriteProcessedInstruction<T>;
-
-    fn from_pc<S: Into<T> + Clone>(local_adapter: &[S]) -> Option<T> {
-        let adapter_cols: &Rv32RdWriteAdapterCols<S> = (*local_adapter).borrow();
-        Some(adapter_cols.from_state.pc.clone().into())
-    }
 }
 
 #[repr(C)]
@@ -155,6 +150,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
                 },
             )
             .eval(builder, ctx.instruction.is_valid);
+    }
+
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+        let cols: &Rv32RdWriteAdapterCols<_> = local.borrow();
+        cols.from_state.pc
     }
 }
 

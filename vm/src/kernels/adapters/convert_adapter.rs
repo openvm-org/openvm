@@ -129,6 +129,11 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
             )
             .eval(builder, ctx.instruction.is_valid);
     }
+
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+        let cols: &ConvertAdapterCols<_, READ_SIZE, WRITE_SIZE> = local.borrow();
+        cols.from_state.pc
+    }
 }
 
 impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapterChip<F>

@@ -83,7 +83,7 @@ impl<AB: AirBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
-        _local_adapter: &[AB::Var],
+        _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, Rv32HeapAdapterInterface<AB::Expr, NUM_LIMBS, NUM_LIMBS>> {
         todo!()
     }

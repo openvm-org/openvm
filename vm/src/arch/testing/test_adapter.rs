@@ -105,4 +105,8 @@ impl<AB: AirBuilder> VmAdapterAir<AB> for EmptyAir {
         _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
     }
+
+    fn get_from_pc(&self, _local: &[AB::Var]) -> AB::Var {
+        todo!()
+    }
 }
