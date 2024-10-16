@@ -66,11 +66,11 @@ pub struct Rv32RdWriteProcessedInstruction<T> {
 
 // This is used by the CoreAir to pass the necessary fields to AdapterAir
 impl<T> From<(T, T, T)> for Rv32RdWriteProcessedInstruction<T> {
-    fn from(tuple: (T, T, T)) -> Self {
+    fn from((is_valid, opcode, imm): (T, T, T)) -> Self {
         Rv32RdWriteProcessedInstruction {
-            is_valid: tuple.0,
-            opcode: tuple.1,
-            imm: tuple.2,
+            is_valid,
+            opcode,
+            imm,
         }
     }
 }

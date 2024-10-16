@@ -42,7 +42,7 @@ pub struct Rv32JalLuiCoreAir {
 
 impl<F: Field> BaseAir<F> for Rv32JalLuiCoreAir {
     fn width(&self) -> usize {
-        Rv32JalLuiCols::<u8>::width()
+        Rv32JalLuiCols::<F>::width()
     }
 }
 
