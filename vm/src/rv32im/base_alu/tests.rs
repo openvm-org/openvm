@@ -12,14 +12,13 @@ use super::{core::solve_alu, BaseAluCoreChip, Rv32BaseAluChip};
 use crate::{
     arch::{
         instructions::AluOpcode,
-        testing::{memory::gen_pointer, VmChipTestBuilder},
+        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
         InstructionExecutor, VmChip, VmChipWrapper,
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            test_adapter::TestAdapterChip, Rv32BaseAluAdapterChip, RV32_CELL_BITS,
-            RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+            Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
         },
         base_alu::BaseAluCoreCols,
     },
@@ -159,11 +158,8 @@ fn rv32_alu_and_rand_test() {
 /// A dummy adapter is used so memory interactions don't indirectly cause false passes.
 ///////////////////////////////////////////////////////////////////////////////////////
 
-type Rv32BaseAluTestChip<F> = VmChipWrapper<
-    F,
-    TestAdapterChip<F, Rv32BaseAluAdapterChip<F>>,
-    BaseAluCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>,
->;
+type Rv32BaseAluTestChip<F> =
+    VmChipWrapper<F, TestAdapterChip<F>, BaseAluCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>>;
 
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_alu_negative_test(
@@ -177,8 +173,8 @@ fn run_rv32_alu_negative_test(
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = Rv32BaseAluTestChip::<F>::new(
         TestAdapterChip::new(
-            [b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)],
-            None,
+            vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
+            vec![None],
         ),
         BaseAluCoreChip::new(xor_lookup_chip.clone(), 0),
         tester.memory_controller(),
