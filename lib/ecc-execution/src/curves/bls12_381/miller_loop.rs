@@ -48,8 +48,8 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
         let mut f = f;
 
-        if c != None {
-            f = fp12_square(f);
+        if c.is_some() {
+            f = fp12_square(f) * c.unwrap();
         }
 
         let mut Q_acc = Q_acc;

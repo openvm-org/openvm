@@ -9,6 +9,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
     fn assert_final_exp_is_one(&self, f: Fq12, P: &[EcPoint<Fq>], Q: &[EcPoint<Fq2>]) {
         let (c, s) = self.final_exp_hint(f);
         let c_inv = c.invert().unwrap();
+        let c_conj_inv = c.conjugate().invert().unwrap();
 
         // f * s = c^{q - x}
         // f * s = c^q * c^-x
@@ -16,7 +17,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         //   where fc = f * c^x (embedded miller loop with c) & x = -0xd201000000010000
         let c_q_inv = c_inv.frobenius_map();
 
-        let fc = self.multi_miller_loop_embedded_exp(P, Q, Some(c));
+        let fc = self.multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
 
         assert_eq!(fc * c_q_inv * s, Fq12::one());
     }

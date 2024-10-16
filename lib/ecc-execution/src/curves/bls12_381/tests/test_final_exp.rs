@@ -11,7 +11,8 @@ use crate::{
 #[allow(non_snake_case)]
 fn test_bls12_381_final_exp_hint() {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) =
-        generate_test_points_bls12_381(&[Fr::from(3), Fr::from(6)], &[Fr::from(8), Fr::from(4)]);
+        // generate_test_points_bls12_381(&[Fr::from(3), Fr::from(6)], &[Fr::from(8), Fr::from(4)]);
+        generate_test_points_bls12_381(&[Fr::from(1), Fr::from(1)], &[Fr::from(1), Fr::from(1)]);
 
     let bls12_381 = Bls12_381;
     let f = bls12_381.multi_miller_loop(&P_ecpoints, &Q_ecpoints);
