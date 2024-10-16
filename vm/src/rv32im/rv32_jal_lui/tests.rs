@@ -137,6 +137,7 @@ fn rand_jal_lui_test() {
 /// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
 ///////////////////////////////////////////////////////////////////////////////////////
 
+#[allow(clippy::too_many_arguments)]
 fn run_negative_jal_lui_test(
     opcode: Rv32JalLuiOpcode,
     initial_imm: Option<i32>,
