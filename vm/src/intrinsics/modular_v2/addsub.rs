@@ -178,14 +178,6 @@ where
             .iter()
             .map(|x| x.as_canonical_u32())
             .collect::<Vec<_>>();
-        // let x = reads[..NUM_LIMBS]
-        //     .iter()
-        //     .map(|x| x.as_canonical_u32())
-        //     .collect::<Vec<_>>();
-        // let y = reads[NUM_LIMBS..]
-        //     .iter()
-        //     .map(|x| x.as_canonical_u32())
-        //     .collect::<Vec<_>>();
 
         let x_biguint = limbs_to_biguint(&x, LIMB_SIZE);
         let y_biguint = limbs_to_biguint(&y, LIMB_SIZE);
