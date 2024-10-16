@@ -1,5 +1,6 @@
-use std::{collections::VecDeque, fmt::Debug};
+use std::{borrow::Borrow, collections::VecDeque, fmt::Debug};
 
+use afs_derive::AlignedBorrow;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{Field, PrimeField32};
 
@@ -89,9 +90,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
 #[derive(Clone, Copy, Debug)]
 pub struct EmptyAir;
 
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct EmptyAirCols<T> {
+    pub dummy: T,
+}
+
 impl<F: Field> BaseAir<F> for EmptyAir {
     fn width(&self) -> usize {
-        0
+        1
     }
 }
 
@@ -101,12 +108,14 @@ impl<AB: AirBuilder> VmAdapterAir<AB> for EmptyAir {
     fn eval(
         &self,
         _builder: &mut AB,
-        _local: &[AB::Var],
+        local: &[AB::Var],
         _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
+        let _cols: &EmptyAirCols<_> = local.borrow();
     }
 
-    fn get_from_pc(&self, _local: &[AB::Var]) -> AB::Var {
-        todo!()
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+        // TODO: This is a hack to make the code compile, as it is not used anywhere
+        local[0]
     }
 }

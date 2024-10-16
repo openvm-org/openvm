@@ -185,22 +185,18 @@ fn run_rv32_alu_negative_test(
         Instruction::from_usize(opcode as usize, [0, 0, 0, 1, 1]),
     );
 
-    let mut air_proof_input = chip.generate_air_proof_input();
+    let mut air_proof_input = chip.clone().generate_air_proof_input();
     let alu_trace = air_proof_input.raw.common_main.as_mut().unwrap();
-    let mut alu_trace_row = alu_trace.row_slice(0).to_vec();
+    let mut alu_trace_row = alu_trace.row_mut(0).split_at_mut(1).1.to_vec();
     let alu_trace_cols: &mut BaseAluCoreCols<F, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS> =
         (*alu_trace_row).borrow_mut();
-
     alu_trace_cols.a = a.map(F::from_canonical_u32);
-    *alu_trace = RowMajorMatrix::new(
-        alu_trace_row,
-        BaseAluCoreCols::<F, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>::width(),
-    );
 
     disable_debug_builder();
     let tester = tester
         .build()
         .load_air_proof_input(air_proof_input)
+        .load(chip)
         .load(xor_lookup_chip)
         .finalize();
     let msg = format!(
