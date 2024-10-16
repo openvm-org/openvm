@@ -1,8 +1,8 @@
-use std::{borrow::Borrow, collections::VecDeque, fmt::Debug};
+use std::{collections::VecDeque, fmt::Debug};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{AirBuilder, BaseAir};
+use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
@@ -103,8 +103,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
     ) {
-        row_slice[..5].copy_from_slice(&write_record.operands);
-        row_slice[5] = F::from_canonical_u32(write_record.from_pc);
+        row_slice[0] = F::from_canonical_u32(write_record.from_pc);
+        row_slice[1..].copy_from_slice(&write_record.operands);
     }
 
     fn air(&self) -> &Self::Air {
@@ -125,6 +125,7 @@ pub struct EmptyAirCols<T> {
 
 impl<F: Field> BaseAir<F> for TestAdapterAir {
     fn width(&self) -> usize {
+        // from_pc, 5 operands
         6
     }
 }
@@ -147,9 +148,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
         self.execution_bridge
             .execute_and_increment_pc_custom(
                 processed_instruction.opcode,
-                local[0..5].to_vec(),
+                local[1..].to_vec(),
                 ExecutionState {
-                    pc: local[5].into(),
+                    pc: local[0].into(),
                     timestamp: AB::Expr::one(),
                 },
                 AB::Expr::zero(),
