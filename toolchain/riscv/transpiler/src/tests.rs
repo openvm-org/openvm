@@ -21,10 +21,11 @@ fn test_decode_elf() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_generate_program() -> Result<()> {
+#[test_case("data/rv32im-fib-from-as")]
+#[test_case("data/rv32im-intrin-from-as")]
+fn test_generate_program(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let data = read(dir.join("data/rv32im-fib-from-as"))?;
+    let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     let program = transpile::<BabyBear>(&elf.instructions);
     for instruction in program {

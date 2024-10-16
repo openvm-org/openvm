@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use axvm_instructions::{EccOpcode, ModularArithmeticOpcode};
 use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
@@ -235,6 +236,67 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 }
 
+fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruction<F> {
+    let opcode = (instruction_u32 & 0x7f) as u8;
+    let funct3 = ((instruction_u32 >> 12) & 3) as u8; // All our instructions are R- or I-type
+
+    match opcode {
+        0x0b => {
+            match funct3 {
+                0b000 => {
+                    // terminate
+                    None
+                }
+                0b001 => {
+                    // keccak or poseidon
+                    None
+                }
+                0b010 => {
+                    // u256
+                    todo!("Implement u256 transpiler");
+                }
+                _ => None,
+            }
+        }
+        0x2b => {
+            match funct3 {
+                0b000 => {
+                    // mod operations
+                    let funct7 = (instruction_u32 >> 25) & 0x7f;
+                    let prime_idx = funct7 >> 2;
+                    let prime_opcode = funct7 & 3;
+                    let opcode_with_offset = (prime_opcode + prime_idx * 4) as usize
+                        + ModularArithmeticOpcode::default_offset();
+                    Some(from_r_type(
+                        opcode_with_offset,
+                        &RType::new(instruction_u32),
+                    ))
+                }
+                0b001 => {
+                    // short weierstrass ec
+                    let funct7 = (instruction_u32 >> 25) & 0x7f;
+                    let prime_idx = funct7 >> 1;
+                    let prime_opcode = funct7 & 1;
+                    let opcode_with_offset =
+                        (prime_opcode + prime_idx * 2) as usize + EccOpcode::default_offset();
+                    Some(from_r_type(
+                        opcode_with_offset,
+                        &RType::new(instruction_u32),
+                    ))
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+    .unwrap_or_else(|| {
+        panic!(
+            "Failed to transpile custom instruction: {:b} (opcode = {:07b}, funct3 = {:03b})",
+            instruction_u32, opcode, funct3
+        )
+    })
+}
+
 /// Transpile the [`Instruction`]s from the 32-bit encoded instructions.
 ///
 /// # Panics
@@ -252,7 +314,7 @@ pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instru
             continue;
         }
         let instruction = process_instruction(&mut transpiler, *instruction_u32)
-            .unwrap_or_else(|| panic!("Failed to transpile instruction {:b}", instruction_u32));
+            .unwrap_or_else(|| process_custom_instruction(*instruction_u32));
         instructions.push(instruction);
     }
     instructions
