@@ -15,7 +15,8 @@ use p3_field::PrimeField32;
 use super::FIELD_ELEMENT_BITS;
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, FlatInterface, Result, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
 };
@@ -58,7 +59,8 @@ impl<C: FieldVariableConfig> MillerDoubleAir<C> {
         let expr = FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
-            range_checker,
+            range_bus: bus.index,
+            range_max_bits: bus.range_max_bits,
         };
         Self {
             expr,
@@ -75,15 +77,19 @@ impl<F, C: FieldVariableConfig> BaseAir<F> for MillerDoubleAir<C> {
 
 impl<F, C: FieldVariableConfig> BaseAirWithPublicValues<F> for MillerDoubleAir<C> {}
 
-impl<AB: AirBuilder, const READ_BYTES: usize, const WRITE_BYTES: usize, C: FieldVariableConfig>
-    VmCoreAir<AB, FlatInterface<AB::Expr, READ_BYTES, WRITE_BYTES>> for MillerDoubleAir<C>
+impl<AB: AirBuilder, I, C: FieldVariableConfig> VmCoreAir<AB, I> for MillerDoubleAir<C>
+where
+    I: VmAdapterInterface<AB::Expr>,
+    I::Reads: From<Vec<AB::Expr>>,
+    I::Writes: From<Vec<AB::Expr>>,
+    I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
-        _local_adapter: &[AB::Var],
-    ) -> AdapterAirContext<AB::Expr, FlatInterface<AB::Expr, READ_BYTES, WRITE_BYTES>> {
+        _from_pc: AB::Var,
+    ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
 }
@@ -92,12 +98,11 @@ pub struct MillerDoubleChip<C: FieldVariableConfig> {
     pub air: MillerDoubleAir<C>,
 }
 
-impl<
-        F: PrimeField32,
-        const READ_BYTES: usize,
-        const WRITE_BYTES: usize,
-        C: FieldVariableConfig,
-    > VmCoreChip<F, FlatInterface<F, READ_BYTES, WRITE_BYTES>> for MillerDoubleChip<C>
+impl<F: PrimeField32, I, C: FieldVariableConfig> VmCoreChip<F, I> for MillerDoubleChip<C>
+where
+    I: VmAdapterInterface<F>,
+    I::Reads: Into<Vec<F>>,
+    I::Writes: From<Vec<F>>,
 {
     type Record = ();
     type Air = MillerDoubleAir<C>;
@@ -106,14 +111,9 @@ impl<
         &self,
         _instruction: &Instruction<F>,
         _from_pc: u32,
-        reads: [F; READ_BYTES],
-    ) -> Result<(
-        AdapterRuntimeContext<F, FlatInterface<F, READ_BYTES, WRITE_BYTES>>,
-        Self::Record,
-    )> {
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         // Input: EcPoint<Fp2>, so total 4 field elements.
-        let field_element_limbs = C::num_limbs_per_field_element();
-        assert_eq!(reads.len(), 4 * field_element_limbs);
 
         todo!()
     }
