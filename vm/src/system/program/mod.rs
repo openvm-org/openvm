@@ -367,7 +367,6 @@ impl<F: PrimeField64> ProgramChip<F> {
     ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
         let step = self.program.step;
         let pc_base = self.program.pc_base;
-        println!("pc = {} pc_base = {} step = {}", pc, pc_base, step);
 
         assert_eq!(
             (pc - pc_base) % step,
