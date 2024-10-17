@@ -17,12 +17,12 @@ pub fn execute_program_with_config(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let vm = VirtualMachine::new(config, program, input_stream);
+    let mut vm = VirtualMachine::new(config, program, input_stream);
     vm.execute().unwrap();
 }
 
 pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
-    let vm = VirtualMachine::new(
+    let mut vm = VirtualMachine::new(
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
@@ -43,7 +43,7 @@ pub fn execute_program_with_public_values(
     input_stream: Vec<Vec<BabyBear>>,
     public_values: &[(usize, BabyBear)],
 ) {
-    let vm = VirtualMachine::new(
+    let mut vm = VirtualMachine::new(
         VmConfig {
             num_public_values: 4,
             ..Default::default()

@@ -29,7 +29,11 @@ where
         } = self;
 
         let row_len = records.len();
-        let correct_len = row_len.next_power_of_two();
+        let correct_len = if row_len > 0 {
+            row_len.next_power_of_two()
+        } else {
+            0
+        };
         let diff = correct_len - row_len;
 
         let aux_cols_factory = memory_controller.borrow().aux_cols_factory();

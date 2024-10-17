@@ -3,6 +3,7 @@ use std::{collections::VecDeque, mem::take};
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
+    prover::types::ProofInput,
 };
 use cycle_tracker::CycleTracker;
 use metrics::VmMetrics;
@@ -13,7 +14,7 @@ use crate::{
     kernels::core::{CoreOptions, CoreState},
     system::{
         program::{ExecutionError, Program},
-        vm::{config::VmConfig, segment::SegmentResult},
+        vm::config::VmConfig,
     },
 };
 
@@ -45,7 +46,7 @@ pub struct VirtualMachineState<F: PrimeField32> {
 }
 
 pub struct VirtualMachineResult<SC: StarkGenericConfig> {
-    pub segment_results: Vec<SegmentResult<SC>>,
+    pub per_segment: Vec<ProofInput<SC>>,
 }
 
 impl<F: PrimeField32> VirtualMachine<F> {
@@ -116,7 +117,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
 
     /// Executes the VM by calling `ExecutionSegment::execute()` until the Core hits `TERMINATE`
     /// and `core_chip.is_done`. Between every segment, the VM will call `next_segment()`.
-    pub fn execute(mut self) -> Result<(), ExecutionError> {
+    pub fn execute(&mut self) -> Result<(), ExecutionError> {
         loop {
             let last_seg = self.segments.last_mut().unwrap();
             last_seg.execute()?;
@@ -137,22 +138,12 @@ impl<F: PrimeField32> VirtualMachine<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        loop {
-            let last_seg = self.segments.last_mut().unwrap();
-            last_seg.execute()?;
-            if last_seg.core_chip.borrow().state.is_done {
-                break;
-            }
-            let cycle_tracker = take(&mut last_seg.cycle_tracker);
-            self.segment(self.current_state(), cycle_tracker);
-        }
-        tracing::debug!("Number of continuation segments: {}", self.segments.len());
-
+        self.execute()?;
         Ok(VirtualMachineResult {
-            segment_results: self
+            per_segment: self
                 .segments
                 .into_iter()
-                .map(ExecutionSegment::produce_result)
+                .map(ExecutionSegment::generate_proof_input)
                 .collect(),
         })
     }

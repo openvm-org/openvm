@@ -10,7 +10,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::arch::{ExecutionBus, ExecutionState};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
 }
