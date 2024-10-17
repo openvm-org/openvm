@@ -118,7 +118,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
                     ctx.instruction.immediate,
                     AB::Expr::one(),
                     AB::Expr::zero(),
-                    ctx.instruction.need_write,
                 ],
                 local_cols.from_state,
                 ExecutionState {
