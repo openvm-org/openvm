@@ -452,11 +452,11 @@ impl<F: PrimeField32> MemoryController<F> {
                 merkle_chip,
                 boundary_chip,
             } => {
-                let (final_partition, records) = self.memory.finalize::<8>();
-                traces.push(boundary_chip.generate_trace(&final_partition));
-                pvs.push(vec![]);
-
                 let hasher = hasher.unwrap();
+
+                let (final_partition, records) = self.memory.finalize::<8>();
+                traces.push(boundary_chip.generate_trace(&final_partition, hasher));
+                pvs.push(vec![]);
 
                 let initial_memory_values = self
                     .initial_memory

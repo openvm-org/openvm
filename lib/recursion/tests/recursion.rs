@@ -62,10 +62,10 @@ where
     ];
 
     let mut result = vm.execute_and_generate().unwrap();
-    assert_eq!(result.segment_results.len(), 1, "unexpected continuation");
-    let air_proof_inputs = result.segment_results.remove(0).air_proof_inputs;
+    assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
+    let proof_input = result.per_segment.remove(0);
     ProofInputForTest {
-        per_air: air_proof_inputs,
+        per_air: proof_input.into_air_proof_input_vec(),
     }
 }
 

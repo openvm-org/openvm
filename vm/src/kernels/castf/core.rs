@@ -19,10 +19,10 @@ use crate::{
     system::program::Instruction,
 };
 
-// LIMB_SIZE is the size of the limbs in bits.
-pub(crate) const LIMB_SIZE: usize = 8;
+// LIMB_BITS is the size of the limbs in bits.
+pub(crate) const LIMB_BITS: usize = 8;
 // the final limb has only 6 bits
-pub(crate) const FINAL_LIMB_SIZE: usize = 6;
+pub(crate) const FINAL_LIMB_BITS: usize = 6;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -33,7 +33,7 @@ pub struct CastFCoreCols<T> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct CastFCoreAir {
-    pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
+    pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_BITS
     offset: usize,
 }
 
@@ -66,7 +66,7 @@ where
             .iter()
             .enumerate()
             .fold(AB::Expr::zero(), |acc, (i, &limb)| {
-                acc + limb * AB::Expr::from_canonical_u32(1 << (i * LIMB_SIZE))
+                acc + limb * AB::Expr::from_canonical_u32(1 << (i * LIMB_BITS))
             });
 
         for i in 0..4 {
@@ -74,8 +74,8 @@ where
                 .range_check(
                     cols.out_val[i],
                     match i {
-                        0..=2 => LIMB_SIZE,
-                        3 => FINAL_LIMB_SIZE,
+                        0..=2 => LIMB_BITS,
+                        3 => FINAL_LIMB_BITS,
                         _ => unreachable!(),
                     },
                 )
@@ -143,9 +143,9 @@ where
         let x = CastF::solve(y.as_canonical_u32());
         for (i, limb) in x.iter().enumerate() {
             if i == 3 {
-                self.range_checker_chip.add_count(*limb, FINAL_LIMB_SIZE);
+                self.range_checker_chip.add_count(*limb, FINAL_LIMB_BITS);
             } else {
-                self.range_checker_chip.add_count(*limb, LIMB_SIZE);
+                self.range_checker_chip.add_count(*limb, LIMB_BITS);
             }
         }
 

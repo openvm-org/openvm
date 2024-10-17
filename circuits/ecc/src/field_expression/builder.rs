@@ -1,4 +1,4 @@
-use std::{cell::RefCell, marker::PhantomData, ops::Deref, rc::Rc, sync::Arc};
+use std::{cell::RefCell, ops::Deref, rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::{
@@ -20,7 +20,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeField64};
 use p3_matrix::Matrix;
 
-use super::{FieldVariable, FieldVariableConfig, SymbolicExpr};
+use super::{FieldVariable, SymbolicExpr};
 
 #[derive(Clone)]
 pub struct ExprBuilder {
@@ -35,9 +35,9 @@ pub struct ExprBuilder {
     // This should be equal to number of constraints, but declare it to be explicit.
     pub num_variables: usize,
 
-    // Need to know limb bits to compute how many limbs are needed.
+    /// The number of bits in a canonical representation of a limb.
     pub limb_bits: usize,
-    // Number of limbs of a field element.
+    /// Number of limbs in canonical representation of the bigint field element.
     pub num_limbs: usize,
     // The max bits to range check.
     pub range_checker_bits: usize,
@@ -52,14 +52,21 @@ pub struct ExprBuilder {
 
     // The equations to compute the newly introduced variables. For trace gen only.
     pub computes: Vec<SymbolicExpr>,
+
+    /// The max bits allowed per limb, determined by the underlying field we use to represent the field element. Typically it is `F::bits() - 2` to allow handling of negative numbers.
+    /// For example BabyBear -> 29.
+    pub(crate) max_limb_bits: usize,
 }
 
 impl ExprBuilder {
+    /// `max_limb_bits` is the max bits allowed per limb, determined by the underlying field we use to represent the field element. Typically it is `F::bits() - 2` to allow handling of negative numbers.
+    /// For example BabyBear -> 29.
     pub fn new(
         prime: BigUint,
         limb_bits: usize,
         num_limbs: usize,
         range_checker_bits: usize,
+        max_limb_bits: usize,
     ) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, prime.clone());
         Self {
@@ -75,27 +82,24 @@ impl ExprBuilder {
             carry_limbs: vec![],
             constraints: vec![],
             computes: vec![],
+            max_limb_bits,
         }
     }
 
-    pub fn new_input<C: FieldVariableConfig>(
-        builder: Rc<RefCell<ExprBuilder>>,
-    ) -> FieldVariable<C> {
-        let (num_input, range_checker_bits) = {
-            let mut borrowed = builder.borrow_mut();
-            assert_eq!(borrowed.num_limbs, C::num_limbs_per_field_element());
-            assert_eq!(borrowed.limb_bits, C::canonical_limb_bits());
-            borrowed.num_input += 1;
-            (borrowed.num_input, borrowed.range_checker_bits)
-        };
+    pub fn new_input(builder: Rc<RefCell<ExprBuilder>>) -> FieldVariable {
+        let mut borrowed = builder.borrow_mut();
+        let num_limbs = borrowed.num_limbs;
+        let limb_bits = borrowed.limb_bits;
+        borrowed.num_input += 1;
+        let (num_input, range_checker_bits) = (borrowed.num_input, borrowed.range_checker_bits);
+        drop(borrowed);
         FieldVariable {
             expr: SymbolicExpr::Input(num_input - 1),
             builder: builder.clone(),
-            limb_max_abs: (1 << C::canonical_limb_bits()) - 1,
-            max_overflow_bits: C::canonical_limb_bits(),
-            expr_limbs: C::num_limbs_per_field_element(),
+            limb_max_abs: (1 << limb_bits) - 1,
+            max_overflow_bits: limb_bits,
+            expr_limbs: num_limbs,
             range_checker_bits,
-            _marker: PhantomData,
         }
     }
 
@@ -327,6 +331,14 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExpr {
 }
 
 impl FieldExpr {
+    pub fn canonical_num_limbs(&self) -> usize {
+        self.builder.num_limbs
+    }
+
+    pub fn canonical_limb_bits(&self) -> usize {
+        self.builder.limb_bits
+    }
+
     pub fn execute(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
         let mut vars = vec![BigUint::zero(); self.num_variables];
         for i in 0..self.constraints.len() {

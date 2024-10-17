@@ -6,7 +6,10 @@ use afs_stark_backend::{
     verifier::VerificationError, Chip,
 };
 use ax_sdk::{
-    config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
+    config::{
+        baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
+        setup_tracing_with_log_level,
+    },
     engine::StarkEngine,
 };
 use itertools::izip;
@@ -15,6 +18,7 @@ use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
+use tracing::Level;
 
 use crate::{
     arch::ExecutionState,
@@ -56,6 +60,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         program_bus: ProgramBus,
         rng: StdRng,
     ) -> Self {
+        setup_tracing_with_log_level(Level::WARN);
         Self {
             memory: MemoryTester::new(memory_controller),
             execution: ExecutionTester::new(execution_bus),

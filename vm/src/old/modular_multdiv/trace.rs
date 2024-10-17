@@ -29,8 +29,8 @@ impl<
         SC: StarkGenericConfig,
         const CARRY_LIMBS: usize,
         const NUM_LIMBS: usize,
-        const LIMB_SIZE: usize,
-    > Chip<SC> for ModularMultDivChip<Val<SC>, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+        const LIMB_BITS: usize,
+    > Chip<SC> for ModularMultDivChip<Val<SC>, CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 where
     Val<SC>: PrimeField32,
 {
@@ -67,7 +67,7 @@ where
                     .data_read
                     .data
                     .map(|x| x.as_canonical_u32()),
-                LIMB_SIZE,
+                LIMB_BITS,
             );
             let y = limbs_to_biguint(
                 &record
@@ -75,7 +75,7 @@ where
                     .data_read
                     .data
                     .map(|x| x.as_canonical_u32()),
-                LIMB_SIZE,
+                LIMB_BITS,
             );
             let r = limbs_to_biguint(
                 &record
@@ -83,7 +83,7 @@ where
                     .data_write
                     .data
                     .map(|x| x.as_canonical_u32()),
-                LIMB_SIZE,
+                LIMB_BITS,
             );
             let is_mult = match ModularArithmeticOpcode::from_usize(record.instruction.opcode) {
                 ModularArithmeticOpcode::MUL => true,
@@ -117,8 +117,8 @@ where
     }
 }
 
-impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    ChipUsageGetter for ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    ChipUsageGetter for ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
@@ -132,8 +132,8 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
     }
 }
 
-impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
     fn generate_aux_cols_mult(
         &self,
@@ -167,7 +167,7 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         is_mult: bool,
     ) {
         // Quotient and result can be smaller, but padding to the desired length.
-        let q_limbs: Vec<isize> = big_int_to_limbs(&q, LIMB_SIZE)
+        let q_limbs: Vec<isize> = big_int_to_limbs(&q, LIMB_BITS)
             .iter()
             .chain(repeat(&0))
             .take(NUM_LIMBS)
@@ -175,7 +175,7 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
             .collect();
         for &q in q_limbs.iter() {
             self.range_checker_chip
-                .add_count((q + (1 << LIMB_SIZE)) as u32, LIMB_SIZE + 1);
+                .add_count((q + (1 << LIMB_BITS)) as u32, LIMB_BITS + 1);
         }
         aux.q = array::from_fn(|i| {
             if q_limbs[i] >= 0 {
@@ -199,14 +199,14 @@ impl<F: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
 
         let q_overflow = OverflowInt {
             limbs: q_limbs,
-            max_overflow_bits: LIMB_SIZE + 1,
-            limb_max_abs: (1 << LIMB_SIZE),
+            max_overflow_bits: LIMB_BITS + 1,
+            limb_max_abs: (1 << LIMB_BITS),
         };
 
         let expr: OverflowInt<isize> = if is_mult { x * y - r } else { r * y - x } - p * q_overflow;
-        let carries = expr.calculate_carries(LIMB_SIZE);
+        let carries = expr.calculate_carries(LIMB_BITS);
         let (carry_min_abs, carry_bits) =
-            get_carry_max_abs_and_bits(expr.max_overflow_bits, LIMB_SIZE);
+            get_carry_max_abs_and_bits(expr.max_overflow_bits, LIMB_BITS);
 
         for (i, &carry) in carries.iter().enumerate() {
             self.range_checker_chip

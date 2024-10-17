@@ -424,7 +424,7 @@ fn assert_failed_assertion(
     builder: Builder<AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
 ) {
     let program = builder.compile_isa();
-    let vm = VirtualMachine::new(VmConfig::default(), program, vec![]);
+    let mut vm = VirtualMachine::new(VmConfig::default(), program, vec![]);
     let result = vm.execute();
     assert!(matches!(result, Err(Fail(_))));
 }

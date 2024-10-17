@@ -1,5 +1,10 @@
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
+};
 use derive_new::new;
 use num_bigint_dig::BigUint;
+use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
@@ -96,6 +101,21 @@ impl VmConfig {
 
     pub fn add_ecc_support(self) -> Self {
         todo!()
+    }
+
+    /// Generate a proving key for the VM.
+    pub fn generate_pk<SC: StarkGenericConfig>(
+        &self,
+        mut keygen_builder: MultiStarkKeygenBuilder<SC>,
+    ) -> MultiStarkProvingKey<SC>
+    where
+        Val<SC>: PrimeField32,
+    {
+        let chip_set = self.create_chip_set::<Val<SC>>();
+        for air in chip_set.airs() {
+            keygen_builder.add_air(air);
+        }
+        keygen_builder.generate_pk()
     }
 }
 

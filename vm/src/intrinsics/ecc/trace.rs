@@ -14,7 +14,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::{
     EcAddUnequalAuxCols, EcAddUnequalChip, EcAddUnequalCols, EcAddUnequalIoCols,
     EcAddUnequalRecord, EcDoubleAuxCols, EcDoubleChip, EcDoubleCols, EcDoubleIoCols,
-    EcDoubleRecord, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS,
+    EcDoubleRecord, LIMB_BITS, NUM_LIMBS, TWO_NUM_LIMBS,
 };
 use crate::{
     arch::instructions::EccOpcode,
@@ -32,12 +32,12 @@ fn load_ec_point<F: PrimeField32>(
         .iter()
         .map(|x| x.as_canonical_u32())
         .collect::<Vec<_>>();
-    let x = limbs_to_biguint(&x_limbs, LIMB_SIZE);
+    let x = limbs_to_biguint(&x_limbs, LIMB_BITS);
     let y_limbs = array_read.data_read.data[NUM_LIMBS..]
         .iter()
         .map(|x| x.as_canonical_u32())
         .collect::<Vec<_>>();
-    let y = limbs_to_biguint(&y_limbs, LIMB_SIZE);
+    let y = limbs_to_biguint(&y_limbs, LIMB_BITS);
     (x, y)
 }
 

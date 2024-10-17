@@ -4,17 +4,16 @@ use std::{
     mem,
     ops::DerefMut,
     rc::Rc,
-    sync::Arc,
 };
 
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    prover::types::AirProofInput,
-    Chip, ChipUsageGetter,
+    prover::types::{AirProofInput, ProofInput},
+    ChipUsageGetter,
 };
 use backtrace::Backtrace;
-use itertools::{izip, zip_eq};
+use itertools::zip_eq;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
@@ -47,7 +46,6 @@ pub struct ExecutionSegment<F: PrimeField32> {
 
 pub struct SegmentResult<SC: StarkGenericConfig> {
     pub air_proof_inputs: Vec<AirProofInput<SC>>,
-    pub metrics: VmMetrics,
 }
 
 impl<SC: StarkGenericConfig> SegmentResult<SC> {
@@ -105,7 +103,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
     /// Stopping is triggered by should_segment()
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        let mut timestamp = self.core_chip.borrow().state.timestamp;
+        let mut timestamp = self.chip_set.memory_controller.borrow().timestamp();
         let mut pc = self.core_chip.borrow().state.pc;
 
         let mut collect_metrics = self.config.collect_metrics;
@@ -113,8 +111,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         self.core_chip.borrow_mut().streams = Streams {
-            input_stream: self.input_stream.clone(),
-            hint_stream: self.hint_stream.clone(),
+            input_stream: mem::take(&mut self.input_stream),
+            hint_stream: mem::take(&mut self.hint_stream),
         };
 
         self.chip_set
@@ -225,14 +223,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         if collect_metrics {
             self.update_chip_metrics();
+            #[cfg(feature = "bench-metrics")]
+            self.collected_metrics.emit();
         }
 
         Ok(())
     }
 
-    /// Compile the AIRs and trace generation outputs for the chips used in this segment
-    /// Should be called after ::execute
-    pub fn produce_result<SC: StarkGenericConfig>(self) -> SegmentResult<SC>
+    /// Generate ProofInput to prove the segment. Should be called after ::execute
+    pub fn generate_proof_input<SC: StarkGenericConfig>(self) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
@@ -243,7 +242,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             ..
         } = self;
         // Drop all strong references to chips other than self.chips, which will be consumed next.
-        drop(chip_set.executors);
         drop(core_chip);
 
         // Finalize memory.
@@ -265,49 +263,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
         }
 
-        let mut result = SegmentResult {
-            air_proof_inputs: vec![chip_set.program_chip.into()],
-            metrics: self.collected_metrics,
-        };
-
-        for chip in chip_set.chips {
-            if chip.current_trace_height() != 0 {
-                result
-                    .air_proof_inputs
-                    .push(chip.generate_air_proof_input());
-            }
-        }
-        // System chips required by architecture: memory and connector
-        // REVISIT: range checker is also system chip because memory requests from it, so range checker must generate trace last.
-        {
-            // memory
-            let memory_controller = Rc::try_unwrap(chip_set.memory_controller)
-                .expect("other chips still hold a reference to memory chip")
-                .into_inner();
-            let range_checker = memory_controller.range_checker.clone();
-            let heights = memory_controller.current_trace_heights();
-            let air_proof_inputs = memory_controller.generate_air_proof_inputs();
-            for (height, air_proof_input) in izip!(heights, air_proof_inputs) {
-                if height != 0 {
-                    result.air_proof_inputs.push(air_proof_input);
-                }
-            }
-            // range checker
-            let chip = range_checker;
-            let air = chip.air();
-            let trace = chip.generate_trace();
-            result
-                .air_proof_inputs
-                .push(AirProofInput::simple(air, trace, vec![]));
-        }
-
-        let trace = chip_set.connector_chip.generate_trace();
-        result.air_proof_inputs.push(AirProofInput::simple_no_pis(
-            Arc::new(chip_set.connector_chip.air),
-            trace,
-        ));
-
-        result
+        chip_set.generate_proof_input()
     }
 
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.

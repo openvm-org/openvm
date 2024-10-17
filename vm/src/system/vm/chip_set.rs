@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
+    iter,
     ops::Range,
     rc::Rc,
     sync::Arc,
@@ -11,9 +12,17 @@ use afs_primitives::{
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::lookup::XorLookupChip,
 };
+use afs_stark_backend::{
+    config::{Domain, StarkGenericConfig},
+    p3_commit::PolynomialSpace,
+    prover::types::{AirProofInput, ProofInput},
+    rap::AnyRap,
+    Chip,
+};
 use axvm_instructions::*;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
+use p3_matrix::Matrix;
 use poseidon2_air::poseidon2::Poseidon2Config;
 use strum::EnumCount;
 
@@ -73,12 +82,73 @@ use crate::{
 };
 
 pub struct VmChipSet<F: PrimeField32> {
-    pub program_chip: ProgramChip<F>,
-    pub memory_controller: MemoryControllerRef<F>,
-    pub connector_chip: VmConnectorChip<F>,
-
     pub executors: BTreeMap<usize, AxVmInstructionExecutor<F>>,
+
+    // ATTENTION: chip destruction should follow the following field order:
+    pub program_chip: ProgramChip<F>,
+    pub connector_chip: VmConnectorChip<F>,
     pub chips: Vec<AxVmChip<F>>,
+    pub memory_controller: MemoryControllerRef<F>,
+    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+}
+
+impl<F: PrimeField32> VmChipSet<F> {
+    pub(crate) fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        // ATTENTION: The order of AIR MUST be consistent with `generate_proof_input`.
+        let program_rap: Arc<dyn AnyRap<SC>> = Arc::new(self.program_chip.air.clone());
+        let connector_rap: Arc<dyn AnyRap<SC>> = Arc::new(self.connector_chip.air.clone());
+        [program_rap, connector_rap]
+            .into_iter()
+            .chain(self.chips.iter().map(|chip| chip.air()))
+            .chain(self.memory_controller.borrow().airs())
+            .chain(iter::once(self.range_checker_chip.air()))
+            .collect()
+    }
+
+    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(self) -> ProofInput<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        // ATTENTION: The order of AIR proof input generation MUST be consistent with `airs`.
+
+        // Drop all strong references to chips other than self.chips, which will be consumed next.
+        drop(self.executors);
+
+        // System: Program Chip
+        let mut pi_builder = ChipSetProofInputBuilder::new();
+        pi_builder.add_air_proof_input(self.program_chip.into());
+        // System: Connector Chip
+        {
+            let trace = self.connector_chip.generate_trace();
+            pi_builder.add_air_proof_input(AirProofInput::simple_no_pis(
+                Arc::new(self.connector_chip.air),
+                trace,
+            ));
+        }
+        // Non-system chips
+        for chip in self.chips {
+            pi_builder.add_air_proof_input(chip.generate_air_proof_input());
+        }
+        // System: Memory Controller
+        {
+            // memory
+            let memory_controller = Rc::try_unwrap(self.memory_controller)
+                .expect("other chips still hold a reference to memory chip")
+                .into_inner();
+
+            let air_proof_inputs = memory_controller.generate_air_proof_inputs();
+            for air_proof_input in air_proof_inputs {
+                pi_builder.add_air_proof_input(air_proof_input);
+            }
+        }
+        // System: Range Checker Chip
+        pi_builder.add_air_proof_input(self.range_checker_chip.generate_air_proof_input());
+
+        pi_builder.generate_proof_input()
+    }
 }
 
 impl VmConfig {
@@ -506,17 +576,22 @@ impl VmConfig {
             }
         }
 
-        chips.push(AxVmChip::ByteXor(byte_xor_chip));
-        chips.push(AxVmChip::RangeTupleChecker(range_tuple_checker));
+        if Arc::strong_count(&byte_xor_chip) > 1 {
+            chips.push(AxVmChip::ByteXor(byte_xor_chip));
+        }
+        if Arc::strong_count(&range_tuple_checker) > 1 {
+            chips.push(AxVmChip::RangeTupleChecker(range_tuple_checker));
+        }
 
         let connector_chip = VmConnectorChip::new(execution_bus);
 
         VmChipSet {
-            program_chip,
-            memory_controller,
-            connector_chip,
             executors,
+            program_chip,
+            connector_chip,
             chips,
+            memory_controller,
+            range_checker_chip: range_checker,
         }
     }
 }
@@ -683,4 +758,43 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
         ),
     };
     (start..(start + len), offset)
+}
+
+struct ChipSetProofInputBuilder<SC: StarkGenericConfig> {
+    curr_air_id: usize,
+    proof_input_per_air: Vec<(usize, AirProofInput<SC>)>,
+}
+
+impl<SC: StarkGenericConfig> ChipSetProofInputBuilder<SC> {
+    fn new() -> Self {
+        Self {
+            curr_air_id: 0,
+            proof_input_per_air: vec![],
+        }
+    }
+    /// Adds air proof input if one of the main trace matrices is non-empty.
+    /// Always increments the internal `curr_air_id` regardless of whether a new air proof input was added or not.
+    fn add_air_proof_input(&mut self, air_proof_input: AirProofInput<SC>) {
+        let h = if !air_proof_input.raw.cached_mains.is_empty() {
+            air_proof_input.raw.cached_mains[0].height()
+        } else {
+            air_proof_input
+                .raw
+                .common_main
+                .as_ref()
+                .map(|trace| trace.height())
+                .unwrap()
+        };
+        if h > 0 {
+            self.proof_input_per_air
+                .push((self.curr_air_id, air_proof_input));
+        }
+        self.curr_air_id += 1;
+    }
+
+    fn generate_proof_input(self) -> ProofInput<SC> {
+        ProofInput {
+            per_air: self.proof_input_per_air,
+        }
+    }
 }

@@ -616,17 +616,41 @@ mod conversions {
         }
     }
 
+    impl<T, const N: usize, const M: usize, const R: usize> From<[[[T; N]; M]; R]> for DynArray<T> {
+        fn from(v: [[[T; N]; M]; R]) -> Self {
+            Self(
+                v.into_iter()
+                    .flat_map(|x| x.into_iter().flatten())
+                    .collect(),
+            )
+        }
+    }
+
+    impl<T, const N: usize, const M: usize, const R: usize> From<DynArray<T>> for [[[T; N]; M]; R] {
+        fn from(v: DynArray<T>) -> Self {
+            assert_eq!(
+                v.0.len(),
+                N * M * R,
+                "Incorrect vector length {}",
+                v.0.len()
+            );
+            let mut it = v.0.into_iter();
+            from_fn(|_| from_fn(|_| from_fn(|_| it.next().unwrap())))
+        }
+    }
+
     impl<T> From<MinimalInstruction<T>> for DynArray<T> {
         fn from(m: MinimalInstruction<T>) -> Self {
             Self(vec![m.is_valid, m.opcode])
         }
     }
 
-    impl<T: Clone> From<DynArray<T>> for MinimalInstruction<T> {
+    impl<T> From<DynArray<T>> for MinimalInstruction<T> {
         fn from(m: DynArray<T>) -> Self {
+            let mut m = m.0.into_iter();
             MinimalInstruction {
-                is_valid: m.0[0].clone(),
-                opcode: m.0[1].clone(),
+                is_valid: m.next().unwrap(),
+                opcode: m.next().unwrap(),
             }
         }
     }
@@ -655,18 +679,8 @@ mod conversions {
         ) -> Self {
             AdapterAirContext {
                 to_pc: ctx.to_pc,
-                reads: ctx
-                    .reads
-                    .into_iter()
-                    .flat_map(|x| x.into_iter())
-                    .collect::<Vec<_>>()
-                    .into(),
-                writes: ctx
-                    .writes
-                    .into_iter()
-                    .flat_map(|x| x.into_iter())
-                    .collect::<Vec<_>>()
-                    .into(),
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
             }
         }
@@ -696,12 +710,55 @@ mod conversions {
         ) -> Self {
             AdapterRuntimeContext {
                 to_pc: ctx.to_pc,
-                writes: ctx
-                    .writes
-                    .into_iter()
-                    .flat_map(|x| x.into_iter())
-                    .collect::<Vec<_>>()
-                    .into(),
+                writes: ctx.writes.into(),
+            }
+        }
+    }
+
+    // AdapterAirContext: DynInterface -> BasicInterface
+    impl<
+            T,
+            PI,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
+        for AdapterAirContext<
+            T,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    where
+        PI: From<DynArray<T>>,
+    {
+        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: DynInterface -> BasicInterface
+    impl<
+            T,
+            PI,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
+        for AdapterRuntimeContext<
+            T,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.into(),
             }
         }
     }
