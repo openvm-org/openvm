@@ -190,10 +190,8 @@ where
         });
 
         let limbs: Vec<u32> = [imm_limbs, pc_limbs].concat();
-        let pc_imm_byte_check = array::from_fn(|i| {
-            self.xor_lookup_chip
-                .request(limbs[i * 2], limbs[i * 2 + 1])
-        });
+        let pc_imm_byte_check =
+            array::from_fn(|i| self.xor_lookup_chip.request(limbs[i * 2], limbs[i * 2 + 1]));
 
         Ok((
             output,
