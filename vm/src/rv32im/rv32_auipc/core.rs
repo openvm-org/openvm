@@ -15,9 +15,7 @@ use crate::{
         instructions::{
             Rv32AuipcOpcode::{self, *},
             UsizeOpcode,
-        },
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip,
+        }, AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip
     },
     rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
     system::program::Instruction,
@@ -58,9 +56,9 @@ impl<AB, I> VmCoreAir<AB, I> for Rv32AuipcCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<()>,
-    I::Writes: From<[AB::Expr; RV32_REGISTER_NUM_LANES]>,
-    I::ProcessedInstruction: From<(AB::Expr, AB::Expr, AB::Expr)>,
+    I::Reads: From<[[AB::Expr; 0]; 0]>,
+    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -121,9 +119,14 @@ where
         let expected_opcode = AB::F::from_canonical_usize(AUIPC as usize + self.offset);
         AdapterAirContext {
             to_pc: None,
-            reads: ().into(),
-            writes: rd_data.map(|x| x.into()).into(),
-            instruction: (is_valid.into(), expected_opcode.into(), imm).into(),
+            reads: [].into(),
+            writes: [rd_data.map(|x| x.into())].into(),
+            instruction: JumpUIProcessedInstruction {
+                is_valid: is_valid.into(),
+                opcode: expected_opcode.into(),
+                immediate: imm.into(),
+            }
+            .into(),
         }
     }
 }
@@ -155,7 +158,7 @@ impl Rv32AuipcCoreChip {
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32AuipcCoreChip
 where
-    I::Writes: From<[F; RV32_REGISTER_NUM_LANES]>,
+    I::Writes: From<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
 {
     type Record = Rv32AuipcCoreRecord<u32>;
     type Air = Rv32AuipcCoreAir;
@@ -172,7 +175,7 @@ where
         let rd_data = solve_auipc(local_opcode_index, from_pc, imm);
         let rd_data_field = rd_data.map(F::from_canonical_u32);
 
-        let output = AdapterRuntimeContext::without_pc(rd_data_field);
+        let output = AdapterRuntimeContext::without_pc([rd_data_field]);
 
         let imm_limbs = array::from_fn(|i| (imm >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
         let pc_limbs = array::from_fn(|i| (from_pc >> ((i + 1) * RV32_CELL_BITS)) & RV32_LIMB_MAX);

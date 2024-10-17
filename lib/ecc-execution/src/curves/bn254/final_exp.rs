@@ -3,7 +3,6 @@ use halo2curves_axiom::{
     ff::Field,
     pairing::MillerLoopResult,
 };
-use num::{BigInt, Num};
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
 use crate::common::{EcPoint, ExpBigInt, FieldExtension, FinalExp, MultiMillerLoop};
@@ -14,6 +13,10 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         let (c, u) = self.final_exp_hint(f);
         let c_inv = c.invert().unwrap();
 
+        // f * u == c^λ
+        // f * u == c^{6x + 2 + q^3 - q^2 + q}
+        // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
+        // where fc == f * c^-{6x + 2}
         // c_mul = c^-{q^3 - q^2 + q}
         let c_q3 = c_inv.frobenius_map(Some(3));
         let c_q2 = c_inv.frobenius_map(Some(2));
@@ -29,13 +32,14 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
 
     // Adapted from the Gnark implementation:
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/sw_bn254/hints.go#L23
+    // returns c (residueWitness) and u (cubicNonResiduePower)
     fn final_exp_hint(&self, f: Fq12) -> (Fq12, Fq12) {
         debug_assert_eq!(
             Gt(f).final_exponentiation(),
             Gt(Fq12::one()),
             "Trying to call final_exp_hint on {f:?} which does not final exponentiate to 1."
         );
-        // Residue witness inverse
+        // Residue witness
         let mut c;
         // Cubic nonresidue power
         let u;
@@ -73,15 +77,6 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
 
         // 1. Compute r-th root and exponentiate to rInv where
         //   rInv = 1/r mod (p^12-1)/r
-        #[cfg(debug_assertions)]
-        {
-            let r = BigInt::from_str_radix(
-                "21888242871839275222246405745257275088548364400416034343698204186575808495617",
-                10,
-            )
-            .unwrap();
-            assert_eq!(c.exp_bigint(R_INV.clone()).exp_bigint(r), c);
-        }
         c = c.exp_bigint(R_INV.clone());
 
         // 2. Compute m-th root where

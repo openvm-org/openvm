@@ -31,6 +31,7 @@ where
         f: Fp12,
         Q_acc: Vec<EcPoint<Fp2>>,
         Q: &[EcPoint<Fp2>],
+        c: Option<Fp12>,
         x_over_ys: Vec<Fp>,
         y_invs: Vec<Fp>,
     ) -> (Fp12, Vec<EcPoint<Fp2>>);
@@ -41,6 +42,7 @@ where
         f: Fp12,
         Q_acc: Vec<EcPoint<Fp2>>,
         Q: &[EcPoint<Fp2>],
+        c: Option<Fp12>,
         x_over_ys: Vec<Fp>,
         y_invs: Vec<Fp>,
     ) -> (Fp12, Vec<EcPoint<Fp2>>);
@@ -78,7 +80,7 @@ where
         let mut f = if let Some(c) = c { c } else { Fp12::ONE };
         let mut Q_acc = Q.to_vec();
 
-        let (f_out, Q_acc_out) = self.pre_loop(f, Q_acc, Q, x_over_ys.clone(), y_invs.clone());
+        let (f_out, Q_acc_out) = self.pre_loop(f, Q_acc, Q, c, x_over_ys.clone(), y_invs.clone());
         f = f_out;
         Q_acc = Q_acc_out;
 
@@ -142,7 +144,7 @@ where
             f = self.evaluate_lines_vec(f, lines);
         }
 
-        let (f_out, _) = self.post_loop(f, Q_acc, Q, x_over_ys, y_invs);
+        let (f_out, _) = self.post_loop(f, Q_acc, Q, c, x_over_ys, y_invs);
         f = f_out;
 
         f
