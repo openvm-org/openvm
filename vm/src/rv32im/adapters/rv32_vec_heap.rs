@@ -1,10 +1,13 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    iter::zip,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -12,7 +15,8 @@ use super::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
@@ -101,16 +105,50 @@ pub struct Rv32VecHeapAdapterCols<
     const WRITE_SIZE: usize,
 > {
     pub from_state: ExecutionState<T>,
+
     pub rd_ptr: T,
     pub rs1_ptr: T,
     pub rs2_ptr: T,
 
+    pub rd_val: [T; RV32_REGISTER_NUM_LANES],
+    pub rs1_val: [T; RV32_REGISTER_NUM_LANES],
+    pub rs2_val: [T; RV32_REGISTER_NUM_LANES],
+
     pub rs1_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
     pub rs2_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
     pub rd_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
+
     pub reads1_aux: [MemoryReadAuxCols<T, READ_SIZE>; NUM_READS],
     pub reads2_aux: [MemoryReadAuxCols<T, READ_SIZE>; NUM_READS],
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; NUM_WRITES],
+}
+
+#[derive(Clone)]
+struct Rv32VecHeapAdapterReads<T, const NUM_READS: usize, const READ_SIZE: usize> {
+    pub data: [[[T; READ_SIZE]; NUM_READS]; 2],
+}
+
+#[derive(Clone)]
+pub struct Rv32VecHeapAdapterInterface<
+    T,
+    const NUM_READS: usize,
+    const NUM_WRITES: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+>(PhantomData<T>);
+
+impl<
+        T,
+        const NUM_READS: usize,
+        const NUM_WRITES: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > VmAdapterInterface<T>
+    for Rv32VecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
+{
+    type Reads = Rv32VecHeapAdapterReads<T, NUM_READS, READ_SIZE>;
+    type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
+    type ProcessedInstruction = MinimalInstruction<T>;
 }
 
 #[allow(dead_code)]
@@ -123,6 +161,8 @@ pub struct Rv32VecHeapAdapterAir<
 > {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
+    /// The max number of bits for an address in memory
+    address_bits: usize,
 }
 
 impl<
@@ -146,7 +186,8 @@ impl<
         const WRITE_SIZE: usize,
     > VmAdapterAir<AB> for Rv32VecHeapAdapterAir<NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
-    type Interface = BasicAdapterInterface<AB::Expr, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
+    type Interface =
+        Rv32VecHeapAdapterInterface<AB::Expr, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
     fn eval(
         &self,
@@ -163,96 +204,67 @@ impl<
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
-        let rs1_val_vec = ctx.reads.rs1.clone();
-        let rs2_val_vec = ctx.reads.rs2.clone();
-        let rd_val_vec = ctx.reads.rd.clone();
-
-        let rs1_val = rs1_val_vec[0].clone()
-            + rs1_val_vec[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS)
-            + rs1_val_vec[2].clone() * AB::Expr::from_canonical_usize(1 << (2 * RV32_CELL_BITS))
-            + rs1_val_vec[3].clone() * AB::Expr::from_canonical_usize(1 << (3 * RV32_CELL_BITS));
-
-        let rs2_val = rs2_val_vec[0].clone()
-            + rs2_val_vec[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS)
-            + rs2_val_vec[2].clone() * AB::Expr::from_canonical_usize(1 << (2 * RV32_CELL_BITS))
-            + rs2_val_vec[3].clone() * AB::Expr::from_canonical_usize(1 << (3 * RV32_CELL_BITS));
-
-        let rd_val = rd_val_vec[0].clone()
-            + rd_val_vec[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS)
-            + rd_val_vec[2].clone() * AB::Expr::from_canonical_usize(1 << (2 * RV32_CELL_BITS))
-            + rd_val_vec[3].clone() * AB::Expr::from_canonical_usize(1 << (3 * RV32_CELL_BITS));
-
-        // read rs1
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(AB::Expr::one(), cols.rs1_ptr),
-                rs1_val_vec,
-                timestamp_pp(),
-                &cols.rs1_read_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
-
-        // read rs2
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(AB::Expr::one(), cols.rs2_ptr),
-                rs2_val_vec,
-                timestamp_pp(),
-                &cols.rs2_read_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
-
-        // read rd
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(AB::Expr::one(), cols.rd_ptr),
-                rd_val_vec,
-                timestamp_pp(),
-                &cols.rd_read_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
-
-        // reads1 from heap
-        for i in 0..NUM_READS {
+        // Read register values for rs1, rs2, rd
+        for (ptr, val, aux) in [
+            (cols.rs1_ptr, cols.rs1_val, cols.rs1_read_aux),
+            (cols.rs2_ptr, cols.rs2_val, cols.rs2_read_aux),
+            (cols.rd_ptr, cols.rd_val, cols.rd_read_aux),
+        ] {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        AB::Expr::from_canonical_usize(2),
-                        rs1_val.clone() + AB::Expr::from_canonical_usize(i * READ_SIZE),
-                    ),
-                    ctx.reads.reads[0][i].clone(),
+                    MemoryAddress::new(AB::Expr::one(), ptr),
+                    val,
                     timestamp_pp(),
-                    &cols.reads1_aux[i],
+                    &cols.rs1_read_aux,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // reads2 from heap
-        for i in 0..NUM_READS {
-            self.memory_bridge
-                .read(
-                    MemoryAddress::new(
-                        AB::Expr::from_canonical_usize(2),
-                        rs2_val.clone() + AB::Expr::from_canonical_usize(i * READ_SIZE),
-                    ),
-                    ctx.reads.reads[1][i].clone(),
-                    timestamp_pp(),
-                    &cols.reads2_aux[i],
-                )
-                .eval(builder, ctx.instruction.is_valid.clone());
+        // Compose the u32 register value into single field element, with
+        // a range check on the highest limb.
+        let [rs1_val_f, rs2_val_f, rd_val_f] =
+            [cols.rs1_val, cols.rs2_val, cols.rd_val].map(|decomp| {
+                decomp
+                    .into_iter()
+                    .enumerate()
+                    .fold(AB::Expr::zero(), |acc, (i, limb)| {
+                        acc + limb * AB::Expr::from_canonical_usize(1 << (i * RV32_CELL_BITS))
+                    })
+            });
+
+        let e = AB::F::from_canonical_usize(2);
+        // Reads from heap
+        for (address, reads, reads_aux) in izip!(
+            [rs1_val_f, rs2_val_f],
+            ctx.reads.data,
+            [&cols.reads1_aux, &cols.reads2_aux]
+        ) {
+            for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
+                self.memory_bridge
+                    .read(
+                        MemoryAddress::new(
+                            e,
+                            address.clone() + AB::Expr::from_canonical_usize(i * READ_SIZE),
+                        ),
+                        read,
+                        timestamp_pp(),
+                        &aux,
+                    )
+                    .eval(builder, ctx.instruction.is_valid.clone());
+            }
         }
 
-        // writes to heap
-        for i in 0..NUM_WRITES {
+        // Writes to heap
+        for (i, (write, aux)) in zip(ctx.writes, &cols.writes_aux).enumerate() {
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
                         AB::Expr::from_canonical_usize(2),
-                        rd_val.clone() + AB::Expr::from_canonical_usize(i * WRITE_SIZE),
+                        rd_val_f.clone() + AB::Expr::from_canonical_usize(i * WRITE_SIZE),
                     ),
-                    ctx.writes[i].clone(),
+                    write,
                     timestamp_pp(),
-                    &cols.writes_aux[i],
+                    &aux,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
@@ -265,8 +277,7 @@ impl<
                     cols.rs1_ptr.into(),
                     cols.rs2_ptr.into(),
                     AB::Expr::one(),
-                    AB::Expr::one(),
-                    AB::Expr::one(),
+                    e.into(),
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
