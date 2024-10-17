@@ -7,21 +7,21 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
 use rand::Rng;
 
-use super::{ModularAddSubV2Chip, ModularAddSubV2CoreChip, ModularMulDivV2CoreChip};
+use super::{ModularAddSubV2CoreChip, ModularMulDivV2CoreChip};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        testing::{TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, VmChipWrapper,
+        testing::VmChipTestBuilder,
+        VmChipWrapper,
     },
-    rv32im::adapters::Rv32VecHeapAdapterChip,
+    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LANES},
     system::program::Instruction,
+    utils::biguint_to_limbs,
 };
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 type F = BabyBear;
-const READ_CELLS: usize = 64;
 
 #[test]
 fn test_coord_addsub() {
@@ -39,7 +39,6 @@ fn test_scalar_addsub() {
 
 fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
     let core = ModularAddSubV2CoreChip::new(
         modulus.clone(),
         NUM_LIMBS,
@@ -48,7 +47,13 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         ModularArithmeticOpcode::default_offset() + opcode_offset,
         BabyBear::bits() - 2,
     );
-    let mut adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
+    // doing 1xNUM_LIMBS reads and writes
+    let adapter = Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_controller(),
+    );
+    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
     let num_tests = 50;
     let mut all_ops = vec![];
@@ -65,24 +70,15 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
             .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
             .collect();
         let mut b = BigUint::new(b_digits.clone());
-        let interface_reads: [BabyBear; READ_CELLS] = [a_digits, b_digits]
-            .concat()
-            .into_iter()
-            .map(BabyBear::from_canonical_u32)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
 
         let op = rng.gen_range(0..2); // 0 for add, 1 for sub
-        a %= modulus.clone();
-        b %= modulus.clone();
+        a %= &modulus;
+        b %= &modulus;
 
         all_ops.push(op);
-        all_a.push(a.clone());
-        all_b.push(b.clone());
-        adapter.prank_reads.push_back(interface_reads.to_vec());
+        all_a.push(a);
+        all_b.push(b);
     }
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     // Second loop: actually run the tests.
     for i in 0..num_tests {
         let op = all_ops[i];
@@ -96,13 +92,6 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
             (&a + &modulus - &b) % &modulus
         };
 
-        let r = chip
-            .core
-            .air
-            .expr
-            .execute(vec![a.clone(), b.clone()], vec![op == 0]);
-        let r = r[0].clone();
-        assert_eq!(expected_answer, r);
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:
         // 1. address_ptr which stores the actual address
@@ -110,27 +99,32 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         // The write of result r is done in the chip.
         let ptr_as = 1;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 12;
-        let addr_ptr3 = 24;
+        let addr_ptr2 = 3 * RV32_REGISTER_NUM_LANES;
+        let addr_ptr3 = 6 * RV32_REGISTER_NUM_LANES;
 
         let data_as = 2;
-        let _address1 = 0;
-        let _address2 = 128;
-        let _address3 = 256;
+        let address1 = 0u32;
+        let address2 = 128u32;
+        let address3 = 256u32;
 
-        // TODO: uncomment memory part when switch to vectorized adapter
-        /*
-        tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
-        tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
-        tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
+        let mut write_reg = |reg_addr, value: u32| {
+            tester.write(
+                ptr_as,
+                reg_addr,
+                value.to_le_bytes().map(BabyBear::from_canonical_u8),
+            );
+        };
+
+        write_reg(addr_ptr1, address1);
+        write_reg(addr_ptr2, address2);
+        write_reg(addr_ptr3, address3);
 
         let a_limbs: [BabyBear; NUM_LIMBS] =
             biguint_to_limbs(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
-        tester.write(data_as, address1, a_limbs);
+        tester.write(data_as, address1 as usize, a_limbs);
         let b_limbs: [BabyBear; NUM_LIMBS] =
             biguint_to_limbs(b.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
-        tester.write(data_as, address2, b_limbs);
-        */
+        tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
             chip.core.air.offset + op,
@@ -142,15 +136,12 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         );
         tester.execute(&mut chip, instruction);
 
-        // TODO: uncomment when switch to vectorized adapter
-        /*
-        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_BITS);
-        for (i, &elem) in r_limbs.iter().enumerate() {
-            let address = address3 + i;
+        let expected_limbs = biguint_to_limbs::<NUM_LIMBS>(expected_answer, LIMB_BITS);
+        for (i, expected) in expected_limbs.into_iter().enumerate() {
+            let address = address3 as usize + i;
             let read_val = tester.read_cell(data_as, address);
-            assert_eq!(BabyBear::from_canonical_u32(elem), read_val);
+            assert_eq!(BabyBear::from_canonical_u32(expected), read_val);
         }
-        */
     }
     let tester = tester.build().load(chip).finalize();
 
@@ -173,7 +164,6 @@ fn test_scalar_muldiv() {
 
 fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
     let core = ModularMulDivV2CoreChip::new(
         modulus.clone(),
         LIMB_BITS,
@@ -182,7 +172,13 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         ModularArithmeticOpcode::default_offset() + opcode_offset,
         BabyBear::bits() - 2,
     );
-    let mut adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
+    // doing 1xNUM_LIMBS reads and writes
+    let adapter = Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_controller(),
+    );
+    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
     let num_tests = 50;
     let mut all_ops = vec![];
@@ -199,25 +195,16 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
             .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
             .collect();
         let mut b = BigUint::new(b_digits.clone());
-        let interface_reads: [BabyBear; READ_CELLS] = [a_digits, b_digits]
-            .concat()
-            .into_iter()
-            .map(BabyBear::from_canonical_u32)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
 
         // let op = rng.gen_range(2..4); // 2 for mul, 3 for div
         let op = 2;
-        a %= modulus.clone();
-        b %= modulus.clone();
+        a %= &modulus;
+        b %= &modulus;
 
         all_ops.push(op);
-        all_a.push(a.clone());
-        all_b.push(b.clone());
-        adapter.prank_reads.push_back(interface_reads.to_vec());
+        all_a.push(a);
+        all_b.push(b);
     }
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     // Second loop: actually run the tests.
     for i in 0..num_tests {
         let op = all_ops[i];
@@ -231,13 +218,6 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
             (&a * big_uint_mod_inverse(&b, &modulus)) % &modulus
         };
 
-        let r = chip
-            .core
-            .air
-            .expr
-            .execute(vec![a.clone(), b.clone()], vec![op == 2]);
-        let r = r[0].clone();
-        assert_eq!(expected_answer, r);
         // Write to memories
         // For each bigunint (a, b, r), there are 2 writes:
         // 1. address_ptr which stores the actual address
@@ -249,12 +229,10 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         let addr_ptr3 = 24;
 
         let data_as = 2;
-        let _address1 = 0;
-        let _address2 = 128;
-        let _address3 = 256;
+        let address1 = 0;
+        let address2 = 128;
+        let address3 = 256;
 
-        // TODO: uncomment memory part when switch to vectorized adapter
-        /*
         tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
         tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
         tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
@@ -265,7 +243,6 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         let b_limbs: [BabyBear; NUM_LIMBS] =
             biguint_to_limbs(b.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address2, b_limbs);
-        */
 
         let instruction = Instruction::from_isize(
             chip.core.air.offset + op,
@@ -277,52 +254,14 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         );
         tester.execute(&mut chip, instruction);
 
-        // TODO: uncomment when switch to vectorized adapter
-        /*
-        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_BITS);
-        for (i, &elem) in r_limbs.iter().enumerate() {
+        let expected_limbs = biguint_to_limbs::<NUM_LIMBS>(expected_answer, LIMB_BITS);
+        for (i, expected) in expected_limbs.into_iter().enumerate() {
             let address = address3 + i;
             let read_val = tester.read_cell(data_as, address);
-            assert_eq!(BabyBear::from_canonical_u32(elem), read_val);
+            assert_eq!(BabyBear::from_canonical_u32(expected), read_val);
         }
-        */
     }
     let tester = tester.build().load(chip).finalize();
 
     tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn test_coord_full_addsub() {
-    let opcode_offset = 0;
-    let modulus = secp256k1_coord_prime();
-    test_full_addsub(opcode_offset, modulus);
-}
-
-#[test]
-fn test_scalar_full_addsub() {
-    let opcode_offset = 4;
-    let modulus = secp256k1_scalar_prime();
-    test_full_addsub(opcode_offset, modulus);
-}
-
-fn test_full_addsub(opcode_offset: usize, modulus: BigUint) {
-    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    let chip = ModularAddSubV2Chip::<F, NUM_LIMBS>::new(
-        Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_controller(),
-        ),
-        ModularAddSubV2CoreChip::new(
-            modulus.clone(),
-            LIMB_BITS,
-            NUM_LIMBS,
-            tester.memory_controller().borrow().range_checker.clone(),
-            opcode_offset,
-            BabyBear::bits() - 2,
-        ),
-        tester.memory_controller(),
-    );
 }
