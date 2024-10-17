@@ -233,16 +233,24 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         let address2 = 128;
         let address3 = 256;
 
-        tester.write_cell(ptr_as, addr_ptr1, BabyBear::from_canonical_usize(address1));
-        tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
-        tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
+        let mut write_reg = |reg_addr, value: u32| {
+            tester.write(
+                ptr_as,
+                reg_addr,
+                value.to_le_bytes().map(BabyBear::from_canonical_u8),
+            );
+        };
+
+        write_reg(addr_ptr1, address1);
+        write_reg(addr_ptr2, address2);
+        write_reg(addr_ptr3, address3);
 
         let a_limbs: [BabyBear; NUM_LIMBS] =
             biguint_to_limbs(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
-        tester.write(data_as, address1, a_limbs);
+        tester.write(data_as, address1 as usize, a_limbs);
         let b_limbs: [BabyBear; NUM_LIMBS] =
             biguint_to_limbs(b.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
-        tester.write(data_as, address2, b_limbs);
+        tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
             chip.core.air.offset + op,
@@ -256,7 +264,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
 
         let expected_limbs = biguint_to_limbs::<NUM_LIMBS>(expected_answer, LIMB_BITS);
         for (i, expected) in expected_limbs.into_iter().enumerate() {
-            let address = address3 + i;
+            let address = address3 as usize + i;
             let read_val = tester.read_cell(data_as, address);
             assert_eq!(BabyBear::from_canonical_u32(expected), read_val);
         }

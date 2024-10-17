@@ -221,6 +221,7 @@ impl<
         // a range check on the highest limb.
         let [rs1_val_f, rs2_val_f, rd_val_f] =
             [cols.rs1_val, cols.rs2_val, cols.rd_val].map(|decomp| {
+                // TODO: range check
                 decomp
                     .into_iter()
                     .enumerate()
@@ -256,7 +257,7 @@ impl<
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
-                        AB::Expr::from_canonical_usize(2),
+                        e,
                         rd_val_f.clone() + AB::Expr::from_canonical_usize(i * WRITE_SIZE),
                     ),
                     write,
@@ -333,7 +334,6 @@ impl<
                 memory.read::<READ_SIZE>(e, F::from_canonical_u32(address + (i * READ_SIZE) as u32))
             })
         });
-
         let reads = [reads1.map(|x| x.data), reads2.map(|x| x.data)];
 
         let record = Rv32VecHeapReadRecord {
@@ -396,21 +396,22 @@ impl<
         row_slice.rs1_ptr = read_record.rs1.pointer;
         row_slice.rs2_ptr = read_record.rs2.pointer;
 
+        row_slice.rd_val = read_record.rd.data;
+        row_slice.rs1_val = read_record.rs1.data;
+        row_slice.rs2_val = read_record.rs2.data;
+
         row_slice.rs1_read_aux = self.aux_cols_factory.make_read_aux_cols(read_record.rs1);
         row_slice.rs2_read_aux = self.aux_cols_factory.make_read_aux_cols(read_record.rs2);
         row_slice.rd_read_aux = self.aux_cols_factory.make_read_aux_cols(read_record.rd);
-        row_slice.reads1_aux = core::array::from_fn(|i| {
-            self.aux_cols_factory
-                .make_read_aux_cols(read_record.reads1[i])
-        });
-        row_slice.reads2_aux = core::array::from_fn(|i| {
-            self.aux_cols_factory
-                .make_read_aux_cols(read_record.reads2[i])
-        });
-        row_slice.writes_aux = core::array::from_fn(|i| {
-            self.aux_cols_factory
-                .make_write_aux_cols(write_record.writes[i])
-        });
+        row_slice.reads1_aux = read_record
+            .reads1
+            .map(|r| self.aux_cols_factory.make_read_aux_cols(r));
+        row_slice.reads2_aux = read_record
+            .reads2
+            .map(|r| self.aux_cols_factory.make_read_aux_cols(r));
+        row_slice.writes_aux = write_record
+            .writes
+            .map(|w| self.aux_cols_factory.make_write_aux_cols(w));
     }
 
     fn air(&self) -> &Self::Air {
