@@ -2,7 +2,6 @@ use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, Fq6},
     ff::Field,
 };
-use num::BigInt;
 
 #[cfg(test)]
 use crate::common::FeltPrint;
@@ -141,47 +140,7 @@ impl LineDType<Fq, Fq2, Fq12> for Fq12 {
     }
 }
 
-impl ExpBigInt<Fq12> for Fq12 {
-    fn exp_bigint(&self, k: BigInt) -> Fq12 {
-        // let (sign, digits) = k.to_u64_digits();
-        // let mut res = self.pow_vartime(digits);
-        // if sign == Sign::Minus {
-        //     res = res.invert().unwrap();
-        // }
-        // res
-        if k == BigInt::from(0) {
-            return Fq12::one();
-        }
-
-        let mut e = k.clone();
-        let mut x = *self;
-
-        if k < BigInt::from(0) {
-            x = x.invert().unwrap();
-            e = -k;
-        }
-
-        let mut res = Fq12::one();
-
-        let x_sq = x.square();
-        let ops = [x, x_sq, x_sq * x];
-
-        let bytes = e.to_bytes_be();
-        for &b in bytes.1.iter() {
-            let mut mask = 0xc0;
-            for j in 0..4 {
-                res = res.square().square();
-                let c = (b & mask) >> (6 - 2 * j);
-                if c != 0 {
-                    res *= &ops[(c - 1) as usize];
-                }
-                mask >>= 2;
-            }
-        }
-
-        res
-    }
-}
+impl ExpBigInt<Fq12> for Fq12 {}
 
 #[cfg(test)]
 impl FeltPrint<Fq> for Fq {

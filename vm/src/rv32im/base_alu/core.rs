@@ -65,7 +65,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _local_adapter: &[AB::Var],
+        _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [

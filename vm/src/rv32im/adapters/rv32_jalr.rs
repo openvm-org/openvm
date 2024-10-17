@@ -91,6 +91,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
     ) {
         todo!()
     }
+
+    fn get_from_pc(&self, _local: &[AB::Var]) -> AB::Var {
+        todo!()
+    }
 }
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {

@@ -22,7 +22,8 @@ use crate::{
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            Rv32RdWriteAdapter, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+            Rv32RdWriteAdapter, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
+            RV_IS_TYPE_IMM_BITS,
         },
         rv32_jal_lui::Rv32JalLuiCols,
     },
@@ -39,6 +40,7 @@ fn set_and_execute(
     rng: &mut StdRng,
     opcode: Rv32JalLuiOpcode,
     imm: Option<i32>,
+    initial_pc: Option<u32>,
 ) {
     let imm: i32 = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm = match opcode {
@@ -48,7 +50,7 @@ fn set_and_execute(
 
     let a = rng.gen_range(1..32) << 2;
 
-    tester.execute(
+    tester.execute_with_pc(
         chip,
         Instruction::from_isize(
             opcode as usize + Rv32JalLuiOpcode::default_offset(),
@@ -58,7 +60,9 @@ fn set_and_execute(
             1,
             0,
         ),
+        initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
     );
+
     let initial_pc = tester
         .execution
         .records
@@ -105,8 +109,8 @@ fn rand_jal_lui_test() {
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, JAL, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LUI, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, JAL, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LUI, None, None);
     }
 
     let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
@@ -120,9 +124,11 @@ fn rand_jal_lui_test() {
 /// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
 ///////////////////////////////////////////////////////////////////////////////////////
 
+#[allow(clippy::too_many_arguments)]
 fn run_negative_jal_lui_test(
     opcode: Rv32JalLuiOpcode,
     initial_imm: Option<i32>,
+    initial_pc: Option<u32>,
     rd_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
     imm: Option<i32>,
     is_jal: Option<bool>,
@@ -142,7 +148,14 @@ fn run_negative_jal_lui_test(
     let core = Rv32JalLuiCoreChip::new(xor_lookup_chip.clone(), Rv32JalLuiOpcode::default_offset());
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.memory_controller());
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, initial_imm);
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        opcode,
+        initial_imm,
+        initial_pc,
+    );
 
     let jal_lui_trace_width = chip.trace_width();
     let mut chip_input = chip.generate_air_proof_input();
@@ -196,6 +209,7 @@ fn opcode_flag_negative_test() {
         None,
         None,
         None,
+        None,
         Some(false),
         Some(true),
         VerificationError::OodEvaluationMismatch,
@@ -205,12 +219,14 @@ fn opcode_flag_negative_test() {
         None,
         None,
         None,
+        None,
         Some(false),
         Some(false),
         VerificationError::NonZeroCumulativeSum,
     );
     run_negative_jal_lui_test(
         LUI,
+        None,
         None,
         None,
         None,
@@ -225,14 +241,6 @@ fn overflow_negative_tests() {
     run_negative_jal_lui_test(
         JAL,
         None,
-        Some([LIMB_MAX, LIMB_MAX, LIMB_MAX, LIMB_MAX]),
-        None,
-        None,
-        None,
-        VerificationError::OodEvaluationMismatch,
-    );
-    run_negative_jal_lui_test(
-        LUI,
         None,
         Some([LIMB_MAX, LIMB_MAX, LIMB_MAX, LIMB_MAX]),
         None,
@@ -242,6 +250,17 @@ fn overflow_negative_tests() {
     );
     run_negative_jal_lui_test(
         LUI,
+        None,
+        None,
+        Some([LIMB_MAX, LIMB_MAX, LIMB_MAX, LIMB_MAX]),
+        None,
+        None,
+        None,
+        VerificationError::OodEvaluationMismatch,
+    );
+    run_negative_jal_lui_test(
+        LUI,
+        None,
         None,
         Some([0, LIMB_MAX, LIMB_MAX, LIMB_MAX + 1]),
         None,
@@ -253,6 +272,7 @@ fn overflow_negative_tests() {
         LUI,
         None,
         None,
+        None,
         Some(-1),
         None,
         None,
@@ -262,10 +282,21 @@ fn overflow_negative_tests() {
         LUI,
         None,
         None,
+        None,
         Some(-28),
         None,
         None,
         VerificationError::OodEvaluationMismatch,
+    );
+    run_negative_jal_lui_test(
+        JAL,
+        None,
+        Some(251),
+        Some([F::neg_one().as_canonical_u32(), 1, 0, 0]),
+        None,
+        None,
+        None,
+        VerificationError::NonZeroCumulativeSum,
     );
 }
 
@@ -289,8 +320,8 @@ fn execute_roundtrip_sanity_test() {
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.memory_controller());
     let num_tests: usize = 10;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, JAL, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LUI, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, JAL, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LUI, None, None);
     }
 
     set_and_execute(
@@ -299,6 +330,7 @@ fn execute_roundtrip_sanity_test() {
         &mut rng,
         LUI,
         Some((1 << IMM_BITS) - 1),
+        None,
     );
     set_and_execute(
         &mut tester,
@@ -306,6 +338,7 @@ fn execute_roundtrip_sanity_test() {
         &mut rng,
         JAL,
         Some((1 << RV_IS_TYPE_IMM_BITS) - 1),
+        None,
     );
 }
 

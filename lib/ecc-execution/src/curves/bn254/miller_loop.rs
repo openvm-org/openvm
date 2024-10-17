@@ -43,12 +43,13 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         f: Fq12,
         Q_acc: Vec<EcPoint<Fq2>>,
         _Q: &[EcPoint<Fq2>],
+        c: Option<Fq12>,
         x_over_ys: Vec<Fq>,
         y_invs: Vec<Fq>,
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
         let mut f = f;
 
-        if f != Fq12::one() {
+        if c.is_some() {
             f = fp12_square(f);
         }
 
@@ -77,6 +78,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         f: Fq12,
         Q_acc: Vec<EcPoint<Fq2>>,
         Q: &[EcPoint<Fq2>],
+        _c: Option<Fq12>,
         x_over_ys: Vec<Fq>,
         y_invs: Vec<Fq>,
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
@@ -130,8 +132,8 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
             let line = lines_S_plus_Q.evaluate(*x_over_y, *y_inv);
             lines.push(line);
         }
-        let mut f = f;
 
+        let mut f = f;
         f = self.evaluate_lines_vec(f, lines);
 
         (f, Q_acc)

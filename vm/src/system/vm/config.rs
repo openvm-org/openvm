@@ -1,12 +1,15 @@
-use std::ops::Range;
-
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
+};
 use derive_new::new;
 use num_bigint_dig::BigUint;
+use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 use crate::{
-    arch::{instructions::*, ExecutorName},
+    arch::ExecutorName,
     kernels::core::CoreOptions,
     old::modular_addsub::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
 };
@@ -20,7 +23,7 @@ pub enum PersistenceType {
     Volatile,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, new)]
+#[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
 pub struct MemoryConfig {
     pub addr_space_max_bits: usize,
     pub pointer_max_bits: usize,
@@ -35,143 +38,12 @@ impl Default for MemoryConfig {
     }
 }
 
-fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
-    let (start, len, offset) = match executor {
-        ExecutorName::Core => (
-            CoreOpcode::default_offset(),
-            CoreOpcode::COUNT,
-            CoreOpcode::default_offset(),
-        ),
-        ExecutorName::FieldArithmetic => (
-            FieldArithmeticOpcode::default_offset(),
-            FieldArithmeticOpcode::COUNT,
-            FieldArithmeticOpcode::default_offset(),
-        ),
-        ExecutorName::FieldExtension => (
-            FieldExtensionOpcode::default_offset(),
-            FieldExtensionOpcode::COUNT,
-            FieldExtensionOpcode::default_offset(),
-        ),
-        ExecutorName::Poseidon2 => (
-            Poseidon2Opcode::default_offset(),
-            Poseidon2Opcode::COUNT,
-            Poseidon2Opcode::default_offset(),
-        ),
-        ExecutorName::Keccak256 => (
-            Keccak256Opcode::default_offset(),
-            Keccak256Opcode::COUNT,
-            Keccak256Opcode::default_offset(),
-        ),
-        ExecutorName::ModularAddSub => (
-            ModularArithmeticOpcode::default_offset(),
-            2,
-            ModularArithmeticOpcode::default_offset(),
-        ),
-        ExecutorName::ModularMultDiv => (
-            ModularArithmeticOpcode::default_offset() + 2,
-            2,
-            ModularArithmeticOpcode::default_offset(),
-        ),
-        ExecutorName::ArithmeticLogicUnitRv32 => (
-            AluOpcode::default_offset(),
-            AluOpcode::COUNT,
-            AluOpcode::default_offset(),
-        ),
-        ExecutorName::LoadStoreRv32 => (
-            Rv32LoadStoreOpcode::default_offset(),
-            Rv32LoadStoreOpcode::COUNT,
-            Rv32LoadStoreOpcode::default_offset(),
-        ),
-        ExecutorName::JalLuiRv32 => (
-            Rv32JalLuiOpcode::default_offset(),
-            Rv32JalLuiOpcode::COUNT,
-            Rv32JalLuiOpcode::default_offset(),
-        ),
-        ExecutorName::JalrRv32 => (
-            Rv32JalrOpcode::default_offset(),
-            Rv32JalrOpcode::COUNT,
-            Rv32JalrOpcode::default_offset(),
-        ),
-        ExecutorName::AuipcRv32 => (
-            Rv32AuipcOpcode::default_offset(),
-            Rv32AuipcOpcode::COUNT,
-            Rv32AuipcOpcode::default_offset(),
-        ),
-        ExecutorName::ArithmeticLogicUnit256 => (
-            U256Opcode::default_offset(),
-            8,
-            U256Opcode::default_offset(),
-        ),
-        ExecutorName::LessThanRv32 => (
-            LessThanOpcode::default_offset(),
-            LessThanOpcode::COUNT,
-            LessThanOpcode::default_offset(),
-        ),
-        ExecutorName::MultiplicationRv32 => (
-            MulOpcode::default_offset(),
-            MulOpcode::COUNT,
-            MulOpcode::default_offset(),
-        ),
-        ExecutorName::MultiplicationHighRv32 => (
-            MulHOpcode::default_offset(),
-            MulHOpcode::COUNT,
-            MulHOpcode::default_offset(),
-        ),
-        ExecutorName::U256Multiplication => (
-            U256Opcode::default_offset() + 11,
-            1,
-            U256Opcode::default_offset(),
-        ),
-        ExecutorName::DivRemRv32 => (
-            DivRemOpcode::default_offset(),
-            DivRemOpcode::COUNT,
-            DivRemOpcode::default_offset(),
-        ),
-        ExecutorName::ShiftRv32 => (
-            ShiftOpcode::default_offset(),
-            ShiftOpcode::COUNT,
-            ShiftOpcode::default_offset(),
-        ),
-        ExecutorName::Shift256 => (
-            U256Opcode::default_offset() + 8,
-            3,
-            U256Opcode::default_offset(),
-        ),
-        ExecutorName::BranchEqualRv32 => (
-            BranchEqualOpcode::default_offset(),
-            BranchEqualOpcode::COUNT,
-            BranchEqualOpcode::default_offset(),
-        ),
-        ExecutorName::BranchLessThanRv32 => (
-            BranchLessThanOpcode::default_offset(),
-            BranchLessThanOpcode::COUNT,
-            BranchLessThanOpcode::default_offset(),
-        ),
-        ExecutorName::CastF => (
-            CastfOpcode::default_offset(),
-            CastfOpcode::COUNT,
-            CastfOpcode::default_offset(),
-        ),
-        ExecutorName::Secp256k1AddUnequal => {
-            (EccOpcode::default_offset(), 1, EccOpcode::default_offset())
-        }
-        ExecutorName::Secp256k1Double => (
-            EccOpcode::default_offset() + 1,
-            1,
-            EccOpcode::default_offset(),
-        ),
-    };
-    (start..(start + len), offset)
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmConfig {
-    // Each executor handles the given range of opcode as usize (absolute, with offset).
-    // Offset is the start opcode (usize) of the Opcode class, and it's needed because some Opcode classes are handled by different executors.
-    // For example, U256Opcode class has some opcodes handled by ArithmeticLogicUnit256, and some by U256Multiplication.
-    // And for U256Multiplication executor to verify the opcode it gets from program, it needs to know the offset of the U256Opcode class.
-    pub executors: Vec<(Range<usize>, ExecutorName, usize)>, // (range of opcodes, who executes, offset)
-    pub modular_executors: Vec<(Range<usize>, ExecutorName, usize, BigUint)>, // (range of opcodes, who executes, offset, modulus)
+    /// List of all executors except modular executors.
+    pub executors: Vec<ExecutorName>,
+    /// List of all supported modulus
+    pub supported_modulus: Vec<BigUint>,
 
     pub poseidon2_max_constraint_degree: usize,
     pub memory_config: MemoryConfig,
@@ -199,40 +71,26 @@ impl VmConfig {
             num_public_values,
             max_segment_len,
             collect_metrics,
-            modular_executors: Vec::new(),
+            supported_modulus: Vec::new(),
         };
         config.add_modular_support(enabled_modulus)
     }
 
-    pub fn add_executor(
-        mut self,
-        range: Range<usize>,
-        executor: ExecutorName,
-        offset: usize,
-    ) -> Self {
+    pub fn add_default_executor(mut self, executor: ExecutorName) -> Self {
         // Some executors need to be handled in a special way, and cannot be added like other executors.
-        let not_allowed_executors = []; // [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
+        let not_allowed_executors = [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
         if not_allowed_executors.contains(&executor) {
             panic!("Cannot add executor for {:?}", executor);
         }
-        self.executors.push((range, executor, offset));
+        self.executors.push(executor);
         self
-    }
-
-    pub fn add_default_executor(self, executor: ExecutorName) -> Self {
-        let (range, offset) = default_executor_range(executor);
-        self.add_executor(range, executor, offset)
     }
 
     // I think adding "opcode class" support is better than adding "executor".
     // The api should be saying: I want to be able to do this set of operations, and doesn't care about what executor is doing it.
     pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
         let mut res = self;
-        let num_ops_per_modulus = ModularArithmeticOpcode::COUNT;
-        for (i, modulus) in enabled_modulus.iter().enumerate() {
-            let shift = i * num_ops_per_modulus;
-            res = res.add_modular_prime(modulus, shift);
-        }
+        res.supported_modulus.extend(enabled_modulus);
         res
     }
 
@@ -241,27 +99,23 @@ impl VmConfig {
         self.add_modular_support(primes)
     }
 
-    pub fn add_modular_prime(self, prime: &BigUint, shift: usize) -> Self {
-        let add_sub_range = default_executor_range(ExecutorName::ModularAddSub);
-        let mult_div_range = default_executor_range(ExecutorName::ModularMultDiv);
-        let mut res = self;
-        res.modular_executors.push((
-            shift_range(&add_sub_range.0, shift),
-            ExecutorName::ModularAddSub,
-            add_sub_range.1 + shift,
-            prime.clone(),
-        ));
-        res.modular_executors.push((
-            shift_range(&mult_div_range.0, shift),
-            ExecutorName::ModularMultDiv,
-            mult_div_range.1 + shift,
-            prime.clone(),
-        ));
-        res
-    }
-
     pub fn add_ecc_support(self) -> Self {
         todo!()
+    }
+
+    /// Generate a proving key for the VM.
+    pub fn generate_pk<SC: StarkGenericConfig>(
+        &self,
+        mut keygen_builder: MultiStarkKeygenBuilder<SC>,
+    ) -> MultiStarkProvingKey<SC>
+    where
+        Val<SC>: PrimeField32,
+    {
+        let chip_set = self.create_chip_set::<Val<SC>>();
+        for air in chip_set.airs() {
+            keygen_builder.add_air(air);
+        }
+        keygen_builder.generate_pk()
     }
 }
 
@@ -358,11 +212,4 @@ impl Modulus {
     pub fn all() -> Vec<Self> {
         Modulus::iter().collect()
     }
-}
-
-#[allow(dead_code)]
-fn shift_range(r: &Range<usize>, x: usize) -> Range<usize> {
-    let start = r.start + x;
-    let end = r.end + x;
-    start..end
 }

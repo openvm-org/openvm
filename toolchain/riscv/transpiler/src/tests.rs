@@ -44,7 +44,7 @@ fn test_tiny_asm_runtime() -> Result<()> {
     }
     let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
     let config = VmConfig::rv32();
-    let vm = VirtualMachine::new(config, program, vec![]);
+    let mut vm = VirtualMachine::new(config, program, vec![]);
 
     // TODO: use "execute_and_generate" when it's implemented
     /*
@@ -75,7 +75,7 @@ fn test_runtime(elf_path: &str) -> Result<()> {
     setup_tracing();
     let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
     let config = VmConfig::rv32();
-    let vm = VirtualMachine::new(config, program, vec![]);
+    let mut vm = VirtualMachine::new(config, program, vec![]);
 
     // TODO: use "execute_and_generate" when it's implemented
     /*

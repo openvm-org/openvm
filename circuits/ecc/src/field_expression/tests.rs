@@ -17,7 +17,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
 use super::{super::test_utils::*, ExprBuilder, FieldExpr, FieldVariableConfig, SymbolicExpr};
-use crate::field_expression::FieldVariable;
+use crate::field_expression::{FieldExprCols, FieldVariable};
 
 const LIMB_BITS: usize = 8;
 
@@ -84,7 +84,8 @@ fn test_add() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -94,7 +95,7 @@ fn test_add() {
     let inputs = vec![x, y];
 
     let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
-    let (_, _, vars, _, _, _) = expr.load_vars(&row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);
     assert_eq!(generated, expected);
@@ -122,7 +123,8 @@ fn test_div() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -133,7 +135,7 @@ fn test_div() {
     let inputs = vec![x, y];
 
     let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
-    let (_, _, vars, _, _, _) = expr.load_vars(&row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);
     assert_eq!(generated, expected);
@@ -167,7 +169,8 @@ fn test_auto_carry_mul() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
@@ -176,7 +179,7 @@ fn test_auto_carry_mul() {
     let inputs = vec![x, y];
 
     let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
-    let (_, _, vars, _, _, _) = expr.load_vars(&row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 2);
     let generated = evaluate_biguint(&vars[1], LIMB_BITS);
     assert_eq!(generated, expected);
@@ -212,7 +215,8 @@ fn test_auto_carry_intmul() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
@@ -221,7 +225,7 @@ fn test_auto_carry_intmul() {
     let inputs = vec![x, y];
 
     let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
-    let (_, _, vars, _, _, _) = expr.load_vars(&row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 2);
     let generated = evaluate_biguint(&vars[1], LIMB_BITS);
     assert_eq!(generated, expected);
@@ -266,7 +270,8 @@ fn test_auto_carry_add() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -276,7 +281,7 @@ fn test_auto_carry_add() {
     let inputs = vec![x, y];
 
     let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
-    let (_, _, vars, _, _, _) = expr.load_vars(&row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 2);
     let generated = evaluate_biguint(&vars[x5_id], LIMB_BITS);
     assert_eq!(generated, expected);
@@ -312,7 +317,8 @@ fn test_ec_add() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
     let (x1, y1) = SampleEcPoints[0].clone();
@@ -321,7 +327,7 @@ fn test_ec_add() {
     let inputs = vec![x1, y1, x2, y2];
 
     let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
-    let (_, _, vars, _, _, _) = expr.load_vars(&row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 3); // lambda, x3, y3
     let generated_x3 = evaluate_biguint(&vars[1], LIMB_BITS);
     let generated_y3 = evaluate_biguint(&vars[2], LIMB_BITS);
@@ -357,7 +363,8 @@ fn test_ec_double() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -366,7 +373,7 @@ fn test_ec_double() {
     let inputs = vec![x1, y1];
 
     let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
-    let (_, _, vars, _, _, _) = expr.load_vars(&row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 3); // lambda, x3, y3
     let generated_x3 = evaluate_biguint(&vars[1], LIMB_BITS);
     let generated_y3 = evaluate_biguint(&vars[2], LIMB_BITS);
@@ -403,7 +410,8 @@ fn test_select() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -414,7 +422,7 @@ fn test_select() {
     let flags = vec![false];
 
     let row = expr.generate_trace_row((inputs, range_checker.clone(), flags));
-    let (_, _, vars, _, _, _) = expr.load_vars(&row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);
     assert_eq!(generated, expected);
@@ -448,7 +456,8 @@ fn test_select2() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_checker: range_checker.clone(),
+        range_bus: range_checker.bus().index,
+        range_max_bits: range_checker.range_max_bits(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -459,7 +468,7 @@ fn test_select2() {
     let flags = vec![true];
 
     let row = expr.generate_trace_row((inputs, range_checker.clone(), flags));
-    let (_, _, vars, _, _, _) = expr.load_vars(&row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);
     assert_eq!(generated, expected);

@@ -75,11 +75,13 @@ and has the following interactions:
   on <span style="color:green">MERKLE_BUS</span> with multiplicity `expand_direction`
 
 The `PersistentBoundaryChip` has rows of the form
-`(expand_direction, address_space, leaf_label, values, timestamp)`
+`(expand_direction, address_space, leaf_label, values, hash, timestamp)`
 and has the following interactions on the <span style="color:green">MERKLE_BUS</span>:
 
 - Send <span style="color:green">**(1, 0, (as - AS_OFFSET) \* 2^L, node\*label, hash_initial)**</span>
 - Receive <span style="color:green">**(-1, 0, (as - AS_OFFSET) \* 2^L, node_label, hash_final)**</span>
+
+It receives `values` from the `MEMORY_BUS` and constrains `hash = compress(values, 0)` via the `POSEIDON2_DIRECT_BUS`.
 
 ## Aggregation
 

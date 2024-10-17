@@ -65,8 +65,10 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     }
 }
 
+/// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
+/// each chip. Change of the order may cause break changes of VKs.
 #[derive(Clone, EnumDiscriminants)]
-#[strum_discriminants(derive(Serialize, Deserialize))]
+#[strum_discriminants(derive(Serialize, Deserialize, Ord, PartialOrd))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum AxVmInstructionExecutor<F: PrimeField32> {

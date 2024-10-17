@@ -70,8 +70,18 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         executor: &mut E,
         instruction: Instruction<F>,
     ) {
+        let initial_pc = self.next_elem_size_u32();
+        self.execute_with_pc(executor, instruction, initial_pc);
+    }
+
+    pub fn execute_with_pc<E: InstructionExecutor<F>>(
+        &mut self,
+        executor: &mut E,
+        instruction: Instruction<F>,
+        initial_pc: u32,
+    ) {
         let initial_state = ExecutionState {
-            pc: self.next_elem_size_u32(),
+            pc: initial_pc,
             timestamp: self.memory.controller.borrow().timestamp(),
         };
         tracing::debug!(?initial_state.timestamp);
