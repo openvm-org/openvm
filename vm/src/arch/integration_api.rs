@@ -607,6 +607,29 @@ mod conversions {
         }
     }
 
+    impl<T, const N: usize, const M: usize, const R: usize> From<[[[T; N]; M]; R]> for DynArray<T> {
+        fn from(v: [[[T; N]; M]; R]) -> Self {
+            Self(
+                v.into_iter()
+                    .flat_map(|x| x.into_iter().flatten())
+                    .collect(),
+            )
+        }
+    }
+
+    impl<T, const N: usize, const M: usize, const R: usize> From<DynArray<T>> for [[[T; N]; M]; R] {
+        fn from(v: DynArray<T>) -> Self {
+            assert_eq!(
+                v.0.len(),
+                N * M * R,
+                "Incorrect vector length {}",
+                v.0.len()
+            );
+            let mut it = v.0.into_iter();
+            from_fn(|_| from_fn(|_| from_fn(|_| it.next().unwrap())))
+        }
+    }
+
     impl<T> From<MinimalInstruction<T>> for DynArray<T> {
         fn from(m: MinimalInstruction<T>) -> Self {
             Self(vec![m.is_valid, m.opcode])
@@ -645,19 +668,9 @@ mod conversions {
         ) -> Self {
             AdapterAirContext {
                 to_pc: ctx.to_pc,
-                reads: ctx
-                    .reads
-                    .into_iter()
-                    .flat_map(|x| x.into_iter())
-                    .collect::<Vec<_>>()
-                    .into(),
-                writes: ctx
-                    .writes
-                    .into_iter()
-                    .flat_map(|x| x.into_iter())
-                    .collect::<Vec<_>>()
-                    .into(),
-                instruction: vec![ctx.instruction.is_valid, ctx.instruction.opcode].into(),
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
             }
         }
     }
@@ -685,12 +698,7 @@ mod conversions {
         ) -> Self {
             AdapterRuntimeContext {
                 to_pc: ctx.to_pc,
-                writes: ctx
-                    .writes
-                    .into_iter()
-                    .flat_map(|x| x.into_iter())
-                    .collect::<Vec<_>>()
-                    .into(),
+                writes: ctx.writes.into(),
             }
         }
     }

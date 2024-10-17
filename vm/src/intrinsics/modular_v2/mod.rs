@@ -7,9 +7,7 @@ pub use muldiv::*;
 
 use crate::{
     arch::{VmAirWrapper, VmChipWrapper},
-    rv32im::adapters::{
-        Rv32VecHeapAdapterAir, Rv32VecHeapAdapterChip, Rv32VecHeapAdapterInterface,
-    },
+    rv32im::adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterChip},
 };
 
 #[cfg(test)]

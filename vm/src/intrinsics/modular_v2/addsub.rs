@@ -12,7 +12,7 @@ use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{ModularConfig, FIELD_ELEMENT_BITS};
+use super::FIELD_ELEMENT_BITS;
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
@@ -20,7 +20,7 @@ use crate::{
         MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
-    utils::{biguint_to_limbs, biguint_to_limbs_vec, limbs_to_biguint},
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
 };
 
 /// The number of limbs and limb bits are determined at runtime.
