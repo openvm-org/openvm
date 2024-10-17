@@ -243,10 +243,7 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
     match opcode {
         0x0b => {
             match funct3 {
-                0b000 => {
-                    // terminate
-                    None
-                }
+                0b000 => Some(terminate()),
                 0b001 => {
                     // keccak or poseidon
                     None
