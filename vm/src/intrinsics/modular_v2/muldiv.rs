@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
     sub_chip::{LocalTraceInstructions, SubAir},
-    var_range::VariableRangeCheckerChip,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{
@@ -75,8 +75,7 @@ impl ModularMulDivV2CoreAir {
         let expr = FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
-            range_bus,
-            range_max_bits,
+            range_bus: VariableRangeCheckerBus::new(range_bus, range_max_bits),
         };
         Self { expr, offset }
     }

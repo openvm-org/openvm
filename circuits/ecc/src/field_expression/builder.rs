@@ -8,7 +8,7 @@ use afs_primitives::{
         OverflowInt,
     },
     sub_chip::{AirConfig, LocalTraceInstructions, SubAir},
-    var_range::VariableRangeCheckerChip,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use afs_stark_backend::{
     interaction::InteractionBuilder,
@@ -135,8 +135,7 @@ pub struct FieldExpr {
 
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
 
-    pub range_bus: usize,
-    pub range_max_bits: usize,
+    pub range_bus: VariableRangeCheckerBus,
 }
 
 impl Deref for FieldExpr {
@@ -204,8 +203,8 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             for limb in var.limbs.iter() {
                 range_check(
                     builder,
-                    self.range_bus,
-                    self.range_max_bits,
+                    self.range_bus.index,
+                    self.range_bus.range_max_bits,
                     self.limb_bits,
                     limb.clone(),
                     is_valid,
