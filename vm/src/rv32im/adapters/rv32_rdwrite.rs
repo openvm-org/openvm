@@ -27,7 +27,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct JumpUIProcessedInstruction<T> {
+pub struct JumpUiProcessedInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number
     pub opcode: T,
@@ -38,8 +38,8 @@ mod conversions {
     use super::*;
     use crate::arch::DynArray;
 
-    impl<T> From<JumpUIProcessedInstruction<T>> for DynArray<T> {
-        fn from(jui: JumpUIProcessedInstruction<T>) -> Self {
+    impl<T> From<JumpUiProcessedInstruction<T>> for DynArray<T> {
+        fn from(jui: JumpUiProcessedInstruction<T>) -> Self {
             Self(vec![jui.is_valid, jui.opcode, jui.immediate])
         }
     }
@@ -104,7 +104,7 @@ pub struct Rv32RdWriteWriteRecord<F: Field> {
 }
 
 type Rv32RdWriteAdapterInterface<T> =
-    BasicAdapterInterface<T, JumpUIProcessedInstruction<T>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
+    BasicAdapterInterface<T, JumpUiProcessedInstruction<T>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]

@@ -20,7 +20,7 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::{
-        JumpUIProcessedInstruction, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
+        JumpUiProcessedInstruction, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
         RV_J_TYPE_IMM_BITS,
     },
     system::program::Instruction,
@@ -57,7 +57,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 0]; 0]>,
     I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
-    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -124,7 +124,7 @@ where
             to_pc: Some(to_pc),
             reads: [].into(),
             writes: [rd.map(|x| x.into())].into(),
-            instruction: JumpUIProcessedInstruction {
+            instruction: JumpUiProcessedInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 immediate: imm.into(),

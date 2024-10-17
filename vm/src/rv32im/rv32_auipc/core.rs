@@ -19,7 +19,7 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
         VmCoreChip,
     },
-    rv32im::adapters::{JumpUIProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
+    rv32im::adapters::{JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
     system::program::Instruction,
 };
 
@@ -60,7 +60,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 0]; 0]>,
     I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
-    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -123,7 +123,7 @@ where
             to_pc: None,
             reads: [].into(),
             writes: [rd_data.map(|x| x.into())].into(),
-            instruction: JumpUIProcessedInstruction {
+            instruction: JumpUiProcessedInstruction {
                 is_valid: is_valid.into(),
                 opcode: expected_opcode.into(),
                 immediate: imm,
