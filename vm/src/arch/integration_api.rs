@@ -660,11 +660,12 @@ mod conversions {
         }
     }
 
-    impl<T: Clone> From<DynArray<T>> for MinimalInstruction<T> {
+    impl<T> From<DynArray<T>> for MinimalInstruction<T> {
         fn from(m: DynArray<T>) -> Self {
+            let mut m = m.0.into_iter();
             MinimalInstruction {
-                is_valid: m.0[0].clone(),
-                opcode: m.0[1].clone(),
+                is_valid: m.next().unwrap(),
+                opcode: m.next().unwrap(),
             }
         }
     }
@@ -722,6 +723,54 @@ mod conversions {
                 BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         ) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.into(),
+            }
+        }
+    }
+
+    // AdapterAirContext: DynInterface -> BasicInterface
+    impl<
+            T,
+            PI,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
+        for AdapterAirContext<
+            T,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    where
+        PI: From<DynArray<T>>,
+    {
+        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: DynInterface -> BasicInterface
+    impl<
+            T,
+            PI,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
+        for AdapterRuntimeContext<
+            T,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
             AdapterRuntimeContext {
                 to_pc: ctx.to_pc,
                 writes: ctx.writes.into(),

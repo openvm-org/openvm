@@ -479,4 +479,48 @@ mod conversions {
             }
         }
     }
+
+    // AdapterAirContext: DynInterface -> Rv32VecHeapAdapterInterface
+    impl<
+            T,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
+        for AdapterAirContext<
+            T,
+            Rv32VecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: DynInterface -> Rv32VecHeapAdapterInterface
+    impl<
+            T,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
+        for AdapterRuntimeContext<
+            T,
+            Rv32VecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.into(),
+            }
+        }
+    }
 }
