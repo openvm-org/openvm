@@ -16,10 +16,10 @@ use crate::{
             Rv32AuipcOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
-    rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
+    rv32im::adapters::{JumpUIProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
     system::program::Instruction,
 };
 

@@ -22,8 +22,8 @@ use crate::{
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            Rv32RdWriteAdapter, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
-            RV_IS_TYPE_IMM_BITS,
+            Rv32CondRdWriteAdapter, Rv32CondRdWriteAdapterCols, PC_BITS, RV32_CELL_BITS,
+            RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
         },
         rv32_jal_lui::Rv32JalLuiCols,
     },
@@ -49,6 +49,7 @@ fn set_and_execute(
     };
 
     let a = rng.gen_range(1..32) << 2;
+    let need_write = a != 0 || opcode == LUI;
 
     tester.execute_with_pc(
         chip,
@@ -59,7 +60,7 @@ fn set_and_execute(
             imm as isize,
             1,
             0,
-            (a != 0) as isize,
+            need_write as isize,
             0,
         ),
         initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
@@ -83,7 +84,7 @@ fn set_and_execute(
         .as_canonical_u32();
 
     let (next_pc, rd_data) = solve_jal_lui(opcode, initial_pc, imm);
-    let rd_data = if a == 0 { [0; 4] } else { rd_data };
+    let rd_data = if need_write { rd_data } else { [0; 4] };
 
     assert_eq!(next_pc, final_pc);
     assert_eq!(rd_data.map(F::from_canonical_u32), tester.read::<4>(1, a));
@@ -102,7 +103,7 @@ fn rand_jal_lui_test() {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapter::<F>::new(
+    let adapter = Rv32CondRdWriteAdapter::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -136,13 +137,14 @@ fn run_negative_jal_lui_test(
     imm: Option<i32>,
     is_jal: Option<bool>,
     is_lui: Option<bool>,
+    need_write: Option<bool>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapter::<F>::new(
+    let adapter = Rv32CondRdWriteAdapter::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -166,8 +168,9 @@ fn run_negative_jal_lui_test(
     {
         let mut trace_row = jal_lui_trace.row_slice(0).to_vec();
 
-        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
 
+        let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
         let core_cols: &mut Rv32JalLuiCols<F> = core_row.borrow_mut();
 
         if let Some(data) = rd_data {
@@ -186,6 +189,10 @@ fn run_negative_jal_lui_test(
         }
         if let Some(is_lui) = is_lui {
             core_cols.is_lui = F::from_bool(is_lui);
+        }
+
+        if let Some(need_write) = need_write {
+            adapter_cols.need_write = F::from_bool(need_write);
         }
 
         *jal_lui_trace = RowMajorMatrix::new(trace_row, jal_lui_trace_width);
@@ -215,6 +222,7 @@ fn opcode_flag_negative_test() {
         None,
         Some(false),
         Some(true),
+        None,
         VerificationError::OodEvaluationMismatch,
     );
     run_negative_jal_lui_test(
@@ -223,6 +231,7 @@ fn opcode_flag_negative_test() {
         None,
         None,
         None,
+        Some(false),
         Some(false),
         Some(false),
         VerificationError::NonZeroCumulativeSum,
@@ -235,6 +244,7 @@ fn opcode_flag_negative_test() {
         None,
         Some(true),
         Some(false),
+        None,
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -249,6 +259,7 @@ fn overflow_negative_tests() {
         None,
         None,
         None,
+        None,
         VerificationError::OodEvaluationMismatch,
     );
     run_negative_jal_lui_test(
@@ -256,6 +267,7 @@ fn overflow_negative_tests() {
         None,
         None,
         Some([LIMB_MAX, LIMB_MAX, LIMB_MAX, LIMB_MAX]),
+        None,
         None,
         None,
         None,
@@ -269,6 +281,7 @@ fn overflow_negative_tests() {
         None,
         None,
         None,
+        None,
         VerificationError::OodEvaluationMismatch,
     );
     run_negative_jal_lui_test(
@@ -277,6 +290,7 @@ fn overflow_negative_tests() {
         None,
         None,
         Some(-1),
+        None,
         None,
         None,
         VerificationError::OodEvaluationMismatch,
@@ -289,6 +303,7 @@ fn overflow_negative_tests() {
         Some(-28),
         None,
         None,
+        None,
         VerificationError::OodEvaluationMismatch,
     );
     run_negative_jal_lui_test(
@@ -296,6 +311,7 @@ fn overflow_negative_tests() {
         None,
         Some(251),
         Some([F::neg_one().as_canonical_u32(), 1, 0, 0]),
+        None,
         None,
         None,
         None,
@@ -314,7 +330,7 @@ fn execute_roundtrip_sanity_test() {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapter::<F>::new(
+    let adapter = Rv32CondRdWriteAdapter::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
