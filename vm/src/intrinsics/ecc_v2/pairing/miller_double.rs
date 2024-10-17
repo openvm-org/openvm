@@ -1,16 +1,16 @@
-use std::{cell::RefCell, marker::PhantomData, rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerChip,
 };
 use afs_stark_backend::rap::BaseAirWithPublicValues;
 use ax_ecc_primitives::{
-    field_expression::{ExprBuilder, FieldExpr, FieldVariableConfig},
+    field_expression::{ExprBuilder, FieldExpr},
     field_extension::Fp2,
 };
 use num_bigint_dig::BigUint;
 use p3_air::{AirBuilder, BaseAir};
-use p3_field::PrimeField32;
+use p3_field::{Field, PrimeField32};
 
 use super::FIELD_ELEMENT_BITS;
 use crate::{
@@ -22,34 +22,39 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct MillerDoubleAir<C: FieldVariableConfig> {
+pub struct MillerDoubleAir {
     pub expr: FieldExpr,
-    pub _marker: PhantomData<C>,
 }
 
-impl<C: FieldVariableConfig> MillerDoubleAir<C> {
-    pub fn new(modulus: BigUint, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
-        let limb_size = C::canonical_limb_bits();
-        let num_limbs = C::num_limbs_per_field_element();
-        assert!(modulus.bits() <= num_limbs * limb_size);
+impl MillerDoubleAir {
+    pub fn new(
+        modulus: BigUint,
+        num_limbs: usize,
+        limb_bits: usize,
+        range_checker: Arc<VariableRangeCheckerChip>,
+        offset: usize,
+        max_limb_bits: usize,
+    ) -> Self {
+        assert!(modulus.bits() <= num_limbs * limb_bits);
         let bus = range_checker.bus();
         let subair = CheckCarryModToZeroSubAir::new(
             modulus.clone(),
-            limb_size,
+            limb_bits,
             bus.index,
             bus.range_max_bits,
             FIELD_ELEMENT_BITS,
         );
         let builder = ExprBuilder::new(
             modulus,
-            limb_size,
+            limb_bits,
             num_limbs,
             range_checker.range_max_bits(),
+            max_limb_bits,
         );
         let builder = Rc::new(RefCell::new(builder));
 
-        let x = Fp2::<C>::new(builder.clone());
-        let y = Fp2::<C>::new(builder.clone());
+        let x = Fp2::new(builder.clone());
+        let y = Fp2::new(builder.clone());
         // TODO:
         // λ = (3x^2) / (2y)
         // x_2S = λ^2 - 2x
@@ -62,22 +67,19 @@ impl<C: FieldVariableConfig> MillerDoubleAir<C> {
             range_bus: bus.index,
             range_max_bits: bus.range_max_bits,
         };
-        Self {
-            expr,
-            _marker: PhantomData,
-        }
+        Self { expr }
     }
 }
 
-impl<F, C: FieldVariableConfig> BaseAir<F> for MillerDoubleAir<C> {
+impl<F: Field> BaseAir<F> for MillerDoubleAir {
     fn width(&self) -> usize {
         1 // TODO
     }
 }
 
-impl<F, C: FieldVariableConfig> BaseAirWithPublicValues<F> for MillerDoubleAir<C> {}
+impl<F: Field> BaseAirWithPublicValues<F> for MillerDoubleAir {}
 
-impl<AB: AirBuilder, I, C: FieldVariableConfig> VmCoreAir<AB, I> for MillerDoubleAir<C>
+impl<AB: AirBuilder, I> VmCoreAir<AB, I> for MillerDoubleAir
 where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<Vec<AB::Expr>>,
@@ -94,24 +96,24 @@ where
     }
 }
 
-pub struct MillerDoubleChip<C: FieldVariableConfig> {
-    pub air: MillerDoubleAir<C>,
+pub struct MillerDoubleChip {
+    pub air: MillerDoubleAir,
 }
 
-impl<F: PrimeField32, I, C: FieldVariableConfig> VmCoreChip<F, I> for MillerDoubleChip<C>
+impl<F: PrimeField32, I> VmCoreChip<F, I> for MillerDoubleChip
 where
     I: VmAdapterInterface<F>,
     I::Reads: Into<Vec<F>>,
     I::Writes: From<Vec<F>>,
 {
     type Record = ();
-    type Air = MillerDoubleAir<C>;
+    type Air = MillerDoubleAir;
 
     fn execute_instruction(
         &self,
         _instruction: &Instruction<F>,
         _from_pc: u32,
-        reads: I::Reads,
+        _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         // Input: EcPoint<Fp2>, so total 4 field elements.
 
