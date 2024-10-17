@@ -30,6 +30,7 @@ pub struct Rv32JalLuiCols<T> {
     pub rd_data: [T; RV32_REGISTER_NUM_LANES],
     pub is_jal: T,
     pub is_lui: T,
+    pub need_write: T,
     pub xor_res: T,
 }
 
@@ -68,6 +69,7 @@ where
             rd_data: rd,
             is_jal,
             is_lui,
+            need_write,
             xor_res,
         } = *cols;
 
@@ -125,6 +127,7 @@ where
                 is_valid,
                 opcode: expected_opcode,
                 immediate: imm.into(),
+                need_write: need_write.into(),
             }
             .into(),
         }
@@ -137,6 +140,7 @@ pub struct Rv32JalLuiCoreRecord<F: Field> {
     pub imm: F,
     pub is_jal: bool,
     pub is_lui: bool,
+    pub need_write: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -209,6 +213,7 @@ where
                 imm,
                 is_jal: local_opcode_index == JAL,
                 is_lui: local_opcode_index == LUI,
+                need_write: instruction.op_f != F::zero(),
             },
         ))
     }
@@ -226,6 +231,7 @@ where
         core_cols.imm = record.imm;
         core_cols.is_jal = F::from_bool(record.is_jal);
         core_cols.is_lui = F::from_bool(record.is_lui);
+        core_cols.need_write = F::from_bool(record.need_write);
         let x = core_cols.rd_data[1].as_canonical_u32();
         let y = core_cols.rd_data[2].as_canonical_u32();
         core_cols.xor_res = F::from_canonical_u32(x ^ y);

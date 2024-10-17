@@ -368,6 +368,7 @@ pub struct JumpUIProcessedInstruction<T> {
     /// Absolute opcode number
     pub opcode: T,
     pub immediate: T,
+    pub need_write: T, // we don't want to write to x0
 }
 
 /// The most common adapter interface.

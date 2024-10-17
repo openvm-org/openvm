@@ -127,6 +127,7 @@ where
                 is_valid: is_valid.into(),
                 opcode: expected_opcode.into(),
                 immediate: imm,
+                need_write: AB::Expr::one(),
             }
             .into(),
         }
