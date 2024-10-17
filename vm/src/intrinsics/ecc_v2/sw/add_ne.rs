@@ -28,7 +28,7 @@ pub struct SwEcAddNeCoreAir {
 
 impl SwEcAddNeCoreAir {
     pub fn new(
-        modulus: BigUint,
+        modulus: BigUint, // The coordinate field.
         num_limbs: usize,
         limb_bits: usize,
         max_limb_bits: usize,
