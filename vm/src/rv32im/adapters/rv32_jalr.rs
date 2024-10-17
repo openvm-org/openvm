@@ -1,33 +1,61 @@
-use std::{marker::PhantomData, mem::size_of};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+};
 
+use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, BaseAir};
-use p3_field::{Field, PrimeField32};
+use p3_air::BaseAir;
+use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ExecutionState, Result, VmAdapterAir,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
+        ExecutionBus, ExecutionState, JumpUIProcessedInstruction, Result, VmAdapterAir,
         VmAdapterChip, VmAdapterInterface,
     },
     system::{
-        memory::{MemoryController, MemoryReadRecord, MemoryWriteRecord},
-        program::Instruction,
+        memory::{
+            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
+            MemoryReadRecord, MemoryWriteRecord,
+        },
+        program::{bridge::ProgramBus, Instruction},
     },
 };
 
+type Rv32JalrAdapterInterface<T> = BasicAdapterInterface<
+    T,
+    JumpUIProcessedInstruction<T>,
+    1,
+    1,
+    RV32_REGISTER_NUM_LANES,
+    RV32_REGISTER_NUM_LANES,
+>;
+
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Rv32JalrAdapter<F: Field> {
-    _marker: PhantomData<F>,
     pub air: Rv32JalrAdapterAir,
+    aux_cols_factory: MemoryAuxColsFactory<F>,
 }
 
 impl<F: PrimeField32> Rv32JalrAdapter<F> {
-    pub fn new() -> Self {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory_controller: MemoryControllerRef<F>,
+    ) -> Self {
+        let memory_controller = RefCell::borrow(&memory_controller);
+        let memory_bridge = memory_controller.memory_bridge();
+        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
-            _marker: PhantomData,
-            air: Rv32JalrAdapterAir {},
+            air: Rv32JalrAdapterAir {
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
+            },
+            aux_cols_factory,
         }
     }
 }
@@ -38,45 +66,29 @@ pub struct Rv32JalrReadRecord<F: Field> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32JalrWriteRecord<F: Field> {
+    pub from_state: ExecutionState<u32>,
     pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Rv32JalrProcessedInstruction<T> {
-    pub _marker: PhantomData<T>,
-}
-
-pub struct Rv32JalrAdapterInterface<T>(PhantomData<T>);
-impl<T> VmAdapterInterface<T> for Rv32JalrAdapterInterface<T> {
-    type Reads = [T; RV32_REGISTER_NUM_LANES];
-    type Writes = [T; RV32_REGISTER_NUM_LANES];
-    type ProcessedInstruction = Rv32JalrProcessedInstruction<T>;
-}
-
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv32JalrAdapterCols<T> {
-    pub _marker: PhantomData<T>,
+    pub from_state: ExecutionState<T>,
+    pub rs1_ptr: T,
+    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub rd_ptr: T,
+    pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
 }
 
-impl<T> Rv32JalrAdapterCols<T> {
-    pub fn width() -> usize {
-        size_of::<Rv32JalrAdapterCols<u8>>()
-    }
+#[derive(Clone, Copy, Debug, derive_new::new)]
+pub struct Rv32JalrAdapterAir {
+    pub(super) memory_bridge: MemoryBridge,
+    pub(super) execution_bridge: ExecutionBridge,
 }
-
-#[derive(Clone, Copy, Debug, Default, derive_new::new)]
-pub struct Rv32JalrAdapterAir {}
 
 impl<F: Field> BaseAir<F> for Rv32JalrAdapterAir {
     fn width(&self) -> usize {
-        size_of::<Rv32JalrAdapterCols<u8>>()
-    }
-}
-
-impl<AB: InteractionBuilder> Air<AB> for Rv32JalrAdapterAir {
-    fn eval(&self, _builder: &mut AB) {
-        todo!();
+        Rv32JalrAdapterCols::<F>::width()
     }
 }
 
@@ -85,15 +97,64 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
 
     fn eval(
         &self,
-        _builder: &mut AB,
-        _local: &[AB::Var],
-        _ctx: AdapterAirContext<AB::Expr, Self::Interface>,
+        builder: &mut AB,
+        local: &[AB::Var],
+        ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        todo!()
+        let local_cols: &Rv32JalrAdapterCols<AB::Var> = local.borrow();
+
+        let timestamp: AB::Var = local_cols.from_state.timestamp;
+        let mut timestamp_delta: usize = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
+        };
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(AB::Expr::one(), local_cols.rs1_ptr),
+                ctx.reads[0].clone(),
+                timestamp_pp(),
+                &local_cols.rs1_aux_cols,
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(AB::Expr::one(), local_cols.rd_ptr),
+                ctx.writes[0].clone(),
+                timestamp_pp(),
+                &local_cols.rd_aux_cols,
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+
+        let to_pc = ctx
+            .to_pc
+            .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(4));
+
+        self.execution_bridge
+            .execute(
+                ctx.instruction.opcode,
+                [
+                    local_cols.rd_ptr.into(),
+                    local_cols.rs1_ptr.into(),
+                    ctx.instruction.immediate,
+                    AB::Expr::one(),
+                    AB::Expr::zero(),
+                ],
+                local_cols.from_state,
+                ExecutionState {
+                    pc: to_pc,
+                    timestamp: local_cols.from_state.timestamp
+                        + AB::F::from_canonical_usize(timestamp_delta),
+                },
+            )
+            .eval(builder, ctx.instruction.is_valid);
     }
 
-    fn get_from_pc(&self, _local: &[AB::Var]) -> AB::Var {
-        todo!()
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+        let cols: &Rv32JalrAdapterCols<_> = local.borrow();
+        cols.from_state.pc
     }
 }
 
@@ -116,7 +177,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
 
         let rs1 = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
 
-        Ok((rs1.data, Rv32JalrReadRecord { rs1 }))
+        Ok(([rs1.data], Rv32JalrReadRecord { rs1 }))
     }
 
     fn postprocess(
@@ -128,24 +189,29 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { op_a: a, d, .. } = *instruction;
-        let rd = memory.write(d, a, output.writes);
+        let rd = memory.write(d, a, output.writes[0]);
 
         Ok((
             ExecutionState {
                 pc: output.to_pc.unwrap_or(from_state.pc + 4),
                 timestamp: memory.timestamp(),
             },
-            Self::WriteRecord { rd },
+            Self::WriteRecord { from_state, rd },
         ))
     }
 
     fn generate_trace_row(
         &self,
-        _row_slice: &mut [F],
-        _read_record: Self::ReadRecord,
-        _write_record: Self::WriteRecord,
+        row_slice: &mut [F],
+        read_record: Self::ReadRecord,
+        write_record: Self::WriteRecord,
     ) {
-        todo!();
+        let adapter_cols: &mut Rv32JalrAdapterCols<_> = row_slice.borrow_mut();
+        adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
+        adapter_cols.rs1_ptr = read_record.rs1.pointer;
+        adapter_cols.rs1_aux_cols = self.aux_cols_factory.make_read_aux_cols(read_record.rs1);
+        adapter_cols.rd_ptr = write_record.rd.pointer;
+        adapter_cols.rd_aux_cols = self.aux_cols_factory.make_write_aux_cols(write_record.rd);
     }
 
     fn air(&self) -> &Self::Air {

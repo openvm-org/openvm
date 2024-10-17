@@ -446,8 +446,8 @@ impl VmConfig {
                 }
                 ExecutorName::JalrRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalrChip::new(
-                        Rv32JalrAdapter::new(),
-                        Rv32JalrCoreChip::new(offset),
+                        Rv32JalrAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32JalrCoreChip::new(byte_xor_chip.clone(), range_checker.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
