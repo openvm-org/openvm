@@ -12,6 +12,9 @@ fn i12_to_u24(imm: i32) -> u32 {
 
 /// Create a new [`Instruction`] from an R-type instruction.
 pub fn from_r_type<F: PrimeField32>(opcode: usize, dec_insn: &RType) -> Instruction<F> {
+    if dec_insn.rd == 0 {
+        return nop();
+    }
     Instruction::new(
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
@@ -27,6 +30,9 @@ pub fn from_r_type<F: PrimeField32>(opcode: usize, dec_insn: &RType) -> Instruct
 
 /// Create a new [`Instruction`] from an I-type instruction. Should only be used for ALU instructions because `imm` is transpiled in a special way.
 pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
+    if dec_insn.rd == 0 {
+        return nop();
+    }
     Instruction::new(
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
@@ -42,6 +48,9 @@ pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruct
 
 /// Create a new [`Instruction`] from a load operation
 pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
+    if dec_insn.rd == 0 {
+        return nop();
+    }
     Instruction::new(
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
@@ -58,6 +67,9 @@ pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instructio
 /// Create a new [`Instruction`] from an I-type instruction with a shamt.
 /// It seems that shamt can only occur in SLLI, SRLI, SRAI.
 pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) -> Instruction<F> {
+    if dec_insn.rd == 0 {
+        return nop();
+    }
     Instruction::new(
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
@@ -112,7 +124,7 @@ pub fn from_j_type<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruct
         isize_to_field(dec_insn.imm as isize),
         F::one(), // rd is a register
         F::zero(),
-        F::zero(),
+        F::from_bool(dec_insn.rd != 0), // we may need to use this flag in the operation
         F::zero(),
         String::new(),
     )
@@ -120,6 +132,9 @@ pub fn from_j_type<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruct
 
 /// Create a new [`Instruction`] from a U-type instruction.
 pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruction<F> {
+    if dec_insn.rd == 0 {
+        return nop();
+    }
     Instruction::new(
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
@@ -141,78 +156,16 @@ pub fn unimp<F: PrimeField32>() -> Instruction<F> {
     }
 }
 
+pub fn nop<F: PrimeField32>() -> Instruction<F> {
+    Instruction {
+        opcode: CoreOpcode::NOP as usize,
+        ..Default::default()
+    }
+}
+
 pub fn terminate<F: PrimeField32>() -> Instruction<F> {
     Instruction {
         opcode: CoreOpcode::TERMINATE as usize,
         ..Default::default()
     }
 }
-
-// /// Returns if the [`Instruction`] is an R-type instruction.
-// #[inline]
-// pub const fn is_r_type(instruction: &Instruction<u32>) -> bool {
-//     instruction.e == 0 // TODO: 0 -> REGISTER_AS or smth?
-// }
-
-// /// Returns whether the [`Instruction`] is an I-type instruction.
-// #[inline]
-// pub const fn is_i_type(instruction: &Instruction<u32>) -> bool {
-//     instruction.e == 1 // TODO: 0 -> IMMEDIATE_AS or smth?
-// }
-
-// /// Decode the [`Instruction`] in the R-type format.
-// #[inline]
-// pub fn r_type(instruction: &Instruction<u32>) -> (Register, Register, Register) {
-//     (
-//         Register::from_usize(instruction.op_a),
-//         Register::from_usize(self.op_b),
-//         Register::from_usize(self.op_c),
-//     )
-// }
-
-// /// Decode the [`Instruction`] in the I-type format.
-// #[inline]
-// #[must_use]
-// pub fn i_type(&self) -> (Register, Register, u32) {
-//     (
-//         Register::from_usize(self.op_a),
-//         Register::from_usize(self.op_b),
-//         self.op_c,
-//     )
-// }
-
-// /// Decode the [`Instruction`] in the S-type format.
-// #[inline]
-// #[must_use]
-// pub fn s_type(&self) -> (Register, Register, u32) {
-//     (
-//         Register::from_usize(self.op_a),
-//         Register::from_usize(self.op_b),
-//         self.op_c,
-//     )
-// }
-
-// /// Decode the [`Instruction`] in the B-type format.
-// #[inline]
-// #[must_use]
-// pub fn b_type(&self) -> (Register, Register, u32) {
-//     (
-//         Register::from_usize(self.op_a),
-//         Register::from_usize(self.op_b),
-//         self.op_c,
-//     )
-// }
-
-// /// Decode the [`Instruction`] in the J-type format.
-// #[inline]
-// #[must_use]
-// pub fn j_type(&self) -> (Register, u32) {
-//     (Register::from_usize(self.op_a), self.op_b)
-// }
-
-// /// Decode the [`Instruction`] in the U-type format.
-// #[inline]
-// #[must_use]
-// pub fn u_type(&self) -> (Register, u32) {
-//     (Register::from_usize(self.op_a), self.op_b)
-// }

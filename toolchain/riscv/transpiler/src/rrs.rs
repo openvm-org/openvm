@@ -168,7 +168,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             isize_to_field(dec_insn.imm as isize),
             F::one(),
             F::zero(),
-            F::zero(),
+            F::from_bool(dec_insn.rd != 0),
             F::zero(),
             String::new(),
         )
@@ -179,6 +179,9 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_auipc(&mut self, dec_insn: UType) -> Self::InstructionResult {
+        if dec_insn.rd == 0 {
+            return nop();
+        }
         Instruction::new(
             Rv32AuipcOpcode::AUIPC.with_default_offset(),
             F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
