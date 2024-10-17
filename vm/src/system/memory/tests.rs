@@ -265,6 +265,7 @@ fn test_memory_controller_persistent() {
     let merkle_bus = MemoryMerkleBus(20);
     let memory_config = MemoryConfig {
         persistence_type: PersistenceType::Persistent,
+        addr_space_max_bits: 1,
         ..Default::default()
     };
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);

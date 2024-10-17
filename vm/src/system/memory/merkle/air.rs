@@ -78,14 +78,14 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
             .when_transition()
             .when_ne(
                 local.parent_height,
-                AB::F::from_canonical_usize(self.memory_dimensions.address_height + 1),
+                AB::F::from_canonical_usize(self.memory_dimensions.address_height + 2),
             )
             .assert_eq(local.height_section, next.height_section);
         builder
             .when_transition()
             .when_ne(
                 next.parent_height,
-                AB::F::from_canonical_usize(self.memory_dimensions.address_height),
+                AB::F::from_canonical_usize(self.memory_dimensions.address_height + 1),
             )
             .assert_eq(local.height_section, next.height_section);
         // two adjacent rows with `is_root` = 1 should have

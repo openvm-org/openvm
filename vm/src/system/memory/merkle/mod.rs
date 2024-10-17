@@ -18,7 +18,7 @@ mod tests;
 #[derive(Clone, Debug)]
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
-    touched_nodes: HashSet<(usize, usize, usize)>,
+    touched_nodes: HashSet<(usize, u64, usize)>,
     num_touched_nonleaves: usize,
     _marker: PhantomData<F>,
 }
@@ -40,7 +40,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         }
     }
 
-    fn touch_node(&mut self, height: usize, as_label: usize, address_label: usize) {
+    fn touch_node(&mut self, height: usize, as_label: u64, address_label: usize) {
         if self.touched_nodes.insert((height, as_label, address_label)) {
             assert_ne!(height, self.air.memory_dimensions.overall_height());
             if height != 0 {
@@ -51,11 +51,16 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 
     pub fn touch_address(&mut self, address_space: F, address: F) {
+        let as_label = self.air.memory_dimensions.as_to_as_label(address_space);
         self.touch_node(
             0,
-            ((address_space.as_canonical_u32() as usize) - self.air.memory_dimensions.as_offset)
-                << self.air.memory_dimensions.address_height,
-            (address.as_canonical_u32() as usize) / CHUNK,
+            as_label,
+            ((address.as_canonical_u32() as usize) / CHUNK) * 2,
+        );
+        self.touch_node(
+            0,
+            as_label,
+            ((address.as_canonical_u32() as usize) / CHUNK) * 2 + 1,
         );
     }
 

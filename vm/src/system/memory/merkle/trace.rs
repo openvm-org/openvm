@@ -62,7 +62,7 @@ fn unused_row<const CHUNK: usize, F: PrimeField32>() -> MemoryMerkleCols<CHUNK, 
 struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     memory_dimensions: MemoryDimensions,
     final_memory: &'a Equipartition<F, CHUNK>,
-    touched_nodes: &'a HashSet<(usize, usize, usize)>,
+    touched_nodes: &'a HashSet<(usize, u64, usize)>,
     trace_rows: &'a mut Vec<MemoryMerkleCols<CHUNK, F>>,
 }
 
@@ -71,20 +71,21 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
         &mut self,
         height: usize,
         initial_node: &MemoryNode<CHUNK, F>,
-        as_label: usize,
+        as_label: u64,
         address_label: usize,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
-            let address_space = F::from_canonical_usize(
-                (as_label >> self.memory_dimensions.address_height)
-                    + self.memory_dimensions.as_offset,
-            );
-            let leaf_values = *self
-                .final_memory
-                .get(&(address_space, address_label))
-                .unwrap_or(&[F::zero(); CHUNK]);
-            MemoryNode::new_leaf(leaf_values)
+            if address_label & 1 == 0 {
+                let address_space = self.memory_dimensions.as_label_to_as(as_label);
+                let leaf_values = *self
+                    .final_memory
+                    .get(&(address_space, address_label >> 1))
+                    .unwrap_or(&[F::zero(); CHUNK]);
+                MemoryNode::new_leaf(leaf_values)
+            } else {
+                MemoryNode::new_leaf([F::zero(); CHUNK])
+            }
         } else if let NonLeaf {
             left: initial_left_node,
             right: initial_right_node,
@@ -112,18 +113,11 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 ))
             };
 
-            let right_as_label = (2 * as_label)
-                + if height > self.memory_dimensions.address_height {
-                    1
-                } else {
-                    0
-                };
-            let right_address_label = (2 * address_label)
-                + if height > self.memory_dimensions.address_height {
-                    0
-                } else {
-                    1
-                };
+            let height_section = (height > self.memory_dimensions.address_height + 1) as usize;
+
+            let right_as_label = (2 * as_label) + height_section as u64;
+            let right_address_label = (2 * address_label) + (1 - height_section);
+
             let right_is_final =
                 !self
                     .touched_nodes
@@ -159,7 +153,7 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
     fn add_trace_row(
         &mut self,
         parent_height: usize,
-        as_label: usize,
+        as_label: u64,
         address_label: usize,
         node: &MemoryNode<CHUNK, F>,
         direction_changes: Option<[bool; 2]>,
@@ -173,10 +167,12 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 } else {
                     F::neg_one()
                 },
-                height_section: F::from_bool(parent_height > self.memory_dimensions.address_height),
+                height_section: F::from_bool(
+                    parent_height > self.memory_dimensions.address_height + 1,
+                ),
                 parent_height: F::from_canonical_usize(parent_height),
                 is_root: F::from_bool(parent_height == self.memory_dimensions.overall_height()),
-                parent_as_label: F::from_canonical_usize(as_label),
+                parent_as_label: F::from_canonical_u64(as_label),
                 parent_address_label: F::from_canonical_usize(address_label),
                 parent_hash: *hash,
                 left_child_hash: left.hash(),

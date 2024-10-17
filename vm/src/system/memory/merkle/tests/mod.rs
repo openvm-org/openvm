@@ -45,7 +45,7 @@ fn test_flatten_fromslice_roundtrip() {
 fn test<const CHUNK: usize>(
     memory_dimensions: MemoryDimensions,
     initial_memory: &Equipartition<BabyBear, CHUNK>,
-    touched_labels: BTreeSet<(BabyBear, usize)>,
+    touched_chunks: BTreeSet<(BabyBear, usize)>,
     final_memory: &Equipartition<BabyBear, CHUNK>,
 ) {
     let MemoryDimensions {
@@ -56,18 +56,18 @@ fn test<const CHUNK: usize>(
     let merkle_bus = MemoryMerkleBus(20);
 
     // checking validity of test data
-    for (&(address_space, label), value) in final_memory {
+    for (&(address_space, chunk_label), value) in final_memory {
         assert!((address_space.as_canonical_u32() as usize) - as_offset < (1 << as_height));
-        assert!(label < (1 << address_height));
-        if initial_memory.get(&(address_space, label)) != Some(value) {
-            assert!(touched_labels.contains(&(address_space, label)));
+        assert!(chunk_label < (1 << address_height));
+        if initial_memory.get(&(address_space, chunk_label)) != Some(value) {
+            assert!(touched_chunks.contains(&(address_space, chunk_label)));
         }
     }
     for key in initial_memory.keys() {
         assert!(final_memory.contains_key(key));
     }
-    for &(address_space, label) in touched_labels.iter() {
-        assert!(final_memory.contains_key(&(address_space, label)));
+    for &(address_space, chunk_label) in touched_chunks.iter() {
+        assert!(final_memory.contains_key(&(address_space, chunk_label)));
     }
 
     let mut hash_test_chip = HashTestChip::new();
@@ -78,11 +78,11 @@ fn test<const CHUNK: usize>(
         MemoryNode::tree_from_memory(memory_dimensions, final_memory, &hash_test_chip);
 
     let mut chip = MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus);
-    for &(address_space, label) in touched_labels.iter() {
+    for &(address_space, chunk_label) in touched_chunks.iter() {
         for i in 0..CHUNK {
             chip.touch_address(
                 address_space,
-                BabyBear::from_canonical_usize(label * CHUNK + i),
+                BabyBear::from_canonical_usize(chunk_label * CHUNK + i),
             );
         }
     }
@@ -98,7 +98,7 @@ fn test<const CHUNK: usize>(
     let mut interaction = |interaction_type: InteractionType,
                            is_compress: bool,
                            height: usize,
-                           as_label: usize,
+                           as_label: u64,
                            address_label: usize,
                            hash: [BabyBear; CHUNK]| {
         let expand_direction = if is_compress {
@@ -113,33 +113,50 @@ fn test<const CHUNK: usize>(
         dummy_interaction_trace_rows.extend([
             expand_direction,
             BabyBear::from_canonical_usize(height),
-            BabyBear::from_canonical_usize(as_label),
+            BabyBear::from_canonical_u64(as_label),
             BabyBear::from_canonical_usize(address_label),
         ]);
         dummy_interaction_trace_rows.extend(hash);
     };
 
-    for (address_space, address_label) in touched_labels {
+    for (address_space, chunk_label) in touched_chunks {
         let initial_values = *initial_memory
-            .get(&(address_space, address_label))
+            .get(&(address_space, chunk_label))
             .unwrap_or(&[BabyBear::zero(); CHUNK]);
-        let as_label = (address_space.as_canonical_u32() as usize - as_offset) << address_height;
+
+        let as_label = memory_dimensions.as_to_as_label(address_space);
         interaction(
             InteractionType::Send,
             false,
             0,
             as_label,
-            address_label,
+            chunk_label * 2,
             initial_values,
         );
-        let final_values = *final_memory.get(&(address_space, address_label)).unwrap();
+        interaction(
+            InteractionType::Send,
+            false,
+            0,
+            as_label,
+            chunk_label * 2 + 1,
+            [BabyBear::zero(); CHUNK],
+        );
+        let final_values = *final_memory.get(&(address_space, chunk_label)).unwrap();
         interaction(
             InteractionType::Send,
             true,
             0,
             as_label,
-            address_label,
+            chunk_label * 2,
             final_values,
+        );
+        interaction(
+            InteractionType::Send,
+            true,
+            0,
+            as_label,
+            chunk_label * 2 + 1,
+            [BabyBear::zero(); CHUNK],
         );
     }
 
@@ -178,13 +195,13 @@ fn random_test<const CHUNK: usize>(
     let mut initial_memory = Equipartition::new();
     let mut final_memory = Equipartition::new();
     let mut seen_labels = HashSet::new();
-    let mut touched_labels = BTreeSet::new();
+    let mut touched_chunks = BTreeSet::new();
 
     while num_initial_addresses != 0 || num_touched_addresses != 0 {
         let address_space = BabyBear::from_canonical_usize((next_usize() & 1) + 1);
-        let label = next_usize() % (1 << height);
+        let chunk_label = next_usize() % (1 << height);
 
-        if seen_labels.insert(label) {
+        if seen_labels.insert(chunk_label) {
             let is_initial = next_usize() & 1 == 0;
             let initial_values =
                 array::from_fn(|_| BabyBear::from_canonical_usize(next_usize() % max_value));
@@ -193,17 +210,17 @@ fn random_test<const CHUNK: usize>(
 
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
-                initial_memory.insert((address_space, label), initial_values);
-                final_memory.insert((address_space, label), initial_values);
+                initial_memory.insert((address_space, chunk_label), initial_values);
+                final_memory.insert((address_space, chunk_label), initial_values);
             }
             if is_touched && num_touched_addresses != 0 {
                 num_touched_addresses -= 1;
-                touched_labels.insert((address_space, label));
+                touched_chunks.insert((address_space, chunk_label));
                 if value_changes || !is_initial {
                     let changed_values = array::from_fn(|_| {
                         BabyBear::from_canonical_usize(next_usize() % max_value)
                     });
-                    final_memory.insert((address_space, label), changed_values);
+                    final_memory.insert((address_space, chunk_label), changed_values);
                 }
             }
         }
@@ -216,7 +233,7 @@ fn random_test<const CHUNK: usize>(
             as_offset: 1,
         },
         &initial_memory,
-        touched_labels,
+        touched_chunks,
         &final_memory,
     );
 }

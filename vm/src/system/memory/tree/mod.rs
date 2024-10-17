@@ -67,16 +67,25 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     }
 
     fn from_memory(
-        memory: &BTreeMap<usize, [F; CHUNK]>,
+        memory: &BTreeMap<u64, [F; CHUNK]>,
         height: usize,
-        from: usize,
+        from: u64,
         hasher: &impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
-        let mut range = memory.range(from..from + (1 << height));
+        let chunk_label = from >> 1;
         if height == 0 {
-            let values = *memory.get(&from).unwrap_or(&[F::zero(); CHUNK]);
-            MemoryNode::new_leaf(values)
-        } else if range.next().is_none() {
+            // if from is even, we are at a leaf memory node; otherwise we are at a padding node
+            if from & 1 == 0 {
+                let values = *memory.get(&chunk_label).unwrap_or(&[F::zero(); CHUNK]);
+                MemoryNode::new_leaf(values)
+            } else {
+                MemoryNode::new_leaf([F::zero(); CHUNK])
+            }
+        } else if memory
+            .range(chunk_label..chunk_label + (1 << (height - 1)))
+            .next()
+            .is_none()
+        {
             MemoryNode::construct_all_zeros(height, hasher)
         } else {
             let midpoint = from + (1 << (height - 1));
@@ -91,25 +100,18 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     }
 
     pub fn tree_from_memory(
-        memory_dimensions: MemoryDimensions,
+        dims: MemoryDimensions,
         memory: &Equipartition<F, CHUNK>,
         hasher: &impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
-        // Construct a BTreeMap that includes the address space in the label calculation,
+        // Construct a BTreeMap that includes the address space in the chunk label calculation,
         // representing the entire memory tree.
         let mut memory_modified = BTreeMap::new();
-        for (&(address_space, address_label), &values) in memory {
-            let label = (((address_space.as_canonical_u32() as usize)
-                - memory_dimensions.as_offset)
-                << memory_dimensions.address_height)
-                + address_label;
-            memory_modified.insert(label, values);
+        for (&(address_space, chunk_label), &values) in memory {
+            let first_chunk_label =
+                (address_space.as_canonical_u64() - dims.as_offset as u64) << dims.address_height;
+            memory_modified.insert(first_chunk_label + chunk_label as u64, values);
         }
-        Self::from_memory(
-            &memory_modified,
-            memory_dimensions.overall_height(),
-            0,
-            hasher,
-        )
+        Self::from_memory(&memory_modified, dims.overall_height(), 0, hasher)
     }
 }
