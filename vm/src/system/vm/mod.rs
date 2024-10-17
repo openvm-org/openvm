@@ -17,6 +17,7 @@ use crate::{
     },
 };
 
+pub mod chip_set;
 pub mod config;
 pub mod connector;
 pub mod cycle_tracker;

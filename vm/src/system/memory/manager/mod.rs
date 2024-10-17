@@ -215,7 +215,7 @@ impl<F: PrimeField32> MemoryController<F> {
     ) -> Self {
         Self {
             memory_bus,
-            mem_config: mem_config.clone(),
+            mem_config,
             interface_chip: MemoryInterface::Volatile {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
@@ -254,7 +254,7 @@ impl<F: PrimeField32> MemoryController<F> {
         };
         Self {
             memory_bus,
-            mem_config: mem_config.clone(),
+            mem_config,
             interface_chip,
             memory: Memory::new(&initial_memory, mem_config.pointer_max_bits),
             adapter_records: HashMap::new(),
@@ -759,7 +759,7 @@ mod tests {
 
         let mut memory_controller = MemoryController::with_volatile_memory(
             memory_bus,
-            memory_config.clone(),
+            memory_config,
             range_checker.clone(),
         );
 
