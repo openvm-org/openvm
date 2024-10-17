@@ -95,7 +95,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
                 .chain(local.values.map(Into::into))
                 .chain(iter::repeat(AB::Expr::zero()).take(CHUNK))
                 .chain(local.hash.map(Into::into)),
-            AB::Expr::one(),
+            local.expand_direction * local.expand_direction,
         );
 
         self.memory_bus
