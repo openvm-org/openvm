@@ -58,22 +58,8 @@ fn set_and_execute(
             0,
         ),
     );
-    let initial_pc = tester
-        .execution
-        .records
-        .last()
-        .unwrap()
-        .initial_state
-        .pc
-        .as_canonical_u32();
-    let final_pc = tester
-        .execution
-        .records
-        .last()
-        .unwrap()
-        .final_state
-        .pc
-        .as_canonical_u32();
+    let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
+    let final_pc = tester.execution.last_to_pc().as_canonical_u32();
 
     let (next_pc, rd_data) = solve_jalr(opcode, initial_pc, imm, rs1);
     let rd_data = if a == 0 { [0; 4] } else { rd_data };

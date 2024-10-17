@@ -361,6 +361,27 @@ pub struct MinimalInstruction<T> {
     pub opcode: T,
 }
 
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct JumpUIProcessedInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+    pub immediate: T,
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct BranchProcessedInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+    /// Instruction immediate value
+    pub immediate: T,
+    /// Amount to increment PC by (opcode default if branch condition failed)
+    pub pc_inc: T,
+}
+
 /// The most common adapter interface.
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.

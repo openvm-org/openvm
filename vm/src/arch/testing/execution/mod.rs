@@ -40,6 +40,14 @@ impl<F: PrimeField32> ExecutionTester<F> {
         })
     }
 
+    pub fn last_from_pc(&self) -> F {
+        self.records.last().unwrap().initial_state.pc
+    }
+
+    pub fn last_to_pc(&self) -> F {
+        self.records.last().unwrap().final_state.pc
+    }
+
     // for use by CoreChip, needs to be modified to setup memorytester (or just merge them before writing CoreChip)
     /*fn test_execution_with_expected_changes<F: PrimeField64, E: InstructionExecutor<F>>(
         &mut self,

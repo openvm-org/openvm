@@ -1,38 +1,48 @@
-use std::sync::Arc;
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+    sync::Arc,
+};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::xor::{bus::XorBus, lookup::XorLookupChip};
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use p3_air::{Air, BaseAir};
-use p3_field::{Field, PrimeField32};
+use p3_air::{AirBuilder, BaseAir};
+use p3_field::{AbstractField, Field, PrimeField32};
+use strum::IntoEnumIterator;
 
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, BranchProcessedInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct BranchLessThanCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BranchLessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub cmp_result: T,
-    pub next_pc: T,
+    pub imm: T,
 
     pub opcode_blt_flag: T,
     pub opcode_bltu_flag: T,
     pub opcode_bge_flag: T,
     pub opcode_bgeu_flag: T,
 
-    pub x_sign: T,
-    pub y_sign: T,
+    // Most significant limb of a and b respectively as a field element, will be range
+    // checked to be within [-128, 127). Field xor_res is the result of (a_msb_f + 128)
+    // ^ (b_msb_f + 128) if signed and a_msb_f ^ b_msb_f else, used to range check
+    // a_msb_f and b_msb_f.
+    pub a_msb_f: T,
+    pub b_msb_f: T,
+    pub xor_res: T,
 
-    // 1 at the most significant index i such that b[i] != c[i], otherwise 0. If such
-    // an i exists, diff_val = c[i] - b[i]
+    // 1 at the most significant index i such that a[i] != b[i], otherwise 0. If such
+    // an i exists, diff_val = b[i] - a[i].
     pub diff_marker: [T; NUM_LIMBS],
     pub diff_val: T,
 }
@@ -40,24 +50,16 @@ pub struct BranchLessThanCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 #[derive(Copy, Clone, Debug)]
 pub struct BranchLessThanCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: XorBus,
+    offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
     for BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
-        BranchLessThanCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+        BranchLessThanCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
-
-impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
-    for BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>
-{
-    fn eval(&self, _builder: &mut AB) {
-        todo!();
-    }
-}
-
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
     for BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>
 {
@@ -68,22 +70,129 @@ impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
+    I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
+    I::Writes: Default,
+    I::ProcessedInstruction: From<BranchProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
-        _builder: &mut AB,
-        _local: &[AB::Var],
+        builder: &mut AB,
+        local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        todo!()
+        let cols: &BranchLessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
+        let flags = [
+            cols.opcode_blt_flag,
+            cols.opcode_bltu_flag,
+            cols.opcode_bge_flag,
+            cols.opcode_bgeu_flag,
+        ];
+
+        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+            builder.assert_bool(flag);
+            acc + flag.into()
+        });
+        builder.assert_bool(is_valid.clone());
+        builder.assert_bool(cols.cmp_result);
+
+        let lt = cols.opcode_blt_flag + cols.opcode_bltu_flag;
+        let ge = cols.opcode_bge_flag + cols.opcode_bgeu_flag;
+        let signed = cols.opcode_blt_flag + cols.opcode_bge_flag;
+
+        let a = &cols.a;
+        let b = &cols.b;
+        let marker = &cols.diff_marker;
+        let mut prefix_sum = AB::Expr::zero();
+
+        let a_diff = a[NUM_LIMBS - 1] - cols.a_msb_f;
+        let b_diff = b[NUM_LIMBS - 1] - cols.b_msb_f;
+        builder
+            .assert_zero(a_diff.clone() * (AB::Expr::from_canonical_u32(1 << LIMB_BITS) - a_diff));
+        builder
+            .assert_zero(b_diff.clone() * (AB::Expr::from_canonical_u32(1 << LIMB_BITS) - b_diff));
+
+        for i in (0..NUM_LIMBS).rev() {
+            let diff = if i == NUM_LIMBS - 1 {
+                cols.b_msb_f - cols.a_msb_f
+            } else {
+                b[i] - a[i]
+            };
+            prefix_sum += marker[i].into();
+            builder.assert_bool(marker[i]);
+            builder.assert_zero((AB::Expr::one() - prefix_sum.clone()) * diff.clone());
+            builder.when(marker[i]).assert_eq(cols.diff_val, diff);
+        }
+
+        builder.assert_bool(prefix_sum.clone());
+        builder.when(AB::Expr::one() - prefix_sum).assert_zero(
+            cols.cmp_result * lt.clone() + (AB::Expr::one() - cols.cmp_result) * ge.clone(),
+        );
+
+        self.bus
+            .send(
+                cols.a_msb_f + AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)) * signed.clone(),
+                cols.b_msb_f + AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)) * signed.clone(),
+                cols.xor_res,
+            )
+            .eval(builder, is_valid.clone());
+
+        // If a[i] >= b[i], then b[i] - a[i] - 1 is in [-2^LIMB_BITS, 0). Thus b[i] - a[i] - 1 +
+        // 2^LIMB_BITS is in [0, 2^LIMB_BITS).
+        let ge_offset = AB::Expr::from_canonical_u32(1 << LIMB_BITS)
+            * (ge.clone() * cols.cmp_result + lt.clone() * (AB::Expr::one() - cols.cmp_result));
+        self.bus
+            .send(
+                cols.diff_val - AB::Expr::one() + ge_offset.clone(),
+                cols.diff_val - AB::Expr::one() + ge_offset,
+                AB::F::zero(),
+            )
+            .eval(builder, is_valid.clone());
+
+        let expected_opcode = flags
+            .iter()
+            .zip(BranchLessThanOpcode::iter())
+            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
+                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+            })
+            + AB::Expr::from_canonical_usize(self.offset);
+
+        // TODO: update the default increment (i.e. 4) when opcodes are updated
+        let pc_inc = cols.cmp_result * cols.imm
+            + (AB::Expr::one() - cols.cmp_result) * AB::Expr::from_canonical_u8(4);
+
+        AdapterAirContext {
+            to_pc: None,
+            reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
+            writes: Default::default(),
+            instruction: BranchProcessedInstruction {
+                is_valid,
+                opcode: expected_opcode,
+                immediate: cols.imm.into(),
+                pc_inc,
+            }
+            .into(),
+        }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct BranchLessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub opcode: BranchLessThanOpcode,
+    pub a: [T; NUM_LIMBS],
+    pub b: [T; NUM_LIMBS],
+    pub cmp_result: T,
+    pub imm: T,
+    pub a_msb_f: T,
+    pub b_msb_f: T,
+    pub xor_res: T,
+    pub diff_val: T,
+    pub diff_idx: usize,
 }
 
 #[derive(Debug)]
 pub struct BranchLessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
-    offset: usize,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanCoreChip<NUM_LIMBS, LIMB_BITS> {
@@ -91,9 +200,9 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanCoreChip<NUM_
         Self {
             air: BranchLessThanCoreAir {
                 bus: xor_lookup_chip.bus(),
+                offset,
             },
             xor_lookup_chip,
-            offset,
         }
     }
 }
@@ -104,8 +213,7 @@ where
     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
     I::Writes: Default,
 {
-    // TODO: update for trace generation
-    type Record = u32;
+    type Record = BranchLessThanCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
     type Air = BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     #[allow(clippy::type_complexity)]
@@ -118,31 +226,107 @@ where
         let Instruction {
             opcode, op_c: imm, ..
         } = *instruction;
-        let local_opcode_index = BranchLessThanOpcode::from_usize(opcode - self.offset);
+        let blt_opcode = BranchLessThanOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let x = data[0].map(|x| x.as_canonical_u32());
-        let y = data[1].map(|y| y.as_canonical_u32());
-        let (cmp_result, _diff_idx, _x_sign, _y_sign) =
-            solve_cmp::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
+        let a = data[0].map(|x| x.as_canonical_u32());
+        let b = data[1].map(|y| y.as_canonical_u32());
+        let (cmp_result, diff_idx, a_sign, b_sign) =
+            solve_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &a, &b);
+
+        let signed = matches!(
+            blt_opcode,
+            BranchLessThanOpcode::BLT | BranchLessThanOpcode::BGE
+        );
+        let lt_opcode = matches!(
+            blt_opcode,
+            BranchLessThanOpcode::BLT | BranchLessThanOpcode::BLTU
+        );
+
+        // xor_res is the result of (b_msb_f + 128) ^ (c_msb_f + 128) if signed,
+        // b_msb_f ^ c_msb_f if not
+        let (a_msb_f, a_msb_xor) = if a_sign {
+            (
+                -F::from_canonical_u32((1 << LIMB_BITS) - a[NUM_LIMBS - 1]),
+                a[NUM_LIMBS - 1] - (1 << (LIMB_BITS - 1)),
+            )
+        } else {
+            (
+                F::from_canonical_u32(a[NUM_LIMBS - 1]),
+                a[NUM_LIMBS - 1] + ((signed as u32) << (LIMB_BITS - 1)),
+            )
+        };
+        let (b_msb_f, b_msb_xor) = if b_sign {
+            (
+                -F::from_canonical_u32((1 << LIMB_BITS) - b[NUM_LIMBS - 1]),
+                b[NUM_LIMBS - 1] - (1 << (LIMB_BITS - 1)),
+            )
+        } else {
+            (
+                F::from_canonical_u32(b[NUM_LIMBS - 1]),
+                b[NUM_LIMBS - 1] + ((signed as u32) << (LIMB_BITS - 1)),
+            )
+        };
+        let xor_res = self.xor_lookup_chip.request(a_msb_xor, b_msb_xor);
+
+        let diff_val = if diff_idx == (NUM_LIMBS - 1) {
+            b_msb_f - a_msb_f
+        } else {
+            F::from_canonical_u32(b[diff_idx]) - F::from_canonical_u32(a[diff_idx])
+        };
+
+        // TODO: update XorLookupChip to either be BitwiseOperation or range check
+        let ge_offset = if lt_opcode ^ cmp_result {
+            F::from_canonical_u32((1 << LIMB_BITS) - 1)
+        } else {
+            -F::one()
+        };
+        let request_val = (diff_val + ge_offset).as_canonical_u32();
+        self.xor_lookup_chip.request(request_val, request_val);
 
         let output = AdapterRuntimeContext {
             to_pc: cmp_result.then_some((F::from_canonical_u32(from_pc) + imm).as_canonical_u32()),
             writes: Default::default(),
         };
+        let record = BranchLessThanCoreRecord {
+            opcode: blt_opcode,
+            a: data[0],
+            b: data[1],
+            cmp_result: F::from_bool(cmp_result),
+            imm,
+            a_msb_f,
+            b_msb_f,
+            xor_res: F::from_canonical_u32(xor_res),
+            diff_val,
+            diff_idx,
+        };
 
-        // TODO: send XorLookupChip requests
-        // TODO: create Record and return
-
-        Ok((output, 0))
+        Ok((output, record))
     }
 
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        todo!()
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            BranchLessThanOpcode::from_usize(opcode - self.air.offset)
+        )
     }
 
-    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
-        todo!()
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let row_slice: &mut BranchLessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> =
+            row_slice.borrow_mut();
+        row_slice.a = record.a;
+        row_slice.b = record.b;
+        row_slice.cmp_result = record.cmp_result;
+        row_slice.imm = record.imm;
+        row_slice.a_msb_f = record.a_msb_f;
+        row_slice.b_msb_f = record.b_msb_f;
+        row_slice.xor_res = record.xor_res;
+        row_slice.diff_marker = array::from_fn(|i| F::from_bool(i == record.diff_idx));
+        row_slice.diff_val = record.diff_val;
+        row_slice.opcode_blt_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BLT);
+        row_slice.opcode_bltu_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BLTU);
+        row_slice.opcode_bge_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BGE);
+        row_slice.opcode_bgeu_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BGEU);
     }
 
     fn air(&self) -> &Self::Air {

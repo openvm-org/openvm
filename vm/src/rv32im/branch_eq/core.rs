@@ -1,46 +1,47 @@
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+};
+
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use p3_air::{Air, BaseAir};
-use p3_field::{Field, PrimeField32};
+use p3_air::{AirBuilder, BaseAir};
+use p3_field::{AbstractField, Field, PrimeField32};
+use strum::IntoEnumIterator;
 
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, BranchProcessedInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct BranchEqualCols<T, const NUM_LIMBS: usize> {
+pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub cmp_result: T,
-    pub next_pc: T,
+    pub imm: T,
 
     pub opcode_beq_flag: T,
     pub opcode_bne_flag: T,
 
-    pub diff_marker: [T; NUM_LIMBS],
+    pub diff_inv_marker: [T; NUM_LIMBS],
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {}
+pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
+    offset: usize,
+}
 
 impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualCoreAir<NUM_LIMBS> {
     fn width(&self) -> usize {
-        BranchEqualCols::<F, NUM_LIMBS>::width()
+        BranchEqualCoreCols::<F, NUM_LIMBS>::width()
     }
 }
-
-impl<AB: InteractionBuilder, const NUM_LIMBS: usize> Air<AB> for BranchEqualCoreAir<NUM_LIMBS> {
-    fn eval(&self, _builder: &mut AB) {
-        todo!();
-    }
-}
-
 impl<F: Field, const NUM_LIMBS: usize> BaseAirWithPublicValues<F>
     for BranchEqualCoreAir<NUM_LIMBS>
 {
@@ -50,28 +51,90 @@ impl<AB, I, const NUM_LIMBS: usize> VmCoreAir<AB, I> for BranchEqualCoreAir<NUM_
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
+    I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
+    I::Writes: Default,
+    I::ProcessedInstruction: From<BranchProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
-        _builder: &mut AB,
-        _local_core: &[AB::Var],
+        builder: &mut AB,
+        local: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        todo!()
+        let cols: &BranchEqualCoreCols<_, NUM_LIMBS> = local.borrow();
+        let flags = [cols.opcode_beq_flag, cols.opcode_bne_flag];
+
+        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+            builder.assert_bool(flag);
+            acc + flag.into()
+        });
+        builder.assert_bool(is_valid.clone());
+        builder.assert_bool(cols.cmp_result);
+
+        let a = &cols.a;
+        let b = &cols.b;
+        let inv_marker = &cols.diff_inv_marker;
+
+        // For BEQ, inv_marker is filled with 0 except at the lowest index i such that
+        // a[i] != b[i]. If such an i exists inv_marker[i] is the inverse of a[i] - b[i],
+        // meaning sum should be 1.
+        let cmp_eq = cols.cmp_result * cols.opcode_beq_flag
+            + (AB::Expr::one() - cols.cmp_result) * cols.opcode_bne_flag;
+        let mut sum = cmp_eq.clone();
+
+        for i in 0..NUM_LIMBS {
+            sum += (a[i] - b[i]) * inv_marker[i];
+            builder.assert_zero(cmp_eq.clone() * (a[i] - b[i]));
+        }
+        builder.when(cols.opcode_beq_flag).assert_one(sum);
+
+        let expected_opcode = flags
+            .iter()
+            .zip(BranchEqualOpcode::iter())
+            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
+                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+            })
+            + AB::Expr::from_canonical_usize(self.offset);
+
+        // TODO: update the default increment (i.e. 4) when opcodes are updated
+        let pc_inc = cols.cmp_result * cols.imm
+            + (AB::Expr::one() - cols.cmp_result) * AB::Expr::from_canonical_u8(4);
+
+        AdapterAirContext {
+            to_pc: None,
+            reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
+            writes: Default::default(),
+            instruction: BranchProcessedInstruction {
+                is_valid,
+                opcode: expected_opcode,
+                immediate: cols.imm.into(),
+                pc_inc,
+            }
+            .into(),
+        }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct BranchEqualCoreRecord<T, const NUM_LIMBS: usize> {
+    pub opcode: BranchEqualOpcode,
+    pub a: [T; NUM_LIMBS],
+    pub b: [T; NUM_LIMBS],
+    pub cmp_result: T,
+    pub imm: T,
+    pub diff_idx: usize,
+    pub diff_inv_val: T,
 }
 
 #[derive(Debug)]
 pub struct BranchEqualCoreChip<const NUM_LIMBS: usize> {
     pub air: BranchEqualCoreAir<NUM_LIMBS>,
-    offset: usize,
 }
 
 impl<const NUM_LIMBS: usize> BranchEqualCoreChip<NUM_LIMBS> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: BranchEqualCoreAir {},
-            offset,
+            air: BranchEqualCoreAir { offset },
         }
     }
 }
@@ -82,8 +145,7 @@ where
     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
     I::Writes: Default,
 {
-    // TODO: update for trace generation
-    type Record = u32;
+    type Record = BranchEqualCoreRecord<F, NUM_LIMBS>;
     type Air = BranchEqualCoreAir<NUM_LIMBS>;
 
     #[allow(clippy::type_complexity)]
@@ -96,31 +158,53 @@ where
         let Instruction {
             opcode, op_c: imm, ..
         } = *instruction;
-        let local_opcode_index = BranchEqualOpcode::from_usize(opcode - self.offset);
+        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
-        let (cmp_result, _diff_idx, _diff_val) =
-            solve_eq::<F, NUM_LIMBS>(local_opcode_index, &x, &y);
+        let (cmp_result, diff_idx, diff_inv_val) =
+            solve_eq::<F, NUM_LIMBS>(branch_eq_opcode, &x, &y);
 
         let output = AdapterRuntimeContext {
             to_pc: cmp_result.then_some((F::from_canonical_u32(from_pc) + imm).as_canonical_u32()),
             writes: Default::default(),
         };
+        let record = BranchEqualCoreRecord {
+            opcode: branch_eq_opcode,
+            a: data[0],
+            b: data[1],
+            cmp_result: F::from_bool(cmp_result),
+            imm,
+            diff_idx,
+            diff_inv_val,
+        };
 
-        // TODO: send XorLookupChip requests
-        // TODO: create Record and return
-
-        Ok((output, 0))
+        Ok((output, record))
     }
 
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        todo!()
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            BranchEqualOpcode::from_usize(opcode - self.air.offset)
+        )
     }
 
-    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
-        todo!()
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let row_slice: &mut BranchEqualCoreCols<_, NUM_LIMBS> = row_slice.borrow_mut();
+        row_slice.a = record.a;
+        row_slice.b = record.b;
+        row_slice.cmp_result = record.cmp_result;
+        row_slice.imm = record.imm;
+        row_slice.opcode_beq_flag = F::from_bool(record.opcode == BranchEqualOpcode::BEQ);
+        row_slice.opcode_bne_flag = F::from_bool(record.opcode == BranchEqualOpcode::BNE);
+        row_slice.diff_inv_marker = array::from_fn(|i| {
+            if i == record.diff_idx {
+                record.diff_inv_val
+            } else {
+                F::zero()
+            }
+        });
     }
 
     fn air(&self) -> &Self::Air {
