@@ -130,7 +130,9 @@ pub struct FieldExpr {
     pub builder: ExprBuilder,
 
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
-    pub range_checker: Arc<VariableRangeCheckerChip>,
+
+    pub range_bus: usize,
+    pub range_max_bits: usize,
 }
 
 impl Deref for FieldExpr {
@@ -167,7 +169,14 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
     type AuxView = ();
 
     fn eval(&self, builder: &mut AB, io: Vec<AB::Var>, _aux: ()) {
-        let (is_valid, inputs, vars, q_limbs, carry_limbs, flags) = self.load_vars(&io);
+        let FieldExprCols {
+            is_valid,
+            inputs,
+            vars,
+            q_limbs,
+            carry_limbs,
+            flags,
+        } = self.load_vars(&io);
         let inputs = load_overflow::<AB>(inputs, self.limb_bits);
         let vars = load_overflow::<AB>(vars, self.limb_bits);
 
@@ -191,8 +200,8 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             for limb in var.limbs.iter() {
                 range_check(
                     builder,
-                    self.range_checker.bus().index,
-                    self.range_checker.range_max_bits(),
+                    self.range_bus,
+                    self.range_max_bits,
                     self.limb_bits,
                     limb.clone(),
                     is_valid,
@@ -203,8 +212,15 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
 }
 
 type Vecs<T> = Vec<Vec<T>>;
-// is_valid, inputs, vars, q_limbs, carry_limbs, flags
-type AllCols<T> = (T, Vecs<T>, Vecs<T>, Vecs<T>, Vecs<T>, Vec<T>);
+
+pub struct FieldExprCols<T> {
+    pub is_valid: T,
+    pub inputs: Vecs<T>,
+    pub vars: Vecs<T>,
+    pub q_limbs: Vecs<T>,
+    pub carry_limbs: Vecs<T>,
+    pub flags: Vec<T>,
+}
 
 impl AirConfig for FieldExpr {
     // No column struct.
@@ -320,7 +336,7 @@ impl FieldExpr {
         vars
     }
 
-    pub fn load_vars<T: Clone>(&self, arr: &[T]) -> AllCols<T> {
+    pub fn load_vars<T: Clone>(&self, arr: &[T]) -> FieldExprCols<T> {
         let is_valid = arr[0].clone();
         let mut idx = 1;
         let mut inputs = vec![];
@@ -344,7 +360,14 @@ impl FieldExpr {
             idx += c;
         }
         let flags = arr[idx..idx + self.num_flags].to_vec();
-        (is_valid, inputs, vars, q_limbs, carry_limbs, flags)
+        FieldExprCols {
+            is_valid,
+            inputs,
+            vars,
+            q_limbs,
+            carry_limbs,
+            flags,
+        }
     }
 }
 

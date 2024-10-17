@@ -12,7 +12,7 @@ use crate::{
     arch::{
         instructions::AluOpcode,
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        InstructionExecutor, VmChipWrapper,
+        ExecutionBridge, InstructionExecutor, VmChipWrapper,
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
@@ -172,10 +172,12 @@ fn run_rv32_alu_negative_test(
 ) {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
+    let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
     let mut chip = Rv32BaseAluTestChip::<F>::new(
         TestAdapterChip::new(
             vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
             vec![None],
+            execution_bridge,
         ),
         BaseAluCoreChip::new(xor_lookup_chip.clone(), 0),
         tester.memory_controller(),

@@ -437,6 +437,7 @@ pub struct DynArray<T>(pub Vec<T>);
 mod conversions {
     use super::*;
 
+    // AdapterAirContext: FlatInterface -> BasicInterface
     impl<
             T,
             PI,
@@ -478,6 +479,7 @@ mod conversions {
         }
     }
 
+    // AdapterAirContext: BasicInterface -> FlatInterface
     impl<
             T,
             PI,
@@ -524,6 +526,7 @@ mod conversions {
         }
     }
 
+    // AdapterRuntimeContext: BasicInterface -> FlatInterface
     impl<
             T,
             PI,
@@ -560,6 +563,7 @@ mod conversions {
         }
     }
 
+    // AdapterRuntimeContext: FlatInterface -> BasicInterface
     impl<
             T: AbstractField,
             PI,
@@ -601,6 +605,12 @@ mod conversions {
         }
     }
 
+    impl<T> From<DynArray<T>> for Vec<T> {
+        fn from(v: DynArray<T>) -> Vec<T> {
+            v.0
+        }
+    }
+
     impl<T, const N: usize, const M: usize> From<[[T; N]; M]> for DynArray<T> {
         fn from(v: [[T; N]; M]) -> Self {
             Self(v.into_iter().flatten().collect())
@@ -627,6 +637,16 @@ mod conversions {
         }
     }
 
+    impl<T: Clone> From<DynArray<T>> for MinimalInstruction<T> {
+        fn from(m: DynArray<T>) -> Self {
+            MinimalInstruction {
+                is_valid: m.0[0].clone(),
+                opcode: m.0[1].clone(),
+            }
+        }
+    }
+
+    // AdapterAirContext: BasicInterface -> DynInterface
     impl<
             T,
             PI: Into<DynArray<T>>,
@@ -667,6 +687,7 @@ mod conversions {
         }
     }
 
+    // AdapterRuntimeContext: BasicInterface -> DynInterface
     impl<
             T,
             PI,
@@ -696,6 +717,34 @@ mod conversions {
                     .flat_map(|x| x.into_iter())
                     .collect::<Vec<_>>()
                     .into(),
+            }
+        }
+    }
+
+    // AdapterAirContext: FlatInterface -> DynInterface
+    impl<T: Clone, PI: Into<DynArray<T>>, const READ_CELLS: usize, const WRITE_CELLS: usize>
+        From<AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
+        for AdapterAirContext<T, DynAdapterInterface<T>>
+    {
+        fn from(ctx: AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.to_vec().into(),
+                writes: ctx.writes.to_vec().into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: FlatInterface -> DynInterface
+    impl<T: Clone, PI, const READ_CELLS: usize, const WRITE_CELLS: usize>
+        From<AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
+        for AdapterRuntimeContext<T, DynAdapterInterface<T>>
+    {
+        fn from(ctx: AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.to_vec().into(),
             }
         }
     }
