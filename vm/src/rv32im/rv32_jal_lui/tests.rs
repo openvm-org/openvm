@@ -60,7 +60,7 @@ fn set_and_execute(
             1,
             0,
         ),
-        initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
+        initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
     );
 
     let initial_pc = tester
