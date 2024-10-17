@@ -45,14 +45,14 @@ mod conversions {
     }
 }
 
-// This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
+/// This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
 #[derive(Debug, Clone)]
 pub struct Rv32RdWriteAdapter<F: Field> {
     pub air: Rv32RdWriteAdapterAir,
     aux_cols_factory: MemoryAuxColsFactory<F>,
 }
 
-// This adapter doesn't read anything, and **maybe** writes to [a:4]_d, where d == 1
+/// This adapter doesn't read anything, and **maybe** writes to [a:4]_d, where d == 1
 #[derive(Debug, Clone)]
 pub struct Rv32CondRdWriteAdapter<F: Field> {
     pub air: Rv32CondRdWriteAdapterAir,
