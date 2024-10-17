@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 
 use afs_compiler::ir::{
     unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
-    DIGEST_SIZE, LIMB_SIZE, NUM_LIMBS,
+    DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
 };
 use afs_stark_backend::{
     keygen::types::TraceWidth,
@@ -489,7 +489,7 @@ impl Hintable<InnerConfig> for BigUint {
     }
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        vec![big_uint_to_num_limbs(self, LIMB_SIZE, NUM_LIMBS)
+        vec![big_uint_to_num_limbs(self, LIMB_BITS, NUM_LIMBS)
             .iter()
             .map(|x| <InnerConfig as Config>::N::from_canonical_usize(*x))
             .collect()]

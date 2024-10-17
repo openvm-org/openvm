@@ -4,7 +4,7 @@ use afs_primitives::bigint::utils::{
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, Field};
 use rand::Rng;
 
 use super::{ModularAddSubV2Chip, ModularAddSubV2CoreChip, ModularMulDivV2CoreChip};
@@ -19,7 +19,7 @@ use crate::{
 };
 
 const NUM_LIMBS: usize = 32;
-const LIMB_SIZE: usize = 8;
+const LIMB_BITS: usize = 8;
 type F = BabyBear;
 const READ_CELLS: usize = 64;
 
@@ -40,10 +40,13 @@ fn test_scalar_addsub() {
 fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    let core = ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let core = ModularAddSubV2CoreChip::new(
         modulus.clone(),
+        NUM_LIMBS,
+        LIMB_BITS,
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
+        BabyBear::bits() - 2,
     );
     let mut adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
     let mut rng = create_seeded_rng();
@@ -55,11 +58,11 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     // First loop: generate all random test data.
     for _ in 0..num_tests {
         let a_digits: Vec<_> = (0..NUM_LIMBS)
-            .map(|_| rng.gen_range(0..(1 << LIMB_SIZE)))
+            .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
             .collect();
         let mut a = BigUint::new(a_digits.clone());
         let b_digits: Vec<_> = (0..NUM_LIMBS)
-            .map(|_| rng.gen_range(0..(1 << LIMB_SIZE)))
+            .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
             .collect();
         let mut b = BigUint::new(b_digits.clone());
         let interface_reads: [BabyBear; READ_CELLS] = [a_digits, b_digits]
@@ -122,10 +125,10 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
 
         let a_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(a.clone(), LIMB_SIZE).map(BabyBear::from_canonical_u32);
+            biguint_to_limbs(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address1, a_limbs);
         let b_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(b.clone(), LIMB_SIZE).map(BabyBear::from_canonical_u32);
+            biguint_to_limbs(b.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address2, b_limbs);
         */
 
@@ -141,7 +144,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
 
         // TODO: uncomment when switch to vectorized adapter
         /*
-        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
+        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_BITS);
         for (i, &elem) in r_limbs.iter().enumerate() {
             let address = address3 + i;
             let read_val = tester.read_cell(data_as, address);
@@ -171,10 +174,13 @@ fn test_scalar_muldiv() {
 fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    let core = ModularMulDivV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
+    let core = ModularMulDivV2CoreChip::new(
         modulus.clone(),
+        LIMB_BITS,
+        NUM_LIMBS,
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
+        BabyBear::bits() - 2,
     );
     let mut adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
     let mut rng = create_seeded_rng();
@@ -186,11 +192,11 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     // First loop: generate all random test data.
     for _ in 0..num_tests {
         let a_digits: Vec<_> = (0..NUM_LIMBS)
-            .map(|_| rng.gen_range(0..(1 << LIMB_SIZE)))
+            .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
             .collect();
         let mut a = BigUint::new(a_digits.clone());
         let b_digits: Vec<_> = (0..NUM_LIMBS)
-            .map(|_| rng.gen_range(0..(1 << LIMB_SIZE)))
+            .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
             .collect();
         let mut b = BigUint::new(b_digits.clone());
         let interface_reads: [BabyBear; READ_CELLS] = [a_digits, b_digits]
@@ -254,10 +260,10 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
 
         let a_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(a.clone(), LIMB_SIZE).map(BabyBear::from_canonical_u32);
+            biguint_to_limbs(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address1, a_limbs);
         let b_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(b.clone(), LIMB_SIZE).map(BabyBear::from_canonical_u32);
+            biguint_to_limbs(b.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address2, b_limbs);
         */
 
@@ -273,7 +279,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
 
         // TODO: uncomment when switch to vectorized adapter
         /*
-        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
+        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_BITS);
         for (i, &elem) in r_limbs.iter().enumerate() {
             let address = address3 + i;
             let read_val = tester.read_cell(data_as, address);
@@ -303,16 +309,19 @@ fn test_scalar_full_addsub() {
 fn test_full_addsub(opcode_offset: usize, modulus: BigUint) {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    let chip = ModularAddSubV2Chip::<F, NUM_LIMBS, LIMB_SIZE>::new(
+    let chip = ModularAddSubV2Chip::<F, NUM_LIMBS>::new(
         Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
         ),
-        ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
+        ModularAddSubV2CoreChip::new(
             modulus.clone(),
+            LIMB_BITS,
+            NUM_LIMBS,
             tester.memory_controller().borrow().range_checker.clone(),
             opcode_offset,
+            BabyBear::bits() - 2,
         ),
         tester.memory_controller(),
     );

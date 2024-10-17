@@ -1,5 +1,3 @@
-use std::convert::Into;
-
 use ax_ecc_primitives::field_expression::FieldVariableConfig;
 
 mod addsub;
@@ -8,7 +6,7 @@ mod muldiv;
 pub use muldiv::*;
 
 use crate::{
-    arch::{VmAdapterInterface, VmAirWrapper, VmChipWrapper},
+    arch::{VmAirWrapper, VmChipWrapper},
     rv32im::adapters::{
         Rv32VecHeapAdapterAir, Rv32VecHeapAdapterChip, Rv32VecHeapAdapterInterface,
     },
@@ -34,21 +32,17 @@ impl<const NUM_LIMBS: usize> FieldVariableConfig for ModularConfig<NUM_LIMBS> {
     }
 }
 
-pub type ModularAddSubV2Air<const NUM_LIMBS: usize, const LIMB_BITS: usize> = VmAirWrapper<
-    Rv32VecHeapAdapterAir<1, 1, NUM_LIMBS, NUM_LIMBS>,
-    ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_BITS>,
->;
-pub type ModularAddSubV2Chip<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> = VmChipWrapper<
+pub type ModularAddSubV2Air<const NUM_LIMBS: usize> =
+    VmAirWrapper<Rv32VecHeapAdapterAir<1, 1, NUM_LIMBS, NUM_LIMBS>, ModularAddSubV2CoreAir>;
+pub type ModularAddSubV2Chip<F, const NUM_LIMBS: usize> = VmChipWrapper<
     F,
     Rv32VecHeapAdapterChip<F, 1, 1, NUM_LIMBS, NUM_LIMBS>,
-    ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_BITS>,
+    ModularAddSubV2CoreChip,
 >;
-pub type ModularMulDivV2Air<const NUM_LIMBS: usize, const LIMB_BITS: usize> = VmAirWrapper<
-    Rv32VecHeapAdapterAir<1, 1, NUM_LIMBS, NUM_LIMBS>,
-    ModularMulDivV2CoreAir<NUM_LIMBS, LIMB_BITS>,
->;
-pub type ModularMulDivV2Chip<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> = VmChipWrapper<
+pub type ModularMulDivV2Air<const NUM_LIMBS: usize> =
+    VmAirWrapper<Rv32VecHeapAdapterAir<1, 1, NUM_LIMBS, NUM_LIMBS>, ModularMulDivV2CoreAir>;
+pub type ModularMulDivV2Chip<F, const NUM_LIMBS: usize> = VmChipWrapper<
     F,
     Rv32VecHeapAdapterChip<F, 1, 1, NUM_LIMBS, NUM_LIMBS>,
-    ModularMulDivV2CoreChip<NUM_LIMBS, LIMB_BITS>,
+    ModularMulDivV2CoreChip,
 >;

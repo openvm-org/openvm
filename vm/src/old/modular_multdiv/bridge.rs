@@ -3,8 +3,8 @@ use p3_field::AbstractField;
 
 use super::{air::ModularMultDivAir, ModularMultDivAuxCols, ModularMultDivIoCols};
 
-impl<const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+impl<const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,

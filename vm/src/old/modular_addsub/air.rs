@@ -19,7 +19,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct ModularAddSubAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+pub struct ModularAddSubAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub(super) subair: CheckCarryModToZeroSubAir,
@@ -27,25 +27,25 @@ pub struct ModularAddSubAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
     pub(super) offset: usize,
 }
 
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> PartitionedBaseAir<F>
-    for ModularAddSubAir<NUM_LIMBS, LIMB_SIZE>
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
+    for ModularAddSubAir<NUM_LIMBS, LIMB_BITS>
 {
 }
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>
-    for ModularAddSubAir<NUM_LIMBS, LIMB_SIZE>
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
+    for ModularAddSubAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         ModularAddSubCols::<F, NUM_LIMBS>::width()
     }
 }
 
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAirWithPublicValues<F>
-    for ModularAddSubAir<NUM_LIMBS, LIMB_SIZE>
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
+    for ModularAddSubAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
-impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air<AB>
-    for ModularAddSubAir<NUM_LIMBS, LIMB_SIZE>
+impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_BITS: usize> Air<AB>
+    for ModularAddSubAir<NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -63,15 +63,15 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air
 
         let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
             io.x.data.data.to_vec(),
-            LIMB_SIZE,
+            LIMB_BITS,
         );
         let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
             io.y.data.data.to_vec(),
-            LIMB_SIZE,
+            LIMB_BITS,
         );
         let z_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
             io.z.data.data.to_vec(),
-            LIMB_SIZE,
+            LIMB_BITS,
         );
 
         let y_cond_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(
@@ -79,7 +79,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize> Air
                 .data
                 .map(|y| AB::Expr::two() * y * aux.is_add)
                 .to_vec(),
-            LIMB_SIZE,
+            LIMB_BITS,
         );
 
         // for addition we get y_overflow = y_cond_overflow - y_overflow

@@ -6,7 +6,7 @@ use super::{
     columns::{ModularAddSubAuxCols, ModularAddSubIoCols},
 };
 
-impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubAir<NUM_LIMBS, LIMB_SIZE> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ModularAddSubAir<NUM_LIMBS, LIMB_BITS> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,

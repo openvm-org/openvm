@@ -60,15 +60,15 @@ pub struct ModularMultDivRecord<T, const NUM_LIMBS: usize> {
 // This chip is for modular multiplication and division of usually 256 bit numbers
 // represented as 32 8 bit limbs in little endian format.
 // Note: CARRY_LIMBS = 2 * NUM_LIMBS - 1 is required
-// Warning: The chip can break if NUM_LIMBS * LIMB_SIZE is not equal to the number of bits in the modulus.
+// Warning: The chip can break if NUM_LIMBS * LIMB_BITS is not equal to the number of bits in the modulus.
 #[derive(Debug, Clone)]
 pub struct ModularMultDivChip<
     T: PrimeField32,
     const CARRY_LIMBS: usize,
     const NUM_LIMBS: usize,
-    const LIMB_SIZE: usize,
+    const LIMB_BITS: usize,
 > {
-    pub air: ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>,
+    pub air: ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>,
     data: Vec<ModularMultDivRecord<T, NUM_LIMBS>>,
     memory_controller: MemoryControllerRef<T>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
@@ -77,8 +77,8 @@ pub struct ModularMultDivChip<
     offset: usize,
 }
 
-impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    ModularMultDivChip<T, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    ModularMultDivChip<T, CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
     pub fn new(
         execution_bus: ExecutionBus,
@@ -91,14 +91,14 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         let memory_bridge = memory_controller.borrow().memory_bridge();
         let bus = range_checker_chip.bus();
         assert!(
-            bus.range_max_bits >= LIMB_SIZE,
-            "range_max_bits {} < LIMB_SIZE {}",
+            bus.range_max_bits >= LIMB_BITS,
+            "range_max_bits {} < LIMB_BITS {}",
             bus.range_max_bits,
-            LIMB_SIZE
+            LIMB_BITS
         );
         let subair = CheckCarryModToZeroSubAir::new(
             modulus.clone(),
-            LIMB_SIZE,
+            LIMB_BITS,
             bus.index,
             bus.range_max_bits,
             FIELD_ELEMENT_BITS,
@@ -119,8 +119,8 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
     }
 }
 
-impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    InstructionExecutor<T> for ModularMultDivChip<T, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    InstructionExecutor<T> for ModularMultDivChip<T, CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
     fn execute(
         &mut self,
@@ -138,7 +138,7 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         } = instruction;
         let local_opcode_index = opcode - self.offset;
         assert_eq!(CARRY_LIMBS, NUM_LIMBS * 2 - 1);
-        assert!(LIMB_SIZE <= 10); // refer to [primitives/src/bigint/README.md]
+        assert!(LIMB_BITS <= 10); // refer to [primitives/src/bigint/README.md]
 
         let mut memory_controller = self.memory_controller.borrow_mut();
         debug_assert_eq!(from_state.timestamp, memory_controller.timestamp());
@@ -149,15 +149,15 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
         let x = x_array_read.data_read.data.map(|x| x.as_canonical_u32());
         let y = y_array_read.data_read.data.map(|x| x.as_canonical_u32());
 
-        let x_biguint = limbs_to_biguint(&x, LIMB_SIZE);
-        let y_biguint = limbs_to_biguint(&y, LIMB_SIZE);
+        let x_biguint = limbs_to_biguint(&x, LIMB_BITS);
+        let y_biguint = limbs_to_biguint(&y, LIMB_BITS);
 
         let z_biguint = self.solve(
             ModularArithmeticOpcode::from_usize(local_opcode_index),
             x_biguint,
             y_biguint,
         );
-        let z_limbs = biguint_to_limbs(z_biguint, LIMB_SIZE);
+        let z_limbs = biguint_to_limbs(z_biguint, LIMB_BITS);
 
         let z_array_write = memory_controller.write_heap::<NUM_LIMBS>(
             d,
@@ -186,14 +186,14 @@ impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LI
     fn get_opcode_name(&self, opcode: usize) -> String {
         let local_opcode_index = ModularArithmeticOpcode::from_usize(opcode - self.offset);
         format!(
-            "{local_opcode_index:?}<{:?},{NUM_LIMBS},{LIMB_SIZE}>",
+            "{local_opcode_index:?}<{:?},{NUM_LIMBS},{LIMB_BITS}>",
             self.modulus
         )
     }
 }
 
-impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    ModularMultDivChip<T, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+impl<T: PrimeField32, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    ModularMultDivChip<T, CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
     pub fn solve(&self, opcode: ModularArithmeticOpcode, x: BigUint, y: BigUint) -> BigUint {
         match opcode {

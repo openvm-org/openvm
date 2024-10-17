@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[derive(Copy, Clone, Debug)]
-pub struct ArithmeticLogicCoreAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
+pub struct ArithmeticLogicCoreAir<const ARG_SIZE: usize, const LIMB_BITS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub bus: XorBus,

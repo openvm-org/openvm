@@ -1,7 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
-    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -12,8 +11,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        MinimalInstruction, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
+        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -114,37 +113,6 @@ pub struct Rv32VecHeapAdapterCols<
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; NUM_WRITES],
 }
 
-#[derive(Clone)]
-struct Rv32VecHeapAdapterReads<T, const NUM_READS: usize, const READ_SIZE: usize> {
-    pub rs1: [T; RV32_REGISTER_NUM_LANES],
-    pub rs2: [T; RV32_REGISTER_NUM_LANES],
-    pub rd: [T; RV32_REGISTER_NUM_LANES],
-    pub reads: [[[T; READ_SIZE]; NUM_READS]; 2],
-}
-
-#[derive(Clone)]
-pub struct Rv32VecHeapAdapterInterface<
-    T,
-    const NUM_READS: usize,
-    const NUM_WRITES: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
->(PhantomData<T>);
-
-impl<
-        T,
-        const NUM_READS: usize,
-        const NUM_WRITES: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > VmAdapterInterface<T>
-    for Rv32VecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
-{
-    type Reads = Rv32VecHeapAdapterReads<T, NUM_READS, READ_SIZE>;
-    type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
-    type ProcessedInstruction = MinimalInstruction<T>;
-}
-
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32VecHeapAdapterAir<
@@ -178,8 +146,7 @@ impl<
         const WRITE_SIZE: usize,
     > VmAdapterAir<AB> for Rv32VecHeapAdapterAir<NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
-    type Interface =
-        Rv32VecHeapAdapterInterface<AB::Expr, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
+    type Interface = BasicAdapterInterface<AB::Expr, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
     fn eval(
         &self,
@@ -326,7 +293,7 @@ impl<
     type ReadRecord = Rv32VecHeapReadRecord<F, NUM_READS, READ_SIZE>;
     type WriteRecord = Rv32VecHeapWriteRecord<F, NUM_WRITES, WRITE_SIZE>;
     type Air = Rv32VecHeapAdapterAir<NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
-    type Interface = Rv32VecHeapAdapterInterface<F, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
+    type Interface = BasicAdapterInterface<F, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
     fn preprocess(
         &mut self,
@@ -450,17 +417,5 @@ impl<
 
     fn air(&self) -> &Self::Air {
         &self.air
-    }
-}
-
-mod conversions {
-    use super::*;
-
-    impl<T, const NUM_READS: usize, const READ_SIZE: usize> Into<[[[T; READ_SIZE]; NUM_READS]; 2]>
-        for Rv32VecHeapAdapterReads<T, NUM_READS, READ_SIZE>
-    {
-        fn into(self) -> [[[T; READ_SIZE]; NUM_READS]; 2] {
-            self.reads
-        }
     }
 }

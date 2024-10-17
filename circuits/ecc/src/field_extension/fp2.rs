@@ -1,17 +1,17 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::field_expression::{ExprBuilder, FieldVariable, FieldVariableConfig};
+use crate::field_expression::{ExprBuilder, FieldVariable};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
-pub struct Fp2<C: FieldVariableConfig> {
-    pub c0: FieldVariable<C>,
-    pub c1: FieldVariable<C>,
+pub struct Fp2 {
+    pub c0: FieldVariable,
+    pub c1: FieldVariable,
 }
 
-impl<C: FieldVariableConfig> Fp2<C> {
+impl Fp2 {
     pub fn new(builder: Rc<RefCell<ExprBuilder>>) -> Self {
-        let c0 = ExprBuilder::new_input::<C>(builder.clone());
-        let c1 = ExprBuilder::new_input::<C>(builder.clone());
+        let c0 = ExprBuilder::new_input(builder.clone());
+        let c1 = ExprBuilder::new_input(builder.clone());
         Fp2 { c0, c1 }
     }
 
@@ -20,27 +20,27 @@ impl<C: FieldVariableConfig> Fp2<C> {
         self.c1.save();
     }
 
-    pub fn add(&mut self, other: &mut Fp2<C>) -> Fp2<C> {
+    pub fn add(&mut self, other: &mut Fp2) -> Fp2 {
         Fp2 {
             c0: self.c0.add(&mut other.c0),
             c1: self.c1.add(&mut other.c1),
         }
     }
 
-    pub fn sub(&mut self, other: &mut Fp2<C>) -> Fp2<C> {
+    pub fn sub(&mut self, other: &mut Fp2) -> Fp2 {
         Fp2 {
             c0: self.c0.sub(&mut other.c0),
             c1: self.c1.sub(&mut other.c1),
         }
     }
 
-    pub fn mul(&mut self, other: &mut Fp2<C>) -> Fp2<C> {
+    pub fn mul(&mut self, other: &mut Fp2) -> Fp2 {
         let c0 = &mut self.c0 * &mut other.c0 - &mut self.c1 * &mut other.c1;
         let c1 = &mut self.c0 * &mut other.c1 + &mut self.c1 * &mut other.c0;
         Fp2 { c0, c1 }
     }
 
-    pub fn div(&mut self, other: &mut Fp2<C>) -> Fp2<C> {
+    pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
         let (z0, z1) = {
             let mut builder = self.c0.builder.borrow_mut();
             let z0 = builder.new_var();
@@ -75,7 +75,7 @@ impl<C: FieldVariableConfig> Fp2<C> {
         }
     }
 
-    pub fn scalar_mul(&mut self, fp: &mut FieldVariable<C>) -> Fp2<C> {
+    pub fn scalar_mul(&mut self, fp: &mut FieldVariable) -> Fp2 {
         Fp2 {
             c0: self.c0.mul(fp),
             c1: self.c1.mul(fp),
@@ -128,15 +128,15 @@ mod tests {
     }
 
     fn test_fp2(
-        fp2_fn: impl Fn(&mut Fp2<TestConfig>, &mut Fp2<TestConfig>) -> Fp2<TestConfig>,
+        fp2_fn: impl Fn(&mut Fp2, &mut Fp2) -> Fp2,
         fq2_fn: impl Fn(&Fq2, &Fq2) -> Fq2,
         save_result: bool,
     ) {
         let prime = bn254_prime();
         let (subair, range_checker, builder) = setup(&prime);
 
-        let mut x_fp2 = Fp2::<TestConfig>::new(builder.clone());
-        let mut y_fp2 = Fp2::<TestConfig>::new(builder.clone());
+        let mut x_fp2 = Fp2::new(builder.clone());
+        let mut y_fp2 = Fp2::new(builder.clone());
         let mut r = fp2_fn(&mut x_fp2, &mut y_fp2);
         if save_result {
             r.save();
@@ -200,9 +200,9 @@ mod tests {
         let prime = bn254_prime();
         let (subair, range_checker, builder) = setup(&prime);
 
-        let mut x_fp2 = Fp2::<TestConfig>::new(builder.clone());
-        let mut y_fp2 = Fp2::<TestConfig>::new(builder.clone());
-        let mut z_fp2 = Fp2::<TestConfig>::new(builder.clone());
+        let mut x_fp2 = Fp2::new(builder.clone());
+        let mut y_fp2 = Fp2::new(builder.clone());
+        let mut z_fp2 = Fp2::new(builder.clone());
         let mut xy = x_fp2.mul(&mut y_fp2);
         let _r = xy.div(&mut z_fp2);
         // no need to save as div auto save.
