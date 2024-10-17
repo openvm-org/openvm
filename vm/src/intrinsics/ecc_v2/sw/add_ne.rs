@@ -1,11 +1,11 @@
-use std::{cell::RefCell, marker::PhantomData, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
     var_range::bus::VariableRangeCheckerBus,
 };
 use afs_stark_backend::rap::BaseAirWithPublicValues;
-use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldVariableConfig};
+use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr};
 use num_bigint_dig::BigUint;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{Field, PrimeField32};
@@ -21,31 +21,41 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct SwEcAddNeAir<C: FieldVariableConfig> {
+pub struct SwEcAddNeCoreAir {
     pub expr: FieldExpr,
     pub offset: usize,
-    pub _marker: PhantomData<C>,
 }
 
-impl<C: FieldVariableConfig> SwEcAddNeAir<C> {
-    pub fn new(modulus: BigUint, range_bus: VariableRangeCheckerBus, offset: usize) -> Self {
-        let limb_size = C::canonical_limb_bits();
-        let num_limbs = C::num_limbs_per_field_element();
-        assert!(modulus.bits() <= num_limbs * limb_size);
+impl SwEcAddNeCoreAir {
+    pub fn new(
+        modulus: BigUint,
+        num_limbs: usize,
+        limb_bits: usize,
+        max_limb_bits: usize,
+        range_bus: VariableRangeCheckerBus,
+        offset: usize,
+    ) -> Self {
+        assert!(modulus.bits() <= num_limbs * limb_bits);
         let subair = CheckCarryModToZeroSubAir::new(
             modulus.clone(),
-            limb_size,
+            limb_bits,
             range_bus.index,
             range_bus.range_max_bits,
             FIELD_ELEMENT_BITS,
         );
-        let builder = ExprBuilder::new(modulus, limb_size, num_limbs, range_bus.range_max_bits);
+        let builder = ExprBuilder::new(
+            modulus,
+            limb_bits,
+            num_limbs,
+            range_bus.range_max_bits,
+            max_limb_bits,
+        );
         let builder = Rc::new(RefCell::new(builder));
 
-        let x1 = ExprBuilder::new_input::<C>(builder.clone());
-        let y1 = ExprBuilder::new_input::<C>(builder.clone());
-        let x2 = ExprBuilder::new_input::<C>(builder.clone());
-        let y2 = ExprBuilder::new_input::<C>(builder.clone());
+        let x1 = ExprBuilder::new_input(builder.clone());
+        let y1 = ExprBuilder::new_input(builder.clone());
+        let x2 = ExprBuilder::new_input(builder.clone());
+        let y2 = ExprBuilder::new_input(builder.clone());
         let mut lambda = (y2 - y1.clone()) / (x2.clone() - x1.clone());
         let mut x3 = lambda.square() - x1.clone() - x2;
         x3.save();
@@ -58,23 +68,19 @@ impl<C: FieldVariableConfig> SwEcAddNeAir<C> {
             check_carry_mod_to_zero: subair,
             range_bus,
         };
-        Self {
-            expr,
-            _marker: PhantomData,
-            offset,
-        }
+        Self { expr, offset }
     }
 }
 
-impl<F: Field, C: FieldVariableConfig> BaseAir<F> for SwEcAddNeAir<C> {
+impl<F: Field> BaseAir<F> for SwEcAddNeCoreAir {
     fn width(&self) -> usize {
         BaseAir::<F>::width(&self.expr)
     }
 }
 
-impl<F: Field, C: FieldVariableConfig> BaseAirWithPublicValues<F> for SwEcAddNeAir<C> {}
+impl<F: Field> BaseAirWithPublicValues<F> for SwEcAddNeCoreAir {}
 
-impl<AB: AirBuilder, C: FieldVariableConfig, I> VmCoreAir<AB, I> for SwEcAddNeAir<C>
+impl<AB: AirBuilder, I> VmCoreAir<AB, I> for SwEcAddNeCoreAir
 where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<Vec<AB::Expr>>,
@@ -91,25 +97,39 @@ where
     }
 }
 
-pub struct SwEcAddNeChip<C: FieldVariableConfig> {
-    pub air: SwEcAddNeAir<C>,
+pub struct SwEcAddNeCoreChip {
+    pub air: SwEcAddNeCoreAir,
 }
 
-impl<C: FieldVariableConfig> SwEcAddNeChip<C> {
-    pub fn new(modulus: BigUint, range_bus: VariableRangeCheckerBus, offset: usize) -> Self {
-        let air = SwEcAddNeAir::new(modulus, range_bus, offset);
+impl SwEcAddNeCoreChip {
+    pub fn new(
+        modulus: BigUint,
+        num_limbs: usize,
+        limb_bits: usize,
+        max_limb_bits: usize,
+        range_bus: VariableRangeCheckerBus,
+        offset: usize,
+    ) -> Self {
+        let air = SwEcAddNeCoreAir::new(
+            modulus,
+            num_limbs,
+            limb_bits,
+            max_limb_bits,
+            range_bus,
+            offset,
+        );
         Self { air }
     }
 }
 
-impl<F: PrimeField32, C: FieldVariableConfig, I> VmCoreChip<F, I> for SwEcAddNeChip<C>
+impl<F: PrimeField32, I> VmCoreChip<F, I> for SwEcAddNeCoreChip
 where
     I: VmAdapterInterface<F>,
     I::Reads: Into<Vec<F>>,
     I::Writes: From<Vec<F>>,
 {
     type Record = ();
-    type Air = SwEcAddNeAir<C>;
+    type Air = SwEcAddNeCoreAir;
 
     fn execute_instruction(
         &self,
@@ -118,8 +138,8 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         // Input: 2 EcPoint<Fp>, so total 4 field elements.
-        let field_element_limbs = C::num_limbs_per_field_element();
-        let limb_bits = C::canonical_limb_bits();
+        let field_element_limbs = self.air.expr.canonical_num_limbs();
+        let limb_bits = self.air.expr.canonical_limb_bits();
         let data: Vec<F> = reads.into();
         assert_eq!(data.len(), 4 * field_element_limbs);
         let data_u32: Vec<u32> = data.iter().map(|x| x.as_canonical_u32()).collect();

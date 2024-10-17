@@ -1,48 +1,34 @@
 use afs_primitives::{bigint::utils::secp256k1_coord_prime, ecc::SampleEcPoints};
-use ax_ecc_primitives::field_expression::FieldVariableConfig;
 use axvm_instructions::UsizeOpcode;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::{super::FIELD_ELEMENT_BITS, SwEcAddNeChip};
+use super::{super::FIELD_ELEMENT_BITS, SwEcAddNeCoreChip};
 use crate::{
     arch::{
         instructions::EccOpcode,
         testing::{TestAdapterChip, VmChipTestBuilder},
         ExecutionBridge, VmChipWrapper,
     },
-    intrinsics::ecc_v2::sw::SwEcDoubleChip,
+    intrinsics::ecc_v2::sw::SwEcDoubleCoreChip,
     system::program::Instruction,
     utils::biguint_to_limbs_vec,
 };
 
 const NUM_LIMBS: usize = 32;
-const LIMB_SIZE: usize = 8;
+const LIMB_BITS: usize = 8;
 type F = BabyBear;
-
-#[derive(Clone)]
-struct TestConfig {}
-impl FieldVariableConfig for TestConfig {
-    fn canonical_limb_bits() -> usize {
-        LIMB_SIZE
-    }
-
-    fn max_limb_bits() -> usize {
-        FIELD_ELEMENT_BITS
-    }
-
-    fn num_limbs_per_field_element() -> usize {
-        NUM_LIMBS
-    }
-}
 
 #[test]
 fn test_add_ne() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = secp256k1_coord_prime();
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    let core = SwEcAddNeChip::<TestConfig>::new(
+    let core = SwEcAddNeCoreChip::new(
         modulus.clone(),
+        NUM_LIMBS,
+        LIMB_BITS,
+        FIELD_ELEMENT_BITS - 1,
         tester.memory_controller().borrow().range_checker.bus(),
         EccOpcode::default_offset(),
     );
@@ -51,10 +37,10 @@ fn test_add_ne() {
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
 
-    let p1_x_limbs = biguint_to_limbs_vec(p1_x.clone(), LIMB_SIZE, NUM_LIMBS);
-    let p1_y_limbs = biguint_to_limbs_vec(p1_y.clone(), LIMB_SIZE, NUM_LIMBS);
-    let p2_x_limbs = biguint_to_limbs_vec(p2_x.clone(), LIMB_SIZE, NUM_LIMBS);
-    let p2_y_limbs = biguint_to_limbs_vec(p2_y.clone(), LIMB_SIZE, NUM_LIMBS);
+    let p1_x_limbs = biguint_to_limbs_vec(p1_x.clone(), LIMB_BITS, NUM_LIMBS);
+    let p1_y_limbs = biguint_to_limbs_vec(p1_y.clone(), LIMB_BITS, NUM_LIMBS);
+    let p2_x_limbs = biguint_to_limbs_vec(p2_x.clone(), LIMB_BITS, NUM_LIMBS);
+    let p2_y_limbs = biguint_to_limbs_vec(p2_y.clone(), LIMB_BITS, NUM_LIMBS);
     let interface_reads = [p1_x_limbs, p1_y_limbs, p2_x_limbs, p2_y_limbs].concat();
     adapter.prank_reads.push_back(
         interface_reads
@@ -99,8 +85,11 @@ fn test_double() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = secp256k1_coord_prime();
     let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    let core = SwEcDoubleChip::<TestConfig>::new(
+    let core = SwEcDoubleCoreChip::new(
         modulus.clone(),
+        NUM_LIMBS,
+        LIMB_BITS,
+        FIELD_ELEMENT_BITS - 1,
         tester.memory_controller().borrow().range_checker.bus(),
         EccOpcode::default_offset(),
     );
@@ -108,8 +97,8 @@ fn test_double() {
 
     let (p1_x, p1_y) = SampleEcPoints[1].clone();
 
-    let p1_x_limbs = biguint_to_limbs_vec(p1_x.clone(), LIMB_SIZE, NUM_LIMBS);
-    let p1_y_limbs = biguint_to_limbs_vec(p1_y.clone(), LIMB_SIZE, NUM_LIMBS);
+    let p1_x_limbs = biguint_to_limbs_vec(p1_x.clone(), LIMB_BITS, NUM_LIMBS);
+    let p1_y_limbs = biguint_to_limbs_vec(p1_y.clone(), LIMB_BITS, NUM_LIMBS);
     let interface_reads = [p1_x_limbs, p1_y_limbs].concat();
     adapter.prank_reads.push_back(
         interface_reads
