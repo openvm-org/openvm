@@ -37,7 +37,7 @@ pub struct Rv32AuipcCols<T> {
     pub rd_byte_check: [T; RV32_REGISTER_NUM_LANES / 2],
 
     // Used to constrain pc_limbs and imm_limbs to 8-bits with XorBus
-    pub pc_imm_byte_check: [T; RV32_REGISTER_NUM_LANES - 1],
+    pub pc_imm_byte_check: [T; RV32_REGISTER_NUM_LANES - 2],
 }
 
 #[derive(Debug, Clone)]
@@ -134,10 +134,12 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32AuipcCoreRecord<T> {
-    pub imm_limbs: [T; RV32_REGISTER_NUM_LANES - 1],
-    pub pc_limbs: [T; RV32_REGISTER_NUM_LANES - 1],
-    pub rd_data: [T; RV32_REGISTER_NUM_LANES],
+pub struct Rv32AuipcCoreRecord<F> {
+    pub imm_limbs: [F; RV32_REGISTER_NUM_LANES - 1],
+    pub pc_limbs: [F; RV32_REGISTER_NUM_LANES - 1],
+    pub rd_data: [F; RV32_REGISTER_NUM_LANES],
+    pub rd_byte_check: [F; RV32_REGISTER_NUM_LANES / 2],
+    pub pc_imm_byte_check: [F; RV32_REGISTER_NUM_LANES - 2],
 }
 
 #[derive(Debug, Clone)]
@@ -162,7 +164,7 @@ impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32AuipcCo
 where
     I::Writes: From<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
 {
-    type Record = Rv32AuipcCoreRecord<u32>;
+    type Record = Rv32AuipcCoreRecord<F>;
     type Air = Rv32AuipcCoreAir;
 
     #[allow(clippy::type_complexity)]
@@ -182,22 +184,25 @@ where
         let imm_limbs = array::from_fn(|i| (imm >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
         let pc_limbs = array::from_fn(|i| (from_pc >> ((i + 1) * RV32_CELL_BITS)) & RV32_LIMB_MAX);
 
-        for i in 0..RV32_REGISTER_NUM_LANES / 2 {
+        let rd_byte_check = array::from_fn(|i| {
             self.xor_lookup_chip
-                .request(rd_data[i * 2], rd_data[i * 2 + 1]);
-        }
+                .request(rd_data[i * 2], rd_data[i * 2 + 1])
+        });
 
         let limbs: Vec<u32> = [imm_limbs, pc_limbs].concat();
-        for i in 0..RV32_REGISTER_NUM_LANES - 2 {
-            self.xor_lookup_chip.request(limbs[i * 2], limbs[i * 2 + 1]);
-        }
+        let pc_imm_byte_check = array::from_fn(|i| {
+            self.xor_lookup_chip
+                .request(limbs[i * 2], limbs[i * 2 + 1])
+        });
 
         Ok((
             output,
             Self::Record {
-                imm_limbs,
-                pc_limbs,
-                rd_data,
+                imm_limbs: imm_limbs.map(F::from_canonical_u32),
+                pc_limbs: pc_limbs.map(F::from_canonical_u32),
+                rd_data: rd_data.map(F::from_canonical_u32),
+                rd_byte_check: rd_byte_check.map(F::from_canonical_u32),
+                pc_imm_byte_check: pc_imm_byte_check.map(F::from_canonical_u32),
             },
         ))
     }
@@ -211,24 +216,12 @@ where
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let core_cols: &mut Rv32AuipcCols<F> = row_slice.borrow_mut();
-        let Self::Record {
-            imm_limbs,
-            pc_limbs,
-            rd_data,
-        } = record;
+        core_cols.imm_limbs = record.imm_limbs;
+        core_cols.pc_limbs = record.pc_limbs;
+        core_cols.rd_data = record.rd_data;
+        core_cols.rd_byte_check = record.rd_byte_check;
+        core_cols.pc_imm_byte_check = record.pc_imm_byte_check;
         core_cols.is_valid = F::one();
-        core_cols.imm_limbs = imm_limbs.map(F::from_canonical_u32);
-        core_cols.pc_limbs = pc_limbs.map(F::from_canonical_u32);
-        core_cols.rd_data = rd_data.map(F::from_canonical_u32);
-
-        for i in 0..RV32_REGISTER_NUM_LANES / 2 {
-            core_cols.rd_byte_check[i] = F::from_canonical_u32(rd_data[i * 2] ^ rd_data[i * 2 + 1]);
-        }
-        let limbs: Vec<u32> = [imm_limbs, pc_limbs].concat();
-
-        for i in 0..RV32_REGISTER_NUM_LANES - 2 {
-            core_cols.pc_imm_byte_check[i] = F::from_canonical_u32(limbs[i * 2] ^ limbs[i * 2 + 1]);
-        }
     }
 
     fn air(&self) -> &Self::Air {
