@@ -115,6 +115,14 @@ pub struct Rv32VecHeapAdapterCols<
 }
 
 #[derive(Clone)]
+struct Rv32VecHeapAdapterReads<T, const NUM_READS: usize, const READ_SIZE: usize> {
+    pub rs1: [T; RV32_REGISTER_NUM_LANES],
+    pub rs2: [T; RV32_REGISTER_NUM_LANES],
+    pub rd: [T; RV32_REGISTER_NUM_LANES],
+    pub reads: [[[T; READ_SIZE]; NUM_READS]; 2],
+}
+
+#[derive(Clone)]
 pub struct Rv32VecHeapAdapterInterface<
     T,
     const NUM_READS: usize,
@@ -132,11 +140,7 @@ impl<
     > VmAdapterInterface<T>
     for Rv32VecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
-    type Reads = (
-        [[T; RV32_REGISTER_NUM_LANES]; 2],
-        [[T; RV32_REGISTER_NUM_LANES]; 1],
-        [[[T; READ_SIZE]; NUM_READS]; 2],
-    );
+    type Reads = Rv32VecHeapAdapterReads<T, NUM_READS, READ_SIZE>;
     type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
     type ProcessedInstruction = MinimalInstruction<T>;
 }
@@ -192,9 +196,9 @@ impl<
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
-        let rs1_val_vec = ctx.reads.0[0].clone();
-        let rs2_val_vec = ctx.reads.0[1].clone();
-        let rd_val_vec = ctx.reads.1[0].clone();
+        let rs1_val_vec = ctx.reads.rs1.clone();
+        let rs2_val_vec = ctx.reads.rs2.clone();
+        let rd_val_vec = ctx.reads.rd.clone();
 
         let rs1_val = rs1_val_vec[0].clone()
             + rs1_val_vec[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS)
@@ -249,7 +253,7 @@ impl<
                         AB::Expr::from_canonical_usize(2),
                         rs1_val.clone() + AB::Expr::from_canonical_usize(i * READ_SIZE),
                     ),
-                    ctx.reads.2[0][i].clone(),
+                    ctx.reads.reads[0][i].clone(),
                     timestamp_pp(),
                     &cols.reads1_aux[i],
                 )
@@ -264,7 +268,7 @@ impl<
                         AB::Expr::from_canonical_usize(2),
                         rs2_val.clone() + AB::Expr::from_canonical_usize(i * READ_SIZE),
                     ),
-                    ctx.reads.2[1][i].clone(),
+                    ctx.reads.reads[1][i].clone(),
                     timestamp_pp(),
                     &cols.reads2_aux[i],
                 )
@@ -364,11 +368,12 @@ impl<
             )
         });
 
-        let reads = (
-            [rs1.0.data, rs2.0.data],
-            [rd.0.data],
-            [reads1.map(|x| x.data), reads2.map(|x| x.data)],
-        );
+        let reads = Rv32VecHeapAdapterReads {
+            rs1: rs1.0.data,
+            rs2: rs2.0.data,
+            rd: rd.0.data,
+            reads: [reads1.map(|x| x.data), reads2.map(|x| x.data)],
+        };
 
         let record = Rv32VecHeapReadRecord {
             rs1: rs1.0,
@@ -445,5 +450,17 @@ impl<
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+mod conversions {
+    use super::*;
+
+    impl<T, const NUM_READS: usize, const READ_SIZE: usize> Into<[[[T; READ_SIZE]; NUM_READS]; 2]>
+        for Rv32VecHeapAdapterReads<T, NUM_READS, READ_SIZE>
+    {
+        fn into(self) -> [[[T; READ_SIZE]; NUM_READS]; 2] {
+            self.reads
+        }
     }
 }

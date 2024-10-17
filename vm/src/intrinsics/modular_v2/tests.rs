@@ -7,13 +7,14 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
 
-use super::{ModularAddSubV2CoreChip, ModularMulDivV2CoreChip};
+use super::{ModularAddSubV2Chip, ModularAddSubV2CoreChip, ModularMulDivV2CoreChip};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
         testing::{TestAdapterChip, VmChipTestBuilder},
         ExecutionBridge, VmChipWrapper,
     },
+    rv32im::adapters::Rv32VecHeapAdapterChip,
     system::program::Instruction,
 };
 
@@ -283,4 +284,36 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let tester = tester.build().load(chip).finalize();
 
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn test_coord_full_addsub() {
+    let opcode_offset = 0;
+    let modulus = secp256k1_coord_prime();
+    test_full_addsub(opcode_offset, modulus);
+}
+
+#[test]
+fn test_scalar_full_addsub() {
+    let opcode_offset = 4;
+    let modulus = secp256k1_scalar_prime();
+    test_full_addsub(opcode_offset, modulus);
+}
+
+fn test_full_addsub(opcode_offset: usize, modulus: BigUint) {
+    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+    let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
+    let chip = ModularAddSubV2Chip::<F, NUM_LIMBS, LIMB_SIZE>::new(
+        Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+            tester.execution_bus(),
+            tester.program_bus(),
+            tester.memory_controller(),
+        ),
+        ModularAddSubV2CoreChip::<NUM_LIMBS, LIMB_SIZE>::new(
+            modulus.clone(),
+            tester.memory_controller().borrow().range_checker.clone(),
+            opcode_offset,
+        ),
+        tester.memory_controller(),
+    );
 }

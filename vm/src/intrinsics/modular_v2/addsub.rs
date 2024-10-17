@@ -76,8 +76,8 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize, I> 
     for ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>
 where
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<Vec<AB::Expr>>,
-    I::Writes: From<Vec<AB::Expr>>,
+    I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
+    I::Writes: From<[AB::Expr; NUM_LIMBS]>,
     I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
 {
     fn eval(
@@ -154,8 +154,8 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize, I> VmCoreC
     for ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE>
 where
     I: VmAdapterInterface<F>,
-    I::Reads: Into<Vec<F>>,
-    I::Writes: From<Vec<F>>,
+    I::Reads: Into<[[[F; NUM_LIMBS]; 1]; 2]>,
+    I::Writes: From<[[F; NUM_LIMBS]; 1]>,
 {
     type Record = ModularAddSubV2CoreRecord;
     type Air = ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>;
@@ -168,16 +168,9 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction.clone();
         let local_opcode_index = opcode - self.air.offset;
-        let data: Vec<F> = reads.into();
-        assert_eq!(data.len(), 2 * NUM_LIMBS);
-        let x = data[..NUM_LIMBS]
-            .iter()
-            .map(|x| x.as_canonical_u32())
-            .collect::<Vec<_>>();
-        let y = data[NUM_LIMBS..]
-            .iter()
-            .map(|x| x.as_canonical_u32())
-            .collect::<Vec<_>>();
+        let data: [[[F; NUM_LIMBS]; 1]; 2] = reads.into();
+        let x = data[0][0].map(|x| x.as_canonical_u32());
+        let y = data[1][0].map(|x| x.as_canonical_u32());
 
         let x_biguint = limbs_to_biguint(&x, LIMB_SIZE);
         let y_biguint = limbs_to_biguint(&y, LIMB_SIZE);
@@ -200,7 +193,7 @@ where
         Ok((
             AdapterRuntimeContext {
                 to_pc: None,
-                writes: z_limbs.map(|x| F::from_canonical_u32(x)).to_vec().into(),
+                writes: [z_limbs.map(|x| F::from_canonical_u32(x))].into(),
             },
             ModularAddSubV2CoreRecord {
                 x: x_biguint,
