@@ -1,7 +1,7 @@
 use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
 use afs_primitives::xor::lookup::XorLookupChip;
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -14,7 +14,6 @@ use crate::{
     arch::{
         instructions::U256Opcode,
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        VmChip,
     },
     kernels::core::BYTE_XOR_BUS,
     old::shift::columns::ShiftCols,
@@ -136,8 +135,8 @@ fn run_shift_negative_test(
                 .add_count(*carry_val, bit_shift as usize);
         }
     }
-
-    let shift_trace = chip.clone().generate_trace();
+    let mut air_proof_input = chip.generate_air_proof_input();
+    let shift_trace = air_proof_input.raw.common_main.as_mut().unwrap();
     let mut shift_trace_vec = shift_trace.row_slice(0).to_vec();
     let shift_trace_cols: &mut ShiftCols<F, NUM_LIMBS, LIMB_BITS> = (*shift_trace_vec).borrow_mut();
 
@@ -149,17 +148,15 @@ fn run_shift_negative_test(
     shift_trace_cols.aux.bit_shift_carry =
         array::from_fn(|i| F::from_canonical_u32(bit_shift_carry[i]));
 
-    let shift_trace: p3_matrix::dense::DenseMatrix<BabyBear> = RowMajorMatrix::new(
+    *shift_trace = RowMajorMatrix::new(
         shift_trace_vec,
         ShiftCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
     );
 
     disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_with_custom_trace(chip, shift_trace)
-        .load(xor_lookup_chip)
-        .finalize();
+    let mut tester = tester.build();
+    tester.air_proof_inputs.push(air_proof_input);
+    let tester = tester.load(xor_lookup_chip).finalize();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
         &expected_error

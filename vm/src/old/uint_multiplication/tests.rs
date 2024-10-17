@@ -1,7 +1,7 @@
 use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
 use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -13,7 +13,6 @@ use crate::{
     arch::{
         instructions::U256Opcode,
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        VmChip,
     },
     kernels::core::RANGE_TUPLE_CHECKER_BUS,
     system::program::Instruction,
@@ -104,14 +103,15 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
     let mut rng = create_seeded_rng();
     run_uint_multiplication_rand_write_execute(&mut tester, &mut chip, x, y, &mut rng);
 
-    let mult_trace = chip.clone().generate_trace();
+    let mut air_proof_input = chip.generate_air_proof_input();
+    let mult_trace = air_proof_input.raw.common_main.as_mut().unwrap();
     let mut mult_trace_vec = mult_trace.row_slice(0).to_vec();
     let mult_trace_cols: &mut UintMultiplicationCols<F, NUM_LIMBS, LIMB_BITS> =
         (*mult_trace_vec).borrow_mut();
 
     mult_trace_cols.io.z.data = array::from_fn(|i| F::from_canonical_u32(z[i]));
     mult_trace_cols.aux.carry = array::from_fn(|i| F::from_canonical_u32(carry[i]));
-    let mult_trace: p3_matrix::dense::DenseMatrix<BabyBear> = RowMajorMatrix::new(
+    *mult_trace = RowMajorMatrix::new(
         mult_trace_vec,
         UintMultiplicationCols::<F, NUM_LIMBS, LIMB_BITS>::width(),
     );
@@ -119,7 +119,7 @@ fn run_negative_uint_multiplication_test<const NUM_LIMBS: usize, const LIMB_BITS
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_with_custom_trace(chip, mult_trace)
+        .load_air_proof_input(air_proof_input)
         .load(range_tuple_chip)
         .finalize();
     let msg = format!(

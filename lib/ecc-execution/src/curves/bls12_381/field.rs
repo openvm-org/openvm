@@ -5,7 +5,9 @@ use halo2curves_axiom::{
 
 #[cfg(test)]
 use crate::common::FeltPrint;
-use crate::common::{EvaluatedLine, FieldExtension, Fp12Constructor, Fp2Constructor, LineMType};
+use crate::common::{
+    EvaluatedLine, ExpBigInt, FieldExtension, Fp12Constructor, Fp2Constructor, LineMType,
+};
 
 impl Fp2Constructor<Fq> for Fq2 {
     fn new(c0: Fq, c1: Fq) -> Self {
@@ -133,6 +135,8 @@ impl LineMType<Fq, Fq2, Fq12> for Fq12 {
         Fq12::from_coeffs(&[line.c, Fq2::ZERO, line.b, Fq2::ONE, Fq2::ZERO, Fq2::ZERO])
     }
 }
+
+impl ExpBigInt<Fq12> for Fq12 {}
 
 #[cfg(test)]
 impl FeltPrint<Fq> for Fq {

@@ -1,8 +1,7 @@
 use afs_compiler::ir::Witness;
 use ax_sdk::{
-    config::{
-        baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
-        setup_tracing,
+    config::baby_bear_poseidon2_outer::{
+        BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine,
     },
     engine::{ProofInputForTest, StarkFriEngine},
 };

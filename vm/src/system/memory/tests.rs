@@ -2,7 +2,7 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
-    iter, mem,
+    mem,
     rc::Rc,
     sync::Arc,
 };
@@ -11,12 +11,12 @@ use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     interaction::InteractionBuilder,
-    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::types::AirProofInput,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
 use ax_sdk::{
-    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-    engine::StarkFriEngine,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use itertools::Itertools;
@@ -32,7 +32,7 @@ use rand::{
 
 use super::{MemoryAuxColsFactory, MemoryController, MemoryReadRecord, TimestampedEquipartition};
 use crate::{
-    arch::{testing::memory::gen_pointer, ExecutionBus, VmChip},
+    arch::{testing::memory::gen_pointer, ExecutionBus},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     kernels::core::RANGE_CHECKER_BUS,
     system::{
@@ -242,30 +242,21 @@ fn test_memory_controller() {
 
     let mut rng = create_seeded_rng();
     let records = make_random_accesses(&mut memory_controller, &mut rng);
-    let memory_requester_trace = generate_trace(records, aux_factory);
-
-    let memory_airs = memory_controller.airs();
-    let range_checker_air = range_checker.air();
     let memory_requester_air = Arc::new(MemoryRequesterAir {
         memory_bridge: memory_controller.memory_bridge(),
     });
-    let airs: Vec<Arc<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_airs
-        .into_iter()
-        .chain(iter::once(memory_requester_air as Arc<dyn AnyRap<_>>))
-        .chain(iter::once(range_checker_air))
-        .collect();
+    let memory_requester_trace = generate_trace(records, aux_factory);
 
     memory_controller.finalize(None::<&mut Poseidon2Chip<BabyBear>>);
 
-    let traces = memory_controller
-        .generate_traces()
-        .into_iter()
-        .chain(iter::once(memory_requester_trace))
-        .chain(iter::once(range_checker.generate_trace()))
-        .collect();
+    let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
+    air_proof_inputs.push(AirProofInput::simple_no_pis(
+        memory_requester_air,
+        memory_requester_trace,
+    ));
+    air_proof_inputs.push(range_checker.generate_air_proof_input());
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, traces)
-        .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_test_fast(air_proof_inputs).expect("Verification failed");
 }
 
 #[test]
@@ -314,36 +305,15 @@ fn test_memory_controller_persistent() {
     );
 
     memory_controller.finalize(Some(&mut poseidon_chip));
+    let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
+    air_proof_inputs.push(AirProofInput::simple_no_pis(
+        Arc::new(memory_requester_air),
+        memory_requester_trace,
+    ));
+    air_proof_inputs.push(range_checker.generate_air_proof_input());
+    air_proof_inputs.push(poseidon_chip.generate_air_proof_input());
 
-    let poseidon_air = poseidon_chip.air.clone();
-    let range_checker_air = range_checker.air();
-    let airs: Vec<Arc<dyn AnyRap<BabyBearPoseidon2Config>>> = memory_controller
-        .airs()
-        .into_iter()
-        .chain(iter::once(
-            Arc::new(memory_requester_air) as Arc<dyn AnyRap<_>>
-        ))
-        .chain(iter::once(range_checker_air))
-        .chain(iter::once(Arc::new(poseidon_air) as Arc<dyn AnyRap<_>>))
-        .collect();
-
-    let pvs = memory_controller
-        .generate_public_values_per_air()
-        .into_iter()
-        .chain(iter::once(vec![]))
-        .chain(iter::once(vec![]))
-        .chain(iter::once(vec![]))
-        .collect_vec();
-
-    let traces = memory_controller
-        .generate_traces()
-        .into_iter()
-        .chain(iter::once(memory_requester_trace))
-        .chain(iter::once(range_checker.generate_trace()))
-        .chain(iter::once(poseidon_chip.generate_trace()))
-        .collect();
-
-    BabyBearPoseidon2Engine::run_simple_test_fast(airs, traces, pvs).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_test_fast(air_proof_inputs).expect("Verification failed");
 }
 
 fn make_random_accesses<F: PrimeField32>(

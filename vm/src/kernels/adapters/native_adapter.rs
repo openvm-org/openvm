@@ -143,6 +143,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for NativeAdapterAir {
             )
             .eval(builder, ctx.instruction.is_valid);
     }
+
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+        let cols: &NativeAdapterCols<_> = local.borrow();
+        cols.from_state.pc
+    }
 }
 
 impl<F: PrimeField32> VmAdapterChip<F> for NativeAdapterChip<F> {

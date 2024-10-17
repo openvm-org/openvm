@@ -54,7 +54,11 @@ fn set_and_execute(
 fn simple_execute_roundtrip_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapter::<F>::new();
+    let adapter = Rv32RdWriteAdapter::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_controller(),
+    );
     let inner = Rv32AuipcCoreChip::<F>::new(Rv32AuipcOpcode::default_offset());
     let mut chip = Rv32AuipcChip::<F>::new(adapter, inner, tester.memory_controller());
 

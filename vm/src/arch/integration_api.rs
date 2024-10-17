@@ -7,15 +7,16 @@ use afs_stark_backend::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
     },
     config::{StarkGenericConfig, Val},
+    prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
-use super::{ExecutionState, InstructionExecutor, Result, VmChip};
+use super::{ExecutionState, InstructionExecutor, Result};
 use crate::system::{
     memory::{MemoryController, MemoryControllerRef},
     program::Instruction,
@@ -31,11 +32,6 @@ pub trait VmAdapterInterface<T> {
     /// May include the `to_pc`.
     /// Typically this should not include address spaces.
     type ProcessedInstruction;
-
-    /// Given the local row slice of the adapter AIR, return the `from_pc` expression, if it can be obtained.
-    fn from_pc<S: Into<T> + Clone>(_local_adapter: &[S]) -> Option<T> {
-        None
-    }
 }
 
 /// The adapter owns all memory accesses and timestamp changes.
@@ -47,6 +43,7 @@ pub trait VmAdapterChip<F: Field> {
     type WriteRecord: Send;
     /// AdapterAir should not have public values
     type Air: BaseAir<F> + Clone;
+
     type Interface: VmAdapterInterface<F>;
 
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
@@ -100,6 +97,9 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
         local: &[AB::Var],
         interface: AdapterAirContext<AB::Expr, Self::Interface>,
     );
+
+    /// Return the `from_pc` expression.
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
 }
 
 /// Trait to be implemented on primitive chip to integrate with the machine.
@@ -132,12 +132,11 @@ where
     I: VmAdapterInterface<AB::Expr>,
 {
     /// Returns `(to_pc, interface)`.
-    // `local_adapter` provided for flexibility - likely only needed for `from_pc` and `is_valid`
     fn eval(
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        local_adapter: &[AB::Var],
+        from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I>;
 }
 
@@ -192,8 +191,8 @@ where
 impl<F, A, M> InstructionExecutor<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,
-    A: VmAdapterChip<F>,
-    M: VmCoreChip<F, A::Interface>,
+    A: VmAdapterChip<F> + Send + Sync,
+    M: VmCoreChip<F, A::Interface> + Send + Sync,
 {
     fn execute(
         &mut self,
@@ -221,49 +220,6 @@ where
     }
 }
 
-impl<F, A, M> VmChip<F> for VmChipWrapper<F, A, M>
-where
-    F: PrimeField32,
-    A: VmAdapterChip<F> + Sync,
-    M: VmCoreChip<F, A::Interface> + Sync,
-{
-    fn generate_trace(self) -> RowMajorMatrix<F> {
-        let height = next_power_of_two_or_zero(self.records.len());
-        let core_width = self.core.air().width();
-        let adapter_width = self.adapter.air().width();
-        let width = core_width + adapter_width;
-        let mut values = vec![F::zero(); height * width];
-        // This zip only goes through records.
-        // The padding rows between records.len()..height are filled with zeros.
-        values
-            .par_chunks_mut(width)
-            .zip(self.records.into_par_iter())
-            .for_each(|(row_slice, record)| {
-                let (adapter_row, core_row) = row_slice.split_at_mut(adapter_width);
-                self.adapter
-                    .generate_trace_row(adapter_row, record.0, record.1);
-                self.core.generate_trace_row(core_row, record.2);
-            });
-        RowMajorMatrix::new(values, width)
-    }
-
-    fn air_name(&self) -> String {
-        format!(
-            "<{},{}>",
-            get_air_name(self.adapter.air()),
-            get_air_name(self.core.air())
-        )
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.records.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        self.adapter.air().width() + self.core.air().width()
-    }
-}
-
 // Note[jpw]: the statement we want is:
 // - when A::Air is an AdapterAir for all AirBuilders needed by stark-backend
 // - and when M::Air is an CoreAir for all AirBuilders needed by stark-backend,
@@ -274,8 +230,8 @@ impl<SC, A, C> Chip<SC> for VmChipWrapper<Val<SC>, A, C>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
-    A: VmAdapterChip<Val<SC>>,
-    C: VmCoreChip<Val<SC>, A::Interface>,
+    A: VmAdapterChip<Val<SC>> + Send + Sync,
+    C: VmCoreChip<Val<SC>, A::Interface> + Send + Sync,
     A::Air: Send + Sync + 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
     A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
@@ -300,6 +256,48 @@ where
             core: self.core.air().clone(),
         };
         Arc::new(air)
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let air = self.air();
+        let height = next_power_of_two_or_zero(self.records.len());
+        let core_width = self.core.air().width();
+        let adapter_width = self.adapter.air().width();
+        let width = core_width + adapter_width;
+        let mut values = vec![Val::<SC>::zero(); height * width];
+        // This zip only goes through records.
+        // The padding rows between records.len()..height are filled with zeros.
+        values
+            .par_chunks_mut(width)
+            .zip(self.records.into_par_iter())
+            .for_each(|(row_slice, record)| {
+                let (adapter_row, core_row) = row_slice.split_at_mut(adapter_width);
+                self.adapter
+                    .generate_trace_row(adapter_row, record.0, record.1);
+                self.core.generate_trace_row(core_row, record.2);
+            });
+        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
+    }
+}
+
+impl<F, A, M> ChipUsageGetter for VmChipWrapper<F, A, M>
+where
+    F: PrimeField32,
+    A: VmAdapterChip<F> + Sync,
+    M: VmCoreChip<F, A::Interface> + Sync,
+{
+    fn air_name(&self) -> String {
+        format!(
+            "<{},{}>",
+            get_air_name(self.adapter.air()),
+            get_air_name(self.core.air())
+        )
+    }
+    fn current_trace_height(&self) -> usize {
+        self.records.len()
+    }
+    fn trace_width(&self) -> usize {
+        self.adapter.air().width() + self.core.air().width()
     }
 }
 
@@ -348,7 +346,9 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let (local_adapter, local_core) = local.split_at(self.adapter.width());
 
-        let ctx = self.core.eval(builder, local_core, local_adapter);
+        let ctx = self
+            .core
+            .eval(builder, local_core, self.adapter.get_from_pc(local_adapter));
         self.adapter.eval(builder, local_adapter, ctx);
     }
 }
@@ -423,6 +423,7 @@ pub struct DynArray<T>(pub Vec<T>);
 mod conversions {
     use super::*;
 
+    // AdapterAirContext: FlatInterface -> BasicInterface
     impl<
             T,
             const NUM_READS: usize,
@@ -463,6 +464,7 @@ mod conversions {
         }
     }
 
+    // AdapterAirContext: BasicInterface -> FlatInterface
     impl<
             T,
             const NUM_READS: usize,
@@ -508,6 +510,7 @@ mod conversions {
         }
     }
 
+    // AdapterRuntimeContext: BasicInterface -> FlatInterface
     impl<
             T,
             const NUM_READS: usize,
@@ -543,6 +546,7 @@ mod conversions {
         }
     }
 
+    // AdapterRuntimeContext: FlatInterface -> BasicInterface
     impl<
             T: AbstractField,
             const NUM_READS: usize,
@@ -583,6 +587,12 @@ mod conversions {
         }
     }
 
+    impl<T> From<DynArray<T>> for Vec<T> {
+        fn from(v: DynArray<T>) -> Vec<T> {
+            v.0
+        }
+    }
+
     impl<T, const N: usize, const M: usize> From<[[T; N]; M]> for DynArray<T> {
         fn from(v: [[T; N]; M]) -> Self {
             Self(v.into_iter().flatten().collect())
@@ -603,6 +613,16 @@ mod conversions {
         }
     }
 
+    impl<T: Clone> From<DynArray<T>> for MinimalInstruction<T> {
+        fn from(m: DynArray<T>) -> Self {
+            MinimalInstruction {
+                is_valid: m.0[0].clone(),
+                opcode: m.0[1].clone(),
+            }
+        }
+    }
+
+    // AdapterAirContext: BasicInterface -> DynInterface
     impl<
             T,
             const NUM_READS: usize,
@@ -642,6 +662,7 @@ mod conversions {
         }
     }
 
+    // AdapterRuntimeContext: BasicInterface -> DynInterface
     impl<
             T,
             const NUM_READS: usize,
@@ -670,6 +691,34 @@ mod conversions {
                     .flat_map(|x| x.into_iter())
                     .collect::<Vec<_>>()
                     .into(),
+            }
+        }
+    }
+
+    // AdapterAirContext: FlatInterface -> DynInterface
+    impl<T: Clone, const READ_CELLS: usize, const WRITE_CELLS: usize>
+        From<AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+        for AdapterAirContext<T, DynAdapterInterface<T>>
+    {
+        fn from(ctx: AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.to_vec().into(),
+                writes: ctx.writes.to_vec().into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: FlatInterface -> DynInterface
+    impl<T: Clone, const READ_CELLS: usize, const WRITE_CELLS: usize>
+        From<AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+        for AdapterRuntimeContext<T, DynAdapterInterface<T>>
+    {
+        fn from(ctx: AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.to_vec().into(),
             }
         }
     }

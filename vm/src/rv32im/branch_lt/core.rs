@@ -73,7 +73,7 @@ where
         &self,
         _builder: &mut AB,
         _local: &[AB::Var],
-        _local_adapter: &[AB::Var],
+        _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
     }
