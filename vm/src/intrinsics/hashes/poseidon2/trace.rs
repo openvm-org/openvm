@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use afs_primitives::utils::next_power_of_two_or_zero;
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     prover::types::AirProofInput,
@@ -29,11 +30,7 @@ where
         } = self;
 
         let row_len = records.len();
-        let correct_len = if row_len > 0 {
-            row_len.next_power_of_two()
-        } else {
-            0
-        };
+        let correct_len = next_power_of_two_or_zero(row_len);
         let diff = correct_len - row_len;
 
         let aux_cols_factory = memory_controller.borrow().aux_cols_factory();

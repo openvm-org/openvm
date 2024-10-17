@@ -17,7 +17,7 @@ use afs_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::{AirProofInput, ProofInput},
     rap::AnyRap,
-    Chip, ChipUsageGetter,
+    Chip,
 };
 use axvm_instructions::*;
 use num_bigint_dig::BigUint;
