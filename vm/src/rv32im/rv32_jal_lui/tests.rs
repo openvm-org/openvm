@@ -22,7 +22,8 @@ use crate::{
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            Rv32RdWriteAdapter, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+            Rv32RdWriteAdapter, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
+            RV_IS_TYPE_IMM_BITS,
         },
         rv32_jal_lui::Rv32JalLuiCols,
     },
@@ -49,32 +50,18 @@ fn set_and_execute(
 
     let a = rng.gen_range(1..32) << 2;
 
-    if let Some(pc) = initial_pc {
-        tester.execute_with_pc(
-            chip,
-            Instruction::from_isize(
-                opcode as usize + Rv32JalLuiOpcode::default_offset(),
-                a as isize,
-                0,
-                imm as isize,
-                1,
-                0,
-            ),
-            pc,
-        );
-    } else {
-        tester.execute(
-            chip,
-            Instruction::from_isize(
-                opcode as usize + Rv32JalLuiOpcode::default_offset(),
-                a as isize,
-                0,
-                imm as isize,
-                1,
-                0,
-            ),
-        );
-    }
+    tester.execute_with_pc(
+        chip,
+        Instruction::from_isize(
+            opcode as usize + Rv32JalLuiOpcode::default_offset(),
+            a as isize,
+            0,
+            imm as isize,
+            1,
+            0,
+        ),
+        initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
+    );
 
     let initial_pc = tester
         .execution
