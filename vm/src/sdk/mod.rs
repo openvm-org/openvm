@@ -25,8 +25,8 @@ where
             let mut config = config;
             config.collect_metrics = true;
             {
-                let mut vm = VirtualMachine::new(config.clone(), program.clone(), input_stream.clone());
-                vm.execute().unwrap();
+                let mut vm = VirtualMachine::new(config.clone()).with_input_stream(input_stream.clone());
+                vm.execute(program.clone()).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time
             config.collect_metrics = false;
@@ -34,9 +34,9 @@ where
         }
     }
 
-    let vm = VirtualMachine::new(config, program, input_stream);
+    let vm = VirtualMachine::new(config).with_input_stream(input_stream);
 
-    let mut result = vm.execute_and_generate().unwrap();
+    let mut result = vm.execute_and_generate(program).unwrap();
     assert_eq!(
         result.per_segment.len(),
         1,

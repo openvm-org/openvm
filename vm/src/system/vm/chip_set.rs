@@ -70,8 +70,8 @@ use crate::{
     },
     system::{
         memory::{
-            merkle::MemoryMerkleBus, offline_checker::MemoryBus, MemoryController,
-            MemoryControllerRef, TimestampedEquipartition, CHUNK,
+            merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
+            MemoryControllerRef, CHUNK,
         },
         program::{bridge::ProgramBus, ProgramChip},
         vm::{
@@ -178,7 +178,7 @@ impl VmConfig {
                     self.memory_config,
                     range_checker.clone(),
                     merkle_bus,
-                    TimestampedEquipartition::<F, CHUNK>::new(),
+                    Equipartition::<F, CHUNK>::new(),
                 )))
             }
         };
