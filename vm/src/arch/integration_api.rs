@@ -741,7 +741,9 @@ mod conversions {
         From<AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
         for AdapterRuntimeContext<T, DynAdapterInterface<T>>
     {
-        fn from(ctx: AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>) -> Self {
+        fn from(
+            ctx: AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>,
+        ) -> Self {
             AdapterRuntimeContext {
                 to_pc: ctx.to_pc,
                 writes: ctx.writes.to_vec().into(),
