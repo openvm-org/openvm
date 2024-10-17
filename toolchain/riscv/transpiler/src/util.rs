@@ -11,14 +11,18 @@ fn i12_to_u24(imm: i32) -> u32 {
 }
 
 /// Create a new [`Instruction`] from an R-type instruction.
-pub fn from_r_type<F: PrimeField32>(opcode: usize, dec_insn: &RType) -> Instruction<F> {
+pub fn from_r_type<F: PrimeField32>(
+    opcode: usize,
+    e_as: usize,
+    dec_insn: &RType,
+) -> Instruction<F> {
     Instruction::new(
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rs1),
         F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rs2),
-        F::one(), // rd and rs1 are registers
-        F::one(), // rs2 is a register
+        F::one(),                      // rd and rs1 are registers
+        F::from_canonical_usize(e_as), // rs2 can be mem (eg modular arith)
         F::zero(),
         F::zero(),
         String::new(),

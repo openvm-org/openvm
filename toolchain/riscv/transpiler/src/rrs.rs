@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use axvm_instructions::{EccOpcode, ModularArithmeticOpcode};
+use axvm_instructions::{riscv::RvIntrinsic, EccOpcode, ModularArithmeticOpcode};
 use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
@@ -15,6 +15,7 @@ use stark_vm::{
     rv32im::adapters::RV32_REGISTER_NUM_LANES,
     system::program::{isize_to_field, Instruction},
 };
+use strum::EnumCount;
 
 use crate::util::*;
 
@@ -26,7 +27,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     type InstructionResult = Instruction<F>;
 
     fn process_add(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::ADD.with_default_offset(), &dec_insn)
+        from_r_type(AluOpcode::ADD.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_addi(&mut self, dec_insn: IType) -> Self::InstructionResult {
@@ -34,11 +35,11 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_sub(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::SUB.with_default_offset(), &dec_insn)
+        from_r_type(AluOpcode::SUB.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_xor(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::XOR.with_default_offset(), &dec_insn)
+        from_r_type(AluOpcode::XOR.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_xori(&mut self, dec_insn: IType) -> Self::InstructionResult {
@@ -46,7 +47,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_or(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::OR.with_default_offset(), &dec_insn)
+        from_r_type(AluOpcode::OR.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_ori(&mut self, dec_insn: IType) -> Self::InstructionResult {
@@ -54,7 +55,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_and(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::AND.with_default_offset(), &dec_insn)
+        from_r_type(AluOpcode::AND.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_andi(&mut self, dec_insn: IType) -> Self::InstructionResult {
@@ -62,7 +63,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_sll(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(ShiftOpcode::SLL.with_default_offset(), &dec_insn)
+        from_r_type(ShiftOpcode::SLL.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_slli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
@@ -70,7 +71,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_srl(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(ShiftOpcode::SRL.with_default_offset(), &dec_insn)
+        from_r_type(ShiftOpcode::SRL.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_srli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
@@ -78,7 +79,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_sra(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(ShiftOpcode::SRA.with_default_offset(), &dec_insn)
+        from_r_type(ShiftOpcode::SRA.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_srai(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
@@ -86,7 +87,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_slt(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(LessThanOpcode::SLT.with_default_offset(), &dec_insn)
+        from_r_type(LessThanOpcode::SLT.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_slti(&mut self, dec_insn: IType) -> Self::InstructionResult {
@@ -94,7 +95,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_sltu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(LessThanOpcode::SLTU.with_default_offset(), &dec_insn)
+        from_r_type(LessThanOpcode::SLTU.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_sltui(&mut self, dec_insn: IType) -> Self::InstructionResult {
@@ -194,35 +195,35 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_mul(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulOpcode::MUL.with_default_offset(), &dec_insn)
+        from_r_type(MulOpcode::MUL.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_mulh(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULH.with_default_offset(), &dec_insn)
+        from_r_type(MulHOpcode::MULH.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_mulhu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULHU.with_default_offset(), &dec_insn)
+        from_r_type(MulHOpcode::MULHU.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_mulhsu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULHSU.with_default_offset(), &dec_insn)
+        from_r_type(MulHOpcode::MULHSU.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_div(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::DIV.with_default_offset(), &dec_insn)
+        from_r_type(DivRemOpcode::DIV.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_divu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::DIVU.with_default_offset(), &dec_insn)
+        from_r_type(DivRemOpcode::DIVU.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_rem(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::REM.with_default_offset(), &dec_insn)
+        from_r_type(DivRemOpcode::REM.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_remu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::REMU.with_default_offset(), &dec_insn)
+        from_r_type(DivRemOpcode::REMU.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
@@ -257,27 +258,31 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
         }
         0x2b => {
             match funct3 {
-                0b000 => {
+                ModularArithmeticOpcode::FUNCT3 => {
                     // mod operations
                     let funct7 = (instruction_u32 >> 25) & 0x7f;
-                    let prime_idx = funct7 >> 2;
-                    let prime_opcode = funct7 & 3;
-                    let opcode_with_offset = (prime_opcode + prime_idx * 4) as usize
+                    let size = ModularArithmeticOpcode::COUNT as u32;
+                    let prime_idx = funct7 / size;
+                    let local_opcode_idx = funct7 % size;
+                    let global_opcode_idx = (local_opcode_idx + prime_idx * size) as usize
                         + ModularArithmeticOpcode::default_offset();
                     Some(from_r_type(
-                        opcode_with_offset,
+                        global_opcode_idx,
+                        2,
                         &RType::new(instruction_u32),
                     ))
                 }
-                0b001 => {
+                EccOpcode::FUNCT3 => {
                     // short weierstrass ec
                     let funct7 = (instruction_u32 >> 25) & 0x7f;
-                    let prime_idx = funct7 >> 1;
-                    let prime_opcode = funct7 & 1;
-                    let opcode_with_offset =
-                        (prime_opcode + prime_idx * 2) as usize + EccOpcode::default_offset();
+                    let size = EccOpcode::COUNT as u32;
+                    let prime_idx = funct7 / size;
+                    let local_opcode_idx = funct7 % size;
+                    let global_opcode_idx = (local_opcode_idx + prime_idx * size) as usize
+                        + EccOpcode::default_offset();
                     Some(from_r_type(
-                        opcode_with_offset,
+                        global_opcode_idx,
+                        2,
                         &RType::new(instruction_u32),
                     ))
                 }
