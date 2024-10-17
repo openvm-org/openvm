@@ -136,6 +136,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
         let rd = if enabled != F::zero() {
             Some(memory.write(d, a, output.writes))
         } else {
+            memory.increment_timestamp();
             None
         };
 
