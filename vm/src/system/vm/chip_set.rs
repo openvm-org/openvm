@@ -772,6 +772,8 @@ impl<SC: StarkGenericConfig> ChipSetProofInputBuilder<SC> {
             proof_input_per_air: vec![],
         }
     }
+    /// Adds air proof input if one of the main trace matrices is non-empty.
+    /// Always increments the internal `curr_air_id` regardless of whether a new air proof input was added or not.
     fn add_air_proof_input(&mut self, air_proof_input: AirProofInput<SC>) {
         let h = if !air_proof_input.raw.cached_mains.is_empty() {
             air_proof_input.raw.cached_mains[0].height()
