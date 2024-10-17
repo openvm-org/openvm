@@ -175,7 +175,10 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_lui(&mut self, dec_insn: UType) -> Self::InstructionResult {
-        from_u_type(Rv32JalLuiOpcode::LUI.with_default_offset(), &dec_insn)
+        // we need to set op_f to 1 because this is handled by the same chip as jal
+        let mut result = from_u_type(Rv32JalLuiOpcode::LUI.with_default_offset(), &dec_insn);
+        result.op_f = F::one();
+        result
     }
 
     fn process_auipc(&mut self, dec_insn: UType) -> Self::InstructionResult {
