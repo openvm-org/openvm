@@ -126,11 +126,6 @@ pub struct Rv32VecHeapAdapterCols<
 }
 
 #[derive(Clone)]
-struct Rv32VecHeapAdapterReads<T, const NUM_READS: usize, const READ_SIZE: usize> {
-    pub data: [[[T; READ_SIZE]; NUM_READS]; 2],
-}
-
-#[derive(Clone)]
 pub struct Rv32VecHeapAdapterInterface<
     T,
     const NUM_READS: usize,
@@ -148,7 +143,7 @@ impl<
     > VmAdapterInterface<T>
     for Rv32VecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
-    type Reads = Rv32VecHeapAdapterReads<T, NUM_READS, READ_SIZE>;
+    type Reads = [[[T; READ_SIZE]; NUM_READS]; 2];
     type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
     type ProcessedInstruction = MinimalInstruction<T>;
 }
@@ -217,7 +212,7 @@ impl<
                     MemoryAddress::new(AB::Expr::one(), ptr),
                     val,
                     timestamp_pp(),
-                    &aux,
+                    aux,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
@@ -238,7 +233,7 @@ impl<
         // Reads from heap
         for (address, reads, reads_aux) in izip!(
             [rs1_val_f, rs2_val_f],
-            ctx.reads.data,
+            ctx.reads,
             [&cols.reads1_aux, &cols.reads2_aux]
         ) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
@@ -250,7 +245,7 @@ impl<
                         ),
                         read,
                         timestamp_pp(),
-                        &aux,
+                        aux,
                     )
                     .eval(builder, ctx.instruction.is_valid.clone());
             }
@@ -266,7 +261,7 @@ impl<
                     ),
                     write,
                     timestamp_pp(),
-                    &aux,
+                    aux,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
@@ -339,9 +334,7 @@ impl<
             })
         });
 
-        let reads = Rv32VecHeapAdapterReads {
-            data: [reads1.map(|x| x.data), reads2.map(|x| x.data)],
-        };
+        let reads = [reads1.map(|x| x.data), reads2.map(|x| x.data)];
 
         let record = Rv32VecHeapReadRecord {
             rs1: rs1_record,
@@ -364,12 +357,15 @@ impl<
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let e = instruction.e;
+        let mut i = 0;
         let writes = output.writes.map(|write| {
-            memory.write(
+            let record = memory.write(
                 e,
                 read_record.rd_val + F::from_canonical_u32((i * WRITE_SIZE) as u32),
                 write,
-            )
+            );
+            i += 1;
+            record
         });
 
         Ok((
@@ -449,14 +445,14 @@ mod conversions {
         ) -> Self {
             AdapterAirContext {
                 to_pc: ctx.to_pc,
-                reads: ctx.reads.data.into(),
+                reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
             }
         }
     }
 
-    // AdapterRuntimeContext: BasicInterface -> DynInterface
+    // AdapterRuntimeContext: Rv32VecHeapAdapterInterface -> DynInterface
     impl<
             T,
             const NUM_READS: usize,
