@@ -15,7 +15,9 @@ use crate::{
         instructions::{
             Rv32AuipcOpcode::{self, *},
             UsizeOpcode,
-        }, AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip
+        },
+        AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
     system::program::Instruction,
@@ -124,7 +126,7 @@ where
             instruction: JumpUIProcessedInstruction {
                 is_valid: is_valid.into(),
                 opcode: expected_opcode.into(),
-                immediate: imm.into(),
+                immediate: imm,
             }
             .into(),
         }
