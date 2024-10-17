@@ -67,20 +67,29 @@ impl<SC: StarkGenericConfig> SegmentResult<SC> {
     }
 }
 
+macro_rules! find_chip {
+    ($chip_set:expr, $chip_type:path) => {{
+        let mut found_chip = None;
+        for chip in &$chip_set.chips {
+            if let $chip_type(c) = chip {
+                assert!(
+                    found_chip.is_none(),
+                    concat!("Multiple ", stringify!($chip_type), " chips found")
+                );
+                found_chip = Some(c.clone());
+            }
+        }
+        found_chip.unwrap()
+    }};
+}
+
 impl<F: PrimeField32> ExecutionSegment<F> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
         let mut chip_set = config.create_chip_set();
         chip_set.program_chip.set_program(program);
 
-        let mut core_chip = None;
-        for chip in &chip_set.chips {
-            if let AxVmChip::Core(c) = chip {
-                assert!(core_chip.is_none(), "Multiple Core chips found");
-                core_chip = Some(c.clone());
-            }
-        }
-        let core_chip = core_chip.unwrap();
+        let core_chip = find_chip!(chip_set, AxVmChip::Core);
         core_chip.borrow_mut().set_start_state(state.state);
 
         Self {
@@ -240,14 +249,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         // Finalize memory.
         match config.memory_config.persistence_type {
             PersistenceType::Persistent => {
-                let mut poseidon_chip = None;
-                for chip in &chip_set.chips {
-                    if let AxVmChip::Poseidon2(c) = chip {
-                        assert!(poseidon_chip.is_none(), "Multiple Poseidon2 chips found");
-                        poseidon_chip = Some(c.clone());
-                    }
-                }
-                let poseidon_chip = poseidon_chip.unwrap();
+                let poseidon_chip = find_chip!(chip_set, AxVmChip::Poseidon2);
                 let mut hasher = poseidon_chip.borrow_mut();
 
                 chip_set
