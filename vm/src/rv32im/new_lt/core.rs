@@ -32,7 +32,8 @@ pub struct LessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
     // Most significant limb of b and c respectively as a field element, will be range
     // checked to be within [-128, 127). Field xor_res is the result of (b_msb_f + 128)
-    // ^ (c_msb_f + 128) used to range check b_msb_f and c_msb_f.
+    // ^ (c_msb_f + 128) if signed and b_msb_f ^ c_msb_f else, used to range check
+    // b_msb_f and c_msb_f.
     pub b_msb_f: T,
     pub c_msb_f: T,
     pub xor_res: T,
