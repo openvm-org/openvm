@@ -610,7 +610,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
     /// Stopping is triggered by should_segment()
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        let mut timestamp = self.core_chip.borrow().state.timestamp;
+        let mut timestamp = self.memory_controller.borrow().timestamp();
         let mut pc = self.core_chip.borrow().state.pc;
 
         let mut collect_metrics = self.config.collect_metrics;

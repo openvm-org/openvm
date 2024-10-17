@@ -69,9 +69,9 @@ impl<T: Clone> CoreIoCols<T> {
 }
 
 impl<T: Field> CoreIoCols<T> {
-    pub fn nop_row(pc: T, timestamp: T) -> Self {
+    pub fn nop_row(pc: T) -> Self {
         Self {
-            timestamp,
+            timestamp: T::default(),
             pc,
             opcode: T::from_canonical_usize(CoreOpcode::NOP as usize),
             op_a: T::default(),
@@ -311,9 +311,9 @@ impl<F: PrimeField32> CoreCols<F> {
     /// This function mutates internal state of some chips. It should be called once for every
     /// NOP row---results should not be cloned.
     /// TODO[zach]: Make this less surprising, probably by not doing less-than checks on dummy rows.
-    pub fn nop_row(chip: &CoreChip<F>, pc: F, timestamp: F) -> Self {
+    pub fn nop_row(chip: &CoreChip<F>, pc: F) -> Self {
         Self {
-            io: CoreIoCols::<F>::nop_row(pc, timestamp),
+            io: CoreIoCols::<F>::nop_row(pc),
             aux: CoreAuxCols::<F>::nop_row(chip),
         }
     }
