@@ -23,7 +23,7 @@ use crate::{
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
-        adapters::{Rv32RdWriteAdapter, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
+        adapters::{Rv32RdWriteAdapter, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
         rv32_auipc::solve_auipc,
     },
     system::program::Instruction,
@@ -44,24 +44,15 @@ fn set_and_execute(
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = gen_pointer(rng, 32);
 
-    if let Some(pc) = initial_pc {
-        tester.execute_with_pc(
-            chip,
-            Instruction::from_usize(
-                opcode as usize + Rv32AuipcOpcode::default_offset(),
-                [a, 0, imm, 1, 0],
-            ),
-            pc,
-        );
-    } else {
-        tester.execute(
-            chip,
-            Instruction::from_usize(
-                opcode as usize + Rv32AuipcOpcode::default_offset(),
-                [a, 0, imm, 1, 0],
-            ),
-        );
-    }
+    tester.execute_with_pc(
+        chip,
+        Instruction::from_usize(
+            opcode as usize + Rv32AuipcOpcode::default_offset(),
+            [a, 0, imm, 1, 0],
+        ),
+        initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
+    );
+
     let initial_pc = tester
         .execution
         .records
