@@ -84,7 +84,8 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 .final_memory
                 .get(&(address_space, address_label))
                 .unwrap_or(&[F::zero(); CHUNK]);
-            MemoryNode::new_leaf(leaf_values)
+            let leaf_hash = hasher.hash(&leaf_values, &[F::zero(); CHUNK]);
+            MemoryNode::new_leaf(leaf_hash)
         } else if let NonLeaf {
             left: initial_left_node,
             right: initial_right_node,
@@ -92,7 +93,7 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
         } = initial_node.clone()
         {
             // Tell the hasher about this hash.
-            hasher.hash_and_record(initial_left_node.hash(), initial_right_node.hash());
+            hasher.hash_and_record(&initial_left_node.hash(), &initial_right_node.hash());
 
             let left_as_label = 2 * as_label;
             let left_address_label = 2 * address_label;

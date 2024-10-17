@@ -181,8 +181,8 @@ fn test_vm_1_persistent() {
         // 13 times. We use 13 because addr_space_max_bits = 1 and pointer_max_bits = 16,
         // so the height of the tree is 1 + 16 - 3 = 14.
         [
-            600046300, 1545134495, 977657425, 1213239099, 417259453, 434928898, 891129211,
-            1521571686
+            1860730809, 952766590, 1529251869, 978208824, 173743442, 1495326235, 1188286360,
+            350327606
         ]
         .map(BabyBear::from_canonical_u32)
     );
