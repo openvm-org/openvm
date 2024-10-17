@@ -16,8 +16,8 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     rv32im::adapters::{PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_J_TYPE_IMM_BITS},
     system::program::Instruction,
@@ -52,9 +52,9 @@ impl<AB, I> VmCoreAir<AB, I> for Rv32JalLuiCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<()>,
-    I::Writes: From<[AB::Expr; RV32_REGISTER_NUM_LANES]>,
-    I::ProcessedInstruction: From<(AB::Expr, AB::Expr, AB::Expr)>,
+    I::Reads: From<[[AB::Expr; 0]; 0]>,
+    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -119,9 +119,14 @@ where
 
         AdapterAirContext {
             to_pc: Some(to_pc),
-            reads: ().into(),
-            writes: rd.map(|x| x.into()).into(),
-            instruction: (is_valid, expected_opcode, imm.into()).into(),
+            reads: [].into(),
+            writes: [rd.map(|x| x.into())].into(),
+            instruction: JumpUIProcessedInstruction {
+                is_valid,
+                opcode: expected_opcode,
+                immediate: imm.into(),
+            }
+            .into(),
         }
     }
 }
@@ -154,7 +159,7 @@ impl Rv32JalLuiCoreChip {
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32JalLuiCoreChip
 where
-    I::Writes: From<[F; RV32_REGISTER_NUM_LANES]>,
+    I::Writes: From<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
 {
     type Record = Rv32JalLuiCoreRecord<F>;
     type Air = Rv32JalLuiCoreAir;
@@ -194,7 +199,7 @@ where
 
         let output = AdapterRuntimeContext {
             to_pc: Some(to_pc),
-            writes: rd_data.into(),
+            writes: [rd_data].into(),
         };
 
         Ok((

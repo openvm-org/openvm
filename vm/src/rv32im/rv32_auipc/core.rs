@@ -71,7 +71,7 @@ impl<F: Field> Rv32AuipcCoreChip<F> {
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32AuipcCoreChip<F>
 where
-    I::Writes: From<[F; RV32_REGISTER_NUM_LANES]>,
+    I::Writes: From<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
 {
     type Record = ();
     type Air = Rv32AuipcCoreAir<F>;
@@ -88,7 +88,7 @@ where
         let rd_data = solve_auipc(local_opcode_index, from_pc, c);
         let rd_data = rd_data.map(F::from_canonical_u32);
 
-        let output = AdapterRuntimeContext::without_pc(rd_data);
+        let output = AdapterRuntimeContext::without_pc([rd_data]);
 
         // TODO: send XorLookUpChip requests
         // TODO: create Record and return
