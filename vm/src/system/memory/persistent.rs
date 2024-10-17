@@ -159,7 +159,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
             let (initial_row, final_row) = row.split_at_mut(width);
             *initial_row.borrow_mut() = match self.initial_memory.get(&(address_space, label)) {
                 Some(initial) => {
-                    let initial_hash = hasher.hash_and_record(&initial.values, &[F::zero(); CHUNK]);
+                    let initial_hash = hasher.hash_and_record(&initial.values);
                     PersistentBoundaryCols {
                         expand_direction: F::one(),
                         address_space,
@@ -171,7 +171,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 }
                 None => {
                     let initial_hash =
-                        hasher.hash_and_record(&[F::zero(); CHUNK], &[F::zero(); CHUNK]);
+                        hasher.hash_and_record(&[F::zero(); CHUNK]);
                     PersistentBoundaryCols {
                         expand_direction: F::one(),
                         address_space,
@@ -184,7 +184,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
             };
             let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
             let final_hash =
-                hasher.hash_and_record(&timestamped_values.values, &[F::zero(); CHUNK]);
+                hasher.hash_and_record(&timestamped_values.values);
             *final_row.borrow_mut() = PersistentBoundaryCols {
                 expand_direction: F::neg_one(),
                 address_space,

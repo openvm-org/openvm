@@ -333,7 +333,7 @@ impl<F: PrimeField32> HasherChip<CHUNK, F> for Poseidon2Chip<F> {
     /// Takes two chunks, hashes them, and returns the result. Total width 3 * CHUNK, exposed in `direct_interaction_width()`.
     ///
     /// No interactions with other chips.
-    fn hash_and_record(&mut self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
+    fn compress_and_record(&mut self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
         let mut input_state = [F::zero(); WIDTH];
         input_state[..CHUNK].copy_from_slice(lhs);
         input_state[CHUNK..].copy_from_slice(rhs);
@@ -347,7 +347,7 @@ impl<F: PrimeField32> HasherChip<CHUNK, F> for Poseidon2Chip<F> {
         output
     }
 
-    fn hash(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
+    fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
         let mut input_state = [F::zero(); WIDTH];
         input_state[..CHUNK].copy_from_slice(lhs);
         input_state[CHUNK..].copy_from_slice(rhs);

@@ -1,17 +1,25 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use p3_field::PrimeField32;
+use p3_field::{Field, PrimeField32};
 use MemoryNode::*;
 
 use super::manager::dimensions::MemoryDimensions;
 use crate::system::memory::Equipartition;
 
-pub trait HasherChip<const CHUNK: usize, F> {
+pub trait HasherChip<const CHUNK: usize, F: Field> {
     /// Statelessly compresses two chunks of data into a single chunk.
-    fn hash(&self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
+    fn compress(&self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
 
     /// Stateful version of `hash` for recording the event in the chip.
-    fn hash_and_record(&mut self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
+    fn compress_and_record(&mut self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
+
+    fn hash(&self, values: &[F; CHUNK]) -> [F; CHUNK] {
+        self.compress(values, &[F::zero(); CHUNK])
+    }
+
+    fn hash_and_record(&mut self, values: &[F; CHUNK]) -> [F; CHUNK] {
+        self.compress_and_record(values, &[F::zero(); CHUNK])
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,7 +52,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> Self {
         NonLeaf {
-            hash: hasher.hash_and_record(&left.hash(), &right.hash()),
+            hash: hasher.compress_and_record(&left.hash(), &right.hash()),
             left,
             right,
         }
@@ -61,7 +69,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         } else {
             let child = Arc::new(Self::construct_uniform(height - 1, leaf_value, hasher));
             NonLeaf {
-                hash: hasher.hash(&child.hash(), &child.hash()),
+                hash: hasher.compress(&child.hash(), &child.hash()),
                 left: child.clone(),
                 right: child,
             }
@@ -77,17 +85,16 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         let mut range = memory.range(from..from + (1 << height));
         if height == 0 {
             let values = *memory.get(&from).unwrap_or(&[F::zero(); CHUNK]);
-            let hash = hasher.hash(&values, &[F::zero(); CHUNK]);
-            MemoryNode::new_leaf(hash)
+            MemoryNode::new_leaf(hasher.hash(&values))
         } else if range.next().is_none() {
-            let leaf_value = hasher.hash(&[F::zero(); CHUNK], &[F::zero(); CHUNK]);
+            let leaf_value = hasher.hash(&[F::zero(); CHUNK]);
             MemoryNode::construct_uniform(height, leaf_value, hasher)
         } else {
             let midpoint = from + (1 << (height - 1));
             let left = Self::from_memory(memory, height - 1, from, hasher);
             let right = Self::from_memory(memory, height - 1, midpoint, hasher);
             NonLeaf {
-                hash: hasher.hash(&left.hash(), &right.hash()),
+                hash: hasher.compress(&left.hash(), &right.hash()),
                 left: Arc::new(left),
                 right: Arc::new(right),
             }
