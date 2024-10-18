@@ -232,7 +232,7 @@ where
             .add_count(rd_data[2], RV32_CELL_BITS);
         self.range_checker_chip
             .add_count(rd_data[3], PC_BITS - RV32_CELL_BITS * 3);
-        
+
         let mask = (1 << 15) - 1;
         let to_pc_last_bit = rs1_val.wrapping_add(imm_extended) & 1;
 
