@@ -48,6 +48,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         BabyBear::bits() - 2,
     );
     // doing 1xNUM_LIMBS reads and writes
+    // Shouldn't this be 2 read 1 write?
     let adapter = Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),

@@ -40,6 +40,12 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
+    pub fn square(&mut self) -> Fp2 {
+        let c0 = self.c0.square() - self.c1.square();
+        let c1 = self.c0.mul(&mut self.c1).int_mul(2);
+        Fp2 { c0, c1 }
+    }
+
     pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
         let (z0, z1) = {
             let mut builder = self.c0.builder.borrow_mut();
@@ -79,6 +85,13 @@ impl Fp2 {
         Fp2 {
             c0: self.c0.mul(fp),
             c1: self.c1.mul(fp),
+        }
+    }
+
+    pub fn int_mul(&mut self, i: isize) -> Fp2 {
+        Fp2 {
+            c0: self.c0.int_mul(i),
+            c1: self.c1.int_mul(i),
         }
     }
 }

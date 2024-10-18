@@ -138,6 +138,8 @@ pub enum ModularArithmeticOpcode {
 pub enum EccOpcode {
     EC_ADD_NE,
     EC_DOUBLE,
+
+    MILLER_DOUBLE,
 }
 
 #[derive(

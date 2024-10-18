@@ -40,6 +40,7 @@ impl RvIntrinsic for EccOpcode {
         match self {
             EccOpcode::EC_ADD_NE => 0x00,
             EccOpcode::EC_DOUBLE => 0x01,
+            EccOpcode::MILLER_DOUBLE => 0x10,
         }
     }
 }
