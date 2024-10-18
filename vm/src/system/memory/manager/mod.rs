@@ -56,6 +56,7 @@ mod trace;
 
 use crate::system::memory::{
     dimensions::MemoryDimensions,
+    manager::memory::INITIAL_TIMESTAMP,
     merkle::{MemoryMerkleBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
     tree::{HasherChip, MemoryNode},
@@ -260,7 +261,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn set_initial_memory(&mut self, memory: Equipartition<F, CHUNK>) {
-        if self.timestamp() > Memory::<F>::INITIAL_TIMESTAMP + 1 {
+        if self.timestamp() > INITIAL_TIMESTAMP + 1 {
             panic!("Cannot set initial memory after first timestamp");
         }
         match &mut self.interface_chip {

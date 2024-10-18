@@ -17,8 +17,9 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use crate::{
     kernels::core::POSEIDON2_DIRECT_BUS,
     system::memory::{
-        dimensions::MemoryDimensions, merkle::MemoryMerkleBus, offline_checker::MemoryBus,
-        tree::HasherChip, Equipartition, MemoryAddress, TimestampedEquipartition,
+        dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
+        offline_checker::MemoryBus, tree::HasherChip, Equipartition, MemoryAddress,
+        TimestampedEquipartition,
     },
 };
 
@@ -165,7 +166,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                         leaf_label: F::from_canonical_usize(label),
                         values: *values,
                         hash: initial_hash,
-                        timestamp: F::zero(),
+                        timestamp: F::from_canonical_u32(INITIAL_TIMESTAMP),
                     }
                 }
                 None => {
