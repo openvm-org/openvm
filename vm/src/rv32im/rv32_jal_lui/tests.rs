@@ -22,7 +22,7 @@ use crate::{
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            Rv32CondRdWriteAdapter, Rv32CondRdWriteAdapterCols, PC_BITS, RV32_CELL_BITS,
+            Rv32CondRdWriteAdapterChip, Rv32CondRdWriteAdapterCols, PC_BITS, RV32_CELL_BITS,
             RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
         },
         rv32_jal_lui::Rv32JalLuiCols,
@@ -49,7 +49,7 @@ fn set_and_execute(
     };
 
     let a = rng.gen_range(1..32) << 2;
-    let need_write = a != 0 || opcode == LUI;
+    let needs_write = a != 0 || opcode == LUI;
 
     tester.execute_with_pc(
         chip,
@@ -60,7 +60,7 @@ fn set_and_execute(
             imm as isize,
             1,
             0,
-            need_write as isize,
+            needs_write as isize,
             0,
         ),
         initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
@@ -84,7 +84,7 @@ fn set_and_execute(
         .as_canonical_u32();
 
     let (next_pc, rd_data) = solve_jal_lui(opcode, initial_pc, imm);
-    let rd_data = if need_write { rd_data } else { [0; 4] };
+    let rd_data = if needs_write { rd_data } else { [0; 4] };
 
     assert_eq!(next_pc, final_pc);
     assert_eq!(rd_data.map(F::from_canonical_u32), tester.read::<4>(1, a));
@@ -103,7 +103,7 @@ fn rand_jal_lui_test() {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32CondRdWriteAdapter::<F>::new(
+    let adapter = Rv32CondRdWriteAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -137,14 +137,14 @@ fn run_negative_jal_lui_test(
     imm: Option<i32>,
     is_jal: Option<bool>,
     is_lui: Option<bool>,
-    need_write: Option<bool>,
+    needs_write: Option<bool>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32CondRdWriteAdapter::<F>::new(
+    let adapter = Rv32CondRdWriteAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -191,8 +191,8 @@ fn run_negative_jal_lui_test(
             core_cols.is_lui = F::from_bool(is_lui);
         }
 
-        if let Some(need_write) = need_write {
-            adapter_cols.need_write = F::from_bool(need_write);
+        if let Some(needs_write) = needs_write {
+            adapter_cols.needs_write = F::from_bool(needs_write);
         }
 
         *jal_lui_trace = RowMajorMatrix::new(trace_row, jal_lui_trace_width);
@@ -330,7 +330,7 @@ fn execute_roundtrip_sanity_test() {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32CondRdWriteAdapter::<F>::new(
+    let adapter = Rv32CondRdWriteAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),

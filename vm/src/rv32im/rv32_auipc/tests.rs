@@ -23,7 +23,7 @@ use crate::{
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
-        adapters::{Rv32RdWriteAdapter, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
+        adapters::{Rv32RdWriteAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
         rv32_auipc::solve_auipc,
     },
     system::program::Instruction,
@@ -80,7 +80,7 @@ fn rand_auipc_test() {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapter::<F>::new(
+    let adapter = Rv32RdWriteAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -118,7 +118,7 @@ fn run_negative_auipc_test(
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapter::<F>::new(
+    let adapter = Rv32RdWriteAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -267,7 +267,7 @@ fn execute_roundtrip_sanity_test() {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapter::<F>::new(
+    let adapter = Rv32RdWriteAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
