@@ -165,7 +165,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             Rv32JalrOpcode::JALR.with_default_offset(),
             F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
             F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rs1),
-            F::from_canonical_u32(i12_to_u24(dec_insn.imm) & 0xffff),
+            F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
             F::one(),
             F::zero(),
             F::from_bool(dec_insn.rd != 0),

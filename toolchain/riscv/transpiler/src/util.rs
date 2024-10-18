@@ -6,7 +6,7 @@ use stark_vm::{
     system::program::{isize_to_field, Instruction},
 };
 
-pub fn i12_to_u24(imm: i32) -> u32 {
+fn i12_to_u24(imm: i32) -> u32 {
     (imm as u32) & 0xffffff
 }
 
