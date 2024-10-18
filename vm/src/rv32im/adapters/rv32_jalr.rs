@@ -229,15 +229,17 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         adapter_cols.rs1_ptr = read_record.rs1.pointer;
         adapter_cols.rs1_aux_cols = self.aux_cols_factory.make_read_aux_cols(read_record.rs1);
-        (adapter_cols.rd_ptr, adapter_cols.rd_aux_cols) = match write_record.rd {
-            Some(rd) => {
-                adapter_cols.needs_write = F::one();
-                (rd.pointer, self.aux_cols_factory.make_write_aux_cols(rd))
-            }
-            None => {
-                adapter_cols.needs_write = F::zero();
-                (F::zero(), MemoryWriteAuxCols::disabled())
-            }
+        (
+            adapter_cols.rd_ptr,
+            adapter_cols.rd_aux_cols,
+            adapter_cols.needs_write,
+        ) = match write_record.rd {
+            Some(rd) => (
+                rd.pointer,
+                self.aux_cols_factory.make_write_aux_cols(rd),
+                F::one(),
+            ),
+            None => (F::zero(), MemoryWriteAuxCols::disabled(), F::zero()),
         };
     }
 
