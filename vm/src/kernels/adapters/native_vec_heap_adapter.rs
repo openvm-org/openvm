@@ -233,7 +233,7 @@ impl<
                     .read(
                         MemoryAddress::new(
                             cols.heap_as,
-                            address.clone() + AB::Expr::from_canonical_usize(i * READ_SIZE),
+                            address + AB::Expr::from_canonical_usize(i * READ_SIZE),
                         ),
                         read,
                         timestamp_pp(),
@@ -249,7 +249,7 @@ impl<
                 .write(
                     MemoryAddress::new(
                         cols.heap_as,
-                        cols.rd_val.clone() + AB::Expr::from_canonical_usize(i * WRITE_SIZE),
+                        cols.rd_val + AB::Expr::from_canonical_usize(i * WRITE_SIZE),
                     ),
                     write,
                     timestamp_pp(),
