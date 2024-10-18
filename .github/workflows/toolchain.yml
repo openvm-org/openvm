@@ -32,7 +32,7 @@ jobs:
       - name: Build a test fibonacci ELF
         working-directory: toolchain/riscv/examples/fibonacci/program
         run: |
-          cargo build --release
+          cargo +nightly build --release
           cp riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program ../../../transpiler/data/rv32im-fibonacci-program-elf-release
 
       - name: Run transpiler tests
