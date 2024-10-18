@@ -333,6 +333,17 @@ pub enum DivRemOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x375]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32TerminateNopOpcode {
+    TERMINATE,
+    NOP,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0xdeadaf]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
