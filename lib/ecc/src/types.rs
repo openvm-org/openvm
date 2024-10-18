@@ -2,6 +2,7 @@ use afs_compiler::{
     ir::{Array, BigUintVar, Builder, Config, MemIndex, MemVariable, Ptr, RVar, Var, Variable},
     prelude::DslVariable,
 };
+use afs_primitives::bigint::utils::big_uint_to_num_limbs;
 use k256::{
     ecdsa::{Signature, VerifyingKey},
     sha2::digest::generic_array::GenericArray,
@@ -9,7 +10,6 @@ use k256::{
 };
 use num_bigint_dig::BigUint;
 use p3_field::{AbstractField, PrimeField64};
-use stark_vm::old::modular_addsub::big_uint_to_num_limbs;
 use zkhash::ark_ff::Zero;
 
 /// EC point in Rust. **Unsafe** to assume (x, y) is a point on the curve.

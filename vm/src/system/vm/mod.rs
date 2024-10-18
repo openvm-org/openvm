@@ -29,7 +29,7 @@ pub mod segment;
 
 /// Parent struct that holds all execution segments, program, config.
 pub struct VirtualMachine<F: PrimeField32> {
-    config: VmConfig,
+    pub config: VmConfig,
     input_stream: VecDeque<Vec<F>>,
     initial_memory: Option<Equipartition<F, CHUNK>>,
     // TODO[zach]: Make better interface for user IOs

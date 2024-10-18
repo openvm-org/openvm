@@ -25,7 +25,7 @@ where
             let mut config = config;
             config.collect_metrics = true;
             {
-                let mut vm = VirtualMachine::new(config.clone()).with_input_stream(input_stream.clone());
+                let vm = VirtualMachine::new(config.clone()).with_input_stream(input_stream.clone());
                 vm.execute(program.clone()).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time

@@ -1,8 +1,9 @@
+use afs_primitives::bigint::utils::big_uint_to_num_limbs;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_field::{AbstractField, PrimeField64};
 use stark_vm::{
-    old::modular_addsub::{big_uint_to_num_limbs, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     system::vm::config::Modulus,
 };
 
