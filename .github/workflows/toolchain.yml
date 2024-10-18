@@ -32,6 +32,7 @@ jobs:
       - name: Build a test fibonacci ELF
         working-directory: toolchain/riscv/examples/fibonacci/program
         run: |
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
           cargo +nightly build --release
           cp riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program ../../../transpiler/data/rv32im-fibonacci-program-elf-release
 
