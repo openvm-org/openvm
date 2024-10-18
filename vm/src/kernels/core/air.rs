@@ -41,7 +41,7 @@ impl<F: Field> BaseAir<F> for CoreAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for CoreAir {
     fn num_public_values(&self) -> usize {
-        2 + self.options.num_public_values
+        self.options.num_public_values
     }
 }
 
@@ -300,7 +300,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             builder.assert_bool(flag);
             sum_flags = sum_flags + flag;
             match_public_value_index += flag * AB::F::from_canonical_usize(i);
-            match_public_value += flag * builder.public_values()[i + 2].into();
+            match_public_value += flag * builder.public_values()[i].into();
         }
 
         let mut when_publish = builder.when(publish_flag);

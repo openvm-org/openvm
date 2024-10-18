@@ -113,7 +113,12 @@ impl<F: PrimeField32> VirtualMachine<F> {
             let config = mem::take(&mut segment.config);
             let cycle_tracker = mem::take(&mut segment.cycle_tracker);
             let state = VirtualMachineState {
-                state: segment.core_chip.borrow().state,
+                state: CoreState {
+                    pc: segment.chip_set.connector_chip.boundary_states[1]
+                        .unwrap()
+                        .pc,
+                    is_done: false,
+                },
                 input_stream: mem::take(&mut segment.input_stream),
                 hint_stream: mem::take(&mut segment.hint_stream),
             };

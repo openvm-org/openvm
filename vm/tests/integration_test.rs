@@ -7,7 +7,7 @@ use ax_sdk::{
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
 use stark_vm::{
     arch::{
@@ -273,7 +273,15 @@ fn test_vm_continuations() {
         Instruction::from_isize(PUBLISH.with_default_offset(), 0, 1, 0, 0, 1),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 1),
     ]);
-    let output = BabyBear::from_canonical_usize(110580720);
+    let expected_output = {
+        let mut a = 0;
+        let mut b = 1;
+        for _ in 0..n {
+            (a, b) = (b, a + b);
+            b %= BabyBear::ORDER_U32;
+        }
+        BabyBear::from_canonical_u32(a)
+    };
 
     let config = VmConfig {
         num_public_values: 1,
@@ -287,7 +295,7 @@ fn test_vm_continuations() {
     }
     .add_default_executor(ExecutorName::FieldArithmetic);
 
-    let vm = VirtualMachine::new(config).with_program_inputs(vec![(0, output)]);
+    let vm = VirtualMachine::new(config).with_program_inputs(vec![(0, expected_output)]);
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let pk = vm.config.generate_pk(engine.keygen_builder());
@@ -305,8 +313,8 @@ fn test_vm_continuations() {
             let air_name = air.1.air.name();
             let pvs = &air.1.raw.public_values;
 
-            if air_name == "CoreAir" {
-                assert_eq!(pvs.len(), 3);
+            if air_name == "VmConnectorAir" {
+                assert_eq!(pvs.len(), 2);
 
                 // Check initial pc matches the previous final pc.
                 assert_eq!(
@@ -318,10 +326,12 @@ fn test_vm_continuations() {
                     }
                 );
                 prev_final_pc = Some(pvs[1]);
+            } else if air_name == "CoreAir" {
+                assert_eq!(pvs.len(), 1);
 
                 // Check the program input is exposed as a public input of the AIR.
                 // For now this appears on every segment.
-                assert_eq!(pvs[2], output);
+                assert_eq!(pvs[0], expected_output);
             } else if air_name == "MemoryMerkleAir<8>" {
                 assert_eq!(pvs.len(), 16);
 
