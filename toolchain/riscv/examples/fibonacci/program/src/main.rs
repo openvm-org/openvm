@@ -4,26 +4,16 @@
 axvm::entry!(main);
 
 pub fn main() {
-    let mut n = 1 << 20;
+    let n = 1 << 10;
     let mut a: u32 = 0;
     let mut b: u32 = 1;
-    let mut x = 0;
-    loop {
+    for _ in 1..n {
         let sum = a + b;
         a = b;
         b = sum;
-        n -= 1;
-        x += 1;
-        // use a beq between registers until the x0 problem is fixed
-        if n == x {
-            // this ecall is mostly to trick compiler to not compile everything away
-            unsafe {
-                core::arch::asm!(
-                    "ecall",
-                    in("a7") a
-                )
-            }
-        }
+    }
+    if a == 0 {
+        loop {}
     }
 }
 

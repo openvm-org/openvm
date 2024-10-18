@@ -19,10 +19,12 @@ use crate::{
             Rv32JalrOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
-    rv32im::adapters::{compose, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
+    rv32im::adapters::{
+        compose, JumpUiProcessedInstruction, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
+    },
     system::program::Instruction,
 };
 
@@ -30,7 +32,7 @@ const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv32JalrCols<T> {
+pub struct Rv32JalrCoreCols<T> {
     pub imm: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LANES],
     pub rd_data: [T; RV32_REGISTER_NUM_LANES - 1],
@@ -63,7 +65,7 @@ pub struct Rv32JalrCoreAir {
 
 impl<F: Field> BaseAir<F> for Rv32JalrCoreAir {
     fn width(&self) -> usize {
-        Rv32JalrCols::<F>::width()
+        Rv32JalrCoreCols::<F>::width()
     }
 }
 
@@ -75,7 +77,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
     I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
-    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -83,8 +85,8 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv32JalrCols<AB::Var> = (*local_core).borrow();
-        let Rv32JalrCols::<AB::Var> {
+        let cols: &Rv32JalrCoreCols<AB::Var> = (*local_core).borrow();
+        let Rv32JalrCoreCols::<AB::Var> {
             imm,
             rs1_data: rs1,
             rd_data: rd,
@@ -166,7 +168,7 @@ where
             to_pc: Some(to_pc),
             reads: [rs1.map(|x| x.into())].into(),
             writes: [rd].into(),
-            instruction: JumpUIProcessedInstruction {
+            instruction: JumpUiProcessedInstruction {
                 is_valid: is_valid.into(),
                 opcode: expected_opcode.into(),
                 immediate: imm.into(),
@@ -273,7 +275,7 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut Rv32JalrCols<F> = row_slice.borrow_mut();
+        let core_cols: &mut Rv32JalrCoreCols<F> = row_slice.borrow_mut();
         core_cols.imm = record.imm;
         core_cols.rd_data = record.rd_data;
         core_cols.rs1_data = record.rs1_data;

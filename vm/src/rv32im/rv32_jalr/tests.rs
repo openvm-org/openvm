@@ -24,8 +24,10 @@ use crate::{
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
-        adapters::{compose, Rv32JalrAdapter, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
-        rv32_jalr::{solve_jalr, Rv32JalrCols},
+        adapters::{
+            compose, Rv32JalrAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
+        },
+        rv32_jalr::{solve_jalr, Rv32JalrCoreCols},
     },
     system::program::Instruction,
 };
@@ -54,7 +56,7 @@ fn set_and_execute(
 ) {
     let imm = initial_imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm_ext = sign_extend(imm);
-    let a = rng.gen_range(1..32) << 2;
+    let a = rng.gen_range(0..32) << 2;
     let b = rng.gen_range(1..32) << 2;
     let to_pc = rng.gen_range(0..(1 << PC_BITS));
 
@@ -67,7 +69,7 @@ fn set_and_execute(
         chip,
         Instruction::from_usize(
             opcode as usize + Rv32JalrOpcode::default_offset(),
-            [a, b, imm as usize, 1, 0],
+            [a, b, imm as usize, 1, 0, (a != 0) as usize, 0],
         ),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
@@ -92,6 +94,7 @@ fn set_and_execute(
     let rs1 = compose(rs1);
 
     let (next_pc, rd_data) = solve_jalr(opcode, initial_pc, imm_ext, rs1);
+    let rd_data = if a == 0 { [0; 4] } else { rd_data };
 
     assert_eq!(next_pc, final_pc);
     assert_eq!(rd_data.map(F::from_canonical_u32), tester.read::<4>(1, a));
@@ -110,7 +113,7 @@ fn rand_jalr_test() {
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
-    let adapter = Rv32JalrAdapter::<F>::new(
+    let adapter = Rv32JalrAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -158,7 +161,7 @@ fn run_negative_jalr_test(
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
-    let adapter = Rv32JalrAdapter::<F>::new(
+    let adapter = Rv32JalrAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -189,7 +192,7 @@ fn run_negative_jalr_test(
 
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
 
-        let core_cols: &mut Rv32JalrCols<F> = core_row.borrow_mut();
+        let core_cols: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = rd_data {
             core_cols.rd_data = data.map(F::from_canonical_u32);
@@ -301,7 +304,7 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
-    let adapter = Rv32JalrAdapter::<F>::new(
+    let adapter = Rv32JalrAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),

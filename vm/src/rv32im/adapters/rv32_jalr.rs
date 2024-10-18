@@ -4,16 +4,16 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
+use afs_primitives::utils::not;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::BaseAir;
+use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::RV32_REGISTER_NUM_LANES;
+use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, JumpUIProcessedInstruction, Result, VmAdapterAir,
-        VmAdapterChip, VmAdapterInterface,
+        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -27,7 +27,7 @@ use crate::{
 
 type Rv32JalrAdapterInterface<T> = BasicAdapterInterface<
     T,
-    JumpUIProcessedInstruction<T>,
+    JumpUiProcessedInstruction<T>,
     1,
     1,
     RV32_REGISTER_NUM_LANES,
@@ -36,12 +36,12 @@ type Rv32JalrAdapterInterface<T> = BasicAdapterInterface<
 
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
 #[derive(Debug, Clone)]
-pub struct Rv32JalrAdapter<F: Field> {
+pub struct Rv32JalrAdapterChip<F: Field> {
     pub air: Rv32JalrAdapterAir,
     aux_cols_factory: MemoryAuxColsFactory<F>,
 }
 
-impl<F: PrimeField32> Rv32JalrAdapter<F> {
+impl<F: PrimeField32> Rv32JalrAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
@@ -67,7 +67,7 @@ pub struct Rv32JalrReadRecord<F: Field> {
 #[derive(Debug, Clone)]
 pub struct Rv32JalrWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
-    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rd: Option<MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>>,
 }
 
 #[repr(C)]
@@ -78,6 +78,7 @@ pub struct Rv32JalrAdapterCols<T> {
     pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
     pub rd_ptr: T,
     pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub needs_write: T,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -110,6 +111,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
             timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
         };
 
+        let (write_count, op_f) = (local_cols.needs_write, local_cols.needs_write);
+
+        builder.assert_bool(write_count);
+        builder
+            .when::<AB::Expr>(not(ctx.instruction.is_valid.clone()))
+            .assert_zero(write_count);
+
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::Expr::one(), local_cols.rs1_ptr),
@@ -126,12 +134,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
                 timestamp_pp(),
                 &local_cols.rd_aux_cols,
             )
-            .eval(builder, ctx.instruction.is_valid.clone());
+            .eval(builder, write_count);
 
         let to_pc = ctx
             .to_pc
             .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(4));
 
+        // regardless of `needs_write`, must always execute instruction when `is_valid`.
         self.execution_bridge
             .execute(
                 ctx.instruction.opcode,
@@ -141,12 +150,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
                     ctx.instruction.immediate,
                     AB::Expr::one(),
                     AB::Expr::zero(),
+                    op_f.into(),
                 ],
                 local_cols.from_state,
                 ExecutionState {
                     pc: to_pc,
-                    timestamp: local_cols.from_state.timestamp
-                        + AB::F::from_canonical_usize(timestamp_delta),
+                    timestamp: timestamp + AB::F::from_canonical_usize(timestamp_delta),
                 },
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -158,7 +167,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
     }
 }
 
-impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
+impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
     type ReadRecord = Rv32JalrReadRecord<F>;
     type WriteRecord = Rv32JalrWriteRecord<F>;
     type Air = Rv32JalrAdapterAir;
@@ -188,8 +197,18 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { op_a: a, d, .. } = *instruction;
-        let rd = memory.write(d, a, output.writes[0]);
+        let Instruction {
+            op_a: a,
+            d,
+            op_f: enabled,
+            ..
+        } = *instruction;
+        let rd = if enabled != F::zero() {
+            Some(memory.write(d, a, output.writes[0]))
+        } else {
+            memory.increment_timestamp();
+            None
+        };
 
         Ok((
             ExecutionState {
@@ -210,8 +229,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         adapter_cols.rs1_ptr = read_record.rs1.pointer;
         adapter_cols.rs1_aux_cols = self.aux_cols_factory.make_read_aux_cols(read_record.rs1);
-        adapter_cols.rd_ptr = write_record.rd.pointer;
-        adapter_cols.rd_aux_cols = self.aux_cols_factory.make_write_aux_cols(write_record.rd);
+        (adapter_cols.rd_ptr, adapter_cols.rd_aux_cols) = if let Some(rd) = write_record.rd {
+            adapter_cols.needs_write = F::one();
+            (rd.pointer, self.aux_cols_factory.make_write_aux_cols(rd))
+        } else {
+            adapter_cols.needs_write = F::zero();
+            (F::zero(), MemoryWriteAuxCols::disabled())
+        };
     }
 
     fn air(&self) -> &Self::Air {

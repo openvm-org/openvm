@@ -52,8 +52,8 @@ use crate::{
     },
     rv32im::{
         adapters::{
-            Rv32BaseAluAdapterChip, Rv32BranchAdapter, Rv32JalrAdapter, Rv32LoadStoreAdapter,
-            Rv32MultAdapter, Rv32RdWriteAdapter,
+            Rv32BaseAluAdapterChip, Rv32BranchAdapter, Rv32CondRdWriteAdapterChip,
+            Rv32JalrAdapterChip, Rv32LoadStoreAdapter, Rv32MultAdapter, Rv32RdWriteAdapterChip,
         },
         base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
         branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
@@ -70,8 +70,8 @@ use crate::{
     },
     system::{
         memory::{
-            merkle::MemoryMerkleBus, offline_checker::MemoryBus, MemoryController,
-            MemoryControllerRef, TimestampedEquipartition, CHUNK,
+            merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
+            MemoryControllerRef, CHUNK,
         },
         program::{bridge::ProgramBus, ProgramChip},
         vm::{
@@ -178,7 +178,7 @@ impl VmConfig {
                     self.memory_config,
                     range_checker.clone(),
                     merkle_bus,
-                    TimestampedEquipartition::<F, CHUNK>::new(),
+                    Equipartition::<F, CHUNK>::new(),
                 )))
             }
         };
@@ -431,7 +431,7 @@ impl VmConfig {
                 }
                 ExecutorName::JalLuiRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalLuiChip::new(
-                        Rv32RdWriteAdapter::new(
+                        Rv32CondRdWriteAdapterChip::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -446,7 +446,11 @@ impl VmConfig {
                 }
                 ExecutorName::JalrRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalrChip::new(
-                        Rv32JalrAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32JalrAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         Rv32JalrCoreChip::new(byte_xor_chip.clone(), range_checker.clone(), offset),
                         memory_controller.clone(),
                     )));
@@ -457,7 +461,7 @@ impl VmConfig {
                 }
                 ExecutorName::AuipcRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32AuipcChip::new(
-                        Rv32RdWriteAdapter::new(
+                        Rv32RdWriteAdapterChip::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),

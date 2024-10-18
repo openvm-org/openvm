@@ -19,6 +19,7 @@ use stark_vm::{
     },
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     system::{
+        memory::Equipartition,
         program::{Instruction, Program},
         vm::{
             config::{MemoryConfig, PersistenceType, VmConfig},
@@ -41,12 +42,12 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig::core().add_default_executor(ExecutorName::FieldArithmetic)
 }
 
-fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Vec<BabyBear>>) {
+fn air_test(config: VmConfig, program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let pk = config.generate_pk(engine.keygen_builder());
 
-    let vm = VirtualMachine::new(config, program, witness_stream);
-    let result = vm.execute_and_generate().unwrap();
+    let vm = VirtualMachine::new(config).with_input_stream(input_stream);
+    let result = vm.execute_and_generate(program).unwrap();
 
     for proof_input in result.per_segment {
         engine
@@ -83,8 +84,8 @@ fn air_test_with_compress_poseidon2(
     .add_default_executor(ExecutorName::Poseidon2);
     let pk = vm_config.generate_pk(engine.keygen_builder());
 
-    let vm = VirtualMachine::new(vm_config, program, vec![]);
-    let result = vm.execute_and_generate().unwrap();
+    let vm = VirtualMachine::new(vm_config);
+    let result = vm.execute_and_generate(program).unwrap();
 
     for proof_input in result.per_segment {
         engine
@@ -142,8 +143,10 @@ fn test_vm_1_optional_air() {
         ];
 
         let program = Program::from_instructions(&instructions);
-        let vm = VirtualMachine::new(vm_config, program, vec![]);
-        let mut result = vm.execute_and_generate().expect("Failed to execute VM");
+        let vm = VirtualMachine::new(vm_config);
+        let mut result = vm
+            .execute_and_generate(program)
+            .expect("Failed to execute VM");
         assert_eq!(result.per_segment.len(), 1);
         let proof_input = result.per_segment.pop().unwrap();
         assert!(
@@ -154,6 +157,32 @@ fn test_vm_1_optional_air() {
             .prove_then_verify(&pk, proof_input)
             .expect("Verification failed");
     }
+}
+
+#[test]
+fn test_vm_initial_memory() {
+    // Program that fails if mem[(1, 0)] != 101.
+    let program = Program::from_instructions(&[
+        Instruction::<BabyBear>::from_isize(BEQ.with_default_offset(), 0, 101, 2, 1, 0),
+        Instruction::<BabyBear>::from_isize(FAIL.with_default_offset(), 0, 0, 0, 0, 0),
+        Instruction::<BabyBear>::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+    ]);
+
+    let mut initial_memory = Equipartition::<BabyBear, CHUNK>::new();
+    initial_memory.insert(
+        (BabyBear::one(), 0),
+        [101, 0, 0, 0, 0, 0, 0, 0].map(BabyBear::from_canonical_u32),
+    );
+
+    let vm = VirtualMachine::new(VmConfig {
+        memory_config: MemoryConfig {
+            persistence_type: PersistenceType::Persistent,
+            ..Default::default()
+        },
+        ..VmConfig::core()
+    })
+    .with_initial_memory(initial_memory);
+    vm.execute(program).unwrap();
 }
 
 #[test]
@@ -177,9 +206,8 @@ fn test_vm_1_persistent() {
 
     let program = Program::from_instructions(&instructions);
 
-    let vm = VirtualMachine::new(config, program, vec![]);
-
-    let result = vm.execute_and_generate().unwrap();
+    let vm = VirtualMachine::new(config);
+    let result = vm.execute_and_generate(program).unwrap();
 
     let proof_input = result.per_segment.into_iter().next().unwrap();
 

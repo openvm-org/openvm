@@ -7,6 +7,7 @@ mod rv32_mul;
 mod rv32_rdwrite;
 mod rv32_vec_heap;
 
+use afs_derive::AlignedBorrow;
 pub use rv32_alu::*;
 pub use rv32_branch::*;
 pub use rv32_heap::*;
@@ -62,4 +63,14 @@ pub fn read_rv32_register<F: PrimeField32>(
     let record = memory.read::<RV32_REGISTER_NUM_LANES>(address_space, pointer);
     let val = compose(record.data);
     (record, val)
+}
+
+// This ProcessInstruction is used by rv32_jalr and rv32_rdwrite
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct JumpUiProcessedInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+    pub immediate: T,
 }

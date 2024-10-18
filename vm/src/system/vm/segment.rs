@@ -24,6 +24,7 @@ use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     kernels::core::{CoreChip, Streams},
     system::{
+        memory::{Equipartition, CHUNK},
         program::{DebugInfo, ExecutionError, Program},
         vm::{chip_set::VmChipSet, config::PersistenceType},
     },
@@ -99,6 +100,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             collected_metrics: Default::default(),
             cycle_tracker: CycleTracker::new(),
         }
+    }
+
+    pub fn set_initial_memory(&mut self, memory: Equipartition<F, CHUNK>) {
+        self.chip_set
+            .memory_controller
+            .borrow_mut()
+            .set_initial_memory(memory);
+    }
+
+    pub fn did_terminate(&self) -> bool {
+        self.core_chip.borrow().state.is_done
     }
 
     /// Stopping is triggered by should_segment()

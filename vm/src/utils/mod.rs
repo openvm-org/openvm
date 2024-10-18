@@ -24,11 +24,13 @@ pub fn biguint_to_limbs<const NUM_LIMBS: usize>(
         *r = (x.clone() % &base).to_u32().unwrap();
         x /= &base;
     }
+    assert!(x.is_zero());
     result
 }
 
+// Use this when num_limbs is not a constant.
 // little endian.
-// Warning: This function only returns the last NUM_LIMBS*LIMB_BITS bits of
+// Warning: This function only returns the last NUM_LIMBS*LIMB_SIZE bits of
 //          the input, while the input can have more than that.
 pub fn biguint_to_limbs_vec(mut x: BigUint, limb_size: usize, num_limbs: usize) -> Vec<u32> {
     let mut result = vec![0; num_limbs];
@@ -37,5 +39,6 @@ pub fn biguint_to_limbs_vec(mut x: BigUint, limb_size: usize, num_limbs: usize) 
         *r = (x.clone() % &base).to_u32().unwrap();
         x /= &base;
     }
+    assert!(x.is_zero());
     result
 }

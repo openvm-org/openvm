@@ -16,10 +16,10 @@ use crate::{
             Rv32AuipcOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
-    rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
+    rv32im::adapters::{JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
     system::program::Instruction,
 };
 
@@ -27,7 +27,7 @@ const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv32AuipcCols<T> {
+pub struct Rv32AuipcCoreCols<T> {
     pub is_valid: T,
     pub imm_limbs: [T; RV32_REGISTER_NUM_LANES - 1],
     pub pc_limbs: [T; RV32_REGISTER_NUM_LANES - 1],
@@ -48,7 +48,7 @@ pub struct Rv32AuipcCoreAir {
 
 impl<F: Field> BaseAir<F> for Rv32AuipcCoreAir {
     fn width(&self) -> usize {
-        Rv32AuipcCols::<F>::width()
+        Rv32AuipcCoreCols::<F>::width()
     }
 }
 
@@ -60,7 +60,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 0]; 0]>,
     I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
-    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -68,9 +68,9 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv32AuipcCols<AB::Var> = (*local_core).borrow();
+        let cols: &Rv32AuipcCoreCols<AB::Var> = (*local_core).borrow();
 
-        let Rv32AuipcCols {
+        let Rv32AuipcCoreCols {
             is_valid,
             imm_limbs,
             pc_limbs,
@@ -123,7 +123,7 @@ where
             to_pc: None,
             reads: [].into(),
             writes: [rd_data.map(|x| x.into())].into(),
-            instruction: JumpUIProcessedInstruction {
+            instruction: JumpUiProcessedInstruction {
                 is_valid: is_valid.into(),
                 opcode: expected_opcode.into(),
                 immediate: imm,
@@ -213,7 +213,7 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut Rv32AuipcCols<F> = row_slice.borrow_mut();
+        let core_cols: &mut Rv32AuipcCoreCols<F> = row_slice.borrow_mut();
         core_cols.imm_limbs = record.imm_limbs;
         core_cols.pc_limbs = record.pc_limbs;
         core_cols.rd_data = record.rd_data;
