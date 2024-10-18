@@ -29,6 +29,12 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
+      - name: Build a test fibonacci ELF
+        working-directory: toolchain/riscv/examples/fibonacci/program
+        run: |
+          cargo build --release
+          cp riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program ../../../transpiler/data/rv32im-fibonacci-program-elf-release
+
       - name: Run transpiler tests
         working-directory: toolchain/riscv/transpiler
         run: |
