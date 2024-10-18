@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::field_expression::{ExprBuilder, FieldVariable};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
+#[derive(Clone)]
 pub struct Fp2 {
     pub c0: FieldVariable,
     pub c1: FieldVariable,
@@ -92,6 +93,7 @@ mod tests {
     };
     use halo2curves_axiom::{
         bn256::{Fq, Fq2, G1},
+        ff::Field,
         group::Group,
     };
     use num_bigint_dig::BigUint;
@@ -104,26 +106,17 @@ mod tests {
         *,
     };
 
-    fn fq_to_biguint(fq: &Fq) -> BigUint {
-        let bytes = fq.to_bytes();
-        BigUint::from_bytes_le(&bytes)
-    }
-
-    fn generate_random_fp2() -> Fq2 {
+    fn generate_random_fq2() -> Fq2 {
         let mut rng = create_seeded_rng();
-        let point_x = G1::random(&mut rng);
-        Fq2 {
-            c0: point_x.x,
-            c1: point_x.y,
-        }
+        Fq2::random(&mut rng)
     }
 
     fn two_fp2_input(x: &Fq2, y: &Fq2) -> Vec<BigUint> {
         vec![
-            fq_to_biguint(&x.c0),
-            fq_to_biguint(&x.c1),
-            fq_to_biguint(&y.c0),
-            fq_to_biguint(&y.c1),
+            bn254_fq_to_biguint(&x.c0),
+            bn254_fq_to_biguint(&x.c1),
+            bn254_fq_to_biguint(&y.c0),
+            bn254_fq_to_biguint(&y.c1),
         ]
     }
 
@@ -150,8 +143,8 @@ mod tests {
         };
         let width = BaseAir::<BabyBear>::width(&air);
 
-        let x_fp2 = generate_random_fp2();
-        let y_fp2 = generate_random_fp2();
+        let x_fp2 = generate_random_fq2();
+        let y_fp2 = generate_random_fq2();
         let r_fp2 = fq2_fn(&x_fp2, &y_fp2);
         let inputs = two_fp2_input(&x_fp2, &y_fp2);
 
@@ -162,8 +155,8 @@ mod tests {
         assert_eq!(vars.len(), 2);
         let r_c0 = evaluate_biguint(&vars[0], LIMB_BITS);
         let r_c1 = evaluate_biguint(&vars[1], LIMB_BITS);
-        let expected_c0 = fq_to_biguint(&r_fp2.c0);
-        let expected_c1 = fq_to_biguint(&r_fp2.c1);
+        let expected_c0 = bn254_fq_to_biguint(&r_fp2.c0);
+        let expected_c1 = bn254_fq_to_biguint(&r_fp2.c1);
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 
@@ -214,17 +207,17 @@ mod tests {
         };
         let width = BaseAir::<BabyBear>::width(&air);
 
-        let x_fp2 = generate_random_fp2();
-        let y_fp2 = generate_random_fp2();
-        let z_fp2 = generate_random_fp2();
+        let x_fp2 = generate_random_fq2();
+        let y_fp2 = generate_random_fq2();
+        let z_fp2 = generate_random_fq2();
         let r_fp2 = z_fp2.invert().unwrap() * x_fp2 * y_fp2;
         let inputs = vec![
-            fq_to_biguint(&x_fp2.c0),
-            fq_to_biguint(&x_fp2.c1),
-            fq_to_biguint(&y_fp2.c0),
-            fq_to_biguint(&y_fp2.c1),
-            fq_to_biguint(&z_fp2.c0),
-            fq_to_biguint(&z_fp2.c1),
+            bn254_fq_to_biguint(&x_fp2.c0),
+            bn254_fq_to_biguint(&x_fp2.c1),
+            bn254_fq_to_biguint(&y_fp2.c0),
+            bn254_fq_to_biguint(&y_fp2.c1),
+            bn254_fq_to_biguint(&z_fp2.c0),
+            bn254_fq_to_biguint(&z_fp2.c1),
         ];
 
         let row = air.generate_trace_row((inputs, range_checker.clone(), vec![]));
@@ -234,8 +227,8 @@ mod tests {
         assert_eq!(vars.len(), 2);
         let r_c0 = evaluate_biguint(&vars[0], LIMB_BITS);
         let r_c1 = evaluate_biguint(&vars[1], LIMB_BITS);
-        let expected_c0 = fq_to_biguint(&r_fp2.c0);
-        let expected_c1 = fq_to_biguint(&r_fp2.c1);
+        let expected_c0 = bn254_fq_to_biguint(&r_fp2.c0);
+        let expected_c1 = bn254_fq_to_biguint(&r_fp2.c1);
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 
