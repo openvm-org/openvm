@@ -62,7 +62,7 @@ impl<
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
     ) -> Self {
-        assert!(R == 1 || R == 2);
+        assert!(R <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
         let aux_cols_factory = memory_controller.aux_cols_factory();
@@ -87,15 +87,12 @@ pub struct Rv32VecHeapReadRecord<
 > {
     /// Read register value from address space e=1
     pub rs: [MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>; R],
-    /// Read register value from address space op_f=1
-    // pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
     /// Read register value from address space d=1
     pub rd: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
 
     pub rd_val: F,
 
     pub reads: [[MemoryReadRecord<F, READ_SIZE>; NUM_READS]; R],
-    // pub reads2: [MemoryReadRecord<F, READ_SIZE>; NUM_READS],
 }
 
 #[derive(Clone, Debug)]
@@ -212,14 +209,11 @@ impl<
         };
 
         // Read register values for rs, rd
-        let read_reg = cols
-            .rs_ptr
-            .into_iter()
-            .zip(cols.rs_val)
-            .zip(cols.rs_read_aux.iter())
-            .map(|((a, b), c)| (a, b, c))
-            .chain(once((cols.rd_ptr, cols.rd_val, &cols.rd_read_aux)));
-        for (ptr, val, aux) in read_reg {
+        for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux).chain(once((
+            cols.rd_ptr,
+            cols.rd_val,
+            &cols.rd_read_aux,
+        ))) {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(AB::Expr::one(), ptr),
@@ -232,7 +226,7 @@ impl<
 
         // Compose the u32 register value into single field element, with
         // a range check on the highest limb.
-        let register_val_f: Vec<_> = cols
+        let mut reg_val_f: Vec<_> = cols
             .rs_val
             .iter()
             .chain(once(&cols.rd_val))
@@ -246,15 +240,12 @@ impl<
                     })
             })
             .collect();
+        let rd_val_f = reg_val_f.pop().unwrap();
+        let rs_val_f = reg_val_f;
 
         let e = AB::F::from_canonical_usize(2);
         // Reads from heap
-        for (address, reads, reads_aux) in izip!(
-            register_val_f[..R].iter(),
-            // [rs1_val_f, rs2_val_f],
-            ctx.reads,
-            &cols.reads_aux,
-        ) {
+        for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
                 self.memory_bridge
                     .read(
@@ -276,7 +267,7 @@ impl<
                 .write(
                     MemoryAddress::new(
                         e,
-                        register_val_f[R].clone() + AB::Expr::from_canonical_usize(i * WRITE_SIZE),
+                        rd_val_f.clone() + AB::Expr::from_canonical_usize(i * WRITE_SIZE),
                     ),
                     write,
                     timestamp_pp(),
@@ -290,12 +281,14 @@ impl<
                 ctx.instruction.opcode,
                 [
                     cols.rd_ptr.into(),
-                    cols.rs_ptr[0].into(),
-                    if R >= 2 {
-                        cols.rs_ptr[1].into()
-                    } else {
-                        AB::Expr::zero()
-                    },
+                    cols.rs_ptr
+                        .first()
+                        .map(|&x| x.into())
+                        .unwrap_or(AB::Expr::zero()),
+                    cols.rs_ptr
+                        .get(1)
+                        .map(|&x| x.into())
+                        .unwrap_or(AB::Expr::zero()),
                     AB::Expr::one(),
                     e.into(),
                 ],
@@ -349,30 +342,32 @@ impl<
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 2);
 
-        let (rs1_record, rs1_val) = read_rv32_register(memory, d, b);
-        let mut register_records = [rs1_record; R];
-        let data1 = from_fn(|i| {
-            memory.read::<READ_SIZE>(e, F::from_canonical_u32(rs1_val + (i * READ_SIZE) as u32))
-        });
-        let mut read_record = [data1; R];
-        let mut read_data = [data1.map(|x| x.data); R];
+        let mut reg_addrs = [b; R];
         if R == 2 {
-            println!("yo!! read second input");
-            let (rs2_record, rs2_val) = read_rv32_register(memory, d, c);
-            register_records[1] = rs2_record;
-            let data2 = from_fn(|i| {
-                memory.read::<READ_SIZE>(e, F::from_canonical_u32(rs2_val + (i * READ_SIZE) as u32))
-            });
-            read_record[1] = data2;
-            read_data[1] = data2.map(|x| x.data);
+            reg_addrs[1] = c;
         }
+        let mut rs_vals = [0; R];
+        let rs_records: [_; R] = from_fn(|i| {
+            let addr = if i == 0 { b } else { c };
+            let (record, val) = read_rv32_register(memory, d, addr);
+            rs_vals[i] = val;
+            record
+        });
         let (rd_record, rd_val) = read_rv32_register(memory, d, a);
 
+        let read_records = rs_vals.map(|address| {
+            // TODO: assert address has < 2^address_bits
+            from_fn(|i| {
+                memory.read::<READ_SIZE>(e, F::from_canonical_u32(address + (i * READ_SIZE) as u32))
+            })
+        });
+        let read_data = read_records.map(|r| r.map(|x| x.data));
+
         let record = Rv32VecHeapReadRecord {
-            rs: register_records,
+            rs: rs_records,
             rd: rd_record,
             rd_val: F::from_canonical_u32(rd_val),
-            reads: read_record,
+            reads: read_records,
         };
 
         Ok((read_data, record))
