@@ -1,7 +1,8 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{
-    bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerChip,
+    bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use afs_stark_backend::rap::BaseAirWithPublicValues;
 use ax_ecc_primitives::{
@@ -21,6 +22,65 @@ use crate::{
     system::program::Instruction,
 };
 
+pub struct Fp12MultiplyChip {
+    pub air: Fp12MultiplyAir,
+    pub xi: Fp2,
+}
+
+impl Fp12MultiplyChip {
+    pub fn new(
+        modulus: BigUint,
+        num_limbs: usize,
+        limb_bits: usize,
+        max_limb_bits: usize,
+        range_bus: VariableRangeCheckerBus,
+        offset: usize,
+        xi: Fp2,
+    ) -> Self {
+        let air = Fp12MultiplyAir::new(
+            modulus,
+            num_limbs,
+            limb_bits,
+            max_limb_bits,
+            range_bus,
+            offset,
+            xi.clone(),
+        );
+        Self { air, xi }
+    }
+}
+
+impl<F: PrimeField32, I> VmCoreChip<F, I> for Fp12MultiplyChip
+where
+    I: VmAdapterInterface<F>,
+    I::Reads: Into<Vec<F>>,
+    I::Writes: From<Vec<F>>,
+{
+    type Record = ();
+    type Air = Fp12MultiplyAir;
+
+    fn execute_instruction(
+        &self,
+        _instruction: &Instruction<F>,
+        _from_pc: u32,
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+        todo!()
+    }
+
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        "Fp12Multiply".to_string()
+    }
+
+    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
+        todo!()
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
 #[derive(Clone)]
 pub struct Fp12MultiplyAir {
     pub expr: FieldExpr,
@@ -32,8 +92,8 @@ impl Fp12MultiplyAir {
         modulus: BigUint,
         num_limbs: usize,
         limb_bits: usize,
-        range_checker: Arc<VariableRangeCheckerChip>,
         max_limb_bits: usize,
+        range_bus: VariableRangeCheckerBus,
         offset: usize,
         xi: Fp2,
     ) -> Self {
@@ -88,40 +148,5 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         todo!()
-    }
-}
-
-pub struct Fp12MultiplyChip {
-    pub air: Fp12MultiplyAir,
-}
-
-impl<F: PrimeField32, I> VmCoreChip<F, I> for Fp12MultiplyChip
-where
-    I: VmAdapterInterface<F>,
-    I::Reads: Into<Vec<F>>,
-    I::Writes: From<Vec<F>>,
-{
-    type Record = ();
-    type Air = Fp12MultiplyAir;
-
-    fn execute_instruction(
-        &self,
-        _instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        todo!()
-    }
-
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        "Fp12Multiply".to_string()
-    }
-
-    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
-        todo!()
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
