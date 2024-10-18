@@ -466,7 +466,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 let hasher = hasher.unwrap();
 
                 let (final_partition, records) = self.memory.finalize::<8>();
-                traces.push(boundary_chip.generate_trace(&final_partition, hasher));
+                traces.push(boundary_chip.generate_trace(initial_memory, &final_partition, hasher));
                 pvs.push(vec![]);
 
                 let final_memory_values = final_partition

@@ -18,7 +18,7 @@ use crate::{
     kernels::core::POSEIDON2_DIRECT_BUS,
     system::memory::{
         dimensions::MemoryDimensions, merkle::MemoryMerkleBus, offline_checker::MemoryBus,
-        tree::HasherChip, MemoryAddress, TimestampedEquipartition,
+        tree::HasherChip, Equipartition, MemoryAddress, TimestampedEquipartition,
     },
 };
 
@@ -115,7 +115,6 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
     touched_labels: HashSet<(F, usize)>,
-    initial_memory: TimestampedEquipartition<F, CHUNK>,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
@@ -131,7 +130,6 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 merkle_bus,
             },
             touched_labels: HashSet::new(),
-            initial_memory: TimestampedEquipartition::new(),
         }
     }
 
@@ -146,6 +144,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     pub fn generate_trace(
         &self,
+        initial_memory: &Equipartition<F, CHUNK>,
         final_memory: &TimestampedEquipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> RowMajorMatrix<F> {
@@ -157,16 +156,16 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
             rows.chunks_mut(2 * width).zip(self.touched_labels.iter())
         {
             let (initial_row, final_row) = row.split_at_mut(width);
-            *initial_row.borrow_mut() = match self.initial_memory.get(&(address_space, label)) {
-                Some(initial) => {
-                    let initial_hash = hasher.hash_and_record(&initial.values);
+            *initial_row.borrow_mut() = match initial_memory.get(&(address_space, label)) {
+                Some(values) => {
+                    let initial_hash = hasher.hash_and_record(values);
                     PersistentBoundaryCols {
                         expand_direction: F::one(),
                         address_space,
                         leaf_label: F::from_canonical_usize(label),
-                        values: initial.values,
+                        values: *values,
                         hash: initial_hash,
-                        timestamp: F::from_canonical_u32(initial.timestamp),
+                        timestamp: F::zero(),
                     }
                 }
                 None => {
