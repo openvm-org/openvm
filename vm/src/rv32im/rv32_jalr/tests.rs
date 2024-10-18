@@ -47,12 +47,14 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        Instruction::from_isize(
+        Instruction::large_from_isize(
             opcode as usize + Rv32JalrOpcode::default_offset(),
             a as isize,
             b as isize,
             imm as isize,
             1,
+            0,
+            (a != 0) as isize,
             0,
         ),
     );
@@ -74,6 +76,7 @@ fn set_and_execute(
         .as_canonical_u32();
 
     let (next_pc, rd_data) = solve_jalr(opcode, initial_pc, imm, rs1);
+    let rd_data = if a == 0 { [0; 4] } else { rd_data };
 
     assert_eq!(next_pc, final_pc);
     assert_eq!(rd_data.map(F::from_canonical_u32), tester.read::<4>(1, a));

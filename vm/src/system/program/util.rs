@@ -17,8 +17,8 @@ pub fn execute_program_with_config(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let vm = VirtualMachine::new(config, program, input_stream);
-    vm.execute().unwrap();
+    let vm = VirtualMachine::new(config).with_input_stream(input_stream);
+    vm.execute(program).unwrap();
 }
 
 pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
@@ -32,10 +32,9 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
         .add_canonical_modulus()
         .add_default_executor(ExecutorName::Secp256k1AddUnequal)
         .add_default_executor(ExecutorName::Secp256k1Double),
-        program,
-        input_stream,
-    );
-    vm.execute().unwrap();
+    )
+    .with_input_stream(input_stream);
+    vm.execute(program).unwrap();
 }
 
 pub fn execute_program_with_public_values(
@@ -43,18 +42,13 @@ pub fn execute_program_with_public_values(
     input_stream: Vec<Vec<BabyBear>>,
     public_values: &[(usize, BabyBear)],
 ) {
-    let vm = VirtualMachine::new(
-        VmConfig {
-            num_public_values: 4,
-            ..Default::default()
-        },
-        program,
-        input_stream,
-    );
-    for &(index, value) in public_values {
-        vm.segments[0].core_chip.borrow_mut().public_values[index] = Some(value);
-    }
-    vm.execute().unwrap()
+    let vm = VirtualMachine::new(VmConfig {
+        num_public_values: 4,
+        ..Default::default()
+    })
+    .with_input_stream(input_stream)
+    .with_public_values(public_values.to_vec());
+    vm.execute(program).unwrap()
 }
 
 impl<F: Copy + Display> Display for Program<F> {

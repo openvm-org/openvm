@@ -15,7 +15,7 @@ use crate::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
     kernels::{
         adapters::convert_adapter::{ConvertAdapterChip, ConvertAdapterCols},
-        castf::{CastF, CastFCoreCols, FINAL_LIMB_SIZE, LIMB_SIZE},
+        castf::{CastF, CastFCoreCols, FINAL_LIMB_BITS, LIMB_BITS},
     },
     system::program::Instruction,
 };
@@ -110,7 +110,7 @@ fn negative_castf_overflow_test() {
         .split_at_mut(ConvertAdapterCols::<F, 1, 4>::width())
         .1
         .borrow_mut();
-    cols.out_val[3] = F::from_canonical_u32(rng.gen_range(1 << FINAL_LIMB_SIZE..1 << LIMB_SIZE));
+    cols.out_val[3] = F::from_canonical_u32(rng.gen_range(1 << FINAL_LIMB_BITS..1 << LIMB_BITS));
 
     let rc_p_input = range_checker_chip.generate_air_proof_input();
 

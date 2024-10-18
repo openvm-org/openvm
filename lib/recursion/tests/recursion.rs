@@ -54,18 +54,17 @@ where
         ..Default::default()
     };
 
-    let vm = VirtualMachine::new(vm_config, fib_program, vec![]);
-    vm.segments[0].core_chip.borrow_mut().public_values = vec![
-        Some(BabyBear::zero()),
-        Some(BabyBear::one()),
-        Some(BabyBear::from_canonical_u32(1346269)),
-    ];
+    let vm = VirtualMachine::new(vm_config).with_public_values(vec![
+        (0, BabyBear::zero()),
+        (1, BabyBear::one()),
+        (2, BabyBear::from_canonical_u32(1346269)),
+    ]);
 
-    let mut result = vm.execute_and_generate().unwrap();
-    assert_eq!(result.segment_results.len(), 1, "unexpected continuation");
-    let air_proof_inputs = result.segment_results.remove(0).air_proof_inputs;
+    let mut result = vm.execute_and_generate(fib_program).unwrap();
+    assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
+    let proof_input = result.per_segment.remove(0);
     ProofInputForTest {
-        per_air: air_proof_inputs,
+        per_air: proof_input.into_air_proof_input_vec(),
     }
 }
 

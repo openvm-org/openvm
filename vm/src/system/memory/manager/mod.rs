@@ -196,8 +196,6 @@ pub struct MemoryController<F: Field> {
     pub(crate) mem_config: MemoryConfig,
     pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
 
-    initial_memory: TimestampedEquipartition<F, CHUNK>,
-
     // addr_space -> Memory data structure
     memory: Memory<F>,
     /// Maps a length to a list of access adapters with that block length as th larger size.
@@ -215,7 +213,7 @@ impl<F: PrimeField32> MemoryController<F> {
     ) -> Self {
         Self {
             memory_bus,
-            mem_config: mem_config.clone(),
+            mem_config,
             interface_chip: MemoryInterface::Volatile {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
@@ -225,13 +223,9 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: Memory::new(
-                &TimestampedEquipartition::<_, 1>::new(),
-                mem_config.pointer_max_bits,
-            ),
+            memory: Memory::new(&Equipartition::<_, 1>::new(), mem_config.pointer_max_bits),
             adapter_records: HashMap::new(),
             range_checker,
-            initial_memory: TimestampedEquipartition::new(),
             result: None,
         }
     }
@@ -241,26 +235,42 @@ impl<F: PrimeField32> MemoryController<F> {
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
         merkle_bus: MemoryMerkleBus,
-        initial_memory: TimestampedEquipartition<F, CHUNK>,
+        initial_memory: Equipartition<F, CHUNK>,
     ) -> Self {
         let memory_dims = MemoryDimensions {
             as_height: mem_config.addr_space_max_bits,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
             as_offset: 1,
         };
+        let memory = Memory::new(&initial_memory, mem_config.pointer_max_bits);
         let interface_chip = MemoryInterface::Persistent {
             boundary_chip: PersistentBoundaryChip::new(memory_dims, memory_bus, merkle_bus),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus),
+            initial_memory,
         };
         Self {
             memory_bus,
-            mem_config: mem_config.clone(),
+            mem_config,
             interface_chip,
-            memory: Memory::new(&initial_memory, mem_config.pointer_max_bits),
+            memory,
             adapter_records: HashMap::new(),
             range_checker,
-            initial_memory,
             result: None,
+        }
+    }
+
+    pub fn set_initial_memory(&mut self, memory: Equipartition<F, CHUNK>) {
+        if self.timestamp() > Memory::<F>::INITIAL_TIMESTAMP + 1 {
+            panic!("Cannot set initial memory after first timestamp");
+        }
+        match &mut self.interface_chip {
+            MemoryInterface::Volatile { .. } => {
+                panic!("Cannot set initial memory for volatile memory");
+            }
+            MemoryInterface::Persistent { initial_memory, .. } => {
+                *initial_memory = memory;
+                self.memory = Memory::new(initial_memory, self.mem_config.pointer_max_bits);
+            }
         }
     }
 
@@ -451,18 +461,14 @@ impl<F: PrimeField32> MemoryController<F> {
             MemoryInterface::Persistent {
                 merkle_chip,
                 boundary_chip,
+                initial_memory,
             } => {
-                let (final_partition, records) = self.memory.finalize::<8>();
-                traces.push(boundary_chip.generate_trace(&final_partition));
-                pvs.push(vec![]);
-
                 let hasher = hasher.unwrap();
 
-                let initial_memory_values = self
-                    .initial_memory
-                    .iter()
-                    .map(|(key, value)| (*key, value.values))
-                    .collect();
+                let (final_partition, records) = self.memory.finalize::<8>();
+                traces.push(boundary_chip.generate_trace(&final_partition, hasher));
+                pvs.push(vec![]);
+
                 let final_memory_values = final_partition
                     .iter()
                     .map(|(key, value)| (*key, value.values))
@@ -470,7 +476,7 @@ impl<F: PrimeField32> MemoryController<F> {
 
                 let initial_node = MemoryNode::tree_from_memory(
                     merkle_chip.air.memory_dimensions,
-                    &initial_memory_values,
+                    initial_memory,
                     hasher,
                 );
                 let (expand_trace, final_node) = merkle_chip.generate_trace_and_final_tree(
@@ -478,6 +484,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     &final_memory_values,
                     hasher,
                 );
+
                 traces.push(expand_trace);
                 let mut expand_pvs = vec![];
                 expand_pvs.extend(initial_node.hash());
@@ -540,6 +547,7 @@ impl<F: PrimeField32> MemoryController<F> {
             MemoryInterface::Persistent {
                 boundary_chip,
                 merkle_chip,
+                ..
             } => {
                 airs.push(Arc::new(boundary_chip.air.clone()));
                 airs.push(Arc::new(merkle_chip.air.clone()));
@@ -581,6 +589,7 @@ impl<F: PrimeField32> MemoryController<F> {
             MemoryInterface::Persistent {
                 boundary_chip,
                 merkle_chip,
+                ..
             } => {
                 heights.push(boundary_chip.current_height());
                 heights.push(merkle_chip.current_height());
@@ -618,6 +627,7 @@ impl<F: PrimeField32> MemoryController<F> {
             MemoryInterface::Persistent {
                 boundary_chip,
                 merkle_chip,
+                ..
             } => {
                 widths.push(BaseAir::<F>::width(&boundary_chip.air));
                 widths.push(BaseAir::<F>::width(&merkle_chip.air));
@@ -759,7 +769,7 @@ mod tests {
 
         let mut memory_controller = MemoryController::with_volatile_memory(
             memory_bus,
-            memory_config.clone(),
+            memory_config,
             range_checker.clone(),
         );
 

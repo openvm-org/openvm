@@ -122,6 +122,23 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
             .collect()
     }
 
+    fn prove_then_verify(
+        &self,
+        pk: &MultiStarkProvingKey<SC>,
+        proof_input: ProofInput<SC>,
+    ) -> Result<(), VerificationError>
+    where
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        let proof = self.prove(pk, proof_input);
+        self.verify(&pk.get_vk(), &proof)
+    }
+
     fn prove(&self, pk: &MultiStarkProvingKey<SC>, proof_input: ProofInput<SC>) -> Proof<SC>
     where
         SC::Pcs: Sync,

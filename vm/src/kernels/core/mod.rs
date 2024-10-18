@@ -56,8 +56,6 @@ pub struct CoreOptions {
 
 #[derive(Clone, Copy, Debug)]
 pub struct CoreState {
-    pub clock_cycle: usize,
-    pub timestamp: u32,
     pub pc: u32,
     pub is_done: bool,
 }
@@ -65,8 +63,6 @@ pub struct CoreState {
 impl CoreState {
     pub fn initial(pc_start: u32) -> Self {
         CoreState {
-            clock_cycle: 0,
-            timestamp: 1,
             pc: pc_start,
             is_done: false,
         }
@@ -115,8 +111,14 @@ impl<F: PrimeField32> CoreChip<F> {
         )
     }
 
+    /// Sets the start state of the Core.
+    pub fn set_start_state(&mut self, state: CoreState) {
+        self.start_state = state;
+        self.state = state;
+    }
+
     /// Sets the current state of the Core.
-    pub fn set_state(&mut self, state: CoreState) {
+    pub fn set_current_state(&mut self, state: CoreState) {
         self.state = state;
     }
 

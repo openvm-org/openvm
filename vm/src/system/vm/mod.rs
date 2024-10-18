@@ -1,22 +1,25 @@
-use std::{collections::VecDeque, mem::take};
+use std::{collections::VecDeque, mem};
 
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
+    prover::types::ProofInput,
 };
-use cycle_tracker::CycleTracker;
 use metrics::VmMetrics;
 use p3_field::PrimeField32;
 pub use segment::ExecutionSegment;
 
 use crate::{
-    kernels::core::{CoreOptions, CoreState},
+    intrinsics::hashes::poseidon2::CHUNK,
+    kernels::core::CoreState,
     system::{
+        memory::Equipartition,
         program::{ExecutionError, Program},
-        vm::{config::VmConfig, segment::SegmentResult},
+        vm::config::VmConfig,
     },
 };
 
+pub mod chip_set;
 pub mod config;
 pub mod connector;
 pub mod cycle_tracker;
@@ -26,9 +29,11 @@ pub mod segment;
 
 /// Parent struct that holds all execution segments, program, config.
 pub struct VirtualMachine<F: PrimeField32> {
-    pub config: VmConfig,
-    pub program: Program<F>,
-    pub segments: Vec<ExecutionSegment<F>>,
+    config: VmConfig,
+    input_stream: VecDeque<Vec<F>>,
+    initial_memory: Option<Equipartition<F, CHUNK>>,
+    // TODO[zach]: Make better interface for user IOs
+    public_values: Vec<(usize, F)>,
 }
 
 /// Struct that holds the current state of the VM. For now, includes memory, input stream, and hint stream.
@@ -44,114 +49,103 @@ pub struct VirtualMachineState<F: PrimeField32> {
 }
 
 pub struct VirtualMachineResult<SC: StarkGenericConfig> {
-    pub segment_results: Vec<SegmentResult<SC>>,
+    pub per_segment: Vec<ProofInput<SC>>,
 }
 
 impl<F: PrimeField32> VirtualMachine<F> {
     /// Create a new VM with a given config, program, and input stream.
     ///
     /// The VM will start with a single segment, which is created from the initial state of the Core.
-    pub fn new(config: VmConfig, program: Program<F>, input_stream: Vec<Vec<F>>) -> Self {
-        let mut vm = Self {
+    pub fn new(config: VmConfig) -> Self {
+        Self {
             config,
-            program,
-            segments: vec![],
-        };
-        vm.segment(
+            input_stream: VecDeque::new(),
+            initial_memory: None,
+            public_values: vec![],
+        }
+    }
+
+    pub fn with_input_stream(mut self, input_stream: Vec<Vec<F>>) -> Self {
+        self.input_stream = VecDeque::from(input_stream);
+        self
+    }
+
+    pub fn with_initial_memory(mut self, memory: Equipartition<F, CHUNK>) -> Self {
+        self.initial_memory = Some(memory);
+        self
+    }
+
+    pub fn with_public_values(mut self, public_values: Vec<(usize, F)>) -> Self {
+        self.public_values = public_values;
+        self
+    }
+
+    fn execute_segments(
+        &mut self,
+        program: Program<F>,
+    ) -> Result<Vec<ExecutionSegment<F>>, ExecutionError> {
+        let mut segments = vec![];
+        let mut segment = ExecutionSegment::new(
+            self.config.clone(),
+            program.clone(),
             VirtualMachineState {
-                state: CoreState::initial(vm.program.pc_start),
-                input_stream: VecDeque::from(input_stream),
+                state: CoreState::initial(program.pc_start),
+                input_stream: mem::take(&mut self.input_stream),
                 hint_stream: VecDeque::new(),
             },
-            CycleTracker::new(),
         );
-        vm
-    }
-
-    /// Create a new segment with a given state.
-    ///
-    /// The segment will be created from the given state and the program.
-    fn segment(&mut self, state: VirtualMachineState<F>, cycle_tracker: CycleTracker) {
-        tracing::debug!(
-            "Creating new continuation segment for {} total segments",
-            self.segments.len() + 1
-        );
-        let program = self.program.clone();
-        let mut segment = ExecutionSegment::new(self.config.clone(), program, state);
-        segment.cycle_tracker = cycle_tracker;
-        self.segments.push(segment);
-    }
-
-    /// Retrieves the current state of the VM by querying the last segment.
-    pub fn current_state(&self) -> VirtualMachineState<F> {
-        let last_seg = self.segments.last().unwrap();
-        VirtualMachineState {
-            state: last_seg.core_chip.borrow().state,
-            input_stream: last_seg.input_stream.clone(),
-            hint_stream: last_seg.hint_stream.clone(),
+        // TODO[zach]: Make this work for more than one segment.
+        {
+            let mut core_chip = segment.core_chip.borrow_mut();
+            for &(idx, public_value) in self.public_values.iter() {
+                core_chip.public_values[idx] = Some(public_value);
+            }
         }
-    }
-
-    /// Retrieves the Core options from the VM's config.
-    pub fn options(&self) -> CoreOptions {
-        self.config.core_options()
-    }
-
-    /// Enable metrics collection on all segments
-    pub fn enable_metrics_collection(&mut self) {
-        self.config.collect_metrics = true;
-        for segment in &mut self.segments {
-            segment.config.collect_metrics = true;
+        if let Some(initial_memory) = self.initial_memory.take() {
+            segment.set_initial_memory(initial_memory);
         }
-    }
 
-    /// Disable metrics collection on all segments
-    pub fn disable_metrics_collection(&mut self) {
-        self.config.collect_metrics = false;
-        for segment in &mut self.segments {
-            segment.config.collect_metrics = false;
-        }
-    }
-
-    /// Executes the VM by calling `ExecutionSegment::execute()` until the Core hits `TERMINATE`
-    /// and `core_chip.is_done`. Between every segment, the VM will call `next_segment()`.
-    pub fn execute(mut self) -> Result<(), ExecutionError> {
         loop {
-            let last_seg = self.segments.last_mut().unwrap();
-            last_seg.execute()?;
-            if last_seg.core_chip.borrow().state.is_done {
+            segment.execute()?;
+            if segment.did_terminate() {
                 break;
             }
-            let cycle_tracker = take(&mut last_seg.cycle_tracker);
-            self.segment(self.current_state(), cycle_tracker);
-        }
-        tracing::debug!("Number of continuation segments: {}", self.segments.len());
 
-        Ok(())
+            let config = mem::take(&mut segment.config);
+            let cycle_tracker = mem::take(&mut segment.cycle_tracker);
+            let state = VirtualMachineState {
+                state: segment.core_chip.borrow().state,
+                input_stream: mem::take(&mut segment.input_stream),
+                hint_stream: mem::take(&mut segment.hint_stream),
+            };
+
+            segments.push(segment);
+            segment = ExecutionSegment::new(config, program.clone(), state);
+            segment.cycle_tracker = cycle_tracker;
+        }
+        segments.push(segment);
+        tracing::debug!("Number of continuation segments: {}", segments.len());
+
+        Ok(segments)
+    }
+
+    pub fn execute(mut self, program: Program<F>) -> Result<(), ExecutionError> {
+        self.execute_segments(program).map(|_| ())
     }
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         mut self,
+        program: Program<F>,
     ) -> Result<VirtualMachineResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        loop {
-            let last_seg = self.segments.last_mut().unwrap();
-            last_seg.execute()?;
-            if last_seg.core_chip.borrow().state.is_done {
-                break;
-            }
-            let cycle_tracker = take(&mut last_seg.cycle_tracker);
-            self.segment(self.current_state(), cycle_tracker);
-        }
-        tracing::debug!("Number of continuation segments: {}", self.segments.len());
+        let segments = self.execute_segments(program)?;
 
         Ok(VirtualMachineResult {
-            segment_results: self
-                .segments
+            per_segment: segments
                 .into_iter()
-                .map(ExecutionSegment::produce_result)
+                .map(ExecutionSegment::generate_proof_input)
                 .collect(),
         })
     }

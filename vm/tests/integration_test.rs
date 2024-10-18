@@ -1,10 +1,9 @@
 use ax_sdk::{
     config::{
-        baby_bear_poseidon2::{default_perm, engine_from_perm, random_perm},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
-        FriParameters,
+        baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
     },
-    engine::StarkEngine,
+    engine::{StarkEngine, StarkFriEngine},
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
@@ -20,6 +19,7 @@ use stark_vm::{
     },
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     system::{
+        memory::Equipartition,
         program::{Instruction, Program},
         vm::{
             config::{MemoryConfig, PersistenceType, VmConfig},
@@ -42,18 +42,16 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig::core().add_default_executor(ExecutorName::FieldArithmetic)
 }
 
-fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Vec<BabyBear>>) {
-    let vm = VirtualMachine::new(config, program, witness_stream);
+fn air_test(config: VmConfig, program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let pk = config.generate_pk(engine.keygen_builder());
 
-    let perm = default_perm();
-    let fri_params = FriParameters::standard_fast();
+    let vm = VirtualMachine::new(config).with_input_stream(input_stream);
+    let result = vm.execute_and_generate(program).unwrap();
 
-    let result = vm.execute_and_generate().unwrap();
-
-    for segment_result in result.segment_results {
-        let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
+    for proof_input in result.per_segment {
         engine
-            .run_test_impl(segment_result.air_proof_inputs)
+            .prove_then_verify(&pk, proof_input)
             .expect("Verification failed");
     }
 }
@@ -64,23 +62,6 @@ fn air_test_with_compress_poseidon2(
     program: Program<BabyBear>,
     memory_persistence: PersistenceType,
 ) {
-    let vm = VirtualMachine::new(
-        VmConfig {
-            poseidon2_max_constraint_degree,
-            memory_config: MemoryConfig {
-                persistence_type: memory_persistence,
-                ..Default::default()
-            },
-            ..VmConfig::core()
-        }
-        .add_default_executor(ExecutorName::Poseidon2),
-        program,
-        vec![],
-    );
-
-    let result = vm.execute_and_generate().unwrap();
-
-    let perm = random_perm();
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
         FriParameters {
             log_blowup: 3,
@@ -90,21 +71,25 @@ fn air_test_with_compress_poseidon2(
     } else {
         standard_fri_params_with_100_bits_conjectured_security(3)
     };
+    let engine = BabyBearPoseidon2Engine::new(fri_params);
 
-    for segment_result in result.segment_results {
-        let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        let air_proof_inputs = segment_result.air_proof_inputs;
+    let vm_config = VmConfig {
+        poseidon2_max_constraint_degree,
+        memory_config: MemoryConfig {
+            persistence_type: memory_persistence,
+            ..Default::default()
+        },
+        ..VmConfig::core()
+    }
+    .add_default_executor(ExecutorName::Poseidon2);
+    let pk = vm_config.generate_pk(engine.keygen_builder());
 
-        // Checking maximum constraint degree across all AIRs
-        let mut keygen_builder = engine.keygen_builder();
-        for air_proof_input in &air_proof_inputs {
-            keygen_builder.add_air(air_proof_input.air.clone());
-        }
-        let pk = keygen_builder.generate_pk();
-        assert!(pk.max_constraint_degree == poseidon2_max_constraint_degree);
+    let vm = VirtualMachine::new(vm_config);
+    let result = vm.execute_and_generate(program).unwrap();
 
+    for proof_input in result.per_segment {
         engine
-            .run_test_impl(air_proof_inputs)
+            .prove_then_verify(&pk, proof_input)
             .expect("Verification failed");
     }
 }
@@ -139,7 +124,78 @@ fn test_vm_1() {
 }
 
 #[test]
+fn test_vm_1_optional_air() {
+    // Default VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program only
+    // uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
+    let vm_config = VmConfig::default();
+    let engine =
+        BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+    let pk = vm_config.generate_pk(engine.keygen_builder());
+    let num_airs = pk.per_air.len();
+
+    {
+        let n = 6;
+        let instructions = vec![
+            Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
+            Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
+            Instruction::from_isize(BNE.with_default_offset(), 0, 0, -1, 1, 0),
+            Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+        ];
+
+        let program = Program::from_instructions(&instructions);
+        let vm = VirtualMachine::new(vm_config);
+        let mut result = vm
+            .execute_and_generate(program)
+            .expect("Failed to execute VM");
+        assert_eq!(result.per_segment.len(), 1);
+        let proof_input = result.per_segment.pop().unwrap();
+        assert!(
+            proof_input.per_air.len() < num_airs,
+            "Expect less used AIRs"
+        );
+        engine
+            .prove_then_verify(&pk, proof_input)
+            .expect("Verification failed");
+    }
+}
+
+#[test]
+fn test_vm_initial_memory() {
+    // Program that fails if mem[(1, 0)] != 101.
+    let program = Program::from_instructions(&[
+        Instruction::<BabyBear>::from_isize(BEQ.with_default_offset(), 0, 101, 2, 1, 0),
+        Instruction::<BabyBear>::from_isize(FAIL.with_default_offset(), 0, 0, 0, 0, 0),
+        Instruction::<BabyBear>::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+    ]);
+
+    let mut initial_memory = Equipartition::<BabyBear, CHUNK>::new();
+    initial_memory.insert(
+        (BabyBear::one(), 0),
+        [101, 0, 0, 0, 0, 0, 0, 0].map(BabyBear::from_canonical_u32),
+    );
+
+    let vm = VirtualMachine::new(VmConfig {
+        memory_config: MemoryConfig {
+            persistence_type: PersistenceType::Persistent,
+            ..Default::default()
+        },
+        ..VmConfig::core()
+    })
+    .with_initial_memory(initial_memory);
+    vm.execute(program).unwrap();
+}
+
+#[test]
 fn test_vm_1_persistent() {
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let config = VmConfig {
+        poseidon2_max_constraint_degree: 3,
+        memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
+        ..VmConfig::core()
+    }
+    .add_default_executor(ExecutorName::FieldArithmetic);
+    let pk = config.generate_pk(engine.keygen_builder());
+
     let n = 6;
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
@@ -150,26 +206,17 @@ fn test_vm_1_persistent() {
 
     let program = Program::from_instructions(&instructions);
 
-    let config = VmConfig {
-        poseidon2_max_constraint_degree: 3,
-        memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
-        ..VmConfig::core()
-    }
-    .add_default_executor(ExecutorName::FieldArithmetic);
-    let vm = VirtualMachine::new(config, program, vec![]);
+    let vm = VirtualMachine::new(config);
+    let result = vm.execute_and_generate(program).unwrap();
 
-    let perm = default_perm();
-    let fri_params = FriParameters::standard_fast();
+    let proof_input = result.per_segment.into_iter().next().unwrap();
 
-    let result = vm.execute_and_generate().unwrap();
-
-    let segment_result = result.segment_results.into_iter().next().unwrap();
-
-    let merkle_air_proof_input = segment_result
-        .air_proof_inputs
+    let merkle_air_proof_input = &proof_input
+        .per_air
         .iter()
-        .find(|info| info.air.name() == "MemoryMerkleAir<8>")
-        .unwrap();
+        .find(|(_, info)| info.air.name() == "MemoryMerkleAir<8>")
+        .unwrap()
+        .1;
     assert_eq!(merkle_air_proof_input.raw.public_values.len(), 16);
     assert_eq!(
         merkle_air_proof_input.raw.public_values[..8],
@@ -181,15 +228,14 @@ fn test_vm_1_persistent() {
         // 13 times. We use 13 because addr_space_max_bits = 1 and pointer_max_bits = 16,
         // so the height of the tree is 1 + 16 - 3 = 14.
         [
-            600046300, 1545134495, 977657425, 1213239099, 417259453, 434928898, 891129211,
-            1521571686
+            1860730809, 952766590, 1529251869, 978208824, 173743442, 1495326235, 1188286360,
+            350327606
         ]
         .map(BabyBear::from_canonical_u32)
     );
 
-    let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
     engine
-        .run_test_impl(segment_result.air_proof_inputs)
+        .prove_then_verify(&pk, proof_input)
         .expect("Verification failed");
 }
 

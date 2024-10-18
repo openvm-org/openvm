@@ -5,7 +5,7 @@ use p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    utils::LIMB_SIZE, Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar,
+    utils::LIMB_BITS, Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar,
     SymbolicExt, SymbolicFelt, SymbolicVar, Usize, Var, Variable,
 };
 
@@ -148,7 +148,7 @@ impl<C: Config> Builder<C> {
 
     pub fn bigint_builder() -> Self {
         Self {
-            bigint_repr_size: LIMB_SIZE as u32,
+            bigint_repr_size: LIMB_BITS as u32,
             ..Default::default()
         }
     }

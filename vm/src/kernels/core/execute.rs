@@ -291,9 +291,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         }
 
         // Update Core chip state with all changes from this segment.
-        self.set_state(CoreState {
-            clock_cycle: self.state.clock_cycle + 1,
-            timestamp,
+        self.set_current_state(CoreState {
             pc: next_pc,
             is_done: local_opcode_index == TERMINATE,
         });

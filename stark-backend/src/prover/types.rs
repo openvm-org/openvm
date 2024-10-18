@@ -71,6 +71,9 @@ impl<SC: StarkGenericConfig> ProofInput<SC> {
     pub fn new(per_air: Vec<(usize, AirProofInput<SC>)>) -> Self {
         Self { per_air }
     }
+    pub fn into_air_proof_input_vec(self) -> Vec<AirProofInput<SC>> {
+        self.per_air.into_iter().map(|(_, x)| x).collect()
+    }
 }
 
 #[derive(Derivative)]

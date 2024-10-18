@@ -38,7 +38,7 @@ pub struct Rv32JalrReadRecord<F: Field> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32JalrWriteRecord<F: Field> {
-    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rd: Option<MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>>,
 }
 
 #[derive(Debug, Clone)]
@@ -127,8 +127,18 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapter<F> {
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { op_a: a, d, .. } = *instruction;
-        let rd = memory.write(d, a, output.writes);
+        let Instruction {
+            op_a: a,
+            d,
+            op_f: enabled,
+            ..
+        } = *instruction;
+        let rd = if enabled != F::zero() {
+            Some(memory.write(d, a, output.writes))
+        } else {
+            memory.increment_timestamp();
+            None
+        };
 
         Ok((
             ExecutionState {

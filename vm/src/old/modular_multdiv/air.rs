@@ -22,7 +22,7 @@ use crate::{
 pub struct ModularMultDivAir<
     const CARRY_LIMBS: usize,
     const NUM_LIMBS: usize,
-    const LIMB_SIZE: usize,
+    const LIMB_BITS: usize,
 > {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
@@ -30,20 +30,20 @@ pub struct ModularMultDivAir<
     pub(super) offset: usize,
 }
 
-impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    PartitionedBaseAir<F> for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    PartitionedBaseAir<F> for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
 }
-impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>
-    for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
+    for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
         ModularMultDivCols::<F, CARRY_LIMBS, NUM_LIMBS>::width()
     }
 }
 
-impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_SIZE: usize>
-    BaseAirWithPublicValues<F> for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+impl<F: Field, const CARRY_LIMBS: usize, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    BaseAirWithPublicValues<F> for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
 }
 
@@ -51,8 +51,8 @@ impl<
         AB: InteractionBuilder,
         const CARRY_LIMBS: usize,
         const NUM_LIMBS: usize,
-        const LIMB_SIZE: usize,
-    > Air<AB> for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE>
+        const LIMB_BITS: usize,
+    > Air<AB> for ModularMultDivAir<CARRY_LIMBS, NUM_LIMBS, LIMB_BITS>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -72,19 +72,19 @@ impl<
         //     and expr = y * z - x if the operation is div
         let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
             io.y.data.data.to_vec(),
-            LIMB_SIZE,
+            LIMB_BITS,
         );
         let x_or_z = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(
             zip(io.x.data.data, io.z.data.data)
                 .map(|(x, z)| x * aux.is_mult + z * (aux.is_valid - aux.is_mult))
                 .collect(),
-            LIMB_SIZE,
+            LIMB_BITS,
         );
         let z_or_x = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Expr>(
             zip(io.x.data.data, io.z.data.data)
                 .map(|(x, z)| z * aux.is_mult + x * (aux.is_valid - aux.is_mult))
                 .collect(),
-            LIMB_SIZE,
+            LIMB_BITS,
         );
 
         let expr = x_or_z * y_overflow - z_or_x;

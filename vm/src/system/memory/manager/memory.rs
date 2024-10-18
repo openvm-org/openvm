@@ -8,7 +8,7 @@ use std::{
 use p3_field::PrimeField32;
 use p3_util::log2_strict_usize;
 
-use crate::system::memory::{TimestampedEquipartition, TimestampedValues};
+use crate::system::memory::{Equipartition, TimestampedEquipartition, TimestampedValues};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Block<T> {
@@ -96,24 +96,24 @@ pub struct Memory<T> {
 
 impl<F: PrimeField32> Memory<F> {
     /// The timestamp corresponding to initial memory.
-    const INITIAL_TIMESTAMP: u32 = 0;
+    pub(super) const INITIAL_TIMESTAMP: u32 = 0;
 
     /// Creates a new `Memory` instance with the given `pointer_max_bits` from a partition in which
     /// every part has length `N`.
     pub fn new<const N: usize>(
-        initial_memory: &TimestampedEquipartition<F, N>,
+        initial_memory: &Equipartition<F, N>,
         pointer_max_bits: usize,
     ) -> Self {
         assert!(N.is_power_of_two());
 
         let mut blocks = HashMap::new();
-        for ((address_space, label), timestamped_values) in initial_memory {
+        for ((address_space, label), values) in initial_memory {
             let block_id = ((1 << pointer_max_bits) + label * N) >> log2_strict_usize(N);
             blocks.insert(
                 (*address_space, block_id),
                 Block::Active {
-                    timestamp: timestamped_values.timestamp,
-                    data: timestamped_values.values.into(),
+                    timestamp: Self::INITIAL_TIMESTAMP,
+                    data: values.into(),
                 },
             );
         }
@@ -467,7 +467,7 @@ mod tests {
 
     use super::{AccessAdapterRecord, AccessAdapterRecordKind, Memory};
     use crate::system::memory::{
-        MemoryReadRecord, MemoryWriteRecord, TimestampedEquipartition, TimestampedValues,
+        Equipartition, MemoryReadRecord, MemoryWriteRecord, TimestampedValues,
     };
 
     macro_rules! bb {
@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_write_read_initial_block_len_1() {
-        let initial_memory = TimestampedEquipartition::<BabyBear, 1>::new();
+        let initial_memory = Equipartition::<BabyBear, 1>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
         let address_space = BabyBear::one();
 
@@ -507,7 +507,7 @@ mod tests {
 
     #[test]
     fn test_write_read_initial_block_len_8() {
-        let initial_memory = TimestampedEquipartition::<BabyBear, 8>::new();
+        let initial_memory = Equipartition::<BabyBear, 8>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
         let address_space = BabyBear::one();
 
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn test_records_initial_block_len_1() {
-        let initial_memory = TimestampedEquipartition::<BabyBear, 1>::new();
+        let initial_memory = Equipartition::<BabyBear, 1>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
 
         let (write_record, adapter_records) = memory.write(bb!(1), 0, bba![1, 2, 3, 4]);
@@ -657,7 +657,7 @@ mod tests {
 
     #[test]
     fn test_records_initial_block_len_8() {
-        let initial_memory = TimestampedEquipartition::<BabyBear, 8>::new();
+        let initial_memory = Equipartition::<BabyBear, 8>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
 
         let (write_record, adapter_records) = memory.write(bb!(1), 0, bba![1, 2, 3, 4]);
@@ -760,7 +760,7 @@ mod tests {
 
     #[test]
     fn test_get_initial_block_len_1() {
-        let initial_memory = TimestampedEquipartition::<BabyBear, 1>::new();
+        let initial_memory = Equipartition::<BabyBear, 1>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
 
         memory.write(bb!(1), 0, bba![4, 3, 2, 1]);
@@ -788,7 +788,7 @@ mod tests {
 
     #[test]
     fn test_get_initial_block_len_8() {
-        let initial_memory = TimestampedEquipartition::<BabyBear, 8>::new();
+        let initial_memory = Equipartition::<BabyBear, 8>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
 
         memory.write(bb!(1), 0, bba![4, 3, 2, 1]);
@@ -817,7 +817,7 @@ mod tests {
 
     #[test]
     fn test_finalize_empty() {
-        let initial_memory = TimestampedEquipartition::<BabyBear, 4>::new();
+        let initial_memory = Equipartition::<BabyBear, 4>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
 
         let (memory, records) = memory.finalize::<4>();
@@ -827,7 +827,7 @@ mod tests {
 
     #[test]
     fn test_finalize_block_len_8() {
-        let initial_memory = TimestampedEquipartition::<BabyBear, 8>::new();
+        let initial_memory = Equipartition::<BabyBear, 8>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory, 29);
         // Make block 0:4 in address space 1 active.
         memory.write(bb!(1), 0, bba![1, 2, 3, 4]);

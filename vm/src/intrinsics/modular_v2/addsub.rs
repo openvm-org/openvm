@@ -3,45 +3,56 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
     sub_chip::{LocalTraceInstructions, SubAir},
-    var_range::VariableRangeCheckerChip,
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldExprCols, FieldVariable};
+use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{ModularConfig, FIELD_ELEMENT_BITS};
+use super::FIELD_ELEMENT_BITS;
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
+        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
-    utils::{biguint_to_limbs, limbs_to_biguint},
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
 };
 
+/// The number of limbs and limb bits are determined at runtime.
 #[derive(Clone)]
-pub struct ModularAddSubV2CoreAir<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
+pub struct ModularAddSubV2CoreAir {
     pub expr: FieldExpr,
     pub offset: usize,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE> {
-    pub fn new(modulus: BigUint, range_bus: usize, range_max_bits: usize, offset: usize) -> Self {
-        assert!(modulus.bits() <= NUM_LIMBS * LIMB_SIZE);
+impl ModularAddSubV2CoreAir {
+    pub fn new(
+        modulus: BigUint,
+        num_limbs: usize,
+        limb_bits: usize,
+        range_bus: usize,
+        range_max_bits: usize,
+        offset: usize,
+        max_limb_bits: usize,
+    ) -> Self {
+        assert!(modulus.bits() <= num_limbs * limb_bits);
         let subair = CheckCarryModToZeroSubAir::new(
             modulus.clone(),
-            LIMB_SIZE,
+            limb_bits,
             range_bus,
             range_max_bits,
             FIELD_ELEMENT_BITS,
         );
-        let builder = ExprBuilder::new(modulus, LIMB_SIZE, NUM_LIMBS, range_max_bits);
+        let builder =
+            ExprBuilder::new(modulus, limb_bits, num_limbs, range_max_bits, max_limb_bits);
         let builder = Rc::new(RefCell::new(builder));
-        let x1 = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
-        let x2 = ExprBuilder::new_input::<ModularConfig<NUM_LIMBS>>(builder.clone());
+        let x1 = ExprBuilder::new_input(builder.clone());
+        let x2 = ExprBuilder::new_input(builder.clone());
         let x3 = x1.clone() + x2.clone();
         let x4 = x1 - x2;
         let is_add_flag = builder.borrow_mut().new_flag();
@@ -52,33 +63,25 @@ impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreAir<NUM_
         let expr = FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
-            range_bus,
-            range_max_bits,
+            range_bus: VariableRangeCheckerBus::new(range_bus, range_max_bits),
         };
         Self { expr, offset }
     }
 }
 
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAir<F>
-    for ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>
-{
+impl<F: Field> BaseAir<F> for ModularAddSubV2CoreAir {
     fn width(&self) -> usize {
         BaseAir::<F>::width(&self.expr)
     }
 }
 
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_SIZE: usize> BaseAirWithPublicValues<F>
-    for ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>
-{
-}
+impl<F: Field> BaseAirWithPublicValues<F> for ModularAddSubV2CoreAir {}
 
-impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const LIMB_SIZE: usize, I> VmCoreAir<AB, I>
-    for ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for ModularAddSubV2CoreAir
 where
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<Vec<AB::Expr>>,
-    I::Writes: From<Vec<AB::Expr>>,
-    I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
+    AdapterAirContext<AB::Expr, I>:
+        From<AdapterAirContext<AB::Expr, DynAdapterInterface<AB::Expr>>>,
 {
     fn eval(
         &self,
@@ -99,12 +102,8 @@ where
         assert_eq!(inputs.len(), 2);
         assert_eq!(vars.len(), 1);
         assert_eq!(flags.len(), 1);
-        let reads = inputs
-            .concat()
-            .iter()
-            .map(|x| (*x).into())
-            .collect::<Vec<_>>();
-        let writes = vars[0].iter().map(|x| (*x).into()).collect::<Vec<_>>();
+        let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
+        let writes: Vec<AB::Expr> = vars[0].iter().map(|x| (*x).into()).collect();
         // flag = 1 means add (opcode = 0), flag = 0 means sub (opcode = 1)
         let expected_opcode = AB::Expr::one() - flags[0];
 
@@ -113,32 +112,40 @@ where
             opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
         };
 
-        AdapterAirContext {
+        let ctx: AdapterAirContext<_, DynAdapterInterface<_>> = AdapterAirContext {
             to_pc: None,
             reads: reads.into(),
             writes: writes.into(),
             instruction: instruction.into(),
-        }
+        };
+        ctx.into()
     }
 }
 
+/// Number of limbs and limb size are determined purely at runtime
 #[derive(Clone)]
-pub struct ModularAddSubV2CoreChip<const NUM_LIMBS: usize, const LIMB_SIZE: usize> {
-    pub air: ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>,
+pub struct ModularAddSubV2CoreChip {
+    pub air: ModularAddSubV2CoreAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_SIZE: usize> ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE> {
+impl ModularAddSubV2CoreChip {
     pub fn new(
         modulus: BigUint,
+        num_limbs: usize,
+        limb_bits: usize,
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
+        max_limb_bits: usize,
     ) -> Self {
         let air = ModularAddSubV2CoreAir::new(
             modulus,
+            num_limbs,
+            limb_bits,
             range_checker.bus().index,
             range_checker.range_max_bits(),
             offset,
+            max_limb_bits,
         );
         Self { air, range_checker }
     }
@@ -150,15 +157,14 @@ pub struct ModularAddSubV2CoreRecord {
     pub is_add_flag: bool,
 }
 
-impl<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_SIZE: usize, I> VmCoreChip<F, I>
-    for ModularAddSubV2CoreChip<NUM_LIMBS, LIMB_SIZE>
+impl<F: PrimeField32, I> VmCoreChip<F, I> for ModularAddSubV2CoreChip
 where
     I: VmAdapterInterface<F>,
-    I::Reads: Into<Vec<F>>,
-    I::Writes: From<Vec<F>>,
+    I::Reads: Into<DynArray<F>>,
+    AdapterRuntimeContext<F, I>: From<AdapterRuntimeContext<F, DynAdapterInterface<F>>>,
 {
     type Record = ModularAddSubV2CoreRecord;
-    type Air = ModularAddSubV2CoreAir<NUM_LIMBS, LIMB_SIZE>;
+    type Air = ModularAddSubV2CoreAir;
 
     fn execute_instruction(
         &self,
@@ -166,21 +172,24 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+        let num_limbs = self.air.expr.canonical_num_limbs();
+        let limb_bits = self.air.expr.canonical_limb_bits();
         let Instruction { opcode, .. } = instruction.clone();
         let local_opcode_index = opcode - self.air.offset;
-        let data: Vec<F> = reads.into();
-        assert_eq!(data.len(), 2 * NUM_LIMBS);
-        let x = data[..NUM_LIMBS]
+        let data: DynArray<_> = reads.into();
+        let data = data.0;
+        debug_assert_eq!(data.len(), 2 * num_limbs);
+        let x = data[..num_limbs]
             .iter()
             .map(|x| x.as_canonical_u32())
-            .collect::<Vec<_>>();
-        let y = data[NUM_LIMBS..]
+            .collect_vec();
+        let y = data[num_limbs..]
             .iter()
             .map(|x| x.as_canonical_u32())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
-        let x_biguint = limbs_to_biguint(&x, LIMB_SIZE);
-        let y_biguint = limbs_to_biguint(&y, LIMB_SIZE);
+        let x_biguint = limbs_to_biguint(&x, limb_bits);
+        let y_biguint = limbs_to_biguint(&y, limb_bits);
 
         let opcode = ModularArithmeticOpcode::from_usize(local_opcode_index);
         let is_add_flag = match opcode {
@@ -195,13 +204,12 @@ where
         );
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
-        let z_limbs = biguint_to_limbs::<NUM_LIMBS>(z_biguint, LIMB_SIZE);
+        let z_limbs = biguint_to_limbs_vec(z_biguint, limb_bits, num_limbs);
+        let writes = z_limbs.into_iter().map(F::from_canonical_u32).collect_vec();
+        let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);
 
         Ok((
-            AdapterRuntimeContext {
-                to_pc: None,
-                writes: z_limbs.map(|x| F::from_canonical_u32(x)).to_vec().into(),
-            },
+            ctx.into(),
             ModularAddSubV2CoreRecord {
                 x: x_biguint,
                 y: y_biguint,

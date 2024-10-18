@@ -11,7 +11,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
@@ -93,7 +94,8 @@ impl<F: Field, const READ_SIZE: usize, const WRITE_SIZE: usize> BaseAir<F>
 impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapterAir<AB>
     for NativeBasicAdapterAir<READ_SIZE, WRITE_SIZE>
 {
-    type Interface = BasicAdapterInterface<AB::Expr, 2, 1, READ_SIZE, WRITE_SIZE>;
+    type Interface =
+        BasicAdapterInterface<AB::Expr, MinimalInstruction<AB::Expr>, 2, 1, READ_SIZE, WRITE_SIZE>;
 
     fn eval(
         &self,
@@ -160,7 +162,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
     type ReadRecord = VectorReadRecord<F, 2, READ_SIZE>;
     type WriteRecord = VectorWriteRecord<F, WRITE_SIZE>;
     type Air = NativeBasicAdapterAir<READ_SIZE, WRITE_SIZE>;
-    type Interface = BasicAdapterInterface<F, 2, 1, READ_SIZE, WRITE_SIZE>;
+    type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 1, READ_SIZE, WRITE_SIZE>;
 
     fn preprocess(
         &mut self,

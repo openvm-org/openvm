@@ -15,14 +15,14 @@ use crate::{
     utils::biguint_to_limbs,
 };
 const NUM_LIMBS: usize = 32;
-const LIMB_SIZE: usize = 8;
+const LIMB_BITS: usize = 8;
 const CARRY_LIMBS: usize = 2 * NUM_LIMBS - 1;
 type F = BabyBear;
 
 #[test]
 fn test_modular_multdiv() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let mut coord_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
+    let mut coord_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_BITS> =
         ModularMultDivChip::new(
             tester.execution_bus(),
             tester.program_bus(),
@@ -30,7 +30,7 @@ fn test_modular_multdiv() {
             secp256k1_coord_prime(),
             0,
         );
-    let mut scalar_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_SIZE> =
+    let mut scalar_chip: ModularMultDivChip<F, CARRY_LIMBS, NUM_LIMBS, LIMB_BITS> =
         ModularMultDivChip::new(
             tester.execution_bus(),
             tester.program_bus(),
@@ -43,11 +43,11 @@ fn test_modular_multdiv() {
 
     for _ in 0..num_tests {
         let a_digits = (0..NUM_LIMBS)
-            .map(|_| rng.gen_range(0..(1 << LIMB_SIZE)))
+            .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
             .collect();
         let mut a = BigUint::new(a_digits);
         let b_digits = (0..NUM_LIMBS)
-            .map(|_| rng.gen_range(0..(1 << LIMB_SIZE)))
+            .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
             .collect();
         let mut b = BigUint::new(b_digits);
 
@@ -89,10 +89,10 @@ fn test_modular_multdiv() {
         tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
 
         let a_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(a.clone(), LIMB_SIZE).map(BabyBear::from_canonical_u32);
+            biguint_to_limbs(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address1, a_limbs);
         let b_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(b.clone(), LIMB_SIZE).map(BabyBear::from_canonical_u32);
+            biguint_to_limbs(b.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
         tester.write(data_as, address2, b_limbs);
 
         let instruction = Instruction::from_isize(
@@ -110,7 +110,7 @@ fn test_modular_multdiv() {
             &mut coord_chip
         };
         tester.execute(chip, instruction);
-        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_SIZE);
+        let r_limbs = biguint_to_limbs::<NUM_LIMBS>(r.clone(), LIMB_BITS);
 
         for (i, &elem) in r_limbs.iter().enumerate() {
             let address = address3 + i;
