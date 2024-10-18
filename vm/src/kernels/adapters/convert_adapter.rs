@@ -117,7 +117,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.execution_bridge
-            .execute_and_increment_pc(
+            .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [
                     cols.a_idx.into(),
@@ -128,6 +128,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
+                (1, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
