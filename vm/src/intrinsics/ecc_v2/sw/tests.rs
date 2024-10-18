@@ -11,8 +11,9 @@ use crate::{
         ExecutionBridge, VmChipWrapper,
     },
     intrinsics::ecc_v2::sw::SwEcDoubleCoreChip,
+    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LANES},
     system::program::Instruction,
-    utils::biguint_to_limbs_vec,
+    utils::{biguint_to_limbs, biguint_to_limbs_vec},
 };
 
 const NUM_LIMBS: usize = 32;
@@ -23,31 +24,31 @@ type F = BabyBear;
 fn test_add_ne() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = secp256k1_coord_prime();
-    let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
     let core = SwEcAddNeCoreChip::new(
         modulus.clone(),
         NUM_LIMBS,
         LIMB_BITS,
         FIELD_ELEMENT_BITS - 1,
-        tester.memory_controller().borrow().range_checker.bus(),
+        tester.memory_controller().borrow().range_checker.clone(),
         EccOpcode::default_offset(),
     );
-    let mut adapter = TestAdapterChip::new(vec![], vec![None], execution_bridge);
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_controller(),
+    );
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
 
-    let p1_x_limbs = biguint_to_limbs_vec(p1_x.clone(), LIMB_BITS, NUM_LIMBS);
-    let p1_y_limbs = biguint_to_limbs_vec(p1_y.clone(), LIMB_BITS, NUM_LIMBS);
-    let p2_x_limbs = biguint_to_limbs_vec(p2_x.clone(), LIMB_BITS, NUM_LIMBS);
-    let p2_y_limbs = biguint_to_limbs_vec(p2_y.clone(), LIMB_BITS, NUM_LIMBS);
-    let interface_reads = [p1_x_limbs, p1_y_limbs, p2_x_limbs, p2_y_limbs].concat();
-    adapter.prank_reads.push_back(
-        interface_reads
-            .into_iter()
-            .map(BabyBear::from_canonical_u32)
-            .collect(),
-    );
+    let p1_x_limbs =
+        biguint_to_limbs::<NUM_LIMBS>(p1_x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+    let p1_y_limbs =
+        biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+    let p2_x_limbs =
+        biguint_to_limbs::<NUM_LIMBS>(p2_x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+    let p2_y_limbs =
+        biguint_to_limbs::<NUM_LIMBS>(p2_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
 
@@ -62,13 +63,29 @@ fn test_add_ne() {
 
     let ptr_as = 1;
     let addr_ptr1 = 0;
-    let addr_ptr2 = 12;
-    let addr_ptr3 = 24;
+    let addr_ptr2 = 3 * RV32_REGISTER_NUM_LANES;
+    let addr_ptr3 = 6 * RV32_REGISTER_NUM_LANES;
 
     let data_as = 2;
-    let _address1 = 0;
-    let _address2 = 128;
-    let _address3 = 256;
+    let address1 = 0u32;
+    let address2 = 128u32;
+    let address3 = 256u32;
+    let mut write_reg = |reg_addr, value: u32| {
+        tester.write(
+            ptr_as,
+            reg_addr,
+            value.to_le_bytes().map(BabyBear::from_canonical_u8),
+        );
+    };
+
+    write_reg(addr_ptr1, address1);
+    write_reg(addr_ptr2, address2);
+    write_reg(addr_ptr3, address3);
+    tester.write(data_as, address1 as usize, p1_x_limbs);
+    tester.write(data_as, address1 as usize + NUM_LIMBS, p1_y_limbs);
+    tester.write(data_as, address2 as usize, p2_x_limbs);
+    tester.write(data_as, address2 as usize + NUM_LIMBS, p2_y_limbs);
+
     let instruction = Instruction::from_isize(
         chip.core.air.offset + EccOpcode::EC_ADD_NE as usize,
         addr_ptr3 as isize,
@@ -78,6 +95,10 @@ fn test_add_ne() {
         data_as as isize,
     );
     tester.execute(&mut chip, instruction);
+
+    let tester = tester.build().load(chip).finalize();
+
+    tester.simple_test().expect("Verification failed");
 }
 
 #[test]
