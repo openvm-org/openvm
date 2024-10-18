@@ -241,7 +241,7 @@ jobs:
         run: |
           s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" benchmarks/${{ inputs.benchmark_name }}.md
           git add benchmarks/${{ inputs.benchmark_name }}.md
-          git commit -m "Update benchmark result for ${{ inputs.benchmark_name }}"
+          git commit --allow-empty -m "Update benchmark result for ${{ inputs.benchmark_name }}"
           git push
 
   stop-runner:
