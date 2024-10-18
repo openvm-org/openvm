@@ -5,7 +5,10 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::xor::{bus::XorBus, lookup::XorLookupChip};
+use afs_primitives::{
+    utils::not,
+    xor::{bus::XorBus, lookup::XorLookupChip},
+};
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -14,7 +17,7 @@ use strum::IntoEnumIterator;
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, BranchProcessedInstruction, Result,
+        AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result,
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
@@ -72,13 +75,13 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
     I::Writes: Default,
-    I::ProcessedInstruction: From<BranchProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &BranchLessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [
@@ -119,14 +122,14 @@ where
             };
             prefix_sum += marker[i].into();
             builder.assert_bool(marker[i]);
-            builder.assert_zero((AB::Expr::one() - prefix_sum.clone()) * diff.clone());
+            builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
             builder.when(marker[i]).assert_eq(cols.diff_val, diff);
         }
 
         builder.assert_bool(prefix_sum.clone());
-        builder.when(AB::Expr::one() - prefix_sum).assert_zero(
-            cols.cmp_result * lt.clone() + (AB::Expr::one() - cols.cmp_result) * ge.clone(),
-        );
+        builder
+            .when(not::<AB::Expr>(prefix_sum))
+            .assert_zero(cols.cmp_result * lt.clone() + not(cols.cmp_result) * ge.clone());
 
         self.bus
             .send(
@@ -139,7 +142,7 @@ where
         // If a[i] >= b[i], then b[i] - a[i] - 1 is in [-2^LIMB_BITS, 0). Thus b[i] - a[i] - 1 +
         // 2^LIMB_BITS is in [0, 2^LIMB_BITS).
         let ge_offset = AB::Expr::from_canonical_u32(1 << LIMB_BITS)
-            * (ge.clone() * cols.cmp_result + lt.clone() * (AB::Expr::one() - cols.cmp_result));
+            * (ge.clone() * cols.cmp_result + lt.clone() * not(cols.cmp_result));
         self.bus
             .send(
                 cols.diff_val - AB::Expr::one() + ge_offset.clone(),
@@ -157,18 +160,18 @@ where
             + AB::Expr::from_canonical_usize(self.offset);
 
         // TODO: update the default increment (i.e. 4) when opcodes are updated
-        let pc_inc = cols.cmp_result * cols.imm
-            + (AB::Expr::one() - cols.cmp_result) * AB::Expr::from_canonical_u8(4);
+        let to_pc = from_pc
+            + cols.cmp_result * cols.imm
+            + not(cols.cmp_result) * AB::Expr::from_canonical_u8(4);
 
         AdapterAirContext {
-            to_pc: None,
+            to_pc: Some(to_pc),
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
             writes: Default::default(),
-            instruction: BranchProcessedInstruction {
+            instruction: JumpUIProcessedInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 immediate: cols.imm.into(),
-                pc_inc,
             }
             .into(),
         }

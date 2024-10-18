@@ -4,6 +4,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
+use afs_primitives::utils::not;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -12,7 +13,7 @@ use strum::IntoEnumIterator;
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, BranchProcessedInstruction, Result,
+        AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result,
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
@@ -53,13 +54,13 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
     I::Writes: Default,
-    I::ProcessedInstruction: From<BranchProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
         builder: &mut AB,
         local: &[AB::Var],
-        _from_pc: AB::Var,
+        from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &BranchEqualCoreCols<_, NUM_LIMBS> = local.borrow();
         let flags = [cols.opcode_beq_flag, cols.opcode_bne_flag];
@@ -78,15 +79,15 @@ where
         // For BEQ, inv_marker is filled with 0 except at the lowest index i such that
         // a[i] != b[i]. If such an i exists inv_marker[i] is the inverse of a[i] - b[i],
         // meaning sum should be 1.
-        let cmp_eq = cols.cmp_result * cols.opcode_beq_flag
-            + (AB::Expr::one() - cols.cmp_result) * cols.opcode_bne_flag;
+        let cmp_eq =
+            cols.cmp_result * cols.opcode_beq_flag + not(cols.cmp_result) * cols.opcode_bne_flag;
         let mut sum = cmp_eq.clone();
 
         for i in 0..NUM_LIMBS {
             sum += (a[i] - b[i]) * inv_marker[i];
             builder.assert_zero(cmp_eq.clone() * (a[i] - b[i]));
         }
-        builder.when(cols.opcode_beq_flag).assert_one(sum);
+        builder.when(is_valid.clone()).assert_one(sum);
 
         let expected_opcode = flags
             .iter()
@@ -97,18 +98,18 @@ where
             + AB::Expr::from_canonical_usize(self.offset);
 
         // TODO: update the default increment (i.e. 4) when opcodes are updated
-        let pc_inc = cols.cmp_result * cols.imm
-            + (AB::Expr::one() - cols.cmp_result) * AB::Expr::from_canonical_u8(4);
+        let to_pc = from_pc
+            + cols.cmp_result * cols.imm
+            + not(cols.cmp_result) * AB::Expr::from_canonical_u8(4);
 
         AdapterAirContext {
-            to_pc: None,
+            to_pc: Some(to_pc),
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
             writes: Default::default(),
-            instruction: BranchProcessedInstruction {
+            instruction: JumpUIProcessedInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 immediate: cols.imm.into(),
-                pc_inc,
             }
             .into(),
         }

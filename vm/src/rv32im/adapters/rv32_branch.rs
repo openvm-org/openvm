@@ -12,8 +12,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::RV32_REGISTER_NUM_LANES;
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, BranchProcessedInstruction, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
+        JumpUIProcessedInstruction, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -70,7 +70,7 @@ pub struct Rv32BranchAdapterInterface<T>(PhantomData<T>);
 impl<T> VmAdapterInterface<T> for Rv32BranchAdapterInterface<T> {
     type Reads = [[T; RV32_REGISTER_NUM_LANES]; 2];
     type Writes = ();
-    type ProcessedInstruction = BranchProcessedInstruction<T>;
+    type ProcessedInstruction = JumpUIProcessedInstruction<T>;
 }
 
 #[repr(C)]
