@@ -76,7 +76,8 @@ where
                 AB::Expr::zero()
             } else {
                 carry[i - 1].clone()
-            } + (0..=i).fold(AB::Expr::zero(), |ac, k| ac + (b[k] * c[i - k]));
+            } + (0..=i)
+                .fold(AB::Expr::zero(), |acc, k| acc + (b[k] * c[i - k]));
             carry[i] = AB::Expr::from(carry_divide) * (expected_limb - a[i]);
         }
 
@@ -186,6 +187,7 @@ where
     }
 }
 
+// returns mul, carry
 pub(super) fn run_mul<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],

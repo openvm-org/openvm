@@ -334,7 +334,11 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        MulHCoreChip::new(range_tuple_checker.clone(), offset),
+                        MulHCoreChip::new(
+                            byte_xor_chip.clone(),
+                            range_tuple_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
