@@ -31,13 +31,12 @@ use crate::{
     intrinsics::{
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-        modular::{
-            ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
-        },
+        modular::{ModularAddSubCoreChip, ModularMulDivCoreChip},
     },
     kernels::{
         adapters::{
             convert_adapter::ConvertAdapterChip, native_adapter::NativeAdapterChip,
+            native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
         castf::{CastFChip, CastFCoreChip},
@@ -47,6 +46,7 @@ use crate::{
         },
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
+        modular::{KernelModularAddSubChip, KernelModularMulDivChip},
     },
     old::{
         alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
@@ -54,7 +54,7 @@ use crate::{
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapter, Rv32JalrAdapter, Rv32LoadStoreAdapter,
-            Rv32MultAdapter, Rv32RdWriteAdapter, Rv32VecHeapAdapterChip,
+            Rv32MultAdapter, Rv32RdWriteAdapter,
         },
         base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
         branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
@@ -547,8 +547,8 @@ impl VmConfig {
             assert!(modulus.bits() <= 32 * 8);
             match executor {
                 ExecutorName::ModularAddSub => {
-                    let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
-                        Rv32VecHeapAdapterChip::<F, 1, 1, 32, 32>::new(
+                    let new_chip = Rc::new(RefCell::new(KernelModularAddSubChip::new(
+                        NativeVecHeapAdapterChip::<F, 1, 1, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -569,8 +569,8 @@ impl VmConfig {
                     chips.push(AxVmChip::ModularAddSub(new_chip.clone()));
                 }
                 ExecutorName::ModularMultDiv => {
-                    let new_chip = Rc::new(RefCell::new(ModularMulDivChip::new(
-                        Rv32VecHeapAdapterChip::<F, 1, 1, 32, 32>::new(
+                    let new_chip = Rc::new(RefCell::new(KernelModularMulDivChip::new(
+                        NativeVecHeapAdapterChip::<F, 1, 1, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
