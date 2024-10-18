@@ -21,7 +21,7 @@ pub const RV32_CELL_BITS: usize = 8;
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 
-// Jump value is in [-2^12, 2^12)
+// Branch immediate value is in [-2^12, 2^12)
 pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;

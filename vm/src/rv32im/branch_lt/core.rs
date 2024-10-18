@@ -28,6 +28,8 @@ use crate::{
 pub struct BranchLessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
+
+    // Boolean result of a op b. Should branch if and only if cmp_result = 1.
     pub cmp_result: T,
     pub imm: T,
 

@@ -24,6 +24,8 @@ use crate::{
 pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
+
+    // Boolean result of a op b. Should branch if and only if cmp_result = 1.
     pub cmp_result: T,
     pub imm: T,
 
@@ -76,13 +78,18 @@ where
         let b = &cols.b;
         let inv_marker = &cols.diff_inv_marker;
 
-        // For BEQ, inv_marker is filled with 0 except at the lowest index i such that
-        // a[i] != b[i]. If such an i exists inv_marker[i] is the inverse of a[i] - b[i],
-        // meaning sum should be 1.
+        // 1 if cmp_result indicates a and b are equal, 0 otherwise
         let cmp_eq =
             cols.cmp_result * cols.opcode_beq_flag + not(cols.cmp_result) * cols.opcode_bne_flag;
         let mut sum = cmp_eq.clone();
 
+        // For BEQ, inv_marker is filled with 0 except at the lowest index i such that
+        // a[i] != b[i]. If such an i exists inv_marker[i] is the inverse of a[i] - b[i],
+        // meaning sum should be 1.
+        //
+        // Note if cmp_eq == 0, then it is impossible to have sum != 0 if a == b. If
+        // cmp_eq == 1, then it is impossible for a[i] - b[i] == 0 to pass for all i if
+        // a != b.
         for i in 0..NUM_LIMBS {
             sum += (a[i] - b[i]) * inv_marker[i];
             builder.assert_zero(cmp_eq.clone() * (a[i] - b[i]));
