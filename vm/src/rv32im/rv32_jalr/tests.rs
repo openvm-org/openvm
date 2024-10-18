@@ -136,7 +136,7 @@ fn run_negative_jalr_test(
     imm: Option<u32>,
     rd_data: Option<[u32; RV32_REGISTER_NUM_LANES - 1]>,
     rs1_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
-    to_pc_last_bit: Option<u32>,
+    to_pc_least_sig_bit: Option<u32>,
     to_pc_limbs: Option<[u32; 2]>,
     imm_sign: Option<u32>,
     expected_error: VerificationError,
@@ -187,7 +187,7 @@ fn run_negative_jalr_test(
             core_cols.rs1_data = data.map(F::from_canonical_u32);
         }
 
-        if let Some(data) = to_pc_last_bit {
+        if let Some(data) = to_pc_least_sig_bit {
             core_cols.to_pc_least_sig_bit = F::from_canonical_u32(data);
         }
 

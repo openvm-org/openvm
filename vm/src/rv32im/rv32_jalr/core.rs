@@ -35,6 +35,8 @@ const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 pub struct Rv32JalrCoreCols<T> {
     pub imm: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LANES],
+    // To save a column, we only store the 3 most significant limbs of `rd_data`
+    // the least significant limb can be derived using from_pc and the other limbs
     pub rd_data: [T; RV32_REGISTER_NUM_LANES - 1],
     pub is_valid: T,
     // Used to range check that rd_data elements are bytes with XorBus
@@ -100,7 +102,7 @@ where
 
         builder.assert_bool(is_valid);
 
-        // Constrain rd_data
+        // composed = composed(rd_data) - rd[0]
         let composed = rd
             .iter()
             .enumerate()
@@ -108,27 +110,29 @@ where
                 acc + val * AB::Expr::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
             });
 
-        let first_limb = from_pc + AB::F::from_canonical_u32(4) - composed;
+        let least_sig_limb = from_pc + AB::F::from_canonical_u32(4) - composed;
 
-        let rd = array::from_fn(|i| {
+        // rd_data is the final data needed
+        let rd_data = array::from_fn(|i| {
             if i == 0 {
-                first_limb.clone()
+                least_sig_limb.clone()
             } else {
                 rd[i - 1].into().clone()
             }
         });
 
+        // Constrain rd_data
+        // Assumes only from_pc in [0,2^PC_BITS) is allowed by program bus
         self.xor_bus
-            .send(rd[0].clone(), rd[1].clone(), xor_res)
+            .send(rd_data[0].clone(), rd_data[1].clone(), xor_res)
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(rd[2].clone(), RV32_CELL_BITS)
+            .range_check(rd_data[2].clone(), RV32_CELL_BITS)
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(rd[3].clone(), PC_BITS - RV32_CELL_BITS * 3)
+            .range_check(rd_data[3].clone(), PC_BITS - RV32_CELL_BITS * 3)
             .eval(builder, is_valid);
 
-        // constrain imm_sign is correct
         builder.assert_bool(imm_sign);
 
         // constrain to_pc_least_sig_bit + 2 * to_pc_limbs = rs1 + imm as a i32 addition with 2 limbs
@@ -161,7 +165,7 @@ where
         AdapterAirContext {
             to_pc: Some(to_pc),
             reads: [rs1.map(|x| x.into())].into(),
-            writes: [rd].into(),
+            writes: [rd_data].into(),
             instruction: JumpUiProcessedInstruction {
                 is_valid: is_valid.into(),
                 opcode: expected_opcode.into(),
