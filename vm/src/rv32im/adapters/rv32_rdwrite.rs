@@ -135,7 +135,7 @@ impl Rv32RdWriteAdapterAir {
     /// Otherwise:
     /// - Writes if `ctx.instruction.is_valid`.
     /// - Sets operand `f` to default value of `0` in the instruction.
-    fn condition_eval<AB: InteractionBuilder>(
+    fn conditional_eval<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local_cols: &Rv32RdWriteAdapterCols<AB::Var>,
@@ -193,7 +193,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
         let local_cols: &Rv32RdWriteAdapterCols<AB::Var> = (*local).borrow();
-        self.condition_eval(builder, local_cols, ctx, None);
+        self.conditional_eval(builder, local_cols, ctx, None);
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
@@ -218,7 +218,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
             .when::<AB::Expr>(not(ctx.instruction.is_valid.clone()))
             .assert_zero(local_cols.needs_write);
 
-        self.inner.condition_eval(
+        self.inner.conditional_eval(
             builder,
             &local_cols.inner,
             ctx,
