@@ -446,18 +446,24 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    // TODO[zach]: Make finalize return a list of `MachineChip`.
-    pub fn finalize(&mut self, hasher: Option<&mut impl HasherChip<CHUNK, F>>) {
+    /// Returns the final memory state if persistent.
+    pub fn finalize(
+        &mut self,
+        hasher: Option<&mut impl HasherChip<CHUNK, F>>,
+    ) -> Option<Equipartition<F, CHUNK>> {
+        if self.result.is_some() {
+            panic!("Cannot finalize more than once");
+        }
         let mut traces = vec![];
         let mut pvs = vec![];
 
-        let records = match &mut self.interface_chip {
+        let (records, final_memory) = match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 let (final_memory, records) = self.memory.finalize::<1>();
                 traces.push(boundary_chip.generate_trace(&final_memory));
                 pvs.push(vec![]);
 
-                records
+                (records, None)
             }
             MemoryInterface::Persistent {
                 merkle_chip,
@@ -491,7 +497,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 expand_pvs.extend(initial_node.hash());
                 expand_pvs.extend(final_node.hash());
                 pvs.push(expand_pvs);
-                records
+                (records, Some(final_memory_values))
             }
         };
         for record in records {
@@ -515,6 +521,8 @@ impl<F: PrimeField32> MemoryController<F> {
             traces,
             public_values: pvs,
         });
+
+        final_memory
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>

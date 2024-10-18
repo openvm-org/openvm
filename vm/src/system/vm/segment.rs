@@ -39,6 +39,8 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
 
+    pub final_memory: Option<Equipartition<F, CHUNK>>,
+
     pub cycle_tracker: CycleTracker,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
@@ -84,12 +86,24 @@ macro_rules! find_chip {
 
 impl<F: PrimeField32> ExecutionSegment<F> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
-    pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
+    pub fn new(
+        config: VmConfig,
+        program: Program<F>,
+        state: VirtualMachineState<F>,
+        initial_memory: Option<Equipartition<F, CHUNK>>,
+    ) -> Self {
         let mut chip_set = config.create_chip_set();
         chip_set.program_chip.set_program(program);
 
         let core_chip = find_chip!(chip_set, AxVmChip::Core);
         core_chip.borrow_mut().set_start_state(state.state);
+
+        if let Some(initial_memory) = initial_memory {
+            chip_set
+                .memory_controller
+                .borrow_mut()
+                .set_initial_memory(initial_memory);
+        }
 
         Self {
             config,
@@ -97,16 +111,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             core_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream.clone(),
+            final_memory: None,
             collected_metrics: Default::default(),
             cycle_tracker: CycleTracker::new(),
         }
-    }
-
-    pub fn set_initial_memory(&mut self, memory: Equipartition<F, CHUNK>) {
-        self.chip_set
-            .memory_controller
-            .borrow_mut()
-            .set_initial_memory(memory);
     }
 
     pub fn did_terminate(&self) -> bool {
@@ -221,7 +229,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 break;
             }
             if self.should_segment() {
-                panic!("continuations not supported");
+                break;
             }
         }
 
@@ -239,6 +247,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             self.collected_metrics.emit();
         }
 
+        // Finalize memory.
+        let mut memory_controller = self.chip_set.memory_controller.borrow_mut();
+        self.final_memory = match self.config.memory_config.persistence_type {
+            PersistenceType::Persistent => {
+                let poseidon_chip = find_chip!(self.chip_set, AxVmChip::Poseidon2);
+                let mut hasher = poseidon_chip.borrow_mut();
+
+                memory_controller.finalize(Some(hasher.deref_mut()))
+            }
+            PersistenceType::Volatile => memory_controller.finalize(None::<&mut Poseidon2Chip<F>>),
+        };
+
         Ok(())
     }
 
@@ -248,32 +268,12 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         let Self {
-            config,
             chip_set,
             core_chip,
             ..
         } = self;
         // Drop all strong references to chips other than self.chips, which will be consumed next.
         drop(core_chip);
-
-        // Finalize memory.
-        match config.memory_config.persistence_type {
-            PersistenceType::Persistent => {
-                let poseidon_chip = find_chip!(chip_set, AxVmChip::Poseidon2);
-                let mut hasher = poseidon_chip.borrow_mut();
-
-                chip_set
-                    .memory_controller
-                    .borrow_mut()
-                    .finalize(Some(hasher.deref_mut()));
-            }
-            PersistenceType::Volatile => {
-                chip_set
-                    .memory_controller
-                    .borrow_mut()
-                    .finalize(None::<&mut Poseidon2Chip<F>>);
-            }
-        }
 
         chip_set.generate_proof_input()
     }
