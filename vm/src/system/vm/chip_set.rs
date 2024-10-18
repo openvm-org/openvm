@@ -31,10 +31,12 @@ use crate::{
     intrinsics::{
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
+        modular::{ModularAddSubCoreChip, ModularMulDivCoreChip},
     },
     kernels::{
         adapters::{
             convert_adapter::ConvertAdapterChip, native_adapter::NativeAdapterChip,
+            native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
         castf::{CastFChip, CastFCoreChip},
@@ -44,11 +46,10 @@ use crate::{
         },
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
+        modular::{KernelModularAddSubChip, KernelModularMulDivChip},
     },
     old::{
-        alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,
-        modular_multdiv::ModularMultDivChip, shift::ShiftChip,
-        uint_multiplication::UintMultiplicationChip,
+        alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
     },
     rv32im::{
         adapters::{
@@ -547,14 +548,24 @@ impl VmConfig {
                     panic!("Attempting to override an executor for opcode {opcode}");
                 }
             }
+            assert!(modulus.bits() <= 32 * 8);
             match executor {
                 ExecutorName::ModularAddSub => {
-                    let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
-                        execution_bus,
-                        program_bus,
+                    let new_chip = Rc::new(RefCell::new(KernelModularAddSubChip::new(
+                        NativeVecHeapAdapterChip::<F, 1, 1, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        ModularAddSubCoreChip::new(
+                            modulus.clone(),
+                            32,
+                            8,
+                            memory_controller.borrow().range_checker.clone(),
+                            offset,
+                            F::bits() - 2,
+                        ),
                         memory_controller.clone(),
-                        modulus,
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, new_chip.clone().into());
@@ -562,12 +573,21 @@ impl VmConfig {
                     chips.push(AxVmChip::ModularAddSub(new_chip.clone()));
                 }
                 ExecutorName::ModularMultDiv => {
-                    let new_chip = Rc::new(RefCell::new(ModularMultDivChip::new(
-                        execution_bus,
-                        program_bus,
+                    let new_chip = Rc::new(RefCell::new(KernelModularMulDivChip::new(
+                        NativeVecHeapAdapterChip::<F, 1, 1, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        ModularMulDivCoreChip::new(
+                            modulus.clone(),
+                            32,
+                            8,
+                            memory_controller.borrow().range_checker.clone(),
+                            offset,
+                            F::bits() - 2,
+                        ),
                         memory_controller.clone(),
-                        modulus,
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, new_chip.clone().into());

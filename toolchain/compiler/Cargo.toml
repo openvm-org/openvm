@@ -13,6 +13,7 @@ p3-bn254-fr = { workspace = true }
 zkhash = { workspace = true }
 
 afs-derive = { workspace = true }
+afs-primitives = { workspace = true }
 ax-sdk = { workspace = true }
 stark-vm = { workspace = true }
 # disable jemalloc to be compatible with afs-starkbackend
