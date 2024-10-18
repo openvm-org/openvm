@@ -159,8 +159,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
                     timestamp: AB::Expr::one(),
                 },
                 AB::Expr::zero(),
-                AB::Expr::from_canonical_u32(4),
-                ctx.to_pc,
+                (4, ctx.to_pc),
             )
             .eval(builder, processed_instruction.is_valid);
     }

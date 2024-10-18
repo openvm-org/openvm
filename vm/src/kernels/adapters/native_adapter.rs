@@ -140,8 +140,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for NativeAdapterAir {
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                AB::Expr::one(),
-                ctx.to_pc,
+                (1, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }

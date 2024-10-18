@@ -279,8 +279,7 @@ impl<
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                AB::Expr::from_canonical_u8(4),
-                ctx.to_pc,
+                (4, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }

@@ -146,8 +146,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                AB::Expr::one(),
-                ctx.to_pc,
+                (1, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
