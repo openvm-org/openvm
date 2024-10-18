@@ -318,11 +318,13 @@ impl<
             op_c: c,
             d,
             e,
+            op_f,
             ..
         } = *instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert_eq!(e.as_canonical_u32(), 2);
+        debug_assert_eq!(e.as_canonical_u32(), 1);
+        debug_assert_eq!(op_f.as_canonical_u32(), 1);
 
         let (rs1_record, rs1_val) = read_rv32_register(memory, d, b);
         let (rs2_record, rs2_val) = read_rv32_register(memory, d, c);

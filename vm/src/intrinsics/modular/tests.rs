@@ -7,7 +7,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
 use rand::Rng;
 
-use super::{ModularAddSubV2CoreChip, ModularMulDivV2CoreChip};
+use super::{ModularAddSubCoreChip, ModularMulDivCoreChip};
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
@@ -39,7 +39,7 @@ fn test_scalar_addsub() {
 
 fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let core = ModularAddSubV2CoreChip::new(
+    let core = ModularAddSubCoreChip::new(
         modulus.clone(),
         NUM_LIMBS,
         LIMB_BITS,
@@ -164,10 +164,10 @@ fn test_scalar_muldiv() {
 
 fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let core = ModularMulDivV2CoreChip::new(
+    let core = ModularMulDivCoreChip::new(
         modulus.clone(),
-        LIMB_BITS,
         NUM_LIMBS,
+        LIMB_BITS,
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
         BabyBear::bits() - 2,

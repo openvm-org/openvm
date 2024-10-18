@@ -16,15 +16,14 @@ use crate::{
     intrinsics::{
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
+        modular::{ModularAddSubChip, ModularMulDivChip},
     },
     kernels::{
         castf::CastFChip, core::CoreChip, field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
     },
     old::{
-        alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,
-        modular_multdiv::ModularMultDivChip, shift::ShiftChip,
-        uint_multiplication::UintMultiplicationChip,
+        alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
     },
     rv32im::{
         base_alu::Rv32BaseAluChip, branch_eq::Rv32BranchEqualChip,
@@ -94,8 +93,8 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
-    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32>>>),
+    ModularMultDiv(Rc<RefCell<ModularMulDivChip<F, 32>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
@@ -127,8 +126,8 @@ pub enum AxVmChip<F: PrimeField32> {
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
-    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32>>>),
+    ModularMultDiv(Rc<RefCell<ModularMulDivChip<F, 32>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
