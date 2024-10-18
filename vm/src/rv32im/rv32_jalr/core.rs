@@ -41,6 +41,7 @@ pub struct Rv32JalrCoreCols<T> {
     pub xor_res: T,
 
     pub to_pc_least_sig_bit: T,
+    /// These are the limbs of `to_pc * 2`.
     pub to_pc_limbs: [T; 2],
     pub imm_sign: T,
 }
@@ -121,19 +122,17 @@ where
             .send(rd[0].clone(), rd[1].clone(), xor_res)
             .eval(builder, is_valid);
         self.range_bus
-            .send(rd[2].clone(), AB::F::from_canonical_usize(RV32_CELL_BITS))
+            .range_check(rd[2].clone(), RV32_CELL_BITS)
             .eval(builder, is_valid);
         self.range_bus
-            .send(
-                rd[3].clone(),
-                AB::F::from_canonical_usize(PC_BITS - RV32_CELL_BITS * 3),
-            )
+            .range_check(rd[3].clone(), PC_BITS - RV32_CELL_BITS * 3)
             .eval(builder, is_valid);
 
         // constrain imm_sign is correct
         builder.assert_bool(imm_sign);
 
-        // constrain to_pc_limbs = rs1 + imm as a u32 addition with 2 limbs
+        // constrain to_pc_least_sig_bit + 2 * to_pc_limbs = rs1 + imm as a i32 addition with 2 limbs
+        // RISC-V spec explicitly sets the least significant bit of `to_pc` to 0
         let rs1_limbs_01 = rs1[0] + rs1[1] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
         let rs1_limbs_23 = rs1[2] + rs1[3] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
         let inv = AB::F::from_canonical_u32(1 << 16).inverse();
@@ -149,10 +148,10 @@ where
 
         // preventing to_pc overflow
         self.range_bus
-            .send(to_pc_limbs[1], AB::F::from_canonical_u32(14))
+            .range_check(to_pc_limbs[1], PC_BITS - 16)
             .eval(builder, is_valid);
         self.range_bus
-            .send(to_pc_limbs[0], AB::F::from_canonical_u32(15))
+            .range_check(to_pc_limbs[0], 15)
             .eval(builder, is_valid);
         let to_pc =
             to_pc_limbs[0] * AB::F::two() + to_pc_limbs[1] * AB::F::from_canonical_u32(1 << 16);
