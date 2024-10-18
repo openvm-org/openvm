@@ -335,6 +335,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         ))
     }
 
+    // TODO[jpw]: it should be possible to share more code with the non-conditional adapter.
     fn generate_trace_row(
         &self,
         row_slice: &mut [F],
