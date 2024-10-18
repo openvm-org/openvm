@@ -1,6 +1,5 @@
 mod rv32_alu;
 mod rv32_branch;
-mod rv32_heap;
 mod rv32_jalr;
 mod rv32_loadstore;
 mod rv32_mul;
@@ -9,7 +8,6 @@ mod rv32_vec_heap;
 
 pub use rv32_alu::*;
 pub use rv32_branch::*;
-pub use rv32_heap::*;
 pub use rv32_jalr::*;
 pub use rv32_loadstore::*;
 pub use rv32_mul::*;
