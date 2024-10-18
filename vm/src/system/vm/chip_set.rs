@@ -56,8 +56,8 @@ use crate::{
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
-            Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip, Rv32MultAdapter, Rv32RdWriteAdapterChip,
-            Rv32VecHeapAdapterChip,
+            Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip, Rv32MultAdapterChip,
+            Rv32RdWriteAdapterChip, Rv32VecHeapAdapterChip,
         },
         base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
         branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
@@ -314,7 +314,11 @@ impl VmConfig {
                 }
                 ExecutorName::MultiplicationRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MultiplicationChip::new(
-                        Rv32MultAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32MultAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         MultiplicationCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_controller.clone(),
                     )));
@@ -325,7 +329,11 @@ impl VmConfig {
                 }
                 ExecutorName::MultiplicationHighRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MulHChip::new(
-                        Rv32MultAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32MultAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         MulHCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_controller.clone(),
                     )));
@@ -349,7 +357,11 @@ impl VmConfig {
                 }
                 ExecutorName::DivRemRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32DivRemChip::new(
-                        Rv32MultAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32MultAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         DivRemCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_controller.clone(),
                     )));

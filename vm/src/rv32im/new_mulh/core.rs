@@ -98,7 +98,7 @@ impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize, const LI
     VmCoreChip<F, I> for MulHCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    I::Writes: From<[F; NUM_LIMBS]>,
+    I::Writes: From<[[F; NUM_LIMBS]; 1]>,
 {
     // TODO: update for trace generation
     type Record = u32;
@@ -115,12 +115,12 @@ where
         let local_opcode_index = MulHOpcode::from_usize(opcode - self.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let x = data[0].map(|x| x.as_canonical_u32());
-        let y = data[1].map(|y| y.as_canonical_u32());
-        let (z, _z_mul, _x_ext, _y_ext) =
-            run_mulh::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
+        let b = data[0].map(|x| x.as_canonical_u32());
+        let c = data[1].map(|y| y.as_canonical_u32());
+        let (a, _a_mul, _b_ext, _c_ext) =
+            run_mulh::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
-        let output = AdapterRuntimeContext::without_pc(z.map(F::from_canonical_u32));
+        let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u32)]);
 
         // TODO: send RangeTupleChecker requests
         // TODO: create Record and return
