@@ -317,6 +317,15 @@ impl<
         let rs2_record = memory.read_cell(d, c);
         let rd_record = memory.read_cell(d, a);
 
+        println!("rs1_record: {}", rs1_record.pointer);
+        println!("rs2_record: {}", rs2_record.pointer);
+        println!("rd_record: {}", rd_record.pointer);
+        println!("d: {}", d);
+        println!("e: {}", e);
+        println!("rs1_record: {}", rs1_record.data[0]);
+        println!("rs2_record: {}", rs2_record.data[0]);
+        println!("rd_record: {}", rd_record.data[0]);
+
         let [reads1, reads2] = [rs1_record.data[0], rs2_record.data[0]].map(|address| {
             // TODO: assert address has < 2^address_bits
             from_fn(|i| {
@@ -349,6 +358,7 @@ impl<
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let e = instruction.e;
         let mut i = 0;
+        println!("rd_val: {} WRITE_SIZE: {}", read_record.rd_val, WRITE_SIZE);
         let writes = output.writes.map(|write| {
             let record = memory.write(
                 e,
@@ -361,7 +371,7 @@ impl<
 
         Ok((
             ExecutionState {
-                pc: from_state.pc + 4,
+                pc: from_state.pc + 1,
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state, writes },
