@@ -52,15 +52,7 @@ fn set_and_execute(
         ),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
-
-    let initial_pc = tester
-        .execution
-        .records
-        .last()
-        .unwrap()
-        .initial_state
-        .pc
-        .as_canonical_u32();
+    let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
 
     let rd_data = solve_auipc(opcode, initial_pc, imm as u32);
 

@@ -65,23 +65,8 @@ fn set_and_execute(
         ),
         initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
     );
-
-    let initial_pc = tester
-        .execution
-        .records
-        .last()
-        .unwrap()
-        .initial_state
-        .pc
-        .as_canonical_u32();
-    let final_pc = tester
-        .execution
-        .records
-        .last()
-        .unwrap()
-        .final_state
-        .pc
-        .as_canonical_u32();
+    let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
+    let final_pc = tester.execution.last_to_pc().as_canonical_u32();
 
     let (next_pc, rd_data) = solve_jal_lui(opcode, initial_pc, imm);
     let rd_data = if needs_write { rd_data } else { [0; 4] };
