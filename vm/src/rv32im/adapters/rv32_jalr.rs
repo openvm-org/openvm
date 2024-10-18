@@ -111,7 +111,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
             timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
         };
 
-        let (write_count, op_f) = (local_cols.needs_write, local_cols.needs_write);
+        let write_count = local_cols.needs_write;
 
         builder.assert_bool(write_count);
         builder
@@ -150,7 +150,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
                     ctx.instruction.immediate,
                     AB::Expr::one(),
                     AB::Expr::zero(),
-                    op_f.into(),
+                    write_count.into(),
                 ],
                 local_cols.from_state,
                 ExecutionState {
@@ -229,12 +229,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         adapter_cols.rs1_ptr = read_record.rs1.pointer;
         adapter_cols.rs1_aux_cols = self.aux_cols_factory.make_read_aux_cols(read_record.rs1);
-        (adapter_cols.rd_ptr, adapter_cols.rd_aux_cols) = if let Some(rd) = write_record.rd {
-            adapter_cols.needs_write = F::one();
-            (rd.pointer, self.aux_cols_factory.make_write_aux_cols(rd))
-        } else {
-            adapter_cols.needs_write = F::zero();
-            (F::zero(), MemoryWriteAuxCols::disabled())
+        (adapter_cols.rd_ptr, adapter_cols.rd_aux_cols) = match write_record.rd {
+            Some(rd) => {
+                adapter_cols.needs_write = F::one();
+                (rd.pointer, self.aux_cols_factory.make_write_aux_cols(rd))
+            }
+            None => {
+                adapter_cols.needs_write = F::zero();
+                (F::zero(), MemoryWriteAuxCols::disabled())
+            }
         };
     }
 
