@@ -94,10 +94,10 @@ pub struct Memory<T> {
     initial_block_len: usize,
 }
 
-impl<F: PrimeField32> Memory<F> {
-    /// The timestamp corresponding to initial memory.
-    pub(super) const INITIAL_TIMESTAMP: u32 = 0;
+/// The timestamp corresponding to initial memory.
+pub const INITIAL_TIMESTAMP: u32 = 0;
 
+impl<F: PrimeField32> Memory<F> {
     /// Creates a new `Memory` instance with the given `pointer_max_bits` from a partition in which
     /// every part has length `N`.
     pub fn new<const N: usize>(
@@ -112,13 +112,13 @@ impl<F: PrimeField32> Memory<F> {
             blocks.insert(
                 (*address_space, block_id),
                 Block::Active {
-                    timestamp: Self::INITIAL_TIMESTAMP,
+                    timestamp: INITIAL_TIMESTAMP,
                     data: values.into(),
                 },
             );
         }
         Self {
-            timestamp: Self::INITIAL_TIMESTAMP + 1,
+            timestamp: INITIAL_TIMESTAMP + 1,
             blocks,
             pointer_max_bits,
             initial_block_len: N,
@@ -270,7 +270,7 @@ impl<F: PrimeField32> Memory<F> {
                 .or_insert_with(|| match self.initial_block_len.cmp(&len) {
                     Ordering::Less => Block::ContainsActive,
                     Ordering::Equal => Block::Active {
-                        timestamp: Self::INITIAL_TIMESTAMP,
+                        timestamp: INITIAL_TIMESTAMP,
                         data: vec![F::default(); len],
                     },
                     Ordering::Greater => Block::ContainedInActive,
