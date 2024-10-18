@@ -6,7 +6,7 @@ pub mod native_basic_adapter;
 pub mod convert_adapter;
 // 2 reads, 1 write, read size = write size = N, no imm support, read/write to address space d
 pub mod native_vectorized_adapter;
-
+// 2 reads and 1 write from/to heap memory
 pub mod native_vec_heap_adapter;
 
 use crate::arch::{BasicAdapterInterface, MinimalInstruction};
