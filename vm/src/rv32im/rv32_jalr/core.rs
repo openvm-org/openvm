@@ -123,6 +123,7 @@ where
 
         // Constrain rd_data
         // Assumes only from_pc in [0,2^PC_BITS) is allowed by program bus
+        // Xor bus is being used to range check two bytes simultaneously. The xor result itself is not used.
         self.xor_bus
             .send(rd_data[0].clone(), rd_data[1].clone(), xor_res)
             .eval(builder, is_valid);
