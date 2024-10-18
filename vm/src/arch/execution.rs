@@ -163,6 +163,7 @@ impl ExecutionBridge {
         }
     }
 
+    /// If `to_pc` is `Some`, then `pc_inc` is ignored and the `to_state` uses `to_pc`. Otherwise `to_pc = from_pc + pc_inc`.
     pub fn execute_and_increment_or_set_pc<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
