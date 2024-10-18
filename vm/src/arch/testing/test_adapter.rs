@@ -151,7 +151,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
         let processed_instruction: MinimalInstruction<AB::Expr> = ctx.instruction.into();
         let cols: &TestAdapterCols<AB::Var> = local.borrow();
         self.execution_bridge
-            .execute_and_increment_pc_custom(
+            .execute_and_increment_or_set_pc(
                 processed_instruction.opcode,
                 cols.operands.to_vec(),
                 ExecutionState {
@@ -160,6 +160,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
                 },
                 AB::Expr::zero(),
                 AB::Expr::from_canonical_u32(4),
+                ctx.to_pc,
             )
             .eval(builder, processed_instruction.is_valid);
     }

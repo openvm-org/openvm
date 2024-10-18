@@ -268,7 +268,7 @@ impl<
         }
 
         self.execution_bridge
-            .execute_and_increment_pc_custom(
+            .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [
                     cols.rd_ptr.into(),
@@ -280,6 +280,7 @@ impl<
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
                 AB::Expr::from_canonical_u8(4),
+                ctx.to_pc,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }

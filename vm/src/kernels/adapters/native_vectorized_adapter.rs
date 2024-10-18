@@ -132,11 +132,13 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.execution_bridge
-            .execute_and_increment_pc(
+            .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [cols.a_idx, cols.b_idx, cols.c_idx, cols.ab_as, cols.c_as],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
+                AB::Expr::one(),
+                ctx.to_pc,
             )
             .eval(builder, ctx.instruction.is_valid);
     }

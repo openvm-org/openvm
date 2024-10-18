@@ -163,6 +163,25 @@ impl ExecutionBridge {
         }
     }
 
+    pub fn execute_and_increment_or_set_pc<AB: InteractionBuilder>(
+        &self,
+        opcode: impl Into<AB::Expr>,
+        operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
+        from_state: ExecutionState<impl Into<AB::Expr> + Clone>,
+        timestamp_change: impl Into<AB::Expr>,
+        pc_inc: impl Into<AB::Expr>,
+        to_pc: Option<impl Into<AB::Expr>>,
+    ) -> ExecutionBridgeInteractor<AB> {
+        let to_state = ExecutionState {
+            pc: match to_pc {
+                Some(to_pc) => to_pc.into(),
+                None => from_state.pc.clone().into() + pc_inc.into(),
+            },
+            timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
+        };
+        self.execute(opcode, operands, from_state, to_state)
+    }
+
     pub fn execute_and_increment_pc<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
@@ -172,21 +191,6 @@ impl ExecutionBridge {
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
             pc: from_state.pc.clone().into() + AB::Expr::one(),
-            timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
-        };
-        self.execute(opcode, operands, from_state, to_state)
-    }
-
-    pub fn execute_and_increment_pc_custom<AB: InteractionBuilder>(
-        &self,
-        opcode: impl Into<AB::Expr>,
-        operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
-        from_state: ExecutionState<impl Into<AB::Expr> + Clone>,
-        timestamp_change: impl Into<AB::Expr>,
-        pc_inc: impl Into<AB::Expr>,
-    ) -> ExecutionBridgeInteractor<AB> {
-        let to_state = ExecutionState {
-            pc: from_state.pc.clone().into() + pc_inc.into(),
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
