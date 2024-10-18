@@ -188,7 +188,7 @@ fn run_negative_jalr_test(
         }
 
         if let Some(data) = to_pc_last_bit {
-            core_cols.to_pc_last_bit = F::from_canonical_u32(data);
+            core_cols.to_pc_least_sig_bit = F::from_canonical_u32(data);
         }
 
         if let Some(data) = to_pc_limbs {

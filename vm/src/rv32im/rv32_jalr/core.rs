@@ -40,7 +40,7 @@ pub struct Rv32JalrCoreCols<T> {
     // Used to range check that rd_data elements are bytes with XorBus
     pub xor_res: T,
 
-    pub to_pc_last_bit: T,
+    pub to_pc_least_sig_bit: T,
     pub to_pc_limbs: [T; 2],
     pub imm_sign: T,
 }
@@ -50,7 +50,7 @@ pub struct Rv32JalrCoreRecord<F> {
     pub rs1_data: [F; RV32_REGISTER_NUM_LANES],
     pub rd_data: [F; RV32_REGISTER_NUM_LANES - 1],
     pub xor_res: F,
-    pub to_pc_last_bit: F,
+    pub to_pc_least_sig_bit: F,
     pub to_pc_limbs: [F; 2],
     pub imm_sign: F,
 }
@@ -93,7 +93,7 @@ where
             is_valid,
             xor_res,
             imm_sign,
-            to_pc_last_bit,
+            to_pc_least_sig_bit,
             to_pc_limbs,
         } = *cols;
 
@@ -138,8 +138,9 @@ where
         let rs1_limbs_23 = rs1[2] + rs1[3] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
         let inv = AB::F::from_canonical_u32(1 << 16).inverse();
 
-        builder.assert_bool(to_pc_last_bit);
-        let carry = (rs1_limbs_01 + imm - to_pc_limbs[0] * AB::F::two() - to_pc_last_bit) * inv;
+        builder.assert_bool(to_pc_least_sig_bit);
+        let carry =
+            (rs1_limbs_01 + imm - to_pc_limbs[0] * AB::F::two() - to_pc_least_sig_bit) * inv;
         builder.when(is_valid).assert_bool(carry.clone());
 
         let imm_extend_limb = imm_sign * AB::F::from_canonical_u32((1 << 16) - 1);
@@ -234,7 +235,7 @@ where
             .add_count(rd_data[3], PC_BITS - RV32_CELL_BITS * 3);
 
         let mask = (1 << 15) - 1;
-        let to_pc_last_bit = rs1_val.wrapping_add(imm_extended) & 1;
+        let to_pc_least_sig_bit = rs1_val.wrapping_add(imm_extended) & 1;
 
         let to_pc_limbs = array::from_fn(|i| F::from_canonical_u32((to_pc >> (1 + i * 15)) & mask));
         self.range_checker_chip
@@ -256,7 +257,7 @@ where
                 rd_data: array::from_fn(|i| rd_data[i + 1]),
                 rs1_data: rs1,
                 xor_res,
-                to_pc_last_bit: F::from_canonical_u32(to_pc_last_bit),
+                to_pc_least_sig_bit: F::from_canonical_u32(to_pc_least_sig_bit),
                 to_pc_limbs,
                 imm_sign: F::from_canonical_u32(imm_sign),
             },
@@ -273,7 +274,7 @@ where
         core_cols.rd_data = record.rd_data;
         core_cols.rs1_data = record.rs1_data;
         core_cols.xor_res = record.xor_res;
-        core_cols.to_pc_last_bit = record.to_pc_last_bit;
+        core_cols.to_pc_least_sig_bit = record.to_pc_least_sig_bit;
         core_cols.to_pc_limbs = record.to_pc_limbs;
         core_cols.imm_sign = record.imm_sign;
         core_cols.is_valid = F::one();
