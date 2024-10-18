@@ -132,12 +132,6 @@ where
 
         // constrain imm_sign is correct
         builder.assert_bool(imm_sign);
-        self.range_bus
-            .send(
-                imm - imm_sign * AB::F::from_canonical_u32(1 << 15),
-                AB::F::from_canonical_u32(15),
-            )
-            .eval(builder, is_valid);
 
         // constrain to_pc_limbs = rs1 + imm as a u32 addition with 2 limbs
         let rs1_limbs_01 = rs1[0] + rs1[1] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
@@ -238,9 +232,8 @@ where
             .add_count(rd_data[2], RV32_CELL_BITS);
         self.range_checker_chip
             .add_count(rd_data[3], PC_BITS - RV32_CELL_BITS * 3);
+        
         let mask = (1 << 15) - 1;
-        self.range_checker_chip.add_count(imm & mask, 15);
-
         let to_pc_last_bit = rs1_val.wrapping_add(imm_extended) & 1;
 
         let to_pc_limbs = array::from_fn(|i| F::from_canonical_u32((to_pc >> (1 + i * 15)) & mask));
