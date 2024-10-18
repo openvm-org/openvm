@@ -17,9 +17,10 @@ use strum::IntoEnumIterator;
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
+    rv32im::adapters::JumpUiProcessedInstruction,
     system::program::Instruction,
 };
 
@@ -77,7 +78,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
     I::Writes: Default,
-    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -170,7 +171,7 @@ where
             to_pc: Some(to_pc),
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
             writes: Default::default(),
-            instruction: JumpUIProcessedInstruction {
+            instruction: JumpUiProcessedInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 immediate: cols.imm.into(),
