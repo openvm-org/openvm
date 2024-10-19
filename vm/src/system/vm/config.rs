@@ -168,6 +168,7 @@ impl VmConfig {
             .add_default_executor(ExecutorName::DivRemRv32)
             .add_default_executor(ExecutorName::ShiftRv32)
             .add_default_executor(ExecutorName::LoadStoreRv32)
+            .add_default_executor(ExecutorName::LoadSignExtendRv32)
             .add_default_executor(ExecutorName::BranchEqualRv32)
             .add_default_executor(ExecutorName::BranchLessThanRv32)
             .add_default_executor(ExecutorName::JalLuiRv32)

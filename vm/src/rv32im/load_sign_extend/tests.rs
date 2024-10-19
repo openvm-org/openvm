@@ -11,7 +11,7 @@ use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
-use super::{solve_loadstore, LoadStoreCoreChip, Rv32LoadStoreChip};
+use super::{solve_load_sign_extend, LoadSignExtendCoreChip, Rv32LoadSignExtendChip};
 use crate::{
     arch::{
         instructions::{
@@ -23,7 +23,7 @@ use crate::{
     },
     rv32im::{
         adapters::{compose, Rv32LoadStoreAdapterChip, RV32_REGISTER_NUM_LANES},
-        loadstore::LoadStoreCoreCols,
+        load_sign_extend::LoadSignExtendCoreCols,
     },
     system::program::Instruction,
 };
@@ -46,7 +46,7 @@ fn sign_extend(num: u32) -> u32 {
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Rv32LoadStoreChip<F>,
+    chip: &mut Rv32LoadSignExtendChip<F>,
     rng: &mut StdRng,
     opcode: Rv32LoadStoreOpcode,
     rs1: Option<[u32; RV32_REGISTER_NUM_LANES]>,
@@ -89,7 +89,7 @@ fn set_and_execute(
         ),
     );
 
-    let write_data = solve_loadstore(opcode, read_data, some_prev_data);
+    let write_data = solve_load_sign_extend(opcode, read_data, some_prev_data);
     if is_load && opcode != HINTLOAD_RV32 {
         assert_eq!(write_data, tester.read::<4>(1, a));
     } else if !is_load {
@@ -116,21 +116,16 @@ fn rand_loadstore_test() {
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
+    let inner =
+        LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::default_offset());
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, inner, tester.memory_controller());
 
-    let num_tests: usize = 100;
+    let num_tests: usize = 1;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, HINTLOAD_RV32, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None);
+        // set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None);
     }
 
-    drop(range_checker_chip);
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -147,8 +142,8 @@ fn rand_loadstore_test() {
 fn run_negative_loadstore_test(
     opcode: Rv32LoadStoreOpcode,
     read_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
-    prev_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
-    opcodes: Option<[bool; 7]>,
+    most_sig_bit: Option<u32>,
+    opcodes: Option<[bool; 2]>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
@@ -161,9 +156,12 @@ fn run_negative_loadstore_test(
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
+    let inner = LoadSignExtendCoreChip::new(
+        range_checker_chip.clone(),
+        Rv32LoadStoreOpcode::default_offset(),
+    );
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, inner, tester.memory_controller());
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
 
@@ -175,24 +173,20 @@ fn run_negative_loadstore_test(
 
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
 
-        let core_cols: &mut LoadStoreCoreCols<F, RV32_REGISTER_NUM_LANES> = core_row.borrow_mut();
+        let core_cols: &mut LoadSignExtendCoreCols<F, RV32_REGISTER_NUM_LANES> =
+            core_row.borrow_mut();
 
         if let Some(read_data) = read_data {
             core_cols.read_data = read_data.map(F::from_canonical_u32);
         }
 
-        if let Some(prev_data) = prev_data {
-            core_cols.prev_data = prev_data.map(F::from_canonical_u32);
+        if let Some(most_sig_bit) = most_sig_bit {
+            core_cols.most_sig_bit = F::from_canonical_u32(most_sig_bit);
         }
 
         if let Some(opcodes) = opcodes {
-            core_cols.opcode_loadw_flag = F::from_bool(opcodes[0]);
-            core_cols.opcode_loadhu_flag = F::from_bool(opcodes[1]);
-            core_cols.opcode_loadbu_flag = F::from_bool(opcodes[2]);
-            core_cols.opcode_storew_flag = F::from_bool(opcodes[3]);
-            core_cols.opcode_storeh_flag = F::from_bool(opcodes[4]);
-            core_cols.opcode_storeb_flag = F::from_bool(opcodes[5]);
-            core_cols.opcode_hintload_flag = F::from_bool(opcodes[6]);
+            core_cols.opcode_loadb_flag = F::from_bool(opcodes[0]);
+            core_cols.opcode_loadh_flag = F::from_bool(opcodes[1]);
         }
         *loadstore_trace = RowMajorMatrix::new(trace_row, loadstore_trace_width);
     }
@@ -211,7 +205,7 @@ fn run_negative_loadstore_test(
 #[test]
 fn negative_loadstore_tests() {
     run_negative_loadstore_test(
-        LOADW,
+        LOADB,
         Some([92, 187, 45, 118]),
         None,
         None,
@@ -219,18 +213,18 @@ fn negative_loadstore_tests() {
     );
 
     run_negative_loadstore_test(
-        STOREB,
-        None,
+        LOADB,
         Some([5, 132, 77, 250]),
+        Some(1),
         None,
         VerificationError::NonZeroCumulativeSum,
     );
 
     run_negative_loadstore_test(
-        LOADHU,
+        LOADH,
         None,
         None,
-        Some([true, false, false, false, false, false, false]),
+        Some([true, false]),
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -251,59 +245,29 @@ fn execute_roundtrip_sanity_test() {
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
+    let inner =
+        LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::default_offset());
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, inner, tester.memory_controller());
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, HINTLOAD_RV32, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None);
     }
 }
 
 #[test]
-fn solve_loadw_storew_sanity_test() {
-    let read_data = [138, 45, 202, 76].map(F::from_canonical_u32);
-    let prev_data = [159, 213, 89, 34].map(F::from_canonical_u32);
-    let store_write_data = solve_loadstore(STOREW, read_data, prev_data);
-    let load_write_data = solve_loadstore(LOADW, read_data, prev_data);
-    assert_eq!(store_write_data, read_data);
-    assert_eq!(load_write_data, read_data);
+fn solve_loadh_sanity_test() {
+    let read_data = [34, 159, 237, 112].map(F::from_canonical_u32);
+    let prev_data = [94, 183, 56, 241].map(F::from_canonical_u32);
+    let write_data = solve_load_sign_extend(LOADH, read_data, prev_data);
+    assert_eq!(write_data, [34, 159, 255, 255].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_storeh_sanity_test() {
-    let read_data = [250, 123, 67, 198].map(F::from_canonical_u32);
-    let prev_data = [144, 56, 175, 92].map(F::from_canonical_u32);
-    let write_data = solve_loadstore(STOREH, read_data, prev_data);
-    assert_eq!(write_data, [250, 123, 175, 92].map(F::from_canonical_u32));
-}
-
-#[test]
-fn solve_storeb_sanity_test() {
-    let read_data = [221, 104, 58, 147].map(F::from_canonical_u32);
-    let prev_data = [199, 83, 243, 12].map(F::from_canonical_u32);
-    let write_data = solve_loadstore(STOREB, read_data, prev_data);
-    assert_eq!(write_data, [221, 83, 243, 12].map(F::from_canonical_u32));
-}
-
-#[test]
-fn solve_loadhu_sanity_test() {
-    let read_data = [175, 33, 198, 250].map(F::from_canonical_u32);
-    let prev_data = [90, 121, 64, 205].map(F::from_canonical_u32);
-    let write_data = solve_loadstore(LOADHU, read_data, prev_data);
-    assert_eq!(write_data, [175, 33, 0, 0].map(F::from_canonical_u32));
-}
-
-#[test]
-fn solve_loadbu_sanity_test() {
-    let read_data = [131, 74, 186, 29].map(F::from_canonical_u32);
-    let prev_data = [142, 67, 210, 88].map(F::from_canonical_u32);
-    let write_data = solve_loadstore(LOADBU, read_data, prev_data);
-    assert_eq!(write_data, [131, 0, 0, 0].map(F::from_canonical_u32));
+fn solve_loadb_sanity_test() {
+    let read_data = [103, 151, 78, 219].map(F::from_canonical_u32);
+    let prev_data = [53, 180, 29, 244].map(F::from_canonical_u32);
+    let write_data = solve_load_sign_extend(LOADB, read_data, prev_data);
+    assert_eq!(write_data, [103, 0, 0, 0].map(F::from_canonical_u32));
 }

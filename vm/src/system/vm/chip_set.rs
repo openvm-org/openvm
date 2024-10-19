@@ -59,6 +59,7 @@ use crate::{
         base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
         branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
         branch_lt::{BranchLessThanCoreChip, Rv32BranchLessThanChip},
+        load_sign_extend::{LoadSignExtendCoreChip, Rv32LoadSignExtendChip},
         loadstore::{LoadStoreCoreChip, Rv32LoadStoreChip},
         new_divrem::{DivRemCoreChip, Rv32DivRemChip},
         new_lt::{LessThanCoreChip, Rv32LessThanChip},
@@ -406,6 +407,23 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::LoadStoreRv32(chip));
                 }
+                ExecutorName::LoadSignExtendRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32LoadSignExtendChip::new(
+                        Rv32LoadStoreAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
+                        LoadSignExtendCoreChip::new(range_checker.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::LoadSignExtendRv32(chip));
+                }
                 ExecutorName::BranchEqualRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BranchEqualChip::new(
                         Rv32BranchAdapterChip::new(
@@ -705,7 +723,12 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
         ),
         ExecutorName::LoadStoreRv32 => (
             Rv32LoadStoreOpcode::default_offset(),
-            Rv32LoadStoreOpcode::COUNT,
+            7,
+            Rv32LoadStoreOpcode::default_offset(),
+        ),
+        ExecutorName::LoadSignExtendRv32 => (
+            Rv32LoadStoreOpcode::default_offset() + 7,
+            2,
             Rv32LoadStoreOpcode::default_offset(),
         ),
         ExecutorName::JalLuiRv32 => (

@@ -170,7 +170,7 @@ where
             Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
 
         let data: [[F; NUM_CELLS]; 2] = reads.into();
-        let write_data = solve_write_data(local_opcode_index, data[1], data[0]);
+        let write_data = solve_loadstore(local_opcode_index, data[1], data[0]);
 
         let output = AdapterRuntimeContext::without_pc([write_data]);
 
@@ -210,7 +210,8 @@ where
     }
 }
 
-pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
+// returns the write data for the opcode
+pub(super) fn solve_loadstore<F: PrimeField32, const NUM_CELLS: usize>(
     opcode: Rv32LoadStoreOpcode,
     read_data: [F; NUM_CELLS],
     prev_data: [F; NUM_CELLS],
@@ -245,20 +246,7 @@ pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
             }
         }
         HINTLOAD_RV32 => (),
-        LOADH => {
-            let ext = read_data[NUM_CELLS / 2 - 1].as_canonical_u32();
-            let ext = (ext >> 7) * 255;
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
-                *cell = F::from_canonical_u32(ext);
-            }
-        }
-        LOADB => {
-            let ext = read_data[0].as_canonical_u32();
-            let ext = (ext >> 7) * 255;
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
-                *cell = F::from_canonical_u32(ext);
-            }
-        }
+        _ => unreachable!(),
     };
     write_data
 }
