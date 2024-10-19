@@ -17,9 +17,11 @@ pub mod offline_checker;
 pub mod range;
 pub mod range_gate;
 pub mod range_tuple;
-pub mod sub_chip;
+mod sub_air;
 pub mod sum;
 pub mod utils;
 pub mod var_range;
 /// Different xor chip implementations
 pub mod xor;
+
+pub use sub_air::SubAir;
