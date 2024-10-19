@@ -5,14 +5,23 @@ use p3_air::AirBuilder;
 pub trait SubAir<AB: AirBuilder> {
     /// Type to define the context, typically in terms of `AB::Expr` that are needed
     /// to define the SubAir's constraints.
-    type AirContext;
+    type AirContext<'a>
+    where
+        Self: 'a,
+        AB: 'a,
+        AB::Var: 'a,
+        AB::Expr: 'a;
 
-    fn eval(&self, builder: &mut AB, ctx: impl Into<Self::AirContext>);
+    fn eval<'a>(&'a self, builder: &'a mut AB, ctx: Self::AirContext<'a>)
+    where
+        AB::Var: 'a,
+        AB::Expr: 'a;
 }
 
 /// This is a helper for generation of the trace on a subset of the columns in a single row
 /// of the trace matrix.
-pub trait TraceSubRowGenerator {
+// [jpw] This could be part of SubAir, but I want to keep SubAir to be constraints only
+pub trait TraceSubRowGenerator<F> {
     /// The minimal amount of information needed to generate the sub-row of the trace matrix.
     /// This type has a lifetime so other context, such as references to other chips, can be provided.
     type TraceContext<'a>
