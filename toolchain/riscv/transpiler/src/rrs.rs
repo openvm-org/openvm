@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use axvm_instructions::{riscv::RvIntrinsic, EccOpcode, ModularArithmeticOpcode};
+use axvm_instructions::{riscv::RvIntrinsic, EccOpcode, Rv32ModularArithmeticOpcode};
 use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
@@ -264,14 +264,14 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
         }
         0x2b => {
             match funct3 {
-                ModularArithmeticOpcode::FUNCT3 => {
+                Rv32ModularArithmeticOpcode::FUNCT3 => {
                     // mod operations
                     let funct7 = (instruction_u32 >> 25) & 0x7f;
-                    let size = ModularArithmeticOpcode::COUNT as u32;
+                    let size = Rv32ModularArithmeticOpcode::COUNT as u32;
                     let prime_idx = funct7 / size;
                     let local_opcode_idx = funct7 % size;
                     let global_opcode_idx = (local_opcode_idx + prime_idx * size) as usize
-                        + ModularArithmeticOpcode::default_offset();
+                        + Rv32ModularArithmeticOpcode::default_offset();
                     Some(from_r_type(
                         global_opcode_idx,
                         2,

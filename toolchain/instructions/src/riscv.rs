@@ -1,4 +1,4 @@
-use crate::{EccOpcode, ModularArithmeticOpcode};
+use crate::{EccOpcode, Rv32ModularArithmeticOpcode};
 
 /// The 7-bit opcode prefix for a 32-bit RISC-V instruction.
 #[repr(u8)]
@@ -13,7 +13,7 @@ pub trait RvIntrinsic {
     const FUNCT3: u8;
 }
 
-impl RvIntrinsic for ModularArithmeticOpcode {
+impl RvIntrinsic for Rv32ModularArithmeticOpcode {
     const FUNCT3: u8 = 0b000;
 }
 

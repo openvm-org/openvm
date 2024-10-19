@@ -34,41 +34,10 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_tiny_asm_runtime() -> Result<()> {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let data = read(dir.join("data/rv32im-fib-from-as"))?;
-    let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    let instructions = transpile::<BabyBear>(&elf.instructions);
-    for instruction in instructions.iter() {
-        println!("{:?}", instruction);
-    }
-    let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
-    let config = VmConfig::rv32();
-    let vm = VirtualMachine::new(config);
-
-    // TODO: use "execute_and_generate" when it's implemented
-    /*
-    let perm = default_perm();
-    let fri_params = FriParameters::standard_fast();
-
-    let result = vm.execute_and_generate()?;
-
-    for segment_result in result.segment_results {
-        let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        engine
-            .run_test_impl(&segment_result.air_infos)
-            .expect("Verification failed");
-    }
-    */
-
-    vm.execute(program)?;
-    Ok(())
-}
-
 #[test_case("data/rv32im-fibonacci-program-elf-release")]
 #[test_case("data/rv32im-exp-from-as")]
-fn test_runtime(elf_path: &str) -> Result<()> {
+#[test_case("data/rv32im-fib-from-as")]
+fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
@@ -79,19 +48,21 @@ fn test_runtime(elf_path: &str) -> Result<()> {
     let vm = VirtualMachine::new(config);
 
     // TODO: use "execute_and_generate" when it's implemented
-    /*
-    let perm = default_perm();
-    let fri_params = FriParameters::standard_fast();
 
-    let result = vm.execute_and_generate()?;
+    vm.execute(program)?;
+    Ok(())
+}
 
-    for segment_result in result.segment_results {
-        let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
-        engine
-            .run_test_impl(&segment_result.air_infos)
-            .expect("Verification failed");
-    }
-    */
+#[test_case("data/rv32im-intrin-from-as")]
+fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let data = read(dir.join(elf_path))?;
+    let elf = Elf::decode(&data, MEM_SIZE as u32)?;
+    let instructions = transpile::<BabyBear>(&elf.instructions);
+    setup_tracing();
+    let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
+    let config = VmConfig::rv32().add_canonical_modulus();
+    let vm = VirtualMachine::new(config);
 
     vm.execute(program)?;
     Ok(())

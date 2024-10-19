@@ -215,6 +215,9 @@ where
         );
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
+        tracing::trace!(
+            "ModularArithmeticOpcode | {local_opcode:?} | {z_biguint:?} | {x_biguint:?} | {y_biguint:?}",
+        );
         let z_limbs = biguint_to_limbs_vec(z_biguint, limb_bits, num_limbs);
         let writes = z_limbs.into_iter().map(F::from_canonical_u32).collect_vec();
         let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);

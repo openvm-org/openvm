@@ -13,4 +13,4 @@
 _start:
 	addmod_1 a2, a0, a1
 	addmod_2 a3, a0, a1
-
+    ecall
