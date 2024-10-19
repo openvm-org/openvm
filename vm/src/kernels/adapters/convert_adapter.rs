@@ -11,7 +11,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     kernels::adapters::native_basic_adapter::{VectorReadRecord, VectorWriteRecord},
     system::{
@@ -80,7 +81,8 @@ impl<F: Field, const READ_SIZE: usize, const WRITE_SIZE: usize> BaseAir<F>
 impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapterAir<AB>
     for ConvertAdapterAir<READ_SIZE, WRITE_SIZE>
 {
-    type Interface = BasicAdapterInterface<AB::Expr, 1, 1, READ_SIZE, WRITE_SIZE>;
+    type Interface =
+        BasicAdapterInterface<AB::Expr, MinimalInstruction<AB::Expr>, 1, 1, READ_SIZE, WRITE_SIZE>;
 
     fn eval(
         &self,
@@ -115,7 +117,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.execution_bridge
-            .execute_and_increment_pc(
+            .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [
                     cols.a_idx.into(),
@@ -126,6 +128,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
+                (1, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
@@ -142,7 +145,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
     type ReadRecord = VectorReadRecord<F, 1, READ_SIZE>;
     type WriteRecord = VectorWriteRecord<F, WRITE_SIZE>;
     type Air = ConvertAdapterAir<READ_SIZE, WRITE_SIZE>;
-    type Interface = BasicAdapterInterface<F, 1, 1, READ_SIZE, WRITE_SIZE>;
+    type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, 1, 1, READ_SIZE, WRITE_SIZE>;
 
     fn preprocess(
         &mut self,

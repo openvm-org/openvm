@@ -13,6 +13,7 @@ use ax_sdk::{
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
+use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
@@ -50,7 +51,13 @@ fn setup(
         range_decomp,
         field_element_bits,
     );
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32, range_checker.range_max_bits());
+    let builder = ExprBuilder::new(
+        prime.clone(),
+        LIMB_BITS,
+        32,
+        range_checker.range_max_bits(),
+        BabyBear::bits() - 2,
+    );
     (subair, range_checker, Rc::new(RefCell::new(builder)))
 }
 
@@ -75,8 +82,8 @@ fn test_add() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker, builder) = setup(&prime);
 
-    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x1 = ExprBuilder::new_input(builder.clone());
+    let x2 = ExprBuilder::new_input(builder.clone());
     let mut x3 = x1 + x2;
     x3.save();
     let builder = builder.borrow().clone();
@@ -84,8 +91,7 @@ fn test_add() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus().index,
-        range_max_bits: range_checker.range_max_bits(),
+        range_bus: range_checker.bus(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -115,16 +121,15 @@ fn test_div() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker, builder) = setup(&prime);
 
-    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x1 = ExprBuilder::new_input(builder.clone());
+    let x2 = ExprBuilder::new_input(builder.clone());
     let _x3 = x1 / x2; // auto save on division.
     let builder = builder.borrow().clone();
 
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus().index,
-        range_max_bits: range_checker.range_max_bits(),
+        range_bus: range_checker.bus(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -155,8 +160,8 @@ fn test_auto_carry_mul() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker, builder) = setup(&prime);
 
-    let mut x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let mut x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut x1 = ExprBuilder::new_input(builder.clone());
+    let mut x2 = ExprBuilder::new_input(builder.clone());
     let mut x3 = &mut x1 * &mut x2;
     // The multiplication below will overflow, so it triggers x3 to be saved first.
     let mut x4 = &mut x3 * &mut x1;
@@ -169,8 +174,7 @@ fn test_auto_carry_mul() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus().index,
-        range_max_bits: range_checker.range_max_bits(),
+        range_bus: range_checker.bus(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
@@ -198,8 +202,8 @@ fn test_auto_carry_mul() {
 fn test_auto_carry_intmul() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker, builder) = setup(&prime);
-    let mut x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let mut x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut x1 = ExprBuilder::new_input(builder.clone());
+    let mut x2 = ExprBuilder::new_input(builder.clone());
     let mut x3 = &mut x1 * &mut x2;
     // The int_mul below will overflow:
     // x3 should have max_overflow_bits = 8 + 8 + log2(32) = 21
@@ -215,8 +219,7 @@ fn test_auto_carry_intmul() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus().index,
-        range_max_bits: range_checker.range_max_bits(),
+        range_bus: range_checker.bus(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
@@ -245,8 +248,8 @@ fn test_auto_carry_add() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker, builder) = setup(&prime);
 
-    let mut x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let mut x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let mut x1 = ExprBuilder::new_input(builder.clone());
+    let mut x2 = ExprBuilder::new_input(builder.clone());
     let mut x3 = &mut x1 * &mut x2;
     let x4 = x3.int_mul(5);
     // Should not overflow, so x3 is not saved.
@@ -270,8 +273,7 @@ fn test_auto_carry_add() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus().index,
-        range_max_bits: range_checker.range_max_bits(),
+        range_bus: range_checker.bus(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -301,10 +303,10 @@ fn test_ec_add() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker, builder) = setup(&prime);
 
-    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let y1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let y2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x1 = ExprBuilder::new_input(builder.clone());
+    let y1 = ExprBuilder::new_input(builder.clone());
+    let x2 = ExprBuilder::new_input(builder.clone());
+    let y2 = ExprBuilder::new_input(builder.clone());
     let dx = x2.clone() - x1.clone();
     let dy = y2.clone() - y1.clone();
     let lambda = dy / dx; // auto save on division.
@@ -317,8 +319,7 @@ fn test_ec_add() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus().index,
-        range_max_bits: range_checker.range_max_bits(),
+        range_bus: range_checker.bus(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
     let (x1, y1) = SampleEcPoints[0].clone();
@@ -349,8 +350,8 @@ fn test_ec_double() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker, builder) = setup(&prime);
 
-    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let mut y1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x1 = ExprBuilder::new_input(builder.clone());
+    let mut y1 = ExprBuilder::new_input(builder.clone());
     let nom = (x1.clone() * x1.clone()).int_mul(3);
     let denom = y1.int_mul(2);
     let lambda = nom / denom;
@@ -363,8 +364,7 @@ fn test_ec_double() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus().index,
-        range_max_bits: range_checker.range_max_bits(),
+        range_bus: range_checker.bus(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -395,8 +395,8 @@ fn test_select() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker, builder) = setup(&prime);
 
-    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x1 = ExprBuilder::new_input(builder.clone());
+    let x2 = ExprBuilder::new_input(builder.clone());
     let x3 = x1.clone() + x2.clone();
     let x4 = x1 - x2;
     let flag = {
@@ -410,8 +410,7 @@ fn test_select() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus().index,
-        range_max_bits: range_checker.range_max_bits(),
+        range_bus: range_checker.bus(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -441,8 +440,8 @@ fn test_select() {
 fn test_select2() {
     let prime = secp256k1_coord_prime();
     let (subair, range_checker, builder) = setup(&prime);
-    let x1 = ExprBuilder::new_input::<TestConfig>(builder.clone());
-    let x2 = ExprBuilder::new_input::<TestConfig>(builder.clone());
+    let x1 = ExprBuilder::new_input(builder.clone());
+    let x2 = ExprBuilder::new_input(builder.clone());
     let x3 = x1.clone() + x2.clone();
     let x4 = x1 - x2;
     let flag = {
@@ -456,8 +455,7 @@ fn test_select2() {
     let expr = FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus().index,
-        range_max_bits: range_checker.range_max_bits(),
+        range_bus: range_checker.bus(),
     };
     let width = BaseAir::<BabyBear>::width(&expr);
 

@@ -34,7 +34,7 @@ fn test_flatten_fromslice_roundtrip() {
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let instructions = program.instructions();
-    let mut chip = ProgramChip::new(program);
+    let mut chip = ProgramChip::new_with_program(program);
     let mut execution_frequencies = vec![0; instructions.len()];
     for pc in execution {
         execution_frequencies[pc as usize] += 1;
@@ -134,7 +134,7 @@ fn test_program_negative() {
     ];
     let program = Program::from_instructions(&instructions);
 
-    let mut chip = ProgramChip::new(program);
+    let mut chip = ProgramChip::new_with_program(program);
     let execution_frequencies = vec![1; instructions.len()];
     for pc in 0..instructions.len() {
         chip.get_instruction(pc as u32).unwrap();

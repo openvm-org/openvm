@@ -3,7 +3,7 @@ use axvm_instructions::UsizeOpcode;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::{EcAddUnequalChip, EcDoubleChip, LIMB_SIZE, NUM_LIMBS, TWO_NUM_LIMBS};
+use super::{EcAddUnequalChip, EcDoubleChip, LIMB_BITS, NUM_LIMBS, TWO_NUM_LIMBS};
 use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder},
     system::program::Instruction,
@@ -39,18 +39,18 @@ fn test_ec_add() {
     tester.write_cell(ptr_as, addr_ptr3, BabyBear::from_canonical_usize(address3));
     let mut p1_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p1_limbs[..NUM_LIMBS].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p1_x, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p1_x, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     p1_limbs[NUM_LIMBS..].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p1_y, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p1_y, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     tester.write(data_as, address1, p1_limbs);
     let mut p2_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p2_limbs[..NUM_LIMBS].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p2_x, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p2_x, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     p2_limbs[NUM_LIMBS..].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p2_y, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p2_y, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     tester.write(data_as, address2, p2_limbs);
 
@@ -72,10 +72,10 @@ fn test_ec_add() {
     let (p3_x, p3_y) = SampleEcPoints[2].clone();
     let mut p3_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p3_limbs[..NUM_LIMBS].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p3_x, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p3_x, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     p3_limbs[NUM_LIMBS..].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p3_y, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p3_y, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     let read_p3 = tester.read::<TWO_NUM_LIMBS>(data_as, address3);
     assert_eq!(p3_limbs, read_p3);
@@ -109,10 +109,10 @@ fn test_ec_double() {
     tester.write_cell(ptr_as, addr_ptr2, BabyBear::from_canonical_usize(address2));
     let mut p1_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p1_limbs[..NUM_LIMBS].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p1_x, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p1_x, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     p1_limbs[NUM_LIMBS..].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p1_y, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p1_y, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     tester.write(data_as, address1, p1_limbs);
     tester.write(data_as, address1, p1_limbs);
@@ -135,10 +135,10 @@ fn test_ec_double() {
     let (p2_x, p2_y) = SampleEcPoints[3].clone();
     let mut p2_limbs = [BabyBear::zero(); TWO_NUM_LIMBS];
     p2_limbs[..NUM_LIMBS].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p2_x, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p2_x, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     p2_limbs[NUM_LIMBS..].copy_from_slice(
-        &biguint_to_limbs::<NUM_LIMBS>(p2_y, LIMB_SIZE).map(BabyBear::from_canonical_u32),
+        &biguint_to_limbs::<NUM_LIMBS>(p2_y, LIMB_BITS).map(BabyBear::from_canonical_u32),
     );
     let read_p2 = tester.read::<TWO_NUM_LIMBS>(data_as, address2);
     assert_eq!(p2_limbs, read_p2);

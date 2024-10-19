@@ -2,7 +2,7 @@ use p3_field::PrimeField32;
 
 use crate::system::memory::{
     merkle::MemoryMerkleChip, persistent::PersistentBoundaryChip, volatile::VolatileBoundaryChip,
-    CHUNK,
+    Equipartition, CHUNK,
 };
 
 #[derive(Clone, Debug)]
@@ -13,6 +13,7 @@ pub enum MemoryInterface<F> {
     Persistent {
         boundary_chip: PersistentBoundaryChip<F, CHUNK>,
         merkle_chip: MemoryMerkleChip<CHUNK, F>,
+        initial_memory: Equipartition<F, CHUNK>,
     },
 }
 
@@ -25,6 +26,7 @@ impl<F: PrimeField32> MemoryInterface<F> {
             MemoryInterface::Persistent {
                 boundary_chip,
                 merkle_chip,
+                ..
             } => {
                 boundary_chip.touch_address(addr_space, pointer);
                 merkle_chip.touch_address(addr_space, pointer);

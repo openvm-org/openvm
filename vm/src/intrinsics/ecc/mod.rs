@@ -16,7 +16,7 @@ use crate::{
         ExecutionState, // instructions::Opcode,
         InstructionExecutor,
     },
-    old::modular_addsub::{FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
+    intrinsics::modular::SECP256K1_COORD_PRIME,
     system::memory::{MemoryControllerRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
     system::program::{bridge::ProgramBus, ExecutionError, Instruction},
     utils::{biguint_to_limbs, limbs_to_biguint},
@@ -34,7 +34,7 @@ pub use columns::*;
 mod test;
 
 const NUM_LIMBS: usize = 32;
-const LIMB_SIZE: usize = 8;
+const LIMB_BITS: usize = 8;
 const TWO_NUM_LIMBS: usize = NUM_LIMBS * 2;
 
 fn read_ec_points<T: PrimeField32>(
@@ -46,8 +46,8 @@ fn read_ec_points<T: PrimeField32>(
     let mut memory_controller = memory_controller.borrow_mut();
     let array_read = memory_controller.read_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer);
     let u32_array = array_read.data_read.data.map(|x| x.as_canonical_u32());
-    let x = limbs_to_biguint(&u32_array[..NUM_LIMBS], LIMB_SIZE);
-    let y = limbs_to_biguint(&u32_array[NUM_LIMBS..], LIMB_SIZE);
+    let x = limbs_to_biguint(&u32_array[..NUM_LIMBS], LIMB_BITS);
+    let y = limbs_to_biguint(&u32_array[NUM_LIMBS..], LIMB_BITS);
     (x, y, array_read)
 }
 
@@ -60,8 +60,8 @@ fn write_ec_points<T: PrimeField32>(
     ptr_pointer: T,
 ) -> MemoryHeapWriteRecord<T, TWO_NUM_LIMBS> {
     let mut memory_controller = memory_controller.borrow_mut();
-    let x_limbs = biguint_to_limbs::<NUM_LIMBS>(x, LIMB_SIZE);
-    let y_limbs = biguint_to_limbs::<NUM_LIMBS>(y, LIMB_SIZE);
+    let x_limbs = biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS);
+    let y_limbs = biguint_to_limbs::<NUM_LIMBS>(y, LIMB_BITS);
     let mut array = [0; 64];
     array[..NUM_LIMBS].copy_from_slice(&x_limbs);
     array[NUM_LIMBS..].copy_from_slice(&y_limbs);
@@ -104,8 +104,8 @@ fn make_ec_config<T: PrimeField32>(memory_controller: &MemoryControllerRef<T>) -
         BigUint::from_u32(7).unwrap(),
         range_checker_chip.bus().index,
         range_checker_chip.range_max_bits(),
-        LIMB_SIZE,
-        FIELD_ELEMENT_BITS,
+        LIMB_BITS,
+        T::bits(),
     )
 }
 

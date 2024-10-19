@@ -7,7 +7,7 @@ use super::{
 };
 
 pub const NUM_LIMBS: usize = 32;
-pub const LIMB_SIZE: usize = 8;
+pub const LIMB_BITS: usize = 8;
 
 /// Converts a prime field element to a usize.
 pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {

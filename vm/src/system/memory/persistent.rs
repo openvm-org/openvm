@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     collections::HashSet,
+    iter,
 };
 
 use afs_derive::AlignedBorrow;
@@ -13,9 +14,13 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use crate::system::memory::{
-    dimensions::MemoryDimensions, merkle::MemoryMerkleBus, offline_checker::MemoryBus,
-    MemoryAddress, TimestampedEquipartition,
+use crate::{
+    kernels::core::POSEIDON2_DIRECT_BUS,
+    system::memory::{
+        dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
+        offline_checker::MemoryBus, tree::HasherChip, Equipartition, MemoryAddress,
+        TimestampedEquipartition,
+    },
 };
 
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
@@ -30,6 +35,7 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
     pub address_space: T,
     pub leaf_label: T,
     pub values: [T; CHUNK],
+    pub hash: [T; CHUNK],
     pub timestamp: T,
 }
 
@@ -77,11 +83,20 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
                 * AB::F::from_canonical_usize(1 << self.memory_dims.address_height),
             local.leaf_label.into(),
         ];
-        expand_fields.extend(local.values.map(|x| x.into()));
+        expand_fields.extend(local.hash.map(Into::into));
         builder.push_send(
             self.merkle_bus.0,
             expand_fields,
             local.expand_direction.into(),
+        );
+
+        builder.push_send(
+            POSEIDON2_DIRECT_BUS,
+            iter::empty()
+                .chain(local.values.map(Into::into))
+                .chain(iter::repeat(AB::Expr::zero()).take(CHUNK))
+                .chain(local.hash.map(Into::into)),
+            local.expand_direction * local.expand_direction,
         );
 
         self.memory_bus
@@ -101,7 +116,6 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
     touched_labels: HashSet<(F, usize)>,
-    initial_memory: TimestampedEquipartition<F, CHUNK>,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
@@ -117,7 +131,6 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 merkle_bus,
             },
             touched_labels: HashSet::new(),
-            initial_memory: TimestampedEquipartition::new(),
         }
     }
 
@@ -132,7 +145,9 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     pub fn generate_trace(
         &self,
+        initial_memory: &Equipartition<F, CHUNK>,
         final_memory: &TimestampedEquipartition<F, CHUNK>,
+        hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> RowMajorMatrix<F> {
         let width = PersistentBoundaryCols::<F, CHUNK>::width();
         let height = next_power_of_two_or_zero(2 * self.touched_labels.len());
@@ -142,28 +157,38 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
             rows.chunks_mut(2 * width).zip(self.touched_labels.iter())
         {
             let (initial_row, final_row) = row.split_at_mut(width);
-            *initial_row.borrow_mut() = match self.initial_memory.get(&(address_space, label)) {
-                Some(initial) => PersistentBoundaryCols {
-                    expand_direction: F::one(),
-                    address_space,
-                    leaf_label: F::from_canonical_usize(label),
-                    values: initial.values,
-                    timestamp: F::from_canonical_u32(initial.timestamp),
-                },
-                None => PersistentBoundaryCols {
-                    expand_direction: F::one(),
-                    address_space,
-                    leaf_label: F::from_canonical_usize(label),
-                    values: [F::zero(); CHUNK],
-                    timestamp: F::zero(),
-                },
+            *initial_row.borrow_mut() = match initial_memory.get(&(address_space, label)) {
+                Some(values) => {
+                    let initial_hash = hasher.hash_and_record(values);
+                    PersistentBoundaryCols {
+                        expand_direction: F::one(),
+                        address_space,
+                        leaf_label: F::from_canonical_usize(label),
+                        values: *values,
+                        hash: initial_hash,
+                        timestamp: F::from_canonical_u32(INITIAL_TIMESTAMP),
+                    }
+                }
+                None => {
+                    let initial_hash = hasher.hash_and_record(&[F::zero(); CHUNK]);
+                    PersistentBoundaryCols {
+                        expand_direction: F::one(),
+                        address_space,
+                        leaf_label: F::from_canonical_usize(label),
+                        values: [F::zero(); CHUNK],
+                        hash: initial_hash,
+                        timestamp: F::zero(),
+                    }
+                }
             };
             let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
+            let final_hash = hasher.hash_and_record(&timestamped_values.values);
             *final_row.borrow_mut() = PersistentBoundaryCols {
                 expand_direction: F::neg_one(),
                 address_space,
                 leaf_label: F::from_canonical_usize(label),
                 values: timestamped_values.values,
+                hash: final_hash,
                 timestamp: F::from_canonical_u32(timestamped_values.timestamp),
             };
         }

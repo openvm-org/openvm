@@ -368,35 +368,40 @@ pub struct MinimalInstruction<T> {
 #[derive(Clone)]
 pub struct BasicAdapterInterface<
     T,
+    PI,
     const NUM_READS: usize,
     const NUM_WRITES: usize,
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
->(PhantomData<T>);
+>(PhantomData<T>, PhantomData<PI>);
 
 impl<
         T,
+        PI,
         const NUM_READS: usize,
         const NUM_WRITES: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > VmAdapterInterface<T>
-    for BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
+    for BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
     type Reads = [[T; READ_SIZE]; NUM_READS];
     type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
-    type ProcessedInstruction = MinimalInstruction<T>;
+    type ProcessedInstruction = PI;
 }
 
 /// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat array for each
-pub struct FlatInterface<T, const READ_CELLS: usize, const WRITE_CELLS: usize>(PhantomData<T>);
+pub struct FlatInterface<T, PI, const READ_CELLS: usize, const WRITE_CELLS: usize>(
+    PhantomData<T>,
+    PhantomData<PI>,
+);
 
-impl<T, const READ_CELLS: usize, const WRITE_CELLS: usize> VmAdapterInterface<T>
-    for FlatInterface<T, READ_CELLS, WRITE_CELLS>
+impl<T, PI, const READ_CELLS: usize, const WRITE_CELLS: usize> VmAdapterInterface<T>
+    for FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>
 {
     type Reads = [T; READ_CELLS];
     type Writes = [T; WRITE_CELLS];
-    type ProcessedInstruction = MinimalInstruction<T>;
+    type ProcessedInstruction = PI;
 }
 
 /// An interface that is fully determined during runtime. This should **only** be used as a last resort when static
@@ -426,6 +431,7 @@ mod conversions {
     // AdapterAirContext: FlatInterface -> BasicInterface
     impl<
             T,
+            PI,
             const NUM_READS: usize,
             const NUM_WRITES: usize,
             const READ_SIZE: usize,
@@ -436,9 +442,9 @@ mod conversions {
         From<
             AdapterAirContext<
                 T,
-                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
-        > for AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>
+        > for AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>
     {
         /// ## Panics
         /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
@@ -446,9 +452,9 @@ mod conversions {
         fn from(
             ctx: AdapterAirContext<
                 T,
-                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
-        ) -> AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>> {
+        ) -> AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>> {
             assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
             assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
             let mut reads_it = ctx.reads.into_iter().flatten();
@@ -467,16 +473,17 @@ mod conversions {
     // AdapterAirContext: BasicInterface -> FlatInterface
     impl<
             T,
+            PI,
             const NUM_READS: usize,
             const NUM_WRITES: usize,
             const READ_SIZE: usize,
             const WRITE_SIZE: usize,
             const READ_CELLS: usize,
             const WRITE_CELLS: usize,
-        > From<AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+        > From<AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
         for AdapterAirContext<
             T,
-            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         >
     {
         /// ## Panics
@@ -488,10 +495,10 @@ mod conversions {
                 reads,
                 writes,
                 instruction,
-            }: AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>,
+            }: AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>,
         ) -> AdapterAirContext<
             T,
-            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         > {
             assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
             assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
@@ -513,6 +520,7 @@ mod conversions {
     // AdapterRuntimeContext: BasicInterface -> FlatInterface
     impl<
             T,
+            PI,
             const NUM_READS: usize,
             const NUM_WRITES: usize,
             const READ_SIZE: usize,
@@ -523,9 +531,9 @@ mod conversions {
         From<
             AdapterRuntimeContext<
                 T,
-                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
-        > for AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>
+        > for AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>
     {
         /// ## Panics
         /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
@@ -533,9 +541,9 @@ mod conversions {
         fn from(
             ctx: AdapterRuntimeContext<
                 T,
-                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
-        ) -> AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>> {
+        ) -> AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>> {
             assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
             let mut writes_it = ctx.writes.into_iter().flatten();
             let writes = from_fn(|_| writes_it.next().unwrap());
@@ -549,26 +557,27 @@ mod conversions {
     // AdapterRuntimeContext: FlatInterface -> BasicInterface
     impl<
             T: AbstractField,
+            PI,
             const NUM_READS: usize,
             const NUM_WRITES: usize,
             const READ_SIZE: usize,
             const WRITE_SIZE: usize,
             const READ_CELLS: usize,
             const WRITE_CELLS: usize,
-        > From<AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+        > From<AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
         for AdapterRuntimeContext<
             T,
-            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         >
     {
         /// ## Panics
         /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
         /// This is a runtime assertion until Rust const generics expressions are stabilized.
         fn from(
-            ctx: AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>,
+            ctx: AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>,
         ) -> AdapterRuntimeContext<
             T,
-            BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         > {
             assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
             let mut writes_it = ctx.writes.into_iter();
@@ -607,17 +616,41 @@ mod conversions {
         }
     }
 
+    impl<T, const N: usize, const M: usize, const R: usize> From<[[[T; N]; M]; R]> for DynArray<T> {
+        fn from(v: [[[T; N]; M]; R]) -> Self {
+            Self(
+                v.into_iter()
+                    .flat_map(|x| x.into_iter().flatten())
+                    .collect(),
+            )
+        }
+    }
+
+    impl<T, const N: usize, const M: usize, const R: usize> From<DynArray<T>> for [[[T; N]; M]; R] {
+        fn from(v: DynArray<T>) -> Self {
+            assert_eq!(
+                v.0.len(),
+                N * M * R,
+                "Incorrect vector length {}",
+                v.0.len()
+            );
+            let mut it = v.0.into_iter();
+            from_fn(|_| from_fn(|_| from_fn(|_| it.next().unwrap())))
+        }
+    }
+
     impl<T> From<MinimalInstruction<T>> for DynArray<T> {
         fn from(m: MinimalInstruction<T>) -> Self {
             Self(vec![m.is_valid, m.opcode])
         }
     }
 
-    impl<T: Clone> From<DynArray<T>> for MinimalInstruction<T> {
+    impl<T> From<DynArray<T>> for MinimalInstruction<T> {
         fn from(m: DynArray<T>) -> Self {
+            let mut m = m.0.into_iter();
             MinimalInstruction {
-                is_valid: m.0[0].clone(),
-                opcode: m.0[1].clone(),
+                is_valid: m.next().unwrap(),
+                opcode: m.next().unwrap(),
             }
         }
     }
@@ -625,6 +658,7 @@ mod conversions {
     // AdapterAirContext: BasicInterface -> DynInterface
     impl<
             T,
+            PI: Into<DynArray<T>>,
             const NUM_READS: usize,
             const NUM_WRITES: usize,
             const READ_SIZE: usize,
@@ -633,31 +667,21 @@ mod conversions {
         From<
             AdapterAirContext<
                 T,
-                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         > for AdapterAirContext<T, DynAdapterInterface<T>>
     {
         fn from(
             ctx: AdapterAirContext<
                 T,
-                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         ) -> Self {
             AdapterAirContext {
                 to_pc: ctx.to_pc,
-                reads: ctx
-                    .reads
-                    .into_iter()
-                    .flat_map(|x| x.into_iter())
-                    .collect::<Vec<_>>()
-                    .into(),
-                writes: ctx
-                    .writes
-                    .into_iter()
-                    .flat_map(|x| x.into_iter())
-                    .collect::<Vec<_>>()
-                    .into(),
-                instruction: vec![ctx.instruction.is_valid, ctx.instruction.opcode].into(),
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
             }
         }
     }
@@ -665,6 +689,7 @@ mod conversions {
     // AdapterRuntimeContext: BasicInterface -> DynInterface
     impl<
             T,
+            PI,
             const NUM_READS: usize,
             const NUM_WRITES: usize,
             const READ_SIZE: usize,
@@ -673,34 +698,77 @@ mod conversions {
         From<
             AdapterRuntimeContext<
                 T,
-                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         > for AdapterRuntimeContext<T, DynAdapterInterface<T>>
     {
         fn from(
             ctx: AdapterRuntimeContext<
                 T,
-                BasicAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         ) -> Self {
             AdapterRuntimeContext {
                 to_pc: ctx.to_pc,
-                writes: ctx
-                    .writes
-                    .into_iter()
-                    .flat_map(|x| x.into_iter())
-                    .collect::<Vec<_>>()
-                    .into(),
+                writes: ctx.writes.into(),
+            }
+        }
+    }
+
+    // AdapterAirContext: DynInterface -> BasicInterface
+    impl<
+            T,
+            PI,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
+        for AdapterAirContext<
+            T,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    where
+        PI: From<DynArray<T>>,
+    {
+        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: DynInterface -> BasicInterface
+    impl<
+            T,
+            PI,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
+        for AdapterRuntimeContext<
+            T,
+            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.into(),
             }
         }
     }
 
     // AdapterAirContext: FlatInterface -> DynInterface
-    impl<T: Clone, const READ_CELLS: usize, const WRITE_CELLS: usize>
-        From<AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+    impl<T: Clone, PI: Into<DynArray<T>>, const READ_CELLS: usize, const WRITE_CELLS: usize>
+        From<AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
         for AdapterAirContext<T, DynAdapterInterface<T>>
     {
-        fn from(ctx: AdapterAirContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>) -> Self {
+        fn from(ctx: AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>) -> Self {
             AdapterAirContext {
                 to_pc: ctx.to_pc,
                 reads: ctx.reads.to_vec().into(),
@@ -711,11 +779,13 @@ mod conversions {
     }
 
     // AdapterRuntimeContext: FlatInterface -> DynInterface
-    impl<T: Clone, const READ_CELLS: usize, const WRITE_CELLS: usize>
-        From<AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>>
+    impl<T: Clone, PI, const READ_CELLS: usize, const WRITE_CELLS: usize>
+        From<AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
         for AdapterRuntimeContext<T, DynAdapterInterface<T>>
     {
-        fn from(ctx: AdapterRuntimeContext<T, FlatInterface<T, READ_CELLS, WRITE_CELLS>>) -> Self {
+        fn from(
+            ctx: AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>,
+        ) -> Self {
             AdapterRuntimeContext {
                 to_pc: ctx.to_pc,
                 writes: ctx.writes.to_vec().into(),

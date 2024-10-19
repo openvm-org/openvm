@@ -30,7 +30,7 @@ use rand::{
     Rng,
 };
 
-use super::{MemoryAuxColsFactory, MemoryController, MemoryReadRecord, TimestampedEquipartition};
+use super::{Equipartition, MemoryAuxColsFactory, MemoryController, MemoryReadRecord};
 use crate::{
     arch::{testing::memory::gen_pointer, ExecutionBus},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
@@ -233,11 +233,8 @@ fn test_memory_controller() {
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-    let mut memory_controller = MemoryController::with_volatile_memory(
-        memory_bus,
-        memory_config.clone(),
-        range_checker.clone(),
-    );
+    let mut memory_controller =
+        MemoryController::with_volatile_memory(memory_bus, memory_config, range_checker.clone());
     let aux_factory = memory_controller.aux_cols_factory();
 
     let mut rng = create_seeded_rng();
@@ -272,10 +269,10 @@ fn test_memory_controller_persistent() {
 
     let mut memory_controller = MemoryController::with_persistent_memory(
         memory_bus,
-        memory_config.clone(),
+        memory_config,
         range_checker.clone(),
         merkle_bus,
-        TimestampedEquipartition::new(),
+        Equipartition::new(),
     );
     let aux_factory = memory_controller.aux_cols_factory();
 

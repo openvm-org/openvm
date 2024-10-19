@@ -1,0 +1,1 @@
+Short Weierstrass (sw) curve (with a = 0) operations

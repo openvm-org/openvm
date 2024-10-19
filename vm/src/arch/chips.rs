@@ -18,13 +18,14 @@ use crate::{
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     },
     kernels::{
-        castf::CastFChip, core::CoreChip, field_arithmetic::FieldArithmeticChip,
+        castf::CastFChip,
+        core::CoreChip,
+        field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
+        modular::{KernelModularAddSubChip, KernelModularMulDivChip},
     },
     old::{
-        alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,
-        modular_multdiv::ModularMultDivChip, shift::ShiftChip,
-        uint_multiplication::UintMultiplicationChip,
+        alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
     },
     rv32im::{
         base_alu::Rv32BaseAluChip, branch_eq::Rv32BranchEqualChip,
@@ -65,8 +66,10 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     }
 }
 
+/// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
+/// each chip. Change of the order may cause break changes of VKs.
 #[derive(Clone, EnumDiscriminants)]
-#[strum_discriminants(derive(Serialize, Deserialize))]
+#[strum_discriminants(derive(Serialize, Deserialize, Ord, PartialOrd))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum AxVmInstructionExecutor<F: PrimeField32> {
@@ -92,8 +95,8 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
-    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
+    ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
@@ -125,8 +128,8 @@ pub enum AxVmChip<F: PrimeField32> {
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
-    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
+    ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }

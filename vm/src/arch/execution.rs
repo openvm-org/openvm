@@ -43,6 +43,11 @@ pub struct ExecutionBridgeInteractor<AB: InteractionBuilder> {
     to_state: ExecutionState<AB::Expr>,
 }
 
+pub enum PcIncOrSet<T> {
+    Inc(T),
+    Set(T),
+}
+
 impl<T> ExecutionState<T> {
     pub fn new(pc: impl Into<T>, timestamp: impl Into<T>) -> Self {
         Self {
@@ -163,6 +168,25 @@ impl ExecutionBridge {
         }
     }
 
+    /// If `to_pc` is `Some`, then `pc_inc` is ignored and the `to_state` uses `to_pc`. Otherwise `to_pc = from_pc + pc_inc`.
+    pub fn execute_and_increment_or_set_pc<AB: InteractionBuilder>(
+        &self,
+        opcode: impl Into<AB::Expr>,
+        operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
+        from_state: ExecutionState<impl Into<AB::Expr> + Clone>,
+        timestamp_change: impl Into<AB::Expr>,
+        pc_kind: impl Into<PcIncOrSet<AB::Expr>>,
+    ) -> ExecutionBridgeInteractor<AB> {
+        let to_state = ExecutionState {
+            pc: match pc_kind.into() {
+                PcIncOrSet::Set(to_pc) => to_pc,
+                PcIncOrSet::Inc(pc_inc) => from_state.pc.clone().into() + pc_inc,
+            },
+            timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
+        };
+        self.execute(opcode, operands, from_state, to_state)
+    }
+
     pub fn execute_and_increment_pc<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
@@ -172,21 +196,6 @@ impl ExecutionBridge {
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
             pc: from_state.pc.clone().into() + AB::Expr::one(),
-            timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
-        };
-        self.execute(opcode, operands, from_state, to_state)
-    }
-
-    pub fn execute_and_increment_pc_custom<AB: InteractionBuilder>(
-        &self,
-        opcode: impl Into<AB::Expr>,
-        operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
-        from_state: ExecutionState<impl Into<AB::Expr> + Clone>,
-        timestamp_change: impl Into<AB::Expr>,
-        pc_inc: impl Into<AB::Expr>,
-    ) -> ExecutionBridgeInteractor<AB> {
-        let to_state = ExecutionState {
-            pc: from_state.pc.clone().into() + pc_inc.into(),
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
@@ -225,5 +234,14 @@ impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
 
         self.execution_bus
             .execute(builder, multiplicity, self.from_state, self.to_state);
+    }
+}
+
+impl<T: AbstractField> From<(u32, Option<T>)> for PcIncOrSet<T> {
+    fn from((pc_inc, to_pc): (u32, Option<T>)) -> Self {
+        match to_pc {
+            None => PcIncOrSet::Inc(T::from_canonical_u32(pc_inc)),
+            Some(to_pc) => PcIncOrSet::Set(to_pc),
+        }
     }
 }

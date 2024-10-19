@@ -1,13 +1,14 @@
+use afs_primitives::bigint::utils::big_uint_to_num_limbs;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_field::{AbstractField, PrimeField64};
 use stark_vm::{
-    old::modular_addsub::{big_uint_to_num_limbs, SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     system::vm::config::Modulus,
 };
 
 use super::{
-    utils::{LIMB_SIZE, NUM_LIMBS},
+    utils::{LIMB_BITS, NUM_LIMBS},
     Array, Builder, Config, DslIr, IfBuilder, Var,
 };
 
@@ -29,7 +30,7 @@ where
     pub fn eval_biguint(&mut self, biguint: BigUint) -> BigUintVar<C> {
         let array = self.dyn_array(NUM_LIMBS);
 
-        let elems: Vec<C::N> = big_uint_to_num_limbs(&biguint, LIMB_SIZE, NUM_LIMBS)
+        let elems: Vec<C::N> = big_uint_to_num_limbs(&biguint, LIMB_BITS, NUM_LIMBS)
             .into_iter()
             .map(C::N::from_canonical_usize)
             .collect();
