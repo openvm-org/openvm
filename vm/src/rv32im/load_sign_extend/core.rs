@@ -180,7 +180,8 @@ where
             Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
 
         let data: [[F; NUM_CELLS]; 2] = reads.into();
-        let write_data = solve_load_sign_extend(local_opcode_index, data[1], data[0]);
+        let write_data =
+            solve_load_sign_extend::<_, NUM_CELLS, LIMB_BITS>(local_opcode_index, data[1], data[0]);
         let output = AdapterRuntimeContext::without_pc([write_data]);
 
         let most_sig_limb = match local_opcode_index {
@@ -227,7 +228,11 @@ where
 }
 
 // returns the write data for the given opcode
-pub(super) fn solve_load_sign_extend<F: PrimeField32, const NUM_CELLS: usize>(
+pub(super) fn solve_load_sign_extend<
+    F: PrimeField32,
+    const NUM_CELLS: usize,
+    const LIMB_BITS: usize,
+>(
     opcode: Rv32LoadStoreOpcode,
     read_data: [F; NUM_CELLS],
     _prev_data: [F; NUM_CELLS],
@@ -236,14 +241,14 @@ pub(super) fn solve_load_sign_extend<F: PrimeField32, const NUM_CELLS: usize>(
     match opcode {
         LOADH => {
             let ext = read_data[NUM_CELLS / 2 - 1].as_canonical_u32();
-            let ext = (ext >> 7) * 255;
+            let ext = (ext >> (LIMB_BITS - 1)) * ((1 << LIMB_BITS) - 1);
             for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
                 *cell = F::from_canonical_u32(ext);
             }
         }
         LOADB => {
             let ext = read_data[0].as_canonical_u32();
-            let ext = (ext >> 7) * 255;
+            let ext = (ext >> (LIMB_BITS - 1)) * ((1 << LIMB_BITS) - 1);
             for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
                 *cell = F::from_canonical_u32(ext);
             }

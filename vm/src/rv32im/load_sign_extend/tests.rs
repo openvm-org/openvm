@@ -22,7 +22,7 @@ use crate::{
         VmAdapterChip,
     },
     rv32im::{
-        adapters::{compose, Rv32LoadStoreAdapterChip, RV32_REGISTER_NUM_LANES},
+        adapters::{compose, Rv32LoadStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
         load_sign_extend::LoadSignExtendCoreCols,
     },
     system::program::Instruction,
@@ -89,7 +89,11 @@ fn set_and_execute(
         ),
     );
 
-    let write_data = solve_load_sign_extend(opcode, read_data, some_prev_data);
+    let write_data = solve_load_sign_extend::<_, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(
+        opcode,
+        read_data,
+        some_prev_data,
+    );
     if is_load && opcode != HINTLOAD_RV32 {
         assert_eq!(write_data, tester.read::<4>(1, a));
     } else if !is_load {
@@ -260,7 +264,9 @@ fn execute_roundtrip_sanity_test() {
 fn solve_loadh_sanity_test() {
     let read_data = [34, 159, 237, 112].map(F::from_canonical_u32);
     let prev_data = [94, 183, 56, 241].map(F::from_canonical_u32);
-    let write_data = solve_load_sign_extend(LOADH, read_data, prev_data);
+    let write_data = solve_load_sign_extend::<_, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(
+        LOADH, read_data, prev_data,
+    );
     assert_eq!(write_data, [34, 159, 255, 255].map(F::from_canonical_u32));
 }
 
@@ -268,6 +274,8 @@ fn solve_loadh_sanity_test() {
 fn solve_loadb_sanity_test() {
     let read_data = [103, 151, 78, 219].map(F::from_canonical_u32);
     let prev_data = [53, 180, 29, 244].map(F::from_canonical_u32);
-    let write_data = solve_load_sign_extend(LOADB, read_data, prev_data);
+    let write_data = solve_load_sign_extend::<_, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(
+        LOADB, read_data, prev_data,
+    );
     assert_eq!(write_data, [103, 0, 0, 0].map(F::from_canonical_u32));
 }
