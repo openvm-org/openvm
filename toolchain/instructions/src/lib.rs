@@ -37,8 +37,6 @@ pub enum CoreOpcode {
     LOADW2,
     STOREW2,
     JAL,
-    BEQ,
-    BNE,
     TERMINATE,
     PUBLISH,
     FAIL,

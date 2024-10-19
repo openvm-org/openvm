@@ -1,6 +1,5 @@
 use std::{array, collections::BTreeMap};
 
-use afs_primitives::{is_equal::IsEqualAir, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 
@@ -120,22 +119,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             JAL => {
                 write!(d, a, F::from_canonical_u32(pc + INST_WIDTH));
                 next_pc = (F::from_canonical_u32(pc) + b).as_canonical_u32();
-            }
-            // If d[a] = e[b], pc <- pc + c
-            BEQ => {
-                let left = read!(d, a);
-                let right = read!(e, b);
-                if left == right {
-                    next_pc = (F::from_canonical_u32(pc) + c).as_canonical_u32();
-                }
-            }
-            // If d[a] != e[b], pc <- pc + c
-            BNE => {
-                let left = read!(d, a);
-                let right = read!(e, b);
-                if left != right {
-                    next_pc = (F::from_canonical_u32(pc) + c).as_canonical_u32();
-                }
             }
             TERMINATE | NOP => {
                 next_pc = pc;
@@ -271,21 +254,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 );
             }
 
-            let is_equal_cols = LocalTraceInstructions::generate_trace_row(
-                &IsEqualAir,
-                (read_cols[0].value, read_cols[1].value),
-            );
-
-            let read0_equals_read1 = is_equal_cols.io.is_equal;
-            let is_equal_aux = is_equal_cols.aux;
-
             let aux = CoreAuxCols {
                 operation_flags,
                 public_value_flags,
                 reads: read_cols,
                 writes: write_cols,
-                read0_equals_read1,
-                is_equal_aux,
                 reads_aux_cols,
                 writes_aux_cols,
                 next_pc: F::from_canonical_u32(next_pc),

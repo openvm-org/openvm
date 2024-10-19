@@ -37,10 +37,12 @@ use crate::{
     },
     kernels::{
         adapters::{
-            convert_adapter::ConvertAdapterChip, native_adapter::NativeAdapterChip,
+            convert_adapter::ConvertAdapterChip,
+            native_adapter::{GenericNativeAdapterChip, NativeAdapterChip},
             native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
+        branch_eq::KernelBranchEqChip,
         castf::{CastFChip, CastFCoreChip},
         core::{
             CoreChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
@@ -222,6 +224,21 @@ impl VmConfig {
                         executors.insert(opcode, core_chip.clone().into());
                     }
                     chips.push(AxVmChip::Core(core_chip));
+                }
+                ExecutorName::BranchEqual => {
+                    let chip = Rc::new(RefCell::new(KernelBranchEqChip::new(
+                        GenericNativeAdapterChip::<_, 2, 0>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        BranchEqualCoreChip::new(offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::BranchEqual(chip));
                 }
                 ExecutorName::FieldArithmetic => {
                     let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
@@ -814,6 +831,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CoreOpcode::default_offset(),
             CoreOpcode::COUNT,
             CoreOpcode::default_offset(),
+        ),
+        ExecutorName::BranchEqual => (
+            BranchEqualOpcode::default_offset(),
+            BranchEqualOpcode::COUNT,
+            BranchEqualOpcode::default_offset(),
         ),
         ExecutorName::FieldArithmetic => (
             FieldArithmeticOpcode::default_offset(),
