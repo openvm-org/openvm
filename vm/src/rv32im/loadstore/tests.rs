@@ -1,8 +1,14 @@
-use std::array;
+use std::{array, borrow::BorrowMut};
 
-use ax_sdk::utils::create_seeded_rng;
+use afs_stark_backend::{
+    utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
+};
+use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};
+use num_traits::WrappingSub;
+use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
 use super::{solve_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
@@ -13,19 +19,29 @@ use crate::{
             UsizeOpcode,
         },
         testing::{memory::gen_pointer, VmChipTestBuilder},
+        VmAdapterChip,
     },
-    rv32im::adapters::Rv32LoadStoreAdapter,
+    rv32im::{
+        adapters::{compose, Rv32LoadStoreAdapterChip, RV32_REGISTER_NUM_LANES},
+        loadstore::LoadStoreCoreCols,
+    },
     system::program::Instruction,
 };
 
-const RV32_NUM_CELLS: usize = 4;
-const IMM_BITS: usize = 12;
+const IMM_BITS: usize = 16;
 const ADDR_BITS: usize = 29;
 
 type F = BabyBear;
 
-fn num_into_limbs(num: u32) -> [F; 4] {
-    array::from_fn(|i| F::from_canonical_u32((num >> (8 * i)) & 255))
+fn into_limbs(num: u32) -> [u32; 4] {
+    array::from_fn(|i| (num >> (8 * i)) & 255)
+}
+fn sign_extend(num: u32) -> u32 {
+    if num & 0x8000 != 0 {
+        num | 0xffff0000
+    } else {
+        num
+    }
 }
 
 fn set_and_execute(
@@ -33,80 +49,219 @@ fn set_and_execute(
     chip: &mut Rv32LoadStoreChip<F>,
     rng: &mut StdRng,
     opcode: Rv32LoadStoreOpcode,
-    is_load: bool,
+    rs1: Option<[u32; RV32_REGISTER_NUM_LANES]>,
+    imm: Option<u32>,
 ) {
-    let imm: i32 = rng.gen_range(0..(1 << IMM_BITS)) - (1 << (IMM_BITS - 1));
-    let imm: i32 = (imm >> 2) << 2;
-    let ptr = if imm < 0 {
-        rng.gen_range(-imm..(1 << ADDR_BITS))
-    } else {
-        rng.gen_range(0..((1 << ADDR_BITS) - imm))
-    };
-    let ptr = ((ptr >> 2) << 2) as u32;
-    let a = gen_pointer(rng, 32);
-    let b = gen_pointer(rng, 32);
-    let ptr_val = (ptr as i32 + imm) as usize;
-    let ptr_limbs = num_into_limbs(ptr);
+    let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
+    let imm_ext = sign_extend(imm);
 
-    tester.write(1, b, ptr_limbs);
+    let ptr_val = rng.gen_range(0..(1 << (ADDR_BITS - 2))) << 2;
+    let rs1 = rs1.unwrap_or(into_limbs(ptr_val.wrapping_sub(&imm_ext)));
+    let rs1 = rs1.map(F::from_canonical_u32);
+    let a = gen_pointer(rng, 4);
+    let b = gen_pointer(rng, 4);
 
-    let some_prev_data: [F; RV32_NUM_CELLS] =
+    let ptr_val = imm_ext.wrapping_add(compose(rs1));
+    tester.write(1, b, rs1);
+
+    let is_load = [LOADW, LOADH, LOADB, LOADHU, LOADBU, HINTLOAD_RV32].contains(&opcode);
+    let some_prev_data: [F; RV32_REGISTER_NUM_LANES] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
     if is_load {
         tester.write(1, a, some_prev_data);
     } else {
-        tester.write(2, ptr_val, some_prev_data);
+        tester.write(2, ptr_val as usize, some_prev_data);
     }
 
-    let data: [F; RV32_NUM_CELLS] =
+    let read_data: [F; RV32_REGISTER_NUM_LANES] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
     if is_load {
-        tester.write(2, ptr_val, data);
+        tester.write(2, ptr_val as usize, read_data);
     } else {
-        tester.write(1, a, data);
+        tester.write(1, a, read_data);
     }
 
     tester.execute(
         chip,
-        Instruction::from_isize(
+        Instruction::from_usize(
             opcode as usize + Rv32LoadStoreOpcode::default_offset(),
-            a as isize,
-            b as isize,
-            imm as isize,
-            1,
-            2,
+            [a, b, imm as usize, 1, 2],
         ),
     );
 
-    let write_data = solve_write_data(opcode, data, some_prev_data);
-    if is_load {
+    let write_data = solve_write_data(opcode, read_data, some_prev_data);
+    if is_load && opcode != HINTLOAD_RV32 {
         assert_eq!(write_data, tester.read::<4>(1, a));
-    } else {
-        assert_eq!(write_data, tester.read::<4>(2, ptr_val));
+    } else if !is_load {
+        assert_eq!(write_data, tester.read::<4>(2, ptr_val as usize));
     }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+/// POSITIVE TESTS
+///
+/// Randomly generate computations and execute, ensuring that the generated trace
+/// passes all constraints.
+///////////////////////////////////////////////////////////////////////////////////////
 #[test]
-fn simple_execute_roundtrip_test() {
+fn rand_loadstore_test() {
+    setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32LoadStoreAdapter::<F, RV32_NUM_CELLS>::new(
-        tester.memory_controller().borrow().range_checker.clone(),
+    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_controller(),
+        range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadStoreCoreChip::<F, RV32_NUM_CELLS>::new(adapter.offset);
+    let inner = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
+    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
+
+    let num_tests: usize = 100;
+    for _ in 0..num_tests {
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, HINTLOAD_RV32, None, None);
+    }
+
+    let tester = tester.build().load(chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// NEGATIVE TESTS
+///
+/// Given a fake trace of a single operation, setup a chip and run the test. We replace
+/// the write part of the trace and check that the core chip throws the expected error.
+/// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
+///////////////////////////////////////////////////////////////////////////////////////
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_loadstore_test(
+    opcode: Rv32LoadStoreOpcode,
+    read_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
+    prev_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
+    opcodes: Option<[bool; 7]>,
+    expected_error: VerificationError,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_controller(),
+        range_checker_chip.clone(),
+        Rv32LoadStoreOpcode::default_offset(),
+    );
+    let inner = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
+    let adapter_width = BaseAir::<F>::width(adapter.air());
+    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
+
+    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+
+    let loadstore_trace_width = chip.trace_width();
+    let mut chip_input = chip.generate_air_proof_input();
+    let loadstore_trace = chip_input.raw.common_main.as_mut().unwrap();
+    {
+        let mut trace_row = loadstore_trace.row_slice(0).to_vec();
+
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+
+        let core_cols: &mut LoadStoreCoreCols<F, RV32_REGISTER_NUM_LANES> = core_row.borrow_mut();
+
+        if let Some(read_data) = read_data {
+            core_cols.read_data = read_data.map(F::from_canonical_u32);
+        }
+
+        if let Some(prev_data) = prev_data {
+            core_cols.prev_data = prev_data.map(F::from_canonical_u32);
+        }
+
+        if let Some(opcodes) = opcodes {
+            core_cols.opcode_loadw_flag = F::from_bool(opcodes[0]);
+            core_cols.opcode_loadhu_flag = F::from_bool(opcodes[1]);
+            core_cols.opcode_loadbu_flag = F::from_bool(opcodes[2]);
+            core_cols.opcode_storew_flag = F::from_bool(opcodes[3]);
+            core_cols.opcode_storeh_flag = F::from_bool(opcodes[4]);
+            core_cols.opcode_storeb_flag = F::from_bool(opcodes[5]);
+            core_cols.opcode_hintload_flag = F::from_bool(opcodes[6]);
+        }
+        *loadstore_trace = RowMajorMatrix::new(trace_row, loadstore_trace_width);
+    }
+
+    drop(range_checker_chip);
+    disable_debug_builder();
+    let tester = tester.build().load_air_proof_input(chip_input).finalize();
+    let msg = format!(
+        "Expected verification to fail with {:?}, but it didn't",
+        &expected_error
+    );
+    let result = tester.simple_test();
+    assert_eq!(result.err(), Some(expected_error), "{}", msg);
+}
+
+#[test]
+fn negative_loadstore_tests() {
+    run_negative_loadstore_test(
+        LOADW,
+        Some([92, 187, 45, 118]),
+        None,
+        None,
+        VerificationError::NonZeroCumulativeSum,
+    );
+
+    run_negative_loadstore_test(
+        STOREB,
+        None,
+        Some([5, 132, 77, 250]),
+        None,
+        VerificationError::NonZeroCumulativeSum,
+    );
+
+    run_negative_loadstore_test(
+        LOADHU,
+        None,
+        None,
+        Some([true, false, false, false, false, false, false]),
+        VerificationError::NonZeroCumulativeSum,
+    );
+}
+///////////////////////////////////////////////////////////////////////////////////////
+/// SANITY TESTS
+///
+/// Ensure that solve functions produce the correct results.
+///////////////////////////////////////////////////////////////////////////////////////
+#[test]
+fn execute_roundtrip_sanity_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_controller(),
+        range_checker_chip.clone(),
+        Rv32LoadStoreOpcode::default_offset(),
+    );
+    let inner = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW, true);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, false);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, false);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, false);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, true);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, true);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, true);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, true);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, HINTLOAD_RV32, None, None);
     }
 }
 

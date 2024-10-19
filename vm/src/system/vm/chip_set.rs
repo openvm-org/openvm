@@ -54,7 +54,7 @@ use crate::{
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
-            Rv32JalrAdapterChip, Rv32LoadStoreAdapter, Rv32MultAdapter, Rv32RdWriteAdapterChip,
+            Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip, Rv32MultAdapter, Rv32RdWriteAdapterChip,
         },
         base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
         branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
@@ -391,7 +391,13 @@ impl VmConfig {
                 }
                 ExecutorName::LoadStoreRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LoadStoreChip::new(
-                        Rv32LoadStoreAdapter::new(range_checker.clone(), offset),
+                        Rv32LoadStoreAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
                         LoadStoreCoreChip::new(offset),
                         memory_controller.clone(),
                     )));
