@@ -17,13 +17,19 @@ mod tests;
 pub const FIELD_ELEMENT_BITS: usize = 30;
 
 pub type ModularAddSubAir<const NUM_LIMBS: usize> =
-    VmAirWrapper<Rv32VecHeapAdapterAir<1, 1, NUM_LIMBS, NUM_LIMBS>, ModularAddSubCoreAir>;
-pub type ModularAddSubChip<F, const NUM_LIMBS: usize> =
-    VmChipWrapper<F, Rv32VecHeapAdapterChip<F, 1, 1, NUM_LIMBS, NUM_LIMBS>, ModularAddSubCoreChip>;
+    VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, NUM_LIMBS, NUM_LIMBS>, ModularAddSubCoreAir>;
+pub type ModularAddSubChip<F, const NUM_LIMBS: usize> = VmChipWrapper<
+    F,
+    Rv32VecHeapAdapterChip<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>,
+    ModularAddSubCoreChip,
+>;
 pub type ModularMulDivAir<const NUM_LIMBS: usize> =
-    VmAirWrapper<Rv32VecHeapAdapterAir<1, 1, NUM_LIMBS, NUM_LIMBS>, ModularMulDivCoreAir>;
-pub type ModularMulDivChip<F, const NUM_LIMBS: usize> =
-    VmChipWrapper<F, Rv32VecHeapAdapterChip<F, 1, 1, NUM_LIMBS, NUM_LIMBS>, ModularMulDivCoreChip>;
+    VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, NUM_LIMBS, NUM_LIMBS>, ModularMulDivCoreAir>;
+pub type ModularMulDivChip<F, const NUM_LIMBS: usize> = VmChipWrapper<
+    F,
+    Rv32VecHeapAdapterChip<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>,
+    ModularMulDivCoreChip,
+>;
 
 pub static SECP256K1_COORD_PRIME: Lazy<BigUint> = Lazy::new(|| {
     BigUint::from_bytes_be(&hex!(

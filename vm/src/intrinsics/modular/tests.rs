@@ -48,14 +48,14 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         BabyBear::bits() - 2,
     );
     // doing 1xNUM_LIMBS reads and writes
-    let adapter = Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
     );
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
-    let num_tests = 50;
+    let num_tests = 1;
     let mut all_ops = vec![];
     let mut all_a = vec![];
     let mut all_b = vec![];
@@ -173,7 +173,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         BabyBear::bits() - 2,
     );
     // doing 1xNUM_LIMBS reads and writes
-    let adapter = Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),

@@ -7,7 +7,7 @@ use ax_sdk::{
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
 use stark_vm::{
     arch::{
@@ -240,6 +240,117 @@ fn test_vm_1_persistent() {
     engine
         .prove_then_verify(&pk, proof_input)
         .expect("Verification failed");
+}
+
+#[test]
+fn test_vm_continuations() {
+    let n = 200000;
+
+    // Simple Fibonacci program to compute nth Fibonacci number mod BabyBear (with F_0 = 1).
+    // Register [0]_1 <- stores the loop counter.
+    // Register [1]_1 <- stores F_i at the beginning of iteration i.
+    // Register [2]_1 <- stores F_{i+1} at the beginning of iteration i.
+    // Register [3]_1 is used as a temporary register.
+    let program = Program::from_instructions(&[
+        // [0]_1 <- 0
+        Instruction::from_isize(ADD.with_default_offset(), 0, 0, 0, 1, 0),
+        // [1]_1 <- 0
+        Instruction::from_isize(ADD.with_default_offset(), 1, 0, 0, 1, 0),
+        // [2]_1 <- 1
+        Instruction::from_isize(ADD.with_default_offset(), 2, 0, 1, 1, 0),
+        // loop_start
+        // [3]_1 <- [1]_1 + [2]_1
+        Instruction::large_from_isize(ADD.with_default_offset(), 3, 1, 2, 1, 1, 1, 0),
+        // [1]_1 <- [2]_1
+        Instruction::large_from_isize(ADD.with_default_offset(), 1, 2, 0, 1, 1, 0, 0),
+        // [2]_1 <- [3]_1
+        Instruction::large_from_isize(ADD.with_default_offset(), 2, 3, 0, 1, 1, 0, 0),
+        // [0]_1 <- [0]_1 + 1
+        Instruction::large_from_isize(ADD.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
+        // if [0]_1 != n, pc <- pc - 3
+        Instruction::from_isize(BNE.with_default_offset(), n, 0, -4, 0, 1),
+        // publish [1]_1 as public value index [0]_0
+        Instruction::from_isize(PUBLISH.with_default_offset(), 0, 1, 0, 0, 1),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 1),
+    ]);
+    let expected_output = {
+        let mut a = 0;
+        let mut b = 1;
+        for _ in 0..n {
+            (a, b) = (b, a + b);
+            b %= BabyBear::ORDER_U32;
+        }
+        BabyBear::from_canonical_u32(a)
+    };
+
+    let config = VmConfig {
+        num_public_values: 1,
+        poseidon2_max_constraint_degree: 3,
+        max_segment_len: 200000,
+        memory_config: MemoryConfig {
+            persistence_type: PersistenceType::Persistent,
+            ..Default::default()
+        },
+        ..VmConfig::core()
+    }
+    .add_default_executor(ExecutorName::FieldArithmetic);
+
+    let vm = VirtualMachine::new(config).with_program_inputs(vec![(0, expected_output)]);
+
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let pk = vm.config.generate_pk(engine.keygen_builder());
+    let result = vm.execute_and_generate(program).unwrap();
+
+    // Let's make sure we have at least 3 segments.
+    assert!(result.per_segment.len() >= 3);
+
+    let mut prev_final_memory_root = None;
+    let mut prev_final_pc = None;
+
+    for (i, proof_input) in result.per_segment.into_iter().enumerate() {
+        // Check public values.
+        for air in &proof_input.per_air {
+            let air_name = air.1.air.name();
+            let pvs = &air.1.raw.public_values;
+
+            if air_name == "VmConnectorAir" {
+                assert_eq!(pvs.len(), 2);
+
+                // Check initial pc matches the previous final pc.
+                assert_eq!(
+                    pvs[0],
+                    if i == 0 {
+                        BabyBear::zero()
+                    } else {
+                        prev_final_pc.unwrap()
+                    }
+                );
+                prev_final_pc = Some(pvs[1]);
+            } else if air_name == "CoreAir" {
+                assert_eq!(pvs.len(), 1);
+
+                // Check the program input is exposed as a public input of the AIR.
+                // For now this appears on every segment.
+                assert_eq!(pvs[0], expected_output);
+            } else if air_name == "MemoryMerkleAir<8>" {
+                assert_eq!(pvs.len(), 16);
+
+                let (initial_memory_root, final_memory_root) = pvs.split_at(8);
+
+                // Check that initial root matches the previous final root.
+                if i != 0 {
+                    assert_eq!(initial_memory_root, prev_final_memory_root.unwrap());
+                }
+                prev_final_memory_root = Some(final_memory_root.to_vec());
+            } else {
+                assert_eq!(pvs.len(), 0);
+            }
+        }
+
+        engine
+            .prove_then_verify(&pk, proof_input)
+            .expect("Verification failed");
+    }
 }
 
 #[test]

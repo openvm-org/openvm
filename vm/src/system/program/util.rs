@@ -47,7 +47,7 @@ pub fn execute_program_with_public_values(
         ..Default::default()
     })
     .with_input_stream(input_stream)
-    .with_public_values(public_values.to_vec());
+    .with_program_inputs(public_values.to_vec());
     vm.execute(program).unwrap()
 }
 

@@ -54,7 +54,7 @@ where
         ..Default::default()
     };
 
-    let vm = VirtualMachine::new(vm_config).with_public_values(vec![
+    let vm = VirtualMachine::new(vm_config).with_program_inputs(vec![
         (0, BabyBear::zero()),
         (1, BabyBear::one()),
         (2, BabyBear::from_canonical_u32(1346269)),

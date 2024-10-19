@@ -1,10 +1,13 @@
-use std::marker::PhantomData;
+use std::{borrow::Borrow, marker::PhantomData, sync::Arc};
 
 use afs_stark_backend::{
+    config::{Domain, StarkGenericConfig},
     interaction::InteractionBuilder,
+    p3_commit::PolynomialSpace,
+    prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, BaseAir, PairBuilder};
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
@@ -15,7 +18,11 @@ pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
+    fn num_public_values(&self) -> usize {
+        2
+    }
+}
 impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
 impl<F: Field> BaseAir<F> for VmConnectorAir {
     fn width(&self) -> usize {
@@ -27,18 +34,27 @@ impl<F: Field> BaseAir<F> for VmConnectorAir {
     }
 }
 
-impl<AB: InteractionBuilder + PairBuilder> Air<AB> for VmConnectorAir {
+impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> for VmConnectorAir {
     fn eval(&self, builder: &mut AB) {
-        // we only have interactions here, so let's jump straight to it shall we
         let main = builder.main();
         let preprocessed = builder.preprocessed();
         let prep_local = preprocessed.row_slice(0);
         let (begin, end) = (main.row_slice(0), main.row_slice(1));
+
+        let begin: &ExecutionState<AB::Var> = (*begin).borrow();
+        let end: &ExecutionState<AB::Var> = (*end).borrow();
+
+        let initial_pc = builder.public_values()[0];
+        let final_pc = builder.public_values()[1];
+
+        builder.when_transition().assert_eq(begin.pc, initial_pc);
+        builder.when_transition().assert_eq(end.pc, final_pc);
+
         self.execution_bus.execute(
             builder,
             AB::Expr::one() - prep_local[0], // 1 only if these are [0th, 1st] and not [1st, 0th]
-            ExecutionState::new(end[0], end[1]),
-            ExecutionState::new(begin[0], begin[1]),
+            ExecutionState::new(end.pc, end.timestamp),
+            ExecutionState::new(begin.pc, begin.timestamp),
         );
     }
 }
@@ -67,14 +83,24 @@ impl<F: PrimeField32> VmConnectorChip<F> {
         self.boundary_states[1] = Some(state);
     }
 
-    pub fn generate_trace(&self) -> RowMajorMatrix<F> {
-        assert!(self.boundary_states.iter().all(|state| state.is_some()));
-        RowMajorMatrix::new(
-            self.boundary_states
+    pub fn generate_air_proof_input<SC: StarkGenericConfig>(self) -> AirProofInput<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let boundary_states = self
+            .boundary_states
+            .into_iter()
+            .map(|state| state.unwrap().map(F::from_canonical_u32))
+            .collect::<Vec<_>>();
+
+        let trace = RowMajorMatrix::new(
+            boundary_states
                 .iter()
-                .flat_map(|state| state.unwrap().map(F::from_canonical_u32).flatten())
-                .collect::<Vec<F>>(),
+                .flat_map(|state| state.flatten())
+                .collect::<Vec<_>>(),
             2,
-        )
+        );
+        let public_values = vec![boundary_states[0].pc, boundary_states[1].pc];
+        AirProofInput::simple(Arc::new(self.air), trace, public_values)
     }
 }

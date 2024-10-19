@@ -123,13 +123,7 @@ impl<F: PrimeField32> VmChipSet<F> {
         let mut pi_builder = ChipSetProofInputBuilder::new();
         pi_builder.add_air_proof_input(self.program_chip.into());
         // System: Connector Chip
-        {
-            let trace = self.connector_chip.generate_trace();
-            pi_builder.add_air_proof_input(AirProofInput::simple_no_pis(
-                Arc::new(self.connector_chip.air),
-                trace,
-            ));
-        }
+        pi_builder.add_air_proof_input(self.connector_chip.generate_air_proof_input());
         // Non-system chips
         for chip in self.chips {
             pi_builder.add_air_proof_input(chip.generate_air_proof_input());
