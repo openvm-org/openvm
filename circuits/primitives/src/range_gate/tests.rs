@@ -12,7 +12,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
-use crate::{range::bus::RangeCheckBus, range_gate::RangeCheckerGateChip};
+use crate::{range::RangeCheckBus, range_gate::RangeCheckerGateChip};
 
 #[test]
 fn test_range_gate_chip() {
