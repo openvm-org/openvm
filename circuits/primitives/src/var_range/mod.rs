@@ -1,22 +1,93 @@
-use std::sync::{atomic::AtomicU32, Arc};
+use core::mem::size_of;
+use std::{
+    borrow::{Borrow, BorrowMut},
+    sync::{atomic::AtomicU32, Arc},
+};
 
-use afs_stark_backend::p3_uni_stark::Val;
-use p3_field::PrimeField32;
+use afs_derive::AlignedBorrow;
+use afs_stark_backend::{
+    config::StarkGenericConfig,
+    interaction::InteractionBuilder,
+    p3_uni_stark::Val,
+    prover::types::AirProofInput,
+    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip, ChipUsageGetter,
+};
+use p3_air::{Air, BaseAir, PairBuilder};
+use p3_field::{Field, PrimeField32};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-pub mod air;
-pub mod bus;
-pub mod columns;
-pub mod trace;
-
+mod bus;
 #[cfg(test)]
 pub mod tests;
 
-use afs_stark_backend::{
-    config::StarkGenericConfig, prover::types::AirProofInput, rap::AnyRap, Chip, ChipUsageGetter,
-};
-pub use air::VariableRangeCheckerAir;
-use bus::VariableRangeCheckerBus;
-use columns::NUM_VARIABLE_RANGE_COLS;
+pub use bus::*;
+
+#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[repr(C)]
+pub struct VariableRangeCols<T> {
+    pub mult: T,
+}
+
+#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[repr(C)]
+pub struct VariableRangePreprocessedCols<T> {
+    pub value: T,
+    pub max_bits: T,
+}
+
+pub const NUM_VARIABLE_RANGE_COLS: usize = size_of::<VariableRangeCols<u8>>();
+pub const NUM_VARIABLE_RANGE_PREPROCESSED_COLS: usize =
+    size_of::<VariableRangePreprocessedCols<u8>>();
+
+#[derive(Clone, Copy, Debug, derive_new::new)]
+pub struct VariableRangeCheckerAir {
+    pub bus: VariableRangeCheckerBus,
+}
+
+impl VariableRangeCheckerAir {
+    pub fn range_max_bits(&self) -> usize {
+        self.bus.range_max_bits
+    }
+}
+
+impl<F: Field> BaseAirWithPublicValues<F> for VariableRangeCheckerAir {}
+impl<F: Field> PartitionedBaseAir<F> for VariableRangeCheckerAir {}
+impl<F: Field> BaseAir<F> for VariableRangeCheckerAir {
+    fn width(&self) -> usize {
+        NUM_VARIABLE_RANGE_COLS
+    }
+
+    fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
+        let rows: Vec<F> = [F::zero(); NUM_VARIABLE_RANGE_PREPROCESSED_COLS]
+            .into_iter()
+            .chain((0..=self.range_max_bits()).flat_map(|bits| {
+                (0..(1 << bits)).flat_map(move |value| {
+                    [F::from_canonical_u32(value), F::from_canonical_usize(bits)].into_iter()
+                })
+            }))
+            .collect();
+        Some(RowMajorMatrix::new(
+            rows,
+            NUM_VARIABLE_RANGE_PREPROCESSED_COLS,
+        ))
+    }
+}
+
+impl<AB: InteractionBuilder + PairBuilder> Air<AB> for VariableRangeCheckerAir {
+    fn eval(&self, builder: &mut AB) {
+        let preprocessed = builder.preprocessed();
+        let prep_local = preprocessed.row_slice(0);
+        let prep_local: &VariableRangePreprocessedCols<AB::Var> = (*prep_local).borrow();
+        let main = builder.main();
+        let local = main.row_slice(0);
+        let local: &VariableRangeCols<AB::Var> = (*local).borrow();
+        // Omit creating separate bridge.rs file for brevity
+        self.bus
+            .receive(prep_local.value, prep_local.max_bits)
+            .eval(builder, local.mult);
+    }
+}
 
 #[derive(Debug)]
 pub struct VariableRangeCheckerChip {
@@ -65,6 +136,16 @@ impl VariableRangeCheckerChip {
             self.count[i].store(0, std::sync::atomic::Ordering::Relaxed);
         }
     }
+
+    pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
+        let mut rows = vec![F::zero(); self.count.len() * NUM_VARIABLE_RANGE_COLS];
+        for (n, row) in rows.chunks_mut(NUM_VARIABLE_RANGE_COLS).enumerate() {
+            let cols: &mut VariableRangeCols<F> = row.borrow_mut();
+            cols.mult =
+                F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::SeqCst));
+        }
+        RowMajorMatrix::new(rows, NUM_VARIABLE_RANGE_COLS)
+    }
 }
 
 impl<SC: StarkGenericConfig> Chip<SC> for VariableRangeCheckerChip
@@ -83,7 +164,7 @@ where
 
 impl ChipUsageGetter for VariableRangeCheckerChip {
     fn air_name(&self) -> String {
-        "VariableRangeCheckerAir".to_string()
+        get_air_name(&self.air)
     }
     fn current_trace_height(&self) -> usize {
         self.count.len()

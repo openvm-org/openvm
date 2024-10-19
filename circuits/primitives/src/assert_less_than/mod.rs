@@ -5,7 +5,7 @@ use p3_air::AirBuilder;
 use p3_field::{AbstractField, Field};
 
 use crate::{
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
 
@@ -141,12 +141,12 @@ impl AssertLessThanAir {
             if i == lower_decomp.len() - 1 && self.max_bits % self.bus.range_max_bits != 0 {
                 // the last limb might have fewer than `bus.range_max_bits` bits
                 self.bus
-                    .range_check(limb.clone(), self.max_bits % self.bus.range_max_bits)
+                    .range_check(*limb, self.max_bits % self.bus.range_max_bits)
                     .eval(builder, count.clone());
             } else {
                 // the other limbs must have exactly `bus.range_max_bits` bits
                 self.bus
-                    .range_check(limb.clone(), self.bus.range_max_bits)
+                    .range_check(*limb, self.bus.range_max_bits)
                     .eval(builder, count.clone());
             }
         }

@@ -22,7 +22,7 @@ use p3_matrix::{
 };
 
 use super::*;
-use crate::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
+use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 
 // We only create an Air for testing purposes
 
