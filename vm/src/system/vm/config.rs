@@ -120,6 +120,7 @@ impl Default for VmConfig {
     fn default() -> Self {
         Self::default_with_no_executors()
             .add_default_executor(ExecutorName::Core)
+            .add_default_executor(ExecutorName::BranchEqual)
             .add_default_executor(ExecutorName::FieldArithmetic)
             .add_default_executor(ExecutorName::FieldExtension)
             .add_default_executor(ExecutorName::Poseidon2)
