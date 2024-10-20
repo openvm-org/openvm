@@ -178,17 +178,6 @@ impl U256Opcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x160]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum U32Opcode {
-    LUI,
-    AUIPC,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
 #[opcode_offset = 0x300]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
