@@ -10,14 +10,12 @@ pub mod is_less_than;
 // pub mod is_less_than_tuple;
 // pub mod is_less_than_tuple_bits;
 // pub mod is_zero;
-// pub mod offline_checker;
 pub mod range;
 pub mod range_gate;
 pub mod range_tuple;
 /// Different xor chip implementations
 // pub mod xor;
 mod sub_air;
-// pub mod sum;
 pub mod utils;
 pub mod var_range;
 
@@ -25,3 +23,5 @@ pub use sub_air::*;
 
 // to be deleted:
 // pub mod ecc;
+// keeping to clean up later:
+// pub mod offline_checker;
