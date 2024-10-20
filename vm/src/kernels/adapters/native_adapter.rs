@@ -28,9 +28,6 @@ pub type NativeAdapterChip<F> = GenericNativeAdapterChip<F, 2, 1>;
 pub type NativeAdapterCols<T> = GenericNativeAdapterCols<T, 2, 1>;
 pub type NativeAdapterAir = GenericNativeAdapterAir<2, 1>;
 
-pub type GenericNativeAdapterInterface<T, const R: usize, const W: usize> =
-    BasicAdapterInterface<T, MinimalInstruction<T>, R, W, 1, 1>;
-
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
@@ -123,7 +120,7 @@ impl<F: Field, const R: usize, const W: usize> BaseAir<F> for GenericNativeAdapt
 impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
     for GenericNativeAdapterAir<R, W>
 {
-    type Interface = GenericNativeAdapterInterface<AB::Expr, R, W>;
+    type Interface = BasicAdapterInterface<AB::Expr, MinimalInstruction<AB::Expr>, R, W, 1, 1>;
 
     fn eval(
         &self,
@@ -211,7 +208,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
     type ReadRecord = NativeReadRecord<F, R>;
     type WriteRecord = NativeWriteRecord<F, W>;
     type Air = GenericNativeAdapterAir<R, W>;
-    type Interface = GenericNativeAdapterInterface<F, R, W>;
+    type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, R, W, 1, 1>;
 
     fn preprocess(
         &mut self,

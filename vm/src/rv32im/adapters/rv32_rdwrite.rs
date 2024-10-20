@@ -25,8 +25,6 @@ use crate::{
     },
 };
 
-type Rv32RdWriteAdapterInterface<T> =
-    BasicAdapterInterface<T, JumpUiProcessedInstruction<T>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
 /// This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
 #[derive(Debug, Clone)]
 pub struct Rv32RdWriteAdapterChip<F: Field> {
@@ -125,11 +123,22 @@ impl Rv32RdWriteAdapterAir {
     /// Otherwise:
     /// - Writes if `ctx.instruction.is_valid`.
     /// - Sets operand `f` to default value of `0` in the instruction.
+    #[allow(clippy::type_complexity)]
     fn conditional_eval<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local_cols: &Rv32RdWriteAdapterCols<AB::Var>,
-        ctx: AdapterAirContext<AB::Expr, Rv32RdWriteAdapterInterface<AB::Expr>>,
+        ctx: AdapterAirContext<
+            AB::Expr,
+            BasicAdapterInterface<
+                AB::Expr,
+                JumpUiProcessedInstruction<AB::Expr>,
+                0,
+                1,
+                0,
+                RV32_REGISTER_NUM_LANES,
+            >,
+        >,
         needs_write: Option<AB::Expr>,
     ) {
         let timestamp: AB::Var = local_cols.from_state.timestamp;
@@ -174,7 +183,14 @@ impl Rv32RdWriteAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
-    type Interface = Rv32RdWriteAdapterInterface<AB::Expr>;
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        JumpUiProcessedInstruction<AB::Expr>,
+        0,
+        1,
+        0,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn eval(
         &self,
@@ -193,7 +209,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
-    type Interface = Rv32RdWriteAdapterInterface<AB::Expr>;
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        JumpUiProcessedInstruction<AB::Expr>,
+        0,
+        1,
+        0,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn eval(
         &self,
@@ -226,7 +249,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
     type ReadRecord = ();
     type WriteRecord = Rv32RdWriteWriteRecord<F>;
     type Air = Rv32RdWriteAdapterAir;
-    type Interface = Rv32RdWriteAdapterInterface<F>;
+    type Interface =
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
 
     fn preprocess(
         &mut self,
@@ -287,7 +311,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
     type ReadRecord = ();
     type WriteRecord = Rv32RdWriteWriteRecord<F>;
     type Air = Rv32CondRdWriteAdapterAir;
-    type Interface = Rv32RdWriteAdapterInterface<F>;
+    type Interface =
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
 
     fn preprocess(
         &mut self,

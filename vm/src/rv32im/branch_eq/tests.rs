@@ -13,10 +13,10 @@ use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        InstructionExecutor, VmCoreChip,
+        BasicAdapterInterface, InstructionExecutor, VmCoreChip,
     },
     rv32im::adapters::{
-        Rv32BranchAdapterChip, Rv32BranchAdapterInterface, PC_BITS, RV32_REGISTER_NUM_LANES,
+        JumpUiProcessedInstruction, Rv32BranchAdapterChip, PC_BITS, RV32_REGISTER_NUM_LANES,
         RV_B_TYPE_IMM_BITS,
     },
     system::program::Instruction,
@@ -138,7 +138,7 @@ fn execute_pc_increment_sanity_test() {
 
     let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LANES> as VmCoreChip<
         F,
-        Rv32BranchAdapterInterface<F>,
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LANES, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
@@ -146,7 +146,7 @@ fn execute_pc_increment_sanity_test() {
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
     let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LANES> as VmCoreChip<
         F,
-        Rv32BranchAdapterInterface<F>,
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LANES, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());

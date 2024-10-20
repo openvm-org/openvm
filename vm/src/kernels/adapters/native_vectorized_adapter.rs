@@ -8,11 +8,11 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::NativeVectorizedAdapterInterface;
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
+        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
@@ -88,7 +88,7 @@ impl<F: Field, const N: usize> BaseAir<F> for NativeVectorizedAdapterAir<N> {
 }
 
 impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectorizedAdapterAir<N> {
-    type Interface = NativeVectorizedAdapterInterface<AB::Expr, N>;
+    type Interface = BasicAdapterInterface<AB::Expr, MinimalInstruction<AB::Expr>, 2, 1, N, N>;
 
     fn eval(
         &self,
@@ -152,7 +152,7 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
     type ReadRecord = NativeVectorizedReadRecord<F, N>;
     type WriteRecord = NativeVectorizedWriteRecord<F, N>;
     type Air = NativeVectorizedAdapterAir<N>;
-    type Interface = NativeVectorizedAdapterInterface<F, N>;
+    type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 1, N, N>;
 
     fn preprocess(
         &mut self,

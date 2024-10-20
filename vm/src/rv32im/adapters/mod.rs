@@ -31,19 +31,7 @@ pub const PC_BITS: usize = 30;
 
 use p3_field::PrimeField32;
 
-use crate::{
-    arch::{BasicAdapterInterface, MinimalInstruction},
-    system::memory::{MemoryController, MemoryReadRecord},
-};
-
-pub type Rv32RTypeAdapterInterface<T> = BasicAdapterInterface<
-    T,
-    MinimalInstruction<T>,
-    2,
-    1,
-    RV32_REGISTER_NUM_LANES,
-    RV32_REGISTER_NUM_LANES,
->;
+use crate::system::memory::{MemoryController, MemoryReadRecord};
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.

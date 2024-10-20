@@ -25,15 +25,6 @@ use crate::{
     },
 };
 
-type Rv32JalrAdapterInterface<T> = BasicAdapterInterface<
-    T,
-    JumpUiProcessedInstruction<T>,
-    1,
-    1,
-    RV32_REGISTER_NUM_LANES,
-    RV32_REGISTER_NUM_LANES,
->;
-
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
 #[derive(Debug, Clone)]
 pub struct Rv32JalrAdapterChip<F: Field> {
@@ -94,7 +85,14 @@ impl<F: Field> BaseAir<F> for Rv32JalrAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
-    type Interface = Rv32JalrAdapterInterface<AB::Expr>;
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        JumpUiProcessedInstruction<AB::Expr>,
+        1,
+        1,
+        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn eval(
         &self,
@@ -171,8 +169,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
     type ReadRecord = Rv32JalrReadRecord<F>;
     type WriteRecord = Rv32JalrWriteRecord<F>;
     type Air = Rv32JalrAdapterAir;
-    type Interface = Rv32JalrAdapterInterface<F>;
-
+    type Interface = BasicAdapterInterface<
+        F,
+        JumpUiProcessedInstruction<F>,
+        1,
+        1,
+        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LANES,
+    >;
     fn preprocess(
         &mut self,
         memory: &mut MemoryController<F>,

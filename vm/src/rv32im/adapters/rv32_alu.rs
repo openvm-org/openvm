@@ -9,11 +9,12 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{Rv32RTypeAdapterInterface, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
+use super::{RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
+        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
@@ -100,7 +101,14 @@ impl<F: Field> BaseAir<F> for Rv32BaseAluAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
-    type Interface = Rv32RTypeAdapterInterface<AB::Expr>;
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        MinimalInstruction<AB::Expr>,
+        2,
+        1,
+        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn eval(
         &self,
@@ -185,7 +193,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
     type ReadRecord = Rv32BaseAluReadRecord<F>;
     type WriteRecord = Rv32BaseAluWriteRecord<F>;
     type Air = Rv32BaseAluAdapterAir;
-    type Interface = Rv32RTypeAdapterInterface<F>;
+    type Interface = BasicAdapterInterface<
+        F,
+        MinimalInstruction<F>,
+        2,
+        1,
+        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn preprocess(
         &mut self,
