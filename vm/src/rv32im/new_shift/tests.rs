@@ -6,7 +6,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
-use super::{core::solve_shift, Rv32ShiftChip, ShiftCoreChip};
+use super::{core::run_shift, Rv32ShiftChip, ShiftCoreChip};
 use crate::{
     arch::{
         instructions::ShiftOpcode,
@@ -73,7 +73,7 @@ fn run_rv32_shift_rand_write_execute<E: InstructionExecutor<F>>(
         tester.write::<RV32_REGISTER_NUM_LANES>(1, rs2, c.map(F::from_canonical_u32));
     }
 
-    let (a, _, _) = solve_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &b, &c);
+    let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &b, &c);
     tester.execute(
         chip,
         Instruction::from_usize(
@@ -156,12 +156,12 @@ fn rv32_shift_sra_rand_test() {
 ///////////////////////////////////////////////////////////////////////////////////////
 ///
 #[test]
-fn solve_sll_sanity_test() {
+fn run_sll_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [45, 7, 61, 186];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [27, 0, 0, 0];
     let z: [u32; RV32_REGISTER_NUM_LANES] = [0, 0, 0, 104];
     let (result, limb_shift, bit_shift) =
-        solve_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(ShiftOpcode::SLL, &x, &y);
+        run_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(ShiftOpcode::SLL, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LANES {
         assert_eq!(z[i], result[i])
     }
@@ -170,12 +170,12 @@ fn solve_sll_sanity_test() {
 }
 
 #[test]
-fn solve_srl_sanity_test() {
+fn run_srl_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [31, 190, 221, 200];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [17, 0, 0, 0];
     let z: [u32; RV32_REGISTER_NUM_LANES] = [110, 100, 0, 0];
     let (result, limb_shift, bit_shift) =
-        solve_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(ShiftOpcode::SRL, &x, &y);
+        run_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(ShiftOpcode::SRL, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LANES {
         assert_eq!(z[i], result[i])
     }
@@ -184,12 +184,12 @@ fn solve_srl_sanity_test() {
 }
 
 #[test]
-fn solve_sra_sanity_test() {
+fn run_sra_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [31, 190, 221, 200];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [17, 0, 0, 0];
     let z: [u32; RV32_REGISTER_NUM_LANES] = [110, 228, 255, 255];
     let (result, limb_shift, bit_shift) =
-        solve_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(ShiftOpcode::SRA, &x, &y);
+        run_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(ShiftOpcode::SRA, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LANES {
         assert_eq!(z[i], result[i])
     }

@@ -9,7 +9,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 use test_log::test;
 
-use super::{solve_shift, ShiftChip};
+use super::{run_shift, ShiftChip};
 use crate::{
     arch::{
         instructions::U256Opcode,
@@ -77,7 +77,7 @@ fn run_shift_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     tester.write::<NUM_LIMBS>(e, x_address, x_f.as_slice().try_into().unwrap());
     tester.write::<NUM_LIMBS>(e, y_address, y_f.as_slice().try_into().unwrap());
 
-    let (z, _, _) = solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, opcode);
+    let (z, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, opcode);
     tester.execute(
         chip,
         Instruction::from_usize(
@@ -613,7 +613,7 @@ fn shift_overflow_test() {
 }
 
 #[test]
-fn solve_sll_sanity_test() {
+fn run_sll_sanity_test() {
     let x: [u32; 32] = [
         45, 7, 61, 186, 49, 53, 119, 68, 145, 55, 102, 126, 9, 195, 23, 26, 197, 216, 251, 31, 74,
         237, 141, 92, 98, 184, 176, 106, 64, 29, 58, 246,
@@ -626,14 +626,14 @@ fn solve_sll_sanity_test() {
         0, 0, 0, 104, 57, 232, 209, 141, 169, 185, 35, 138, 188, 49, 243, 75, 24, 190, 208, 40,
         198, 222, 255, 80, 106, 111, 228, 18, 195, 133, 85, 3,
     ];
-    let sll_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SLL).0;
+    let sll_result = run_shift::<32, 8>(&x, &y, U256Opcode::SLL).0;
     for i in 0..32 {
         assert_eq!(z[i], sll_result[i])
     }
 }
 
 #[test]
-fn solve_srl_sanity_test() {
+fn run_srl_sanity_test() {
     let x: [u32; 32] = [
         253, 247, 209, 166, 217, 253, 46, 42, 197, 8, 33, 136, 144, 148, 101, 195, 173, 150, 26,
         215, 233, 90, 213, 185, 119, 255, 238, 174, 31, 190, 221, 72,
@@ -646,8 +646,8 @@ fn solve_srl_sanity_test() {
         104, 211, 236, 126, 23, 149, 98, 132, 16, 68, 72, 202, 178, 225, 86, 75, 141, 235, 116,
         173, 234, 220, 187, 127, 119, 215, 15, 223, 110, 36, 0, 0,
     ];
-    let srl_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SRL).0;
-    let sra_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SRA).0;
+    let srl_result = run_shift::<32, 8>(&x, &y, U256Opcode::SRL).0;
+    let sra_result = run_shift::<32, 8>(&x, &y, U256Opcode::SRA).0;
     for i in 0..32 {
         assert_eq!(z[i], srl_result[i]);
         assert_eq!(z[i], sra_result[i]);
@@ -655,7 +655,7 @@ fn solve_srl_sanity_test() {
 }
 
 #[test]
-fn solve_sra_sanity_test() {
+fn run_sra_sanity_test() {
     let x: [u32; 32] = [
         253, 247, 209, 166, 217, 253, 46, 42, 197, 8, 33, 136, 144, 148, 101, 195, 173, 150, 26,
         215, 233, 90, 213, 185, 119, 255, 238, 174, 31, 190, 221, 200,
@@ -668,7 +668,7 @@ fn solve_sra_sanity_test() {
         104, 211, 236, 126, 23, 149, 98, 132, 16, 68, 72, 202, 178, 225, 86, 75, 141, 235, 116,
         173, 234, 220, 187, 127, 119, 215, 15, 223, 110, 228, 255, 255,
     ];
-    let sra_result = solve_shift::<32, 8>(&x, &y, U256Opcode::SRA).0;
+    let sra_result = run_shift::<32, 8>(&x, &y, U256Opcode::SRA).0;
     for i in 0..32 {
         assert_eq!(z[i], sra_result[i])
     }

@@ -9,7 +9,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
-    columns::ArithmeticLogicCols, solve_subtract, ArithmeticLogicChip, ALU_CMP_INSTRUCTIONS,
+    columns::ArithmeticLogicCols, run_subtract, ArithmeticLogicChip, ALU_CMP_INSTRUCTIONS,
 };
 use crate::{
     arch::{
@@ -17,7 +17,7 @@ use crate::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
     },
     kernels::core::BYTE_XOR_BUS,
-    old::alu::solve_alu,
+    old::alu::run_alu,
     system::program::Instruction,
 };
 
@@ -72,7 +72,7 @@ fn run_alu_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     tester.write::<NUM_LIMBS>(e, x_address, x_f.as_slice().try_into().unwrap());
     tester.write::<NUM_LIMBS>(e, y_address, y_f.as_slice().try_into().unwrap());
 
-    let (z, cmp) = solve_alu::<F, NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
+    let (z, cmp) = run_alu::<F, NUM_LIMBS, LIMB_BITS>(opcode, &x, &y);
     tester.execute(
         chip,
         Instruction::from_usize(
@@ -542,7 +542,7 @@ fn alu_slt_pos_neg_sign_negative_test() {
         U256Opcode::SLT,
         x.to_vec(),
         y.to_vec(),
-        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        run_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         true,
         0,
         1,
@@ -558,7 +558,7 @@ fn alu_slt_neg_pos_sign_negative_test() {
         U256Opcode::SLT,
         x.to_vec(),
         y.to_vec(),
-        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        run_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         false,
         1,
         0,
@@ -575,7 +575,7 @@ fn alu_slt_both_pos_sign_negative_test() {
         U256Opcode::SLT,
         x.to_vec(),
         y.to_vec(),
-        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        run_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         false,
         0,
         0,
@@ -592,7 +592,7 @@ fn alu_slt_both_neg_sign_negative_test() {
         U256Opcode::SLT,
         x.to_vec(),
         y.to_vec(),
-        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        run_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         true,
         1,
         1,
@@ -609,7 +609,7 @@ fn alu_slt_wrong_sign_negative_test() {
         U256Opcode::SLT,
         x.to_vec(),
         y.to_vec(),
-        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        run_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         true,
         0,
         1,
@@ -626,7 +626,7 @@ fn alu_slt_non_boolean_sign_negative_test() {
         U256Opcode::SLT,
         x.to_vec(),
         y.to_vec(),
-        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        run_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         false,
         2,
         1,
@@ -642,7 +642,7 @@ fn alu_slt_wrong_xor_test() {
         U256Opcode::SLT,
         x.to_vec(),
         y.to_vec(),
-        solve_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
+        run_subtract::<NUM_LIMBS, LIMB_BITS>(&x, &y).0,
         false,
         0,
         1,

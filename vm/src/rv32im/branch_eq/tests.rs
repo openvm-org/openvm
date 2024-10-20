@@ -6,7 +6,7 @@ use p3_field::{AbstractField, PrimeField32};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
-    core::{solve_eq, BranchEqualCoreChip},
+    core::{run_eq, BranchEqualCoreChip},
     Rv32BranchEqualChip,
 };
 use crate::{
@@ -59,7 +59,7 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
         rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS)),
     );
 
-    let (cmp_result, _, _) = solve_eq::<F, RV32_REGISTER_NUM_LANES>(opcode, &a, &b);
+    let (cmp_result, _, _) = run_eq::<F, RV32_REGISTER_NUM_LANES>(opcode, &a, &b);
     let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
     let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
     // TODO: update the default increment (i.e. 4) when opcodes are updated
@@ -154,25 +154,25 @@ fn execute_pc_increment_sanity_test() {
 }
 
 #[test]
-fn solve_eq_sanity_test() {
+fn run_eq_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [19, 4, 1790, 60];
     let (cmp_result, _, diff_val) =
-        solve_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BEQ, &x, &x);
+        run_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BEQ, &x, &x);
     assert!(cmp_result);
     assert_eq!(diff_val, F::zero());
 
     let (cmp_result, _, diff_val) =
-        solve_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BNE, &x, &x);
+        run_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BNE, &x, &x);
     assert!(!cmp_result);
     assert_eq!(diff_val, F::zero());
 }
 
 #[test]
-fn solve_ne_sanity_test() {
+fn run_ne_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [19, 4, 1790, 60];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [19, 32, 1804, 60];
     let (cmp_result, diff_idx, diff_val) =
-        solve_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BEQ, &x, &y);
+        run_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BEQ, &x, &y);
     assert!(!cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u32(x[diff_idx]) - F::from_canonical_u32(y[diff_idx])),
@@ -180,7 +180,7 @@ fn solve_ne_sanity_test() {
     );
 
     let (cmp_result, diff_idx, diff_val) =
-        solve_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BNE, &x, &y);
+        run_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BNE, &x, &y);
     assert!(cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u32(x[diff_idx]) - F::from_canonical_u32(y[diff_idx])),

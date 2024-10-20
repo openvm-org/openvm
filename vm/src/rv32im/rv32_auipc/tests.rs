@@ -24,7 +24,7 @@ use crate::{
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{Rv32RdWriteAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
-        rv32_auipc::solve_auipc,
+        rv32_auipc::run_auipc,
     },
     system::program::Instruction,
 };
@@ -54,7 +54,7 @@ fn set_and_execute(
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
 
-    let rd_data = solve_auipc(opcode, initial_pc, imm as u32);
+    let rd_data = run_auipc(opcode, initial_pc, imm as u32);
 
     assert_eq!(rd_data.map(F::from_canonical_u32), tester.read::<4>(1, a));
 }
@@ -274,11 +274,11 @@ fn execute_roundtrip_sanity_test() {
 }
 
 #[test]
-fn solve_auipc_sanity_test() {
+fn run_auipc_sanity_test() {
     let opcode = AUIPC;
     let initial_pc = 234567890;
     let imm = 11302451;
-    let rd_data = solve_auipc(opcode, initial_pc, imm);
+    let rd_data = run_auipc(opcode, initial_pc, imm);
 
     assert_eq!(rd_data, [210, 107, 113, 186]);
 }

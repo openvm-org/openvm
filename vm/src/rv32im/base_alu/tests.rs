@@ -7,7 +7,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
-use super::{core::solve_alu, BaseAluCoreChip, Rv32BaseAluChip};
+use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAluChip};
 use crate::{
     arch::{
         instructions::AluOpcode,
@@ -77,7 +77,7 @@ fn run_rv32_alu_rand_write_execute<E: InstructionExecutor<F>>(
         tester.write::<RV32_REGISTER_NUM_LANES>(1, rs2, c.map(F::from_canonical_u32));
     }
 
-    let a = solve_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &b, &c);
+    let a = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &b, &c);
     tester.execute(
         chip,
         Instruction::from_usize(
@@ -296,55 +296,55 @@ fn rv32_alu_and_wrong_negative_test() {
 ///////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn solve_add_sanity_test() {
+fn run_add_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
     let z: [u32; RV32_REGISTER_NUM_LANES] = [23, 205, 73, 49];
-    let result = solve_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::ADD, &x, &y);
+    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::ADD, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LANES {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
-fn solve_sub_sanity_test() {
+fn run_sub_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
     let z: [u32; RV32_REGISTER_NUM_LANES] = [179, 118, 240, 172];
-    let result = solve_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::SUB, &x, &y);
+    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::SUB, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LANES {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
-fn solve_xor_sanity_test() {
+fn run_xor_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
     let z: [u32; RV32_REGISTER_NUM_LANES] = [215, 138, 49, 173];
-    let result = solve_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::XOR, &x, &y);
+    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::XOR, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LANES {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
-fn solve_or_sanity_test() {
+fn run_or_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
     let z: [u32; RV32_REGISTER_NUM_LANES] = [247, 171, 61, 239];
-    let result = solve_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::OR, &x, &y);
+    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::OR, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LANES {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
-fn solve_and_sanity_test() {
+fn run_and_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
     let z: [u32; RV32_REGISTER_NUM_LANES] = [32, 33, 12, 66];
-    let result = solve_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::AND, &x, &y);
+    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::AND, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LANES {
         assert_eq!(z[i], result[i])
     }

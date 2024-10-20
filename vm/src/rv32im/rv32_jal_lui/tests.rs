@@ -12,7 +12,7 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
-use super::{solve_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreChip};
+use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreChip};
 use crate::{
     arch::{
         instructions::Rv32JalLuiOpcode::{self, *},
@@ -68,7 +68,7 @@ fn set_and_execute(
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
     let final_pc = tester.execution.last_to_pc().as_canonical_u32();
 
-    let (next_pc, rd_data) = solve_jal_lui(opcode, initial_pc, imm);
+    let (next_pc, rd_data) = run_jal_lui(opcode, initial_pc, imm);
     let rd_data = if needs_write { rd_data } else { [0; 4] };
 
     assert_eq!(next_pc, final_pc);
@@ -347,21 +347,21 @@ fn execute_roundtrip_sanity_test() {
 }
 
 #[test]
-fn solve_jal_sanity_test() {
+fn run_jal_sanity_test() {
     let opcode = JAL;
     let initial_pc = 28120;
     let imm = -2048;
-    let (next_pc, rd_data) = solve_jal_lui(opcode, initial_pc, imm);
+    let (next_pc, rd_data) = run_jal_lui(opcode, initial_pc, imm);
     assert_eq!(next_pc, 26072);
     assert_eq!(rd_data, [220, 109, 0, 0]);
 }
 
 #[test]
-fn solve_lui_sanity_test() {
+fn run_lui_sanity_test() {
     let opcode = LUI;
     let initial_pc = 456789120;
     let imm = 853679;
-    let (next_pc, rd_data) = solve_jal_lui(opcode, initial_pc, imm);
+    let (next_pc, rd_data) = run_jal_lui(opcode, initial_pc, imm);
     assert_eq!(next_pc, 456789124);
     assert_eq!(rd_data, [0, 240, 106, 208]);
 }

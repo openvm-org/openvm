@@ -118,7 +118,7 @@ where
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
         let (z, _z_mul, _x_ext, _y_ext) =
-            solve_mulh::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
+            run_mulh::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
         let output = AdapterRuntimeContext::without_pc(z.map(F::from_canonical_u32));
 
@@ -142,7 +142,7 @@ where
 }
 
 // returns mulh[[s]u], mul, x_ext, y_ext
-pub(super) fn solve_mulh<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_mulh<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: MulHOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],

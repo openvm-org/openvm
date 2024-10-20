@@ -230,7 +230,7 @@ where
         let rs1 = reads.into()[0];
         let rs1_val = compose(rs1);
 
-        let (to_pc, rd_data) = solve_jalr(local_opcode_index, from_pc, imm_extended, rs1_val);
+        let (to_pc, rd_data) = run_jalr(local_opcode_index, from_pc, imm_extended, rs1_val);
 
         let xor_res = F::from_canonical_u32(self.xor_lookup_chip.request(rd_data[0], rd_data[1]));
         self.range_checker_chip
@@ -290,7 +290,7 @@ where
 }
 
 // returns (to_pc, rd_data)
-pub(super) fn solve_jalr(
+pub(super) fn run_jalr(
     _opcode: Rv32JalrOpcode,
     pc: u32,
     imm: u32,

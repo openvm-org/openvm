@@ -73,7 +73,7 @@ fn new_field_arithmetic_air_test() {
         assert_ne!(address1, address2);
         let result_address = gen_pointer(&mut rng, 1);
 
-        let result = FieldArithmetic::solve_field_arithmetic(opcode, operand1, operand2).unwrap();
+        let result = FieldArithmetic::run_field_arithmetic(opcode, operand1, operand2).unwrap();
         tracing::debug!(
             "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",
             result_as, as1, as2, result_address, address1, address2, result, operand1, operand2,
