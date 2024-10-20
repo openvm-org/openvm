@@ -13,11 +13,11 @@ pub mod is_less_than;
 pub mod range;
 pub mod range_gate;
 pub mod range_tuple;
-/// Different xor chip implementations
-// pub mod xor;
 mod sub_air;
 pub mod utils;
 pub mod var_range;
+/// Different xor chip implementations
+pub mod xor;
 
 pub use sub_air::*;
 

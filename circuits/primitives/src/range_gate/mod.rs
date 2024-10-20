@@ -1,4 +1,7 @@
 //! Range check for a fixed bit size without using preprocessed trace.
+//!
+//! Caution: We almost always prefer to use the [VariableRangeCheckerChip](super::var_range::VariableRangeCheckerChip) instead of this chip.
+
 use std::{
     borrow::Borrow,
     mem::{size_of, transmute},
@@ -15,7 +18,7 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::indices_arr;
 
-use crate::range::RangeCheckBus;
+pub use crate::range::RangeCheckBus;
 
 #[cfg(test)]
 mod tests;

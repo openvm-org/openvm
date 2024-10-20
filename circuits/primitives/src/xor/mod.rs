@@ -1,5 +1,3 @@
-/// Xor via bit decomposition
-pub mod bits;
 pub mod bus;
 /// Xor via limb decomposition, which interacts with the `lookup::XorLookupChip`
 pub mod limbs;

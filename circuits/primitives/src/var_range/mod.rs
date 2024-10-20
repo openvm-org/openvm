@@ -1,3 +1,8 @@
+//! A chip which uses preprocessed trace to provide a lookup table for range checking
+//! a variable `x` has `b` bits where `b` can be any integer in `[0, range_max_bits]`.
+//! In other words, the same chip can be used to range check for different bit sizes.
+//! We define `0` to have `0` bits.
+
 use core::mem::size_of;
 use std::{
     borrow::{Borrow, BorrowMut},
