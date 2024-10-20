@@ -14,9 +14,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        Result, VecHeapAdapterInterface, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
-    rv32im::adapters::VecHeapAdapterInterface,
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
