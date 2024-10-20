@@ -124,8 +124,4 @@ impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
     fn trace_width(&self) -> usize {
         2
     }
-
-    fn current_trace_cells(&self) -> usize {
-        4
-    }
 }
