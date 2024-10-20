@@ -1,11 +1,11 @@
 use std::{borrow::Borrow, marker::PhantomData, sync::Arc};
 
 use afs_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
-    p3_commit::PolynomialSpace,
     prover::types::AirProofInput,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip, ChipUsageGetter,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -82,15 +82,22 @@ impl<F: PrimeField32> VmConnectorChip<F> {
     pub fn end(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[1] = Some(state);
     }
+}
 
-    pub fn generate_air_proof_input<SC: StarkGenericConfig>(self) -> AirProofInput<SC>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
+impl<SC> Chip<SC> for VmConnectorChip<Val<SC>>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let boundary_states = self
             .boundary_states
             .into_iter()
-            .map(|state| state.unwrap().map(F::from_canonical_u32))
+            .map(|state| state.unwrap().map(Val::<SC>::from_canonical_u32))
             .collect::<Vec<_>>();
 
         let trace = RowMajorMatrix::new(
@@ -102,5 +109,23 @@ impl<F: PrimeField32> VmConnectorChip<F> {
         );
         let public_values = vec![boundary_states[0].pc, boundary_states[1].pc];
         AirProofInput::simple(Arc::new(self.air), trace, public_values)
+    }
+}
+
+impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
+    fn air_name(&self) -> String {
+        "VmConnectorAir".to_string()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        2
+    }
+
+    fn trace_width(&self) -> usize {
+        2
+    }
+
+    fn current_trace_cells(&self) -> usize {
+        4
     }
 }
