@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -32,7 +33,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Rv32BaseAluAdapterChip<F: Field> {
     pub air: Rv32BaseAluAdapterAir,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
@@ -43,13 +44,12 @@ impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: Rv32BaseAluAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -277,9 +277,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let row_slice: &mut Rv32BaseAluAdapterCols<_> = row_slice.borrow_mut();
-        let aux_cols_factory = &self.aux_cols_factory;
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.rd_ptr = write_record.rd.pointer;
         row_slice.rs1_ptr = read_record.rs1.pointer;

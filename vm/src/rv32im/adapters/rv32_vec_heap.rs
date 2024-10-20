@@ -3,6 +3,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
     iter::{once, zip},
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -44,7 +45,7 @@ pub struct Rv32VecHeapAdapterChip<
     const WRITE_SIZE: usize,
 > {
     pub air: Rv32VecHeapAdapterAir<R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<
@@ -64,7 +65,6 @@ impl<
         assert!(R <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         let address_bits = memory_controller.mem_config.pointer_max_bits;
         Self {
             air: Rv32VecHeapAdapterAir {
@@ -72,7 +72,7 @@ impl<
                 memory_bridge,
                 address_bits,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -380,6 +380,7 @@ impl<
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let row_slice: &mut Rv32VecHeapAdapterCols<
             F,
@@ -399,14 +400,14 @@ impl<
 
         row_slice.rs_read_aux = read_record
             .rs
-            .map(|r| self.aux_cols_factory.make_read_aux_cols(r));
-        row_slice.rd_read_aux = self.aux_cols_factory.make_read_aux_cols(read_record.rd);
+            .map(|r| aux_cols_factory.make_read_aux_cols(r));
+        row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rd);
         row_slice.reads_aux = read_record
             .reads
-            .map(|r| r.map(|x| self.aux_cols_factory.make_read_aux_cols(x)));
+            .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(x)));
         row_slice.writes_aux = write_record
             .writes
-            .map(|w| self.aux_cols_factory.make_write_aux_cols(w));
+            .map(|w| aux_cols_factory.make_write_aux_cols(w));
     }
 
     fn air(&self) -> &Self::Air {

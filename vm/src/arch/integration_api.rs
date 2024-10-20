@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::utils::next_power_of_two_or_zero;
@@ -18,7 +18,7 @@ use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result};
 use crate::system::{
-    memory::{MemoryController, MemoryControllerRef},
+    memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef},
     program::Instruction,
 };
 
@@ -79,6 +79,7 @@ pub trait VmAdapterChip<F: Field> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     );
 
     fn air(&self) -> &Self::Air;
@@ -265,6 +266,8 @@ where
         let adapter_width = self.adapter.air().width();
         let width = core_width + adapter_width;
         let mut values = vec![Val::<SC>::zero(); height * width];
+
+        let memory_aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
         // This zip only goes through records.
         // The padding rows between records.len()..height are filled with zeros.
         values
@@ -272,8 +275,12 @@ where
             .zip(self.records.into_par_iter())
             .for_each(|(row_slice, record)| {
                 let (adapter_row, core_row) = row_slice.split_at_mut(adapter_width);
-                self.adapter
-                    .generate_trace_row(adapter_row, record.0, record.1);
+                self.adapter.generate_trace_row(
+                    adapter_row,
+                    record.0,
+                    record.1,
+                    &memory_aux_cols_factory,
+                );
                 self.core.generate_trace_row(core_row, record.2);
             });
         AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))

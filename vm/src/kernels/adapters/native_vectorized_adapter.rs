@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -28,7 +29,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct NativeVectorizedAdapterChip<F: Field, const N: usize> {
     pub air: NativeVectorizedAdapterAir<N>,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32, const N: usize> NativeVectorizedAdapterChip<F, N> {
@@ -39,13 +40,12 @@ impl<F: PrimeField32, const N: usize> NativeVectorizedAdapterChip<F, N> {
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: NativeVectorizedAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -207,9 +207,9 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let row_slice: &mut NativeVectorizedAdapterCols<_, N> = row_slice.borrow_mut();
-        let aux_cols_factory = &self.aux_cols_factory;
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_idx = write_record.a.pointer;

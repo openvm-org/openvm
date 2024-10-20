@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -39,7 +40,7 @@ pub struct VectorWriteRecord<F: Field, const WRITE_SIZE: usize> {
 #[derive(Clone, Debug)]
 pub struct ConvertAdapterChip<F: Field, const READ_SIZE: usize, const WRITE_SIZE: usize> {
     pub air: ConvertAdapterAir<READ_SIZE, WRITE_SIZE>,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize>
@@ -52,13 +53,12 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize>
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: ConvertAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -201,9 +201,9 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let row_slice: &mut ConvertAdapterCols<_, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();
-        let aux_cols_factory = &self.aux_cols_factory;
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_idx = write_record.writes[0].pointer;

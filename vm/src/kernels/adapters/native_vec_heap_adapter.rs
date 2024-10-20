@@ -3,6 +3,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
     iter::zip,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -42,7 +43,7 @@ pub struct NativeVecHeapAdapterChip<
     const WRITE_SIZE: usize,
 > {
     pub air: NativeVecHeapAdapterAir<NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<
@@ -60,7 +61,6 @@ impl<
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         let address_bits = memory_controller.mem_config.pointer_max_bits;
         Self {
             air: NativeVecHeapAdapterAir {
@@ -68,7 +68,7 @@ impl<
                 memory_bridge,
                 address_bits,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -359,6 +359,7 @@ impl<
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let row_slice: &mut NativeVecHeapAdapterCols<
             F,
@@ -380,18 +381,18 @@ impl<
         row_slice.ptr_as = read_record.ptr_as;
         row_slice.heap_as = read_record.heap_as;
 
-        row_slice.rs1_read_aux = self.aux_cols_factory.make_read_aux_cols(read_record.rs1);
-        row_slice.rs2_read_aux = self.aux_cols_factory.make_read_aux_cols(read_record.rs2);
-        row_slice.rd_read_aux = self.aux_cols_factory.make_read_aux_cols(read_record.rd);
+        row_slice.rs1_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rs1);
+        row_slice.rs2_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rs2);
+        row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rd);
         row_slice.reads1_aux = read_record
             .reads1
-            .map(|r| self.aux_cols_factory.make_read_aux_cols(r));
+            .map(|r| aux_cols_factory.make_read_aux_cols(r));
         row_slice.reads2_aux = read_record
             .reads2
-            .map(|r| self.aux_cols_factory.make_read_aux_cols(r));
+            .map(|r| aux_cols_factory.make_read_aux_cols(r));
         row_slice.writes_aux = write_record
             .writes
-            .map(|w| self.aux_cols_factory.make_write_aux_cols(w));
+            .map(|w| aux_cols_factory.make_write_aux_cols(w));
     }
 
     fn air(&self) -> &Self::Air {
