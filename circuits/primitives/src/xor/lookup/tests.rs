@@ -1,6 +1,9 @@
 use std::{iter, sync::Arc};
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
+use afs_stark_backend::{
+    prover::USE_DEBUG_BUILDER, rap::AnyRap, utils::disable_debug_builder,
+    verifier::VerificationError,
+};
 use ax_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
@@ -12,7 +15,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
-use crate::xor::{bus::XorBus, limbs::XorLimbsChip};
+use crate::xor::{bus::XorBus, XorLookupChip};
 
 #[test]
 fn test_xor_limbs_chip() {
@@ -20,16 +23,15 @@ fn test_xor_limbs_chip() {
 
     let bus = XorBus(0);
 
-    const N: usize = 6;
-    const M: usize = 2;
-    const LOG_XOR_REQUESTS: usize = 1;
-    const LOG_NUM_REQUESTERS: usize = 2;
+    const M: usize = 6;
+    const LOG_XOR_REQUESTS: usize = 2;
+    const LOG_NUM_REQUESTERS: usize = 1;
 
-    const MAX_INPUT: u32 = 1 << N;
+    const MAX_INPUT: u32 = 1 << M;
     const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
     const NUM_REQUESTERS: usize = 1 << LOG_NUM_REQUESTERS;
 
-    let xor_chip = XorLimbsChip::<N, M>::new(bus, vec![]);
+    let xor_chip = XorLookupChip::<M>::new(bus);
 
     let requesters_lists = (0..NUM_REQUESTERS)
         .map(|_| {
@@ -67,20 +69,17 @@ fn test_xor_limbs_chip() {
         })
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    let xor_limbs_chip_trace = xor_chip.generate_trace();
-    let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
+    let xor_trace = xor_chip.generate_trace();
 
     let mut all_chips: Vec<Arc<dyn AnyRap<_>>> = vec![];
     for requester in requesters {
         all_chips.push(Arc::new(requester));
     }
     all_chips.push(Arc::new(xor_chip.air));
-    all_chips.push(Arc::new(xor_chip.xor_lookup_chip.air));
 
     let all_traces = requesters_traces
         .into_iter()
-        .chain(iter::once(xor_limbs_chip_trace))
-        .chain(iter::once(xor_lookup_chip_trace))
+        .chain(iter::once(xor_trace))
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
@@ -93,14 +92,13 @@ fn negative_test_xor_limbs_chip() {
 
     let bus = XorBus(0);
 
-    const N: usize = 6;
-    const M: usize = 2;
+    const M: usize = 6;
     const LOG_XOR_REQUESTS: usize = 3;
 
-    const MAX_INPUT: u32 = 1 << N;
+    const MAX_INPUT: u32 = 1 << M;
     const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
 
-    let xor_chip = XorLimbsChip::<N, M>::new(bus, vec![]);
+    let xor_chip = XorLookupChip::<M>::new(bus);
 
     let pairs = (0..XOR_REQUESTS)
         .map(|_| {
@@ -135,15 +133,12 @@ fn negative_test_xor_limbs_chip() {
         4,
     );
 
-    let xor_limbs_chip_trace = xor_chip.generate_trace();
-    let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
+    let xor_trace = xor_chip.generate_trace();
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     let result = BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![requester, xor_chip.air, xor_chip.xor_lookup_chip.air],
-        vec![requester_trace, xor_limbs_chip_trace, xor_lookup_chip_trace],
+        any_rap_arc_vec![requester, xor_chip.air],
+        vec![requester_trace, xor_trace],
     );
     assert_eq!(
         result.err(),
