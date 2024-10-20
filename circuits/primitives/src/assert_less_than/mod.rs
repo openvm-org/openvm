@@ -22,10 +22,17 @@ pub struct AssertLessThanIo<T> {
     pub y: T,
     /// Will only apply constraints when `count != 0`.
     /// Range checks are done with multiplicity `count`.
-    /// If `count == 0` then no range checks are done and the aux columns
-    /// can all be zero.
+    /// If `count == 0` then no range checks are done.
     /// In practice `count` is always boolean, although this is not enforced
     /// by the subair.
+    ///
+    /// N.B.: in fact range checks could always be done, if the aux
+    /// subrow values are set to 0 when `count == 0`. This woud slightly
+    /// simplify the range check interactions, although usually doesn't change
+    /// the overall constraint degree. It however leads to the annoyance that
+    /// you must update the RangeChecker's multiplicities even on dummy padding
+    /// rows. To improve quality of life,
+    /// we currently use this more complex constraint.
     pub count: T,
 }
 impl<T> AssertLessThanIo<T> {
@@ -43,7 +50,7 @@ impl<T> AssertLessThanIo<T> {
 /// we have that AUX_LEN = max_bits.div_ceil(bus.range_max_bits)
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug, new)]
-pub struct AssertLessThanAuxCols<T, const AUX_LEN: usize> {
+pub struct LessThanAuxCols<T, const AUX_LEN: usize> {
     // lower_decomp consists of lower decomposed into limbs of size bus.range_max_bits
     // note: the final limb might have less than bus.range_max_bits bits
     pub lower_decomp: [T; AUX_LEN],
@@ -51,9 +58,9 @@ pub struct AssertLessThanAuxCols<T, const AUX_LEN: usize> {
 
 /// This is intended for use as a **SubAir**, not as a standalone Air.
 ///
-/// This SubAir checks whether one number is less than another, assuming
+/// This SubAir constrains that `x < y` when `count != 0`, assuming
 /// the two numbers both have a max number of bits, given by `max_bits`.
-/// The SubAir compares the numbers by decomposing them into limbs of
+/// The SubAir decomposes `y - x - 1` into limbs of
 /// size `bus.range_max_bits`, and interacts with a
 /// `VariableRangeCheckerBus` to range check the decompositions.
 ///
@@ -61,7 +68,7 @@ pub struct AssertLessThanAuxCols<T, const AUX_LEN: usize> {
 /// The number of limbs is `max_bits.div_ceil(bus.range_max_bits)`.
 ///
 /// The expected max constraint degree of `eval` is
-///     deg(condition) + max(1, deg(io.x), deg(io.y))
+///     deg(count) + max(1, deg(x), deg(y))
 #[derive(Copy, Clone, Debug)]
 pub struct AssertLessThanAir {
     /// The bus for sends to range chip
@@ -96,8 +103,8 @@ impl AssertLessThanAir {
     /// FOR INTERNAL USE ONLY.
     /// This AIR is only sound if interactions are enabled
     ///
-    /// Constraints between `io` and `aux` are only enforced when `condition != 0`.
-    /// This means `aux` can be all zero independent on what `io` is by setting `condition = 0`.
+    /// Constraints between `io` and `aux` are only enforced when `count != 0`.
+    /// This means `aux` can be all zero independent on what `io` is by setting `count = 0`.
     #[inline(always)]
     fn eval_without_range_checks<AB: AirBuilder>(
         &self,
@@ -117,14 +124,14 @@ impl AssertLessThanAir {
             .iter()
             .enumerate()
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u64(1 << (i * self.bus.range_max_bits))
+                acc + val * AB::Expr::from_canonical_usize(1 << (i * self.bus.range_max_bits))
             });
 
         // constrain that y-x-1 is equal to the constructed lower value.
         // this enforces that the intermediate value is in the range [0, 2^max_bits - 1], which is equivalent to x < y
         builder.when(io.count).assert_eq(intermed_val, lower);
-        // the degree of this constraint is expected to be deg(condition) + max(deg(intermed_val), deg(lower))
-        // since we are constraining condition * intermed_val == condition * lower,
+        // the degree of this constraint is expected to be deg(count) + max(deg(intermed_val), deg(lower))
+        // since we are constraining count * intermed_val == count * lower
     }
 
     #[inline(always)]
@@ -135,20 +142,16 @@ impl AssertLessThanAir {
         count: impl Into<AB::Expr>,
     ) {
         let count = count.into();
+        let mut bits_remaining = self.max_bits;
         // we range check the limbs of the lower_decomp so that we know each element
         // of lower_decomp has the correct number of bits
-        for (i, limb) in lower_decomp.iter().enumerate() {
-            if i == lower_decomp.len() - 1 && self.max_bits % self.bus.range_max_bits != 0 {
-                // the last limb might have fewer than `bus.range_max_bits` bits
-                self.bus
-                    .range_check(*limb, self.max_bits % self.bus.range_max_bits)
-                    .eval(builder, count.clone());
-            } else {
-                // the other limbs must have exactly `bus.range_max_bits` bits
-                self.bus
-                    .range_check(*limb, self.bus.range_max_bits)
-                    .eval(builder, count.clone());
-            }
+        for limb in lower_decomp {
+            // the last limb might have fewer than `bus.range_max_bits` bits
+            let range_bits = bits_remaining.min(self.bus.range_max_bits);
+            self.bus
+                .range_check(*limb, range_bits)
+                .eval(builder, count.clone());
+            bits_remaining = bits_remaining.saturating_sub(self.bus.range_max_bits);
         }
     }
 }

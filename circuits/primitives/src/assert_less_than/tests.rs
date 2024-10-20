@@ -33,7 +33,7 @@ use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
     pub x: T,
     pub y: T,
-    pub aux: AssertLessThanAuxCols<T, AUX_LEN>,
+    pub aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
 #[derive(Clone, Copy)]
