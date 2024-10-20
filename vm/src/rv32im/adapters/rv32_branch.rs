@@ -1,7 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
-    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -12,8 +11,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
+        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -65,6 +64,10 @@ pub struct Rv32BranchWriteRecord {
     pub from_state: ExecutionState<u32>,
 }
 
+pub type Rv32BranchAdapterInterface<T> =
+    BasicAdapterInterface<T, JumpUiProcessedInstruction<T>, 2, 0, RV32_REGISTER_NUM_LANES, 0>;
+
+/*
 pub struct Rv32BranchAdapterInterface<T>(PhantomData<T>);
 
 impl<T> VmAdapterInterface<T> for Rv32BranchAdapterInterface<T> {
@@ -72,6 +75,7 @@ impl<T> VmAdapterInterface<T> for Rv32BranchAdapterInterface<T> {
     type Writes = ();
     type ProcessedInstruction = JumpUiProcessedInstruction<T>;
 }
+*/
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
