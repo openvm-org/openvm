@@ -1,33 +1,119 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    utils::disable_debug_builder,
+    verifier::VerificationError,
+};
 use ax_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
+use derive_new::new;
+use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::DenseMatrix;
-
-use super::{super::is_less_than::IsLessThanChip, columns::IsLessThanCols};
-use crate::{
-    is_less_than::IsLessThanAir,
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+use p3_field::{AbstractField, Field};
+use p3_matrix::{
+    dense::{DenseMatrix, RowMajorMatrix},
+    Matrix,
 };
 
+use super::IsLessThanIo;
+use crate::{
+    is_less_than::IsLessThanAir,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
+};
+
+/// Struct purely for testing purposes. We could make this have a const generic just like
+/// `AssertLessThanCols`, but for demonstration purposes we use `Vec` to show how to use the
+/// SubAir even when the columns do not implement `AlignedBorrow`.
+#[derive(Clone, Debug, new)]
+pub struct IsLessThanCols<T> {
+    pub x: T,
+    pub y: T,
+    pub out: T,
+    pub lower_decomp: Vec<T>,
+}
+
+/// Note that this air has no const generics. The parameters such as `max_bits, decomp_limbs` are all
+/// configured in the constructor at runtime.
+#[derive(Clone, Copy)]
+pub struct IsLtTestAir(pub IsLessThanAir);
+
+impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
+impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}
+impl<F: Field> BaseAir<F> for IsLtTestAir {
+    fn width(&self) -> usize {
+        // Cannot use size_of because Cols has Vec<T> which is stored on the heap
+        3 + self.0.decomp_limbs
+    }
+}
+impl<AB: InteractionBuilder> Air<AB> for IsLtTestAir {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+
+        let local = main.row_slice(0);
+        let (io, lower_decomp) = local.split_at(3);
+        let [x, y, out] = [io[0], io[1], io[2]];
+
+        let io = IsLessThanIo::new(x, y, out, AB::F::one());
+        self.0.eval(builder, (io, lower_decomp));
+    }
+}
+
+#[derive(Clone)]
+pub struct IsLessThanChip {
+    pub air: IsLtTestAir,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
+}
+
 impl IsLessThanChip {
+    pub fn new(max_bits: usize, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
+        let bus = range_checker.bus();
+        Self {
+            air: IsLtTestAir(IsLessThanAir::new(bus, max_bits)),
+            range_checker,
+        }
+    }
     pub fn generate_trace<F: Field>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
-        let width: usize = IsLessThanCols::<F>::width(&self.air);
+        assert!(pairs.len().is_power_of_two());
+        let width: usize = BaseAir::<F>::width(&self.air);
 
-        let mut rows_concat = vec![F::zero(); width * pairs.len()];
-        for (i, (x, y)) in pairs.iter().enumerate() {
-            let mut lt_cols =
-                IsLessThanColsMut::<F>::from_slice(&mut rows_concat[i * width..(i + 1) * width]);
-
+        let mut rows = vec![F::zero(); width * pairs.len()];
+        for (row, (x, y)) in rows.chunks_mut(width).zip(pairs) {
+            let mut row = IsLessThanColsMut::from_mut_slice(row);
+            *row.x = F::from_canonical_u32(x);
+            *row.y = F::from_canonical_u32(y);
+            *row.out = F::from_bool(x < y);
             self.air
-                .generate_trace_row(*x, *y, &self.range_checker, &mut lt_cols);
+                .0
+                .generate_subrow((&self.range_checker, x, y), &mut row.lower_decomp);
         }
 
-        RowMajorMatrix::new(rows_concat, width)
+        RowMajorMatrix::new(rows, width)
+    }
+}
+
+// We create a custom struct of mutable references since `IsLessThanCols` cannot derive `AlignedBorrow`.
+pub struct IsLessThanColsMut<'a, T> {
+    pub x: &'a mut T,
+    pub y: &'a mut T,
+    pub out: &'a mut T,
+    pub lower_decomp: &'a mut [T],
+}
+
+impl<'a, T> IsLessThanColsMut<'a, T> {
+    pub fn from_mut_slice(slc: &'a mut [T]) -> Self {
+        let (io, lower_decomp) = slc.split_at_mut(3);
+        let mut io = io.iter_mut();
+
+        Self {
+            x: io.next().unwrap(),
+            y: io.next().unwrap(),
+            out: io.next().unwrap(),
+            lower_decomp,
+        }
     }
 }
 
@@ -39,23 +125,6 @@ fn get_tester_is_lt_chip() -> IsLessThanChip {
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
 
     IsLessThanChip::new(max_bits, range_checker)
-}
-
-#[test]
-fn test_flatten_fromslice_roundtrip() {
-    let lt_air = IsLessThanAir::new(VariableRangeCheckerBus::new(0, 8), 16);
-
-    let num_cols = IsLessThanCols::<usize>::width(&lt_air);
-    let all_cols = (0..num_cols).collect::<Vec<usize>>();
-
-    let cols_numbered = IsLessThanCols::<usize>::from_slice(&all_cols);
-    let flattened = cols_numbered.flatten();
-
-    for (i, col) in flattened.iter().enumerate() {
-        assert_eq!(*col, all_cols[i]);
-    }
-
-    assert_eq!(num_cols, flattened.len());
 }
 
 #[test]

@@ -1,6 +1,4 @@
-use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
-use derive_new::new;
 use p3_air::AirBuilder;
 use p3_field::{AbstractField, Field};
 
@@ -116,7 +114,7 @@ impl IsLessThanAir {
         assert_eq!(lower_decomp.len(), self.decomp_limbs);
         // this is the desired intermediate value (i.e. y - x - 1)
         // deg(intermed_val) = deg(io)
-        let intermed_val = io.y - io.x - AB::Expr::from_canonical_usize((1 << self.max_bits) - 1);
+        let intermed_val = io.y - io.x + AB::Expr::from_canonical_usize((1 << self.max_bits) - 1);
 
         // Construct lower from lower_decomp:
         // - each limb of lower_decomp will be range checked
@@ -125,7 +123,7 @@ impl IsLessThanAir {
             .iter()
             .enumerate()
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_usize(1 << (i * self.bus.range_max_bits))
+                acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
             });
 
         // constrain that the lower + out * 2^max_bits is the correct intermediate sum
