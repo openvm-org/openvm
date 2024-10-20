@@ -86,8 +86,14 @@ impl<F: Field> BaseAir<F> for Rv32BranchAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
-    type Interface =
-        BasicAdapterInterface<AB::Expr, JumpUiProcessedInstruction<AB::Expr>, 2, 0, 1, 1>;
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        JumpUiProcessedInstruction<AB::Expr>,
+        2,
+        0,
+        RV32_REGISTER_NUM_LANES,
+        0,
+    >;
 
     fn eval(
         &self,
