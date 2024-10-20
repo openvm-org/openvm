@@ -14,15 +14,26 @@ use crate::{
         ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
         VmAdapterInterface,
     },
-    kernels::adapters::native_basic_adapter::{VectorReadRecord, VectorWriteRecord},
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
+            MemoryReadRecord, MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
 };
+
+#[derive(Debug)]
+pub struct VectorReadRecord<F: Field, const NUM_READS: usize, const READ_SIZE: usize> {
+    pub reads: [MemoryReadRecord<F, READ_SIZE>; NUM_READS],
+}
+
+#[derive(Debug)]
+pub struct VectorWriteRecord<F: Field, const WRITE_SIZE: usize> {
+    pub from_state: ExecutionState<u32>,
+    pub writes: [MemoryWriteRecord<F, WRITE_SIZE>; 1],
+}
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
