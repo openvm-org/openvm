@@ -128,7 +128,7 @@ pub struct Rv32VecHeapAdapterCols<
 }
 
 #[derive(Clone)]
-pub struct Rv32VecHeapAdapterInterface<
+pub struct VecHeapAdapterInterface<
     T,
     const R: usize,
     const NUM_READS: usize,
@@ -145,7 +145,7 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > VmAdapterInterface<T>
-    for Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
+    for VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
     type Reads = [[[T; READ_SIZE]; NUM_READS]; R];
     type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
@@ -191,7 +191,7 @@ impl<
     > VmAdapterAir<AB> for Rv32VecHeapAdapterAir<R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
     type Interface =
-        Rv32VecHeapAdapterInterface<AB::Expr, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
+        VecHeapAdapterInterface<AB::Expr, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
     fn eval(
         &self,
@@ -319,8 +319,7 @@ impl<
     type ReadRecord = Rv32VecHeapReadRecord<F, R, NUM_READS, READ_SIZE>;
     type WriteRecord = Rv32VecHeapWriteRecord<F, NUM_WRITES, WRITE_SIZE>;
     type Air = Rv32VecHeapAdapterAir<R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
-    type Interface =
-        Rv32VecHeapAdapterInterface<F, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
+    type Interface = VecHeapAdapterInterface<F, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
     fn preprocess(
         &mut self,
@@ -442,10 +441,10 @@ impl<
 }
 
 mod conversions {
-    use super::Rv32VecHeapAdapterInterface;
+    use super::VecHeapAdapterInterface;
     use crate::arch::{AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface};
 
-    // AdapterAirContext: Rv32VecHeapAdapterInterface -> DynInterface
+    // AdapterAirContext: VecHeapAdapterInterface -> DynInterface
     impl<
             T,
             const R: usize,
@@ -457,14 +456,14 @@ mod conversions {
         From<
             AdapterAirContext<
                 T,
-                Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         > for AdapterAirContext<T, DynAdapterInterface<T>>
     {
         fn from(
             ctx: AdapterAirContext<
                 T,
-                Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         ) -> Self {
             AdapterAirContext {
@@ -476,7 +475,7 @@ mod conversions {
         }
     }
 
-    // AdapterRuntimeContext: Rv32VecHeapAdapterInterface -> DynInterface
+    // AdapterRuntimeContext: VecHeapAdapterInterface -> DynInterface
     impl<
             T,
             const R: usize,
@@ -488,14 +487,14 @@ mod conversions {
         From<
             AdapterRuntimeContext<
                 T,
-                Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         > for AdapterRuntimeContext<T, DynAdapterInterface<T>>
     {
         fn from(
             ctx: AdapterRuntimeContext<
                 T,
-                Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         ) -> Self {
             AdapterRuntimeContext {
@@ -505,7 +504,7 @@ mod conversions {
         }
     }
 
-    // AdapterAirContext: DynInterface -> Rv32VecHeapAdapterInterface
+    // AdapterAirContext: DynInterface -> VecHeapAdapterInterface
     impl<
             T,
             const R: usize,
@@ -516,7 +515,7 @@ mod conversions {
         > From<AdapterAirContext<T, DynAdapterInterface<T>>>
         for AdapterAirContext<
             T,
-            Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         >
     {
         fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
@@ -529,7 +528,7 @@ mod conversions {
         }
     }
 
-    // AdapterRuntimeContext: DynInterface -> Rv32VecHeapAdapterInterface
+    // AdapterRuntimeContext: DynInterface -> VecHeapAdapterInterface
     impl<
             T,
             const R: usize,
@@ -540,7 +539,7 @@ mod conversions {
         > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
         for AdapterRuntimeContext<
             T,
-            Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         >
     {
         fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {

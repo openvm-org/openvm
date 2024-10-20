@@ -3,7 +3,6 @@ use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
     iter::zip,
-    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -15,8 +14,9 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        MinimalInstruction, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
+    rv32im::adapters::VecHeapAdapterInterface,
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -130,29 +130,6 @@ pub struct NativeVecHeapAdapterCols<
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; NUM_WRITES],
 }
 
-#[derive(Clone)]
-pub struct NativeVecHeapAdapterInterface<
-    T,
-    const NUM_READS: usize,
-    const NUM_WRITES: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
->(PhantomData<T>);
-
-impl<
-        T,
-        const NUM_READS: usize,
-        const NUM_WRITES: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > VmAdapterInterface<T>
-    for NativeVecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
-{
-    type Reads = [[[T; READ_SIZE]; NUM_READS]; 2];
-    type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
-    type ProcessedInstruction = MinimalInstruction<T>;
-}
-
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct NativeVecHeapAdapterAir<
@@ -189,7 +166,7 @@ impl<
     > VmAdapterAir<AB> for NativeVecHeapAdapterAir<NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
     type Interface =
-        NativeVecHeapAdapterInterface<AB::Expr, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
+        VecHeapAdapterInterface<AB::Expr, 2, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
     fn eval(
         &self,
@@ -294,7 +271,7 @@ impl<
     type ReadRecord = NativeVecHeapReadRecord<F, NUM_READS, READ_SIZE>;
     type WriteRecord = NativeVecHeapWriteRecord<F, NUM_WRITES, WRITE_SIZE>;
     type Air = NativeVecHeapAdapterAir<NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
-    type Interface = NativeVecHeapAdapterInterface<F, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
+    type Interface = VecHeapAdapterInterface<F, 2, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
     fn preprocess(
         &mut self,
@@ -420,112 +397,5 @@ impl<
 
     fn air(&self) -> &Self::Air {
         &self.air
-    }
-}
-
-mod conversions {
-    use super::NativeVecHeapAdapterInterface;
-    use crate::arch::{AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface};
-
-    // AdapterAirContext: NativeVecHeapAdapterInterface -> DynInterface
-    impl<
-            T,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        >
-        From<
-            AdapterAirContext<
-                T,
-                NativeVecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        > for AdapterAirContext<T, DynAdapterInterface<T>>
-    {
-        fn from(
-            ctx: AdapterAirContext<
-                T,
-                NativeVecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        ) -> Self {
-            AdapterAirContext {
-                to_pc: ctx.to_pc,
-                reads: ctx.reads.into(),
-                writes: ctx.writes.into(),
-                instruction: ctx.instruction.into(),
-            }
-        }
-    }
-
-    // AdapterRuntimeContext: NativeVecHeapAdapterInterface -> DynInterface
-    impl<
-            T,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        >
-        From<
-            AdapterRuntimeContext<
-                T,
-                NativeVecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        > for AdapterRuntimeContext<T, DynAdapterInterface<T>>
-    {
-        fn from(
-            ctx: AdapterRuntimeContext<
-                T,
-                NativeVecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        ) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.into(),
-            }
-        }
-    }
-
-    // AdapterAirContext: DynInterface -> NativeVecHeapAdapterInterface
-    impl<
-            T,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
-        for AdapterAirContext<
-            T,
-            NativeVecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >
-    {
-        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterAirContext {
-                to_pc: ctx.to_pc,
-                reads: ctx.reads.into(),
-                writes: ctx.writes.into(),
-                instruction: ctx.instruction.into(),
-            }
-        }
-    }
-
-    // AdapterRuntimeContext: DynInterface -> NativeVecHeapAdapterInterface
-    impl<
-            T,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
-        for AdapterRuntimeContext<
-            T,
-            NativeVecHeapAdapterInterface<T, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >
-    {
-        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.into(),
-            }
-        }
     }
 }
