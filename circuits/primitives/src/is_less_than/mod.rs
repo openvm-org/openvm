@@ -93,8 +93,12 @@ impl IsLessThanAir {
         }
     }
 
-    pub fn when_transition(self) -> AssertLtWhenTransitionAir {
-        AssertLtWhenTransitionAir(self)
+    pub fn range_max_bits(&self) -> usize {
+        self.bus.range_max_bits
+    }
+
+    pub fn when_transition(self) -> IsLtWhenTransitionAir {
+        IsLtWhenTransitionAir(self)
     }
 
     /// FOR INTERNAL USE ONLY.
@@ -174,7 +178,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
     }
 }
 
-/// The same subair as [AssertLessThanAir] except that non-range check
+/// The same subair as [IsLessThanAir] except that non-range check
 /// constraints are not imposed on the last row.
 /// Intended use case is for asserting less than between entries in
 /// adjacent rows.
@@ -219,24 +223,22 @@ impl<F: Field> TraceSubRowGenerator<F> for IsLessThanAir {
         (range_checker, x, y): (&'a VariableRangeCheckerChip, u32, u32),
         lower_decomp: &'a mut [F],
     ) {
-        debug_assert!(x < y, "assert {x} < {y} failed");
         debug_assert_eq!(lower_decomp.len(), self.decomp_limbs);
 
         // obtain the lower_bits
-        let check_less_than = y - x - 1;
-        let lower_u32 = check_less_than & ((1 << self.max_bits) - 1);
-        // decompose lower_bits into limbs and range check
-        for (i, limb) in lower_decomp.iter_mut().enumerate() {
-            let bits =
-                (lower_u32 >> (i * self.bus.range_max_bits)) & ((1 << self.bus.range_max_bits) - 1);
-            *limb = F::from_canonical_u32(bits);
+        let check_less_than = (1 << self.max_bits) + y - x - 1;
+        let mut lower_u32 = check_less_than & ((1 << self.max_bits) - 1);
 
-            if i == self.decomp_limbs - 1 && self.max_bits % self.bus.range_max_bits != 0 {
-                let last_limb_max_bits = self.max_bits % self.bus.range_max_bits;
-                range_checker.add_count(bits, last_limb_max_bits);
-            } else {
-                range_checker.add_count(bits, self.bus.range_max_bits);
-            }
+        // decompose lower_u32 into limbs and range check
+        let mask = (1 << self.range_max_bits()) - 1;
+        let mut bits_remaining = self.max_bits;
+        for limb in lower_decomp.iter_mut() {
+            let limb_u32 = lower_u32 & mask;
+            *limb = F::from_canonical_u32(limb_u32);
+            range_checker.add_count(limb_u32, bits_remaining.min(self.bus.range_max_bits));
+
+            lower_u32 >>= self.range_max_bits();
+            bits_remaining = bits_remaining.saturating_sub(self.range_max_bits());
         }
     }
 }

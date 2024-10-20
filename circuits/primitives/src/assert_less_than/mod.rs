@@ -100,6 +100,10 @@ impl AssertLessThanAir {
         AssertLtWhenTransitionAir(self)
     }
 
+    pub fn range_max_bits(&self) -> usize {
+        self.bus.range_max_bits
+    }
+
     /// FOR INTERNAL USE ONLY.
     /// This AIR is only sound if interactions are enabled
     ///
@@ -124,7 +128,7 @@ impl AssertLessThanAir {
             .iter()
             .enumerate()
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_usize(1 << (i * self.bus.range_max_bits))
+                acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
             });
 
         // constrain that y-x-1 is equal to the constructed lower value.
@@ -147,11 +151,11 @@ impl AssertLessThanAir {
         // of lower_decomp has the correct number of bits
         for limb in lower_decomp {
             // the last limb might have fewer than `bus.range_max_bits` bits
-            let range_bits = bits_remaining.min(self.bus.range_max_bits);
+            let range_bits = bits_remaining.min(self.range_max_bits());
             self.bus
                 .range_check(*limb, range_bits)
                 .eval(builder, count.clone());
-            bits_remaining = bits_remaining.saturating_sub(self.bus.range_max_bits);
+            bits_remaining = bits_remaining.saturating_sub(self.range_max_bits());
         }
     }
 }
@@ -223,21 +227,19 @@ impl<F: Field> TraceSubRowGenerator<F> for AssertLessThanAir {
         debug_assert!(x < y, "assert {x} < {y} failed");
         debug_assert_eq!(lower_decomp.len(), self.decomp_limbs);
 
-        // obtain the lower_bits
-        let check_less_than = y - x - 1;
-        let lower_u32 = check_less_than & ((1 << self.max_bits) - 1);
-        // decompose lower_bits into limbs and range check
-        for (i, limb) in lower_decomp.iter_mut().enumerate() {
-            let bits =
-                (lower_u32 >> (i * self.bus.range_max_bits)) & ((1 << self.bus.range_max_bits) - 1);
-            *limb = F::from_canonical_u32(bits);
+        // Note: if x < y then lower_u32 should already have <= max_bits bits
+        let mut lower_u32 = y - x - 1;
+        debug_assert!(lower_u32 < (1 << self.max_bits));
+        // decompose lower_u32 into limbs and range check
+        let mask = (1 << self.range_max_bits()) - 1;
+        let mut bits_remaining = self.max_bits;
+        for limb in lower_decomp.iter_mut() {
+            let limb_u32 = lower_u32 & mask;
+            *limb = F::from_canonical_u32(limb_u32);
+            range_checker.add_count(limb_u32, bits_remaining.min(self.bus.range_max_bits));
 
-            if i == self.decomp_limbs - 1 && self.max_bits % self.bus.range_max_bits != 0 {
-                let last_limb_max_bits = self.max_bits % self.bus.range_max_bits;
-                range_checker.add_count(bits, last_limb_max_bits);
-            } else {
-                range_checker.add_count(bits, self.bus.range_max_bits);
-            }
+            lower_u32 >>= self.range_max_bits();
+            bits_remaining = bits_remaining.saturating_sub(self.range_max_bits());
         }
     }
 }

@@ -14,6 +14,23 @@ use crate::{
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 
+impl IsLessThanChip {
+    pub fn generate_trace<F: Field>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
+        let width: usize = IsLessThanCols::<F>::width(&self.air);
+
+        let mut rows_concat = vec![F::zero(); width * pairs.len()];
+        for (i, (x, y)) in pairs.iter().enumerate() {
+            let mut lt_cols =
+                IsLessThanColsMut::<F>::from_slice(&mut rows_concat[i * width..(i + 1) * width]);
+
+            self.air
+                .generate_trace_row(*x, *y, &self.range_checker, &mut lt_cols);
+        }
+
+        RowMajorMatrix::new(rows_concat, width)
+    }
+}
+
 fn get_tester_is_lt_chip() -> IsLessThanChip {
     let max_bits: usize = 16;
     let decomp: usize = 8;
