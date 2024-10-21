@@ -175,7 +175,7 @@ where
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
-        let imm = instruction.op_c;
+        let imm = instruction.c;
 
         let signed_imm = match local_opcode_index {
             JAL => {

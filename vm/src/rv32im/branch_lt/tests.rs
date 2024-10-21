@@ -151,7 +151,7 @@ fn execute_pc_increment_sanity_test() {
 
     let mut instruction = Instruction::<F> {
         opcode: BranchLessThanOpcode::BLT.as_usize(),
-        op_c: F::from_canonical_u8(8),
+        c: F::from_canonical_u8(8),
         ..Default::default()
     };
     let x: [F; RV32_REGISTER_NUM_LANES] = [145, 34, 25, 205].map(F::from_canonical_u32);

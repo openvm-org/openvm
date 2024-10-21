@@ -77,7 +77,7 @@ impl<
 pub struct NativeVecHeapReadRecord<F: Field, const NUM_READS: usize, const READ_SIZE: usize> {
     /// Read register value from address space e=1
     pub rs1: MemoryReadRecord<F, 1>,
-    /// Read register value from address space op_f=1
+    /// Read register value from address space f=1
     pub rs2: MemoryReadRecord<F, 1>,
     /// Read register value from address space d=1
     pub rd: MemoryReadRecord<F, 1>,
@@ -280,14 +280,7 @@ impl<
         <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
-        let Instruction {
-            op_a: a,
-            op_b: b,
-            op_c: c,
-            d,
-            e,
-            ..
-        } = *instruction;
+        let Instruction { a, b, c, d, e, .. } = *instruction;
 
         let rs1_record = memory.read_cell(d, b);
         let rs2_record = memory.read_cell(d, c);

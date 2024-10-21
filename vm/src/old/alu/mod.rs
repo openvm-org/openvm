@@ -104,9 +104,9 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
-            op_a: a,
-            op_b: b,
-            op_c: c,
+            a,
+            b,
+            c,
             d,
             e,
             ..

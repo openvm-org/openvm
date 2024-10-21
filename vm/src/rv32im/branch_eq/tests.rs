@@ -130,7 +130,7 @@ fn execute_pc_increment_sanity_test() {
 
     let mut instruction = Instruction::<F> {
         opcode: BranchEqualOpcode::BEQ.as_usize(),
-        op_c: F::from_canonical_u8(8),
+        c: F::from_canonical_u8(8),
         ..Default::default()
     };
     let x: [F; RV32_REGISTER_NUM_LANES] = [19, 4, 1790, 60].map(F::from_canonical_u32);

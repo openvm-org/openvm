@@ -138,9 +138,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
     )> {
         let Instruction {
             opcode,
-            op_a: a,
-            op_b: b,
-            op_c: c,
+            a,
+            b,
+            c,
             d,
             e,
             ..
@@ -218,12 +218,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
-            opcode,
-            op_a: a,
-            op_c: c,
-            d,
-            e,
-            ..
+            opcode, a, c, d, e, ..
         } = *instruction;
 
         let local_opcode_index = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);

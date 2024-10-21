@@ -185,7 +185,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
-        let Instruction { op_b: b, d, .. } = *instruction;
+        let Instruction { b, d, .. } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), 1);
 
         let rs1 = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
@@ -202,10 +202,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
-            op_a: a,
-            d,
-            op_f: enabled,
-            ..
+            a, d, f: enabled, ..
         } = *instruction;
         let rd = if enabled != F::zero() {
             Some(memory.write(d, a, output.writes[0]))

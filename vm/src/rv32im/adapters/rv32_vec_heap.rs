@@ -303,14 +303,7 @@ impl<
         <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
-        let Instruction {
-            op_a: a,
-            op_b: b,
-            op_c: c,
-            d,
-            e,
-            ..
-        } = *instruction;
+        let Instruction { a, b, c, d, e, .. } = *instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 2);

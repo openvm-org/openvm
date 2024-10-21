@@ -165,13 +165,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
         <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
-        let Instruction {
-            op_a: a,
-            op_b: b,
-            d,
-            e,
-            ..
-        } = *instruction;
+        let Instruction { a, b, d, e, .. } = *instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 1);

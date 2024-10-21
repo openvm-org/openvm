@@ -158,9 +158,9 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
                         is_compress_direct: F::zero(),
                         pc: F::from_canonical_u32(from_state.pc),
                         timestamp: F::from_canonical_u32(from_state.timestamp),
-                        a: instruction.op_a,
-                        b: instruction.op_b,
-                        c: instruction.op_c,
+                        a: instruction.a,
+                        b: instruction.b,
+                        c: instruction.c,
                         d: instruction.d,
                         e: instruction.e,
                         is_compress_opcode: F::from_bool(instruction.opcode == COMP_POS2 as usize),
@@ -240,9 +240,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         let Instruction {
             opcode,
-            op_a,
-            op_b,
-            op_c,
+            a,
+            b,
+            c,
             d,
             e,
             ..
@@ -256,15 +256,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         let chunk_f = F::from_canonical_usize(CHUNK);
 
-        let dst_ptr_read = memory_controller.read_cell(d, op_a);
+        let dst_ptr_read = memory_controller.read_cell(d, a);
         let dst_ptr = dst_ptr_read.value();
 
-        let lhs_ptr_read = memory_controller.read_cell(d, op_b);
+        let lhs_ptr_read = memory_controller.read_cell(d, b);
         let lhs_ptr = lhs_ptr_read.value();
 
         let (rhs_ptr, rhs_ptr_read) = match local_opcode_index {
             COMP_POS2 => {
-                let rhs_ptr_read = memory_controller.read_cell(d, op_c);
+                let rhs_ptr_read = memory_controller.read_cell(d, c);
                 (rhs_ptr_read.value(), Some(rhs_ptr_read))
             }
             PERM_POS2 => {

@@ -219,13 +219,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         Self::ReadRecord,
     )> {
         assert!(R <= 2);
-        let Instruction {
-            op_b: b,
-            op_c: c,
-            e,
-            op_f: f,
-            ..
-        } = *instruction;
+        let Instruction { b, c, e, f, .. } = *instruction;
 
         let mut reads = Vec::with_capacity(R);
         if R >= 1 {
@@ -253,7 +247,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         assert!(W <= 1);
-        let Instruction { op_a: a, d, .. } = *instruction;
+        let Instruction { a, d, .. } = *instruction;
         let mut writes = Vec::with_capacity(W);
         if W >= 1 {
             writes.push(memory.write(d, a, output.writes[0]));

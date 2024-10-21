@@ -143,7 +143,7 @@ impl Rv32RdWriteAdapterAir {
     ) {
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let timestamp_delta = 1;
-        let (write_count, op_f) = if let Some(needs_write) = needs_write {
+        let (write_count, f) = if let Some(needs_write) = needs_write {
             (needs_write.clone(), needs_write)
         } else {
             (ctx.instruction.is_valid.clone(), AB::Expr::zero())
@@ -170,7 +170,7 @@ impl Rv32RdWriteAdapterAir {
                     ctx.instruction.immediate,
                     AB::Expr::one(),
                     AB::Expr::zero(),
-                    op_f,
+                    f,
                 ],
                 local_cols.from_state,
                 ExecutionState {
@@ -274,7 +274,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { op_a: a, d, .. } = *instruction;
+        let Instruction { a, d, .. } = *instruction;
         let rd = memory.write(d, a, output.writes[0]);
 
         Ok((
@@ -334,8 +334,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { op_a: a, d, .. } = *instruction;
-        let rd = if instruction.op_f != F::zero() {
+        let Instruction { a, d, .. } = *instruction;
+        let rd = if instruction.f != F::zero() {
             Some(memory.write(d, a, output.writes[0]))
         } else {
             memory.increment_timestamp();

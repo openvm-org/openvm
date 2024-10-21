@@ -218,9 +218,7 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction {
-            opcode, op_c: c, ..
-        } = *instruction;
+        let Instruction { opcode, c, .. } = *instruction;
         let local_opcode_index = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
 
         let imm = c.as_canonical_u32();

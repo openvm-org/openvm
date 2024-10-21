@@ -162,13 +162,7 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
-        let Instruction {
-            op_b: b,
-            op_c: c,
-            d,
-            e,
-            ..
-        } = *instruction;
+        let Instruction { b, c, d, e, .. } = *instruction;
 
         let y_val = memory.read::<N>(d, b);
         let z_val = memory.read::<N>(e, c);
@@ -187,7 +181,7 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { op_a: a, d, .. } = *instruction;
+        let Instruction { a, d, .. } = *instruction;
         let a_val = memory.write(d, a, output.writes[0]);
 
         Ok((

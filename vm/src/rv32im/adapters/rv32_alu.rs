@@ -210,13 +210,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
-        let Instruction {
-            op_b: b,
-            op_c: c,
-            d,
-            e,
-            ..
-        } = *instruction;
+        let Instruction { b, c, d, e, .. } = *instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert!(e.as_canonical_u32() <= 1);
@@ -253,7 +247,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { op_a: a, d, .. } = *instruction;
+        let Instruction { a, d, .. } = *instruction;
         let rd = memory.write(d, a, output.writes[0]);
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
