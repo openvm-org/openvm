@@ -40,7 +40,7 @@ impl<AB: AirBuilder> Air<AB> for IsZeroAir {
 
         let local = main.row_slice(0);
         let local: &IsZeroCols<_> = (*local).borrow();
-        let io = IsZeroIo::new(local.x.into(), local.out.into());
+        let io = IsZeroIo::new(local.x.into(), local.out.into(), AB::Expr::one());
 
         SubAir::eval(self, builder, (io, local.inv));
     }

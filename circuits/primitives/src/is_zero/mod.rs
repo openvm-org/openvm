@@ -12,8 +12,11 @@ pub mod tests;
 #[derive(Copy, Clone, Debug, new)]
 pub struct IsZeroIo<T> {
     pub x: T,
-    /// The boolean output, constrained to equal (x == 0).
+    /// The boolean output, constrained to equal (x == 0) when `condition != 0`..
     pub out: T,
+    /// Constraints only hold when `condition != 0`. When `condition == 0`, setting all trace values
+    /// to zero still passes the constraints.
+    pub condition: T,
 }
 
 #[repr(C)]
@@ -35,8 +38,9 @@ impl<AB: AirBuilder> SubAir<AB> for IsZeroAir {
         AB::Var: 'a,
         AB::Expr: 'a,
     {
+        // We always assert this, even when `condition == 0`, because x = 0, out = 0 will pass.
         builder.assert_zero(io.x.clone() * io.out.clone());
-        builder.assert_one(io.out + io.x * inv);
+        builder.when(io.condition).assert_one(io.out + io.x * inv);
     }
 }
 

@@ -15,8 +15,11 @@ pub mod tests;
 pub struct IsEqualIo<T> {
     pub x: T,
     pub y: T,
-    /// The boolean output, constrained to equal (x == y).
+    /// The boolean output, constrained to equal (x == y), when `condition != 0`.
     pub out: T,
+    /// Constraints only hold when `condition != 0`. When `condition == 0`, setting all trace values
+    /// to zero still passes the constraints.
+    pub condition: T,
 }
 
 pub type IsEqualAuxCols<T> = IsZeroAuxCols<T>;
@@ -34,7 +37,7 @@ impl<AB: AirBuilder> SubAir<AB> for IsEqualAir {
         AB::Var: 'a,
         AB::Expr: 'a,
     {
-        let is_zero_io = IsZeroIo::new(io.x - io.y, io.out);
+        let is_zero_io = IsZeroIo::new(io.x - io.y, io.out, io.condition);
         IsZeroAir.eval(builder, (is_zero_io, inv));
     }
 }

@@ -4,7 +4,7 @@ pub mod assert_less_than;
 // pub mod bigint;
 pub mod bitwise_op_lookup;
 pub mod is_equal;
-// pub mod is_equal_vec;
+pub mod is_equal_array;
 pub mod is_less_than;
 pub mod is_zero;
 pub mod range;

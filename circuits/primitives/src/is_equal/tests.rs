@@ -40,7 +40,12 @@ impl<AB: AirBuilder> Air<AB> for IsEqualAir {
 
         let local = main.row_slice(0);
         let local: &IsEqualCols<_> = (*local).borrow();
-        let io = IsEqualIo::new(local.x.into(), local.y.into(), local.out.into());
+        let io = IsEqualIo::new(
+            local.x.into(),
+            local.y.into(),
+            local.out.into(),
+            AB::Expr::one(),
+        );
 
         SubAir::eval(self, builder, (io, local.inv));
     }
