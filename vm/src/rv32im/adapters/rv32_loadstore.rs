@@ -118,7 +118,7 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
 
     pub imm: F,
     pub imm_sign: bool,
-    pub mem_ptr: [F; 2],
+    pub mem_ptr_limbs: [F; 2],
 }
 
 #[derive(Debug, Clone)]
@@ -143,8 +143,9 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub imm: T,
     pub imm_sign: T,
     /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
-    pub mem_ptr: [T; 2],
-
+    pub mem_ptr_limbs: [T; 2],
+    /// needed to range check mem_ptr_limbs[0] to 16 bits with 15 bit range_checker
+    pub mem_ptr_least_sig_bit: T,
     /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
     pub write_aux: [T; MemoryWriteAuxCols::<u8, RV32_REGISTER_NUM_LIMBS>::striped_width()],
 }
@@ -202,7 +203,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             + local_cols.rs1_data[3] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
 
         let inv = AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2)).inverse();
-        let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr[0]) * inv;
+        let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
 
         builder
             .when(is_valid.clone() - is_hint.clone())
@@ -213,24 +214,31 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             .assert_bool(local_cols.imm_sign);
         let imm_extend_limb =
             local_cols.imm_sign * AB::F::from_canonical_u32((1 << (RV32_CELL_BITS * 2)) - 1);
-        let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr[1]) * inv;
+        let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
         builder
             .when(is_valid.clone() - is_hint.clone())
             .assert_bool(carry.clone());
 
         // preventing mem_ptr overflow
+        builder
+            .when(is_valid.clone())
+            .assert_bool(local_cols.mem_ptr_least_sig_bit);
+        let inv_2 = AB::F::two().inverse();
         self.range_bus
-            .range_check(local_cols.mem_ptr[0], RV32_CELL_BITS * 2)
+            .range_check(
+                (local_cols.mem_ptr_limbs[0] - local_cols.mem_ptr_least_sig_bit) * inv_2,
+                RV32_CELL_BITS * 2 - 1,
+            )
             .eval(builder, is_valid.clone() - is_hint.clone());
         self.range_bus
             .range_check(
-                local_cols.mem_ptr[1],
+                local_cols.mem_ptr_limbs[1],
                 self.address_max_bits - RV32_CELL_BITS * 2,
             )
             .eval(builder, is_valid.clone() - is_hint.clone());
 
-        let mem_ptr = local_cols.mem_ptr[0]
-            + local_cols.mem_ptr[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
+        let mem_ptr = local_cols.mem_ptr_limbs[0]
+            + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
 
         // read_as is 2 for loads and 1 for stores
         let read_as =
@@ -323,7 +331,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 2);
-
+        debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
         let rs1_record = if local_opcode == HINTLOAD_RV32 {
             memory.increment_timestamp();
@@ -342,13 +350,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
         assert!(ptr_val < (1 << self.air.address_max_bits) || local_opcode == HINTLOAD_RV32);
-        let mem_ptr = array::from_fn(|i| (ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff);
+        let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
 
         if local_opcode != HINTLOAD_RV32 {
             self.range_checker_chip
-                .add_count(mem_ptr[0], RV32_CELL_BITS * 2);
-            self.range_checker_chip
-                .add_count(mem_ptr[1], self.air.address_max_bits - RV32_CELL_BITS * 2);
+                .add_count(mem_ptr_limbs[0] >> 1, RV32_CELL_BITS * 2 - 1);
+            self.range_checker_chip.add_count(
+                mem_ptr_limbs[1],
+                self.air.address_max_bits - RV32_CELL_BITS * 2,
+            );
         }
         let read_record = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
@@ -385,7 +395,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 read: read_record,
                 imm: c,
                 imm_sign: imm_sign == 1,
-                mem_ptr: mem_ptr.map(F::from_canonical_u32),
+                mem_ptr_limbs: mem_ptr_limbs.map(F::from_canonical_u32),
             },
         ))
     }
@@ -463,7 +473,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         };
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
-        adapter_cols.mem_ptr = read_record.mem_ptr;
+        adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs;
+        adapter_cols.mem_ptr_least_sig_bit =
+            F::from_canonical_u32(read_record.mem_ptr_limbs[0].as_canonical_u32() & 1);
         aux_cols_factory
             .make_write_aux_cols(write_record.write)
             .strip_prev_data(&mut adapter_cols.write_aux);
