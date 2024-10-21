@@ -40,7 +40,7 @@ pub struct AccessAdapterRecord<T> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MemoryWriteRecord<T, const N: usize> {
     pub address_space: T,
-    pub pointer: T,
+    pub address: T,
     pub timestamp: u32,
     pub prev_timestamp: u32,
     pub data: [T; N],
@@ -60,7 +60,7 @@ impl<T: Copy> MemoryWriteRecord<T, 1> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MemoryReadRecord<T, const N: usize> {
     pub address_space: T,
-    pub pointer: T,
+    pub address: T,
     pub timestamp: u32,
     pub prev_timestamp: u32,
     pub data: [T; N],
@@ -77,7 +77,7 @@ impl<T: Copy> MemoryReadRecord<T, 1> {
 /// The ID of the root node is 1. The ID of the left child of a node with id `node_id` is `2*node_id`,
 /// and the ID of the right child is `2*node_id + 1`.
 ///
-/// Thus, the ith block of size 2^j has ID `2^{pointer_max_bits - j} + i`.
+/// Thus, the ith block of size 2^j has ID `2^{address_max_bits - j} + i`.
 type BlockId = usize;
 
 /// Tracks the state of memory cells specified by `(address_space, index)` tuples.
@@ -89,7 +89,7 @@ type BlockId = usize;
 #[derive(Debug, Clone)]
 pub struct Memory<T> {
     timestamp: u32,
-    pointer_max_bits: usize,
+    address_max_bits: usize,
     blocks: HashMap<(T, BlockId), Block<T>>,
     initial_block_len: usize,
 }
@@ -98,17 +98,17 @@ pub struct Memory<T> {
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
 impl<F: PrimeField32> Memory<F> {
-    /// Creates a new `Memory` instance with the given `pointer_max_bits` from a partition in which
+    /// Creates a new `Memory` instance with the given `address_max_bits` from a partition in which
     /// every part has length `N`.
     pub fn new<const N: usize>(
         initial_memory: &Equipartition<F, N>,
-        pointer_max_bits: usize,
+        address_max_bits: usize,
     ) -> Self {
         assert!(N.is_power_of_two());
 
         let mut blocks = HashMap::new();
         for ((address_space, label), values) in initial_memory {
-            let block_id = ((1 << pointer_max_bits) + label * N) >> log2_strict_usize(N);
+            let block_id = ((1 << address_max_bits) + label * N) >> log2_strict_usize(N);
             blocks.insert(
                 (*address_space, block_id),
                 Block::Active {
@@ -120,7 +120,7 @@ impl<F: PrimeField32> Memory<F> {
         Self {
             timestamp: INITIAL_TIMESTAMP + 1,
             blocks,
-            pointer_max_bits,
+            address_max_bits,
             initial_block_len: N,
         }
     }
@@ -167,7 +167,7 @@ impl<F: PrimeField32> Memory<F> {
             *timestamp = self.timestamp;
             let record = MemoryWriteRecord {
                 address_space,
-                pointer: F::from_canonical_usize(start_index),
+                address: F::from_canonical_usize(start_index),
                 timestamp: self.timestamp,
                 prev_timestamp,
                 data: values,
@@ -206,7 +206,7 @@ impl<F: PrimeField32> Memory<F> {
             *timestamp = self.timestamp;
             let record = MemoryReadRecord {
                 address_space,
-                pointer: F::from_canonical_usize(start_index),
+                address: F::from_canonical_usize(start_index),
                 timestamp: self.timestamp,
                 prev_timestamp,
                 data: data.clone().try_into().unwrap(),
@@ -241,8 +241,8 @@ impl<F: PrimeField32> Memory<F> {
 
     // Returns the block ID of the block of length `len` containing the index `index`.
     fn block_id(&self, index: usize, len: usize) -> BlockId {
-        // Leaves have labels from (1 << pointer_max_bits)..(1 << (pointer_max_bits + 1)) - 1.
-        ((1 << self.pointer_max_bits) + index) >> log2_strict_usize(len)
+        // Leaves have labels from (1 << address_max_bits)..(1 << (address_max_bits + 1)) - 1.
+        ((1 << self.address_max_bits) + index) >> log2_strict_usize(len)
     }
 
     /// Recursively makes a memory block active and produces adapter records.
@@ -385,7 +385,7 @@ impl<F: PrimeField32> Memory<F> {
             }
             // Leaves are at `block_height = 0`.
             let block_height =
-                (self.pointer_max_bits + 1) - (usize::BITS - block_id.leading_zeros()) as usize;
+                (self.address_max_bits + 1) - (usize::BITS - block_id.leading_zeros()) as usize;
 
             match block_height.cmp(&target_block_height) {
                 Ordering::Less => {
@@ -410,7 +410,7 @@ impl<F: PrimeField32> Memory<F> {
         let mut final_memory = BTreeMap::new();
 
         for (address_space, block_id) in blocks {
-            let start_index = (block_id << target_block_height) - (1 << self.pointer_max_bits);
+            let start_index = (block_id << target_block_height) - (1 << self.address_max_bits);
             let label = start_index / N;
             let (timestamp, data) = self.node_access(
                 address_space,
@@ -576,7 +576,7 @@ mod tests {
             write_record,
             MemoryWriteRecord {
                 address_space: bb!(1),
-                pointer: bb!(0),
+                address: bb!(0),
                 timestamp: 1,
                 prev_timestamp: 0,
                 data: bba![1, 2, 3, 4],
@@ -592,7 +592,7 @@ mod tests {
             read_record,
             MemoryReadRecord {
                 address_space: bb!(1),
-                pointer: bb!(0),
+                address: bb!(0),
                 timestamp: 2,
                 prev_timestamp: 1,
                 data: bba![1, 2, 3, 4],
@@ -619,7 +619,7 @@ mod tests {
             read_record,
             MemoryWriteRecord {
                 address_space: bb!(1),
-                pointer: bb!(0),
+                address: bb!(0),
                 timestamp: 3,
                 prev_timestamp: 2,
                 data: bba![10, 11],
@@ -647,7 +647,7 @@ mod tests {
             read_record,
             MemoryReadRecord {
                 address_space: bb!(1),
-                pointer: bb!(0),
+                address: bb!(0),
                 timestamp: 4,
                 prev_timestamp: 3,
                 data: bba![10, 11, 3, 4],
@@ -679,7 +679,7 @@ mod tests {
             write_record,
             MemoryWriteRecord {
                 address_space: bb!(1),
-                pointer: bb!(0),
+                address: bb!(0),
                 timestamp: 1,
                 prev_timestamp: 0,
                 data: bba![1, 2, 3, 4],
@@ -695,7 +695,7 @@ mod tests {
             read_record,
             MemoryReadRecord {
                 address_space: bb!(1),
-                pointer: bb!(0),
+                address: bb!(0),
                 timestamp: 2,
                 prev_timestamp: 1,
                 data: bba![1, 2, 3, 4],
@@ -722,7 +722,7 @@ mod tests {
             read_record,
             MemoryWriteRecord {
                 address_space: bb!(1),
-                pointer: bb!(0),
+                address: bb!(0),
                 timestamp: 3,
                 prev_timestamp: 2,
                 data: bba![10, 11],
@@ -750,7 +750,7 @@ mod tests {
             read_record,
             MemoryReadRecord {
                 address_space: bb!(1),
-                pointer: bb!(0),
+                address: bb!(0),
                 timestamp: 4,
                 prev_timestamp: 3,
                 data: bba![10, 11, 3, 4],

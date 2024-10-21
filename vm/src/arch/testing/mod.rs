@@ -103,20 +103,20 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.rng.next_u32() % (1 << (F::bits() - 2))
     }
 
-    pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.memory.read_cell(address_space, pointer)
+    pub fn read_cell(&mut self, address_space: usize, address: usize) -> F {
+        self.memory.read_cell(address_space, address)
     }
 
-    pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.memory.write_cell(address_space, pointer, value);
+    pub fn write_cell(&mut self, address_space: usize, address: usize, value: F) {
+        self.memory.write_cell(address_space, address, value);
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        self.memory.read(address_space, pointer)
+    pub fn read<const N: usize>(&mut self, address_space: usize, address: usize) -> [F; N] {
+        self.memory.read(address_space, address)
     }
 
-    pub fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
-        self.memory.write(address_space, pointer, value);
+    pub fn write<const N: usize>(&mut self, address_space: usize, address: usize, value: [F; N]) {
+        self.memory.write(address_space, address, value);
     }
 
     pub fn execution_bus(&self) -> ExecutionBus {

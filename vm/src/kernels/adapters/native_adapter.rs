@@ -27,7 +27,7 @@ use crate::{
 
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
-/// If an operand is not used, its address space and pointer should be all 0.
+/// If an operand is not used, its address space and address should be all 0.
 #[derive(Clone, Debug)]
 pub struct NativeAdapterChip<F: Field, const R: usize, const W: usize> {
     pub air: NativeAdapterAir<R, W>,
@@ -156,7 +156,7 @@ impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
         let zero_address =
             || MemoryAddress::new(AB::Expr::from(AB::F::zero()), AB::Expr::from(AB::F::zero()));
         let f = |var_addr: MemoryAddress<AB::Var, AB::Var>| -> MemoryAddress<AB::Expr, AB::Expr> {
-            MemoryAddress::new(var_addr.address_space.into(), var_addr.pointer.into())
+            MemoryAddress::new(var_addr.address_space.into(), var_addr.address.into())
         };
 
         let addr_a = if W >= 1 {
@@ -178,9 +178,9 @@ impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
             .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [
-                    addr_a.pointer,
-                    addr_b.pointer,
-                    addr_c.pointer,
+                    addr_a.address,
+                    addr_b.address,
+                    addr_c.address,
                     addr_a.address_space,
                     addr_b.address_space,
                     addr_c.address_space,
@@ -273,14 +273,14 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
         row_slice.reads_aux = read_record.reads.map(|x| {
-            let address = MemoryAddress::new(x.address_space, x.pointer);
+            let address = MemoryAddress::new(x.address_space, x.address);
             NativeAdapterReadCols {
                 address,
                 read_aux: aux_cols_factory.make_read_or_immediate_aux_cols(x),
             }
         });
         row_slice.writes_aux = write_record.writes.map(|x| {
-            let address = MemoryAddress::new(x.address_space, x.pointer);
+            let address = MemoryAddress::new(x.address_space, x.address);
             NativeAdapterWriteCols {
                 address,
                 write_aux: aux_cols_factory.make_write_aux_cols(x),

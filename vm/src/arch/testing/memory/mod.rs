@@ -44,11 +44,11 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 
     /// Returns the cell value at the current timestamp according to [MemoryController].
-    pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
+    pub fn read_cell(&mut self, address_space: usize, address: usize) -> F {
+        let [addr_space, address] = [address_space, address].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let read = RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
-        let address = MemoryAddress::new(addr_space, pointer);
+        let read = RefCell::borrow_mut(&self.controller).read_cell(addr_space, address);
+        let address = MemoryAddress::new(addr_space, address);
         self.records.push(self.bus.receive(
             address,
             read.data.to_vec(),
@@ -62,10 +62,10 @@ impl<F: PrimeField32> MemoryTester<F> {
         read.value()
     }
 
-    pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let write = RefCell::borrow_mut(&self.controller).write_cell(addr_space, pointer, value);
-        let address = MemoryAddress::new(addr_space, pointer);
+    pub fn write_cell(&mut self, address_space: usize, address: usize, value: F) {
+        let [addr_space, address] = [address_space, address].map(F::from_canonical_usize);
+        let write = RefCell::borrow_mut(&self.controller).write_cell(addr_space, address, value);
+        let address = MemoryAddress::new(addr_space, address);
         self.records.push(self.bus.receive(
             address,
             write.prev_data.to_vec(),
@@ -78,19 +78,19 @@ impl<F: PrimeField32> MemoryTester<F> {
         ));
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        from_fn(|i| self.read_cell(address_space, pointer + i))
+    pub fn read<const N: usize>(&mut self, address_space: usize, address: usize) -> [F; N] {
+        from_fn(|i| self.read_cell(address_space, address + i))
     }
 
     pub fn write<const N: usize>(
         &mut self,
         address_space: usize,
-        mut pointer: usize,
+        mut address: usize,
         cells: [F; N],
     ) {
         for cell in cells {
-            self.write_cell(address_space, pointer, cell);
-            pointer += 1;
+            self.write_cell(address_space, address, cell);
+            address += 1;
         }
     }
 }
@@ -144,7 +144,7 @@ where
     *[1, 2].choose(rng).unwrap()
 }
 
-pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
+pub fn gen_address<R>(rng: &mut R, len: usize) -> usize
 where
     R: Rng + ?Sized,
 {

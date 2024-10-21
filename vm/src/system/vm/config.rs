@@ -26,7 +26,7 @@ pub enum PersistenceType {
 #[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
 pub struct MemoryConfig {
     pub addr_space_max_bits: usize,
-    pub pointer_max_bits: usize,
+    pub address_max_bits: usize,
     pub clk_max_bits: usize,
     pub decomp: usize,
     pub persistence_type: PersistenceType,

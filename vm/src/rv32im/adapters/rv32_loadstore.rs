@@ -149,8 +149,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 2);
 
-        // We constrain that the pointer to the memory has ar most addr_bits
-        let addr_bits = memory.mem_config.pointer_max_bits;
+        // We constrain that the address has at most addr_bits
+        let addr_bits = memory.mem_config.address_max_bits;
         debug_assert!(addr_bits >= (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
 
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);

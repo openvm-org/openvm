@@ -187,12 +187,12 @@ pub enum AsmInstruction<F, EF> {
 
     /// HintBits(src, len).
     ///
-    /// Bit decompose the field element at pointer `src` to the first `len` little endian bits and add to hint stream.
+    /// Bit decompose the field element at address `src` to the first `len` little endian bits and add to hint stream.
     HintBits(i32, u32),
 
     /// HintBytes(src, len).
     ///
-    /// Byte decompose the field element at pointer `src` to the first `len` little endian bytes and add to hint stream.
+    /// Byte decompose the field element at address `src` to the first `len` little endian bytes and add to hint stream.
     HintBytes(i32, u32),
 
     /// Stores the next hint stream word into value stored at addr + value.

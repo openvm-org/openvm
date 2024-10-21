@@ -12,7 +12,7 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, VmChipTestBuilder},
+        testing::{memory::gen_address, VmChipTestBuilder},
     },
     rv32im::adapters::Rv32LoadStoreAdapter,
     system::program::Instruction,
@@ -43,8 +43,8 @@ fn set_and_execute(
         rng.gen_range(0..((1 << ADDR_BITS) - imm))
     };
     let ptr = ((ptr >> 2) << 2) as u32;
-    let a = gen_pointer(rng, 32);
-    let b = gen_pointer(rng, 32);
+    let a = gen_address(rng, 32);
+    let b = gen_address(rng, 32);
     let ptr_val = (ptr as i32 + imm) as usize;
     let ptr_limbs = num_into_limbs(ptr);
 

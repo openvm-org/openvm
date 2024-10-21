@@ -206,10 +206,10 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         let row_slice: &mut NativeVectorizedAdapterCols<_, N> = row_slice.borrow_mut();
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.a_idx = write_record.a.pointer;
+        row_slice.a_idx = write_record.a.address;
         row_slice.ab_as = write_record.a.address_space;
-        row_slice.b_idx = read_record.b.pointer;
-        row_slice.c_idx = read_record.c.pointer;
+        row_slice.b_idx = read_record.b.address;
+        row_slice.c_idx = read_record.c.address;
         row_slice.c_as = read_record.c.address_space;
 
         row_slice.reads_aux = [

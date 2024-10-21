@@ -85,7 +85,7 @@ The following notation is used throughout this document:
 
 **Addressing**: we support different address spaces via `as_b, as_c`.
 
-- We use `[a]_{as}` to denote the single-cell value at pointer location `a` in address space `as`. This is a single
+- We use `[a]_{as}` to denote the single-cell value at address location `a` in address space `as`. This is a single
   field element.
 - We use `[a:N]_{as}` to denote the slice `[a..a + N]_{as}` -- this is an length-`N` array of field elements.
 

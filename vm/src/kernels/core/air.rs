@@ -118,13 +118,13 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let mut when_loadw = builder.when(loadw_flag);
 
         when_loadw.assert_eq(read1.address_space, d);
-        when_loadw.assert_eq(read1.pointer, c);
+        when_loadw.assert_eq(read1.address, c);
 
         when_loadw.assert_eq(read2.address_space, e);
-        when_loadw.assert_eq(read1.value, read2.pointer - b);
+        when_loadw.assert_eq(read1.value, read2.address - b);
 
         when_loadw.assert_eq(write.address_space, d);
-        when_loadw.assert_eq(write.pointer, a);
+        when_loadw.assert_eq(write.address, a);
         when_loadw.assert_eq(write.value, read2.value);
 
         when_loadw
@@ -139,13 +139,13 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         let mut when_storew = builder.when(storew_flag);
         when_storew.assert_eq(read1.address_space, d);
-        when_storew.assert_eq(read1.pointer, c);
+        when_storew.assert_eq(read1.address, c);
 
         when_storew.assert_eq(read2.address_space, d);
-        when_storew.assert_eq(read2.pointer, a);
+        when_storew.assert_eq(read2.address, a);
 
         when_storew.assert_eq(write.address_space, e);
-        when_storew.assert_eq(read1.value, write.pointer - b);
+        when_storew.assert_eq(read1.value, write.address - b);
         when_storew.assert_eq(write.value, read2.value);
 
         when_storew
@@ -162,17 +162,17 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let mut when_loadw2 = builder.when(loadw2_flag);
 
         when_loadw2.assert_eq(read1.address_space, d);
-        when_loadw2.assert_eq(read1.pointer, c);
+        when_loadw2.assert_eq(read1.address, c);
 
         when_loadw2.assert_eq(read2.address_space, d);
-        when_loadw2.assert_eq(read2.pointer, f);
+        when_loadw2.assert_eq(read2.address, f);
 
         when_loadw2.assert_eq(read3.address_space, e);
         let addr_diff = read1.value + g * read2.value;
-        when_loadw2.assert_eq(addr_diff, read3.pointer - b);
+        when_loadw2.assert_eq(addr_diff, read3.address - b);
 
         when_loadw2.assert_eq(write.address_space, d);
-        when_loadw2.assert_eq(write.pointer, a);
+        when_loadw2.assert_eq(write.address, a);
         when_loadw2.assert_eq(write.value, read3.value);
 
         when_loadw2
@@ -188,17 +188,17 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         let mut when_storew2 = builder.when(storew2_flag);
         when_storew2.assert_eq(read1.address_space, d);
-        when_storew2.assert_eq(read1.pointer, c);
+        when_storew2.assert_eq(read1.address, c);
 
         when_storew2.assert_eq(read2.address_space, d);
-        when_storew2.assert_eq(read2.pointer, a);
+        when_storew2.assert_eq(read2.address, a);
 
         when_storew2.assert_eq(read3.address_space, d);
-        when_storew2.assert_eq(read3.pointer, f);
+        when_storew2.assert_eq(read3.address, f);
 
         when_storew2.assert_eq(write.address_space, e);
         let addr_diff = read1.value + g * read3.value;
-        when_storew2.assert_eq(addr_diff, write.pointer - b);
+        when_storew2.assert_eq(addr_diff, write.address - b);
         when_storew2.assert_eq(write.value, read2.value);
 
         when_storew2
@@ -212,10 +212,10 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         let mut when_shintw = builder.when(shintw_flag);
         when_shintw.assert_eq(read1.address_space, d);
-        when_shintw.assert_eq(read1.pointer, a);
+        when_shintw.assert_eq(read1.address, a);
 
         when_shintw.assert_eq(write.address_space, e);
-        when_shintw.assert_eq(read1.value, write.pointer - b);
+        when_shintw.assert_eq(read1.value, write.address - b);
 
         when_shintw
             .when_transition()
@@ -228,7 +228,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let mut when_jal = builder.when(jal_flag);
 
         when_jal.assert_eq(write.address_space, d);
-        when_jal.assert_eq(write.pointer, a);
+        when_jal.assert_eq(write.address, a);
         when_jal.assert_eq(write.value, pc + inst_width);
 
         when_jal.when_transition().assert_eq(next_pc, pc + b);
@@ -241,10 +241,10 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let mut when_beq = builder.when(beq_flag);
 
         when_beq.assert_eq(read1.address_space, d);
-        when_beq.assert_eq(read1.pointer, a);
+        when_beq.assert_eq(read1.address, a);
 
         when_beq.assert_eq(read2.address_space, e);
-        when_beq.assert_eq(read2.pointer, b);
+        when_beq.assert_eq(read2.address, b);
 
         when_beq
             .when_transition()
@@ -263,10 +263,10 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let mut when_bne = builder.when(bne_flag);
 
         when_bne.assert_eq(read1.address_space, d);
-        when_bne.assert_eq(read1.pointer, a);
+        when_bne.assert_eq(read1.address, a);
 
         when_bne.assert_eq(read2.address_space, e);
-        when_bne.assert_eq(read2.pointer, b);
+        when_bne.assert_eq(read2.address, b);
 
         when_bne
             .when_transition()
@@ -310,10 +310,10 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         when_publish.assert_eq(read2.value, match_public_value);
 
         when_publish.assert_eq(read1.address_space, d);
-        when_publish.assert_eq(read1.pointer, a);
+        when_publish.assert_eq(read1.address, a);
 
         when_publish.assert_eq(read2.address_space, e);
-        when_publish.assert_eq(read2.pointer, b);
+        when_publish.assert_eq(read2.address, b);
 
         let mut op_timestamp: AB::Expr = timestamp.into();
 
@@ -321,7 +321,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         for (read, read_aux_cols, enabled) in izip!(&reads, reads_aux_cols, reads_enabled) {
             self.memory_bridge
                 .read_or_immediate(
-                    MemoryAddress::new(read.address_space, read.pointer),
+                    MemoryAddress::new(read.address_space, read.address),
                     read.value,
                     op_timestamp.clone(),
                     &read_aux_cols,
@@ -334,7 +334,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         for (write, write_aux_cols, enabled) in izip!(&writes, writes_aux_cols, writes_enabled) {
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(write.address_space, write.pointer),
+                    MemoryAddress::new(write.address_space, write.address),
                     [write.value],
                     op_timestamp.clone(),
                     &write_aux_cols,

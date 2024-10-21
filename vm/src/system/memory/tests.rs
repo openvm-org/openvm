@@ -32,7 +32,7 @@ use rand::{
 
 use super::{Equipartition, MemoryAuxColsFactory, MemoryController, MemoryReadRecord};
 use crate::{
-    arch::{testing::memory::gen_pointer, ExecutionBus},
+    arch::{testing::memory::gen_address, ExecutionBus},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     kernels::core::RANGE_CHECKER_BUS,
     system::{
@@ -52,7 +52,7 @@ const MAX: usize = 64;
 #[derive(AlignedBorrow)]
 struct MemoryRequesterCols<T> {
     address_space: T,
-    pointer: T,
+    address: T,
     data_1: [T; 1],
     data_4: [T; 4],
     data_max: [T; MAX],
@@ -104,7 +104,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryRequesterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(local.address_space, local.pointer),
+                MemoryAddress::new(local.address_space, local.address),
                 local.data_1,
                 local.timestamp,
                 &local.read_1_aux,
@@ -113,7 +113,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryRequesterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(local.address_space, local.pointer),
+                MemoryAddress::new(local.address_space, local.address),
                 local.data_4,
                 local.timestamp,
                 &local.read_4_aux,
@@ -122,7 +122,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryRequesterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(local.address_space, local.pointer),
+                MemoryAddress::new(local.address_space, local.address),
                 local.data_1,
                 local.timestamp,
                 &local.write_1_aux,
@@ -131,7 +131,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryRequesterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(local.address_space, local.pointer),
+                MemoryAddress::new(local.address_space, local.address),
                 local.data_4,
                 local.timestamp,
                 &local.write_4_aux,
@@ -140,7 +140,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryRequesterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(local.address_space, local.pointer),
+                MemoryAddress::new(local.address_space, local.address),
                 local.data_max,
                 local.timestamp,
                 &local.read_max_aux,
@@ -171,7 +171,7 @@ fn generate_trace<F: PrimeField32>(
         match record {
             Record::Write(record) => {
                 row.address_space = record.address_space;
-                row.pointer = record.pointer;
+                row.address = record.address;
                 row.timestamp = F::from_canonical_u32(record.timestamp);
 
                 row.data_1 = record.data;
@@ -180,7 +180,7 @@ fn generate_trace<F: PrimeField32>(
             }
             Record::Read(record) => {
                 row.address_space = record.address_space;
-                row.pointer = record.pointer;
+                row.address = record.address;
                 row.timestamp = F::from_canonical_u32(record.timestamp);
 
                 row.data_1 = record.data;
@@ -189,7 +189,7 @@ fn generate_trace<F: PrimeField32>(
             }
             Record::Read4(record) => {
                 row.address_space = record.address_space;
-                row.pointer = record.pointer;
+                row.address = record.address;
                 row.timestamp = F::from_canonical_u32(record.timestamp);
 
                 row.data_4 = record.data;
@@ -198,7 +198,7 @@ fn generate_trace<F: PrimeField32>(
             }
             Record::Write4(record) => {
                 row.address_space = record.address_space;
-                row.pointer = record.pointer;
+                row.address = record.address;
                 row.timestamp = F::from_canonical_u32(record.timestamp);
 
                 row.data_4 = record.data;
@@ -207,7 +207,7 @@ fn generate_trace<F: PrimeField32>(
             }
             Record::ReadMax(record) => {
                 row.address_space = record.address_space;
-                row.pointer = record.pointer;
+                row.address = record.address;
                 row.timestamp = F::from_canonical_u32(record.timestamp);
 
                 row.data_max = record.data;
@@ -323,26 +323,26 @@ fn make_random_accesses<F: PrimeField32>(
 
             match rng.gen_range(0..5) {
                 0 => {
-                    let pointer = F::from_canonical_usize(gen_pointer(rng, 1));
+                    let address = F::from_canonical_usize(gen_address(rng, 1));
                     let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                    Record::Write(memory_controller.write(address_space, pointer, [data]))
+                    Record::Write(memory_controller.write(address_space, address, [data]))
                 }
                 1 => {
-                    let pointer = F::from_canonical_usize(gen_pointer(rng, 1));
-                    Record::Read(memory_controller.read::<1>(address_space, pointer))
+                    let address = F::from_canonical_usize(gen_address(rng, 1));
+                    Record::Read(memory_controller.read::<1>(address_space, address))
                 }
                 2 => {
-                    let pointer = F::from_canonical_usize(gen_pointer(rng, 4));
-                    Record::Read4(memory_controller.read::<4>(address_space, pointer))
+                    let address = F::from_canonical_usize(gen_address(rng, 4));
+                    Record::Read4(memory_controller.read::<4>(address_space, address))
                 }
                 3 => {
-                    let pointer = F::from_canonical_usize(gen_pointer(rng, 4));
+                    let address = F::from_canonical_usize(gen_address(rng, 4));
                     let data = array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..1 << 30)));
-                    Record::Write4(memory_controller.write::<4>(address_space, pointer, data))
+                    Record::Write4(memory_controller.write::<4>(address_space, address, data))
                 }
                 4 => {
-                    let pointer = F::from_canonical_usize(gen_pointer(rng, MAX));
-                    Record::ReadMax(memory_controller.read::<MAX>(address_space, pointer))
+                    let address = F::from_canonical_usize(gen_address(rng, MAX));
+                    Record::ReadMax(memory_controller.read::<MAX>(address_space, address))
                 }
                 _ => unreachable!(),
             }

@@ -20,7 +20,7 @@ use crate::{
             Poseidon2Opcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
+        testing::{memory::gen_address, VmChipTestBuilder, VmChipTester},
     },
     intrinsics::hashes::poseidon2::Poseidon2VmIoCols,
     system::program::Instruction,
@@ -39,7 +39,7 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
     (0..num_ops)
         .map(|_| {
             let [a, b, c] =
-                std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
+                std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_address(&mut rng, 1)));
             Instruction {
                 opcode: if rng.gen_bool(0.5) {
                     PERM_POS2 as usize
@@ -85,9 +85,9 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester {
         ]
         .map(|elem| elem.as_canonical_u64() as usize);
 
-        let dst = gen_pointer(&mut rng, CHUNK);
-        let lhs = gen_pointer(&mut rng, CHUNK);
-        let rhs = gen_pointer(&mut rng, CHUNK);
+        let dst = gen_address(&mut rng, CHUNK);
+        let lhs = gen_address(&mut rng, CHUNK);
+        let rhs = gen_address(&mut rng, CHUNK);
 
         let data: [_; WIDTH] =
             std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));

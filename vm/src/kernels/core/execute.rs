@@ -62,23 +62,23 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         let mut read_records = vec![];
 
         macro_rules! read {
-            ($addr_space: expr, $pointer: expr) => {{
+            ($addr_space: expr, $address: expr) => {{
                 assert!(read_records.len() < CORE_MAX_READS_PER_CYCLE);
                 read_records.push(
                     self.memory_controller
                         .borrow_mut()
-                        .read_cell($addr_space, $pointer),
+                        .read_cell($addr_space, $address),
                 );
                 read_records[read_records.len() - 1].data[0]
             }};
         }
 
         macro_rules! write {
-            ($addr_space: expr, $pointer: expr, $data: expr) => {{
+            ($addr_space: expr, $address: expr, $data: expr) => {{
                 assert!(write_records.len() < CORE_MAX_WRITES_PER_CYCLE);
                 write_records.push(self.memory_controller.borrow_mut().write_cell(
                     $addr_space,
-                    $pointer,
+                    $address,
                     $data,
                 ));
             }};

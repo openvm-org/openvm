@@ -198,7 +198,7 @@ pub struct MemoryReadOrImmediateOperation<'a, T, V> {
 /// IsZeroAir.subair_eval:
 ///         deg(enabled) + max(deg(address.address_space) + deg(aux.is_immediate),
 ///                           deg(address.address_space) + deg(aux.is_zero_aux))
-/// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
+/// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.address))
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
 impl<'a, F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'a, F, V> {
@@ -224,10 +224,10 @@ impl<'a, F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'a,
                 addr_space_is_zero_cols.inv,
             );
         }
-        // When `is_immediate`, the data should be the pointer value.
+        // When `is_immediate`, the data should be the address value.
         builder
             .when(self.aux.is_immediate)
-            .assert_eq(self.data.clone(), self.address.pointer.clone());
+            .assert_eq(self.data.clone(), self.address.address.clone());
 
         // Timestamps should be increasing (when enabled).
         self.offline_checker.eval_timestamps(

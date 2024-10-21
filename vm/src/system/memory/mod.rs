@@ -18,20 +18,20 @@ pub enum OpType {
     Write = 1,
 }
 
-/// The full pointer to a location in memory consists of an address space and a pointer within
+/// The full identifier of a location in memory consists of an address space and a address within
 /// the address space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow)]
 #[repr(C)]
 pub struct MemoryAddress<S, T> {
     pub address_space: S,
-    pub pointer: T,
+    pub address: T,
 }
 
 impl<S, T> MemoryAddress<S, T> {
-    pub fn new(address_space: S, pointer: T) -> Self {
+    pub fn new(address_space: S, address: T) -> Self {
         Self {
             address_space,
-            pointer,
+            address,
         }
     }
 
@@ -42,7 +42,7 @@ impl<S, T> MemoryAddress<S, T> {
     {
         Self {
             address_space: a.address_space.into(),
-            pointer: a.pointer.into(),
+            address: a.address.into(),
         }
     }
 }

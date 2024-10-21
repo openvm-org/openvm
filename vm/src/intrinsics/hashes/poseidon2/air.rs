@@ -143,10 +143,10 @@ impl<AB: InteractionBuilder> Air<AB> for Poseidon2VmAir<AB::F> {
             .eval(builder, cols.io.is_opcode);
 
         // Second output chunk.
-        let pointer = cols.aux.dst_ptr + AB::F::from_canonical_usize(CHUNK);
+        let address = cols.aux.dst_ptr + AB::F::from_canonical_usize(CHUNK);
         self.memory_bridge
             .write(
-                MemoryAddress::new(cols.io.e, pointer),
+                MemoryAddress::new(cols.io.e, address),
                 cols.aux.internal.io.output[CHUNK..].try_into().unwrap(),
                 timestamp_pp(),
                 &output2_aux_cols,

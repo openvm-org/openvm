@@ -46,10 +46,10 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; 4]) -> u32 {
 pub fn read_rv32_register<F: PrimeField32>(
     memory: &mut MemoryController<F>,
     address_space: F,
-    pointer: F,
+    address: F,
 ) -> (MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>, u32) {
     debug_assert_eq!(address_space, F::one());
-    let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
+    let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, address);
     let val = compose(record.data);
     (record, val)
 }

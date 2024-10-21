@@ -70,14 +70,14 @@ pub struct TimestampedValues<T, const N: usize> {
     pub values: [T; N],
 }
 
-/// Represents first reads a pointer, and then a batch read at the pointer.
+/// Represents first reading a pointer, and then a batch read at the pointer.
 #[derive(Clone, Copy, Debug)]
 pub struct MemoryHeapReadRecord<T, const N: usize> {
     pub address_read: MemoryReadRecord<T, 1>,
     pub data_read: MemoryReadRecord<T, N>,
 }
 
-/// Represents first reads a pointer, and then a batch write at the pointer.
+/// Represents first reading a pointer, and then a batch write at the pointer.
 #[derive(Clone, Copy, Debug)]
 pub struct MemoryHeapWriteRecord<T, const N: usize> {
     pub address_read: MemoryReadRecord<T, 1>,
@@ -137,12 +137,12 @@ impl<T: Clone, const N: usize> From<MemoryHeapReadRecord<T, N>> for MemoryHeapDa
             address: MemoryDataIoCols {
                 data: record.address_read.data,
                 address_space: record.address_read.address_space,
-                address: record.address_read.pointer,
+                address: record.address_read.address,
             },
             data: MemoryDataIoCols {
                 data: record.data_read.data,
                 address_space: record.data_read.address_space,
-                address: record.data_read.pointer,
+                address: record.data_read.address,
             },
         }
     }
@@ -154,12 +154,12 @@ impl<T: Clone, const N: usize> From<MemoryHeapWriteRecord<T, N>> for MemoryHeapD
             address: MemoryDataIoCols {
                 data: record.address_read.data,
                 address_space: record.address_read.address_space,
-                address: record.address_read.pointer,
+                address: record.address_read.address,
             },
             data: MemoryDataIoCols {
                 data: record.data_write.data,
                 address_space: record.data_write.address_space,
-                address: record.data_write.pointer,
+                address: record.data_write.address,
             },
         }
     }
@@ -219,12 +219,12 @@ impl<F: PrimeField32> MemoryController<F> {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
                     mem_config.addr_space_max_bits,
-                    mem_config.pointer_max_bits,
+                    mem_config.address_max_bits,
                     mem_config.decomp,
                     range_checker.clone(),
                 ),
             },
-            memory: Memory::new(&Equipartition::<_, 1>::new(), mem_config.pointer_max_bits),
+            memory: Memory::new(&Equipartition::<_, 1>::new(), mem_config.address_max_bits),
             adapter_records: HashMap::new(),
             range_checker,
             result: None,
@@ -240,10 +240,10 @@ impl<F: PrimeField32> MemoryController<F> {
     ) -> Self {
         let memory_dims = MemoryDimensions {
             as_height: mem_config.addr_space_max_bits,
-            address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
+            address_height: mem_config.address_max_bits - log2_strict_usize(CHUNK),
             as_offset: 1,
         };
-        let memory = Memory::new(&initial_memory, mem_config.pointer_max_bits);
+        let memory = Memory::new(&initial_memory, mem_config.address_max_bits);
         let interface_chip = MemoryInterface::Persistent {
             boundary_chip: PersistentBoundaryChip::new(memory_dims, memory_bus, merkle_bus),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus),
@@ -270,7 +270,7 @@ impl<F: PrimeField32> MemoryController<F> {
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
                 *initial_memory = memory;
-                self.memory = Memory::new(initial_memory, self.mem_config.pointer_max_bits);
+                self.memory = Memory::new(initial_memory, self.mem_config.address_max_bits);
             }
         }
     }
@@ -283,16 +283,16 @@ impl<F: PrimeField32> MemoryController<F> {
         )
     }
 
-    pub fn read_cell(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, 1> {
-        self.read(address_space, pointer)
+    pub fn read_cell(&mut self, address_space: F, address: F) -> MemoryReadRecord<F, 1> {
+        self.read(address_space, address)
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, N> {
+    pub fn read<const N: usize>(&mut self, address_space: F, address: F) -> MemoryReadRecord<F, N> {
         assert!(
             address_space == F::zero()
-                || pointer.as_canonical_u32() < (1 << self.mem_config.pointer_max_bits),
+                || address.as_canonical_u32() < (1 << self.mem_config.address_max_bits),
             "memory out of bounds: {:?}",
-            pointer.as_canonical_u32()
+            address.as_canonical_u32()
         );
 
         if address_space == F::zero() {
@@ -303,16 +303,16 @@ impl<F: PrimeField32> MemoryController<F> {
 
             return MemoryReadRecord {
                 address_space,
-                pointer,
+                address,
                 timestamp,
                 prev_timestamp: 0,
-                data: array::from_fn(|_| pointer),
+                data: array::from_fn(|_| address),
             };
         }
 
         let (record, adapter_records) = self
             .memory
-            .read::<N>(address_space, pointer.as_canonical_u32() as usize);
+            .read::<N>(address_space, address.as_canonical_u32() as usize);
         for record in adapter_records {
             self.adapter_records
                 .entry(record.data.len())
@@ -321,7 +321,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
 
         for i in 0..N as u32 {
-            let ptr = F::from_canonical_u32(pointer.as_canonical_u32() + i);
+            let ptr = F::from_canonical_u32(address.as_canonical_u32() + i);
             self.interface_chip.touch_address(address_space, ptr);
         }
 
@@ -333,9 +333,9 @@ impl<F: PrimeField32> MemoryController<F> {
         &mut self,
         ptr_address_space: F,
         data_address_space: F,
-        ptr_pointer: F,
+        ptr_address: F,
     ) -> MemoryHeapReadRecord<F, N> {
-        let address_read = self.read_cell(ptr_address_space, ptr_pointer);
+        let address_read = self.read_cell(ptr_address_space, ptr_address);
         let data_read = self.read(data_address_space, address_read.value());
 
         MemoryHeapReadRecord {
@@ -347,36 +347,36 @@ impl<F: PrimeField32> MemoryController<F> {
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
-    pub fn unsafe_read_cell(&self, addr_space: F, pointer: F) -> F {
+    pub fn unsafe_read_cell(&self, addr_space: F, address: F) -> F {
         match self
             .memory
-            .get(addr_space, pointer.as_canonical_u32() as usize)
+            .get(addr_space, address.as_canonical_u32() as usize)
         {
             Some((_, &value)) => value,
             None => F::zero(),
         }
     }
 
-    pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<F, 1> {
-        self.write(address_space, pointer, [data])
+    pub fn write_cell(&mut self, address_space: F, address: F, data: F) -> MemoryWriteRecord<F, 1> {
+        self.write(address_space, address, [data])
     }
 
     pub fn write<const N: usize>(
         &mut self,
         address_space: F,
-        pointer: F,
+        address: F,
         data: [F; N],
     ) -> MemoryWriteRecord<F, N> {
         assert_ne!(address_space, F::zero());
         assert!(
-            pointer.as_canonical_u32() < (1 << self.mem_config.pointer_max_bits),
+            address.as_canonical_u32() < (1 << self.mem_config.address_max_bits),
             "memory out of bounds: {:?}",
-            pointer.as_canonical_u32()
+            address.as_canonical_u32()
         );
 
         let (record, adapter_records) =
             self.memory
-                .write(address_space, pointer.as_canonical_u32() as usize, data);
+                .write(address_space, address.as_canonical_u32() as usize, data);
         for record in adapter_records {
             self.adapter_records
                 .entry(record.data.len())
@@ -385,7 +385,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
 
         for i in 0..N as u32 {
-            let ptr = F::from_canonical_u32(pointer.as_canonical_u32() + i);
+            let ptr = F::from_canonical_u32(address.as_canonical_u32() + i);
             self.interface_chip.touch_address(address_space, ptr);
         }
 
@@ -397,10 +397,10 @@ impl<F: PrimeField32> MemoryController<F> {
         &mut self,
         ptr_address_space: F,
         data_address_space: F,
-        ptr_pointer: F,
+        ptr_address: F,
         data: [F; N],
     ) -> MemoryHeapWriteRecord<F, N> {
-        let address_read = self.read_cell(ptr_address_space, ptr_pointer);
+        let address_read = self.read_cell(ptr_address_space, ptr_address);
         let data_write = self.write(data_address_space, address_read.value(), data);
 
         MemoryHeapWriteRecord {
@@ -785,14 +785,14 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..1000 {
             let address_space = F::from_canonical_u32(*[1, 2].choose(&mut rng).unwrap());
-            let pointer =
-                F::from_canonical_u32(rng.gen_range(0..1 << memory_config.pointer_max_bits));
+            let address =
+                F::from_canonical_u32(rng.gen_range(0..1 << memory_config.address_max_bits));
 
             if rng.gen_bool(0.5) {
                 let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                memory_controller.write(address_space, pointer, [data]);
+                memory_controller.write(address_space, address, [data]);
             } else {
-                memory_controller.read::<1>(address_space, pointer);
+                memory_controller.read::<1>(address_space, address);
             }
         }
         assert_eq!(memory_controller.adapter_records.len(), 0);

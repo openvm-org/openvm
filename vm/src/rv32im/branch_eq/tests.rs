@@ -12,7 +12,7 @@ use super::{
 use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
-        testing::{memory::gen_pointer, VmChipTestBuilder},
+        testing::{memory::gen_address, VmChipTestBuilder},
         BasicAdapterInterface, InstructionExecutor, VmCoreChip,
     },
     rv32im::adapters::{
@@ -41,8 +41,8 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
     imm: i32,
     rng: &mut StdRng,
 ) {
-    let rs1 = gen_pointer(rng, 32);
-    let rs2 = gen_pointer(rng, 32);
+    let rs1 = gen_address(rng, 32);
+    let rs2 = gen_address(rng, 32);
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_canonical_u32));
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u32));
 

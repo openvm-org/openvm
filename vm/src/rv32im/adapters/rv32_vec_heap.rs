@@ -65,7 +65,7 @@ impl<
         assert!(R <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config.pointer_max_bits;
+        let address_bits = memory_controller.mem_config.address_max_bits;
         Self {
             air: Rv32VecHeapAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -385,8 +385,8 @@ impl<
         > = row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-        row_slice.rd_ptr = read_record.rd.pointer;
-        row_slice.rs_ptr = read_record.rs.map(|r| r.pointer);
+        row_slice.rd_ptr = read_record.rd.address;
+        row_slice.rs_ptr = read_record.rs.map(|r| r.address);
 
         row_slice.rd_val = read_record.rd.data;
         row_slice.rs_val = read_record.rs.map(|r| r.data);

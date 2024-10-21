@@ -1,5 +1,5 @@
 # Overview
-Chips in the VM need to perform memory read and write operations. The goal of the memory offline checking is to ensure that memory consistency across all chips. Every memory operation consists of operation type (Read or Write), address (address_space and pointer), data, and timestamp. All memory operations across all chips should happen at distinct timestamps between 1 and 2^29. We assume that memory is initialized at timestamp 0. For simplicity, we assume that all memory operations are enabled (there is a way to disable them in the implementation).
+Chips in the VM need to perform memory read and write operations. The goal of the memory offline checking is to ensure that memory consistency across all chips. Every memory operation consists of operation type (Read or Write), address_space and address, data, and timestamp. All memory operations across all chips should happen at distinct timestamps between 1 and 2^29. We assume that memory is initialized at timestamp 0. For simplicity, we assume that all memory operations are enabled (there is a way to disable them in the implementation).
 
 We call an address accessed when it's initialized, finalized, read from, or written to. An address is initialized at timestamp 0 and is finalized at the same timestamp it was last read from or written to (or 0 if there were no operations involving it).
 

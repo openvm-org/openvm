@@ -134,8 +134,8 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         }
     }
 
-    pub fn touch_address(&mut self, address_space: F, pointer: F) {
-        let label = pointer.as_canonical_u32() as usize / CHUNK;
+    pub fn touch_address(&mut self, address_space: F, address: F) {
+        let label = address.as_canonical_u32() as usize / CHUNK;
         self.touched_labels.insert((address_space, label));
     }
 

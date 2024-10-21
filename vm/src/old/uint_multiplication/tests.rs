@@ -12,7 +12,7 @@ use super::{columns::UintMultiplicationCols, run_uint_multiplication, UintMultip
 use crate::{
     arch::{
         instructions::U256Opcode,
-        testing::{memory::gen_pointer, VmChipTestBuilder},
+        testing::{memory::gen_address, VmChipTestBuilder},
     },
     kernels::core::RANGE_TUPLE_CHECKER_BUS,
     system::program::Instruction,
@@ -40,12 +40,12 @@ fn run_uint_multiplication_rand_write_execute<const NUM_LIMBS: usize, const LIMB
     let d = rng.gen_range(address_space_range());
     let e = rng.gen_range(address_space_range());
 
-    let x_address = gen_pointer(rng, 64);
-    let y_address = gen_pointer(rng, 64);
-    let z_address = gen_pointer(rng, 64);
-    let x_ptr_to_address = gen_pointer(rng, 1);
-    let y_ptr_to_address = gen_pointer(rng, 1);
-    let z_ptr_to_address = gen_pointer(rng, 1);
+    let x_address = gen_address(rng, 64);
+    let y_address = gen_address(rng, 64);
+    let z_address = gen_address(rng, 64);
+    let x_ptr_to_address = gen_address(rng, 1);
+    let y_ptr_to_address = gen_address(rng, 1);
+    let z_ptr_to_address = gen_address(rng, 1);
 
     let x_f = x
         .clone()

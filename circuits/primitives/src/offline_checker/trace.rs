@@ -16,7 +16,8 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
     /// [clk, idx, data, op_type, same_idx, lt_bit, is_valid, is_equal_idx_aux, lt_aux]
     ///
     /// The trace consists of a row for every read/write operation plus some extra rows
-    /// The trace is sorted by addr (addr_space and pointer) and then by clk, so every addr has a block of consective rows in the trace with the following structure
+    /// The trace is sorted by addr_space, address, and then clk, so every
+    /// (addr_space, address) pair has a block of consecutive rows in the trace with the following structure
     /// A row is added to the trace for every read/write operation with the corresponding data
     /// The trace is padded at the end to be of height trace_degree
     pub fn generate_trace(

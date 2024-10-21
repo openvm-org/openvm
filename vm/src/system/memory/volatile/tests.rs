@@ -36,8 +36,8 @@ fn boundary_air_test() {
     let mut distinct_addresses = HashSet::new();
     while distinct_addresses.len() < num_addresses {
         let addr_space = Val::from_canonical_usize(rng.gen_range(0..MAX_ADDRESS_SPACE));
-        let pointer = Val::from_canonical_usize(rng.gen_range(0..MAX_VAL));
-        distinct_addresses.insert((addr_space, pointer));
+        let address = Val::from_canonical_usize(rng.gen_range(0..MAX_VAL));
+        distinct_addresses.insert((addr_space, address));
     }
 
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, DECOMP);
@@ -47,12 +47,12 @@ fn boundary_air_test() {
 
     let mut final_memory = TimestampedEquipartition::new();
 
-    for (addr_space, pointer) in distinct_addresses.iter().cloned() {
+    for (addr_space, address) in distinct_addresses.iter().cloned() {
         let final_data = Val::from_canonical_usize(rng.gen_range(0..MAX_VAL));
         let final_clk = rng.gen_range(1..MAX_VAL) as u32;
 
         final_memory.insert(
-            (addr_space, pointer.as_canonical_u32() as usize),
+            (addr_space, address.as_canonical_u32() as usize),
             TimestampedValues {
                 values: [final_data],
                 timestamp: final_clk,
@@ -68,11 +68,11 @@ fn boundary_air_test() {
     let init_memory_trace = RowMajorMatrix::new(
         distinct_addresses
             .iter()
-            .flat_map(|(addr_space, pointer)| {
+            .flat_map(|(addr_space, address)| {
                 vec![
                     Val::one(),
                     *addr_space,
-                    *pointer,
+                    *address,
                     Val::zero(),
                     Val::zero(),
                     Val::one(),
@@ -86,15 +86,15 @@ fn boundary_air_test() {
     let final_memory_trace = RowMajorMatrix::new(
         distinct_addresses
             .iter()
-            .flat_map(|(addr_space, pointer)| {
+            .flat_map(|(addr_space, address)| {
                 let timestamped_value = final_memory
-                    .get(&(*addr_space, pointer.as_canonical_u32() as usize))
+                    .get(&(*addr_space, address.as_canonical_u32() as usize))
                     .unwrap();
 
                 vec![
                     Val::one(),
                     *addr_space,
-                    *pointer,
+                    *address,
                     timestamped_value.values[0],
                     Val::from_canonical_u32(timestamped_value.timestamp),
                     Val::one(),

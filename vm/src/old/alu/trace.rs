@@ -58,24 +58,24 @@ where
                 from_state: from_state.map(Val::<SC>::from_canonical_u32),
                 x: MemoryData::<Val<SC>, NUM_LIMBS, LIMB_BITS> {
                     data: x_read.data,
-                    address: x_read.pointer,
-                    ptr_to_address: x_ptr_read.pointer,
+                    address: x_read.address,
+                    ptr_to_address: x_ptr_read.address,
                 },
                 y: MemoryData::<Val<SC>, NUM_LIMBS, LIMB_BITS> {
                     data: y_read.data,
-                    address: y_read.pointer,
-                    ptr_to_address: y_ptr_read.pointer,
+                    address: y_read.address,
+                    ptr_to_address: y_ptr_read.address,
                 },
                 z: match &z_write {
                     WriteRecord::Long(z) => MemoryData {
                         data: z.data,
-                        address: z.pointer,
-                        ptr_to_address: z_ptr_read.pointer,
+                        address: z.address,
+                        ptr_to_address: z_ptr_read.address,
                     },
                     WriteRecord::Bool(z) => MemoryData {
                         data: array::from_fn(|i| cmp_buffer[i]),
-                        address: z.pointer,
-                        ptr_to_address: z_ptr_read.pointer,
+                        address: z.address,
+                        ptr_to_address: z_ptr_read.address,
                     },
                 },
                 cmp_result: match &z_write {

@@ -10,7 +10,7 @@ use super::air::VolatileBoundaryAir;
 #[derive(new)]
 pub struct VolatileBoundaryCols<T> {
     pub addr_space: T,
-    pub pointer: T,
+    pub address: T,
 
     pub initial_data: T,
     pub final_data: T,
@@ -25,7 +25,7 @@ impl<T: Clone> VolatileBoundaryCols<T> {
     pub fn from_slice(slc: &[T], boundary_air: &VolatileBoundaryAir) -> Self {
         Self {
             addr_space: slc[0].clone(),
-            pointer: slc[1].clone(),
+            address: slc[1].clone(),
             initial_data: slc[2].clone(),
             final_data: slc[3].clone(),
             final_timestamp: slc[4].clone(),
@@ -37,7 +37,7 @@ impl<T: Clone> VolatileBoundaryCols<T> {
 
     pub fn flatten(self) -> Vec<T> {
         iter::once(self.addr_space)
-            .chain(iter::once(self.pointer))
+            .chain(iter::once(self.address))
             .chain(iter::once(self.initial_data))
             .chain(iter::once(self.final_data))
             .chain(iter::once(self.final_timestamp))
@@ -59,7 +59,7 @@ impl<T> VolatileBoundaryCols<T> {
     {
         VolatileBoundaryCols::new(
             self.addr_space.into(),
-            self.pointer.into(),
+            self.address.into(),
             self.initial_data.into(),
             self.final_data.into(),
             self.final_timestamp.into(),

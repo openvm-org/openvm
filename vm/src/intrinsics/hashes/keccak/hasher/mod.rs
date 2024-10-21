@@ -257,9 +257,9 @@ impl<F: PrimeField32> Default for KeccakInputBlock<F> {
 
 impl<F: Copy> KeccakRecord<F> {
     pub fn operands(&self) -> [F; 6] {
-        let a = self.dst_read.pointer;
-        let b = self.src_read.pointer;
-        let c = self.len_read.pointer;
+        let a = self.dst_read.address;
+        let b = self.src_read.address;
+        let c = self.len_read.address;
         let d = self.dst_read.address_space;
         let e = self.digest_writes[0].address_space;
         let f = self.len_read.address_space;

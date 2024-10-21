@@ -29,7 +29,7 @@ impl VolatileBoundaryAir {
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
-        pointer_max_bits: usize,
+        address_max_bits: usize,
         decomp: usize,
         for_testing: bool,
     ) -> Self {
@@ -37,7 +37,7 @@ impl VolatileBoundaryAir {
             memory_bus,
             addr_lt_air: IsLessThanTupleAir::new(
                 VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp),
-                vec![addr_space_max_bits, pointer_max_bits],
+                vec![addr_space_max_bits, address_max_bits],
             ),
             for_testing,
         }
@@ -77,8 +77,8 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
             // Ensuring addr_lt is correct
             let lt_cols = IsLessThanTupleCols::new(
                 IsLessThanTupleIoCols::new(
-                    vec![local.addr_space, local.pointer],
-                    vec![next.addr_space, next.pointer],
+                    vec![local.addr_space, local.address],
+                    vec![next.addr_space, next.address],
                     next.addr_lt,
                 ),
                 next.addr_lt_aux.clone(),

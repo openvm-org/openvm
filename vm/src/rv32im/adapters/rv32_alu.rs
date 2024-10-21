@@ -275,11 +275,11 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
     ) {
         let row_slice: &mut Rv32BaseAluAdapterCols<_> = row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.rd_ptr = write_record.rd.pointer;
-        row_slice.rs1_ptr = read_record.rs1.pointer;
+        row_slice.rd_ptr = write_record.rd.address;
+        row_slice.rs1_ptr = read_record.rs1.address;
         row_slice.rs2 = read_record
             .rs2
-            .map(|rs2| rs2.pointer)
+            .map(|rs2| rs2.address)
             .unwrap_or(read_record.rs2_imm);
         row_slice.rs2_as = read_record
             .rs2

@@ -17,7 +17,7 @@ use super::{core::FieldArithmeticCoreChip, FieldArithmeticChip};
 use crate::{
     arch::{
         instructions::FieldArithmeticOpcode,
-        testing::{memory::gen_pointer, VmChipTestBuilder},
+        testing::{memory::gen_address, VmChipTestBuilder},
     },
     kernels::{
         adapters::native_adapter::{NativeAdapterChip, NativeAdapterCols},
@@ -63,15 +63,15 @@ fn new_field_arithmetic_air_test() {
         let address1 = if as1 == 0 {
             operand1.as_canonical_u32() as usize
         } else {
-            gen_pointer(&mut rng, 1)
+            gen_address(&mut rng, 1)
         };
         let address2 = if as2 == 0 {
             operand2.as_canonical_u32() as usize
         } else {
-            gen_pointer(&mut rng, 1)
+            gen_address(&mut rng, 1)
         };
         assert_ne!(address1, address2);
-        let result_address = gen_pointer(&mut rng, 1);
+        let result_address = gen_address(&mut rng, 1);
 
         let result = FieldArithmetic::run_field_arithmetic(opcode, operand1, operand2).unwrap();
         tracing::debug!(

@@ -13,7 +13,7 @@ use super::{run_shift, ShiftChip};
 use crate::{
     arch::{
         instructions::U256Opcode,
-        testing::{memory::gen_pointer, VmChipTestBuilder},
+        testing::{memory::gen_address, VmChipTestBuilder},
     },
     kernels::core::BYTE_XOR_BUS,
     old::shift::columns::ShiftCols,
@@ -53,12 +53,12 @@ fn run_shift_rand_write_execute<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     let d = rng.gen_range(address_space_range());
     let e = rng.gen_range(address_space_range());
 
-    let x_address = gen_pointer(rng, 64);
-    let y_address = gen_pointer(rng, 64);
-    let res_address = gen_pointer(rng, 64);
-    let x_ptr_to_address = gen_pointer(rng, 1);
-    let y_ptr_to_address = gen_pointer(rng, 1);
-    let res_ptr_to_address = gen_pointer(rng, 1);
+    let x_address = gen_address(rng, 64);
+    let y_address = gen_address(rng, 64);
+    let res_address = gen_address(rng, 64);
+    let x_ptr_to_address = gen_address(rng, 1);
+    let y_ptr_to_address = gen_address(rng, 1);
+    let res_ptr_to_address = gen_address(rng, 1);
 
     let x_f = x
         .clone()

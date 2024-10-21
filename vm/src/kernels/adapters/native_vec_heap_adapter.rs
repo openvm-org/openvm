@@ -61,7 +61,7 @@ impl<
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config.pointer_max_bits;
+        let address_bits = memory_controller.mem_config.address_max_bits;
         Self {
             air: NativeVecHeapAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -286,9 +286,9 @@ impl<
         let rs2_record = memory.read_cell(d, c);
         let rd_record = memory.read_cell(d, a);
 
-        println!("rs1_record: {}", rs1_record.pointer);
-        println!("rs2_record: {}", rs2_record.pointer);
-        println!("rd_record: {}", rd_record.pointer);
+        println!("rs1_record: {}", rs1_record.address);
+        println!("rs2_record: {}", rs2_record.address);
+        println!("rd_record: {}", rd_record.address);
         println!("d: {}", d);
         println!("e: {}", e);
         println!("rs1_record: {}", rs1_record.data[0]);
@@ -363,9 +363,9 @@ impl<
         > = row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-        row_slice.rd_ptr = read_record.rd.pointer;
-        row_slice.rs1_ptr = read_record.rs1.pointer;
-        row_slice.rs2_ptr = read_record.rs2.pointer;
+        row_slice.rd_ptr = read_record.rd.address;
+        row_slice.rs1_ptr = read_record.rs1.address;
+        row_slice.rs2_ptr = read_record.rs2.address;
 
         row_slice.rd_val = read_record.rd.data[0];
         row_slice.rs1_val = read_record.rs1.data[0];

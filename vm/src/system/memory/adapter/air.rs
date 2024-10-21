@@ -89,7 +89,7 @@ impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
             .send(
                 MemoryAddress::new(
                     local.address.address_space,
-                    local.address.pointer + AB::Expr::from_canonical_usize(N / 2),
+                    local.address.address + AB::Expr::from_canonical_usize(N / 2),
                 ),
                 local.values[N / 2..].to_vec(),
                 local.right_timestamp,

@@ -206,9 +206,9 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
         let row_slice: &mut ConvertAdapterCols<_, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.a_idx = write_record.writes[0].pointer;
+        row_slice.a_idx = write_record.writes[0].address;
         row_slice.a_as = write_record.writes[0].address_space;
-        row_slice.b_idx = read_record.reads[0].pointer;
+        row_slice.b_idx = read_record.reads[0].address;
         row_slice.b_as = read_record.reads[0].address_space;
 
         row_slice.reads_aux = [aux_cols_factory.make_read_aux_cols(read_record.reads[0])];

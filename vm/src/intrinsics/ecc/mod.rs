@@ -41,10 +41,10 @@ fn read_ec_points<T: PrimeField32>(
     memory_controller: MemoryControllerRef<T>,
     ptr_as: T,
     data_as: T,
-    ptr_pointer: T,
+    ptr_address: T,
 ) -> (BigUint, BigUint, MemoryHeapReadRecord<T, TWO_NUM_LIMBS>) {
     let mut memory_controller = memory_controller.borrow_mut();
-    let array_read = memory_controller.read_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer);
+    let array_read = memory_controller.read_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_address);
     let u32_array = array_read.data_read.data.map(|x| x.as_canonical_u32());
     let x = limbs_to_biguint(&u32_array[..NUM_LIMBS], LIMB_BITS);
     let y = limbs_to_biguint(&u32_array[NUM_LIMBS..], LIMB_BITS);
@@ -57,7 +57,7 @@ fn write_ec_points<T: PrimeField32>(
     y: BigUint,
     ptr_as: T,
     data_as: T,
-    ptr_pointer: T,
+    ptr_address: T,
 ) -> MemoryHeapWriteRecord<T, TWO_NUM_LIMBS> {
     let mut memory_controller = memory_controller.borrow_mut();
     let x_limbs = biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS);
@@ -66,7 +66,7 @@ fn write_ec_points<T: PrimeField32>(
     array[..NUM_LIMBS].copy_from_slice(&x_limbs);
     array[NUM_LIMBS..].copy_from_slice(&y_limbs);
     let array: [T; 64] = array.map(|x| T::from_canonical_u32(x));
-    memory_controller.write_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_pointer, array)
+    memory_controller.write_heap::<TWO_NUM_LIMBS>(ptr_as, data_as, ptr_address, array)
 }
 
 #[derive(Clone, Debug)]

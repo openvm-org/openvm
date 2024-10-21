@@ -209,8 +209,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
     ) {
         let row_slice: &mut Rv32BranchAdapterCols<_> = row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.rs1_ptr = read_record.rs1.pointer;
-        row_slice.rs2_ptr = read_record.rs2.pointer;
+        row_slice.rs1_ptr = read_record.rs1.address;
+        row_slice.rs2_ptr = read_record.rs2.address;
         row_slice.reads_aux = [
             aux_cols_factory.make_read_aux_cols(read_record.rs1),
             aux_cols_factory.make_read_aux_cols(read_record.rs2),

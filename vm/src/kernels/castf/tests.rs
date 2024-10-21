@@ -12,7 +12,7 @@ use rand::{rngs::StdRng, Rng};
 
 use super::{CastFChip, CastFCoreChip};
 use crate::{
-    arch::testing::{memory::gen_pointer, VmChipTestBuilder},
+    arch::testing::{memory::gen_address, VmChipTestBuilder},
     kernels::{
         adapters::convert_adapter::{ConvertAdapterChip, ConvertAdapterCols},
         castf::{CastF, CastFCoreCols, FINAL_LIMB_BITS, LIMB_BITS},
@@ -38,8 +38,8 @@ fn prepare_castf_rand_write_execute(
 
     let as_x = rng.gen_range(address_space_range()); // d
     let as_y = rng.gen_range(address_space_range()); // e
-    let address_x = gen_pointer(rng, 32); // a
-    let address_y = gen_pointer(rng, 32); // b
+    let address_x = gen_address(rng, 32); // a
+    let address_y = gen_address(rng, 32); // b
 
     let operand1_f = F::from_canonical_u32(y);
 

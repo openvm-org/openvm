@@ -14,7 +14,7 @@ impl VolatileBoundaryAir {
         // Write the initial memory values at initial timestamps
         self.memory_bus
             .send(
-                MemoryAddress::new(local.addr_space, local.pointer),
+                MemoryAddress::new(local.addr_space, local.address),
                 vec![local.initial_data],
                 AB::Expr::zero(),
             )
@@ -23,7 +23,7 @@ impl VolatileBoundaryAir {
         // Read the final memory values at last timestamps when written to
         self.memory_bus
             .receive(
-                MemoryAddress::new(local.addr_space, local.pointer),
+                MemoryAddress::new(local.addr_space, local.address),
                 vec![local.final_data],
                 local.final_timestamp,
             )

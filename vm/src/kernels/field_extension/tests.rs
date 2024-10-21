@@ -16,7 +16,7 @@ use crate::{
     arch::{
         instructions::{FieldExtensionOpcode, UsizeOpcode},
         testing::{
-            memory::{gen_address_space, gen_pointer},
+            memory::{gen_address, gen_address_space},
             VmChipTestBuilder,
         },
     },
@@ -52,9 +52,9 @@ fn new_field_extension_air_test() {
 
         let as_d = gen_address_space(&mut rng);
         let as_e = gen_address_space(&mut rng);
-        let address1 = gen_pointer(&mut rng, 4);
-        let address2 = gen_pointer(&mut rng, 4);
-        let result_address = gen_pointer(&mut rng, 4);
+        let address1 = gen_address(&mut rng, 4);
+        let address2 = gen_address(&mut rng, 4);
+        let result_address = gen_address(&mut rng, 4);
 
         let operand1 = array::from_fn(|_| rng.gen::<F>());
         let operand2 = array::from_fn(|_| rng.gen::<F>());

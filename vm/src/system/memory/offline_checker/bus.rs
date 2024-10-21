@@ -41,7 +41,7 @@ impl MemoryBus {
         MemoryBusInteraction {
             bus_index: self.0,
             interaction_type,
-            address: MemoryAddress::new(address.address_space.into(), address.pointer.into()),
+            address: MemoryAddress::new(address.address_space.into(), address.address.into()),
             data: data.into_iter().map(|item| item.into()).collect(),
             timestamp: timestamp.into(),
         }
@@ -68,7 +68,7 @@ impl<T: AbstractField> MemoryBusInteraction<T> {
         // Chain 1 at the end to ensure that different length interactions are always distinct.
         let fields = iter::empty()
             .chain(iter::once(self.address.address_space))
-            .chain(iter::once(self.address.pointer))
+            .chain(iter::once(self.address.address))
             .chain(self.data)
             .chain(iter::once(self.timestamp))
             .chain(iter::once(AB::Expr::one()));

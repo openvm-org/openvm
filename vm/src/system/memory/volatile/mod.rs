@@ -25,7 +25,7 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
-        pointer_max_bits: usize,
+        address_max_bits: usize,
         decomp: usize,
         range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
@@ -33,7 +33,7 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
             air: VolatileBoundaryAir::new(
                 memory_bus,
                 addr_space_max_bits,
-                pointer_max_bits,
+                address_max_bits,
                 decomp,
                 false,
             ),
@@ -42,8 +42,8 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
         }
     }
 
-    pub fn touch_address(&mut self, addr_space: F, pointer: F) {
-        self.touched_addresses.insert((addr_space, pointer));
+    pub fn touch_address(&mut self, addr_space: F, address: F) {
+        self.touched_addresses.insert((addr_space, address));
     }
 
     pub fn all_addresses(&self) -> Vec<(F, F)> {

@@ -11,7 +11,7 @@ use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAluChip};
 use crate::{
     arch::{
         instructions::AluOpcode,
-        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
+        testing::{memory::gen_address, TestAdapterChip, VmChipTestBuilder},
         ExecutionBridge, InstructionExecutor, VmChipWrapper,
     },
     kernels::core::BYTE_XOR_BUS,
@@ -68,9 +68,9 @@ fn run_rv32_alu_rand_write_execute<E: InstructionExecutor<F>>(
 ) {
     let is_imm = c_imm.is_some();
 
-    let rs1 = gen_pointer(rng, 32);
-    let rs2 = c_imm.unwrap_or_else(|| gen_pointer(rng, 32));
-    let rd = gen_pointer(rng, 32);
+    let rs1 = gen_address(rng, 32);
+    let rs2 = c_imm.unwrap_or_else(|| gen_address(rng, 32));
+    let rd = gen_address(rng, 32);
 
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     if !is_imm {

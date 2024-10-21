@@ -299,7 +299,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         let adapter_cols: &mut Rv32RdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         let rd = write_record.rd.unwrap();
-        adapter_cols.rd_ptr = rd.pointer;
+        adapter_cols.rd_ptr = rd.address;
         adapter_cols.rd_aux_cols = aux_cols_factory.make_write_aux_cols(rd);
     }
 
@@ -362,7 +362,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.inner.from_state = write_record.from_state.map(F::from_canonical_u32);
         if let Some(rd) = write_record.rd {
-            adapter_cols.inner.rd_ptr = rd.pointer;
+            adapter_cols.inner.rd_ptr = rd.address;
             adapter_cols.inner.rd_aux_cols = aux_cols_factory.make_write_aux_cols(rd);
             adapter_cols.needs_write = F::one();
         } else {
