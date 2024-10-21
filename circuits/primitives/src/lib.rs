@@ -1,7 +1,24 @@
-extern crate core;
+//! This crate contains a collection of primitives for use when building circuits.
+//! The primitives are separated into two types: standalone [Air](p3_air::Air)s and [SubAir]s.
+//!
+//! The following modules contain standalone [Air]s:
+//! - [range]
+//! - [range_gate]
+//! - [range_tuple]
+//! - [var_range]
+//! - [xor]
+//!
+//! The following modules contain [SubAir]s:
+//! - [assert_less_than]
+//! - [bigint]
+//! - [bitwise_op_lookup]
+//! - [is_equal]
+//! - [is_equal_array]
+//! - [is_less_than]
+//! - [is_zero]
 
 pub mod assert_less_than;
-// pub mod bigint;
+pub mod bigint;
 pub mod bitwise_op_lookup;
 pub mod is_equal;
 pub mod is_equal_array;
