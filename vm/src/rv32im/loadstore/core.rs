@@ -22,7 +22,6 @@ use crate::{
     system::program::Instruction,
 };
 
-
 /// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
 /// This chip uses read_data and prev_data to get the write_data
 #[repr(C)]
