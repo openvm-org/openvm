@@ -535,6 +535,7 @@ dependencies = [
  "ax-sdk",
  "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git)",
  "hex-literal",
+ "lazy_static",
  "num-bigint-dig",
  "num-traits",
  "p3-air",
