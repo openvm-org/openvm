@@ -88,22 +88,22 @@ pub enum FieldExtensionOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x170]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum CastfOpcode {
-    CASTF,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
 #[opcode_offset = 0x120]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum Poseidon2Opcode {
     PERM_POS2,
     COMP_POS2,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x170]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum CastfOpcode {
+    CASTF,
 }
 
 #[derive(
@@ -173,17 +173,6 @@ impl U256Opcode {
     pub fn shift_opcodes() -> impl Iterator<Item = U256Opcode> {
         (U256Opcode::SLL as usize..=U256Opcode::SRA as usize).map(U256Opcode::from_usize)
     }
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x160]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum U32Opcode {
-    LUI,
-    AUIPC,
 }
 
 #[derive(
@@ -329,6 +318,19 @@ pub enum DivRemOpcode {
     DIVU,
     REM,
     REMU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x500]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32ModularArithmeticOpcode {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
 }
 
 #[derive(

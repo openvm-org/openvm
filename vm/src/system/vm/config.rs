@@ -78,10 +78,7 @@ impl VmConfig {
 
     pub fn add_default_executor(mut self, executor: ExecutorName) -> Self {
         // Some executors need to be handled in a special way, and cannot be added like other executors.
-        let not_allowed_executors = [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
-        if not_allowed_executors.contains(&executor) {
-            panic!("Cannot add executor for {:?}", executor);
-        }
+        // Adding these will cause a panic in the `create_chip_set` function.
         self.executors.push(executor);
         self
     }
@@ -195,6 +192,7 @@ impl VmConfig {
     }
 }
 
+// TO BE DELETED:
 #[derive(EnumCount, EnumIter, FromRepr, Clone, Debug)]
 #[repr(usize)]
 pub enum Modulus {

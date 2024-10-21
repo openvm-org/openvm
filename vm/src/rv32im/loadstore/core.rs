@@ -170,7 +170,7 @@ where
             Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
 
         let data: [[F; NUM_CELLS]; 2] = reads.into();
-        let write_data = solve_loadstore(local_opcode_index, data[1], data[0]);
+        let write_data = run_write_data(local_opcode_index, data[1], data[0]);
 
         let output = AdapterRuntimeContext::without_pc([write_data]);
 
@@ -210,8 +210,7 @@ where
     }
 }
 
-// returns the write data for the opcode
-pub(super) fn solve_loadstore<F: PrimeField32, const NUM_CELLS: usize>(
+pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
     opcode: Rv32LoadStoreOpcode,
     read_data: [F; NUM_CELLS],
     prev_data: [F; NUM_CELLS],

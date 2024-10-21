@@ -11,7 +11,7 @@ use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
-use super::{solve_loadstore, LoadStoreCoreChip, Rv32LoadStoreChip};
+use super::{run_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
 use crate::{
     arch::{
         instructions::{
@@ -22,7 +22,7 @@ use crate::{
         VmAdapterChip,
     },
     rv32im::{
-        adapters::{compose, Rv32LoadStoreAdapterChip, RV32_REGISTER_NUM_LANES},
+        adapters::{compose, Rv32LoadStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         loadstore::LoadStoreCoreCols,
     },
     system::program::Instruction,
@@ -49,7 +49,7 @@ fn set_and_execute(
     chip: &mut Rv32LoadStoreChip<F>,
     rng: &mut StdRng,
     opcode: Rv32LoadStoreOpcode,
-    rs1: Option<[u32; RV32_REGISTER_NUM_LANES]>,
+    rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
 ) {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
@@ -65,15 +65,15 @@ fn set_and_execute(
     tester.write(1, b, rs1);
 
     let is_load = [LOADW, LOADH, LOADB, LOADHU, LOADBU, HINTLOAD_RV32].contains(&opcode);
-    let some_prev_data: [F; RV32_REGISTER_NUM_LANES] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
+    let some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
+        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
     if is_load {
         tester.write(1, a, some_prev_data);
     } else {
         tester.write(2, ptr_val as usize, some_prev_data);
     }
 
-    let read_data: [F; RV32_REGISTER_NUM_LANES] =
+    let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
     if is_load {
         tester.write(2, ptr_val as usize, read_data);
@@ -89,7 +89,7 @@ fn set_and_execute(
         ),
     );
 
-    let write_data = solve_loadstore(opcode, read_data, some_prev_data);
+    let write_data = run_write_data(opcode, read_data, some_prev_data);
     if is_load && opcode != HINTLOAD_RV32 {
         assert_eq!(write_data, tester.read::<4>(1, a));
     } else if !is_load {
@@ -146,8 +146,8 @@ fn rand_loadstore_test() {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_loadstore_test(
     opcode: Rv32LoadStoreOpcode,
-    read_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
-    prev_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
+    read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    prev_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     opcodes: Option<[bool; 7]>,
     expected_error: VerificationError,
 ) {
@@ -175,7 +175,7 @@ fn run_negative_loadstore_test(
 
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
 
-        let core_cols: &mut LoadStoreCoreCols<F, RV32_REGISTER_NUM_LANES> = core_row.borrow_mut();
+        let core_cols: &mut LoadStoreCoreCols<F, RV32_REGISTER_NUM_LIMBS> = core_row.borrow_mut();
 
         if let Some(read_data) = read_data {
             core_cols.read_data = read_data.map(F::from_canonical_u32);
@@ -267,43 +267,43 @@ fn execute_roundtrip_sanity_test() {
 }
 
 #[test]
-fn solve_loadw_storew_sanity_test() {
+fn run_loadw_storew_sanity_test() {
     let read_data = [138, 45, 202, 76].map(F::from_canonical_u32);
     let prev_data = [159, 213, 89, 34].map(F::from_canonical_u32);
-    let store_write_data = solve_loadstore(STOREW, read_data, prev_data);
-    let load_write_data = solve_loadstore(LOADW, read_data, prev_data);
+    let store_write_data = run_write_data(STOREW, read_data, prev_data);
+    let load_write_data = run_write_data(LOADW, read_data, prev_data);
     assert_eq!(store_write_data, read_data);
     assert_eq!(load_write_data, read_data);
 }
 
 #[test]
-fn solve_storeh_sanity_test() {
+fn run_storeh_sanity_test() {
     let read_data = [250, 123, 67, 198].map(F::from_canonical_u32);
     let prev_data = [144, 56, 175, 92].map(F::from_canonical_u32);
-    let write_data = solve_loadstore(STOREH, read_data, prev_data);
+    let write_data = run_write_data(STOREH, read_data, prev_data);
     assert_eq!(write_data, [250, 123, 175, 92].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_storeb_sanity_test() {
+fn run_storeb_sanity_test() {
     let read_data = [221, 104, 58, 147].map(F::from_canonical_u32);
     let prev_data = [199, 83, 243, 12].map(F::from_canonical_u32);
-    let write_data = solve_loadstore(STOREB, read_data, prev_data);
+    let write_data = run_write_data(STOREB, read_data, prev_data);
     assert_eq!(write_data, [221, 83, 243, 12].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_loadhu_sanity_test() {
+fn run_loadhu_sanity_test() {
     let read_data = [175, 33, 198, 250].map(F::from_canonical_u32);
     let prev_data = [90, 121, 64, 205].map(F::from_canonical_u32);
-    let write_data = solve_loadstore(LOADHU, read_data, prev_data);
+    let write_data = run_write_data(LOADHU, read_data, prev_data);
     assert_eq!(write_data, [175, 33, 0, 0].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_loadbu_sanity_test() {
+fn run_loadbu_sanity_test() {
     let read_data = [131, 74, 186, 29].map(F::from_canonical_u32);
     let prev_data = [142, 67, 210, 88].map(F::from_canonical_u32);
-    let write_data = solve_loadstore(LOADBU, read_data, prev_data);
+    let write_data = run_write_data(LOADBU, read_data, prev_data);
     assert_eq!(write_data, [131, 0, 0, 0].map(F::from_canonical_u32));
 }

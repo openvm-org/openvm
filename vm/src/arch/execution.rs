@@ -109,18 +109,18 @@ impl<F: Field> InstructionCols<F> {
     pub fn from_instruction(instruction: &Instruction<F>) -> Self {
         let Instruction {
             opcode,
-            op_a,
-            op_b,
-            op_c,
+            a,
+            b,
+            c,
             d,
             e,
-            op_f,
-            op_g,
+            f,
+            g,
             ..
         } = instruction;
         Self {
             opcode: F::from_canonical_usize(*opcode),
-            operands: [op_a, op_b, op_c, d, e, op_f, op_g].map(|&f| f),
+            operands: [a, b, c, d, e, f, g].map(|&f| f),
         }
     }
 }

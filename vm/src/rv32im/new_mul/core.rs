@@ -111,7 +111,7 @@ where
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
-        let z = solve_mul::<NUM_LIMBS, LIMB_BITS>(&x, &y);
+        let z = run_mul::<NUM_LIMBS, LIMB_BITS>(&x, &y);
 
         // Core doesn't modify PC directly, so we let Adapter handle the increment
         let output = AdapterRuntimeContext::without_pc(z.map(F::from_canonical_u32));
@@ -135,7 +135,7 @@ where
     }
 }
 
-pub(super) fn solve_mul<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_mul<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {

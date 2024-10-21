@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -14,21 +15,32 @@ use crate::{
         ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
         VmAdapterInterface,
     },
-    kernels::adapters::native_basic_adapter::{VectorReadRecord, VectorWriteRecord},
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
+            MemoryReadRecord, MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
 };
 
+#[derive(Debug)]
+pub struct VectorReadRecord<F: Field, const NUM_READS: usize, const READ_SIZE: usize> {
+    pub reads: [MemoryReadRecord<F, READ_SIZE>; NUM_READS],
+}
+
+#[derive(Debug)]
+pub struct VectorWriteRecord<F: Field, const WRITE_SIZE: usize> {
+    pub from_state: ExecutionState<u32>,
+    pub writes: [MemoryWriteRecord<F, WRITE_SIZE>; 1],
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct ConvertAdapterChip<F: Field, const READ_SIZE: usize, const WRITE_SIZE: usize> {
     pub air: ConvertAdapterAir<READ_SIZE, WRITE_SIZE>,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize>
@@ -41,13 +53,12 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize>
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: ConvertAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -155,7 +166,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
         <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
-        let Instruction { op_b: b, e, .. } = *instruction;
+        let Instruction { b, e, .. } = *instruction;
 
         let y_val = memory.read::<READ_SIZE>(e, b);
 
@@ -170,7 +181,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { op_a: a, d, .. } = *instruction;
+        let Instruction { a, d, .. } = *instruction;
         let a_val = memory.write::<WRITE_SIZE>(d, a, output.writes[0]);
 
         Ok((
@@ -190,9 +201,9 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let row_slice: &mut ConvertAdapterCols<_, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();
-        let aux_cols_factory = &self.aux_cols_factory;
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_idx = write_record.writes[0].pointer;

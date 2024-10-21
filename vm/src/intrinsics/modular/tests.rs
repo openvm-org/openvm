@@ -14,7 +14,7 @@ use crate::{
         testing::VmChipTestBuilder,
         VmChipWrapper,
     },
-    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LANES},
+    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
     system::program::Instruction,
     utils::biguint_to_limbs,
 };
@@ -99,8 +99,8 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         // The write of result r is done in the chip.
         let ptr_as = 1;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 3 * RV32_REGISTER_NUM_LANES;
-        let addr_ptr3 = 6 * RV32_REGISTER_NUM_LANES;
+        let addr_ptr2 = 3 * RV32_REGISTER_NUM_LIMBS;
+        let addr_ptr3 = 6 * RV32_REGISTER_NUM_LIMBS;
 
         let data_as = 2;
         let address1 = 0u32;

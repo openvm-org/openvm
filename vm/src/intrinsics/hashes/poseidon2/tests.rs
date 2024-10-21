@@ -46,13 +46,13 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 } else {
                     COMP_POS2 as usize
                 },
-                op_a: a,
-                op_b: b,
-                op_c: c,
+                a,
+                b,
+                c,
                 d: BabyBear::one(),
                 e: BabyBear::two(),
-                op_f: BabyBear::zero(),
-                op_g: BabyBear::zero(),
+                f: BabyBear::zero(),
+                g: BabyBear::zero(),
                 debug: String::new(),
             }
         })
@@ -77,9 +77,9 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester {
     for instruction in random_instructions(num_ops) {
         let opcode = Poseidon2Opcode::from_usize(instruction.opcode);
         let [a, b, c, d, e] = [
-            instruction.op_a,
-            instruction.op_b,
-            instruction.op_c,
+            instruction.a,
+            instruction.b,
+            instruction.c,
             instruction.d,
             instruction.e,
         ]

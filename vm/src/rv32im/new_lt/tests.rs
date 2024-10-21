@@ -6,7 +6,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
-use super::{core::solve_less_than, LessThanCoreChip, Rv32LessThanChip};
+use super::{core::run_less_than, LessThanCoreChip, Rv32LessThanChip};
 use crate::{
     arch::{
         instructions::LessThanOpcode,
@@ -15,7 +15,7 @@ use crate::{
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::adapters::{
-        Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
     },
     system::program::Instruction,
 };
@@ -35,7 +35,7 @@ fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     array::from_fn(|_| rng.gen_range(0..(1 << LIMB_BITS)))
 }
 
-fn generate_rv32_immediate(rng: &mut StdRng) -> (Option<usize>, [u32; RV32_REGISTER_NUM_LANES]) {
+fn generate_rv32_immediate(rng: &mut StdRng) -> (Option<usize>, [u32; RV32_REGISTER_NUM_LIMBS]) {
     let mut imm: u32 = rng.gen_range(0..(1 << RV_IS_TYPE_IMM_BITS));
     if (imm & 0x800) != 0 {
         imm |= !0xFFF
@@ -57,8 +57,8 @@ fn run_rv32_lt_rand_write_execute<E: InstructionExecutor<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
     opcode: LessThanOpcode,
-    b: [u32; RV32_REGISTER_NUM_LANES],
-    c: [u32; RV32_REGISTER_NUM_LANES],
+    b: [u32; RV32_REGISTER_NUM_LIMBS],
+    c: [u32; RV32_REGISTER_NUM_LIMBS],
     c_imm: Option<usize>,
     rng: &mut StdRng,
 ) {
@@ -68,12 +68,12 @@ fn run_rv32_lt_rand_write_execute<E: InstructionExecutor<F>>(
     let rs2 = c_imm.unwrap_or_else(|| gen_pointer(rng, 32));
     let rd = gen_pointer(rng, 32);
 
-    tester.write::<RV32_REGISTER_NUM_LANES>(1, rs1, b.map(F::from_canonical_u32));
+    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     if !is_imm {
-        tester.write::<RV32_REGISTER_NUM_LANES>(1, rs2, c.map(F::from_canonical_u32));
+        tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
     }
 
-    let (cmp, _, _, _) = solve_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &b, &c);
+    let (cmp, _, _, _) = run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
     tester.execute(
         chip,
         Instruction::from_usize(
@@ -81,12 +81,12 @@ fn run_rv32_lt_rand_write_execute<E: InstructionExecutor<F>>(
             [rd, rs1, rs2, 1, if is_imm { 0 } else { 1 }],
         ),
     );
-    let mut a = [0; RV32_REGISTER_NUM_LANES];
+    let mut a = [0; RV32_REGISTER_NUM_LIMBS];
     a[0] = cmp as u32;
 
     assert_eq!(
         a.map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LANES>(1, rd)
+        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
     );
 }
 
@@ -106,11 +106,11 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     );
 
     for _ in 0..num_ops {
-        let b = generate_long_number::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(&mut rng);
+        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
         let (c_imm, c) = if rng.gen_bool(0.5) {
             (
                 None,
-                generate_long_number::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(&mut rng),
+                generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng),
             )
         } else {
             generate_rv32_immediate(&mut rng)
@@ -149,11 +149,11 @@ fn rv32_sltu_rand_test() {
 ///////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn solve_sltu_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [145, 34, 25, 205];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [73, 35, 25, 205];
+fn run_sltu_sanity_test() {
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(LessThanOpcode::SLTU, &x, &y);
+        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(LessThanOpcode::SLTU, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(!x_sign); // unsigned
@@ -161,11 +161,11 @@ fn solve_sltu_sanity_test() {
 }
 
 #[test]
-fn solve_slt_same_sign_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [145, 34, 25, 205];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [73, 35, 25, 205];
+fn run_slt_same_sign_sanity_test() {
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
+        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(x_sign); // negative
@@ -173,11 +173,11 @@ fn solve_slt_same_sign_sanity_test() {
 }
 
 #[test]
-fn solve_slt_diff_sign_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [45, 35, 25, 55];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [173, 34, 25, 205];
+fn run_slt_diff_sign_sanity_test() {
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [45, 35, 25, 55];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [173, 34, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
+        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 3);
     assert!(!x_sign); // positive

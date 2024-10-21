@@ -15,7 +15,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{compose, ADDRESS_BITS, RV32_REGISTER_NUM_LANES};
+use super::{compose, ADDRESS_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::{
     arch::{
         instructions::{
@@ -59,15 +59,15 @@ type Rv32LoadStoreAdapterRuntimeInterface<T> = BasicAdapterInterface<
     LoadStoreProcessedInstruction<T>,
     2,
     1,
-    RV32_REGISTER_NUM_LANES,
-    RV32_REGISTER_NUM_LANES,
+    RV32_REGISTER_NUM_LIMBS,
+    RV32_REGISTER_NUM_LIMBS,
 >;
 
 pub struct Rv32LoadStoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
 impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapterAirInterface<AB> {
-    type Reads = [[AB::Var; RV32_REGISTER_NUM_LANES]; 2];
-    type Writes = [[AB::Expr; RV32_REGISTER_NUM_LANES]; 1];
+    type Reads = [[AB::Var; RV32_REGISTER_NUM_LIMBS]; 2];
+    type Writes = [[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1];
     type ProcessedInstruction = LoadStoreProcessedInstruction<AB::Expr>;
 }
 
@@ -78,8 +78,8 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
 pub struct Rv32LoadStoreAdapterChip<F: Field> {
     pub air: Rv32LoadStoreAdapterAir,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
     offset: usize,
+    _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
@@ -92,7 +92,6 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: Rv32LoadStoreAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -100,19 +99,18 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
                 range_bus: range_checker_chip.bus(),
             },
             range_checker_chip,
-            aux_cols_factory,
             offset,
+            _marker: PhantomData,
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreReadRecord<F: Field> {
-    pub rs1_aux_cols: MemoryReadAuxCols<F, RV32_REGISTER_NUM_LANES>,
-    pub rs1_data: [F; RV32_REGISTER_NUM_LANES],
+    pub rs1_record: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>>,
     pub rs1_ptr: F,
     // This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads
-    pub read: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>>,
+    pub read: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>>,
 
     pub imm: F,
     pub imm_sign: bool,
@@ -123,7 +121,7 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
 pub struct Rv32LoadStoreWriteRecord<F: Field> {
     pub from_state: ExecutionState<F>,
     // This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores
-    pub write: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub write: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
     pub rd_rs2_ptr: F,
 }
 
@@ -132,12 +130,12 @@ pub struct Rv32LoadStoreWriteRecord<F: Field> {
 pub struct Rv32LoadStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
-    pub rs1_data: [T; RV32_REGISTER_NUM_LANES],
-    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 
     // Will write to rd when Load and read from rs2 when Store
     pub rd_rs2_ptr: T,
-    pub read_data_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub read_data_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub imm: T,
     pub imm_sign: T,
     // mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
@@ -309,9 +307,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
     )> {
         let Instruction {
             opcode,
-            op_a: a,
-            op_b: b,
-            op_c: c,
+            a,
+            b,
+            c,
             d,
             e,
             ..
@@ -324,7 +322,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             memory.increment_timestamp();
             None
         } else {
-            Some(memory.read::<RV32_REGISTER_NUM_LANES>(d, b))
+            Some(memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b))
         };
 
         let rs1_val = match rs1_record {
@@ -347,9 +345,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         }
         let read_record = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                Some(memory.read::<RV32_REGISTER_NUM_LANES>(e, F::from_canonical_u32(ptr_val)))
+                Some(memory.read::<RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_u32(ptr_val)))
             }
-            STOREW | STOREH | STOREB => Some(memory.read::<RV32_REGISTER_NUM_LANES>(d, a)),
+            STOREW | STOREH | STOREB => Some(memory.read::<RV32_REGISTER_NUM_LIMBS>(d, a)),
             HINTLOAD_RV32 => {
                 memory.increment_timestamp();
                 None
@@ -369,24 +367,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let read_data = if let Some(read_record) = read_record {
             read_record.data
         } else {
-            [F::zero(); RV32_REGISTER_NUM_LANES]
+            [F::zero(); RV32_REGISTER_NUM_LIMBS]
         };
 
-        let (rs1_aux_cols, rs1_data) = match rs1_record {
-            Some(rs1_record) => (
-                self.aux_cols_factory.make_read_aux_cols(rs1_record),
-                rs1_record.data,
-            ),
-            None => (
-                MemoryReadAuxCols::disabled(),
-                [F::zero(); RV32_REGISTER_NUM_LANES],
-            ),
-        };
         Ok((
             [prev_data, read_data],
             Self::ReadRecord {
-                rs1_aux_cols,
-                rs1_data,
+                rs1_record,
                 rs1_ptr: b,
                 read: read_record,
                 imm: c,
@@ -405,19 +392,18 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
-            opcode,
-            op_a: a,
-            op_c: c,
-            d,
-            e,
-            ..
+            opcode, a, c, d, e, ..
         } = *instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
+        let rs1_data = match read_record.rs1_record {
+            Some(rs1_record) => rs1_record.data,
+            None => [F::zero(); RV32_REGISTER_NUM_LIMBS],
+        };
         let write_record = match local_opcode {
             STOREW | STOREH | STOREB => {
-                let rs1_val = compose(read_record.rs1_data);
+                let rs1_val = compose(rs1_data);
                 let imm = c.as_canonical_u32();
                 let imm_sign = (imm & 0x8000) >> 15;
                 let imm_extended = imm + imm_sign * 0xffff0000;
@@ -448,22 +434,30 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state;
-        adapter_cols.rs1_data = read_record.rs1_data;
-        adapter_cols.rs1_aux_cols = read_record.rs1_aux_cols;
+        (adapter_cols.rs1_data, adapter_cols.rs1_aux_cols) = match read_record.rs1_record {
+            Some(rs1_record) => (
+                rs1_record.data,
+                aux_cols_factory.make_read_aux_cols(rs1_record),
+            ),
+            None => (
+                [F::zero(); RV32_REGISTER_NUM_LIMBS],
+                MemoryReadAuxCols::disabled(),
+            ),
+        };
         adapter_cols.rs1_ptr = read_record.rs1_ptr;
         adapter_cols.rd_rs2_ptr = write_record.rd_rs2_ptr;
         adapter_cols.read_data_aux = match read_record.read {
-            Some(read) => self.aux_cols_factory.make_read_aux_cols(read),
+            Some(read) => aux_cols_factory.make_read_aux_cols(read),
             None => MemoryReadAuxCols::disabled(),
         };
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
         adapter_cols.mem_ptr = read_record.mem_ptr;
-        adapter_cols.write_aux = self
-            .aux_cols_factory
+        adapter_cols.write_aux = aux_cols_factory
             .make_write_aux_cols(write_record.write)
             .get_base();
     }

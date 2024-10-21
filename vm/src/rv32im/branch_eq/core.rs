@@ -164,16 +164,13 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction {
-            opcode, op_c: imm, ..
-        } = *instruction;
+        let Instruction { opcode, c: imm, .. } = *instruction;
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
-        let (cmp_result, diff_idx, diff_inv_val) =
-            solve_eq::<F, NUM_LIMBS>(branch_eq_opcode, &x, &y);
+        let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &x, &y);
 
         let output = AdapterRuntimeContext {
             to_pc: cmp_result.then_some((F::from_canonical_u32(from_pc) + imm).as_canonical_u32()),
@@ -222,7 +219,7 @@ where
 }
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
-pub(super) fn solve_eq<F: PrimeField32, const NUM_LIMBS: usize>(
+pub(super) fn run_eq<F: PrimeField32, const NUM_LIMBS: usize>(
     local_opcode_index: BranchEqualOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],

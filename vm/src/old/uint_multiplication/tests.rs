@@ -8,7 +8,7 @@ use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
-use super::{columns::UintMultiplicationCols, solve_uint_multiplication, UintMultiplicationChip};
+use super::{columns::UintMultiplicationCols, run_uint_multiplication, UintMultiplicationChip};
 use crate::{
     arch::{
         instructions::U256Opcode,
@@ -64,7 +64,7 @@ fn run_uint_multiplication_rand_write_execute<const NUM_LIMBS: usize, const LIMB
     tester.write::<NUM_LIMBS>(e, x_address, x_f.as_slice().try_into().unwrap());
     tester.write::<NUM_LIMBS>(e, y_address, y_f.as_slice().try_into().unwrap());
 
-    let (z, _) = solve_uint_multiplication::<NUM_LIMBS, LIMB_BITS>(&x, &y);
+    let (z, _) = run_uint_multiplication::<NUM_LIMBS, LIMB_BITS>(&x, &y);
     tester.execute(
         chip,
         Instruction::from_usize(

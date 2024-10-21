@@ -121,12 +121,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
-            op_a: a,
-            op_b: b,
-            op_c: c,
+            a,
+            b,
+            c,
             d,
             e,
-            op_f: f,
+            f,
             ..
         } = instruction;
         let local_opcode_index = Keccak256Opcode::from_usize(opcode - self.offset);

@@ -23,7 +23,7 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::{
-        compose, JumpUiProcessedInstruction, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
+        compose, JumpUiProcessedInstruction, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     system::program::Instruction,
 };
@@ -34,10 +34,10 @@ const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv32JalrCoreCols<T> {
     pub imm: T,
-    pub rs1_data: [T; RV32_REGISTER_NUM_LANES],
+    pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
     // To save a column, we only store the 3 most significant limbs of `rd_data`
     // the least significant limb can be derived using from_pc and the other limbs
-    pub rd_data: [T; RV32_REGISTER_NUM_LANES - 1],
+    pub rd_data: [T; RV32_REGISTER_NUM_LIMBS - 1],
     pub is_valid: T,
     // Used to range check that rd_data elements are bytes with XorBus
     pub xor_res: T,
@@ -50,8 +50,8 @@ pub struct Rv32JalrCoreCols<T> {
 
 pub struct Rv32JalrCoreRecord<F> {
     pub imm: F,
-    pub rs1_data: [F; RV32_REGISTER_NUM_LANES],
-    pub rd_data: [F; RV32_REGISTER_NUM_LANES - 1],
+    pub rs1_data: [F; RV32_REGISTER_NUM_LIMBS],
+    pub rd_data: [F; RV32_REGISTER_NUM_LIMBS - 1],
     pub xor_res: F,
     pub to_pc_least_sig_bit: F,
     pub to_pc_limbs: [F; 2],
@@ -78,8 +78,8 @@ impl<AB, I> VmCoreAir<AB, I> for Rv32JalrCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
-    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::Reads: From<[[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1]>,
+    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
 {
     fn eval(
@@ -205,8 +205,8 @@ impl Rv32JalrCoreChip {
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32JalrCoreChip
 where
-    I::Reads: Into<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
-    I::Writes: From<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::Reads: Into<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
+    I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
 {
     type Record = Rv32JalrCoreRecord<F>;
     type Air = Rv32JalrCoreAir;
@@ -218,9 +218,7 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction {
-            opcode, op_c: c, ..
-        } = *instruction;
+        let Instruction { opcode, c, .. } = *instruction;
         let local_opcode_index = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
 
         let imm = c.as_canonical_u32();
@@ -230,7 +228,7 @@ where
         let rs1 = reads.into()[0];
         let rs1_val = compose(rs1);
 
-        let (to_pc, rd_data) = solve_jalr(local_opcode_index, from_pc, imm_extended, rs1_val);
+        let (to_pc, rd_data) = run_jalr(local_opcode_index, from_pc, imm_extended, rs1_val);
 
         let xor_res = F::from_canonical_u32(self.xor_lookup_chip.request(rd_data[0], rd_data[1]));
         self.range_checker_chip
@@ -290,12 +288,12 @@ where
 }
 
 // returns (to_pc, rd_data)
-pub(super) fn solve_jalr(
+pub(super) fn run_jalr(
     _opcode: Rv32JalrOpcode,
     pc: u32,
     imm: u32,
     rs1: u32,
-) -> (u32, [u32; RV32_REGISTER_NUM_LANES]) {
+) -> (u32, [u32; RV32_REGISTER_NUM_LIMBS]) {
     let to_pc = rs1.wrapping_add(imm);
     let to_pc = to_pc - (to_pc & 1);
     assert!(to_pc < (1 << PC_BITS));

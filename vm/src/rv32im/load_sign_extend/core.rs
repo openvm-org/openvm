@@ -180,8 +180,11 @@ where
             Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
 
         let data: [[F; NUM_CELLS]; 2] = reads.into();
-        let write_data =
-            solve_load_sign_extend::<_, NUM_CELLS, LIMB_BITS>(local_opcode_index, data[1], data[0]);
+        let write_data: [F; NUM_CELLS] = run_write_data_sign_extend::<_, NUM_CELLS, LIMB_BITS>(
+            local_opcode_index,
+            data[1],
+            data[0],
+        );
         let output = AdapterRuntimeContext::without_pc([write_data]);
 
         let most_sig_limb = match local_opcode_index {
@@ -228,7 +231,7 @@ where
 }
 
 // returns the write data for the given opcode
-pub(super) fn solve_load_sign_extend<
+pub(super) fn run_write_data_sign_extend<
     F: PrimeField32,
     const NUM_CELLS: usize,
     const LIMB_BITS: usize,

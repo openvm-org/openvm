@@ -63,13 +63,13 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             timestamp,
             pc,
             opcode,
-            op_a: a,
-            op_b: b,
-            op_c: c,
+            a,
+            b,
+            c,
             d,
             e,
-            op_f: f,
-            op_g: g,
+            f,
+            g,
         } = io;
 
         let CoreAuxCols {

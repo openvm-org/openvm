@@ -19,7 +19,7 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
         VmCoreChip,
     },
-    rv32im::adapters::{JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
+    rv32im::adapters::{JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     system::program::Instruction,
 };
 
@@ -29,15 +29,15 @@ const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv32AuipcCoreCols<T> {
     pub is_valid: T,
-    pub imm_limbs: [T; RV32_REGISTER_NUM_LANES - 1],
-    pub pc_limbs: [T; RV32_REGISTER_NUM_LANES - 1],
-    pub rd_data: [T; RV32_REGISTER_NUM_LANES],
+    pub imm_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
+    pub pc_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
+    pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
 
     // Used to constrain rd_data to 8-bits with XorBus
-    pub rd_byte_check: [T; RV32_REGISTER_NUM_LANES / 2],
+    pub rd_byte_check: [T; RV32_REGISTER_NUM_LIMBS / 2],
 
     // Used to constrain pc_limbs and imm_limbs to 8-bits with XorBus
-    pub pc_imm_byte_check: [T; RV32_REGISTER_NUM_LANES - 2],
+    pub pc_imm_byte_check: [T; RV32_REGISTER_NUM_LIMBS - 2],
 }
 
 #[derive(Debug, Clone)]
@@ -59,7 +59,7 @@ where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 0]; 0]>,
-    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
 {
     fn eval(
@@ -96,23 +96,23 @@ where
             .when(cols.is_valid)
             .assert_eq(rd_data[0], from_pc - intermed_val);
 
-        let mut carry: [AB::Expr; RV32_REGISTER_NUM_LANES] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry: [AB::Expr; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
         let carry_divide = AB::F::from_canonical_usize(1 << RV32_CELL_BITS).inverse();
 
-        for i in 1..RV32_REGISTER_NUM_LANES {
+        for i in 1..RV32_REGISTER_NUM_LIMBS {
             carry[i] = AB::Expr::from(carry_divide)
                 * (pc_limbs[i - 1] + imm_limbs[i - 1] - rd_data[i] + carry[i - 1].clone());
             builder.when(is_valid).assert_bool(carry[i].clone());
         }
 
         // Range checking to 8 bits
-        for i in 0..RV32_REGISTER_NUM_LANES / 2 {
+        for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
             self.bus
                 .send(rd_data[i * 2], rd_data[i * 2 + 1], rd_byte_check[i])
                 .eval(builder, is_valid);
         }
         let limbs = [imm_limbs, pc_limbs].concat();
-        for i in 0..RV32_REGISTER_NUM_LANES - 2 {
+        for i in 0..RV32_REGISTER_NUM_LIMBS - 2 {
             self.bus
                 .send(limbs[i * 2], limbs[i * 2 + 1], pc_imm_byte_check[i])
                 .eval(builder, is_valid);
@@ -135,11 +135,11 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Rv32AuipcCoreRecord<F> {
-    pub imm_limbs: [F; RV32_REGISTER_NUM_LANES - 1],
-    pub pc_limbs: [F; RV32_REGISTER_NUM_LANES - 1],
-    pub rd_data: [F; RV32_REGISTER_NUM_LANES],
-    pub rd_byte_check: [F; RV32_REGISTER_NUM_LANES / 2],
-    pub pc_imm_byte_check: [F; RV32_REGISTER_NUM_LANES - 2],
+    pub imm_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],
+    pub pc_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],
+    pub rd_data: [F; RV32_REGISTER_NUM_LIMBS],
+    pub rd_byte_check: [F; RV32_REGISTER_NUM_LIMBS / 2],
+    pub pc_imm_byte_check: [F; RV32_REGISTER_NUM_LIMBS - 2],
 }
 
 #[derive(Debug, Clone)]
@@ -162,7 +162,7 @@ impl Rv32AuipcCoreChip {
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32AuipcCoreChip
 where
-    I::Writes: From<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
 {
     type Record = Rv32AuipcCoreRecord<F>;
     type Air = Rv32AuipcCoreAir;
@@ -175,8 +175,8 @@ where
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
-        let imm = instruction.op_c.as_canonical_u32();
-        let rd_data = solve_auipc(local_opcode_index, from_pc, imm);
+        let imm = instruction.c.as_canonical_u32();
+        let rd_data = run_auipc(local_opcode_index, from_pc, imm);
         let rd_data_field = rd_data.map(F::from_canonical_u32);
 
         let output = AdapterRuntimeContext::without_pc([rd_data_field]);
@@ -228,11 +228,11 @@ where
 }
 
 // returns rd_data
-pub(super) fn solve_auipc(
+pub(super) fn run_auipc(
     _opcode: Rv32AuipcOpcode,
     pc: u32,
     imm: u32,
-) -> [u32; RV32_REGISTER_NUM_LANES] {
+) -> [u32; RV32_REGISTER_NUM_LIMBS] {
     let rd = pc.wrapping_add(imm << RV32_CELL_BITS);
     array::from_fn(|i| (rd >> (RV32_CELL_BITS * i)) & RV32_LIMB_MAX)
 }

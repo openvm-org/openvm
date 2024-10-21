@@ -229,16 +229,14 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction {
-            opcode, op_c: imm, ..
-        } = *instruction;
+        let Instruction { opcode, c: imm, .. } = *instruction;
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let a = data[0].map(|x| x.as_canonical_u32());
         let b = data[1].map(|y| y.as_canonical_u32());
         let (cmp_result, diff_idx, a_sign, b_sign) =
-            solve_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &a, &b);
+            run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &a, &b);
 
         let signed = matches!(
             blt_opcode,
@@ -341,7 +339,7 @@ where
 }
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)
-pub(super) fn solve_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     local_opcode_index: BranchLessThanOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],

@@ -7,6 +7,7 @@ use afs_primitives::{
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldExprCols, FieldVariable};
+use axvm_instructions::Rv32ModularArithmeticOpcode;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
@@ -15,9 +16,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::FIELD_ELEMENT_BITS;
 use crate::{
     arch::{
-        instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
-        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
+        DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
@@ -191,11 +191,11 @@ where
         let x_biguint = limbs_to_biguint(&x, limb_bits);
         let y_biguint = limbs_to_biguint(&y, limb_bits);
 
-        let opcode = ModularArithmeticOpcode::from_usize(local_opcode_index);
-        let is_add_flag = match opcode {
-            ModularArithmeticOpcode::ADD => true,
-            ModularArithmeticOpcode::SUB => false,
-            _ => panic!("Unsupported opcode: {:?}", opcode),
+        let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_index);
+        let is_add_flag = match local_opcode {
+            Rv32ModularArithmeticOpcode::ADD => true,
+            Rv32ModularArithmeticOpcode::SUB => false,
+            _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
 
         let vars = self.air.expr.execute(
@@ -204,6 +204,9 @@ where
         );
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
+        tracing::trace!(
+            "ModularArithmeticOpcode | {local_opcode:?} | {z_biguint:?} | {x_biguint:?} | {y_biguint:?}",
+        );
         let z_limbs = biguint_to_limbs_vec(z_biguint, limb_bits, num_limbs);
         let writes = z_limbs.into_iter().map(F::from_canonical_u32).collect_vec();
         let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);

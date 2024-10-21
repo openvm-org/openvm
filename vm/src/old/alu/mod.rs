@@ -104,9 +104,9 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode,
-            op_a: a,
-            op_b: b,
-            op_c: c,
+            a,
+            b,
+            c,
             d,
             e,
             ..
@@ -123,7 +123,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
-        let (z, cmp) = solve_alu::<T, NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
+        let (z, cmp) = run_alu::<T, NUM_LIMBS, LIMB_BITS>(local_opcode_index, &x, &y);
 
         let z_write = if ALU_CMP_INSTRUCTIONS.contains(&local_opcode_index) {
             WriteRecord::Bool(memory_controller.write_cell(
@@ -202,20 +202,20 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     }
 }
 
-fn solve_alu<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_alu<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     local_opcode_index: U256Opcode,
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, bool) {
     match local_opcode_index {
-        U256Opcode::ADD => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        U256Opcode::SUB | U256Opcode::LT => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
-        U256Opcode::EQ => solve_eq::<T, NUM_LIMBS, LIMB_BITS>(x, y),
-        U256Opcode::XOR => solve_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
-        U256Opcode::AND => solve_and::<NUM_LIMBS, LIMB_BITS>(x, y),
-        U256Opcode::OR => solve_or::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::ADD => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::SUB | U256Opcode::LT => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::EQ => run_eq::<T, NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::XOR => run_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::AND => run_and::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::OR => run_or::<NUM_LIMBS, LIMB_BITS>(x, y),
         U256Opcode::SLT => {
-            let (z, cmp) = solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y);
+            let (z, cmp) = run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y);
             (
                 z,
                 cmp ^ (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) != 0)
@@ -226,7 +226,7 @@ fn solve_alu<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     }
 }
 
-fn solve_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, bool) {
@@ -240,7 +240,7 @@ fn solve_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (z, false)
 }
 
-fn solve_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, bool) {
@@ -259,7 +259,7 @@ fn solve_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (z, carry[NUM_LIMBS - 1] != 0)
 }
 
-fn solve_eq<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_eq<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, bool) {
@@ -275,7 +275,7 @@ fn solve_eq<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (z, true)
 }
 
-fn solve_xor<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_xor<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, bool) {
@@ -283,7 +283,7 @@ fn solve_xor<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (z, false)
 }
 
-fn solve_and<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_and<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, bool) {
@@ -291,7 +291,7 @@ fn solve_and<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (z, false)
 }
 
-fn solve_or<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_or<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, bool) {

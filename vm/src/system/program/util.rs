@@ -52,23 +52,23 @@ pub fn execute_program_with_public_values(
 }
 
 impl<F: Copy + Display> Display for Program<F> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for instruction in self.instructions().iter() {
             let Instruction {
                 opcode,
-                op_a,
-                op_b,
-                op_c,
+                a,
+                b,
+                c,
                 d,
                 e,
-                op_f,
-                op_g,
+                f,
+                g,
                 debug,
             } = instruction;
             write!(
-                f,
+                formatter,
                 "{:?} {} {} {} {} {} {} {} {}",
-                opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug,
+                opcode, a, b, c, d, e, f, g, debug,
             )?;
         }
         Ok(())
@@ -79,18 +79,18 @@ pub fn display_program_with_pc<F: Copy + Display>(program: &Program<F>) {
     for (pc, instruction) in program.instructions().iter().enumerate() {
         let Instruction {
             opcode,
-            op_a,
-            op_b,
-            op_c,
+            a,
+            b,
+            c,
             d,
             e,
-            op_f,
-            op_g,
+            f,
+            g,
             debug,
         } = instruction;
         println!(
             "{} | {:?} {} {} {} {} {} {} {} {}",
-            pc, opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug
+            pc, opcode, a, b, c, d, e, f, g, debug
         );
     }
 }
