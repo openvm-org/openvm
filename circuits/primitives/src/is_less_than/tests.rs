@@ -11,12 +11,9 @@ use ax_sdk::{
 };
 use derive_new::new;
 use p3_air::{Air, BaseAir};
-use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
-use p3_matrix::{
-    dense::{DenseMatrix, RowMajorMatrix},
-    Matrix,
-};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_maybe_rayon::prelude::*;
 
 use super::IsLessThanIo;
 use crate::{
@@ -66,30 +63,35 @@ impl<AB: InteractionBuilder> Air<AB> for IsLtTestAir {
 pub struct IsLessThanChip {
     pub air: IsLtTestAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
+    pub pairs: Vec<(u32, u32)>,
 }
 
+// Todo: implement Chip<SC> for IsLessThanChip
 impl IsLessThanChip {
     pub fn new(max_bits: usize, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         let bus = range_checker.bus();
         Self {
             air: IsLtTestAir(IsLessThanAir::new(bus, max_bits)),
             range_checker,
+            pairs: vec![],
         }
     }
-    pub fn generate_trace<F: Field>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
-        assert!(pairs.len().is_power_of_two());
+    pub fn generate_trace<F: Field>(self) -> RowMajorMatrix<F> {
+        assert!(self.pairs.len().is_power_of_two());
         let width: usize = BaseAir::<F>::width(&self.air);
 
-        let mut rows = vec![F::zero(); width * pairs.len()];
-        for (row, (x, y)) in rows.chunks_mut(width).zip(pairs) {
-            let mut row = IsLessThanColsMut::from_mut_slice(row);
-            *row.x = F::from_canonical_u32(x);
-            *row.y = F::from_canonical_u32(y);
-            *row.out = F::from_bool(x < y);
-            self.air
-                .0
-                .generate_subrow((&self.range_checker, x, y), &mut row.lower_decomp);
-        }
+        let mut rows = vec![F::zero(); width * self.pairs.len()];
+        rows.par_chunks_mut(width)
+            .zip(self.pairs)
+            .for_each(|(row, (x, y))| {
+                let mut row = IsLessThanColsMut::from_mut_slice(row);
+                *row.x = F::from_canonical_u32(x);
+                *row.y = F::from_canonical_u32(y);
+                *row.out = F::from_bool(x < y);
+                self.air
+                    .0
+                    .generate_subrow((&self.range_checker, x, y), &mut row.lower_decomp);
+            });
 
         RowMajorMatrix::new(rows, width)
     }
@@ -117,57 +119,55 @@ impl<'a, T> IsLessThanColsMut<'a, T> {
     }
 }
 
-fn get_tester_is_lt_chip() -> IsLessThanChip {
+fn setup() -> (IsLessThanChip, Arc<VariableRangeCheckerChip>) {
     let max_bits: usize = 16;
     let decomp: usize = 8;
     let bus = VariableRangeCheckerBus::new(0, decomp);
-
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
 
-    IsLessThanChip::new(max_bits, range_checker)
+    (
+        IsLessThanChip::new(max_bits, range_checker.clone()),
+        range_checker,
+    )
 }
 
 #[test]
 fn test_is_less_than_chip_lt() {
-    let chip = get_tester_is_lt_chip();
-    let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
-    let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
+    let (mut chip, range_checker) = setup();
+    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    chip.pairs = vec![(14321, 26883), (1, 0), (773, 773), (337, 456)];
+    let trace = chip.generate_trace();
+    let range_trace = range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![chip.air, chip.range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+        .expect("Verification failed");
 }
 
 #[test]
 fn test_lt_chip_decomp_does_not_divide() {
-    let chip = get_tester_is_lt_chip();
-    let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
-    let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
+    let (mut chip, range_checker) = setup();
+    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    chip.pairs = vec![(14321, 26883), (1, 0), (773, 773), (337, 456)];
+    let trace = chip.generate_trace();
+    let range_trace = range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![chip.air, chip.range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+        .expect("Verification failed");
 }
 
 #[test]
 fn test_is_less_than_negative() {
-    let chip = get_tester_is_lt_chip();
-    let mut trace = chip.generate_trace(vec![(446, 553)]);
-    let range_trace = chip.range_checker.generate_trace();
+    let (mut chip, range_checker) = setup();
+    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    chip.pairs = vec![(446, 553)];
+    let mut trace = chip.generate_trace();
+    let range_trace = range_checker.generate_trace();
 
     trace.values[2] = AbstractField::from_canonical_u64(0);
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![chip.air, chip.range_checker.air],
-            vec![trace, range_trace],
-        )
-        .err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace],).err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );

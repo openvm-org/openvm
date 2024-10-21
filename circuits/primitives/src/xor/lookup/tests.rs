@@ -1,9 +1,6 @@
 use std::{iter, sync::Arc};
 
-use afs_stark_backend::{
-    prover::USE_DEBUG_BUILDER, rap::AnyRap, utils::disable_debug_builder,
-    verifier::VerificationError,
-};
+use afs_stark_backend::{rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,

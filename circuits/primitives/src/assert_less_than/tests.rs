@@ -5,8 +5,8 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{
-    prover::USE_DEBUG_BUILDER,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    utils::disable_debug_builder,
     verifier::VerificationError,
 };
 use ax_sdk::{
@@ -20,6 +20,7 @@ use p3_matrix::{
     dense::{DenseMatrix, RowMajorMatrix},
     Matrix,
 };
+use p3_maybe_rayon::prelude::*;
 
 use super::*;
 use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
@@ -62,6 +63,7 @@ impl<AB: InteractionBuilder, const AUX_LEN: usize> Air<AB> for AssertLtTestAir<A
 pub struct AssertLessThanChip<const AUX_LEN: usize> {
     pub air: AssertLtTestAir<AUX_LEN>,
     pub range_checker: Arc<VariableRangeCheckerChip>,
+    pub pairs: Vec<(u32, u32)>,
 }
 
 impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
@@ -70,22 +72,25 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
         Self {
             air: AssertLtTestAir(AssertLessThanAir::new(bus, max_bits)),
             range_checker,
+            pairs: vec![],
         }
     }
 
-    pub fn generate_trace<F: Field>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
-        assert!(pairs.len().is_power_of_two());
+    pub fn generate_trace<F: Field>(self) -> RowMajorMatrix<F> {
+        assert!(self.pairs.len().is_power_of_two());
         let width: usize = AssertLessThanCols::<F, AUX_LEN>::width();
 
-        let mut rows = vec![F::zero(); width * pairs.len()];
-        for (row, (x, y)) in rows.chunks_mut(width).zip(pairs) {
-            let row: &mut AssertLessThanCols<F, AUX_LEN> = row.borrow_mut();
-            row.x = F::from_canonical_u32(x);
-            row.y = F::from_canonical_u32(y);
-            self.air
-                .0
-                .generate_subrow((&self.range_checker, x, y), &mut row.aux.lower_decomp);
-        }
+        let mut rows = vec![F::zero(); width * self.pairs.len()];
+        rows.par_chunks_mut(width)
+            .zip(self.pairs)
+            .for_each(|(row, (x, y))| {
+                let row: &mut AssertLessThanCols<F, AUX_LEN> = row.borrow_mut();
+                row.x = F::from_canonical_u32(x);
+                row.y = F::from_canonical_u32(y);
+                self.air
+                    .0
+                    .generate_subrow((&self.range_checker, x, y), &mut row.aux.lower_decomp);
+            });
 
         RowMajorMatrix::new(rows, width)
     }
@@ -119,16 +124,14 @@ fn test_assert_less_than_chip_lt() {
     const AUX_LEN: usize = 2;
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
+    let mut chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
+    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    chip.pairs = vec![(14321, 26883), (0, 1), (28, 120), (337, 456)];
+    let trace = chip.generate_trace();
+    let range_trace: DenseMatrix<BabyBear> = range_checker.generate_trace();
 
-    let chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker);
-    let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
-    let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
-
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![chip.air, chip.range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+        .expect("Verification failed");
 }
 
 #[test]
@@ -139,16 +142,14 @@ fn test_lt_chip_decomp_does_not_divide() {
     const AUX_LEN: usize = 4;
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
+    let mut chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
+    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    chip.pairs = vec![(14321, 26883), (0, 1), (28, 120), (337, 456)];
+    let trace = chip.generate_trace();
+    let range_trace: DenseMatrix<BabyBear> = range_checker.generate_trace();
 
-    let chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker);
-    let trace = chip.generate_trace(vec![(14321, 26883), (0, 1), (28, 120), (337, 456)]);
-    let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
-
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![chip.air, chip.range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+        .expect("Verification failed");
 }
 
 #[test]
@@ -159,23 +160,18 @@ fn test_assert_less_than_negative_1() {
     const AUX_LEN: usize = 2;
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
-
-    let chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker);
-    let mut trace = chip.generate_trace(vec![(28, 29)]);
-    let range_trace = chip.range_checker.generate_trace();
+    let mut chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
+    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    chip.pairs = vec![(28, 29)];
+    let mut trace = chip.generate_trace();
+    let range_trace = range_checker.generate_trace();
 
     // Make the trace invalid
     trace.values.swap(0, 1);
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![chip.air, chip.range_checker.air],
-            vec![trace, range_trace],
-        )
-        .err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace]).err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
@@ -187,24 +183,20 @@ fn test_assert_less_than_negative_2() {
     let decomp: usize = 8;
     let bus = VariableRangeCheckerBus::new(0, decomp);
     const AUX_LEN: usize = 4;
-    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
 
-    let chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker);
-    let mut trace = chip.generate_trace(vec![(28, 29)]);
-    let range_trace = chip.range_checker.generate_trace();
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
+    let mut chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
+    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    chip.pairs = vec![(28, 29)];
+    let mut trace = chip.generate_trace();
+    let range_trace = range_checker.generate_trace();
 
     // Make the trace invalid
     trace.values[2] = AbstractField::from_canonical_u64(1 << decomp as u64);
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![chip.air, chip.range_checker.air],
-            vec![trace, range_trace],
-        )
-        .err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace],).err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );

@@ -52,7 +52,7 @@ pub struct Poseidon2InternalRoundCols<const WIDTH: usize, T> {
 impl<const WIDTH: usize, T: Field> Poseidon2Cols<WIDTH, T> {
     pub fn blank_row(p2_air: &Poseidon2Air<WIDTH, T>) -> Self {
         let zero_row = [T::zero(); WIDTH];
-        p2_air.generate_local_trace(zero_row)
+        p2_air.generate_trace_row(zero_row)
     }
 }
 

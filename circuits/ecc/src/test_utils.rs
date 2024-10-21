@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc, str::FromStr, sync::Arc};
 
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
