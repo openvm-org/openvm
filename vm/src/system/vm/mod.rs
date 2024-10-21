@@ -11,7 +11,7 @@ pub use segment::ExecutionSegment;
 
 use crate::{
     intrinsics::hashes::poseidon2::CHUNK,
-    kernels::core::CoreState,
+    kernels::core::Streams,
     system::{
         memory::Equipartition,
         program::{ExecutionError, Program},
@@ -34,18 +34,6 @@ pub struct VirtualMachine<F: PrimeField32> {
     initial_memory: Option<Equipartition<F, CHUNK>>,
     // TODO[zach]: Make better interface for user IOs
     program_inputs: Vec<(usize, F)>,
-}
-
-/// Struct that holds the current state of the VM. For now, includes memory, input stream, and hint stream.
-/// Hint stream cannot be added to during execution, but must be copied because it is popped from.
-#[derive(Clone, Debug)]
-pub struct VirtualMachineState<F: PrimeField32> {
-    /// Current state of the Core
-    pub state: CoreState,
-    /// Input stream of the Core
-    pub input_stream: VecDeque<Vec<F>>,
-    /// Hint stream of the Core
-    pub hint_stream: VecDeque<F>,
 }
 
 pub struct VirtualMachineResult<SC: StarkGenericConfig> {
@@ -88,13 +76,13 @@ impl<F: PrimeField32> VirtualMachine<F> {
         let mut segment = ExecutionSegment::new(
             self.config.clone(),
             program.clone(),
-            VirtualMachineState {
-                state: CoreState::initial(program.pc_start),
+            Streams {
                 input_stream: mem::take(&mut self.input_stream),
                 hint_stream: VecDeque::new(),
             },
             self.initial_memory.take(),
         );
+        let mut pc = program.pc_start;
 
         loop {
             // TODO[zach]: User public values currently set on all segments on the core chip.
@@ -105,29 +93,27 @@ impl<F: PrimeField32> VirtualMachine<F> {
                     core_chip.public_values[idx] = Some(public_value);
                 }
             }
-            segment.execute()?;
+            pc = segment.execute_from_pc(pc)?;
             if segment.did_terminate() {
                 break;
             }
 
+            assert_eq!(
+                pc,
+                segment.chip_set.connector_chip.boundary_states[1]
+                    .unwrap()
+                    .pc
+            );
+
             let config = mem::take(&mut segment.config);
             let cycle_tracker = mem::take(&mut segment.cycle_tracker);
-            let state = VirtualMachineState {
-                state: CoreState {
-                    pc: segment.chip_set.connector_chip.boundary_states[1]
-                        .unwrap()
-                        .pc,
-                    is_done: false,
-                },
-                input_stream: mem::take(&mut segment.input_stream),
-                hint_stream: mem::take(&mut segment.hint_stream),
-            };
+            let streams = mem::take(&mut segment.streams);
             let final_memory = mem::take(&mut segment.final_memory)
                 .expect("final memory should be set in continuations segment");
 
             segments.push(segment);
 
-            segment = ExecutionSegment::new(config, program.clone(), state, Some(final_memory));
+            segment = ExecutionSegment::new(config, program.clone(), streams, Some(final_memory));
             segment.cycle_tracker = cycle_tracker;
         }
         segments.push(segment);
