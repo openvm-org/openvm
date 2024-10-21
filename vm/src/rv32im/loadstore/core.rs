@@ -94,7 +94,7 @@ where
         let local_opcode_index =
             Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
         let data: [[F; NUM_CELLS]; 2] = reads.into();
-        let write_data = solve_write_data(local_opcode_index, data[0], data[1]);
+        let write_data = run_write_data(local_opcode_index, data[0], data[1]);
 
         let output = AdapterRuntimeContext::without_pc(write_data);
 
@@ -117,7 +117,7 @@ where
     }
 }
 
-pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
+pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
     opcode: Rv32LoadStoreOpcode,
     read_data: [F; NUM_CELLS],
     prev_data: [F; NUM_CELLS],

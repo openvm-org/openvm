@@ -7,18 +7,18 @@ use p3_field::{AbstractField, PrimeField32};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
-    core::{solve_cmp, BranchLessThanCoreChip},
+    core::{run_cmp, BranchLessThanCoreChip},
     Rv32BranchLessThanChip,
 };
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        InstructionExecutor, VmCoreChip,
+        BasicAdapterInterface, InstructionExecutor, VmCoreChip,
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::adapters::{
-        Rv32BranchAdapterChip, Rv32BranchAdapterInterface, PC_BITS, RV32_CELL_BITS,
+        JumpUiProcessedInstruction, Rv32BranchAdapterChip, PC_BITS, RV32_CELL_BITS,
         RV32_REGISTER_NUM_LANES, RV_B_TYPE_IMM_BITS,
     },
     system::program::Instruction,
@@ -67,8 +67,7 @@ fn run_rv32_branch_lt_rand_execute<E: InstructionExecutor<F>>(
         rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS)),
     );
 
-    let (cmp_result, _, _, _) =
-        solve_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &a, &b);
+    let (cmp_result, _, _, _) = run_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &a, &b);
     let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
     let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
     // TODO: update the default increment (i.e. 4) when opcodes are updated
@@ -159,7 +158,7 @@ fn execute_pc_increment_sanity_test() {
 
     let result = <BranchLessThanCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS> as VmCoreChip<
         F,
-        Rv32BranchAdapterInterface<F>,
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LANES, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
@@ -167,7 +166,7 @@ fn execute_pc_increment_sanity_test() {
     instruction.opcode = BranchLessThanOpcode::BGE.as_usize();
     let result = <BranchLessThanCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS> as VmCoreChip<
         F,
-        Rv32BranchAdapterInterface<F>,
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LANES, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, x]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());
@@ -175,18 +174,18 @@ fn execute_pc_increment_sanity_test() {
 }
 
 #[test]
-fn solve_cmp_unsigned_sanity_test() {
+fn run_cmp_unsigned_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [145, 34, 25, 205];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BLTU, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BLTU, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(!x_sign); // unsigned
     assert!(!y_sign); // unsigned
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BGEU, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BGEU, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(!x_sign); // unsigned
@@ -194,18 +193,18 @@ fn solve_cmp_unsigned_sanity_test() {
 }
 
 #[test]
-fn solve_cmp_same_sign_sanity_test() {
+fn run_cmp_same_sign_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [145, 34, 25, 205];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BLT, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BLT, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(x_sign); // negative
     assert!(y_sign); // negative
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BGE, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BGE, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(x_sign); // negative
@@ -213,18 +212,18 @@ fn solve_cmp_same_sign_sanity_test() {
 }
 
 #[test]
-fn solve_cmp_diff_sign_sanity_test() {
+fn run_cmp_diff_sign_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [45, 35, 25, 55];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [173, 34, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BLT, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BLT, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 3);
     assert!(!x_sign); // positive
     assert!(y_sign); // negative
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BGE, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(BranchLessThanOpcode::BGE, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 3);
     assert!(!x_sign); // positive

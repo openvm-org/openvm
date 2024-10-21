@@ -16,7 +16,7 @@ use super::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        MinimalInstruction, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        Result, VecHeapAdapterInterface, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -45,7 +45,7 @@ pub struct Rv32VecHeapAdapterChip<
     const WRITE_SIZE: usize,
 > {
     pub air: Rv32VecHeapAdapterAir<R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<
@@ -65,7 +65,6 @@ impl<
         assert!(R <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         let address_bits = memory_controller.mem_config.pointer_max_bits;
         Self {
             air: Rv32VecHeapAdapterAir {
@@ -73,7 +72,7 @@ impl<
                 memory_bridge,
                 address_bits,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -127,31 +126,6 @@ pub struct Rv32VecHeapAdapterCols<
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; NUM_WRITES],
 }
 
-#[derive(Clone)]
-pub struct Rv32VecHeapAdapterInterface<
-    T,
-    const R: usize,
-    const NUM_READS: usize,
-    const NUM_WRITES: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
->(PhantomData<T>);
-
-impl<
-        T,
-        const R: usize,
-        const NUM_READS: usize,
-        const NUM_WRITES: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > VmAdapterInterface<T>
-    for Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
-{
-    type Reads = [[[T; READ_SIZE]; NUM_READS]; R];
-    type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
-    type ProcessedInstruction = MinimalInstruction<T>;
-}
-
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32VecHeapAdapterAir<
@@ -191,7 +165,7 @@ impl<
     > VmAdapterAir<AB> for Rv32VecHeapAdapterAir<R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
     type Interface =
-        Rv32VecHeapAdapterInterface<AB::Expr, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
+        VecHeapAdapterInterface<AB::Expr, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
     fn eval(
         &self,
@@ -319,8 +293,7 @@ impl<
     type ReadRecord = Rv32VecHeapReadRecord<F, R, NUM_READS, READ_SIZE>;
     type WriteRecord = Rv32VecHeapWriteRecord<F, NUM_WRITES, WRITE_SIZE>;
     type Air = Rv32VecHeapAdapterAir<R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
-    type Interface =
-        Rv32VecHeapAdapterInterface<F, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
+    type Interface = VecHeapAdapterInterface<F, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
     fn preprocess(
         &mut self,
@@ -407,6 +380,7 @@ impl<
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let row_slice: &mut Rv32VecHeapAdapterCols<
             F,
@@ -426,128 +400,17 @@ impl<
 
         row_slice.rs_read_aux = read_record
             .rs
-            .map(|r| self.aux_cols_factory.make_read_aux_cols(r));
-        row_slice.rd_read_aux = self.aux_cols_factory.make_read_aux_cols(read_record.rd);
+            .map(|r| aux_cols_factory.make_read_aux_cols(r));
+        row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rd);
         row_slice.reads_aux = read_record
             .reads
-            .map(|r| r.map(|x| self.aux_cols_factory.make_read_aux_cols(x)));
+            .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(x)));
         row_slice.writes_aux = write_record
             .writes
-            .map(|w| self.aux_cols_factory.make_write_aux_cols(w));
+            .map(|w| aux_cols_factory.make_write_aux_cols(w));
     }
 
     fn air(&self) -> &Self::Air {
         &self.air
-    }
-}
-
-mod conversions {
-    use super::Rv32VecHeapAdapterInterface;
-    use crate::arch::{AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface};
-
-    // AdapterAirContext: Rv32VecHeapAdapterInterface -> DynInterface
-    impl<
-            T,
-            const R: usize,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        >
-        From<
-            AdapterAirContext<
-                T,
-                Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        > for AdapterAirContext<T, DynAdapterInterface<T>>
-    {
-        fn from(
-            ctx: AdapterAirContext<
-                T,
-                Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        ) -> Self {
-            AdapterAirContext {
-                to_pc: ctx.to_pc,
-                reads: ctx.reads.into(),
-                writes: ctx.writes.into(),
-                instruction: ctx.instruction.into(),
-            }
-        }
-    }
-
-    // AdapterRuntimeContext: Rv32VecHeapAdapterInterface -> DynInterface
-    impl<
-            T,
-            const R: usize,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        >
-        From<
-            AdapterRuntimeContext<
-                T,
-                Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        > for AdapterRuntimeContext<T, DynAdapterInterface<T>>
-    {
-        fn from(
-            ctx: AdapterRuntimeContext<
-                T,
-                Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        ) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.into(),
-            }
-        }
-    }
-
-    // AdapterAirContext: DynInterface -> Rv32VecHeapAdapterInterface
-    impl<
-            T,
-            const R: usize,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
-        for AdapterAirContext<
-            T,
-            Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >
-    {
-        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterAirContext {
-                to_pc: ctx.to_pc,
-                reads: ctx.reads.into(),
-                writes: ctx.writes.into(),
-                instruction: ctx.instruction.into(),
-            }
-        }
-    }
-
-    // AdapterRuntimeContext: DynInterface -> Rv32VecHeapAdapterInterface
-    impl<
-            T,
-            const R: usize,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
-        for AdapterRuntimeContext<
-            T,
-            Rv32VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >
-    {
-        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.into(),
-            }
-        }
     }
 }

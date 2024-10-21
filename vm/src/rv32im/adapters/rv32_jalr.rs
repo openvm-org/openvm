@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -25,20 +26,11 @@ use crate::{
     },
 };
 
-type Rv32JalrAdapterInterface<T> = BasicAdapterInterface<
-    T,
-    JumpUiProcessedInstruction<T>,
-    1,
-    1,
-    RV32_REGISTER_NUM_LANES,
-    RV32_REGISTER_NUM_LANES,
->;
-
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
 #[derive(Debug, Clone)]
 pub struct Rv32JalrAdapterChip<F: Field> {
     pub air: Rv32JalrAdapterAir,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32> Rv32JalrAdapterChip<F> {
@@ -49,13 +41,12 @@ impl<F: PrimeField32> Rv32JalrAdapterChip<F> {
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: Rv32JalrAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -94,7 +85,14 @@ impl<F: Field> BaseAir<F> for Rv32JalrAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
-    type Interface = Rv32JalrAdapterInterface<AB::Expr>;
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        JumpUiProcessedInstruction<AB::Expr>,
+        1,
+        1,
+        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn eval(
         &self,
@@ -171,8 +169,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
     type ReadRecord = Rv32JalrReadRecord<F>;
     type WriteRecord = Rv32JalrWriteRecord<F>;
     type Air = Rv32JalrAdapterAir;
-    type Interface = Rv32JalrAdapterInterface<F>;
-
+    type Interface = BasicAdapterInterface<
+        F,
+        JumpUiProcessedInstruction<F>,
+        1,
+        1,
+        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LANES,
+    >;
     fn preprocess(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -224,11 +228,12 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let adapter_cols: &mut Rv32JalrAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         adapter_cols.rs1_ptr = read_record.rs1.pointer;
-        adapter_cols.rs1_aux_cols = self.aux_cols_factory.make_read_aux_cols(read_record.rs1);
+        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(read_record.rs1);
         (
             adapter_cols.rd_ptr,
             adapter_cols.rd_aux_cols,
@@ -236,7 +241,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         ) = match write_record.rd {
             Some(rd) => (
                 rd.pointer,
-                self.aux_cols_factory.make_write_aux_cols(rd),
+                aux_cols_factory.make_write_aux_cols(rd),
                 F::one(),
             ),
             None => (F::zero(), MemoryWriteAuxCols::disabled(), F::zero()),

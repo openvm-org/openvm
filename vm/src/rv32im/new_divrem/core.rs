@@ -118,7 +118,7 @@ where
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
         let y = data[1].map(|y| y.as_canonical_u32());
-        let (q, r, _x_sign, _y_sign) = solve_divrem::<NUM_LIMBS, LIMB_BITS>(
+        let (q, r, _x_sign, _y_sign) = run_divrem::<NUM_LIMBS, LIMB_BITS>(
             local_opcode_index == DivRemOpcode::DIV || local_opcode_index == DivRemOpcode::REM,
             &x,
             &y,
@@ -155,7 +155,7 @@ where
 }
 
 // Returns (quotient, remainder, x_sign, y_sign)
-pub(super) fn solve_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     signed: bool,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],

@@ -298,7 +298,7 @@ where
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
-        let (a, limb_shift, bit_shift) = solve_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &b, &c);
+        let (a, limb_shift, bit_shift) = run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &b, &c);
 
         let bit_shift_carry = array::from_fn(|i| match shift_opcode {
             ShiftOpcode::SLL => b[i] >> (LIMB_BITS - bit_shift),
@@ -366,19 +366,19 @@ where
     }
 }
 
-pub(super) fn solve_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: ShiftOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> ([u32; NUM_LIMBS], usize, usize) {
     match opcode {
-        ShiftOpcode::SLL => solve_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
-        ShiftOpcode::SRL => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
-        ShiftOpcode::SRA => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, false),
+        ShiftOpcode::SLL => run_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
+        ShiftOpcode::SRL => run_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
+        ShiftOpcode::SRA => run_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, false),
     }
 }
 
-fn solve_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> ([u32; NUM_LIMBS], usize, usize) {
@@ -400,7 +400,7 @@ fn solve_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (result, limb_shift, bit_shift)
 }
 
-fn solve_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
     logical: bool,

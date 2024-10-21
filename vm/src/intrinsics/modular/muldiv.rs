@@ -116,12 +116,12 @@ where
         assert_eq!(flags.len(), 1);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[0].iter().map(|x| (*x).into()).collect();
-        // flag = 1 means mul (opcode = 2), flag = 0 means div (opcode = 3)
-        let expected_opcode = AB::Expr::from_canonical_usize(3) - flags[0];
+        // flag = 1 means mul (local opcode idx = 2), flag = 0 means div (local opcode idx = 3)
+        let local_opcode_idx = AB::Expr::from_canonical_usize(3) - flags[0];
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
-            opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
+            opcode: local_opcode_idx + AB::Expr::from_canonical_usize(self.offset),
         };
 
         let ctx: AdapterAirContext<_, DynAdapterInterface<_>> = AdapterAirContext {
@@ -186,7 +186,7 @@ where
         let num_limbs = self.air.expr.canonical_num_limbs();
         let limb_bits = self.air.expr.canonical_limb_bits();
         let Instruction { opcode, .. } = instruction.clone();
-        let local_opcode_index = opcode - self.air.offset;
+        let local_opcode_idx = opcode - self.air.offset;
         let data: DynArray<_> = reads.into();
         let data = data.0;
         assert_eq!(data.len(), 2 * num_limbs);
@@ -202,11 +202,11 @@ where
         let x_biguint = limbs_to_biguint(&x, limb_bits);
         let y_biguint = limbs_to_biguint(&y, limb_bits);
 
-        let opcode = ModularArithmeticOpcode::from_usize(local_opcode_index);
-        let is_mul_flag = match opcode {
+        let local_opcode = ModularArithmeticOpcode::from_usize(local_opcode_idx);
+        let is_mul_flag = match local_opcode {
             ModularArithmeticOpcode::MUL => true,
             ModularArithmeticOpcode::DIV => false,
-            _ => panic!("Unsupported opcode: {:?}", opcode),
+            _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
 
         let vars = self.air.expr.execute(
@@ -215,6 +215,9 @@ where
         );
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
+        tracing::trace!(
+            "ModularArithmeticOpcode | {local_opcode:?} | {z_biguint:?} | {x_biguint:?} | {y_biguint:?}",
+        );
         let z_limbs = biguint_to_limbs_vec(z_biguint, limb_bits, num_limbs);
         let writes = z_limbs.into_iter().map(F::from_canonical_u32).collect_vec();
         let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);

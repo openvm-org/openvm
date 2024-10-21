@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -25,13 +26,11 @@ use crate::{
     },
 };
 
-type Rv32RdWriteAdapterInterface<T> =
-    BasicAdapterInterface<T, JumpUiProcessedInstruction<T>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
 /// This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
 #[derive(Debug, Clone)]
 pub struct Rv32RdWriteAdapterChip<F: Field> {
     pub air: Rv32RdWriteAdapterAir,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 /// This adapter doesn't read anything, and **maybe** writes to [a:4]_d, where d == 1
@@ -50,13 +49,12 @@ impl<F: PrimeField32> Rv32RdWriteAdapterChip<F> {
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: Rv32RdWriteAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -125,11 +123,22 @@ impl Rv32RdWriteAdapterAir {
     /// Otherwise:
     /// - Writes if `ctx.instruction.is_valid`.
     /// - Sets operand `f` to default value of `0` in the instruction.
+    #[allow(clippy::type_complexity)]
     fn conditional_eval<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local_cols: &Rv32RdWriteAdapterCols<AB::Var>,
-        ctx: AdapterAirContext<AB::Expr, Rv32RdWriteAdapterInterface<AB::Expr>>,
+        ctx: AdapterAirContext<
+            AB::Expr,
+            BasicAdapterInterface<
+                AB::Expr,
+                JumpUiProcessedInstruction<AB::Expr>,
+                0,
+                1,
+                0,
+                RV32_REGISTER_NUM_LANES,
+            >,
+        >,
         needs_write: Option<AB::Expr>,
     ) {
         let timestamp: AB::Var = local_cols.from_state.timestamp;
@@ -174,7 +183,14 @@ impl Rv32RdWriteAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
-    type Interface = Rv32RdWriteAdapterInterface<AB::Expr>;
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        JumpUiProcessedInstruction<AB::Expr>,
+        0,
+        1,
+        0,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn eval(
         &self,
@@ -193,7 +209,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
-    type Interface = Rv32RdWriteAdapterInterface<AB::Expr>;
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        JumpUiProcessedInstruction<AB::Expr>,
+        0,
+        1,
+        0,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn eval(
         &self,
@@ -226,7 +249,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
     type ReadRecord = ();
     type WriteRecord = Rv32RdWriteWriteRecord<F>;
     type Air = Rv32RdWriteAdapterAir;
-    type Interface = Rv32RdWriteAdapterInterface<F>;
+    type Interface =
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
 
     fn preprocess(
         &mut self,
@@ -270,12 +294,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let adapter_cols: &mut Rv32RdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         let rd = write_record.rd.unwrap();
         adapter_cols.rd_ptr = rd.pointer;
-        adapter_cols.rd_aux_cols = self.aux_cols_factory.make_write_aux_cols(rd);
+        adapter_cols.rd_aux_cols = aux_cols_factory.make_write_aux_cols(rd);
     }
 
     fn air(&self) -> &Self::Air {
@@ -287,7 +312,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
     type ReadRecord = ();
     type WriteRecord = Rv32RdWriteWriteRecord<F>;
     type Air = Rv32CondRdWriteAdapterAir;
-    type Interface = Rv32RdWriteAdapterInterface<F>;
+    type Interface =
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
 
     fn preprocess(
         &mut self,
@@ -331,12 +357,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.inner.from_state = write_record.from_state.map(F::from_canonical_u32);
         if let Some(rd) = write_record.rd {
             adapter_cols.inner.rd_ptr = rd.pointer;
-            adapter_cols.inner.rd_aux_cols = self.inner.aux_cols_factory.make_write_aux_cols(rd);
+            adapter_cols.inner.rd_aux_cols = aux_cols_factory.make_write_aux_cols(rd);
             adapter_cols.needs_write = F::one();
         } else {
             adapter_cols.needs_write = F::zero();

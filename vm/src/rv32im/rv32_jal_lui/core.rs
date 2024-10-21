@@ -186,7 +186,7 @@ where
             }
             LUI => imm.as_canonical_u32() as i32,
         };
-        let (to_pc, rd_data) = solve_jal_lui(local_opcode_index, from_pc, signed_imm);
+        let (to_pc, rd_data) = run_jal_lui(local_opcode_index, from_pc, signed_imm);
 
         self.xor_lookup_chip.request(rd_data[1], rd_data[2]);
         if local_opcode_index == JAL {
@@ -240,7 +240,7 @@ where
 }
 
 // returns (to_pc, rd_data)
-pub(super) fn solve_jal_lui(
+pub(super) fn run_jal_lui(
     opcode: Rv32JalLuiOpcode,
     pc: u32,
     imm: i32,

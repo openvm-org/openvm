@@ -6,7 +6,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
-use super::{core::solve_less_than, LessThanCoreChip, Rv32LessThanChip};
+use super::{core::run_less_than, LessThanCoreChip, Rv32LessThanChip};
 use crate::{
     arch::{
         instructions::LessThanOpcode,
@@ -73,7 +73,7 @@ fn run_rv32_lt_rand_write_execute<E: InstructionExecutor<F>>(
         tester.write::<RV32_REGISTER_NUM_LANES>(1, rs2, c.map(F::from_canonical_u32));
     }
 
-    let (cmp, _, _, _) = solve_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &b, &c);
+    let (cmp, _, _, _) = run_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &b, &c);
     tester.execute(
         chip,
         Instruction::from_usize(
@@ -149,11 +149,11 @@ fn rv32_sltu_rand_test() {
 ///////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn solve_sltu_sanity_test() {
+fn run_sltu_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [145, 34, 25, 205];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(LessThanOpcode::SLTU, &x, &y);
+        run_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(LessThanOpcode::SLTU, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(!x_sign); // unsigned
@@ -161,11 +161,11 @@ fn solve_sltu_sanity_test() {
 }
 
 #[test]
-fn solve_slt_same_sign_sanity_test() {
+fn run_slt_same_sign_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [145, 34, 25, 205];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
+        run_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(x_sign); // negative
@@ -173,11 +173,11 @@ fn solve_slt_same_sign_sanity_test() {
 }
 
 #[test]
-fn solve_slt_diff_sign_sanity_test() {
+fn run_slt_diff_sign_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LANES] = [45, 35, 25, 55];
     let y: [u32; RV32_REGISTER_NUM_LANES] = [173, 34, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        solve_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
+        run_less_than::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 3);
     assert!(!x_sign); // positive

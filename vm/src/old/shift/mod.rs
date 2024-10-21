@@ -125,7 +125,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|y| y.as_canonical_u32());
         let (z, limb_shift, bit_shift) =
-            solve_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, U256Opcode::from_usize(local_opcode_index));
+            run_shift::<NUM_LIMBS, LIMB_BITS>(&x, &y, U256Opcode::from_usize(local_opcode_index));
 
         let carry = x
             .into_iter()
@@ -191,20 +191,20 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     }
 }
 
-fn solve_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
     op: U256Opcode,
 ) -> (Vec<u32>, usize, usize) {
     match op {
-        U256Opcode::SLL => solve_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
-        U256Opcode::SRL => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
-        U256Opcode::SRA => solve_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, false),
+        U256Opcode::SLL => run_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
+        U256Opcode::SRL => run_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
+        U256Opcode::SRA => run_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, false),
         _ => unreachable!(),
     }
 }
 
-fn solve_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, usize, usize) {
@@ -226,7 +226,7 @@ fn solve_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (result, limb_shift, bit_shift)
 }
 
-fn solve_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
     logical: bool,

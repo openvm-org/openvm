@@ -27,7 +27,7 @@ use crate::{
         adapters::{
             compose, Rv32JalrAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
         },
-        rv32_jalr::{solve_jalr, Rv32JalrCoreCols},
+        rv32_jalr::{run_jalr, Rv32JalrCoreCols},
     },
     system::program::Instruction,
 };
@@ -78,7 +78,7 @@ fn set_and_execute(
 
     let rs1 = compose(rs1);
 
-    let (next_pc, rd_data) = solve_jalr(opcode, initial_pc, imm_ext, rs1);
+    let (next_pc, rd_data) = run_jalr(opcode, initial_pc, imm_ext, rs1);
     let rd_data = if a == 0 { [0; 4] } else { rd_data };
 
     assert_eq!(next_pc, final_pc);
@@ -308,12 +308,12 @@ fn execute_roundtrip_sanity_test() {
 }
 
 #[test]
-fn solve_jalr_sanity_test() {
+fn run_jalr_sanity_test() {
     let opcode = JALR;
     let initial_pc = 789456120;
     let imm = -1235_i32 as u32;
     let rs1 = 736482910;
-    let (next_pc, rd_data) = solve_jalr(opcode, initial_pc, imm, rs1);
+    let (next_pc, rd_data) = run_jalr(opcode, initial_pc, imm, rs1);
     assert_eq!(next_pc, 736481674);
     assert_eq!(rd_data, [252, 36, 14, 47]);
 }
