@@ -43,6 +43,7 @@ fn sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
         num
     }
 }
+
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32LoadSignExtendChip<F>,
