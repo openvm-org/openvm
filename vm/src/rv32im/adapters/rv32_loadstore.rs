@@ -145,8 +145,6 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub write_aux: MemoryBaseAuxCols<T>,
 }
 
-const RV32_TWO_CELL_BITS: usize = RV32_CELL_BITS * 2;
-
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32LoadStoreAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
@@ -198,7 +196,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let limbs_23 = local_cols.rs1_data[2]
             + local_cols.rs1_data[3] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
 
-        let inv = AB::F::from_canonical_u32(1 << RV32_TWO_CELL_BITS).inverse();
+        let inv = AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2)).inverse();
         let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr[0]) * inv;
 
         builder
@@ -209,7 +207,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             .when(is_valid.clone() - is_hint.clone())
             .assert_bool(local_cols.imm_sign);
         let imm_extend_limb =
-            local_cols.imm_sign * AB::F::from_canonical_u32((1 << RV32_TWO_CELL_BITS) - 1);
+            local_cols.imm_sign * AB::F::from_canonical_u32((1 << (RV32_CELL_BITS * 2)) - 1);
         let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr[1]) * inv;
         builder
             .when(is_valid.clone() - is_hint.clone())
@@ -217,14 +215,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         // preventing mem_ptr overflow
         self.range_bus
-            .range_check(local_cols.mem_ptr[0], RV32_TWO_CELL_BITS)
+            .range_check(local_cols.mem_ptr[0], RV32_CELL_BITS * 2)
             .eval(builder, is_valid.clone() - is_hint.clone());
         self.range_bus
-            .range_check(local_cols.mem_ptr[1], ADDRESS_BITS - RV32_TWO_CELL_BITS)
+            .range_check(local_cols.mem_ptr[1], ADDRESS_BITS - RV32_CELL_BITS * 2)
             .eval(builder, is_valid.clone() - is_hint.clone());
 
         let mem_ptr = local_cols.mem_ptr[0]
-            + local_cols.mem_ptr[1] * AB::F::from_canonical_u32(1 << RV32_TWO_CELL_BITS);
+            + local_cols.mem_ptr[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
 
         // read_as is 2 for loads and 1 for stores
         let read_as =
@@ -335,13 +333,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
         assert!(ptr_val < (1 << ADDRESS_BITS) || local_opcode == HINTLOAD_RV32);
-        let mem_ptr = array::from_fn(|i| (ptr_val >> (i * RV32_TWO_CELL_BITS)) & 0xffff);
+        let mem_ptr = array::from_fn(|i| (ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff);
 
         if local_opcode != HINTLOAD_RV32 {
             self.range_checker_chip
-                .add_count(mem_ptr[0], RV32_TWO_CELL_BITS);
+                .add_count(mem_ptr[0], RV32_CELL_BITS * 2);
             self.range_checker_chip
-                .add_count(mem_ptr[1], ADDRESS_BITS - RV32_TWO_CELL_BITS);
+                .add_count(mem_ptr[1], ADDRESS_BITS - RV32_CELL_BITS * 2);
         }
         let read_record = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
@@ -392,7 +390,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
-            opcode, a, c, d, e, ..
+            opcode, a, d, e, ..
         } = *instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
@@ -404,8 +402,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let write_record = match local_opcode {
             STOREW | STOREH | STOREB => {
                 let rs1_val = compose(rs1_data);
-                let imm = c.as_canonical_u32();
-                let imm_sign = (imm & 0x8000) >> 15;
+                let imm = read_record.imm.as_canonical_u32();
+                let imm_sign = read_record.imm_sign as u32;
                 let imm_extended = imm + imm_sign * 0xffff0000;
                 let ptr = rs1_val.wrapping_add(imm_extended);
                 assert!(ptr < (1 << ADDRESS_BITS));
