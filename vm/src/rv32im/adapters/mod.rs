@@ -4,7 +4,7 @@ mod rv32_jalr;
 mod rv32_loadstore;
 mod rv32_mul;
 mod rv32_rdwrite;
-mod rv32_terminate_nop;
+// mod rv32_terminate_nop;
 mod rv32_vec_heap;
 
 use afs_derive::AlignedBorrow;
@@ -14,7 +14,7 @@ pub use rv32_jalr::*;
 pub use rv32_loadstore::*;
 pub use rv32_mul::*;
 pub use rv32_rdwrite::*;
-pub use rv32_terminate_nop::*;
+// pub use rv32_terminate_nop::*;
 pub use rv32_vec_heap::*;
 
 /// 32-bit register stored as 4 bytes (4 lanes of 8-bits)

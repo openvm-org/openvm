@@ -225,7 +225,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         .absolute(now_trace_cells.into_values().sum::<usize>() as u64);
                 }
             }
-            if opcode == CoreOpcode::TERMINATE as usize {
+            if opcode == CoreOpcode::TERMINATE as usize
+                || opcode == Rv32TerminateNopOpcode::TERMINATE.with_default_offset()
+            {
                 break;
             }
             if self.should_segment() {
