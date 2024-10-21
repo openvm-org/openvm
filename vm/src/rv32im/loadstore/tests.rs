@@ -29,7 +29,6 @@ use crate::{
 };
 
 const IMM_BITS: usize = 16;
-const ADDR_BITS: usize = 29;
 
 type F = BabyBear;
 
@@ -55,7 +54,15 @@ fn set_and_execute(
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm_ext = sign_extend::<IMM_BITS>(imm);
 
-    let ptr_val = rng.gen_range(0..(1 << (ADDR_BITS - 2))) << 2;
+    let ptr_val = rng.gen_range(
+        0..(1
+            << (tester
+                .memory_controller()
+                .borrow()
+                .mem_config
+                .pointer_max_bits
+                - 2)),
+    ) << 2;
     let rs1 = rs1
         .unwrap_or(into_limbs::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
             ptr_val.wrapping_sub(&imm_ext),
