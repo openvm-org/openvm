@@ -36,6 +36,9 @@ use crate::{
     },
 };
 
+
+// LoadStore Adapter handles all memory and register operations, so it must be aware
+// of the instruction type, specifically whether it is a load or store, and if it is a hint.
 pub struct LoadStoreProcessedInstruction<T> {
     pub is_valid: T,
     // Absolute opcode number
