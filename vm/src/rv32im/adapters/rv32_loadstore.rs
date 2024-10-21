@@ -109,6 +109,7 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreReadRecord<F: Field> {
     /// This is `None` when handling `HintLoad` opcode.
+    /// This is `None` when handling `HintLoad` opcode.
     pub rs1_record: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>>,
     pub rs1_ptr: F,
     /// This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads.
@@ -123,7 +124,7 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreWriteRecord<F: Field> {
     pub from_state: ExecutionState<F>,
-    // This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores
+    /// This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores
     pub write: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
     pub rd_rs2_ptr: F,
 }
@@ -136,15 +137,15 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
     pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 
-    // Will write to rd when Load and read from rs2 when Store
+    /// Will write to rd when Load and read from rs2 when Store
     pub rd_rs2_ptr: T,
     pub read_data_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub imm: T,
     pub imm_sign: T,
-    // mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
+    /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
     pub mem_ptr: [T; 2],
 
-    // prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
+    /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
     pub write_aux: [T; MemoryWriteAuxCols::<u8, RV32_REGISTER_NUM_LIMBS>::striped_width()],
 }
 
