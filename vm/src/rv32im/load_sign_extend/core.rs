@@ -9,7 +9,6 @@ use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheck
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
-use strum::IntoEnumIterator;
 
 use crate::{
     arch::{
@@ -90,33 +89,30 @@ where
             opcode_loadh_flag,
             most_sig_bit,
         } = *cols;
-        let flags = [opcode_loadb_flag, opcode_loadh_flag];
 
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
-            builder.assert_bool(flag);
-            acc + flag.into()
-        });
+        builder.assert_bool(opcode_loadb_flag);
+        builder.assert_bool(opcode_loadh_flag);
+        let is_valid = opcode_loadb_flag + opcode_loadh_flag;
         builder.assert_bool(is_valid.clone());
         builder.assert_bool(most_sig_bit);
 
-        let expected_opcode = flags
-            .iter()
-            .zip(Rv32LoadStoreOpcode::iter().skip(7))
-            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
-            })
+        let expected_opcode = opcode_loadb_flag * AB::F::from_canonical_u8(LOADB as u8)
+            + opcode_loadh_flag * AB::F::from_canonical_u8(LOADH as u8)
             + AB::Expr::from_canonical_usize(self.offset);
 
+        let limb_mask = most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1);
+
+        // there are three parts to write_data:
+        // 1st limb is always read_data
+        // 2nd to (NUM_CELLS/2)th limbs are read_data if loadh and sign extended if loadb
+        // (NUM_CELLS/2 + 1)th to last limbs are always sign extended limbs
         let write_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
             if i == 0 {
                 read_data[i].into()
             } else if i < NUM_CELLS / 2 {
-                read_data[i] * opcode_loadh_flag
-                    + opcode_loadb_flag
-                        * most_sig_bit
-                        * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1)
+                read_data[i] * opcode_loadh_flag + opcode_loadb_flag * limb_mask.clone()
             } else {
-                most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1)
+                limb_mask.clone()
             }
         });
 

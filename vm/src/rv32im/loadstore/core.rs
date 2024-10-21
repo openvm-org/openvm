@@ -102,14 +102,21 @@ where
         });
         builder.assert_bool(is_valid.clone());
 
-        let expected_opcode = flags
-            .iter()
-            .zip(Rv32LoadStoreOpcode::iter())
-            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
-            })
-            + AB::Expr::from_canonical_usize(self.offset);
+        let expected_opcode = flags.iter().zip(Rv32LoadStoreOpcode::iter()).fold(
+            AB::Expr::zero(),
+            |acc, (flag, local_opcode)| {
+                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+            },
+        ) + AB::Expr::from_canonical_usize(self.offset);
 
+        // there are three parts to write_data:
+        // 1st limb is always read_data
+        // 2nd to (NUM_CELLS/2)th limbs are read_data if loadw/loadhu/storew/storeh/hintload
+        //                                  prev_data if storeb
+        //                                  zero if loadbu
+        // (NUM_CELLS/2 + 1)th to last limbs are read_data if loadw/hintload/storew
+        //                                  prev_data if storeb/storeh
+        //                                  zero if loadbu/loadhu
         let write_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
             if i == 0 {
                 read_data[i].into()
