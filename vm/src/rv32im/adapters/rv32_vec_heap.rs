@@ -12,7 +12,7 @@ use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
+use super::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
@@ -85,9 +85,9 @@ pub struct Rv32VecHeapReadRecord<
     const READ_SIZE: usize,
 > {
     /// Read register value from address space e=1
-    pub rs: [MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>; R],
+    pub rs: [MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>; R],
     /// Read register value from address space d=1
-    pub rd: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rd: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
 
     pub rd_val: F,
 
@@ -116,11 +116,11 @@ pub struct Rv32VecHeapAdapterCols<
     pub rd_ptr: T,
     pub rs_ptr: [T; R],
 
-    pub rd_val: [T; RV32_REGISTER_NUM_LANES],
-    pub rs_val: [[T; RV32_REGISTER_NUM_LANES]; R],
+    pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; R],
 
-    pub rs_read_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>; R],
-    pub rd_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub rs_read_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; R],
+    pub rd_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 
     pub reads_aux: [[MemoryReadAuxCols<T, READ_SIZE>; NUM_READS]; R],
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; NUM_WRITES],

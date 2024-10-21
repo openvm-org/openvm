@@ -15,8 +15,8 @@ pub use rv32_mul::*;
 pub use rv32_rdwrite::*;
 pub use rv32_vec_heap::*;
 
-/// 32-bit register stored as 4 bytes (4 lanes of 8-bits)
-pub const RV32_REGISTER_NUM_LANES: usize = 4;
+/// 32-bit register stored as 4 bytes (4 limbs of 8-bits)
+pub const RV32_REGISTER_NUM_LIMBS: usize = 4;
 pub const RV32_CELL_BITS: usize = 8;
 
 // For soundness, should be <= 16
@@ -47,9 +47,9 @@ pub fn read_rv32_register<F: PrimeField32>(
     memory: &mut MemoryController<F>,
     address_space: F,
     pointer: F,
-) -> (MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>, u32) {
+) -> (MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>, u32) {
     debug_assert_eq!(address_space, F::one());
-    let record = memory.read::<RV32_REGISTER_NUM_LANES>(address_space, pointer);
+    let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
     let val = compose(record.data);
     (record, val)
 }

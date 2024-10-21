@@ -9,7 +9,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LANES};
+use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LIMBS};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
@@ -54,9 +54,9 @@ impl<F: PrimeField32> Rv32BranchAdapterChip<F> {
 #[derive(Debug)]
 pub struct Rv32BranchReadRecord<F: Field> {
     /// Read register value from address space d = 1
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
     /// Read register value from address space e = 1
-    pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[derive(Debug)]
@@ -70,7 +70,7 @@ pub struct Rv32BranchAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs2_ptr: T,
-    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>; 2],
+    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; 2],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -91,7 +91,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
         JumpUiProcessedInstruction<AB::Expr>,
         2,
         0,
-        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LIMBS,
         0,
     >;
 
@@ -155,7 +155,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
     type WriteRecord = Rv32BranchWriteRecord;
     type Air = Rv32BranchAdapterAir;
     type Interface =
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LANES, 0>;
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>;
 
     fn preprocess(
         &mut self,
@@ -170,8 +170,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 1);
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LANES>(d, a);
-        let rs2 = memory.read::<RV32_REGISTER_NUM_LANES>(e, b);
+        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, a);
+        let rs2 = memory.read::<RV32_REGISTER_NUM_LIMBS>(e, b);
 
         Ok(([rs1.data, rs2.data], Self::ReadRecord { rs1, rs2 }))
     }

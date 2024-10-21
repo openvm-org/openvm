@@ -23,7 +23,7 @@ use crate::{
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
-        adapters::{Rv32RdWriteAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
+        adapters::{Rv32RdWriteAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         rv32_auipc::run_auipc,
     },
     system::program::Instruction,
@@ -101,9 +101,9 @@ fn run_negative_auipc_test(
     opcode: Rv32AuipcOpcode,
     initial_imm: Option<u32>,
     initial_pc: Option<u32>,
-    rd_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
-    imm_limbs: Option<[u32; RV32_REGISTER_NUM_LANES - 1]>,
-    pc_limbs: Option<[u32; RV32_REGISTER_NUM_LANES - 1]>,
+    rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    imm_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
+    pc_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();

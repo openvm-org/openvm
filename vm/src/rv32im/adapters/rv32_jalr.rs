@@ -10,7 +10,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LANES};
+use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LIMBS};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
@@ -52,13 +52,13 @@ impl<F: PrimeField32> Rv32JalrAdapterChip<F> {
 }
 #[derive(Debug, Clone)]
 pub struct Rv32JalrReadRecord<F: Field> {
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Rv32JalrWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
-    pub rd: Option<MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>>,
+    pub rd: Option<MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>>,
 }
 
 #[repr(C)]
@@ -66,9 +66,9 @@ pub struct Rv32JalrWriteRecord<F: Field> {
 pub struct Rv32JalrAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
-    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub rd_ptr: T,
-    pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub needs_write: T,
 }
 
@@ -90,8 +90,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
         JumpUiProcessedInstruction<AB::Expr>,
         1,
         1,
-        RV32_REGISTER_NUM_LANES,
-        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_REGISTER_NUM_LIMBS,
     >;
 
     fn eval(
@@ -174,8 +174,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         JumpUiProcessedInstruction<F>,
         1,
         1,
-        RV32_REGISTER_NUM_LANES,
-        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_REGISTER_NUM_LIMBS,
     >;
     fn preprocess(
         &mut self,
@@ -188,7 +188,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         let Instruction { b, d, .. } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), 1);
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
+        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
 
         Ok(([rs1.data], Rv32JalrReadRecord { rs1 }))
     }

@@ -10,7 +10,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LANES};
+use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LIMBS};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
@@ -74,7 +74,7 @@ impl<F: PrimeField32> Rv32CondRdWriteAdapterChip<F> {
 #[derive(Debug, Clone)]
 pub struct Rv32RdWriteWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
-    pub rd: Option<MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>>,
+    pub rd: Option<MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>>,
 }
 
 #[repr(C)]
@@ -82,7 +82,7 @@ pub struct Rv32RdWriteWriteRecord<F: Field> {
 pub struct Rv32RdWriteAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
-    pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[repr(C)]
@@ -136,7 +136,7 @@ impl Rv32RdWriteAdapterAir {
                 0,
                 1,
                 0,
-                RV32_REGISTER_NUM_LANES,
+                RV32_REGISTER_NUM_LIMBS,
             >,
         >,
         needs_write: Option<AB::Expr>,
@@ -189,7 +189,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
         0,
         1,
         0,
-        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LIMBS,
     >;
 
     fn eval(
@@ -215,7 +215,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
         0,
         1,
         0,
-        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LIMBS,
     >;
 
     fn eval(
@@ -250,7 +250,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
     type WriteRecord = Rv32RdWriteWriteRecord<F>;
     type Air = Rv32RdWriteAdapterAir;
     type Interface =
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LIMBS>;
 
     fn preprocess(
         &mut self,
@@ -313,7 +313,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
     type WriteRecord = Rv32RdWriteWriteRecord<F>;
     type Air = Rv32CondRdWriteAdapterAir;
     type Interface =
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LANES>;
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LIMBS>;
 
     fn preprocess(
         &mut self,

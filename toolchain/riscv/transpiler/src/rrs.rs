@@ -12,7 +12,7 @@ use stark_vm::{
         MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
         Rv32LoadStoreOpcode, ShiftOpcode, UsizeOpcode,
     },
-    rv32im::adapters::RV32_REGISTER_NUM_LANES,
+    rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
     system::program::Instruction,
 };
 use strum::EnumCount;
@@ -165,8 +165,8 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
         Instruction::new(
             Rv32JalrOpcode::JALR.with_default_offset(),
-            F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
-            F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rs1),
+            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
             F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
             F::one(),
             F::zero(),
@@ -189,7 +189,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         }
         Instruction::new(
             Rv32AuipcOpcode::AUIPC.with_default_offset(),
-            F::from_canonical_usize(RV32_REGISTER_NUM_LANES * dec_insn.rd),
+            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
             F::zero(),
             F::from_canonical_u32(((dec_insn.imm as u32) & 0xfffff000) >> 8),
             F::one(), // rd is a register
