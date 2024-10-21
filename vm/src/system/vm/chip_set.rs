@@ -216,7 +216,6 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        0,
                         offset,
                     )));
                     for opcode in range {

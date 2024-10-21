@@ -1,10 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, VecDeque},
-    mem,
-    ops::DerefMut,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::BTreeMap, mem, ops::DerefMut, rc::Rc};
 
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -18,7 +12,7 @@ use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
 
-use super::{cycle_tracker::CycleTracker, VirtualMachineState, VmConfig, VmMetrics};
+use super::{cycle_tracker::CycleTracker, VmConfig, VmMetrics};
 use crate::{
     arch::{instructions::*, AxVmChip, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
@@ -36,8 +30,7 @@ pub struct ExecutionSegment<F: PrimeField32> {
     /// Shortcut to the core chip.
     pub core_chip: Rc<RefCell<CoreChip<F>>>,
 
-    pub input_stream: VecDeque<Vec<F>>,
-    pub hint_stream: VecDeque<F>,
+    pub streams: Streams<F>,
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
 
@@ -89,14 +82,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     pub fn new(
         config: VmConfig,
         program: Program<F>,
-        state: VirtualMachineState<F>,
+        streams: Streams<F>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
     ) -> Self {
         let mut chip_set = config.create_chip_set();
         chip_set.program_chip.set_program(program);
 
         let core_chip = find_chip!(chip_set, AxVmChip::Core);
-        core_chip.borrow_mut().set_start_state(state.state);
 
         if let Some(initial_memory) = initial_memory {
             chip_set
@@ -109,8 +101,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             config,
             chip_set,
             core_chip,
-            input_stream: state.input_stream,
-            hint_stream: state.hint_stream.clone(),
+            streams,
             final_memory: None,
             collected_metrics: Default::default(),
             cycle_tracker: CycleTracker::new(),
@@ -118,22 +109,18 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     }
 
     pub fn did_terminate(&self) -> bool {
-        self.core_chip.borrow().state.is_done
+        self.core_chip.borrow().did_terminate
     }
 
     /// Stopping is triggered by should_segment()
-    pub fn execute(&mut self) -> Result<(), ExecutionError> {
+    pub fn execute_from_pc(&mut self, mut pc: u32) -> Result<u32, ExecutionError> {
         let mut timestamp = self.chip_set.memory_controller.borrow().timestamp();
-        let mut pc = self.core_chip.borrow().state.pc;
 
         let mut collect_metrics = self.config.collect_metrics;
         // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
 
-        self.core_chip.borrow_mut().streams = Streams {
-            input_stream: mem::take(&mut self.input_stream),
-            hint_stream: mem::take(&mut self.hint_stream),
-        };
+        self.core_chip.borrow_mut().streams = mem::take(&mut self.streams);
 
         self.chip_set
             .connector_chip
@@ -176,25 +163,20 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             prev_backtrace = trace;
 
             let mut opcode_name = None;
-            if self.chip_set.executors.contains_key(&opcode) {
-                let executor = self.chip_set.executors.get_mut(&opcode).unwrap();
-                match InstructionExecutor::execute(
+            if let Some(executor) = self.chip_set.executors.get_mut(&opcode) {
+                let next_state = InstructionExecutor::execute(
                     executor,
                     instruction,
                     ExecutionState::new(pc, timestamp),
-                ) {
-                    Ok(next_state) => {
-                        pc = next_state.pc;
-                        timestamp = next_state.timestamp;
-                    }
-                    Err(e) => return Err(e),
-                }
+                )?;
                 if collect_metrics {
                     opcode_name = Some(executor.get_opcode_name(opcode));
                 }
+                pc = next_state.pc;
+                timestamp = next_state.timestamp;
             } else {
                 return Err(ExecutionError::DisabledOperation(pc, opcode));
-            }
+            };
 
             if collect_metrics {
                 let now_trace_cells = self.current_trace_cells();
@@ -237,9 +219,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             .connector_chip
             .end(ExecutionState::new(pc, timestamp));
 
-        let streams = mem::take(&mut self.core_chip.borrow_mut().streams);
-        self.hint_stream = streams.hint_stream;
-        self.input_stream = streams.input_stream;
+        self.streams = mem::take(&mut self.core_chip.borrow_mut().streams);
 
         if collect_metrics {
             self.update_chip_metrics();
@@ -259,7 +239,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             PersistenceType::Volatile => memory_controller.finalize(None::<&mut Poseidon2Chip<F>>),
         };
 
-        Ok(())
+        Ok(pc)
     }
 
     /// Generate ProofInput to prove the segment. Should be called after ::execute
