@@ -27,14 +27,17 @@ pub struct IsEqualCols<T> {
     pub inv: T,
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for IsEqualAir {}
-impl<F: Field> PartitionedBaseAir<F> for IsEqualAir {}
-impl<F: Field> BaseAir<F> for IsEqualAir {
+#[derive(Clone, Copy)]
+pub struct IsEqTestAir(IsEqualAir);
+
+impl<F: Field> BaseAirWithPublicValues<F> for IsEqTestAir {}
+impl<F: Field> PartitionedBaseAir<F> for IsEqTestAir {}
+impl<F: Field> BaseAir<F> for IsEqTestAir {
     fn width(&self) -> usize {
         IsEqualCols::<F>::width()
     }
 }
-impl<AB: AirBuilder> Air<AB> for IsEqualAir {
+impl<AB: AirBuilder> Air<AB> for IsEqTestAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -47,7 +50,7 @@ impl<AB: AirBuilder> Air<AB> for IsEqualAir {
             AB::Expr::one(),
         );
 
-        SubAir::eval(self, builder, (io, local.inv));
+        self.0.eval(builder, (io, local.inv));
     }
 }
 
@@ -89,8 +92,11 @@ fn test_single_is_equal(x: u32, y: u32) {
 
     let trace = chip.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![IsEqualAir], vec![trace])
-        .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+        any_rap_arc_vec![IsEqTestAir],
+        vec![trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test_matrix(
@@ -115,7 +121,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
     disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![IsEqualAir],
+            any_rap_arc_vec![IsEqTestAir],
             vec![trace]
         )
         .err(),

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ops::Deref, rc::Rc, sync::Arc};
+use std::{cell::RefCell, ops::Deref, rc::Rc};
 
 use afs_primitives::{
     bigint::{
@@ -16,7 +16,7 @@ use afs_stark_backend::{
 };
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
-use p3_air::{Air, AirBuilder, BaseAir};
+use p3_air::{AirBuilder, BaseAir};
 use p3_field::{Field, PrimeField64};
 
 use super::{FieldVariable, SymbolicExpr};

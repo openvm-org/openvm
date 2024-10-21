@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
+use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     config::Val, engine::VerificationData, prover::types::AirProofInput,
     verifier::VerificationError, Chip,

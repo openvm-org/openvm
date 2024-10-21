@@ -1,8 +1,8 @@
-use std::{array, collections::BTreeMap};
+use std::{array, borrow::Borrow, collections::BTreeMap};
 
 use afs_primitives::{
-    is_equal::{columns::IsEqualAuxCols, IsEqualAir},
-    sub_chip::LocalTraceInstructions,
+    is_equal::{IsEqualAir, IsEqualAuxCols},
+    TraceSubRowGenerator,
 };
 use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
@@ -138,7 +138,7 @@ impl<T> CoreMemoryAccessCols<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct CoreAuxCols<T> {
     pub operation_flags: BTreeMap<CoreOpcode, T>,
     pub public_value_flags: Vec<T>,
@@ -183,7 +183,7 @@ impl<T: Clone> CoreAuxCols<T> {
 
         start = end;
         end += IsEqualAuxCols::<T>::width();
-        let is_equal_aux = IsEqualAuxCols::from_slice(&slc[start..end]);
+        let is_equal_aux: &IsEqualAuxCols<_> = (&slc[start..end]).borrow();
 
         let reads_aux_cols = array::from_fn(|_| {
             start = end;
@@ -203,7 +203,7 @@ impl<T: Clone> CoreAuxCols<T> {
             reads,
             writes,
             read0_equals_read1: beq_check,
-            is_equal_aux,
+            is_equal_aux: is_equal_aux.clone(),
             reads_aux_cols,
             writes_aux_cols,
             next_pc,
@@ -229,7 +229,7 @@ impl<T: Clone> CoreAuxCols<T> {
                 .flat_map(CoreMemoryAccessCols::<T>::flatten),
         );
         flattened.push(self.read0_equals_read1.clone());
-        flattened.extend(self.is_equal_aux.flatten());
+        flattened.extend([self.is_equal_aux.inv.clone()]);
         flattened.extend(
             self.reads_aux_cols
                 .iter()
@@ -266,15 +266,15 @@ impl<F: PrimeField32> CoreAuxCols<F> {
             operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::NOP));
         }
 
-        let is_equal_cols =
-            LocalTraceInstructions::generate_trace_row(&IsEqualAir, (F::zero(), F::zero()));
+        let mut is_equal_inv = F::zero();
+        IsEqualAir.generate_subrow((F::zero(), F::zero()), &mut is_equal_inv);
         Self {
             operation_flags,
             public_value_flags: vec![F::zero(); chip.air.options.num_public_values],
             reads: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
             writes: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
             read0_equals_read1: F::one(),
-            is_equal_aux: is_equal_cols.aux,
+            is_equal_aux: IsEqualAuxCols::new(is_equal_inv),
             reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
             next_pc: F::from_canonical_u32(chip.state.pc),
@@ -282,7 +282,7 @@ impl<F: PrimeField32> CoreAuxCols<F> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct CoreCols<T> {
     pub io: CoreIoCols<T>,
     pub aux: CoreAuxCols<T>,

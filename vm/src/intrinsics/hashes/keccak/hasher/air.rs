@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_primitives::{utils::not, xor::bus::XorBus};
+use afs_primitives::{utils::not, xor::XorBus};
 use afs_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,

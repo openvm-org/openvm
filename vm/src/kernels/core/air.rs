@@ -1,8 +1,8 @@
 use std::borrow::Borrow;
 
 use afs_primitives::{
-    is_equal::{columns::IsEqualIoCols, IsEqualAir},
-    sub_chip::SubAir,
+    is_equal::{IsEqualAir, IsEqualIo},
+    SubAir,
 };
 use afs_stark_backend::{
     interaction::InteractionBuilder,
@@ -345,12 +345,13 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         // evaluate equality between read1 and read2
 
-        let is_equal_io_cols = IsEqualIoCols {
-            x: read1.value,
-            y: read2.value,
-            is_equal: read0_equals_read1,
+        let is_equal_io = IsEqualIo {
+            x: read1.value.into(),
+            y: read2.value.into(),
+            out: read0_equals_read1.into(),
+            condition: AB::Expr::one(),
         };
-        SubAir::eval(&IsEqualAir, builder, is_equal_io_cols, is_equal_aux);
+        IsEqualAir.eval(builder, (is_equal_io, is_equal_aux.inv));
 
         // make sure program terminates or shards with NOP
         builder.when_last_row().assert_zero(

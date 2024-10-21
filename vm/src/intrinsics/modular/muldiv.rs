@@ -2,8 +2,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
-    sub_chip::{LocalTraceInstructions, SubAir},
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{

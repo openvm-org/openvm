@@ -1,8 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use afs_primitives::{
-    bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
-    var_range::bus::VariableRangeCheckerBus,
+    bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerBus,
 };
 use afs_stark_backend::rap::BaseAirWithPublicValues;
 use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr};

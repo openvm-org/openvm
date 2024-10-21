@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use afs_primitives::xor::bus::XorBus;
+use afs_primitives::xor::XorBus;
 pub use air::CoreAir;
 use p3_field::PrimeField32;
 

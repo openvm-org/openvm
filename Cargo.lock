@@ -3639,6 +3639,7 @@ dependencies = [
  "hex-literal",
  "inferno",
  "itertools 0.13.0",
+ "lazy_static",
  "metrics",
  "num-bigint-dig",
  "num-traits",

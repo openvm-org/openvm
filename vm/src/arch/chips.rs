@@ -2,8 +2,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_derive::{Chip, ChipUsageGetter};
 use afs_primitives::{
-    range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip,
-    xor::lookup::XorLookupChip,
+    range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip, xor::XorLookupChip,
 };
 use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
@@ -14,7 +13,6 @@ use strum_macros::IntoStaticStr;
 use crate::{
     arch::ExecutionState,
     intrinsics::{
-        ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{ModularAddSubChip, ModularMulDivChip},
     },
@@ -103,8 +101,8 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
     ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
-    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
-    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
+    // Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
+    // Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
@@ -143,6 +141,6 @@ pub enum AxVmChip<F: PrimeField32> {
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
     ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
-    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
-    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
+    // Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
+    // Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }

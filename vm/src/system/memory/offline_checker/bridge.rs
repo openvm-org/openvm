@@ -1,11 +1,8 @@
 use afs_primitives::{
-    assert_less_than::{columns::AssertLessThanIoCols, AssertLessThanAir},
-    is_zero::{
-        columns::{IsZeroCols, IsZeroIoCols},
-        IsZeroAir,
-    },
+    assert_less_than::{AssertLessThanAir, AssertLessThanIo},
+    is_zero::IsZeroAir,
     utils::not,
-    var_range::bus::VariableRangeCheckerBus,
+    var_range::VariableRangeCheckerBus,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;

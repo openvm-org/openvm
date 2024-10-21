@@ -1,6 +1,6 @@
 use std::{array, collections::BTreeMap};
 
-use afs_primitives::{is_equal::IsEqualAir, sub_chip::LocalTraceInstructions};
+use afs_primitives::is_equal::IsEqualAir;
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 

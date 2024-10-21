@@ -4,7 +4,7 @@
 use std::{array, borrow::Borrow, iter};
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::assert_less_than::columns::AssertLessThanAuxCols;
+use afs_primitives::is_less_than::LessThanAuxCols;
 use p3_field::{AbstractField, PrimeField32};
 
 use crate::system::memory::offline_checker::bridge::AUX_LEN;
@@ -18,7 +18,7 @@ pub(super) struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
     pub(super) prev_timestamp: T,
     /// The auxiliary columns to perform the less than check.
-    pub(super) clk_lt_aux: AssertLessThanAuxCols<T, AUX_LEN>,
+    pub(super) clk_lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
 impl<T: Clone> MemoryBaseAuxCols<T> {

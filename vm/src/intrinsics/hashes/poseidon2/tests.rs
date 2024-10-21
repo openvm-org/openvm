@@ -1,4 +1,3 @@
-use afs_primitives::sub_chip::LocalTraceInstructions;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
     config::{

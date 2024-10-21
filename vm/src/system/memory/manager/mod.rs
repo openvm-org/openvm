@@ -10,11 +10,11 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::{
-    assert_less_than::{columns::AssertLessThanAuxCols, AssertLessThanAir},
+    assert_less_than::{AssertLessThanAir, LessThanAuxCols},
     is_less_than::IsLessThanAir,
     is_zero::IsZeroAir,
-    sub_chip::LocalTraceInstructions,
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    TraceSubRowGenerator,
 };
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -413,10 +413,7 @@ impl<F: PrimeField32> MemoryController<F> {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.mem_config.decomp);
         MemoryAuxColsFactory {
             range_checker: self.range_checker.clone(),
-            timestamp_lt_air: AssertLessThanAir::<AUX_LEN>::new(
-                range_bus,
-                self.mem_config.clk_max_bits,
-            ),
+            timestamp_lt_air: AssertLessThanAir::new(range_bus, self.mem_config.clk_max_bits),
             _marker: Default::default(),
         }
     }
@@ -667,7 +664,7 @@ impl<F: PrimeField32> MemoryController<F> {
 #[derive(Clone, Debug)]
 pub struct MemoryAuxColsFactory<T> {
     range_checker: Arc<VariableRangeCheckerChip>,
-    timestamp_lt_air: AssertLessThanAir<AUX_LEN>,
+    timestamp_lt_air: AssertLessThanAir,
     _marker: PhantomData<T>,
 }
 
@@ -711,14 +708,16 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         &self,
         read: MemoryReadRecord<F, 1>,
     ) -> MemoryReadOrImmediateAuxCols<F> {
-        let addr_space_is_zero_cols = IsZeroAir.generate_trace_row(read.address_space);
+        let mut inv = F::zero();
+        let is_zero = F::from_bool(read.address_space.is_zero());
+        IsZeroAir.generate_subrow(read.address_space, &mut inv);
         let timestamp_lt_cols =
             self.generate_timestamp_lt_cols(read.prev_timestamp, read.timestamp);
 
         MemoryReadOrImmediateAuxCols::new(
             F::from_canonical_u32(read.prev_timestamp),
-            addr_space_is_zero_cols.io.is_zero,
-            addr_space_is_zero_cols.inv,
+            is_zero,
+            inv,
             timestamp_lt_cols,
         )
     }
@@ -738,17 +737,14 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         &self,
         prev_timestamp: u32,
         timestamp: u32,
-    ) -> AssertLessThanAuxCols<F, AUX_LEN> {
+    ) -> LessThanAuxCols<F, AUX_LEN> {
         debug_assert!(prev_timestamp < timestamp);
-        let mut aux: AssertLessThanAuxCols<F, AUX_LEN> =
-            AssertLessThanAuxCols::<F, AUX_LEN>::new([F::zero(); AUX_LEN]);
-        self.timestamp_lt_air.generate_trace_row_aux(
-            prev_timestamp,
-            timestamp,
-            &self.range_checker,
-            &mut aux,
+        let mut decomp = [F::zero(); AUX_LEN];
+        self.timestamp_lt_air.generate_subrow(
+            (&self.range_checker, prev_timestamp, timestamp),
+            &mut decomp,
         );
-        aux
+        LessThanAuxCols::new(decomp)
     }
 }
 
@@ -756,7 +752,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
 mod tests {
     use std::sync::Arc;
 
-    use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
+    use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
