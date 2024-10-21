@@ -33,12 +33,12 @@ const ADDR_BITS: usize = 29;
 
 type F = BabyBear;
 
-fn into_limbs(num: u32) -> [u32; 4] {
-    array::from_fn(|i| (num >> (8 * i)) & 255)
+fn into_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize>(num: u32) -> [u32; NUM_LIMBS] {
+    array::from_fn(|i| (num >> (LIMB_BITS * i)) & ((1 << LIMB_BITS) - 1))
 }
-fn sign_extend(num: u32) -> u32 {
-    if num & 0x8000 != 0 {
-        num | 0xffff0000
+fn sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
+    if num & (1 << (IMM_BITS - 1)) != 0 {
+        num | (u32::MAX - (1 << IMM_BITS) + 1)
     } else {
         num
     }
@@ -53,11 +53,14 @@ fn set_and_execute(
     imm: Option<u32>,
 ) {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_ext = sign_extend(imm);
+    let imm_ext = sign_extend::<IMM_BITS>(imm);
 
     let ptr_val = rng.gen_range(0..(1 << (ADDR_BITS - 2))) << 2;
-    let rs1 = rs1.unwrap_or(into_limbs(ptr_val.wrapping_sub(&imm_ext)));
-    let rs1 = rs1.map(F::from_canonical_u32);
+    let rs1 = rs1
+        .unwrap_or(into_limbs::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+            ptr_val.wrapping_sub(&imm_ext),
+        ))
+        .map(F::from_canonical_u32);
     let a = gen_pointer(rng, 4);
     let b = gen_pointer(rng, 4);
 
@@ -66,18 +69,14 @@ fn set_and_execute(
 
     let is_load = [LOADW, LOADH, LOADB, LOADHU, LOADBU, HINTLOAD_RV32].contains(&opcode);
     let some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
-    if is_load {
-        tester.write(1, a, some_prev_data);
-    } else {
-        tester.write(2, ptr_val as usize, some_prev_data);
-    }
-
+        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
     let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
     if is_load {
+        tester.write(1, a, some_prev_data);
         tester.write(2, ptr_val as usize, read_data);
     } else {
+        tester.write(2, ptr_val as usize, some_prev_data);
         tester.write(1, a, read_data);
     }
 
