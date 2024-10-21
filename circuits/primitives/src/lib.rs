@@ -17,7 +17,5 @@ pub mod xor;
 mod sub_air;
 pub use sub_air::*;
 
-// to be deleted:
-// pub mod ecc;
 // keeping to clean up later:
 // pub mod offline_checker;
