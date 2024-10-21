@@ -122,7 +122,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
 
         let x = x_read.data.map(|x| x.as_canonical_u32());
         let y = y_read.data.map(|x| x.as_canonical_u32());
-        let (z, carry) = solve_uint_multiplication::<NUM_LIMBS, LIMB_BITS>(&x, &y);
+        let (z, carry) = run_uint_multiplication::<NUM_LIMBS, LIMB_BITS>(&x, &y);
 
         for (z_val, carry_val) in z.iter().zip(carry.iter()) {
             self.range_tuple_chip.add_count(&[*z_val, *carry_val]);
@@ -161,7 +161,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
     }
 }
 
-fn solve_uint_multiplication<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_uint_multiplication<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32],
     y: &[u32],
 ) -> (Vec<u32>, Vec<u32>) {

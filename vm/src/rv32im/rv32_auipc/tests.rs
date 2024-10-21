@@ -11,20 +11,20 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
-use super::{Rv32AuipcChip, Rv32AuipcCols, Rv32AuipcCoreChip};
+use super::{Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols};
 use crate::{
     arch::{
         instructions::{
             Rv32AuipcOpcode::{self, *},
             UsizeOpcode,
         },
-        testing::{memory::gen_pointer, VmChipTestBuilder},
+        testing::VmChipTestBuilder,
         VmAdapterChip,
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{Rv32RdWriteAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES},
-        rv32_auipc::solve_auipc,
+        rv32_auipc::run_auipc,
     },
     system::program::Instruction,
 };
@@ -42,7 +42,7 @@ fn set_and_execute(
     initial_pc: Option<u32>,
 ) {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
-    let a = gen_pointer(rng, 32);
+    let a = rng.gen_range(0..32) << 2;
 
     tester.execute_with_pc(
         chip,
@@ -52,17 +52,9 @@ fn set_and_execute(
         ),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
+    let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
 
-    let initial_pc = tester
-        .execution
-        .records
-        .last()
-        .unwrap()
-        .initial_state
-        .pc
-        .as_canonical_u32();
-
-    let rd_data = solve_auipc(opcode, initial_pc, imm as u32);
+    let rd_data = run_auipc(opcode, initial_pc, imm as u32);
 
     assert_eq!(rd_data.map(F::from_canonical_u32), tester.read::<4>(1, a));
 }
@@ -144,7 +136,7 @@ fn run_negative_auipc_test(
 
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
 
-        let core_cols: &mut Rv32AuipcCols<F> = core_row.borrow_mut();
+        let core_cols: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = rd_data {
             core_cols.rd_data = data.map(F::from_canonical_u32);
@@ -282,11 +274,11 @@ fn execute_roundtrip_sanity_test() {
 }
 
 #[test]
-fn solve_auipc_sanity_test() {
+fn run_auipc_sanity_test() {
     let opcode = AUIPC;
     let initial_pc = 234567890;
     let imm = 11302451;
-    let rd_data = solve_auipc(opcode, initial_pc, imm);
+    let rd_data = run_auipc(opcode, initial_pc, imm);
 
     assert_eq!(rd_data, [210, 107, 113, 186]);
 }

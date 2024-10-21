@@ -5,7 +5,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::Rv32DoNothingAdapterInterface;
+// use super::Rv32DoNothingAdapterInterface;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,

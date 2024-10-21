@@ -143,6 +143,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             PUBLISH => {
                 let public_value_index = read!(d, a).as_canonical_u64() as usize;
                 let value = read!(e, b);
+                tracing::debug!(
+                    "publishing value {:?} at index {}",
+                    value,
+                    public_value_index
+                );
                 if public_value_index >= num_public_values {
                     return Err(ExecutionError::PublicValueIndexOutOfBounds(
                         pc,

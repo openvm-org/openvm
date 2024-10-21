@@ -44,20 +44,11 @@ where
             self.rows.concat(),
             CoreCols::<Val<SC>>::get_width(&self.air),
         );
-        let public_values = {
-            let first_row_pc = self.start_state.pc;
-            let last_row_pc = self.state.pc;
-            let mut result = vec![
-                Val::<SC>::from_canonical_u32(first_row_pc),
-                Val::<SC>::from_canonical_u32(last_row_pc),
-            ];
-            result.extend(
-                self.public_values
-                    .iter()
-                    .map(|pv| pv.unwrap_or(Val::<SC>::zero())),
-            );
-            result
-        };
+        let public_values = self
+            .public_values
+            .iter()
+            .map(|pv| pv.unwrap_or(Val::<SC>::zero()))
+            .collect();
         AirProofInput::simple(self.air(), trace, public_values)
     }
 }

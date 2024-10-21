@@ -6,9 +6,8 @@ use afs_primitives::{
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use ax_ecc_primitives::field_expression::{
-    ExprBuilder, FieldExpr, FieldExprCols, FieldVariable, SymbolicExpr,
-};
+use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldExprCols, FieldVariable};
+use axvm_instructions::Rv32ModularArithmeticOpcode;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
@@ -17,9 +16,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::FIELD_ELEMENT_BITS;
 use crate::{
     arch::{
-        instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
-        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
+        DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
@@ -27,16 +25,16 @@ use crate::{
 
 /// The number of limbs and limb bits are determined at runtime.
 #[derive(Clone)]
-pub struct ModularMulDivV2CoreAir {
+pub struct ModularAddSubCoreAir {
     pub expr: FieldExpr,
     pub offset: usize,
 }
 
-impl ModularMulDivV2CoreAir {
+impl ModularAddSubCoreAir {
     pub fn new(
         modulus: BigUint,
-        limb_bits: usize,
         num_limbs: usize,
+        limb_bits: usize,
         range_bus: usize,
         range_max_bits: usize,
         offset: usize,
@@ -53,23 +51,13 @@ impl ModularMulDivV2CoreAir {
         let builder =
             ExprBuilder::new(modulus, limb_bits, num_limbs, range_max_bits, max_limb_bits);
         let builder = Rc::new(RefCell::new(builder));
-        let x = ExprBuilder::new_input(builder.clone());
-        let y = ExprBuilder::new_input(builder.clone());
-        let z = builder.borrow_mut().new_var();
-        let z = FieldVariable::from_var(builder.clone(), z);
-        let is_mul_flag = builder.borrow_mut().new_flag();
-        // constraint is x * y = z, or z * y = x
-        let lvar = FieldVariable::select(is_mul_flag, &x, &z);
-        let rvar = FieldVariable::select(is_mul_flag, &z, &x);
-        let constraint = lvar * y.clone() - rvar;
-        builder.borrow_mut().add_constraint(constraint.expr);
-        let compute = SymbolicExpr::Select(
-            is_mul_flag,
-            Box::new(x.expr.clone() * y.expr.clone()),
-            Box::new(x.expr.clone() / y.expr.clone()),
-        );
-        builder.borrow_mut().add_compute(compute);
-
+        let x1 = ExprBuilder::new_input(builder.clone());
+        let x2 = ExprBuilder::new_input(builder.clone());
+        let x3 = x1.clone() + x2.clone();
+        let x4 = x1 - x2;
+        let is_add_flag = builder.borrow_mut().new_flag();
+        let mut x5 = FieldVariable::select(is_add_flag, &x3, &x4);
+        x5.save();
         let builder = builder.borrow().clone();
 
         let expr = FieldExpr {
@@ -81,15 +69,15 @@ impl ModularMulDivV2CoreAir {
     }
 }
 
-impl<F: Field> BaseAir<F> for ModularMulDivV2CoreAir {
+impl<F: Field> BaseAir<F> for ModularAddSubCoreAir {
     fn width(&self) -> usize {
         BaseAir::<F>::width(&self.expr)
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for ModularMulDivV2CoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for ModularAddSubCoreAir {}
 
-impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for ModularMulDivV2CoreAir
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for ModularAddSubCoreAir
 where
     I: VmAdapterInterface<AB::Expr>,
     AdapterAirContext<AB::Expr, I>:
@@ -116,8 +104,8 @@ where
         assert_eq!(flags.len(), 1);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[0].iter().map(|x| (*x).into()).collect();
-        // flag = 1 means mul (opcode = 2), flag = 0 means div (opcode = 3)
-        let expected_opcode = AB::Expr::from_canonical_usize(3) - flags[0];
+        // flag = 1 means add (opcode = 0), flag = 0 means sub (opcode = 1)
+        let expected_opcode = AB::Expr::one() - flags[0];
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
@@ -134,25 +122,26 @@ where
     }
 }
 
+/// Number of limbs and limb size are determined purely at runtime
 #[derive(Clone)]
-pub struct ModularMulDivV2CoreChip {
-    pub air: ModularMulDivV2CoreAir,
+pub struct ModularAddSubCoreChip {
+    pub air: ModularAddSubCoreAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
-impl ModularMulDivV2CoreChip {
+impl ModularAddSubCoreChip {
     pub fn new(
         modulus: BigUint,
-        limb_bits: usize,
         num_limbs: usize,
+        limb_bits: usize,
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
         max_limb_bits: usize,
     ) -> Self {
-        let air = ModularMulDivV2CoreAir::new(
+        let air = ModularAddSubCoreAir::new(
             modulus,
-            limb_bits,
             num_limbs,
+            limb_bits,
             range_checker.bus().index,
             range_checker.range_max_bits(),
             offset,
@@ -162,20 +151,20 @@ impl ModularMulDivV2CoreChip {
     }
 }
 
-pub struct ModularMulDivV2CoreRecord {
+pub struct ModularAddSubCoreRecord {
     pub x: BigUint,
     pub y: BigUint,
-    pub is_mul_flag: bool,
+    pub is_add_flag: bool,
 }
 
-impl<F: PrimeField32, I> VmCoreChip<F, I> for ModularMulDivV2CoreChip
+impl<F: PrimeField32, I> VmCoreChip<F, I> for ModularAddSubCoreChip
 where
     I: VmAdapterInterface<F>,
     I::Reads: Into<DynArray<F>>,
     AdapterRuntimeContext<F, I>: From<AdapterRuntimeContext<F, DynAdapterInterface<F>>>,
 {
-    type Record = ModularMulDivV2CoreRecord;
-    type Air = ModularMulDivV2CoreAir;
+    type Record = ModularAddSubCoreRecord;
+    type Air = ModularAddSubCoreAir;
 
     fn execute_instruction(
         &self,
@@ -189,7 +178,7 @@ where
         let local_opcode_index = opcode - self.air.offset;
         let data: DynArray<_> = reads.into();
         let data = data.0;
-        assert_eq!(data.len(), 2 * num_limbs);
+        debug_assert_eq!(data.len(), 2 * num_limbs);
         let x = data[..num_limbs]
             .iter()
             .map(|x| x.as_canonical_u32())
@@ -202,42 +191,45 @@ where
         let x_biguint = limbs_to_biguint(&x, limb_bits);
         let y_biguint = limbs_to_biguint(&y, limb_bits);
 
-        let opcode = ModularArithmeticOpcode::from_usize(local_opcode_index);
-        let is_mul_flag = match opcode {
-            ModularArithmeticOpcode::MUL => true,
-            ModularArithmeticOpcode::DIV => false,
-            _ => panic!("Unsupported opcode: {:?}", opcode),
+        let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_index);
+        let is_add_flag = match local_opcode {
+            Rv32ModularArithmeticOpcode::ADD => true,
+            Rv32ModularArithmeticOpcode::SUB => false,
+            _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
 
         let vars = self.air.expr.execute(
             vec![x_biguint.clone(), y_biguint.clone()],
-            vec![is_mul_flag],
+            vec![is_add_flag],
         );
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
+        tracing::trace!(
+            "ModularArithmeticOpcode | {local_opcode:?} | {z_biguint:?} | {x_biguint:?} | {y_biguint:?}",
+        );
         let z_limbs = biguint_to_limbs_vec(z_biguint, limb_bits, num_limbs);
         let writes = z_limbs.into_iter().map(F::from_canonical_u32).collect_vec();
         let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);
 
         Ok((
             ctx.into(),
-            ModularMulDivV2CoreRecord {
+            ModularAddSubCoreRecord {
                 x: x_biguint,
                 y: y_biguint,
-                is_mul_flag,
+                is_add_flag,
             },
         ))
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {
-        "ModularMulDiv".to_string()
+        "ModularAddSub".to_string()
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let input = (
             vec![record.x, record.y],
             self.range_checker.clone(),
-            vec![record.is_mul_flag],
+            vec![record.is_add_flag],
         );
         let row = LocalTraceInstructions::<F>::generate_trace_row(&self.air.expr, input);
         for (i, element) in row.iter().enumerate() {

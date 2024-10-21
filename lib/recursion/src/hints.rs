@@ -4,6 +4,7 @@ use afs_compiler::ir::{
     unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
     DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
 };
+use afs_primitives::bigint::utils::big_uint_to_num_limbs;
 use afs_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
@@ -26,7 +27,6 @@ use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use p3_util::log2_strict_usize;
-use stark_vm::old::modular_addsub::big_uint_to_num_limbs;
 
 use crate::{
     types::{InnerConfig, VerifierInput},

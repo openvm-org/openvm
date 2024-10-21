@@ -5,6 +5,7 @@ use afs_compiler::{
     conversion::CompilerOptions,
     ir::{Array, Builder, Config, Var, LIMB_BITS, NUM_LIMBS},
 };
+use afs_primitives::bigint::utils::{big_uint_to_num_limbs, secp256k1_coord_prime};
 use itertools::Itertools;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use num_traits::{abs, signum, FromPrimitive};
@@ -12,7 +13,6 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     arch::ExecutorName,
-    old::modular_addsub::{big_uint_to_num_limbs, secp256k1_coord_prime},
     system::{program::util::execute_program_with_config, vm::config::VmConfig},
 };
 

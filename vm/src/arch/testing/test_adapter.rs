@@ -14,7 +14,10 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, ExecutionBridge,
         ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
     },
-    system::{memory::MemoryController, program::Instruction},
+    system::{
+        memory::{MemoryAuxColsFactory, MemoryController},
+        program::Instruction,
+    },
 };
 
 // Replaces A: VmAdapterChip while testing VmCoreChip functionality, as it has no
@@ -108,6 +111,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
         row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        _aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let cols: &mut TestAdapterCols<F> = row_slice.borrow_mut();
         cols.from_pc = F::from_canonical_u32(write_record.from_pc);
@@ -151,7 +155,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
         let processed_instruction: MinimalInstruction<AB::Expr> = ctx.instruction.into();
         let cols: &TestAdapterCols<AB::Var> = local.borrow();
         self.execution_bridge
-            .execute_and_increment_pc_custom(
+            .execute_and_increment_or_set_pc(
                 processed_instruction.opcode,
                 cols.operands.to_vec(),
                 ExecutionState {
@@ -159,7 +163,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
                     timestamp: AB::Expr::one(),
                 },
                 AB::Expr::zero(),
-                AB::Expr::from_canonical_u32(4),
+                (4, ctx.to_pc),
             )
             .eval(builder, processed_instruction.is_valid);
     }

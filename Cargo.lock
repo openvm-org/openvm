@@ -34,6 +34,7 @@ version = "0.1.0"
 dependencies = [
  "afs-compiler",
  "afs-derive",
+ "afs-primitives",
  "ax-sdk",
  "backtrace",
  "cfg-if",
@@ -649,6 +650,7 @@ dependencies = [
  "p3-field",
  "rrs-lib",
  "stark-vm",
+ "strum",
  "test-case",
 ]
 

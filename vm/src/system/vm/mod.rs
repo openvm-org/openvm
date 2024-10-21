@@ -29,11 +29,11 @@ pub mod segment;
 
 /// Parent struct that holds all execution segments, program, config.
 pub struct VirtualMachine<F: PrimeField32> {
-    config: VmConfig,
+    pub config: VmConfig,
     input_stream: VecDeque<Vec<F>>,
     initial_memory: Option<Equipartition<F, CHUNK>>,
     // TODO[zach]: Make better interface for user IOs
-    public_values: Vec<(usize, F)>,
+    program_inputs: Vec<(usize, F)>,
 }
 
 /// Struct that holds the current state of the VM. For now, includes memory, input stream, and hint stream.
@@ -61,7 +61,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
             config,
             input_stream: VecDeque::new(),
             initial_memory: None,
-            public_values: vec![],
+            program_inputs: vec![],
         }
     }
 
@@ -75,8 +75,8 @@ impl<F: PrimeField32> VirtualMachine<F> {
         self
     }
 
-    pub fn with_public_values(mut self, public_values: Vec<(usize, F)>) -> Self {
-        self.public_values = public_values;
+    pub fn with_program_inputs(mut self, program_inputs: Vec<(usize, F)>) -> Self {
+        self.program_inputs = program_inputs;
         self
     }
 
@@ -93,19 +93,18 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 input_stream: mem::take(&mut self.input_stream),
                 hint_stream: VecDeque::new(),
             },
+            self.initial_memory.take(),
         );
-        // TODO[zach]: Make this work for more than one segment.
-        {
-            let mut core_chip = segment.core_chip.borrow_mut();
-            for &(idx, public_value) in self.public_values.iter() {
-                core_chip.public_values[idx] = Some(public_value);
-            }
-        }
-        if let Some(initial_memory) = self.initial_memory.take() {
-            segment.set_initial_memory(initial_memory);
-        }
 
         loop {
+            // TODO[zach]: User public values currently set on all segments on the core chip.
+            // This needs to change.
+            {
+                let mut core_chip = segment.core_chip.borrow_mut();
+                for &(idx, public_value) in self.program_inputs.iter() {
+                    core_chip.public_values[idx] = Some(public_value);
+                }
+            }
             segment.execute()?;
             if segment.did_terminate() {
                 break;
@@ -114,13 +113,21 @@ impl<F: PrimeField32> VirtualMachine<F> {
             let config = mem::take(&mut segment.config);
             let cycle_tracker = mem::take(&mut segment.cycle_tracker);
             let state = VirtualMachineState {
-                state: segment.core_chip.borrow().state,
+                state: CoreState {
+                    pc: segment.chip_set.connector_chip.boundary_states[1]
+                        .unwrap()
+                        .pc,
+                    is_done: false,
+                },
                 input_stream: mem::take(&mut segment.input_stream),
                 hint_stream: mem::take(&mut segment.hint_stream),
             };
+            let final_memory = mem::take(&mut segment.final_memory)
+                .expect("final memory should be set in continuations segment");
 
             segments.push(segment);
-            segment = ExecutionSegment::new(config, program.clone(), state);
+
+            segment = ExecutionSegment::new(config, program.clone(), state, Some(final_memory));
             segment.cycle_tracker = cycle_tracker;
         }
         segments.push(segment);

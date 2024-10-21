@@ -5,7 +5,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
-use super::{solve_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
+use super::{run_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
 use crate::{
     arch::{
         instructions::{
@@ -78,7 +78,7 @@ fn set_and_execute(
         ),
     );
 
-    let write_data = solve_write_data(opcode, data, some_prev_data);
+    let write_data = run_write_data(opcode, data, some_prev_data);
     if is_load {
         assert_eq!(write_data, tester.read::<4>(1, a));
     } else {
@@ -111,59 +111,59 @@ fn simple_execute_roundtrip_test() {
 }
 
 #[test]
-fn solve_loadw_storew_sanity_test() {
+fn run_loadw_storew_sanity_test() {
     let read_data = [138, 45, 202, 76].map(F::from_canonical_u32);
     let prev_data = [159, 213, 89, 34].map(F::from_canonical_u32);
-    let store_write_data = solve_write_data(STOREW, read_data, prev_data);
-    let load_write_data = solve_write_data(LOADW, read_data, prev_data);
+    let store_write_data = run_write_data(STOREW, read_data, prev_data);
+    let load_write_data = run_write_data(LOADW, read_data, prev_data);
     assert_eq!(store_write_data, read_data);
     assert_eq!(load_write_data, read_data);
 }
 
 #[test]
-fn solve_storeh_sanity_test() {
+fn run_storeh_sanity_test() {
     let read_data = [250, 123, 67, 198].map(F::from_canonical_u32);
     let prev_data = [144, 56, 175, 92].map(F::from_canonical_u32);
-    let write_data = solve_write_data(STOREH, read_data, prev_data);
+    let write_data = run_write_data(STOREH, read_data, prev_data);
     assert_eq!(write_data, [250, 123, 175, 92].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_storeb_sanity_test() {
+fn run_storeb_sanity_test() {
     let read_data = [221, 104, 58, 147].map(F::from_canonical_u32);
     let prev_data = [199, 83, 243, 12].map(F::from_canonical_u32);
-    let write_data = solve_write_data(STOREB, read_data, prev_data);
+    let write_data = run_write_data(STOREB, read_data, prev_data);
     assert_eq!(write_data, [221, 83, 243, 12].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_loadhu_sanity_test() {
+fn run_loadhu_sanity_test() {
     let read_data = [175, 33, 198, 250].map(F::from_canonical_u32);
     let prev_data = [90, 121, 64, 205].map(F::from_canonical_u32);
-    let write_data = solve_write_data(LOADHU, read_data, prev_data);
+    let write_data = run_write_data(LOADHU, read_data, prev_data);
     assert_eq!(write_data, [175, 33, 0, 0].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_loadbu_sanity_test() {
+fn run_loadbu_sanity_test() {
     let read_data = [131, 74, 186, 29].map(F::from_canonical_u32);
     let prev_data = [142, 67, 210, 88].map(F::from_canonical_u32);
-    let write_data = solve_write_data(LOADBU, read_data, prev_data);
+    let write_data = run_write_data(LOADBU, read_data, prev_data);
     assert_eq!(write_data, [131, 0, 0, 0].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_loadh_sanity_test() {
+fn run_loadh_sanity_test() {
     let read_data = [34, 159, 237, 112].map(F::from_canonical_u32);
     let prev_data = [94, 183, 56, 241].map(F::from_canonical_u32);
-    let write_data = solve_write_data(LOADH, read_data, prev_data);
+    let write_data = run_write_data(LOADH, read_data, prev_data);
     assert_eq!(write_data, [34, 159, 255, 255].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_loadb_sanity_test() {
+fn run_loadb_sanity_test() {
     let read_data = [103, 151, 78, 219].map(F::from_canonical_u32);
     let prev_data = [53, 180, 29, 244].map(F::from_canonical_u32);
-    let write_data = solve_write_data(LOADB, read_data, prev_data);
+    let write_data = run_write_data(LOADB, read_data, prev_data);
     assert_eq!(write_data, [103, 0, 0, 0].map(F::from_canonical_u32));
 }

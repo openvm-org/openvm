@@ -16,15 +16,17 @@ use crate::{
     intrinsics::{
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
+        modular::{ModularAddSubChip, ModularMulDivChip},
     },
     kernels::{
-        castf::CastFChip, core::CoreChip, field_arithmetic::FieldArithmeticChip,
+        castf::CastFChip,
+        core::CoreChip,
+        field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
+        modular::{KernelModularAddSubChip, KernelModularMulDivChip},
     },
     old::{
-        alu::ArithmeticLogicChip, modular_addsub::ModularAddSubChip,
-        modular_multdiv::ModularMultDivChip, shift::ShiftChip,
-        uint_multiplication::UintMultiplicationChip,
+        alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
     },
     rv32im::{
         base_alu::Rv32BaseAluChip, branch_eq::Rv32BranchEqualChip,
@@ -92,14 +94,21 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
     JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
+    // Intrinsics:
+    ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),
+    ModularMulDivRv32_1x32(Rc<RefCell<ModularMulDivChip<F, 1, 32>>>),
+    ModularAddSubRv32_3x16(Rc<RefCell<ModularAddSubChip<F, 3, 16>>>),
+    ModularMulDivRv32_3x16(Rc<RefCell<ModularMulDivChip<F, 3, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
-    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
+    ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }
 
+/// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
+/// each chip. Change of the order may cause break changes of VKs.
 #[derive(Clone, IntoStaticStr, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
@@ -125,10 +134,15 @@ pub enum AxVmChip<F: PrimeField32> {
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
     JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
+    // Intrinsics:
+    ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),
+    ModularMulDivRv32_1x32(Rc<RefCell<ModularMulDivChip<F, 1, 32>>>),
+    ModularAddSubRv32_3x16(Rc<RefCell<ModularAddSubChip<F, 3, 16>>>),
+    ModularMulDivRv32_3x16(Rc<RefCell<ModularMulDivChip<F, 3, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<ModularAddSubChip<F, 32, 8>>>),
-    ModularMultDiv(Rc<RefCell<ModularMultDivChip<F, 63, 32, 8>>>),
+    ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
+    ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
     Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
     Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
 }

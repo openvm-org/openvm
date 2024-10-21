@@ -10,6 +10,7 @@ ax-sdk = { path = "../../sdk" }                                # TODO: feature-g
 afs-derive = { path = "../../derive" }
 stark-vm = { path = "../../vm", features = ["sdk"] }
 ax-ecc-lib = { path = "../ecc" }
+afs-primitives = { path = "../../circuits/primitives" }
 
 p3-air = { workspace = true }
 p3-field = { workspace = true }

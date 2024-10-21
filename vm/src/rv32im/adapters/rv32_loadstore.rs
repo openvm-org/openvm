@@ -20,7 +20,7 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryController, MemoryReadRecord, MemoryWriteRecord,
+            MemoryAuxColsFactory, MemoryController, MemoryReadRecord, MemoryWriteRecord,
         },
         program::Instruction,
     },
@@ -261,6 +261,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         _row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
+        _aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         todo!()
     }

@@ -27,7 +27,7 @@ const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv32AuipcCols<T> {
+pub struct Rv32AuipcCoreCols<T> {
     pub is_valid: T,
     pub imm_limbs: [T; RV32_REGISTER_NUM_LANES - 1],
     pub pc_limbs: [T; RV32_REGISTER_NUM_LANES - 1],
@@ -48,7 +48,7 @@ pub struct Rv32AuipcCoreAir {
 
 impl<F: Field> BaseAir<F> for Rv32AuipcCoreAir {
     fn width(&self) -> usize {
-        Rv32AuipcCols::<F>::width()
+        Rv32AuipcCoreCols::<F>::width()
     }
 }
 
@@ -68,9 +68,9 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv32AuipcCols<AB::Var> = (*local_core).borrow();
+        let cols: &Rv32AuipcCoreCols<AB::Var> = (*local_core).borrow();
 
-        let Rv32AuipcCols {
+        let Rv32AuipcCoreCols {
             is_valid,
             imm_limbs,
             pc_limbs,
@@ -176,7 +176,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
         let imm = instruction.op_c.as_canonical_u32();
-        let rd_data = solve_auipc(local_opcode_index, from_pc, imm);
+        let rd_data = run_auipc(local_opcode_index, from_pc, imm);
         let rd_data_field = rd_data.map(F::from_canonical_u32);
 
         let output = AdapterRuntimeContext::without_pc([rd_data_field]);
@@ -213,7 +213,7 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut Rv32AuipcCols<F> = row_slice.borrow_mut();
+        let core_cols: &mut Rv32AuipcCoreCols<F> = row_slice.borrow_mut();
         core_cols.imm_limbs = record.imm_limbs;
         core_cols.pc_limbs = record.pc_limbs;
         core_cols.rd_data = record.rd_data;
@@ -228,7 +228,7 @@ where
 }
 
 // returns rd_data
-pub(super) fn solve_auipc(
+pub(super) fn run_auipc(
     _opcode: Rv32AuipcOpcode,
     pc: u32,
     imm: u32,

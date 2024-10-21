@@ -147,7 +147,7 @@ where
         let data: [[F; 1]; 2] = reads.into();
         let b = data[0][0];
         let c = data[1][0];
-        let a = FieldArithmetic::solve_field_arithmetic(local_opcode_index, b, c).unwrap();
+        let a = FieldArithmetic::run_field_arithmetic(local_opcode_index, b, c).unwrap();
 
         let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
             to_pc: None,
@@ -196,7 +196,7 @@ where
 
 pub struct FieldArithmetic;
 impl FieldArithmetic {
-    pub(super) fn solve_field_arithmetic<F: Field>(
+    pub(super) fn run_field_arithmetic<F: Field>(
         opcode: FieldArithmeticOpcode,
         b: F,
         c: F,

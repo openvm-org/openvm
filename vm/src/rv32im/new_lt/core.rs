@@ -39,7 +39,7 @@ pub struct LessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub xor_res: T,
 
     // 1 at the most significant index i such that b[i] != c[i], otherwise 0. If such
-    // an i exists, diff_val = c[i] - b[i]
+    // an i exists, diff_val = c[i] - b[i] if c[i] > b[i] or b[i] - c[i] else.
     pub diff_marker: [T; NUM_LIMBS],
     pub diff_val: T,
 }
@@ -85,6 +85,7 @@ where
             acc + flag.into()
         });
         builder.assert_bool(is_valid.clone());
+        builder.assert_bool(cols.cmp_result);
 
         let b = &cols.b;
         let c = &cols.c;
@@ -98,6 +99,7 @@ where
         builder
             .assert_zero(c_diff.clone() * (AB::Expr::from_canonical_u32(1 << LIMB_BITS) - c_diff));
 
+        // TODO: after negative tests are implemented, optimize to lower degree as in branch
         for i in (0..NUM_LIMBS).rev() {
             let diff = (if i == NUM_LIMBS - 1 {
                 cols.c_msb_f - cols.b_msb_f
@@ -209,7 +211,7 @@ where
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
         let (cmp_result, diff_idx, b_sign, c_sign) =
-            solve_less_than::<NUM_LIMBS, LIMB_BITS>(less_than_opcode, &b, &c);
+            run_less_than::<NUM_LIMBS, LIMB_BITS>(less_than_opcode, &b, &c);
 
         // xor_res is the result of (b_msb_f + 128) ^ (c_msb_f + 128) if signed,
         // b_msb_f ^ c_msb_f if not
@@ -261,8 +263,8 @@ where
         let output = AdapterRuntimeContext::without_pc([writes.map(F::from_canonical_u32)]);
         let record = LessThanCoreRecord {
             opcode: less_than_opcode,
-            b: b.map(F::from_canonical_u32),
-            c: c.map(F::from_canonical_u32),
+            b: data[0],
+            c: data[1],
             cmp_result: F::from_bool(cmp_result),
             b_msb_f,
             c_msb_f,
@@ -298,7 +300,7 @@ where
 }
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)
-pub(super) fn solve_less_than<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_less_than<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: LessThanOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],

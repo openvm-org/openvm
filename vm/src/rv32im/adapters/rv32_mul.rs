@@ -14,7 +14,8 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryController, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
+            MemoryAuxColsFactory, MemoryController, MemoryControllerRef, MemoryReadRecord,
+            MemoryWriteRecord,
         },
         program::{bridge::ProgramBus, Instruction},
     },
@@ -176,6 +177,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapter<F> {
         _row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         _write_record: Self::WriteRecord,
+        _aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         todo!();
     }

@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -8,11 +9,11 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::NativeVectorizedAdapterInterface;
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
+        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
@@ -28,7 +29,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct NativeVectorizedAdapterChip<F: Field, const N: usize> {
     pub air: NativeVectorizedAdapterAir<N>,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32, const N: usize> NativeVectorizedAdapterChip<F, N> {
@@ -39,13 +40,12 @@ impl<F: PrimeField32, const N: usize> NativeVectorizedAdapterChip<F, N> {
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: NativeVectorizedAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -88,7 +88,7 @@ impl<F: Field, const N: usize> BaseAir<F> for NativeVectorizedAdapterAir<N> {
 }
 
 impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectorizedAdapterAir<N> {
-    type Interface = NativeVectorizedAdapterInterface<AB::Expr, N>;
+    type Interface = BasicAdapterInterface<AB::Expr, MinimalInstruction<AB::Expr>, 2, 1, N, N>;
 
     fn eval(
         &self,
@@ -132,11 +132,12 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.execution_bridge
-            .execute_and_increment_pc(
+            .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [cols.a_idx, cols.b_idx, cols.c_idx, cols.ab_as, cols.c_as],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
+                (1, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
@@ -151,7 +152,7 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
     type ReadRecord = NativeVectorizedReadRecord<F, N>;
     type WriteRecord = NativeVectorizedWriteRecord<F, N>;
     type Air = NativeVectorizedAdapterAir<N>;
-    type Interface = NativeVectorizedAdapterInterface<F, N>;
+    type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 1, N, N>;
 
     fn preprocess(
         &mut self,
@@ -206,9 +207,9 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let row_slice: &mut NativeVectorizedAdapterCols<_, N> = row_slice.borrow_mut();
-        let aux_cols_factory = &self.aux_cols_factory;
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_idx = write_record.a.pointer;

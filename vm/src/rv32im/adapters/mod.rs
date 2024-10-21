@@ -1,6 +1,5 @@
 mod rv32_alu;
 mod rv32_branch;
-mod rv32_heap;
 mod rv32_jalr;
 mod rv32_loadstore;
 mod rv32_mul;
@@ -8,9 +7,9 @@ mod rv32_rdwrite;
 mod rv32_terminate_nop;
 mod rv32_vec_heap;
 
+use afs_derive::AlignedBorrow;
 pub use rv32_alu::*;
 pub use rv32_branch::*;
-pub use rv32_heap::*;
 pub use rv32_jalr::*;
 pub use rv32_loadstore::*;
 pub use rv32_mul::*;
@@ -25,28 +24,19 @@ pub const RV32_CELL_BITS: usize = 8;
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 
+// Branch immediate value is in [-2^12, 2^12)
+pub const RV_B_TYPE_IMM_BITS: usize = 13;
+
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
 pub const PC_BITS: usize = 30;
 
 use p3_field::PrimeField32;
 
-use crate::{
-    arch::{BasicAdapterInterface, MinimalInstruction},
-    system::memory::{MemoryController, MemoryReadRecord},
-};
+use crate::system::memory::{MemoryController, MemoryReadRecord};
 
-pub type Rv32RTypeAdapterInterface<T> = BasicAdapterInterface<
-    T,
-    MinimalInstruction<T>,
-    2,
-    1,
-    RV32_REGISTER_NUM_LANES,
-    RV32_REGISTER_NUM_LANES,
->;
-
-pub type Rv32DoNothingAdapterInterface<T> =
-    BasicAdapterInterface<T, MinimalInstruction<T>, 0, 0, 0, 0>;
+// pub type Rv32DoNothingAdapterInterface<T> =
+//     BasicAdapterInterface<T, MinimalInstruction<T>, 0, 0, 0, 0>;
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.
@@ -67,4 +57,14 @@ pub fn read_rv32_register<F: PrimeField32>(
     let record = memory.read::<RV32_REGISTER_NUM_LANES>(address_space, pointer);
     let val = compose(record.data);
     (record, val)
+}
+
+// This ProcessInstruction is used by rv32_jalr and rv32_rdwrite
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct JumpUiProcessedInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+    pub immediate: T,
 }

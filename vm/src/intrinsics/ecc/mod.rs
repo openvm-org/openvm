@@ -16,7 +16,7 @@ use crate::{
         ExecutionState, // instructions::Opcode,
         InstructionExecutor,
     },
-    old::modular_addsub::{FIELD_ELEMENT_BITS, SECP256K1_COORD_PRIME},
+    intrinsics::modular::SECP256K1_COORD_PRIME,
     system::memory::{MemoryControllerRef, MemoryHeapReadRecord, MemoryHeapWriteRecord},
     system::program::{bridge::ProgramBus, ExecutionError, Instruction},
     utils::{biguint_to_limbs, limbs_to_biguint},
@@ -105,7 +105,7 @@ fn make_ec_config<T: PrimeField32>(memory_controller: &MemoryControllerRef<T>) -
         range_checker_chip.bus().index,
         range_checker_chip.range_max_bits(),
         LIMB_BITS,
-        FIELD_ELEMENT_BITS,
+        T::bits(),
     )
 }
 

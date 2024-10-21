@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    marker::PhantomData,
 };
 
 use afs_derive::AlignedBorrow;
@@ -9,11 +10,12 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{Rv32RTypeAdapterInterface, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
+use super::{RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
+        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
@@ -31,7 +33,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Rv32BaseAluAdapterChip<F: Field> {
     pub air: Rv32BaseAluAdapterAir,
-    aux_cols_factory: MemoryAuxColsFactory<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
@@ -42,13 +44,12 @@ impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let aux_cols_factory = memory_controller.aux_cols_factory();
         Self {
             air: Rv32BaseAluAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
-            aux_cols_factory,
+            _marker: PhantomData,
         }
     }
 }
@@ -100,7 +101,14 @@ impl<F: Field> BaseAir<F> for Rv32BaseAluAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
-    type Interface = Rv32RTypeAdapterInterface<AB::Expr>;
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        MinimalInstruction<AB::Expr>,
+        2,
+        1,
+        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn eval(
         &self,
@@ -159,7 +167,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.execution_bridge
-            .execute_and_increment_pc_custom(
+            .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [
                     local.rd_ptr.into(),
@@ -170,7 +178,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
                 ],
                 local.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                AB::Expr::from_canonical_u8(4),
+                (4, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
@@ -185,7 +193,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
     type ReadRecord = Rv32BaseAluReadRecord<F>;
     type WriteRecord = Rv32BaseAluWriteRecord<F>;
     type Air = Rv32BaseAluAdapterAir;
-    type Interface = Rv32RTypeAdapterInterface<F>;
+    type Interface = BasicAdapterInterface<
+        F,
+        MinimalInstruction<F>,
+        2,
+        1,
+        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LANES,
+    >;
 
     fn preprocess(
         &mut self,
@@ -262,9 +277,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let row_slice: &mut Rv32BaseAluAdapterCols<_> = row_slice.borrow_mut();
-        let aux_cols_factory = &self.aux_cols_factory;
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.rd_ptr = write_record.rd.pointer;
         row_slice.rs1_ptr = read_record.rs1.pointer;
