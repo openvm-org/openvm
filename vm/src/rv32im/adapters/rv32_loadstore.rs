@@ -97,7 +97,7 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 range_bus: range_checker_chip.bus(),
-                address_max_bits: memory_controller.mem_config.addr_space_max_bits,
+                address_max_bits: memory_controller.mem_config.pointer_max_bits,
             },
             range_checker_chip,
             offset,
