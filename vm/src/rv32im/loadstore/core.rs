@@ -23,8 +23,8 @@ use crate::{
 };
 
 
-// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
-// This chip uses read_data and prev_data to get the write_data
+/// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
+/// This chip uses read_data and prev_data to get the write_data
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {

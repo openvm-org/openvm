@@ -24,9 +24,9 @@ use crate::{
     system::program::Instruction,
 };
 
-// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
-// This chip uses read_data to construct write_data
-// This chip doesn't require prev_data, but it is added for compatibility with the LoadStore Adapter chip
+/// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
+/// This chip uses read_data to construct write_data
+/// This chip doesn't require prev_data, but it is added for compatibility with the LoadStore Adapter chip
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
@@ -233,7 +233,6 @@ where
     }
 }
 
-// returns the write data for the given opcode
 pub(super) fn run_write_data_sign_extend<
     F: PrimeField32,
     const NUM_CELLS: usize,

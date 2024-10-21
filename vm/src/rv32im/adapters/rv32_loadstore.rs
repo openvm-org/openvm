@@ -37,8 +37,8 @@ use crate::{
 };
 
 
-// LoadStore Adapter handles all memory and register operations, so it must be aware
-// of the instruction type, specifically whether it is a load or store, and if it is a hint.
+/// LoadStore Adapter handles all memory and register operations, so it must be aware
+/// of the instruction type, specifically whether it is a load or store, and if it is a hint.
 pub struct LoadStoreProcessedInstruction<T> {
     pub is_valid: T,
     // Absolute opcode number
@@ -47,14 +47,14 @@ pub struct LoadStoreProcessedInstruction<T> {
     pub is_hint: T,
 }
 
-// The LoadStoreAdapter seperates Runtime and Air AdapterInterfaces.
-// This is necessary because `prev_data` should be owned by the core chip and sent to the adapter,
-// and it must have an AB::Var type in AIR as to satisfy the memory_bridge interface.
-// This is achived by having different types for reads and writes in Air AdapterInterface.
-// This method ensures that there are no modifications to the global interfaces.
+/// The LoadStoreAdapter seperates Runtime and Air AdapterInterfaces.
+/// This is necessary because `prev_data` should be owned by the core chip and sent to the adapter,
+/// and it must have an AB::Var type in AIR as to satisfy the memory_bridge interface.
+/// This is achived by having different types for reads and writes in Air AdapterInterface.
+/// This method ensures that there are no modifications to the global interfaces.
 
-// Here 2 reads represent read_data and prev_data,
-// Getting the intermediate pointer is completely internal to the adapter and shouldn't be a part of the AdapterInterface
+/// Here 2 reads represent read_data and prev_data,
+/// Getting the intermediate pointer is completely internal to the adapter and shouldn't be a part of the AdapterInterface
 type Rv32LoadStoreAdapterRuntimeInterface<T> = BasicAdapterInterface<
     T,
     LoadStoreProcessedInstruction<T>,
@@ -72,9 +72,9 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
     type ProcessedInstruction = LoadStoreProcessedInstruction<AB::Expr>;
 }
 
-// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
-// In case of Loads, reads from the intermediate pointer and writes to rd.
-// In case of Stores, reads from rs2 and writes to the intermediate pointer.
+/// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
+/// In case of Loads, reads from the intermediate pointer and writes to rd.
+/// In case of Stores, reads from rs2 and writes to the intermediate pointer.
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreAdapterChip<F: Field> {
     pub air: Rv32LoadStoreAdapterAir,
