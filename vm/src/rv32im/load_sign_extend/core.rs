@@ -25,7 +25,7 @@ use crate::{
 
 /// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
 /// This chip uses read_data to construct write_data
-/// This chip doesn't require prev_data, but it is added for compatibility with the LoadStore Adapter chip
+/// prev_data columns are not used in constraints defined in the CoreAir, but are used in constraints by the Adapter
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {

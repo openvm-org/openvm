@@ -109,7 +109,6 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreReadRecord<F: Field> {
     /// This is `None` when handling `HintLoad` opcode.
-    /// This is `None` when handling `HintLoad` opcode.
     pub rs1_record: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>>,
     pub rs1_ptr: F,
     /// This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads.
@@ -233,12 +232,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
 
         // read_as is 2 for loads and 1 for stores
-        let read_as =
-            is_load.clone() * AB::F::two() + utils::not::<AB::Expr>(is_load.clone()) * AB::F::one();
+        let read_as = utils::select::<AB::Expr>(is_load.clone(), AB::Expr::two(), AB::Expr::one());
 
         // read_ptr is mem_ptr for loads and rd_rs2_ptr for stores
-        let read_ptr = is_load.clone() * mem_ptr.clone()
-            + utils::not::<AB::Expr>(is_load.clone()) * local_cols.rd_rs2_ptr;
+        let read_ptr =
+            utils::select::<AB::Expr>(is_load.clone(), mem_ptr.clone(), local_cols.rd_rs2_ptr);
 
         self.memory_bridge
             .read(
@@ -253,12 +251,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             MemoryWriteAuxCols::concat_prev_data(&local_cols.write_aux, ctx.reads[0]);
 
         // write_as is 1 for loads and 2 for stores
-        let write_as =
-            is_load.clone() * AB::F::one() + utils::not::<AB::Expr>(is_load.clone()) * AB::F::two();
+        let write_as = utils::select::<AB::Expr>(is_load.clone(), AB::Expr::one(), AB::Expr::two());
 
         // write_ptr is rd_rs2_ptr for loads and mem_ptr for stores
-        let write_ptr = is_load.clone() * local_cols.rd_rs2_ptr
-            + utils::not::<AB::Expr>(is_load.clone()) * mem_ptr;
+        let write_ptr =
+            utils::select::<AB::Expr>(is_load.clone(), local_cols.rd_rs2_ptr, mem_ptr.clone());
 
         self.memory_bridge
             .write(
