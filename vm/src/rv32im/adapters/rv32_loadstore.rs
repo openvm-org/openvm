@@ -108,9 +108,11 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreReadRecord<F: Field> {
+    /// This is `None` when handling `HintLoad` opcode.
     pub rs1_record: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>>,
     pub rs1_ptr: F,
-    // This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads
+    /// This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads.
+    /// It is `None` when handling `HintLoad` opcode.
     pub read: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>>,
 
     pub imm: F,
