@@ -1,7 +1,11 @@
 //! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`,
 //! `MemoryReadWithImmediateAuxCols`, and `MemoryWriteAuxCols`.
 
-use std::{array, borrow::{Borrow, BorrowMut}, iter};
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+    iter,
+};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::assert_less_than::columns::AssertLessThanAuxCols;
@@ -88,12 +92,14 @@ impl<const N: usize, T: Clone> MemoryWriteAuxCols<T, N> {
     }
 
     pub fn concat_prev_data(base_slice: &[T], prev_data: [T; N]) -> Self {
-        Self { base: MemoryBaseAuxCols::from_slice(base_slice), prev_data }
+        Self {
+            base: MemoryBaseAuxCols::from_slice(base_slice),
+            prev_data,
+        }
     }
 
     // will populate strip_slice with the stripped data
-    pub fn strip_prev_data(self, strip_slice: &mut [T])
-    {
+    pub fn strip_prev_data(self, strip_slice: &mut [T]) {
         let base_cols: &mut MemoryBaseAuxCols<_> = strip_slice.borrow_mut();
         *base_cols = self.base;
     }
@@ -105,7 +111,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
             .chain(self.base.flatten())
             .chain(self.prev_data)
             .collect()
-    }    
+    }
 }
 
 impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<F, N> {
