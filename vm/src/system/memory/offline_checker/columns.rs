@@ -1,11 +1,7 @@
 //! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`,
 //! `MemoryReadWithImmediateAuxCols`, and `MemoryWriteAuxCols`.
 
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-    iter,
-};
+use std::{array, borrow::Borrow, iter};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::assert_less_than::columns::AssertLessThanAuxCols;
@@ -18,7 +14,7 @@ use crate::system::memory::offline_checker::bridge::AUX_LEN;
 #[repr(C)]
 /// Base structure for auxiliary memory columns.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow)]
-pub(super) struct MemoryBaseAuxCols<T> {
+pub struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
     pub(super) prev_timestamp: T,
     /// The auxiliary columns to perform the less than check.
@@ -69,10 +65,6 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
             prev_data,
         }
     }
-
-    pub const fn striped_width() -> usize {
-        Self::width() - N
-    }
 }
 
 impl<const N: usize, T: Clone> MemoryWriteAuxCols<T, N> {
@@ -91,17 +83,12 @@ impl<const N: usize, T: Clone> MemoryWriteAuxCols<T, N> {
         }
     }
 
-    pub fn concat_prev_data(base_slice: &[T], prev_data: [T; N]) -> Self {
-        Self {
-            base: MemoryBaseAuxCols::from_slice(base_slice),
-            prev_data,
-        }
+    pub fn from_base(base: MemoryBaseAuxCols<T>, prev_data: [T; N]) -> Self {
+        Self { base, prev_data }
     }
 
-    // will populate strip_slice with the stripped data
-    pub fn strip_prev_data(self, strip_slice: &mut [T]) {
-        let base_cols: &mut MemoryBaseAuxCols<_> = strip_slice.borrow_mut();
-        *base_cols = self.base;
+    pub fn get_base(self) -> MemoryBaseAuxCols<T> {
+        self.base
     }
 }
 

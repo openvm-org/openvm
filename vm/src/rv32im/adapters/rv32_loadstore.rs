@@ -28,7 +28,9 @@ use crate::{
     rv32im::adapters::RV32_CELL_BITS,
     system::{
         memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+            offline_checker::{
+                MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
+            },
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
@@ -145,7 +147,7 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub mem_ptr_limbs: [T; 2],
 
     /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
-    pub write_aux: [T; MemoryWriteAuxCols::<u8, RV32_REGISTER_NUM_LIMBS>::striped_width()],
+    pub write_base_aux: MemoryBaseAuxCols<T>,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -247,8 +249,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             )
             .eval(builder, is_valid.clone() - is_hint.clone());
 
-        let write_aux_cols =
-            MemoryWriteAuxCols::concat_prev_data(&local_cols.write_aux, ctx.reads[0]);
+        let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads[0]);
 
         // write_as is 1 for loads and 2 for stores
         let write_as = utils::select::<AB::Expr>(is_load.clone(), AB::Expr::one(), AB::Expr::two());
@@ -463,9 +464,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs;
-        aux_cols_factory
+        adapter_cols.write_base_aux = aux_cols_factory
             .make_write_aux_cols(write_record.write)
-            .strip_prev_data(&mut adapter_cols.write_aux);
+            .get_base();
     }
 
     fn air(&self) -> &Self::Air {
