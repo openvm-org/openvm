@@ -159,9 +159,6 @@ impl VmConfig {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
-        let range_tuple_bus =
-            RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, [(1 << 8), 32 * (1 << 8)]);
-        let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
         let memory_controller = match self.memory_config.persistence_type {
             PersistenceType::Volatile => {
@@ -190,6 +187,13 @@ impl VmConfig {
         // That is, if chip A holds a strong reference to chip B, then A must precede B in `required_executors`.
         let mut required_executors: BTreeSet<_> = self.executors.clone().into_iter().collect();
         let mut chips = vec![];
+
+        let mul_u256_enabled = required_executors.contains(&ExecutorName::U256Multiplication);
+        let range_tuple_bus = RangeTupleCheckerBus::new(
+            RANGE_TUPLE_CHECKER_BUS,
+            [(1 << 8), if mul_u256_enabled { 32 } else { 8 } * (1 << 8)],
+        );
+        let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
         // CoreChip is always required even if it's not explicitly specified.
         required_executors.insert(ExecutorName::Core);
