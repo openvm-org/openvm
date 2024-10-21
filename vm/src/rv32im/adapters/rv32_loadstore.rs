@@ -6,7 +6,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32};
 
-use super::{compose, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS};
+use super::{compose, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 use crate::{
     arch::{
         instructions::{
@@ -34,10 +34,10 @@ pub struct Rv32LoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub c: T,
     pub d: T, // will fix to 1 to save a column
     pub e: T,
-    pub ptr: [T; RV32_REGISTER_NUM_LANES],
+    pub ptr: [T; RV32_REGISTER_NUM_LIMBS],
     // pub read: [T; NUM_CELLS],
     // pub write: [T; NUM_CELLS],
-    pub read_ptr_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub read_ptr_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub read_data_aux: MemoryReadAuxCols<T, NUM_CELLS>,
     pub write_aux: MemoryWriteAuxCols<T, NUM_CELLS>,
 }
@@ -74,7 +74,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
 
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreAdapterReadRecord<F: Field, const NUM_CELLS: usize> {
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
 
     // This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads
     pub read: MemoryReadRecord<F, NUM_CELLS>,
@@ -138,9 +138,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
     )> {
         let Instruction {
             opcode,
-            op_a: a,
-            op_b: b,
-            op_c: c,
+            a,
+            b,
+            c,
             d,
             e,
             ..
@@ -151,9 +151,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         // We constrain that the pointer to the memory has ar most addr_bits
         let addr_bits = memory.mem_config.pointer_max_bits;
-        debug_assert!(addr_bits >= (RV32_REGISTER_NUM_LANES - 1) * RV32_CELL_BITS);
+        debug_assert!(addr_bits >= (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
 
-        let rs1_record = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
+        let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
         let rs1_val = compose(rs1_record.data);
 
         // Note: c is a field element and immediate is a signed integer
@@ -218,12 +218,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
-            opcode,
-            op_a: a,
-            op_c: c,
-            d,
-            e,
-            ..
+            opcode, a, c, d, e, ..
         } = *instruction;
 
         let local_opcode_index = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);

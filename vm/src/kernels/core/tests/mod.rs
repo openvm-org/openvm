@@ -140,13 +140,13 @@ fn execution_test<const NUM_WORDS: usize, const WORD_SIZE: usize>(
             timestamp: cols.io.timestamp,
             pc: BabyBear::from_canonical_u64(pc as u64),
             opcode: BabyBear::from_canonical_u64(program.instructions[pc].opcode as u64),
-            op_a: program.instructions[pc].op_a,
-            op_b: program.instructions[pc].op_b,
-            op_c: program.instructions[pc].op_c,
+            a: program.instructions[pc].a,
+            b: program.instructions[pc].b,
+            c: program.instructions[pc].c,
             d: program.instructions[pc].d,
             e: program.instructions[pc].e,
-            op_f: program.instructions[pc].op_f,
-            op_g: program.instructions[pc].op_g,
+            f: program.instructions[pc].f,
+            g: program.instructions[pc].g,
         };
         assert_eq!(cols.io, expected_io);
     }
@@ -243,13 +243,13 @@ fn air_test_change<
             BabyBear::from_canonical_usize(segment.program_chip.execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
-            instruction.op_a,
-            instruction.op_b,
-            instruction.op_c,
+            instruction.a,
+            instruction.b,
+            instruction.c,
             instruction.d,
             instruction.e,
-            instruction.op_f,
-            instruction.op_g,
+            instruction.f,
+            instruction.g,
         ]);
     }
 

@@ -5,7 +5,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField32};
 
-use super::RV32_REGISTER_NUM_LANES;
+use super::RV32_REGISTER_NUM_LIMBS;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
@@ -49,15 +49,15 @@ impl<F: PrimeField32> Rv32MultAdapter<F> {
 #[derive(Debug)]
 pub struct Rv32MultReadRecord<F: Field> {
     /// Reads from operand registers
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
-    pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[derive(Debug)]
 pub struct Rv32MultWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register
-    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
 }
 
 /// Interface for reading two RV32 registers
@@ -71,8 +71,8 @@ pub struct Rv32MultProcessedInstruction<T> {
 }
 
 impl<T> VmAdapterInterface<T> for Rv32MultAdapterInterface<T> {
-    type Reads = [[T; RV32_REGISTER_NUM_LANES]; 2];
-    type Writes = [T; RV32_REGISTER_NUM_LANES];
+    type Reads = [[T; RV32_REGISTER_NUM_LIMBS]; 2];
+    type Writes = [T; RV32_REGISTER_NUM_LIMBS];
     type ProcessedInstruction = Rv32MultProcessedInstruction<T>;
 }
 
@@ -82,8 +82,8 @@ pub struct Rv32MultAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_index: T,
     pub rs2_index: T,
-    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>; 2],
-    pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; 2],
+    pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -135,17 +135,12 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapter<F> {
         <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
-        let Instruction {
-            op_b: b,
-            op_c: c,
-            d,
-            ..
-        } = *instruction;
+        let Instruction { b, c, d, .. } = *instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), 1);
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
-        let rs2 = memory.read::<RV32_REGISTER_NUM_LANES>(d, c);
+        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
+        let rs2 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, c);
 
         Ok(([rs1.data, rs2.data], Self::ReadRecord { rs1, rs2 }))
     }
@@ -160,7 +155,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapter<F> {
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         // TODO: timestamp delta debug check
 
-        let Instruction { op_a: a, d, .. } = *instruction;
+        let Instruction { a, d, .. } = *instruction;
         let rd = memory.write(d, a, output.writes);
 
         Ok((

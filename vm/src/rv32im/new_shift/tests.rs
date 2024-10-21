@@ -15,7 +15,7 @@ use crate::{
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::adapters::{
-        Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+        Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
     },
     system::program::Instruction,
 };
@@ -35,7 +35,7 @@ fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     array::from_fn(|_| rng.gen_range(0..(1 << LIMB_BITS)))
 }
 
-fn generate_rv32_immediate(rng: &mut StdRng) -> (Option<usize>, [u32; RV32_REGISTER_NUM_LANES]) {
+fn generate_rv32_immediate(rng: &mut StdRng) -> (Option<usize>, [u32; RV32_REGISTER_NUM_LIMBS]) {
     let mut imm: u32 = rng.gen_range(0..(1 << RV_IS_TYPE_IMM_BITS));
     if (imm & 0x800) != 0 {
         imm |= !0xFFF
@@ -57,8 +57,8 @@ fn run_rv32_shift_rand_write_execute<E: InstructionExecutor<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
     opcode: ShiftOpcode,
-    b: [u32; RV32_REGISTER_NUM_LANES],
-    c: [u32; RV32_REGISTER_NUM_LANES],
+    b: [u32; RV32_REGISTER_NUM_LIMBS],
+    c: [u32; RV32_REGISTER_NUM_LIMBS],
     c_imm: Option<usize>,
     rng: &mut StdRng,
 ) {
@@ -68,12 +68,12 @@ fn run_rv32_shift_rand_write_execute<E: InstructionExecutor<F>>(
     let rs2 = c_imm.unwrap_or_else(|| gen_pointer(rng, 32));
     let rd = gen_pointer(rng, 32);
 
-    tester.write::<RV32_REGISTER_NUM_LANES>(1, rs1, b.map(F::from_canonical_u32));
+    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     if !is_imm {
-        tester.write::<RV32_REGISTER_NUM_LANES>(1, rs2, c.map(F::from_canonical_u32));
+        tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
     }
 
-    let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &b, &c);
+    let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
     tester.execute(
         chip,
         Instruction::from_usize(
@@ -84,7 +84,7 @@ fn run_rv32_shift_rand_write_execute<E: InstructionExecutor<F>>(
 
     assert_eq!(
         a.map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LANES>(1, rd)
+        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
     );
 }
 
@@ -108,11 +108,11 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     );
 
     for _ in 0..num_ops {
-        let b = generate_long_number::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(&mut rng);
+        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
         let (c_imm, c) = if rng.gen_bool(0.5) {
             (
                 None,
-                generate_long_number::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(&mut rng),
+                generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng),
             )
         } else {
             generate_rv32_immediate(&mut rng)
@@ -157,12 +157,12 @@ fn rv32_shift_sra_rand_test() {
 ///
 #[test]
 fn run_sll_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [45, 7, 61, 186];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [27, 0, 0, 0];
-    let z: [u32; RV32_REGISTER_NUM_LANES] = [0, 0, 0, 104];
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [45, 7, 61, 186];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [27, 0, 0, 0];
+    let z: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 104];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(ShiftOpcode::SLL, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LANES {
+        run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SLL, &x, &y);
+    for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
     assert_eq!((y[0] as usize) / RV32_CELL_BITS, limb_shift);
@@ -171,12 +171,12 @@ fn run_sll_sanity_test() {
 
 #[test]
 fn run_srl_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [31, 190, 221, 200];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [17, 0, 0, 0];
-    let z: [u32; RV32_REGISTER_NUM_LANES] = [110, 100, 0, 0];
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [31, 190, 221, 200];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [17, 0, 0, 0];
+    let z: [u32; RV32_REGISTER_NUM_LIMBS] = [110, 100, 0, 0];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(ShiftOpcode::SRL, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LANES {
+        run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SRL, &x, &y);
+    for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
     assert_eq!((y[0] as usize) / RV32_CELL_BITS, limb_shift);
@@ -185,12 +185,12 @@ fn run_srl_sanity_test() {
 
 #[test]
 fn run_sra_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [31, 190, 221, 200];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [17, 0, 0, 0];
-    let z: [u32; RV32_REGISTER_NUM_LANES] = [110, 228, 255, 255];
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [31, 190, 221, 200];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [17, 0, 0, 0];
+    let z: [u32; RV32_REGISTER_NUM_LIMBS] = [110, 228, 255, 255];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(ShiftOpcode::SRA, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LANES {
+        run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SRA, &x, &y);
+    for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
     assert_eq!((y[0] as usize) / RV32_CELL_BITS, limb_shift);

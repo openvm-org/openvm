@@ -23,7 +23,7 @@ use crate::{
     rv32im::{
         adapters::{
             Rv32CondRdWriteAdapterChip, Rv32CondRdWriteAdapterCols, PC_BITS, RV32_CELL_BITS,
-            RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+            RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
         },
         rv32_jal_lui::Rv32JalLuiCoreCols,
     },
@@ -118,7 +118,7 @@ fn run_negative_jal_lui_test(
     opcode: Rv32JalLuiOpcode,
     initial_imm: Option<i32>,
     initial_pc: Option<u32>,
-    rd_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
+    rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<i32>,
     is_jal: Option<bool>,
     is_lui: Option<bool>,

@@ -10,7 +10,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{RV32_CELL_BITS, RV32_REGISTER_NUM_LANES};
+use super::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
@@ -57,11 +57,11 @@ impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
 #[derive(Clone, Debug)]
 pub struct Rv32BaseAluReadRecord<F: Field> {
     /// Read register value from address space d=1
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
     /// Either
     /// - read rs2 register value or
     /// - if `rs2_is_imm` is true, this is None
-    pub rs2: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LANES>>,
+    pub rs2: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>>,
     /// immediate value of rs2 or 0
     pub rs2_imm: F,
 }
@@ -70,7 +70,7 @@ pub struct Rv32BaseAluReadRecord<F: Field> {
 pub struct Rv32BaseAluWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register
-    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LANES>,
+    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[repr(C)]
@@ -83,8 +83,8 @@ pub struct Rv32BaseAluAdapterCols<T> {
     pub rs2: T,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: T,
-    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LANES>; 2],
-    pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LANES>,
+    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; 2],
+    pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[allow(dead_code)]
@@ -106,8 +106,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
         MinimalInstruction<AB::Expr>,
         2,
         1,
-        RV32_REGISTER_NUM_LANES,
-        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_REGISTER_NUM_LIMBS,
     >;
 
     fn eval(
@@ -198,8 +198,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         MinimalInstruction<F>,
         2,
         1,
-        RV32_REGISTER_NUM_LANES,
-        RV32_REGISTER_NUM_LANES,
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_REGISTER_NUM_LIMBS,
     >;
 
     fn preprocess(
@@ -210,18 +210,12 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         <Self::Interface as VmAdapterInterface<F>>::Reads,
         Self::ReadRecord,
     )> {
-        let Instruction {
-            op_b: b,
-            op_c: c,
-            d,
-            e,
-            ..
-        } = *instruction;
+        let Instruction { b, c, d, e, .. } = *instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert!(e.as_canonical_u32() <= 1);
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LANES>(d, b);
+        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
         let (rs2, rs2_data, rs2_imm) = if e.is_zero() {
             let c_u32 = c.as_canonical_u32();
             debug_assert_eq!(c_u32 >> 24, 0);
@@ -238,7 +232,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
                 c,
             )
         } else {
-            let rs2_read = memory.read::<RV32_REGISTER_NUM_LANES>(e, c);
+            let rs2_read = memory.read::<RV32_REGISTER_NUM_LIMBS>(e, c);
             (Some(rs2_read), rs2_read.data, F::zero())
         };
 
@@ -253,7 +247,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         output: AdapterRuntimeContext<F, Self::Interface>,
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { op_a: a, d, .. } = *instruction;
+        let Instruction { a, d, .. } = *instruction;
         let rd = memory.write(d, a, output.writes[0]);
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
@@ -295,7 +289,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
             aux_cols_factory.make_read_aux_cols(read_record.rs1),
             match read_record.rs2 {
                 Some(rs2_record) => aux_cols_factory.make_read_aux_cols(rs2_record),
-                None => MemoryReadAuxCols::<F, RV32_REGISTER_NUM_LANES>::disabled(),
+                None => MemoryReadAuxCols::<F, RV32_REGISTER_NUM_LIMBS>::disabled(),
             },
         ];
         row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);

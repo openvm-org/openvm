@@ -93,13 +93,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
             },
             TestAdapterRecord {
                 operands: [
-                    instruction.op_a,
-                    instruction.op_b,
-                    instruction.op_c,
+                    instruction.a,
+                    instruction.b,
+                    instruction.c,
                     instruction.d,
                     instruction.e,
-                    instruction.op_f,
-                    instruction.op_g,
+                    instruction.f,
+                    instruction.g,
                 ],
                 from_pc: from_state.pc,
             },

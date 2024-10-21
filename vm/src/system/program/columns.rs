@@ -13,13 +13,13 @@ pub struct ProgramExecutionCols<T> {
     pub pc: T,
 
     pub opcode: T,
-    pub op_a: T,
-    pub op_b: T,
-    pub op_c: T,
-    pub as_b: T,
-    pub as_c: T,
-    pub op_f: T,
-    pub op_g: T,
+    pub a: T,
+    pub b: T,
+    pub c: T,
+    pub d: T,
+    pub e: T,
+    pub f: T,
+    pub g: T,
 }
 
 // Straightforward implementation for from_slice, flatten, and width functions.
@@ -46,13 +46,13 @@ impl<T: Clone> ProgramExecutionCols<T> {
         Self {
             pc: slc[0].clone(),
             opcode: slc[1].clone(),
-            op_a: slc[2].clone(),
-            op_b: slc[3].clone(),
-            op_c: slc[4].clone(),
-            as_b: slc[5].clone(),
-            as_c: slc[6].clone(),
-            op_f: slc[7].clone(),
-            op_g: slc[8].clone(),
+            a: slc[2].clone(),
+            b: slc[3].clone(),
+            c: slc[4].clone(),
+            d: slc[5].clone(),
+            e: slc[6].clone(),
+            f: slc[7].clone(),
+            g: slc[8].clone(),
         }
     }
 
@@ -60,13 +60,13 @@ impl<T: Clone> ProgramExecutionCols<T> {
         vec![
             self.pc.clone(),
             self.opcode.clone(),
-            self.op_a.clone(),
-            self.op_b.clone(),
-            self.op_c.clone(),
-            self.as_b.clone(),
-            self.as_c.clone(),
-            self.op_f.clone(),
-            self.op_g.clone(),
+            self.a.clone(),
+            self.b.clone(),
+            self.c.clone(),
+            self.d.clone(),
+            self.e.clone(),
+            self.f.clone(),
+            self.g.clone(),
         ]
     }
 }

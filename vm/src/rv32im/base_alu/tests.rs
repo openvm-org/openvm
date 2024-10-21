@@ -17,7 +17,7 @@ use crate::{
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES, RV_IS_TYPE_IMM_BITS,
+            Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
         },
         base_alu::BaseAluCoreCols,
     },
@@ -39,7 +39,7 @@ fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     array::from_fn(|_| rng.gen_range(0..(1 << LIMB_BITS)))
 }
 
-fn generate_rv32_immediate(rng: &mut StdRng) -> (Option<usize>, [u32; RV32_REGISTER_NUM_LANES]) {
+fn generate_rv32_immediate(rng: &mut StdRng) -> (Option<usize>, [u32; RV32_REGISTER_NUM_LIMBS]) {
     let mut imm: u32 = rng.gen_range(0..(1 << RV_IS_TYPE_IMM_BITS));
     if (imm & 0x800) != 0 {
         imm |= !0xFFF
@@ -61,8 +61,8 @@ fn run_rv32_alu_rand_write_execute<E: InstructionExecutor<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
     opcode: AluOpcode,
-    b: [u32; RV32_REGISTER_NUM_LANES],
-    c: [u32; RV32_REGISTER_NUM_LANES],
+    b: [u32; RV32_REGISTER_NUM_LIMBS],
+    c: [u32; RV32_REGISTER_NUM_LIMBS],
     c_imm: Option<usize>,
     rng: &mut StdRng,
 ) {
@@ -72,12 +72,12 @@ fn run_rv32_alu_rand_write_execute<E: InstructionExecutor<F>>(
     let rs2 = c_imm.unwrap_or_else(|| gen_pointer(rng, 32));
     let rd = gen_pointer(rng, 32);
 
-    tester.write::<RV32_REGISTER_NUM_LANES>(1, rs1, b.map(F::from_canonical_u32));
+    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     if !is_imm {
-        tester.write::<RV32_REGISTER_NUM_LANES>(1, rs2, c.map(F::from_canonical_u32));
+        tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
     }
 
-    let a = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(opcode, &b, &c);
+    let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
     tester.execute(
         chip,
         Instruction::from_usize(
@@ -88,7 +88,7 @@ fn run_rv32_alu_rand_write_execute<E: InstructionExecutor<F>>(
 
     assert_eq!(
         a.map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LANES>(1, rd)
+        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
     );
 }
 
@@ -108,11 +108,11 @@ fn run_rv32_alu_rand_test(opcode: AluOpcode, num_ops: usize) {
     );
 
     for _ in 0..num_ops {
-        let b = generate_long_number::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(&mut rng);
+        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
         let (c_imm, c) = if rng.gen_bool(0.5) {
             (
                 None,
-                generate_long_number::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(&mut rng),
+                generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng),
             )
         } else {
             generate_rv32_immediate(&mut rng)
@@ -159,15 +159,15 @@ fn rv32_alu_and_rand_test() {
 
 #[allow(dead_code)]
 type Rv32BaseAluTestChip<F> =
-    VmChipWrapper<F, TestAdapterChip<F>, BaseAluCoreChip<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>>;
+    VmChipWrapper<F, TestAdapterChip<F>, BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
 
 #[allow(clippy::too_many_arguments)]
 #[allow(dead_code)]
 fn run_rv32_alu_negative_test(
     opcode: AluOpcode,
-    a: [u32; RV32_REGISTER_NUM_LANES],
-    b: [u32; RV32_REGISTER_NUM_LANES],
-    c: [u32; RV32_REGISTER_NUM_LANES],
+    a: [u32; RV32_REGISTER_NUM_LIMBS],
+    b: [u32; RV32_REGISTER_NUM_LIMBS],
+    c: [u32; RV32_REGISTER_NUM_LIMBS],
     expected_error: VerificationError,
 ) {
     let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
@@ -191,7 +191,7 @@ fn run_rv32_alu_negative_test(
     let mut air_proof_input = chip.clone().generate_air_proof_input();
     let alu_trace = air_proof_input.raw.common_main.as_mut().unwrap();
     let mut alu_trace_row = alu_trace.row_mut(0).split_at_mut(1).1.to_vec();
-    let alu_trace_cols: &mut BaseAluCoreCols<F, RV32_REGISTER_NUM_LANES, RV32_CELL_BITS> =
+    let alu_trace_cols: &mut BaseAluCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
         (*alu_trace_row).borrow_mut();
     alu_trace_cols.a = a.map(F::from_canonical_u32);
 
@@ -297,55 +297,55 @@ fn rv32_alu_and_wrong_negative_test() {
 
 #[test]
 fn run_add_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
-    let z: [u32; RV32_REGISTER_NUM_LANES] = [23, 205, 73, 49];
-    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::ADD, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LANES {
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
+    let z: [u32; RV32_REGISTER_NUM_LIMBS] = [23, 205, 73, 49];
+    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(AluOpcode::ADD, &x, &y);
+    for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
 fn run_sub_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
-    let z: [u32; RV32_REGISTER_NUM_LANES] = [179, 118, 240, 172];
-    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::SUB, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LANES {
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
+    let z: [u32; RV32_REGISTER_NUM_LIMBS] = [179, 118, 240, 172];
+    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(AluOpcode::SUB, &x, &y);
+    for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
 fn run_xor_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
-    let z: [u32; RV32_REGISTER_NUM_LANES] = [215, 138, 49, 173];
-    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::XOR, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LANES {
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
+    let z: [u32; RV32_REGISTER_NUM_LIMBS] = [215, 138, 49, 173];
+    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(AluOpcode::XOR, &x, &y);
+    for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
 fn run_or_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
-    let z: [u32; RV32_REGISTER_NUM_LANES] = [247, 171, 61, 239];
-    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::OR, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LANES {
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
+    let z: [u32; RV32_REGISTER_NUM_LIMBS] = [247, 171, 61, 239];
+    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(AluOpcode::OR, &x, &y);
+    for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
 fn run_and_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [229, 33, 29, 111];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [50, 171, 44, 194];
-    let z: [u32; RV32_REGISTER_NUM_LANES] = [32, 33, 12, 66];
-    let result = run_alu::<RV32_REGISTER_NUM_LANES, RV32_CELL_BITS>(AluOpcode::AND, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LANES {
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
+    let z: [u32; RV32_REGISTER_NUM_LIMBS] = [32, 33, 12, 66];
+    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(AluOpcode::AND, &x, &y);
+    for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
