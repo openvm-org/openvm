@@ -123,7 +123,7 @@ fn test<const CHUNK: usize>(
         let initial_values = *initial_memory
             .get(&(address_space, address_label))
             .unwrap_or(&[BabyBear::zero(); CHUNK]);
-        let as_label = (address_space.as_canonical_u32() as usize - as_offset) << address_height;
+        let as_label = address_space.as_canonical_u32() as usize - as_offset;
         interaction(
             InteractionType::Send,
             false,

@@ -38,8 +38,8 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
             [
                 local.expand_direction + (local.left_direction_different * AB::F::two()),
                 local.parent_height - AB::F::one(),
-                local.parent_as_label * AB::F::two(),
-                local.parent_address_label * AB::F::two(),
+                local.parent_as_label * (AB::Expr::one() + local.height_section),
+                local.parent_address_label * (AB::Expr::two() - local.height_section),
             ]
             .into_iter()
             .chain(local.left_child_hash.into_iter().map(Into::into)),
@@ -51,8 +51,9 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
             [
                 local.expand_direction + (local.right_direction_different * AB::F::two()),
                 local.parent_height - AB::F::one(),
-                (local.parent_as_label * AB::F::two()) + local.height_section,
-                (local.parent_address_label * AB::F::two())
+                (local.parent_as_label * (AB::Expr::one() + local.height_section))
+                    + local.height_section,
+                (local.parent_address_label * (AB::Expr::two() - local.height_section))
                     + (AB::Expr::one() - local.height_section),
             ]
             .into_iter()
