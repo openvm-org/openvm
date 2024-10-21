@@ -218,6 +218,7 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+        assert!(self.range_checker_chip.range_max_bits() >= 16);
         let Instruction { opcode, c, .. } = *instruction;
         let local_opcode_index = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
 
@@ -239,9 +240,9 @@ where
         let mask = (1 << 15) - 1;
         let to_pc_least_sig_bit = rs1_val.wrapping_add(imm_extended) & 1;
 
-        let to_pc_limbs = array::from_fn(|i| F::from_canonical_u32((to_pc >> (1 + i * 15)) & mask));
+        let to_pc_limbs = array::from_fn(|i| F::from_canonical_u32((to_pc >> (1 + i * 16)) & mask));
         self.range_checker_chip
-            .add_count(to_pc_limbs[0].as_canonical_u32(), 15);
+            .add_count(to_pc_limbs[0].as_canonical_u32(), 16);
         self.range_checker_chip
             .add_count(to_pc_limbs[1].as_canonical_u32(), 14);
 

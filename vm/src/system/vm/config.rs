@@ -34,7 +34,7 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 29, 29, 15, PersistenceType::Volatile)
+        Self::new(29, 29, 29, 16, PersistenceType::Volatile)
     }
 }
 
