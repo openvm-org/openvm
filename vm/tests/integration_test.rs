@@ -6,8 +6,9 @@ use ax_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     utils::create_seeded_rng,
 };
+use axvm_instructions::PublishOpcode::PUBLISH;
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::AbstractField;
 use rand::Rng;
 use stark_vm::{
     arch::{
@@ -23,7 +24,7 @@ use stark_vm::{
         program::{Instruction, Program},
         vm::{
             config::{MemoryConfig, PersistenceType, VmConfig},
-            VirtualMachine,
+            SingleSegmentVM, VirtualMachine,
         },
     },
 };
@@ -162,6 +163,34 @@ fn test_vm_1_optional_air() {
 }
 
 #[test]
+fn test_vm_public_values() {
+    let mut vm_config = VmConfig::core();
+    vm_config.num_public_values = 3;
+    let engine =
+        BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+    let pk = vm_config.generate_pk(engine.keygen_builder());
+
+    {
+        let instructions = vec![
+            Instruction::from_usize(PUBLISH.with_default_offset(), [0, 12, 2, 0, 0, 0]),
+            Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+        ];
+
+        let program = Program::from_instructions(&instructions);
+        let vm = SingleSegmentVM::new(vm_config);
+        let pvs = vm.execute(program.clone(), vec![]).unwrap();
+        assert_eq!(
+            pvs,
+            vec![None, None, Some(BabyBear::from_canonical_u32(12))]
+        );
+        let proof_input = vm.execute_and_generate(program, vec![]).unwrap();
+        engine
+            .prove_then_verify(&pk, proof_input)
+            .expect("Verification failed");
+    }
+}
+
+#[test]
 fn test_vm_initial_memory() {
     // Program that fails if mem[(1, 0)] != 101.
     let program = Program::from_instructions(&[
@@ -269,22 +298,11 @@ fn test_vm_continuations() {
         Instruction::large_from_isize(ADD.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
         // if [0]_1 != n, pc <- pc - 3
         Instruction::from_isize(BNE.with_default_offset(), n, 0, -4, 0, 1),
-        // publish [1]_1 as public value index [0]_0
-        Instruction::from_isize(PUBLISH.with_default_offset(), 0, 1, 0, 0, 1),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 1),
     ]);
-    let expected_output = {
-        let mut a = 0;
-        let mut b = 1;
-        for _ in 0..n {
-            (a, b) = (b, a + b);
-            b %= BabyBear::ORDER_U32;
-        }
-        BabyBear::from_canonical_u32(a)
-    };
 
     let config = VmConfig {
-        num_public_values: 1,
+        num_public_values: 0,
         poseidon2_max_constraint_degree: 3,
         max_segment_len: 200000,
         memory_config: MemoryConfig {
@@ -295,7 +313,7 @@ fn test_vm_continuations() {
     }
     .add_executor(ExecutorName::FieldArithmetic);
 
-    let vm = VirtualMachine::new(config).with_program_inputs(vec![(0, expected_output)]);
+    let vm = VirtualMachine::new(config);
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let pk = vm.config.generate_pk(engine.keygen_builder());
@@ -326,12 +344,6 @@ fn test_vm_continuations() {
                     }
                 );
                 prev_final_pc = Some(pvs[1]);
-            } else if air_name == "CoreAir" {
-                assert_eq!(pvs.len(), 1);
-
-                // Check the program input is exposed as a public input of the AIR.
-                // For now this appears on every segment.
-                assert_eq!(pvs[0], expected_output);
             } else if air_name == "MemoryMerkleAir<8>" {
                 assert_eq!(pvs.len(), 16);
 

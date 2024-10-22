@@ -15,7 +15,6 @@ use super::Streams;
 use crate::{
     arch::ExecutorName,
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
-    kernels::core::CoreOptions,
 };
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
@@ -140,12 +139,6 @@ impl VmConfig {
             false,
             vec![],
         )
-    }
-
-    pub fn core_options(&self) -> CoreOptions {
-        CoreOptions {
-            num_public_values: self.num_public_values,
-        }
     }
 
     pub fn core() -> Self {

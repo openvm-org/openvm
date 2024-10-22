@@ -196,7 +196,6 @@ where
         } else {
             reads[1]
         };
-
         let write_data = run_write_data(local_opcode, read_data, prev_data);
 
         let output = AdapterRuntimeContext::without_pc([write_data]);

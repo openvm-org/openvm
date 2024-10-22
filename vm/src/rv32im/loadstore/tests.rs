@@ -105,7 +105,7 @@ fn set_and_execute(
     let write_data = run_write_data(opcode, read_data, some_prev_data);
     if is_load {
         assert_eq!(write_data, tester.read::<4>(1, a));
-    } else if !is_load {
+    } else {
         assert_eq!(write_data, tester.read::<4>(2, ptr_val as usize));
     }
 }
