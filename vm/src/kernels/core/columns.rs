@@ -23,13 +23,13 @@ pub struct CoreIoCols<T> {
     pub pc: T,
 
     pub opcode: T,
-    pub op_a: T,
-    pub op_b: T,
-    pub op_c: T,
+    pub a: T,
+    pub b: T,
+    pub c: T,
     pub d: T,
     pub e: T,
-    pub op_f: T,
-    pub op_g: T,
+    pub f: T,
+    pub g: T,
 }
 
 impl<T: Clone> CoreIoCols<T> {
@@ -38,13 +38,13 @@ impl<T: Clone> CoreIoCols<T> {
             timestamp: slc[0].clone(),
             pc: slc[1].clone(),
             opcode: slc[2].clone(),
-            op_a: slc[3].clone(),
-            op_b: slc[4].clone(),
-            op_c: slc[5].clone(),
+            a: slc[3].clone(),
+            b: slc[4].clone(),
+            c: slc[5].clone(),
             d: slc[6].clone(),
             e: slc[7].clone(),
-            op_f: slc[8].clone(),
-            op_g: slc[9].clone(),
+            f: slc[8].clone(),
+            g: slc[9].clone(),
         }
     }
 
@@ -53,13 +53,13 @@ impl<T: Clone> CoreIoCols<T> {
             self.timestamp.clone(),
             self.pc.clone(),
             self.opcode.clone(),
-            self.op_a.clone(),
-            self.op_b.clone(),
-            self.op_c.clone(),
+            self.a.clone(),
+            self.b.clone(),
+            self.c.clone(),
             self.d.clone(),
             self.e.clone(),
-            self.op_f.clone(),
-            self.op_g.clone(),
+            self.f.clone(),
+            self.g.clone(),
         ]
     }
 
@@ -69,18 +69,18 @@ impl<T: Clone> CoreIoCols<T> {
 }
 
 impl<T: Field> CoreIoCols<T> {
-    pub fn nop_row(pc: T) -> Self {
+    pub fn nop_row(pc: u32) -> Self {
         Self {
             timestamp: T::default(),
-            pc,
+            pc: T::from_canonical_u32(pc),
             opcode: T::from_canonical_usize(CoreOpcode::NOP as usize),
-            op_a: T::default(),
-            op_b: T::default(),
-            op_c: T::default(),
+            a: T::default(),
+            b: T::default(),
+            c: T::default(),
             d: T::default(),
             e: T::default(),
-            op_f: T::default(),
-            op_g: T::default(),
+            f: T::default(),
+            g: T::default(),
         }
     }
 }
@@ -260,7 +260,7 @@ impl<T: Clone> CoreAuxCols<T> {
 }
 
 impl<F: PrimeField32> CoreAuxCols<F> {
-    pub fn nop_row(chip: &CoreChip<F>) -> Self {
+    pub fn nop_row(chip: &CoreChip<F>, pc: u32) -> Self {
         let mut operation_flags = BTreeMap::new();
         for opcode in CoreOpcode::iter() {
             operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::NOP));
@@ -277,7 +277,7 @@ impl<F: PrimeField32> CoreAuxCols<F> {
             is_equal_aux: is_equal_cols.aux,
             reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
-            next_pc: F::from_canonical_u32(chip.pc),
+            next_pc: F::from_canonical_u32(pc),
         }
     }
 }
@@ -311,10 +311,10 @@ impl<F: PrimeField32> CoreCols<F> {
     /// This function mutates internal state of some chips. It should be called once for every
     /// NOP row---results should not be cloned.
     /// TODO[zach]: Make this less surprising, probably by not doing less-than checks on dummy rows.
-    pub fn nop_row(chip: &CoreChip<F>, pc: F) -> Self {
+    pub fn nop_row(chip: &CoreChip<F>, pc: u32) -> Self {
         Self {
             io: CoreIoCols::<F>::nop_row(pc),
-            aux: CoreAuxCols::<F>::nop_row(chip),
+            aux: CoreAuxCols::<F>::nop_row(chip, pc),
         }
     }
 }

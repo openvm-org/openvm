@@ -146,7 +146,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
     // set the value of [c]_f to zero, necessary to bypass trace gen checks
     let row = chip_input.raw.common_main.as_mut().unwrap().row_mut(0);
     let cols: &mut FieldArithmeticCoreCols<BabyBear> = row
-        .split_at_mut(NativeAdapterCols::<BabyBear>::width())
+        .split_at_mut(NativeAdapterCols::<BabyBear, 2, 1>::width())
         .1
         .borrow_mut();
     cols.b = BabyBear::zero();

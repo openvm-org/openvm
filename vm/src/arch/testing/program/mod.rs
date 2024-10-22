@@ -35,13 +35,13 @@ impl<F: PrimeField32> ProgramTester<F> {
         self.records.push(ProgramExecutionCols {
             pc: F::from_canonical_u32(initial_state.pc),
             opcode: F::from_canonical_usize(instruction.opcode),
-            op_a: instruction.op_a,
-            op_b: instruction.op_b,
-            op_c: instruction.op_c,
-            as_b: instruction.d,
-            as_c: instruction.e,
-            op_f: instruction.op_f,
-            op_g: instruction.op_g,
+            a: instruction.a,
+            b: instruction.b,
+            c: instruction.c,
+            d: instruction.d,
+            e: instruction.e,
+            f: instruction.f,
+            g: instruction.g,
         });
     }
 }

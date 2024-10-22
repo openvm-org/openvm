@@ -16,7 +16,7 @@ use crate::{
         BasicAdapterInterface, InstructionExecutor, VmCoreChip,
     },
     rv32im::adapters::{
-        JumpUiProcessedInstruction, Rv32BranchAdapterChip, PC_BITS, RV32_REGISTER_NUM_LANES,
+        JumpUiProcessedInstruction, Rv32BranchAdapterChip, PC_BITS, RV32_REGISTER_NUM_LIMBS,
         RV_B_TYPE_IMM_BITS,
     },
     system::program::Instruction,
@@ -36,15 +36,15 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
     opcode: BranchEqualOpcode,
-    a: [u32; RV32_REGISTER_NUM_LANES],
-    b: [u32; RV32_REGISTER_NUM_LANES],
+    a: [u32; RV32_REGISTER_NUM_LIMBS],
+    b: [u32; RV32_REGISTER_NUM_LIMBS],
     imm: i32,
     rng: &mut StdRng,
 ) {
     let rs1 = gen_pointer(rng, 32);
     let rs2 = gen_pointer(rng, 32);
-    tester.write::<RV32_REGISTER_NUM_LANES>(1, rs1, a.map(F::from_canonical_u32));
-    tester.write::<RV32_REGISTER_NUM_LANES>(1, rs2, b.map(F::from_canonical_u32));
+    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_canonical_u32));
+    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u32));
 
     tester.execute_with_pc(
         chip,
@@ -59,7 +59,7 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
         rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS)),
     );
 
-    let (cmp_result, _, _) = run_eq::<F, RV32_REGISTER_NUM_LANES>(opcode, &a, &b);
+    let (cmp_result, _, _) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(opcode, &a, &b);
     let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
     let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
     // TODO: update the default increment (i.e. 4) when opcodes are updated
@@ -126,27 +126,27 @@ fn rv32_bne_rand_test() {
 
 #[test]
 fn execute_pc_increment_sanity_test() {
-    let core = BranchEqualCoreChip::<RV32_REGISTER_NUM_LANES>::new(0);
+    let core = BranchEqualCoreChip::<RV32_REGISTER_NUM_LIMBS>::new(0);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchEqualOpcode::BEQ.as_usize(),
-        op_c: F::from_canonical_u8(8),
+        c: F::from_canonical_u8(8),
         ..Default::default()
     };
-    let x: [F; RV32_REGISTER_NUM_LANES] = [19, 4, 1790, 60].map(F::from_canonical_u32);
-    let y: [F; RV32_REGISTER_NUM_LANES] = [19, 32, 1804, 60].map(F::from_canonical_u32);
+    let x: [F; RV32_REGISTER_NUM_LIMBS] = [19, 4, 1790, 60].map(F::from_canonical_u32);
+    let y: [F; RV32_REGISTER_NUM_LIMBS] = [19, 32, 1804, 60].map(F::from_canonical_u32);
 
-    let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LANES> as VmCoreChip<
+    let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LANES, 0>,
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
-    let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LANES> as VmCoreChip<
+    let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LANES, 0>,
+        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());
@@ -155,24 +155,24 @@ fn execute_pc_increment_sanity_test() {
 
 #[test]
 fn run_eq_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [19, 4, 1790, 60];
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [19, 4, 1790, 60];
     let (cmp_result, _, diff_val) =
-        run_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BEQ, &x, &x);
+        run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BEQ, &x, &x);
     assert!(cmp_result);
     assert_eq!(diff_val, F::zero());
 
     let (cmp_result, _, diff_val) =
-        run_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BNE, &x, &x);
+        run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BNE, &x, &x);
     assert!(!cmp_result);
     assert_eq!(diff_val, F::zero());
 }
 
 #[test]
 fn run_ne_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LANES] = [19, 4, 1790, 60];
-    let y: [u32; RV32_REGISTER_NUM_LANES] = [19, 32, 1804, 60];
+    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [19, 4, 1790, 60];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [19, 32, 1804, 60];
     let (cmp_result, diff_idx, diff_val) =
-        run_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BEQ, &x, &y);
+        run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BEQ, &x, &y);
     assert!(!cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u32(x[diff_idx]) - F::from_canonical_u32(y[diff_idx])),
@@ -180,7 +180,7 @@ fn run_ne_sanity_test() {
     );
 
     let (cmp_result, diff_idx, diff_val) =
-        run_eq::<F, RV32_REGISTER_NUM_LANES>(BranchEqualOpcode::BNE, &x, &y);
+        run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BNE, &x, &y);
     assert!(cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u32(x[diff_idx]) - F::from_canonical_u32(y[diff_idx])),

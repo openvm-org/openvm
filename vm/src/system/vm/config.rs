@@ -34,7 +34,7 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 29, 29, 15, PersistenceType::Volatile)
+        Self::new(29, 29, 29, 16, PersistenceType::Volatile)
     }
 }
 
@@ -165,6 +165,7 @@ impl VmConfig {
             .add_default_executor(ExecutorName::DivRemRv32)
             .add_default_executor(ExecutorName::ShiftRv32)
             .add_default_executor(ExecutorName::LoadStoreRv32)
+            .add_default_executor(ExecutorName::LoadSignExtendRv32)
             .add_default_executor(ExecutorName::BranchEqualRv32)
             .add_default_executor(ExecutorName::BranchLessThanRv32)
             .add_default_executor(ExecutorName::JalLuiRv32)

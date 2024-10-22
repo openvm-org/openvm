@@ -229,13 +229,16 @@ pub enum LessThanOpcode {
 #[allow(non_camel_case_types)]
 pub enum Rv32LoadStoreOpcode {
     LOADW,
+    /// LOADBU, LOADHU are unsigned extend opcodes, implemented in the same chip with LOADW
+    LOADBU,
+    LOADHU,
     STOREW,
     STOREH,
     STOREB,
+    HINTLOAD_RV32,
+    /// The following are signed extend opcodes
     LOADB,
     LOADH,
-    LOADBU,
-    LOADHU,
 }
 
 #[derive(

@@ -2,6 +2,7 @@ pub mod adapters;
 pub mod base_alu;
 pub mod branch_eq;
 pub mod branch_lt;
+pub mod load_sign_extend;
 pub mod loadstore;
 pub mod new_divrem;
 pub mod new_lt;

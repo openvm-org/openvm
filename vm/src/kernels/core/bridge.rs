@@ -17,7 +17,7 @@ impl CoreAir {
         self.execution_bridge
             .execute(
                 io.opcode + AB::Expr::from_canonical_usize(self.offset),
-                [io.op_a, io.op_b, io.op_c, io.d, io.e, io.op_f, io.op_g],
+                [io.a, io.b, io.c, io.d, io.e, io.f, io.g],
                 ExecutionState::new(io.pc, io.timestamp),
                 ExecutionState::<AB::Expr>::new(
                     next_pc.into(),

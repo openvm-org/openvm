@@ -25,20 +25,16 @@ use crate::{
     },
 };
 
-pub type NativeAdapterChip<F> = GenericNativeAdapterChip<F, 2, 1>;
-pub type NativeAdapterCols<T> = GenericNativeAdapterCols<T, 2, 1>;
-pub type NativeAdapterAir = GenericNativeAdapterAir<2, 1>;
-
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
 #[derive(Clone, Debug)]
-pub struct GenericNativeAdapterChip<F: Field, const R: usize, const W: usize> {
-    pub air: GenericNativeAdapterAir<R, W>,
+pub struct NativeAdapterChip<F: Field, const R: usize, const W: usize> {
+    pub air: NativeAdapterAir<R, W>,
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField32, const R: usize, const W: usize> GenericNativeAdapterChip<F, R, W> {
+impl<F: PrimeField32, const R: usize, const W: usize> NativeAdapterChip<F, R, W> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
@@ -47,7 +43,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> GenericNativeAdapterChip<F
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
         Self {
-            air: GenericNativeAdapterAir {
+            air: NativeAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
@@ -85,40 +81,40 @@ impl<F: Field, const W: usize> NativeWriteRecord<F, W> {
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct GenericNativeAdapterReadCols<T> {
+pub struct NativeAdapterReadCols<T> {
     pub address: MemoryAddress<T, T>,
     pub read_aux: MemoryReadOrImmediateAuxCols<T>,
 }
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct GenericNativeAdapterWriteCols<T> {
+pub struct NativeAdapterWriteCols<T> {
     pub address: MemoryAddress<T, T>,
     pub write_aux: MemoryWriteAuxCols<T, 1>,
 }
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct GenericNativeAdapterCols<T, const R: usize, const W: usize> {
+pub struct NativeAdapterCols<T, const R: usize, const W: usize> {
     pub from_state: ExecutionState<T>,
-    pub reads_aux: [GenericNativeAdapterReadCols<T>; R],
-    pub writes_aux: [GenericNativeAdapterWriteCols<T>; W],
+    pub reads_aux: [NativeAdapterReadCols<T>; R],
+    pub writes_aux: [NativeAdapterWriteCols<T>; W],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct GenericNativeAdapterAir<const R: usize, const W: usize> {
+pub struct NativeAdapterAir<const R: usize, const W: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 }
 
-impl<F: Field, const R: usize, const W: usize> BaseAir<F> for GenericNativeAdapterAir<R, W> {
+impl<F: Field, const R: usize, const W: usize> BaseAir<F> for NativeAdapterAir<R, W> {
     fn width(&self) -> usize {
-        GenericNativeAdapterCols::<F, R, W>::width()
+        NativeAdapterCols::<F, R, W>::width()
     }
 }
 
 impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
-    for GenericNativeAdapterAir<R, W>
+    for NativeAdapterAir<R, W>
 {
     type Interface = BasicAdapterInterface<AB::Expr, MinimalInstruction<AB::Expr>, R, W, 1, 1>;
 
@@ -128,7 +124,7 @@ impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &GenericNativeAdapterCols<_, R, W> = local.borrow();
+        let cols: &NativeAdapterCols<_, R, W> = local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta = 0usize;
         let mut timestamp_pp = || {
@@ -197,17 +193,17 @@ impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &GenericNativeAdapterCols<_, R, W> = local.borrow();
+        let cols: &NativeAdapterCols<_, R, W> = local.borrow();
         cols.from_state.pc
     }
 }
 
 impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
-    for GenericNativeAdapterChip<F, R, W>
+    for NativeAdapterChip<F, R, W>
 {
     type ReadRecord = NativeReadRecord<F, R>;
     type WriteRecord = NativeWriteRecord<F, W>;
-    type Air = GenericNativeAdapterAir<R, W>;
+    type Air = NativeAdapterAir<R, W>;
     type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, R, W, 1, 1>;
 
     fn preprocess(
@@ -219,13 +215,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         Self::ReadRecord,
     )> {
         assert!(R <= 2);
-        let Instruction {
-            op_b: b,
-            op_c: c,
-            e,
-            op_f: f,
-            ..
-        } = *instruction;
+        let Instruction { b, c, e, f, .. } = *instruction;
 
         let mut reads = Vec::with_capacity(R);
         if R >= 1 {
@@ -253,7 +243,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         assert!(W <= 1);
-        let Instruction { op_a: a, d, .. } = *instruction;
+        let Instruction { a, d, .. } = *instruction;
         let mut writes = Vec::with_capacity(W);
         if W >= 1 {
             writes.push(memory.write(d, a, output.writes[0]));
@@ -278,20 +268,20 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
-        let row_slice: &mut GenericNativeAdapterCols<_, R, W> = row_slice.borrow_mut();
+        let row_slice: &mut NativeAdapterCols<_, R, W> = row_slice.borrow_mut();
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
         row_slice.reads_aux = read_record.reads.map(|x| {
             let address = MemoryAddress::new(x.address_space, x.pointer);
-            GenericNativeAdapterReadCols {
+            NativeAdapterReadCols {
                 address,
                 read_aux: aux_cols_factory.make_read_or_immediate_aux_cols(x),
             }
         });
         row_slice.writes_aux = write_record.writes.map(|x| {
             let address = MemoryAddress::new(x.address_space, x.pointer);
-            GenericNativeAdapterWriteCols {
+            NativeAdapterWriteCols {
                 address,
                 write_aux: aux_cols_factory.make_write_aux_cols(x),
             }

@@ -53,13 +53,13 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
             BabyBear::from_canonical_usize(execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode),
-            instruction.op_a,
-            instruction.op_b,
-            instruction.op_c,
+            instruction.a,
+            instruction.b,
+            instruction.c,
             instruction.d,
             instruction.e,
-            instruction.op_f,
-            instruction.op_g,
+            instruction.f,
+            instruction.g,
         ]);
     }
 
@@ -152,9 +152,9 @@ fn test_program_negative() {
             BabyBear::from_canonical_usize(execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode),
-            instruction.op_a,
-            instruction.op_b,
-            instruction.op_c,
+            instruction.a,
+            instruction.b,
+            instruction.c,
             instruction.d,
             instruction.e,
         ]);

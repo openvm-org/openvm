@@ -9,5 +9,6 @@ pub mod tests;
 mod core;
 pub use core::*;
 
-pub type FieldArithmeticAir = VmAirWrapper<NativeAdapterAir, FieldArithmeticCoreAir>;
-pub type FieldArithmeticChip<F> = VmChipWrapper<F, NativeAdapterChip<F>, FieldArithmeticCoreChip>;
+pub type FieldArithmeticAir = VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>;
+pub type FieldArithmeticChip<F> =
+    VmChipWrapper<F, NativeAdapterChip<F, 2, 1>, FieldArithmeticCoreChip>;

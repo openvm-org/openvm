@@ -25,7 +25,7 @@ use crate::{
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
-            compose, Rv32JalrAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
+            compose, Rv32JalrAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
         },
         rv32_jalr::{run_jalr, Rv32JalrCoreCols},
     },
@@ -52,7 +52,7 @@ fn set_and_execute(
     opcode: Rv32JalrOpcode,
     initial_imm: Option<u32>,
     initial_pc: Option<u32>,
-    rs1: Option<[u32; RV32_REGISTER_NUM_LANES]>,
+    rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
 ) {
     let imm = initial_imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm_ext = sign_extend(imm);
@@ -132,10 +132,10 @@ fn rand_jalr_test() {
 fn run_negative_jalr_test(
     opcode: Rv32JalrOpcode,
     initial_pc: Option<u32>,
-    initial_rs1: Option<[u32; RV32_REGISTER_NUM_LANES]>,
+    initial_rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
-    rd_data: Option<[u32; RV32_REGISTER_NUM_LANES - 1]>,
-    rs1_data: Option<[u32; RV32_REGISTER_NUM_LANES]>,
+    rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
+    rs1_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     to_pc_least_sig_bit: Option<u32>,
     to_pc_limbs: Option<[u32; 2]>,
     imm_sign: Option<u32>,

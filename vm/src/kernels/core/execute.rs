@@ -35,25 +35,25 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         let num_public_values = core_options.num_public_values;
 
         let local_opcode_index = instruction.opcode - self.offset;
-        let a = instruction.op_a;
-        let b = instruction.op_b;
-        let c = instruction.op_c;
+        let a = instruction.a;
+        let b = instruction.b;
+        let c = instruction.c;
         let d = instruction.d;
         let e = instruction.e;
-        let f = instruction.op_f;
-        let g = instruction.op_g;
+        let f = instruction.f;
+        let g = instruction.g;
 
         let io = CoreIoCols {
             timestamp: F::from_canonical_u32(timestamp),
             pc: F::from_canonical_u32(pc),
             opcode: F::from_canonical_usize(local_opcode_index),
-            op_a: a,
-            op_b: b,
-            op_c: c,
+            a,
+            b,
+            c,
             d,
             e,
-            op_f: f,
-            op_g: g,
+            f,
+            g,
         };
 
         let mut next_pc = pc + 1;
@@ -294,9 +294,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             let cols = CoreCols { io, aux };
             self.rows.push(cols.flatten());
         }
-
-        // Update Core chip state with all changes from this segment.
-        self.set_current_pc(next_pc);
 
         Ok(ExecutionState::new(next_pc, timestamp))
     }

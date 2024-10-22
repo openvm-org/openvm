@@ -156,9 +156,9 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcAddUnequalChip<T> {
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode: _,
-            op_a: p3_address_ptr,
-            op_b: p1_address_ptr,
-            op_c: p2_address_ptr,
+            a: p3_address_ptr,
+            b: p1_address_ptr,
+            c: p2_address_ptr,
             d,
             e,
             ..
@@ -269,8 +269,8 @@ impl<T: PrimeField32> InstructionExecutor<T> for EcDoubleChip<T> {
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
             opcode: _,
-            op_a: p2_address_ptr,
-            op_b: p1_address_ptr,
+            a: p2_address_ptr,
+            b: p1_address_ptr,
             d,
             e,
             ..

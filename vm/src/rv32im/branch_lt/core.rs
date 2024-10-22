@@ -229,9 +229,7 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction {
-            opcode, op_c: imm, ..
-        } = *instruction;
+        let Instruction { opcode, c: imm, .. } = *instruction;
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();

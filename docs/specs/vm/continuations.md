@@ -50,11 +50,11 @@ On the <span style="color:green">MERKLE_BUS</span>, we have interactions of the 
   by **node_label**. If zero, the row is a dummy row.
 - **height** indicates the height of the node represented in this interaction, i.e. `H` - its depth. `H = 0` indicates
   that a node is a leaf.
-- **labels = (as_label, address_label)** are labels of the node. The root has both equal to 0; if a node has labels
-  `(x, y)`, then its left child has labels `(2x, 2y)` and its right child has labels either `(2x + 1, 2y)` or
-  `(2x, 2y + 1)` depending on whether the address space or address is being expanded (this is determined by the height
-  of the node). Defined this way, if a leaf has labels `(x, y)`, then the address space it corresponds to is
-  `(x / 2^L) + AS_OFFSET` and the addresses it corresponds to are `C * y..C * (y + 1)`
+- **labels = (as_label, address_label)** are labels of the node. Concatenating the labels (or
+  `as_label << address_bits + address_label`) produces the full label. The root has full label equal to 0. If a node has
+  full label `x`, then its left child has label `2x` and its right child has label either `2x + 1`. We split the full
+  label into `(as_label, address_label)` so that (1) we immediately have the address space and address and (2) do not
+  overflow the field characteristic.
 - **hash** is the hash value of the node represented by the interaction.
 
 Rows that correspond to initial/final memory states are sent to the `MEMORY_BUS` with the corresponding timestamps and

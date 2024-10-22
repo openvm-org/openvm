@@ -79,8 +79,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             // direction = -1 => is_final = 1
             local.expand_direction.into(),
             AB::Expr::zero(),
-            (local.address_space - AB::F::from_canonical_usize(self.memory_dims.as_offset))
-                * AB::F::from_canonical_usize(1 << self.memory_dims.address_height),
+            local.address_space - AB::F::from_canonical_usize(self.memory_dims.as_offset),
             local.leaf_label.into(),
         ];
         expand_fields.extend(local.hash.map(Into::into));

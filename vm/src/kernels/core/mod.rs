@@ -64,9 +64,6 @@ pub struct Streams<F> {
 pub struct CoreChip<F: PrimeField32> {
     pub air: CoreAir,
     pub rows: Vec<Vec<F>>,
-    pub pc: u32,
-    /// Program counter at the start of the current segment.
-    pub start_pc: u32,
     pub public_values: Vec<Option<F>>,
     pub memory_controller: MemoryControllerRef<F>,
 
@@ -83,37 +80,6 @@ impl<F: PrimeField32> CoreChip<F> {
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
         offset: usize,
-        pc_start: usize,
-    ) -> Self {
-        Self::from_state(
-            options,
-            execution_bus,
-            program_bus,
-            memory_controller,
-            pc_start as u32,
-            offset,
-        )
-    }
-
-    /// Sets the start state of the Core.
-    pub fn set_start_pc(&mut self, pc: u32) {
-        self.start_pc = pc;
-        self.pc = pc;
-    }
-
-    /// Sets the current state of the Core.
-    pub fn set_current_pc(&mut self, pc: u32) {
-        self.pc = pc;
-    }
-
-    /// Sets the current state of the Core.
-    pub fn from_state(
-        options: CoreOptions,
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
-        pc: u32,
-        offset: usize,
     ) -> Self {
         let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
@@ -124,8 +90,6 @@ impl<F: PrimeField32> CoreChip<F> {
                 offset,
             },
             rows: vec![],
-            pc,
-            start_pc: pc,
             public_values: vec![None; options.num_public_values],
             memory_controller,
             streams: Default::default(),
