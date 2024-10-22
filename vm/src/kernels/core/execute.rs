@@ -86,7 +86,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let mut public_value_flags = vec![F::zero(); num_public_values];
 
-        let hint_stream = &mut self.streams.hint_stream;
+        let mut streams = self.streams.lock();
 
         let local_opcode_index = CoreOpcode::from_usize(local_opcode_index);
         match local_opcode_index {
@@ -177,24 +177,28 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 println!("{}", value);
             }
             HINT_INPUT => {
-                let hint = match self.streams.input_stream.pop_front() {
+                let hint = match streams.input_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
                         return Err(ExecutionError::EndOfInputStream(pc));
                     }
                 };
-                hint_stream.clear();
-                hint_stream.push_back(F::from_canonical_usize(hint.len()));
-                hint_stream.extend(hint);
+                streams.hint_stream.clear();
+                streams
+                    .hint_stream
+                    .push_back(F::from_canonical_usize(hint.len()));
+                streams.hint_stream.extend(hint);
             }
             HINT_BITS => {
                 let val = self.memory_controller.borrow().unsafe_read_cell(d, a);
                 let mut val = val.as_canonical_u32();
 
                 let len = c.as_canonical_u32();
-                hint_stream.clear();
+                streams.hint_stream.clear();
                 for _ in 0..len {
-                    hint_stream.push_back(F::from_canonical_u32(val & 1));
+                    streams
+                        .hint_stream
+                        .push_back(F::from_canonical_u32(val & 1));
                     val >>= 1;
                 }
             }
@@ -203,15 +207,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let mut val = val.as_canonical_u32();
 
                 let len = c.as_canonical_u32();
-                hint_stream.clear();
+                streams.hint_stream.clear();
                 for _ in 0..len {
-                    hint_stream.push_back(F::from_canonical_u32(val & 0xff));
+                    streams
+                        .hint_stream
+                        .push_back(F::from_canonical_u32(val & 0xff));
                     val >>= 8;
                 }
             }
             // e[d[a] + b] <- hint_stream.next()
             SHINTW => {
-                let hint = match hint_stream.pop_front() {
+                let hint = match streams.hint_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
                         return Err(ExecutionError::HintOutOfBounds(pc));

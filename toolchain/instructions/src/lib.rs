@@ -226,7 +226,7 @@ pub enum Rv32LoadStoreOpcode {
     STOREW,
     STOREH,
     STOREB,
-    HINTLOAD_RV32,
+    HINT_STOREW,
     /// The following are signed extend opcodes
     LOADB,
     LOADH,

@@ -23,9 +23,11 @@ use axvm_instructions::*;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
+use parking_lot::Mutex;
 use poseidon2_air::poseidon2::Poseidon2Config;
 use strum::EnumCount;
 
+use super::Streams;
 use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
     intrinsics::{
@@ -151,7 +153,10 @@ impl<F: PrimeField32> VmChipSet<F> {
 }
 
 impl VmConfig {
-    pub fn create_chip_set<F: PrimeField32>(&self) -> VmChipSet<F> {
+    pub fn create_chip_set<F: PrimeField32>(
+        &self,
+        streams: Arc<Mutex<Streams<F>>>,
+    ) -> VmChipSet<F> {
         let execution_bus = ExecutionBus(0);
         let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
         let memory_bus = MemoryBus(1);
@@ -220,6 +225,7 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
+                        streams.clone(),
                         offset,
                     )));
                     for opcode in range {
@@ -415,7 +421,7 @@ impl VmConfig {
                             range_checker.clone(),
                             offset,
                         ),
-                        LoadStoreCoreChip::new(offset),
+                        LoadStoreCoreChip::new(streams.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {

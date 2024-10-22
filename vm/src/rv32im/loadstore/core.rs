@@ -1,12 +1,14 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
+    sync::Arc,
 };
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
+use parking_lot::Mutex;
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -19,7 +21,10 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::LoadStoreProcessedInstruction,
-    system::program::Instruction,
+    system::{
+        program::{ExecutionError, Instruction},
+        vm::Streams,
+    },
 };
 
 /// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
@@ -33,7 +38,7 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub opcode_storew_flag: T,
     pub opcode_storeh_flag: T,
     pub opcode_storeb_flag: T,
-    pub opcode_hintload_flag: T,
+    pub opcode_hint_storew_flag: T,
 
     pub read_data: [T; NUM_CELLS],
     pub prev_data: [T; NUM_CELLS],
@@ -84,7 +89,7 @@ where
             opcode_storew_flag: is_storew,
             opcode_storeb_flag: is_storeb,
             opcode_storeh_flag: is_storeh,
-            opcode_hintload_flag: is_hintload,
+            opcode_hint_storew_flag: is_hint_storew,
         } = *cols;
         let flags = [
             is_loadw,
@@ -93,7 +98,7 @@ where
             is_storew,
             is_storeh,
             is_storeb,
-            is_hintload,
+            is_hint_storew,
         ];
 
         let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
@@ -111,25 +116,25 @@ where
 
         // there are three parts to write_data:
         // 1st limb is always read_data
-        // 2nd to (NUM_CELLS/2)th limbs are read_data if loadw/loadhu/storew/storeh/hintload
+        // 2nd to (NUM_CELLS/2)th limbs are read_data if loadw/loadhu/storew/storeh/hint_storew
         //                                  prev_data if storeb
         //                                  zero if loadbu
-        // (NUM_CELLS/2 + 1)th to last limbs are read_data if loadw/hintload/storew
+        // (NUM_CELLS/2 + 1)th to last limbs are read_data if loadw/storew/hint_storew
         //                                  prev_data if storeb/storeh
         //                                  zero if loadbu/loadhu
         let write_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
             if i == 0 {
                 read_data[i].into()
             } else if i < NUM_CELLS / 2 {
-                read_data[i] * (is_loadw + is_loadhu + is_storew + is_storeh + is_hintload)
+                read_data[i] * (is_loadw + is_loadhu + is_storew + is_storeh + is_hint_storew)
                     + prev_data[i] * is_storeb
             } else {
-                read_data[i] * (is_loadw + is_storew + is_hintload)
+                read_data[i] * (is_loadw + is_storew + is_hint_storew)
                     + prev_data[i] * (is_storeb + is_storeh)
             }
         });
 
-        let is_load = is_loadw + is_loadhu + is_loadbu + is_hintload;
+        let is_load = is_loadw + is_loadhu + is_loadbu;
 
         AdapterAirContext {
             to_pc: None,
@@ -139,7 +144,7 @@ where
                 is_valid,
                 opcode: expected_opcode,
                 is_load,
-                is_hint: is_hintload.into(),
+                is_hint: is_hint_storew.into(),
             }
             .into(),
         }
@@ -147,20 +152,22 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreCoreChip<const NUM_CELLS: usize> {
+pub struct LoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
     pub air: LoadStoreCoreAir<NUM_CELLS>,
+    pub streams: Arc<Mutex<Streams<F>>>,
 }
 
-impl<const NUM_CELLS: usize> LoadStoreCoreChip<NUM_CELLS> {
-    pub fn new(offset: usize) -> Self {
+impl<F: PrimeField32, const NUM_CELLS: usize> LoadStoreCoreChip<F, NUM_CELLS> {
+    pub fn new(streams: Arc<Mutex<Streams<F>>>, offset: usize) -> Self {
         Self {
             air: LoadStoreCoreAir::<NUM_CELLS> { offset },
+            streams,
         }
     }
 }
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
-    for LoadStoreCoreChip<NUM_CELLS>
+    for LoadStoreCoreChip<F, NUM_CELLS>
 where
     I::Reads: Into<[[F; NUM_CELLS]; 2]>,
     I::Writes: From<[[F; NUM_CELLS]; 1]>,
@@ -172,23 +179,34 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        _from_pc: u32,
+        from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode_index =
-            Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
 
-        let data: [[F; NUM_CELLS]; 2] = reads.into();
-        let write_data = run_write_data(local_opcode_index, data[1], data[0]);
+        let reads = reads.into();
+        let prev_data = reads[0];
+        let read_data: [F; NUM_CELLS] = if local_opcode == HINT_STOREW {
+            // In case of HINT_STOREW will get the read data from the hint_stream
+            let mut streams = self.streams.lock();
+            if streams.hint_stream.len() < NUM_CELLS {
+                return Err(ExecutionError::HintOutOfBounds(from_pc));
+            }
+            array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
+        } else {
+            reads[1]
+        };
+
+        let write_data = run_write_data(local_opcode, read_data, prev_data);
 
         let output = AdapterRuntimeContext::without_pc([write_data]);
 
         Ok((
             output,
             LoadStoreCoreRecord {
-                opcode: local_opcode_index,
-                prev_data: data[0],
-                read_data: data[1],
+                opcode: local_opcode,
+                prev_data,
+                read_data,
             },
         ))
     }
@@ -209,7 +227,7 @@ where
         core_cols.opcode_storew_flag = F::from_bool(opcode == STOREW);
         core_cols.opcode_storeh_flag = F::from_bool(opcode == STOREH);
         core_cols.opcode_storeb_flag = F::from_bool(opcode == STOREB);
-        core_cols.opcode_hintload_flag = F::from_bool(opcode == HINTLOAD_RV32);
+        core_cols.opcode_hint_storew_flag = F::from_bool(opcode == HINT_STOREW);
         core_cols.prev_data = record.prev_data;
         core_cols.read_data = record.read_data;
     }
@@ -253,7 +271,7 @@ pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
                 *cell = prev_data[i];
             }
         }
-        HINTLOAD_RV32 => (),
+        HINT_STOREW => (),
         _ => unreachable!(),
     };
     write_data
