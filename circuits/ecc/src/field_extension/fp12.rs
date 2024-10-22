@@ -31,13 +31,27 @@ impl Fp12 {
         }
     }
 
-    pub fn save(&mut self) {
-        self.c0.save();
-        self.c1.save();
-        self.c2.save();
-        self.c3.save();
-        self.c4.save();
-        self.c5.save();
+    pub fn save(&mut self) -> [usize; 12] {
+        let c0_indices = self.c0.save();
+        let c1_indices = self.c1.save();
+        let c2_indices = self.c2.save();
+        let c3_indices = self.c3.save();
+        let c4_indices = self.c4.save();
+        let c5_indices = self.c5.save();
+        [
+            c0_indices.0,
+            c0_indices.1,
+            c1_indices.0,
+            c1_indices.1,
+            c2_indices.0,
+            c2_indices.1,
+            c3_indices.0,
+            c3_indices.1,
+            c4_indices.0,
+            c4_indices.1,
+            c5_indices.0,
+            c5_indices.1,
+        ]
     }
 
     pub fn add(&mut self, other: &mut Fp12) -> Fp12 {
@@ -111,33 +125,20 @@ impl Fp12 {
     }
 
     fn mul_c0(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
-        // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4 + cs5co3)
         let mut cs0co0 = self.c0.mul(&mut other.c0);
-        cs0co0.save();
 
         let mut cs1co2 = self.c1.mul(&mut other.c2);
-        cs1co2.save();
         let mut cs2co1 = self.c2.mul(&mut other.c1);
-        cs2co1.save();
         let mut cs3co5 = self.c3.mul(&mut other.c5);
-        cs3co5.save();
         let mut cs4co4 = self.c4.mul(&mut other.c4);
-        cs4co4.save();
         let mut cs5co3 = self.c5.mul(&mut other.c3);
-        cs5co3.save();
         let mut c0_xi0 = cs1co2.add(&mut cs2co1);
-        c0_xi0.save();
         let mut c0_xi1 = c0_xi0.add(&mut cs3co5);
-        c0_xi1.save();
-        let mut c0_xi2 = c0_xi1.add(&mut cs4co4);
-        c0_xi2.save();
+        let mut c0_xi2 = c0_xi1.add(&mut cs4co4); // auto save
         let mut c0_xi3 = c0_xi2.add(&mut cs5co3);
-        c0_xi3.save();
-        let mut c0_xi = xi.mul(&mut c0_xi3);
-        c0_xi.save();
+        let mut c0_xi = xi.mul(&mut c0_xi3); // auto save
 
-        let c0 = cs0co0.add(&mut c0_xi);
-        c0
+        cs0co0.add(&mut c0_xi)
     }
 
     fn mul_c1(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
@@ -322,7 +323,6 @@ mod tests {
         y: Fq12,
         fp12_fn: impl Fn(&mut Fp12, &mut Fp12, &mut Fp2) -> Fp12,
         fq12_fn: impl Fn(&Fq12, &Fq12) -> Fq12,
-        save_result: bool,
     ) {
         let prime = bn254_prime();
         let (subair, range_checker, builder) = setup(&prime);
@@ -331,9 +331,7 @@ mod tests {
         let mut y_fp12 = Fp12::new(builder.clone());
         let mut xi_fp2 = Fp2::new(builder.clone());
         let mut r = fp12_fn(&mut x_fp12, &mut y_fp12, &mut xi_fp2);
-        if save_result {
-            r.save();
-        }
+        let indices = r.save();
 
         let builder = builder.borrow().clone();
         let air = FieldExpr {
@@ -357,18 +355,19 @@ mod tests {
         let range_trace = range_checker.generate_trace();
 
         let len = vars.len();
-        let r_c0 = evaluate_biguint(&vars[len - 12], LIMB_BITS);
-        let r_c1 = evaluate_biguint(&vars[len - 11], LIMB_BITS);
-        let r_c2 = evaluate_biguint(&vars[len - 10], LIMB_BITS);
-        let r_c3 = evaluate_biguint(&vars[len - 9], LIMB_BITS);
-        let r_c4 = evaluate_biguint(&vars[len - 8], LIMB_BITS);
-        let r_c5 = evaluate_biguint(&vars[len - 7], LIMB_BITS);
-        let r_c6 = evaluate_biguint(&vars[len - 6], LIMB_BITS);
-        let r_c7 = evaluate_biguint(&vars[len - 5], LIMB_BITS);
-        let r_c8 = evaluate_biguint(&vars[len - 4], LIMB_BITS);
-        let r_c9 = evaluate_biguint(&vars[len - 3], LIMB_BITS);
-        let r_c10 = evaluate_biguint(&vars[len - 2], LIMB_BITS);
-        let r_c11 = evaluate_biguint(&vars[len - 1], LIMB_BITS);
+        println!("indices: {:?}", indices);
+        let r_c0 = evaluate_biguint(&vars[indices[0]], LIMB_BITS);
+        let r_c1 = evaluate_biguint(&vars[indices[1]], LIMB_BITS);
+        let r_c2 = evaluate_biguint(&vars[indices[2]], LIMB_BITS);
+        let r_c3 = evaluate_biguint(&vars[indices[3]], LIMB_BITS);
+        let r_c4 = evaluate_biguint(&vars[indices[4]], LIMB_BITS);
+        let r_c5 = evaluate_biguint(&vars[indices[5]], LIMB_BITS);
+        let r_c6 = evaluate_biguint(&vars[indices[6]], LIMB_BITS);
+        let r_c7 = evaluate_biguint(&vars[indices[7]], LIMB_BITS);
+        let r_c8 = evaluate_biguint(&vars[indices[8]], LIMB_BITS);
+        let r_c9 = evaluate_biguint(&vars[indices[9]], LIMB_BITS);
+        let r_c10 = evaluate_biguint(&vars[indices[10]], LIMB_BITS);
+        let r_c11 = evaluate_biguint(&vars[indices[11]], LIMB_BITS);
         let exp_r_c0_c0_c0 = bn254_fq_to_biguint(&r_fq12.c0.c0.c0);
         let exp_r_c0_c0_c1 = bn254_fq_to_biguint(&r_fq12.c0.c0.c1);
         let exp_r_c0_c1_c0 = bn254_fq_to_biguint(&r_fq12.c0.c1.c0);
@@ -420,7 +419,7 @@ mod tests {
     fn test_fp12_mul() {
         let x = generate_random_fq12();
         let y = generate_random_fq12();
-        run_fp12_test_mul(x, y, Fp12::mul, |x, y| x * y, true);
+        run_fp12_test_mul(x, y, Fp12::mul, |x, y| x * y);
     }
 
     // #[test]
