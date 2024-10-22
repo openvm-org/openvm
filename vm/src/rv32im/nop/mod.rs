@@ -21,9 +21,6 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-// pub type Rv32TerminateNopChip<F> =
-//     VmChipWrapper<F, Rv32TerminateNopAdapterChip<F>, Rv32TerminateNopCoreChip<F>>;
-
 #[derive(Clone, Debug)]
 pub struct Rv32TerminateNopAir {
     pub execution_bridge: ExecutionBridge,
