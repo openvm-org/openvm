@@ -98,15 +98,18 @@ where
         from_pc: u32,
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, a, b, .. } = instruction;
+        let Instruction { opcode, b, .. } = instruction;
         assert_eq!(
             NativeJalOpcode::from_usize(opcode - self.air.offset),
             NativeJalOpcode::JAL
         );
 
+        println!("from_pc: {}", from_pc);
+        println!("b: {}", b);
+
         let output = AdapterRuntimeContext {
-            to_pc: Some(from_pc + b.as_canonical_u32()),
-            writes: [[*a + F::one()]].into(),
+            to_pc: Some((F::from_canonical_u32(from_pc) + *b).as_canonical_u32()),
+            writes: [[F::from_canonical_u32(from_pc) + F::one()]].into(),
         };
 
         Ok((output, JalRecord { imm: *b }))
