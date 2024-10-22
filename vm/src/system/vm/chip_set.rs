@@ -49,6 +49,7 @@ use crate::{
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
+        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
     old::{
         alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
@@ -79,7 +80,6 @@ use crate::{
             MemoryControllerRef, CHUNK,
         },
         program::{bridge::ProgramBus, ProgramChip},
-        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
         vm::{
             config::{PersistenceType, VmConfig},
             connector::VmConnectorChip,

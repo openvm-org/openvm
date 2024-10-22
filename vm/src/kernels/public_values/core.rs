@@ -10,11 +10,12 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, MinimalInstruction,
         Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
-    system::{program::Instruction, public_values::columns::PublicValuesCoreColsView},
+    kernels::public_values::columns::PublicValuesCoreColsView,
+    system::program::Instruction,
 };
 
-pub(super) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
-pub(super) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
+pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
+pub(crate) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
 
 #[derive(Copy, Clone, Debug)]
 pub struct PublicValuesCoreAir {

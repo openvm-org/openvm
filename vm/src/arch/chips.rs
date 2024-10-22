@@ -24,6 +24,7 @@ use crate::{
         field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
+        public_values::PublicValuesChip,
     },
     old::{
         alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
@@ -35,10 +36,7 @@ use crate::{
         new_mul::Rv32MultiplicationChip, new_mulh::Rv32MulHChip, new_shift::Rv32ShiftChip,
         rv32_auipc::Rv32AuipcChip, rv32_jal_lui::Rv32JalLuiChip, rv32_jalr::Rv32JalrChip,
     },
-    system::{
-        program::{ExecutionError, Instruction},
-        public_values::PublicValuesChip,
-    },
+    system::program::{ExecutionError, Instruction},
 };
 
 #[enum_dispatch]

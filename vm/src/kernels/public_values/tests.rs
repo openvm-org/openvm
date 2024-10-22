@@ -18,7 +18,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     arch::VmCoreAir,
-    system::public_values::{
+    kernels::public_values::{
         columns::PublicValuesCoreColsView,
         core::{AdapterInterface, PublicValuesCoreAir},
     },

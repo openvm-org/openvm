@@ -1,21 +1,21 @@
 use std::marker::PhantomData;
 
-pub(super) struct PublicValuesCoreColsView<'a, T, R> {
+pub(crate) struct PublicValuesCoreColsView<'a, T, R> {
     pub is_valid: R,
     /// The value to publish.
     pub value: R,
     /// The index of the public value to publish.
     pub index: R,
     pub custom_pv_flags: Vec<R>,
-    pub(super) _marker: PhantomData<&'a T>,
+    pub(crate) _marker: PhantomData<&'a T>,
 }
 
 impl<'a, T, R> PublicValuesCoreColsView<'a, T, R> {
-    pub(super) fn width(&self) -> usize {
+    pub(crate) fn width(&self) -> usize {
         3 + self.custom_pv_flags.len()
     }
     #[allow(dead_code)]
-    pub(super) fn flatten(self) -> Vec<R> {
+    pub(crate) fn flatten(self) -> Vec<R> {
         [self.is_valid, self.value, self.index]
             .into_iter()
             .chain(self.custom_pv_flags)
@@ -23,7 +23,7 @@ impl<'a, T, R> PublicValuesCoreColsView<'a, T, R> {
     }
 }
 impl<'a, T> PublicValuesCoreColsView<'a, T, &'a T> {
-    pub(super) fn borrow(arr: &'a [T]) -> PublicValuesCoreColsView<'a, T, &'a T> {
+    pub(crate) fn borrow(arr: &'a [T]) -> PublicValuesCoreColsView<'a, T, &'a T> {
         PublicValuesCoreColsView::<T, &'a T> {
             is_valid: &arr[0],
             value: &arr[1],
@@ -34,7 +34,7 @@ impl<'a, T> PublicValuesCoreColsView<'a, T, &'a T> {
     }
 }
 impl<'a, T> PublicValuesCoreColsView<'a, T, &'a mut T> {
-    pub(super) fn borrow_mut(arr: &'a mut [T]) -> PublicValuesCoreColsView<'a, T, &'a mut T> {
+    pub(crate) fn borrow_mut(arr: &'a mut [T]) -> PublicValuesCoreColsView<'a, T, &'a mut T> {
         let (first_three, rest) = arr.split_at_mut(3);
         let [is_valid, value, index] = first_three else {
             unreachable!("first_three should have exactly 3 elements");

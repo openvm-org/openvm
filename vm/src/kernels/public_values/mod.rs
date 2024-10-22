@@ -1,7 +1,9 @@
 use crate::{
     arch::{VmAirWrapper, VmChipWrapper},
-    kernels::adapters::native_adapter::{NativeAdapterAir, NativeAdapterChip},
-    system::public_values::core::{PublicValuesCoreAir, PublicValuesCoreChip},
+    kernels::{
+        adapters::native_adapter::{NativeAdapterAir, NativeAdapterChip},
+        public_values::core::{PublicValuesCoreAir, PublicValuesCoreChip},
+    },
 };
 
 mod columns;
