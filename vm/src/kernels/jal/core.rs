@@ -51,8 +51,6 @@ where
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &JalCoreCols<_> = local_core.borrow();
 
-        // TODO[yi]: Do we need to range check for overflow on `to_pc` or `writes`?
-
         AdapterAirContext {
             to_pc: Some(from_pc.into() + cols.imm.into()),
             reads: [].into(),
