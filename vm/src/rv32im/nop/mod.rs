@@ -1,10 +1,3 @@
-// mod core;
-
-// pub use core::*;
-
-// use super::adapters::Rv32TerminateNopAdapterChip;
-// use crate::arch::VmChipWrapper;
-
 use std::{borrow::Borrow, iter, sync::Arc};
 
 use afs_derive::AlignedBorrow;
@@ -41,8 +34,7 @@ pub struct Rv32TerminateNopAir {
 pub struct Rv32TerminateNopCols<T> {
     pub pc: T,
     pub timestamp: T,
-    /// 0 means invalid, 1 means terminate, 2 means nop
-    pub flag: T,
+    pub is_valid: T,
 }
 
 impl<F: Field> BaseAir<F> for Rv32TerminateNopAir {
@@ -66,7 +58,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Rv32TerminateNopAir {
         let Rv32TerminateNopCols {
             pc,
             timestamp,
-            flag,
+            is_valid,
         } = (*local).borrow();
 
         self.execution_bridge
@@ -75,21 +67,18 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Rv32TerminateNopAir {
                 iter::empty::<AB::Expr>(),
                 ExecutionState::<AB::Expr>::new((*pc).into(), (*timestamp).into()),
                 ExecutionState::<AB::Expr>::new(
-                    (*pc).into() + AB::Expr::from_canonical_usize(4) * (*flag - AB::Expr::one()),
+                    (*pc).into() + AB::Expr::from_canonical_usize(4) * (*is_valid),
                     (*timestamp).into(),
                 ),
             )
-            .eval(
-                builder,
-                (*flag) - *flag * (*flag - AB::Expr::one()) * AB::F::two().inverse(),
-            );
+            .eval(builder, (*is_valid).into());
     }
 }
 
 pub struct Rv32TerminateNopChip<F> {
     pub air: Rv32TerminateNopAir,
     pub rows: Vec<Rv32TerminateNopCols<F>>,
-    pub offset: usize,
+    pub nop_opcode: usize,
 }
 
 impl<F> Rv32TerminateNopChip<F> {
@@ -100,7 +89,7 @@ impl<F> Rv32TerminateNopChip<F> {
                 nop_opcode: offset + Rv32NopOpcode::NOP.as_usize(),
             },
             rows: vec![],
-            offset,
+            nop_opcode: offset,
         }
     }
 }
@@ -112,17 +101,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32TerminateNopChip<F> {
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = Rv32NopOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32NopOpcode::from_usize(opcode - self.nop_opcode);
         self.rows.push(Rv32TerminateNopCols {
             pc: F::from_canonical_u32(from_state.pc),
             timestamp: F::from_canonical_u32(from_state.timestamp),
-            flag: F::from_bool(local_opcode_index == Rv32NopOpcode::NOP),
+            is_valid: F::from_bool(local_opcode_index == Rv32NopOpcode::NOP),
         });
         Ok(ExecutionState::new(from_state.pc + 4, from_state.timestamp))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        let local_opcode_index = Rv32NopOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32NopOpcode::from_usize(opcode - self.nop_opcode);
         format!("{local_opcode_index:?}")
     }
 }
@@ -158,7 +147,7 @@ where
         let trace = RowMajorMatrix::new(
             self.rows
                 .iter()
-                .flat_map(|row| vec![row.pc, row.timestamp, row.flag])
+                .flat_map(|row| vec![row.pc, row.timestamp, row.is_valid])
                 .chain(iter::repeat(Val::<SC>::zero()).take((correct_height - curr_height) * width))
                 .collect::<Vec<_>>(),
             width,

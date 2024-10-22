@@ -155,9 +155,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let prev_trace_cells = self.current_trace_cells();
 
             if opcode == TerminateOpcode::TERMINATE.with_default_offset() {
-                self.chip_set
-                    .connector_chip
-                    .end(ExecutionState::new(pc, timestamp));
                 break;
             }
 
