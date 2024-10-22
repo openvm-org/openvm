@@ -24,6 +24,7 @@ use crate::{
         field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
+        public_values::PublicValuesChip,
     },
     old::{
         alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
@@ -77,6 +78,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
+    PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
@@ -115,6 +117,7 @@ pub enum AxVmChip<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
+    PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),

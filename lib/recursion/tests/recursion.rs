@@ -54,11 +54,7 @@ where
         ..Default::default()
     };
 
-    let vm = VirtualMachine::new(vm_config).with_program_inputs(vec![
-        (0, BabyBear::zero()),
-        (1, BabyBear::one()),
-        (2, BabyBear::from_canonical_u32(1346269)),
-    ]);
+    let vm = VirtualMachine::new(vm_config);
 
     let mut result = vm.execute_and_generate(fib_program).unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");

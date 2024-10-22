@@ -49,6 +49,7 @@ use crate::{
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
+        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
     old::{
         alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
@@ -197,6 +198,15 @@ impl VmConfig {
 
         // CoreChip is always required even if it's not explicitly specified.
         required_executors.insert(ExecutorName::Core);
+        // PublicValuesChip is required when num_public_values > 0.
+        if self.num_public_values > 0 {
+            // Raw public values are not supported when continuation is enabled.
+            assert_ne!(
+                self.memory_config.persistence_type,
+                PersistenceType::Persistent
+            );
+            required_executors.insert(ExecutorName::PublicValues);
+        }
         // We always put Poseidon2 chips in the end. So it will be initialized separately.
         let has_poseidon_chip = required_executors.contains(&ExecutorName::Poseidon2);
         if has_poseidon_chip {
@@ -216,7 +226,6 @@ impl VmConfig {
             match executor {
                 ExecutorName::Core => {
                     let core_chip = Rc::new(RefCell::new(CoreChip::new(
-                        self.core_options(),
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
@@ -256,6 +265,21 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::FieldExtension(chip));
+                }
+                ExecutorName::PublicValues => {
+                    let chip = Rc::new(RefCell::new(PublicValuesChip::new(
+                        NativeAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        PublicValuesCoreChip::new(self.num_public_values, offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::PublicValues(chip));
                 }
                 ExecutorName::Poseidon2 => {}
                 ExecutorName::Keccak256 => {
@@ -844,6 +868,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             FieldExtensionOpcode::default_offset(),
             FieldExtensionOpcode::COUNT,
             FieldExtensionOpcode::default_offset(),
+        ),
+        ExecutorName::PublicValues => (
+            PublishOpcode::default_offset(),
+            PublishOpcode::COUNT,
+            PublishOpcode::default_offset(),
         ),
         ExecutorName::Poseidon2 => (
             Poseidon2Opcode::default_offset(),

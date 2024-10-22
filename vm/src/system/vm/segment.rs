@@ -138,7 +138,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             );
 
             let opcode = instruction.opcode;
-            let prev_trace_cells = self.current_trace_cells();
+            let prev_trace_cells = if collect_metrics {
+                self.current_trace_cells()
+            } else {
+                BTreeMap::new()
+            };
 
             if opcode == TerminateOpcode::TERMINATE.with_default_offset() {
                 self.did_terminate = true;

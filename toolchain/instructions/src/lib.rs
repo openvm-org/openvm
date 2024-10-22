@@ -39,7 +39,6 @@ pub enum CoreOpcode {
     JAL,
     BEQ,
     BNE,
-    PUBLISH,
     FAIL,
     PRINTF,
     /// Instruction to write the next hint word into memory.
@@ -66,6 +65,16 @@ pub enum CoreOpcode {
 #[allow(non_camel_case_types)]
 pub enum TerminateOpcode {
     TERMINATE,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x080]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum PublishOpcode {
+    PUBLISH,
 }
 
 #[derive(
