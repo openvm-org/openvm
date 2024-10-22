@@ -138,7 +138,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 }
             }
             NOP => {
-                next_pc = pc + 1;
+                unreachable!()
             }
             PUBLISH => {
                 let public_value_index = read!(d, a).as_canonical_u64() as usize;
