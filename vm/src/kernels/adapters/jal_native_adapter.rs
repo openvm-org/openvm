@@ -147,10 +147,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for JalNativeAdapterChip<F> {
         let Instruction { a, d, .. } = *_instruction;
         let writes = vec![memory.write(d, a, output.writes[0])];
 
-        println!("to_pc: {}", output.to_pc.unwrap());
-        println!("writes: {:?}", writes);
-        println!("from_state: {:?}", from_state);
-
         Ok((
             ExecutionState {
                 pc: output.to_pc.unwrap_or(from_state.pc + 1),

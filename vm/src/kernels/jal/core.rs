@@ -19,6 +19,7 @@ use crate::{
 #[derive(AlignedBorrow)]
 pub struct JalCoreCols<T> {
     pub imm: T,
+    pub is_valid: T,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -57,7 +58,7 @@ where
             reads: [].into(),
             writes: [[from_pc.into() + AB::Expr::from_canonical_usize(1)]].into(),
             instruction: JumpUiProcessedInstruction {
-                is_valid: AB::Expr::one(),
+                is_valid: cols.is_valid.into(),
                 opcode: AB::Expr::from_canonical_usize(NativeJalOpcode::JAL as usize + self.offset),
                 immediate: cols.imm.into(),
             }
@@ -104,9 +105,6 @@ where
             NativeJalOpcode::JAL
         );
 
-        println!("from_pc: {}", from_pc);
-        println!("b: {}", b);
-
         let output = AdapterRuntimeContext {
             to_pc: Some((F::from_canonical_u32(from_pc) + *b).as_canonical_u32()),
             writes: [[F::from_canonical_u32(from_pc) + F::one()]].into(),
@@ -126,6 +124,7 @@ where
         let JalRecord { imm } = record;
         let row_slice: &mut JalCoreCols<_> = row_slice.borrow_mut();
         row_slice.imm = imm;
+        row_slice.is_valid = F::one();
     }
 
     fn air(&self) -> &Self::Air {
