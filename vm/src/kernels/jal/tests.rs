@@ -1,10 +1,9 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
 use ax_sdk::utils::create_seeded_rng;
-use num_traits::WrappingSub;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -94,7 +93,6 @@ fn rand_jal_test() {
 #[test]
 fn negative_jal_test() {
     let (mut rng, mut tester, mut chip, adapter) = setup();
-    let num_tests: usize = 100;
     set_and_execute(&mut tester, &mut chip, &mut rng, None, None);
 
     let jal_trace_width = chip.trace_width();
