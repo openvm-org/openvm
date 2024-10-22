@@ -13,7 +13,8 @@ use stark_vm::{
     arch::{
         instructions::{
             BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
-            Keccak256Opcode::*, NativeBranchEqualOpcode, Poseidon2Opcode::*, UsizeOpcode,
+            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, Poseidon2Opcode::*,
+            UsizeOpcode,
         },
         ExecutorName,
     },
@@ -42,6 +43,7 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig::core()
         .add_default_executor(ExecutorName::FieldArithmetic)
         .add_default_executor(ExecutorName::BranchEqual)
+        .add_default_executor(ExecutorName::Jal)
 }
 
 fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
@@ -207,7 +209,8 @@ fn test_vm_initial_memory() {
         },
         ..VmConfig::core()
     }
-    .add_default_executor(ExecutorName::BranchEqual);
+    .add_default_executor(ExecutorName::BranchEqual)
+    .add_default_executor(ExecutorName::Jal);
     let vm = VirtualMachine::new(config).with_initial_memory(initial_memory);
     air_test(vm, program);
 }
@@ -221,7 +224,8 @@ fn test_vm_1_persistent() {
         ..VmConfig::core()
     }
     .add_default_executor(ExecutorName::FieldArithmetic)
-    .add_default_executor(ExecutorName::BranchEqual);
+    .add_default_executor(ExecutorName::BranchEqual)
+    .add_default_executor(ExecutorName::Jal);
     let pk = config.generate_pk(engine.keygen_builder());
 
     let n = 6;
@@ -333,7 +337,8 @@ fn test_vm_continuations() {
         ..VmConfig::core()
     }
     .add_default_executor(ExecutorName::FieldArithmetic)
-    .add_default_executor(ExecutorName::BranchEqual);
+    .add_default_executor(ExecutorName::BranchEqual)
+    .add_default_executor(ExecutorName::Jal);
 
     let vm = VirtualMachine::new(config).with_program_inputs(vec![(0, expected_output)]);
 
@@ -432,7 +437,11 @@ fn test_vm_without_field_arithmetic() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(VmConfig::core().add_default_executor(ExecutorName::BranchEqual)),
+        VirtualMachine::new(
+            VmConfig::core()
+                .add_default_executor(ExecutorName::BranchEqual)
+                .add_default_executor(ExecutorName::Jal),
+        ),
         program,
     );
 }
@@ -827,7 +836,8 @@ fn test_vm_keccak() {
         VirtualMachine::new(
             VmConfig::core()
                 .add_default_executor(ExecutorName::Keccak256)
-                .add_default_executor(ExecutorName::BranchEqual),
+                .add_default_executor(ExecutorName::BranchEqual)
+                .add_default_executor(ExecutorName::Jal),
         ),
         program,
     );
@@ -856,7 +866,8 @@ fn test_vm_keccak_non_full_round() {
         VirtualMachine::new(
             VmConfig::core()
                 .add_default_executor(ExecutorName::Keccak256)
-                .add_default_executor(ExecutorName::BranchEqual),
+                .add_default_executor(ExecutorName::BranchEqual)
+                .add_default_executor(ExecutorName::Jal),
         ),
         program,
     );

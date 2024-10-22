@@ -215,18 +215,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .when_transition()
             .assert_eq(next_pc, pc + inst_width);
 
-        // JAL: d[a] <- pc + INST_WIDTH, pc <- pc + b
-        let jal_flag = operation_flags[&JAL];
-        write_enabled += jal_flag.into();
-
-        let mut when_jal = builder.when(jal_flag);
-
-        when_jal.assert_eq(write.address_space, d);
-        when_jal.assert_eq(write.pointer, a);
-        when_jal.assert_eq(write.value, pc + inst_width);
-
-        when_jal.when_transition().assert_eq(next_pc, pc + b);
-
         // NOP constraints same pc and timestamp as next row
         let nop_flag = operation_flags[&NOP];
         let mut when_nop = builder.when(nop_flag);

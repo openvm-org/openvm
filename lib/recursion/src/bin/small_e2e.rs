@@ -69,6 +69,7 @@ where
 
     let vm_config = VmConfig::default_with_no_executors()
         .add_default_executor(ExecutorName::BranchEqual)
+        .add_default_executor(ExecutorName::Jal)
         .add_default_executor(ExecutorName::Keccak256)
         .add_default_executor(ExecutorName::FieldArithmetic)
         .add_default_executor(ExecutorName::FieldExtension);

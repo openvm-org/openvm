@@ -24,6 +24,7 @@ use crate::{
         core::CoreChip,
         field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
+        jal::KernelJalChip,
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
     },
     old::{
@@ -77,6 +78,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
+    Jal(Rc<RefCell<KernelJalChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
@@ -116,6 +118,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
 pub enum AxVmChip<F: PrimeField32> {
     Core(Rc<RefCell<CoreChip<F>>>),
     BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
+    Jal(Rc<RefCell<KernelJalChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),

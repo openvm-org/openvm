@@ -13,7 +13,8 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use super::Program;
 use crate::{
     arch::instructions::{
-        BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, UsizeOpcode,
+        BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
+        NativeJalOpcode::*, UsizeOpcode,
     },
     kernels::core::READ_INSTRUCTION_BUS,
     system::program::{columns::ProgramCols, Instruction, ProgramChip},
@@ -91,7 +92,14 @@ fn test_program_1() {
         // word[1]_1 <- word[1]_1
         Instruction::large_from_isize(STOREW.with_default_offset(), 1, 1, 0, 0, 1, 0, 1),
         // if word[0]_1 == 0 then pc += 3
-        Instruction::from_isize(BEQ.with_default_offset(), 0, 0, 3, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            0,
+            0,
+            3,
+            1,
+            0,
+        ),
         // word[0]_1 <- word[0]_1 - word[1]_1
         Instruction::from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1),
         // word[2]_1 <- pc + 1, pc -= 2
@@ -112,13 +120,27 @@ fn test_program_without_field_arithmetic() {
         // word[0]_1 <- word[5]_0
         Instruction::large_from_isize(STOREW.with_default_offset(), 5, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 2
-        Instruction::from_isize(BNE.with_default_offset(), 0, 4, 3, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            0,
+            4,
+            3,
+            1,
+            0,
+        ),
         // word[2]_1 <- pc + 1, pc -= 2
         Instruction::from_isize(JAL.with_default_offset(), 2, -2, 0, 1, 0),
         // terminate
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= 1
-        Instruction::from_isize(BEQ.with_default_offset(), 0, 5, -1, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            0,
+            5,
+            -1,
+            1,
+            0,
+        ),
     ];
 
     let program = Program::from_instructions(&instructions);

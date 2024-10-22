@@ -486,7 +486,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             vec![
                 // pc <- labels[label], mem[dst] <- pc
                 inst(
-                    options.opcode_with_offset(CoreOpcode::JAL),
+                    options.opcode_with_offset(NativeJalOpcode::JAL),
                     i32_f(dst),
                     labels(label) - pc,
                     F::zero(),

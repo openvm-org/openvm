@@ -36,7 +36,6 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,
-        JAL => 1,
         TERMINATE => 0,
         PUBLISH => 2,
         FAIL => 0,

@@ -54,6 +54,7 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
         vec![],
         VmConfig::default_with_no_executors()
             .add_default_executor(ExecutorName::BranchEqual)
+            .add_default_executor(ExecutorName::Jal)
             .add_default_executor(ExecutorName::FieldArithmetic)
             .add_default_executor(ExecutorName::FieldExtension)
             .add_default_executor(ExecutorName::Keccak256),

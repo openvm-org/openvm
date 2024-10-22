@@ -38,7 +38,8 @@ use crate::{
     kernels::{
         adapters::{
             branch_native_adapter::BranchNativeAdapterChip, convert_adapter::ConvertAdapterChip,
-            native_adapter::NativeAdapterChip, native_vec_heap_adapter::NativeVecHeapAdapterChip,
+            jal_native_adapter::JalNativeAdapterChip, native_adapter::NativeAdapterChip,
+            native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
         branch_eq::KernelBranchEqChip,
@@ -49,6 +50,7 @@ use crate::{
         },
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
+        jal::{JalCoreChip, KernelJalChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
     },
     old::{
@@ -238,6 +240,21 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::BranchEqual(chip));
+                }
+                ExecutorName::Jal => {
+                    let chip = Rc::new(RefCell::new(KernelJalChip::new(
+                        JalNativeAdapterChip::<_>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        JalCoreChip::new(offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::Jal(chip));
                 }
                 ExecutorName::FieldArithmetic => {
                     let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
@@ -835,6 +852,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             NativeBranchEqualOpcode::default_offset(),
             BranchEqualOpcode::COUNT,
             NativeBranchEqualOpcode::default_offset(),
+        ),
+        ExecutorName::Jal => (
+            NativeJalOpcode::default_offset(),
+            NativeJalOpcode::COUNT,
+            NativeJalOpcode::default_offset(),
         ),
         ExecutorName::FieldArithmetic => (
             FieldArithmeticOpcode::default_offset(),

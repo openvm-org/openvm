@@ -92,6 +92,7 @@ fn test_compiler_256_mul() {
             ..Default::default()
         }
         .add_default_executor(ExecutorName::BranchEqual)
+        .add_default_executor(ExecutorName::Jal)
         .add_default_executor(ExecutorName::U256Multiplication),
         program,
         vec![],
@@ -286,6 +287,7 @@ fn test_compiler_256_sll_srl() {
             ..Default::default()
         }
         .add_default_executor(ExecutorName::BranchEqual)
+        .add_default_executor(ExecutorName::Jal)
         .add_default_executor(ExecutorName::Shift256),
         program,
         vec![],
@@ -346,6 +348,7 @@ fn test_compiler_256_sra() {
             ..Default::default()
         }
         .add_default_executor(ExecutorName::BranchEqual)
+        .add_default_executor(ExecutorName::Jal)
         .add_default_executor(ExecutorName::Shift256),
         program,
         vec![],

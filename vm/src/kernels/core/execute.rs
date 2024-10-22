@@ -14,7 +14,7 @@ use crate::{
     },
     kernels::core::{
         columns::{CoreAuxCols, CoreCols, CoreIoCols, CoreMemoryAccessCols},
-        CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+        CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE,
     },
     system::{
         memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
@@ -114,11 +114,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let value = read!(d, a);
                 let index = read!(d, f);
                 write!(e, base_pointer + b + index * g, value);
-            }
-            // d[a] <- pc + INST_WIDTH, pc <- pc + b
-            JAL => {
-                write!(d, a, F::from_canonical_u32(pc + INST_WIDTH));
-                next_pc = (F::from_canonical_u32(pc) + b).as_canonical_u32();
             }
             TERMINATE | NOP => {
                 next_pc = pc;

@@ -36,7 +36,6 @@ pub enum CoreOpcode {
     STOREW,
     LOADW2,
     STOREW2,
-    JAL,
     TERMINATE,
     PUBLISH,
     FAIL,
@@ -61,7 +60,7 @@ pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
 
 impl UsizeOpcode for NativeBranchEqualOpcode {
     fn default_offset() -> usize {
-        0x040
+        0x020
     }
 
     fn from_usize(value: usize) -> Self {
@@ -71,6 +70,16 @@ impl UsizeOpcode for NativeBranchEqualOpcode {
     fn as_usize(&self) -> usize {
         self.0.as_usize()
     }
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x030]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum NativeJalOpcode {
+    JAL,
 }
 
 #[derive(
