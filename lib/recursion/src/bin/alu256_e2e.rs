@@ -113,8 +113,8 @@ where
     let vm_config = VmConfig {
         ..Default::default()
     }
-    .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
-    .add_default_executor(ExecutorName::Shift256);
+    .add_executor(ExecutorName::ArithmeticLogicUnit256)
+    .add_executor(ExecutorName::Shift256);
     gen_vm_program_test_proof_input(program, vec![], vm_config)
 }
 

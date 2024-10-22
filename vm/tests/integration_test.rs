@@ -39,7 +39,7 @@ where
 }
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
-    VmConfig::core().add_default_executor(ExecutorName::FieldArithmetic)
+    VmConfig::core().add_executor(ExecutorName::FieldArithmetic)
 }
 
 fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
@@ -80,7 +80,7 @@ fn air_test_with_compress_poseidon2(
         },
         ..VmConfig::core()
     }
-    .add_default_executor(ExecutorName::Poseidon2);
+    .add_executor(ExecutorName::Poseidon2);
     let pk = vm_config.generate_pk(engine.keygen_builder());
 
     let vm = VirtualMachine::new(vm_config);
@@ -196,7 +196,7 @@ fn test_vm_1_persistent() {
         memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
         ..VmConfig::core()
     }
-    .add_default_executor(ExecutorName::FieldArithmetic);
+    .add_executor(ExecutorName::FieldArithmetic);
     let pk = config.generate_pk(engine.keygen_builder());
 
     let n = 6;
@@ -293,7 +293,7 @@ fn test_vm_continuations() {
         },
         ..VmConfig::core()
     }
-    .add_default_executor(ExecutorName::FieldArithmetic);
+    .add_executor(ExecutorName::FieldArithmetic);
 
     let vm = VirtualMachine::new(config).with_program_inputs(vec![(0, expected_output)]);
 
@@ -464,8 +464,8 @@ fn test_vm_field_extension_arithmetic() {
 
     let vm = VirtualMachine::new(
         VmConfig::core()
-            .add_default_executor(ExecutorName::FieldArithmetic)
-            .add_default_executor(ExecutorName::FieldExtension),
+            .add_executor(ExecutorName::FieldArithmetic)
+            .add_executor(ExecutorName::FieldExtension),
     );
 
     air_test(vm, program);
@@ -497,8 +497,8 @@ fn test_vm_field_extension_arithmetic_persistent() {
             memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
             ..VmConfig::core()
         }
-        .add_default_executor(ExecutorName::FieldArithmetic)
-        .add_default_executor(ExecutorName::FieldExtension),
+        .add_executor(ExecutorName::FieldArithmetic)
+        .add_executor(ExecutorName::FieldExtension),
     );
 
     air_test(vm, program);
@@ -739,7 +739,7 @@ fn test_vm_keccak() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(VmConfig::core().add_default_executor(ExecutorName::Keccak256)),
+        VirtualMachine::new(VmConfig::core().add_executor(ExecutorName::Keccak256)),
         program,
     );
 }
@@ -764,7 +764,7 @@ fn test_vm_keccak_non_full_round() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(VmConfig::core().add_default_executor(ExecutorName::Keccak256)),
+        VirtualMachine::new(VmConfig::core().add_executor(ExecutorName::Keccak256)),
         program,
     );
 }

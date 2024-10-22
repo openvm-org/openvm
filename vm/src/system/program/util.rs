@@ -28,10 +28,10 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             max_segment_len: (1 << 25) - 100,
             ..Default::default()
         }
-        .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
+        .add_executor(ExecutorName::ArithmeticLogicUnit256)
         .add_canonical_modulus()
-        .add_default_executor(ExecutorName::Secp256k1AddUnequal)
-        .add_default_executor(ExecutorName::Secp256k1Double),
+        .add_executor(ExecutorName::Secp256k1AddUnequal)
+        .add_executor(ExecutorName::Secp256k1Double),
     )
     .with_input_stream(input_stream);
     vm.execute(program).unwrap();
