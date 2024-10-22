@@ -1,8 +1,13 @@
-use std::{marker::PhantomData, mem::size_of};
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+};
 
+use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::BaseAir;
-use p3_field::{Field, PrimeField32};
+use p3_field::{AbstractField, Field, PrimeField32};
+use strum::IntoEnumIterator;
 
 use crate::{
     arch::{
@@ -13,76 +18,155 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
         VmCoreChip,
     },
+    rv32im::adapters::LoadStoreProcessedInstruction,
     system::program::Instruction,
 };
 
-#[derive(Debug, Clone)]
-pub struct LoadStoreCols<T, const NUM_CELLS: usize> {
-    pub _marker: PhantomData<T>,
+/// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
+/// This chip uses read_data and prev_data to get the write_data
+#[repr(C)]
+#[derive(Debug, Clone, AlignedBorrow)]
+pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
+    pub opcode_loadw_flag: T,
+    pub opcode_loadhu_flag: T,
+    pub opcode_loadbu_flag: T,
+    pub opcode_storew_flag: T,
+    pub opcode_storeh_flag: T,
+    pub opcode_storeb_flag: T,
+    pub opcode_hintload_flag: T,
+
+    pub read_data: [T; NUM_CELLS],
+    pub prev_data: [T; NUM_CELLS],
 }
 
-impl<T, const NUM_CELLS: usize> LoadStoreCols<T, NUM_CELLS> {
-    pub fn width() -> usize {
-        size_of::<LoadStoreCols<T, NUM_CELLS>>()
-    }
+#[derive(Debug, Clone)]
+pub struct LoadStoreCoreRecord<F, const NUM_CELLS: usize> {
+    pub opcode: Rv32LoadStoreOpcode,
+
+    pub read_data: [F; NUM_CELLS],
+    pub prev_data: [F; NUM_CELLS],
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreCoreAir<F: Field, const NUM_CELLS: usize> {
-    pub _marker: PhantomData<F>,
+pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
 }
 
-impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreCoreAir<F, NUM_CELLS> {
+impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreCoreAir<NUM_CELLS> {
     fn width(&self) -> usize {
-        LoadStoreCols::<F, NUM_CELLS>::width()
+        LoadStoreCoreCols::<F, NUM_CELLS>::width()
     }
 }
 
-impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F>
-    for LoadStoreCoreAir<F, NUM_CELLS>
-{
-}
+impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F> for LoadStoreCoreAir<NUM_CELLS> {}
 
-impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreCoreAir<AB::F, NUM_CELLS>
+impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreCoreAir<NUM_CELLS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
+    I::Reads: From<[[AB::Var; NUM_CELLS]; 2]>,
+    I::Writes: From<[[AB::Expr; NUM_CELLS]; 1]>,
+    I::ProcessedInstruction: From<LoadStoreProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
-        _builder: &mut AB,
-        _local_core: &[AB::Var],
+        builder: &mut AB,
+        local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        todo!()
+        let cols: &LoadStoreCoreCols<AB::Var, NUM_CELLS> = (*local_core).borrow();
+        let LoadStoreCoreCols::<AB::Var, NUM_CELLS> {
+            read_data,
+            prev_data,
+            opcode_loadw_flag: is_loadw,
+            opcode_loadbu_flag: is_loadbu,
+            opcode_loadhu_flag: is_loadhu,
+            opcode_storew_flag: is_storew,
+            opcode_storeb_flag: is_storeb,
+            opcode_storeh_flag: is_storeh,
+            opcode_hintload_flag: is_hintload,
+        } = *cols;
+        let flags = [
+            is_loadw,
+            is_loadbu,
+            is_loadhu,
+            is_storew,
+            is_storeh,
+            is_storeb,
+            is_hintload,
+        ];
+
+        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+            builder.assert_bool(flag);
+            acc + flag.into()
+        });
+        builder.assert_bool(is_valid.clone());
+
+        let expected_opcode = flags.iter().zip(Rv32LoadStoreOpcode::iter()).fold(
+            AB::Expr::zero(),
+            |acc, (flag, local_opcode)| {
+                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+            },
+        ) + AB::Expr::from_canonical_usize(self.offset);
+
+        // there are three parts to write_data:
+        // 1st limb is always read_data
+        // 2nd to (NUM_CELLS/2)th limbs are read_data if loadw/loadhu/storew/storeh/hintload
+        //                                  prev_data if storeb
+        //                                  zero if loadbu
+        // (NUM_CELLS/2 + 1)th to last limbs are read_data if loadw/hintload/storew
+        //                                  prev_data if storeb/storeh
+        //                                  zero if loadbu/loadhu
+        let write_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
+            if i == 0 {
+                read_data[i].into()
+            } else if i < NUM_CELLS / 2 {
+                read_data[i] * (is_loadw + is_loadhu + is_storew + is_storeh + is_hintload)
+                    + prev_data[i] * is_storeb
+            } else {
+                read_data[i] * (is_loadw + is_storew + is_hintload)
+                    + prev_data[i] * (is_storeb + is_storeh)
+            }
+        });
+
+        let is_load = is_loadw + is_loadhu + is_loadbu + is_hintload;
+
+        AdapterAirContext {
+            to_pc: None,
+            reads: [prev_data, read_data].into(),
+            writes: [write_data].into(),
+            instruction: LoadStoreProcessedInstruction {
+                is_valid,
+                opcode: expected_opcode,
+                is_load,
+                is_hint: is_hintload.into(),
+            }
+            .into(),
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
-    pub air: LoadStoreCoreAir<F, NUM_CELLS>,
+pub struct LoadStoreCoreChip<const NUM_CELLS: usize> {
+    pub air: LoadStoreCoreAir<NUM_CELLS>,
 }
 
-impl<F: Field, const NUM_CELLS: usize> LoadStoreCoreChip<F, NUM_CELLS> {
+impl<const NUM_CELLS: usize> LoadStoreCoreChip<NUM_CELLS> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: LoadStoreCoreAir::<F, NUM_CELLS> {
-                _marker: PhantomData,
-                offset,
-            },
+            air: LoadStoreCoreAir::<NUM_CELLS> { offset },
         }
     }
 }
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
-    for LoadStoreCoreChip<F, NUM_CELLS>
+    for LoadStoreCoreChip<NUM_CELLS>
 where
     I::Reads: Into<[[F; NUM_CELLS]; 2]>,
-    I::Writes: From<[F; NUM_CELLS]>,
+    I::Writes: From<[[F; NUM_CELLS]; 1]>,
 {
-    type Record = ();
-    type Air = LoadStoreCoreAir<F, NUM_CELLS>;
+    type Record = LoadStoreCoreRecord<F, NUM_CELLS>;
+    type Air = LoadStoreCoreAir<NUM_CELLS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
@@ -93,12 +177,20 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index =
             Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
+
         let data: [[F; NUM_CELLS]; 2] = reads.into();
-        let write_data = solve_write_data(local_opcode_index, data[0], data[1]);
+        let write_data = run_write_data(local_opcode_index, data[1], data[0]);
 
-        let output = AdapterRuntimeContext::without_pc(write_data);
+        let output = AdapterRuntimeContext::without_pc([write_data]);
 
-        Ok((output, ()))
+        Ok((
+            output,
+            LoadStoreCoreRecord {
+                opcode: local_opcode_index,
+                prev_data: data[0],
+                read_data: data[1],
+            },
+        ))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -108,8 +200,18 @@ where
         )
     }
 
-    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
-        todo!()
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
+        let opcode = record.opcode;
+        core_cols.opcode_loadw_flag = F::from_bool(opcode == LOADW);
+        core_cols.opcode_loadhu_flag = F::from_bool(opcode == LOADHU);
+        core_cols.opcode_loadbu_flag = F::from_bool(opcode == LOADBU);
+        core_cols.opcode_storew_flag = F::from_bool(opcode == STOREW);
+        core_cols.opcode_storeh_flag = F::from_bool(opcode == STOREH);
+        core_cols.opcode_storeb_flag = F::from_bool(opcode == STOREB);
+        core_cols.opcode_hintload_flag = F::from_bool(opcode == HINTLOAD_RV32);
+        core_cols.prev_data = record.prev_data;
+        core_cols.read_data = record.read_data;
     }
 
     fn air(&self) -> &Self::Air {
@@ -117,7 +219,7 @@ where
     }
 }
 
-pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
+pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
     opcode: Rv32LoadStoreOpcode,
     read_data: [F; NUM_CELLS],
     prev_data: [F; NUM_CELLS],
@@ -125,18 +227,9 @@ pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
     let mut write_data = read_data;
     match opcode {
         LOADW => (),
-        LOADH => {
-            let ext = read_data[NUM_CELLS / 2 - 1].as_canonical_u32();
-            let ext = (ext >> 7) * 255;
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
-                *cell = F::from_canonical_u32(ext);
-            }
-        }
-        LOADB => {
-            let ext = read_data[0].as_canonical_u32();
-            let ext = (ext >> 7) * 255;
+        LOADBU => {
             for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
-                *cell = F::from_canonical_u32(ext);
+                *cell = F::zero();
             }
         }
         LOADHU => {
@@ -144,12 +237,12 @@ pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
                 *cell = F::zero();
             }
         }
-        LOADBU => {
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
-                *cell = F::zero();
+        STOREW => (),
+        STOREB => {
+            for (i, cell) in write_data.iter_mut().enumerate().take(NUM_CELLS).skip(1) {
+                *cell = prev_data[i];
             }
         }
-        STOREW => (),
         STOREH => {
             for (i, cell) in write_data
                 .iter_mut()
@@ -160,11 +253,8 @@ pub(super) fn solve_write_data<F: PrimeField32, const NUM_CELLS: usize>(
                 *cell = prev_data[i];
             }
         }
-        STOREB => {
-            for (i, cell) in write_data.iter_mut().enumerate().take(NUM_CELLS).skip(1) {
-                *cell = prev_data[i];
-            }
-        }
+        HINTLOAD_RV32 => (),
+        _ => unreachable!(),
     };
     write_data
 }

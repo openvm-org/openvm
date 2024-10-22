@@ -76,22 +76,11 @@ where
             cols.opcode_and_flag,
         ];
 
-        for flag in flags {
+        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
             builder.assert_bool(flag);
-        }
-
-        let is_valid = flags
-            .iter()
-            .fold(AB::Expr::zero(), |acc, &flag| acc + flag.into());
+            acc + flag.into()
+        });
         builder.assert_bool(is_valid.clone());
-
-        let expected_opcode = flags
-            .iter()
-            .zip(AluOpcode::iter())
-            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
-            })
-            + AB::Expr::from_canonical_usize(self.offset);
 
         let a = &cols.a;
         let b = &cols.b;
@@ -142,6 +131,13 @@ where
                 + cols.opcode_and_flag * (b[i] + c[i] - (AB::Expr::from_canonical_u32(2) * a[i]));
             self.bus.send(x, y, x_xor_y).eval(builder, is_valid.clone());
         }
+
+        let expected_opcode = flags.iter().zip(AluOpcode::iter()).fold(
+            AB::Expr::zero(),
+            |acc, (flag, local_opcode)| {
+                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+            },
+        ) + AB::Expr::from_canonical_usize(self.offset);
 
         AdapterAirContext {
             to_pc: None,
@@ -206,7 +202,7 @@ where
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
-        let a = solve_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
+        let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
         // Core doesn't modify PC directly, so we let Adapter handle the increment
         let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
@@ -255,21 +251,21 @@ where
     }
 }
 
-pub(super) fn solve_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: AluOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {
     match opcode {
-        AluOpcode::ADD => solve_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::SUB => solve_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::XOR => solve_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::OR => solve_or::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::AND => solve_and::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::ADD => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::SUB => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::XOR => run_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::OR => run_or::<NUM_LIMBS, LIMB_BITS>(x, y),
+        AluOpcode::AND => run_and::<NUM_LIMBS, LIMB_BITS>(x, y),
     }
 }
 
-fn solve_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {
@@ -283,7 +279,7 @@ fn solve_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     z
 }
 
-fn solve_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {
@@ -302,21 +298,21 @@ fn solve_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     z
 }
 
-fn solve_xor<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_xor<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {
     array::from_fn(|i| x[i] ^ y[i])
 }
 
-fn solve_or<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_or<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {
     array::from_fn(|i| x[i] | y[i])
 }
 
-fn solve_and<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn run_and<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {

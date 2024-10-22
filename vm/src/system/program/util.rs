@@ -28,10 +28,10 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             max_segment_len: (1 << 25) - 100,
             ..Default::default()
         }
-        .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
+        .add_executor(ExecutorName::ArithmeticLogicUnit256)
         .add_canonical_modulus()
-        .add_default_executor(ExecutorName::Secp256k1AddUnequal)
-        .add_default_executor(ExecutorName::Secp256k1Double),
+        .add_executor(ExecutorName::Secp256k1AddUnequal)
+        .add_executor(ExecutorName::Secp256k1Double),
     )
     .with_input_stream(input_stream);
     vm.execute(program).unwrap();
@@ -47,28 +47,28 @@ pub fn execute_program_with_public_values(
         ..Default::default()
     })
     .with_input_stream(input_stream)
-    .with_public_values(public_values.to_vec());
+    .with_program_inputs(public_values.to_vec());
     vm.execute(program).unwrap()
 }
 
 impl<F: Copy + Display> Display for Program<F> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for instruction in self.instructions().iter() {
             let Instruction {
                 opcode,
-                op_a,
-                op_b,
-                op_c,
+                a,
+                b,
+                c,
                 d,
                 e,
-                op_f,
-                op_g,
+                f,
+                g,
                 debug,
             } = instruction;
             write!(
-                f,
+                formatter,
                 "{:?} {} {} {} {} {} {} {} {}",
-                opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug,
+                opcode, a, b, c, d, e, f, g, debug,
             )?;
         }
         Ok(())
@@ -79,18 +79,18 @@ pub fn display_program_with_pc<F: Copy + Display>(program: &Program<F>) {
     for (pc, instruction) in program.instructions().iter().enumerate() {
         let Instruction {
             opcode,
-            op_a,
-            op_b,
-            op_c,
+            a,
+            b,
+            c,
             d,
             e,
-            op_f,
-            op_g,
+            f,
+            g,
             debug,
         } = instruction;
         println!(
             "{} | {:?} {} {} {} {} {} {} {} {}",
-            pc, opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug
+            pc, opcode, a, b, c, d, e, f, g, debug
         );
     }
 }

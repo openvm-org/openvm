@@ -17,9 +17,10 @@ use strum::IntoEnumIterator;
 use crate::{
     arch::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, JumpUIProcessedInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
+        VmCoreChip,
     },
+    rv32im::adapters::JumpUiProcessedInstruction,
     system::program::Instruction,
 };
 
@@ -77,7 +78,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
     I::Writes: Default,
-    I::ProcessedInstruction: From<JumpUIProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -170,7 +171,7 @@ where
             to_pc: Some(to_pc),
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
             writes: Default::default(),
-            instruction: JumpUIProcessedInstruction {
+            instruction: JumpUiProcessedInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 immediate: cols.imm.into(),
@@ -228,16 +229,14 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction {
-            opcode, op_c: imm, ..
-        } = *instruction;
+        let Instruction { opcode, c: imm, .. } = *instruction;
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let a = data[0].map(|x| x.as_canonical_u32());
         let b = data[1].map(|y| y.as_canonical_u32());
         let (cmp_result, diff_idx, a_sign, b_sign) =
-            solve_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &a, &b);
+            run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &a, &b);
 
         let signed = matches!(
             blt_opcode,
@@ -340,7 +339,7 @@ where
 }
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)
-pub(super) fn solve_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     local_opcode_index: BranchLessThanOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],

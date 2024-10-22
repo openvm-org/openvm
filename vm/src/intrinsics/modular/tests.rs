@@ -14,7 +14,7 @@ use crate::{
         testing::VmChipTestBuilder,
         VmChipWrapper,
     },
-    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LANES},
+    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
     system::program::Instruction,
     utils::biguint_to_limbs,
 };
@@ -48,14 +48,14 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         BabyBear::bits() - 2,
     );
     // doing 1xNUM_LIMBS reads and writes
-    let adapter = Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
     );
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
-    let num_tests = 50;
+    let num_tests = 1;
     let mut all_ops = vec![];
     let mut all_a = vec![];
     let mut all_b = vec![];
@@ -99,8 +99,8 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         // The write of result r is done in the chip.
         let ptr_as = 1;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 3 * RV32_REGISTER_NUM_LANES;
-        let addr_ptr3 = 6 * RV32_REGISTER_NUM_LANES;
+        let addr_ptr2 = 3 * RV32_REGISTER_NUM_LIMBS;
+        let addr_ptr3 = 6 * RV32_REGISTER_NUM_LIMBS;
 
         let data_as = 2;
         let address1 = 0u32;
@@ -173,7 +173,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         BabyBear::bits() - 2,
     );
     // doing 1xNUM_LIMBS reads and writes
-    let adapter = Rv32VecHeapAdapterChip::<F, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),

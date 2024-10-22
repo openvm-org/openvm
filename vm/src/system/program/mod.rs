@@ -30,13 +30,13 @@ pub mod util;
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
     pub opcode: usize,
-    pub op_a: F,
-    pub op_b: F,
-    pub op_c: F,
+    pub a: F,
+    pub b: F,
+    pub c: F,
     pub d: F,
     pub e: F,
-    pub op_f: F,
-    pub op_g: F,
+    pub f: F,
+    pub g: F,
     pub debug: String,
 }
 
@@ -49,23 +49,16 @@ pub fn isize_to_field<F: Field>(value: isize) -> F {
 
 impl<F: Field> Instruction<F> {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_isize(
-        opcode: usize,
-        op_a: isize,
-        op_b: isize,
-        op_c: isize,
-        d: isize,
-        e: isize,
-    ) -> Self {
+    pub fn from_isize(opcode: usize, a: isize, b: isize, c: isize, d: isize, e: isize) -> Self {
         Self {
             opcode,
-            op_a: isize_to_field::<F>(op_a),
-            op_b: isize_to_field::<F>(op_b),
-            op_c: isize_to_field::<F>(op_c),
+            a: isize_to_field::<F>(a),
+            b: isize_to_field::<F>(b),
+            c: isize_to_field::<F>(c),
             d: isize_to_field::<F>(d),
             e: isize_to_field::<F>(e),
-            op_f: isize_to_field::<F>(0),
-            op_g: isize_to_field::<F>(0),
+            f: isize_to_field::<F>(0),
+            g: isize_to_field::<F>(0),
             debug: String::new(),
         }
     }
@@ -81,13 +74,13 @@ impl<F: Field> Instruction<F> {
             .collect_vec();
         Self {
             opcode,
-            op_a: operands[0],
-            op_b: operands[1],
-            op_c: operands[2],
+            a: operands[0],
+            b: operands[1],
+            c: operands[2],
             d: operands[3],
             e: operands[4],
-            op_f: operands[5],
-            op_g: operands[6],
+            f: operands[5],
+            g: operands[6],
             debug: String::new(),
         }
     }
@@ -95,23 +88,23 @@ impl<F: Field> Instruction<F> {
     #[allow(clippy::too_many_arguments)]
     pub fn large_from_isize(
         opcode: usize,
-        op_a: isize,
-        op_b: isize,
-        op_c: isize,
+        a: isize,
+        b: isize,
+        c: isize,
         d: isize,
         e: isize,
-        op_f: isize,
-        op_g: isize,
+        f: isize,
+        g: isize,
     ) -> Self {
         Self {
             opcode,
-            op_a: isize_to_field::<F>(op_a),
-            op_b: isize_to_field::<F>(op_b),
-            op_c: isize_to_field::<F>(op_c),
+            a: isize_to_field::<F>(a),
+            b: isize_to_field::<F>(b),
+            c: isize_to_field::<F>(c),
             d: isize_to_field::<F>(d),
             e: isize_to_field::<F>(e),
-            op_f: isize_to_field::<F>(op_f),
-            op_g: isize_to_field::<F>(op_g),
+            f: isize_to_field::<F>(f),
+            g: isize_to_field::<F>(g),
             debug: String::new(),
         }
     }
@@ -119,13 +112,13 @@ impl<F: Field> Instruction<F> {
     pub fn debug(opcode: usize, debug: &str) -> Self {
         Self {
             opcode,
-            op_a: F::zero(),
-            op_b: F::zero(),
-            op_c: F::zero(),
+            a: F::zero(),
+            b: F::zero(),
+            c: F::zero(),
             d: F::zero(),
             e: F::zero(),
-            op_f: F::zero(),
-            op_g: F::zero(),
+            f: F::zero(),
+            g: F::zero(),
             debug: String::from(debug),
         }
     }
@@ -135,13 +128,13 @@ impl<T: Default> Default for Instruction<T> {
     fn default() -> Self {
         Self {
             opcode: NOP as usize,
-            op_a: T::default(),
-            op_b: T::default(),
-            op_c: T::default(),
+            a: T::default(),
+            b: T::default(),
+            c: T::default(),
             d: T::default(),
             e: T::default(),
-            op_f: T::default(),
-            op_g: T::default(),
+            f: T::default(),
+            g: T::default(),
             debug: String::new(),
         }
     }

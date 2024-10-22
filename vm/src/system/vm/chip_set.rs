@@ -2,7 +2,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     iter,
-    ops::Range,
+    ops::{Range, RangeInclusive},
     rc::Rc,
     sync::Arc,
 };
@@ -31,7 +31,9 @@ use crate::{
     intrinsics::{
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-        modular::{ModularAddSubCoreChip, ModularMulDivCoreChip},
+        modular::{
+            ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
+        },
     },
     kernels::{
         adapters::{
@@ -54,11 +56,13 @@ use crate::{
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
-            Rv32JalrAdapter, Rv32LoadStoreAdapter, Rv32MultAdapter, Rv32RdWriteAdapterChip,
+            Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip, Rv32MultAdapterChip,
+            Rv32RdWriteAdapterChip, Rv32VecHeapAdapterChip,
         },
         base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
         branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
         branch_lt::{BranchLessThanCoreChip, Rv32BranchLessThanChip},
+        load_sign_extend::{LoadSignExtendCoreChip, Rv32LoadSignExtendChip},
         loadstore::{LoadStoreCoreChip, Rv32LoadStoreChip},
         new_divrem::{DivRemCoreChip, Rv32DivRemChip},
         new_lt::{LessThanCoreChip, Rv32LessThanChip},
@@ -122,13 +126,7 @@ impl<F: PrimeField32> VmChipSet<F> {
         let mut pi_builder = ChipSetProofInputBuilder::new();
         pi_builder.add_air_proof_input(self.program_chip.into());
         // System: Connector Chip
-        {
-            let trace = self.connector_chip.generate_trace();
-            pi_builder.add_air_proof_input(AirProofInput::simple_no_pis(
-                Arc::new(self.connector_chip.air),
-                trace,
-            ));
-        }
+        pi_builder.add_air_proof_input(self.connector_chip.generate_air_proof_input());
         // Non-system chips
         for chip in self.chips {
             pi_builder.add_air_proof_input(chip.generate_air_proof_input());
@@ -161,9 +159,6 @@ impl VmConfig {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
-        let range_tuple_bus =
-            RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, [(1 << 8), 32 * (1 << 8)]);
-        let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
         let memory_controller = match self.memory_config.persistence_type {
             PersistenceType::Volatile => {
@@ -193,6 +188,13 @@ impl VmConfig {
         let mut required_executors: BTreeSet<_> = self.executors.clone().into_iter().collect();
         let mut chips = vec![];
 
+        let mul_u256_enabled = required_executors.contains(&ExecutorName::U256Multiplication);
+        let range_tuple_bus = RangeTupleCheckerBus::new(
+            RANGE_TUPLE_CHECKER_BUS,
+            [(1 << 8), if mul_u256_enabled { 32 } else { 8 } * (1 << 8)],
+        );
+        let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+
         // CoreChip is always required even if it's not explicitly specified.
         required_executors.insert(ExecutorName::Core);
         // We always put Poseidon2 chips in the end. So it will be initialized separately.
@@ -218,7 +220,6 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        0,
                         offset,
                     )));
                     for opcode in range {
@@ -317,7 +318,11 @@ impl VmConfig {
                 }
                 ExecutorName::MultiplicationRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MultiplicationChip::new(
-                        Rv32MultAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32MultAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         MultiplicationCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_controller.clone(),
                     )));
@@ -328,8 +333,16 @@ impl VmConfig {
                 }
                 ExecutorName::MultiplicationHighRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MulHChip::new(
-                        Rv32MultAdapter::new(execution_bus, program_bus, memory_controller.clone()),
-                        MulHCoreChip::new(range_tuple_checker.clone(), offset),
+                        Rv32MultAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        MulHCoreChip::new(
+                            byte_xor_chip.clone(),
+                            range_tuple_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -352,7 +365,11 @@ impl VmConfig {
                 }
                 ExecutorName::DivRemRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32DivRemChip::new(
-                        Rv32MultAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32MultAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         DivRemCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_controller.clone(),
                     )));
@@ -391,7 +408,13 @@ impl VmConfig {
                 }
                 ExecutorName::LoadStoreRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LoadStoreChip::new(
-                        Rv32LoadStoreAdapter::new(range_checker.clone(), offset),
+                        Rv32LoadStoreAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
                         LoadStoreCoreChip::new(offset),
                         memory_controller.clone(),
                     )));
@@ -399,6 +422,23 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::LoadStoreRv32(chip));
+                }
+                ExecutorName::LoadSignExtendRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32LoadSignExtendChip::new(
+                        Rv32LoadStoreAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
+                        LoadSignExtendCoreChip::new(range_checker.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::LoadSignExtendRv32(chip));
                 }
                 ExecutorName::BranchEqualRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BranchEqualChip::new(
@@ -447,8 +487,12 @@ impl VmConfig {
                 }
                 ExecutorName::JalrRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32JalrChip::new(
-                        Rv32JalrAdapter::new(),
-                        Rv32JalrCoreChip::new(offset),
+                        Rv32JalrAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        Rv32JalrCoreChip::new(byte_xor_chip.clone(), range_checker.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -514,8 +558,8 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::Secp256k1Double(chip));
                 }
-                ExecutorName::ModularAddSub | ExecutorName::ModularMultDiv => {
-                    unreachable!("Modular executors should be handled differently")
+                _ => {
+                    unreachable!("Unsupported executor")
                 }
             }
         }
@@ -536,12 +580,13 @@ impl VmConfig {
             chips.push(AxVmChip::Poseidon2(poseidon_chip));
         }
 
-        for (range, executor, offset, modulus) in
+        for (local_range, executor, class_offset, modulus) in
             gen_modular_executor_tuple(self.supported_modulus.clone())
         {
-            for opcode in range.clone() {
-                if executors.contains_key(&opcode) {
-                    panic!("Attempting to override an executor for opcode {opcode}");
+            let range = shift_range(*local_range.start()..*local_range.end() + 1, class_offset);
+            for global_opcode_idx in range.clone() {
+                if executors.contains_key(&global_opcode_idx) {
+                    panic!("Attempting to override an executor for opcode {global_opcode_idx}");
                 }
             }
             assert!(modulus.bits() <= 32 * 8);
@@ -558,13 +603,13 @@ impl VmConfig {
                             32,
                             8,
                             memory_controller.borrow().range_checker.clone(),
-                            offset,
+                            class_offset,
                             F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
-                    for opcode in range {
-                        executors.insert(opcode, new_chip.clone().into());
+                    for global_opcode in range {
+                        executors.insert(global_opcode, new_chip.clone().into());
                     }
                     chips.push(AxVmChip::ModularAddSub(new_chip.clone()));
                 }
@@ -580,15 +625,103 @@ impl VmConfig {
                             32,
                             8,
                             memory_controller.borrow().range_checker.clone(),
-                            offset,
+                            class_offset,
                             F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
-                    for opcode in range {
-                        executors.insert(opcode, new_chip.clone().into());
+                    for global_opcode in range {
+                        executors.insert(global_opcode, new_chip.clone().into());
                     }
-                    chips.push(AxVmChip::ModularMultDiv(new_chip.clone()));
+                    chips.push(AxVmChip::ModularMultDiv(new_chip));
+                }
+                ExecutorName::ModularAddSubRv32_1x32 => {
+                    let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
+                        Rv32VecHeapAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        ModularAddSubCoreChip::new(
+                            modulus.clone(),
+                            32,
+                            8,
+                            memory_controller.borrow().range_checker.clone(),
+                            class_offset,
+                            F::bits() - 2,
+                        ),
+                        memory_controller.clone(),
+                    )));
+                    for global_opcode in range {
+                        executors.insert(global_opcode, new_chip.clone().into());
+                    }
+                    chips.push(AxVmChip::ModularAddSubRv32_1x32(new_chip));
+                }
+                ExecutorName::ModularMulDivRv32_1x32 => {
+                    let new_chip = Rc::new(RefCell::new(ModularMulDivChip::new(
+                        Rv32VecHeapAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        ModularMulDivCoreChip::new(
+                            modulus.clone(),
+                            32,
+                            8,
+                            memory_controller.borrow().range_checker.clone(),
+                            class_offset,
+                            F::bits() - 2,
+                        ),
+                        memory_controller.clone(),
+                    )));
+                    for global_opcode in range {
+                        executors.insert(global_opcode, new_chip.clone().into());
+                    }
+                    chips.push(AxVmChip::ModularMulDivRv32_1x32(new_chip));
+                }
+                ExecutorName::ModularAddSubRv32_3x16 => {
+                    let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
+                        Rv32VecHeapAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        ModularAddSubCoreChip::new(
+                            modulus.clone(),
+                            48,
+                            8,
+                            memory_controller.borrow().range_checker.clone(),
+                            class_offset,
+                            F::bits() - 2,
+                        ),
+                        memory_controller.clone(),
+                    )));
+                    for global_opcode in range {
+                        executors.insert(global_opcode, new_chip.clone().into());
+                    }
+                    chips.push(AxVmChip::ModularAddSubRv32_3x16(new_chip));
+                }
+                ExecutorName::ModularMulDivRv32_3x16 => {
+                    let new_chip = Rc::new(RefCell::new(ModularMulDivChip::new(
+                        Rv32VecHeapAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        ModularMulDivCoreChip::new(
+                            modulus.clone(),
+                            48,
+                            8,
+                            memory_controller.borrow().range_checker.clone(),
+                            class_offset,
+                            F::bits() - 2,
+                        ),
+                        memory_controller.clone(),
+                    )));
+                    for global_opcode in range {
+                        executors.insert(global_opcode, new_chip.clone().into());
+                    }
+                    chips.push(AxVmChip::ModularMulDivRv32_3x16(new_chip));
                 }
                 _ => unreachable!(
                     "modular_executors should only contain ModularAddSub and ModularMultDiv"
@@ -618,34 +751,78 @@ impl VmConfig {
 
 fn gen_modular_executor_tuple(
     supported_modulus: Vec<BigUint>,
-) -> Vec<(Range<usize>, ExecutorName, usize, BigUint)> {
-    let num_ops_per_modulus = ModularArithmeticOpcode::COUNT;
-    let add_sub_range = default_executor_range(ExecutorName::ModularAddSub);
-    let mult_div_range = default_executor_range(ExecutorName::ModularMultDiv);
+) -> Vec<(RangeInclusive<usize>, ExecutorName, usize, BigUint)> {
     supported_modulus
         .into_iter()
         .enumerate()
         .flat_map(|(i, modulus)| {
-            let shift = i * num_ops_per_modulus;
-            [
+            // TODO[jpw]: delete the Kernel executors; for now I will always add both the kernel
+            // and intrinsic executors together
+            let class_offset =
+                ModularArithmeticOpcode::default_offset() + i * ModularArithmeticOpcode::COUNT;
+            let mut res = vec![
                 (
-                    shift_range(&add_sub_range.0, shift),
+                    ModularArithmeticOpcode::ADD as usize..=(ModularArithmeticOpcode::SUB as usize),
                     ExecutorName::ModularAddSub,
-                    add_sub_range.1 + shift,
+                    class_offset,
                     modulus.clone(),
                 ),
                 (
-                    shift_range(&mult_div_range.0, shift),
+                    ModularArithmeticOpcode::MUL as usize..=(ModularArithmeticOpcode::DIV as usize),
                     ExecutorName::ModularMultDiv,
-                    mult_div_range.1 + shift,
-                    modulus,
+                    class_offset,
+                    modulus.clone(),
                 ),
-            ]
+            ];
+            // determine the number of bytes needed to represent a prime field element
+            let bytes = modulus.bits().div_ceil(8);
+            // We want to use log_num_lanes as a const, this likely requires a macro
+            let class_offset = Rv32ModularArithmeticOpcode::default_offset()
+                + i * Rv32ModularArithmeticOpcode::COUNT;
+            if bytes <= 32 {
+                res.extend([
+                    (
+                        Rv32ModularArithmeticOpcode::ADD as usize
+                            ..=(Rv32ModularArithmeticOpcode::SUB as usize),
+                        ExecutorName::ModularAddSubRv32_1x32,
+                        class_offset,
+                        modulus.clone(),
+                    ),
+                    (
+                        Rv32ModularArithmeticOpcode::MUL as usize
+                            ..=(Rv32ModularArithmeticOpcode::DIV as usize),
+                        ExecutorName::ModularMulDivRv32_1x32,
+                        class_offset,
+                        modulus,
+                    ),
+                ])
+            } else if bytes <= 48 {
+                res.extend([
+                    (
+                        Rv32ModularArithmeticOpcode::ADD as usize
+                            ..=(Rv32ModularArithmeticOpcode::SUB as usize),
+                        ExecutorName::ModularAddSubRv32_3x16,
+                        class_offset,
+                        modulus.clone(),
+                    ),
+                    (
+                        Rv32ModularArithmeticOpcode::MUL as usize
+                            ..=(Rv32ModularArithmeticOpcode::DIV as usize),
+                        ExecutorName::ModularMulDivRv32_3x16,
+                        class_offset,
+                        modulus,
+                    ),
+                ])
+            } else {
+                panic!("modulus {:?} is too large", modulus);
+            }
+
+            res
         })
         .collect()
 }
 
-fn shift_range(r: &Range<usize>, x: usize) -> Range<usize> {
+fn shift_range(r: Range<usize>, x: usize) -> Range<usize> {
     let start = r.start + x;
     let end = r.end + x;
     start..end
@@ -678,16 +855,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Keccak256Opcode::COUNT,
             Keccak256Opcode::default_offset(),
         ),
-        ExecutorName::ModularAddSub => (
-            ModularArithmeticOpcode::default_offset(),
-            2,
-            ModularArithmeticOpcode::default_offset(),
-        ),
-        ExecutorName::ModularMultDiv => (
-            ModularArithmeticOpcode::default_offset() + 2,
-            2,
-            ModularArithmeticOpcode::default_offset(),
-        ),
         ExecutorName::ArithmeticLogicUnitRv32 => (
             AluOpcode::default_offset(),
             AluOpcode::COUNT,
@@ -695,7 +862,12 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
         ),
         ExecutorName::LoadStoreRv32 => (
             Rv32LoadStoreOpcode::default_offset(),
-            Rv32LoadStoreOpcode::COUNT,
+            7,
+            Rv32LoadStoreOpcode::default_offset(),
+        ),
+        ExecutorName::LoadSignExtendRv32 => (
+            Rv32LoadStoreOpcode::default_offset() + 7,
+            2,
             Rv32LoadStoreOpcode::default_offset(),
         ),
         ExecutorName::JalLuiRv32 => (
@@ -768,6 +940,7 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CastfOpcode::COUNT,
             CastfOpcode::default_offset(),
         ),
+        // TODO: these should be configurable and remove from default executors
         ExecutorName::Secp256k1AddUnequal => {
             (EccOpcode::default_offset(), 1, EccOpcode::default_offset())
         }
@@ -776,6 +949,7 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             1,
             EccOpcode::default_offset(),
         ),
+        _ => panic!("Not a default executor"),
     };
     (start..(start + len), offset)
 }

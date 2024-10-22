@@ -76,10 +76,8 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
-            let address_space = F::from_canonical_usize(
-                (as_label >> self.memory_dimensions.address_height)
-                    + self.memory_dimensions.as_offset,
-            );
+            let address_space =
+                F::from_canonical_usize(as_label + self.memory_dimensions.as_offset);
             let leaf_values = *self
                 .final_memory
                 .get(&(address_space, address_label))
@@ -94,12 +92,24 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
             // Tell the hasher about this hash.
             hasher.compress_and_record(&initial_left_node.hash(), &initial_right_node.hash());
 
-            let left_as_label = 2 * as_label;
-            let left_address_label = 2 * address_label;
+            let is_as_section = height > self.memory_dimensions.address_height;
+
+            let (left_as_label, right_as_label) = if is_as_section {
+                (2 * as_label, 2 * as_label + 1)
+            } else {
+                (as_label, as_label)
+            };
+            let (left_address_label, right_address_label) = if is_as_section {
+                (address_label, address_label)
+            } else {
+                (2 * address_label, 2 * address_label + 1)
+            };
+
             let left_is_final =
                 !self
                     .touched_nodes
                     .contains(&(height - 1, left_as_label, left_address_label));
+
             let final_left_node = if left_is_final {
                 initial_left_node
             } else {
@@ -112,22 +122,11 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 ))
             };
 
-            let right_as_label = (2 * as_label)
-                + if height > self.memory_dimensions.address_height {
-                    1
-                } else {
-                    0
-                };
-            let right_address_label = (2 * address_label)
-                + if height > self.memory_dimensions.address_height {
-                    0
-                } else {
-                    1
-                };
             let right_is_final =
                 !self
                     .touched_nodes
                     .contains(&(height - 1, right_as_label, right_address_label));
+
             let final_right_node = if right_is_final {
                 initial_right_node
             } else {

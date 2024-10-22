@@ -46,15 +46,18 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             if height != 0 {
                 self.num_touched_nonleaves += 1;
             }
-            self.touch_node(height + 1, as_label / 2, address_label / 2);
+            if height >= self.air.memory_dimensions.address_height {
+                self.touch_node(height + 1, as_label / 2, address_label);
+            } else {
+                self.touch_node(height + 1, as_label, address_label / 2);
+            }
         }
     }
 
     pub fn touch_address(&mut self, address_space: F, address: F) {
         self.touch_node(
             0,
-            ((address_space.as_canonical_u32() as usize) - self.air.memory_dimensions.as_offset)
-                << self.air.memory_dimensions.address_height,
+            (address_space.as_canonical_u32() as usize) - self.air.memory_dimensions.as_offset,
             (address.as_canonical_u32() as usize) / CHUNK,
         );
     }

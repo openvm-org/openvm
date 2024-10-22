@@ -59,16 +59,16 @@ impl CompilerOptions {
     }
 }
 
-fn inst<F: PrimeField64>(opcode: usize, op_a: F, op_b: F, op_c: F, d: AS, e: AS) -> Instruction<F> {
+fn inst<F: PrimeField64>(opcode: usize, a: F, b: F, c: F, d: AS, e: AS) -> Instruction<F> {
     Instruction {
         opcode,
-        op_a,
-        op_b,
-        op_c,
+        a,
+        b,
+        c,
         d: d.to_field(),
         e: e.to_field(),
-        op_f: F::zero(),
-        op_g: F::zero(),
+        f: F::zero(),
+        g: F::zero(),
         debug: String::new(),
     }
 }
@@ -76,22 +76,22 @@ fn inst<F: PrimeField64>(opcode: usize, op_a: F, op_b: F, op_c: F, d: AS, e: AS)
 #[allow(clippy::too_many_arguments)]
 fn inst_med<F: PrimeField64>(
     opcode: usize,
-    op_a: F,
-    op_b: F,
-    op_c: F,
+    a: F,
+    b: F,
+    c: F,
     d: AS,
     e: AS,
     f: AS,
 ) -> Instruction<F> {
     Instruction {
         opcode,
-        op_a,
-        op_b,
-        op_c,
+        a,
+        b,
+        c,
         d: d.to_field(),
         e: e.to_field(),
-        op_f: f.to_field(),
-        op_g: F::zero(),
+        f: f.to_field(),
+        g: F::zero(),
         debug: String::new(),
     }
 }
@@ -99,23 +99,23 @@ fn inst_med<F: PrimeField64>(
 #[allow(clippy::too_many_arguments)]
 fn inst_large<F: PrimeField64>(
     opcode: usize,
-    op_a: F,
-    op_b: F,
-    op_c: F,
+    a: F,
+    b: F,
+    c: F,
     d: AS,
     e: AS,
-    op_f: F,
-    op_g: F,
+    f: F,
+    g: F,
 ) -> Instruction<F> {
     Instruction {
         opcode,
-        op_a,
-        op_b,
-        op_c,
+        a,
+        b,
+        c,
         d: d.to_field(),
         e: e.to_field(),
-        op_f,
-        op_g,
+        f,
+        g,
         debug: String::new(),
     }
 }
@@ -123,13 +123,13 @@ fn inst_large<F: PrimeField64>(
 fn dbg<F: PrimeField64>(opcode: usize, debug: String) -> Instruction<F> {
     Instruction {
         opcode,
-        op_a: F::zero(),
-        op_b: F::zero(),
-        op_c: F::zero(),
+        a: F::zero(),
+        b: F::zero(),
+        c: F::zero(),
         d: F::zero(),
         e: F::zero(),
-        op_f: F::zero(),
-        op_g: F::zero(),
+        f: F::zero(),
+        g: F::zero(),
         debug,
     }
 }

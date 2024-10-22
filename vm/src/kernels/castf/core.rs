@@ -15,7 +15,7 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
         VmCoreAir, VmCoreChip,
     },
-    rv32im::adapters::RV32_REGISTER_NUM_LANES,
+    rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
     system::program::Instruction,
 };
 
@@ -28,7 +28,7 @@ pub(crate) const FINAL_LIMB_BITS: usize = 6;
 #[derive(AlignedBorrow)]
 pub struct CastFCoreCols<T> {
     pub in_val: T,
-    pub out_val: [T; RV32_REGISTER_NUM_LANES],
+    pub out_val: [T; RV32_REGISTER_NUM_LIMBS],
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -50,7 +50,7 @@ where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 1]; 1]>,
-    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
 {
     fn eval(
@@ -98,7 +98,7 @@ where
 #[derive(Debug)]
 pub struct CastFRecord<F> {
     pub in_val: F,
-    pub out_val: [F; RV32_REGISTER_NUM_LANES],
+    pub out_val: [F; RV32_REGISTER_NUM_LIMBS],
 }
 
 #[derive(Debug)]
@@ -122,7 +122,7 @@ impl CastFCoreChip {
 impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for CastFCoreChip
 where
     I::Reads: Into<[[F; 1]; 1]>,
-    I::Writes: From<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
 {
     type Record = CastFRecord<F>;
     type Air = CastFCoreAir;
@@ -179,7 +179,7 @@ where
 
 pub struct CastF;
 impl CastF {
-    pub(super) fn solve(y: u32) -> [u32; RV32_REGISTER_NUM_LANES] {
+    pub(super) fn solve(y: u32) -> [u32; RV32_REGISTER_NUM_LIMBS] {
         let mut x = [0; 4];
         for (i, limb) in x.iter_mut().enumerate() {
             *limb = (y >> (8 * i)) & 0xFF;

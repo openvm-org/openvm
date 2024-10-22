@@ -16,14 +16,30 @@ mod tests;
 
 pub const FIELD_ELEMENT_BITS: usize = 30;
 
-pub type ModularAddSubAir<const NUM_LIMBS: usize> =
-    VmAirWrapper<Rv32VecHeapAdapterAir<1, 1, NUM_LIMBS, NUM_LIMBS>, ModularAddSubCoreAir>;
-pub type ModularAddSubChip<F, const NUM_LIMBS: usize> =
-    VmChipWrapper<F, Rv32VecHeapAdapterChip<F, 1, 1, NUM_LIMBS, NUM_LIMBS>, ModularAddSubCoreChip>;
-pub type ModularMulDivAir<const NUM_LIMBS: usize> =
-    VmAirWrapper<Rv32VecHeapAdapterAir<1, 1, NUM_LIMBS, NUM_LIMBS>, ModularMulDivCoreAir>;
-pub type ModularMulDivChip<F, const NUM_LIMBS: usize> =
-    VmChipWrapper<F, Rv32VecHeapAdapterChip<F, 1, 1, NUM_LIMBS, NUM_LIMBS>, ModularMulDivCoreChip>;
+/// Each prime field element will be represented as `NUM_LANES * LANE_SIZE` cells in memory.
+/// The `LANE_SIZE` must be a power of 2 and determines the size of the batch memory read/writes.
+pub type ModularAddSubAir<const NUM_LANES: usize, const LANE_SIZE: usize> = VmAirWrapper<
+    Rv32VecHeapAdapterAir<2, NUM_LANES, NUM_LANES, LANE_SIZE, LANE_SIZE>,
+    ModularAddSubCoreAir,
+>;
+/// See [ModularAddSubAir].
+pub type ModularAddSubChip<F, const NUM_LANES: usize, const LANE_SIZE: usize> = VmChipWrapper<
+    F,
+    Rv32VecHeapAdapterChip<F, 2, NUM_LANES, NUM_LANES, LANE_SIZE, LANE_SIZE>,
+    ModularAddSubCoreChip,
+>;
+/// Each prime field element will be represented as `NUM_LANES * LANE_SIZE` cells in memory.
+/// The `LANE_SIZE` must be a power of 2 and determines the size of the batch memory read/writes.
+pub type ModularMulDivAir<const NUM_LANES: usize, const LANE_SIZE: usize> = VmAirWrapper<
+    Rv32VecHeapAdapterAir<2, NUM_LANES, NUM_LANES, LANE_SIZE, LANE_SIZE>,
+    ModularMulDivCoreAir,
+>;
+/// See [ModularMulDivAir].
+pub type ModularMulDivChip<F, const NUM_LANES: usize, const LANE_SIZE: usize> = VmChipWrapper<
+    F,
+    Rv32VecHeapAdapterChip<F, 2, NUM_LANES, NUM_LANES, LANE_SIZE, LANE_SIZE>,
+    ModularMulDivCoreChip,
+>;
 
 pub static SECP256K1_COORD_PRIME: Lazy<BigUint> = Lazy::new(|| {
     BigUint::from_bytes_be(&hex!(

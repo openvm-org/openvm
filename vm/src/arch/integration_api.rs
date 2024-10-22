@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::utils::next_power_of_two_or_zero;
@@ -18,7 +18,7 @@ use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result};
 use crate::system::{
-    memory::{MemoryController, MemoryControllerRef},
+    memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef},
     program::Instruction,
 };
 
@@ -79,6 +79,7 @@ pub trait VmAdapterChip<F: Field> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
     );
 
     fn air(&self) -> &Self::Air;
@@ -265,6 +266,8 @@ where
         let adapter_width = self.adapter.air().width();
         let width = core_width + adapter_width;
         let mut values = vec![Val::<SC>::zero(); height * width];
+
+        let memory_aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
         // This zip only goes through records.
         // The padding rows between records.len()..height are filled with zeros.
         values
@@ -272,8 +275,12 @@ where
             .zip(self.records.into_par_iter())
             .for_each(|(row_slice, record)| {
                 let (adapter_row, core_row) = row_slice.split_at_mut(adapter_width);
-                self.adapter
-                    .generate_trace_row(adapter_row, record.0, record.1);
+                self.adapter.generate_trace_row(
+                    adapter_row,
+                    record.0,
+                    record.1,
+                    &memory_aux_cols_factory,
+                );
                 self.core.generate_trace_row(core_row, record.2);
             });
         AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
@@ -361,15 +368,6 @@ pub struct MinimalInstruction<T> {
     pub opcode: T,
 }
 
-#[repr(C)]
-#[derive(AlignedBorrow)]
-pub struct JumpUIProcessedInstruction<T> {
-    pub is_valid: T,
-    /// Absolute opcode number
-    pub opcode: T,
-    pub immediate: T,
-}
-
 /// The most common adapter interface.
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
@@ -397,6 +395,31 @@ impl<
     type Reads = [[T; READ_SIZE]; NUM_READS];
     type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
     type ProcessedInstruction = PI;
+}
+
+#[derive(Clone)]
+pub struct VecHeapAdapterInterface<
+    T,
+    const R: usize,
+    const NUM_READS: usize,
+    const NUM_WRITES: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+>(PhantomData<T>);
+
+impl<
+        T,
+        const R: usize,
+        const NUM_READS: usize,
+        const NUM_WRITES: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > VmAdapterInterface<T>
+    for VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
+{
+    type Reads = [[[T; READ_SIZE]; NUM_READS]; R];
+    type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
+    type ProcessedInstruction = MinimalInstruction<T>;
 }
 
 /// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat array for each
@@ -436,6 +459,112 @@ pub struct DynArray<T>(pub Vec<T>);
 
 mod conversions {
     use super::*;
+
+    // AdapterAirContext: VecHeapAdapterInterface -> DynInterface
+    impl<
+            T,
+            const R: usize,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        >
+        From<
+            AdapterAirContext<
+                T,
+                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        > for AdapterAirContext<T, DynAdapterInterface<T>>
+    {
+        fn from(
+            ctx: AdapterAirContext<
+                T,
+                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        ) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: VecHeapAdapterInterface -> DynInterface
+    impl<
+            T,
+            const R: usize,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        >
+        From<
+            AdapterRuntimeContext<
+                T,
+                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        > for AdapterRuntimeContext<T, DynAdapterInterface<T>>
+    {
+        fn from(
+            ctx: AdapterRuntimeContext<
+                T,
+                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        ) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.into(),
+            }
+        }
+    }
+
+    // AdapterAirContext: DynInterface -> VecHeapAdapterInterface
+    impl<
+            T,
+            const R: usize,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
+        for AdapterAirContext<
+            T,
+            VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: DynInterface -> VecHeapAdapterInterface
+    impl<
+            T,
+            const R: usize,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
+        for AdapterRuntimeContext<
+            T,
+            VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.into(),
+            }
+        }
+    }
 
     // AdapterAirContext: FlatInterface -> BasicInterface
     impl<

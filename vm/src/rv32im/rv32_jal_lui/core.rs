@@ -20,7 +20,7 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::{
-        JumpUiProcessedInstruction, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LANES,
+        JumpUiProcessedInstruction, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
         RV_J_TYPE_IMM_BITS,
     },
     system::program::Instruction,
@@ -28,9 +28,9 @@ use crate::{
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv32JalLuiCols<T> {
+pub struct Rv32JalLuiCoreCols<T> {
     pub imm: T,
-    pub rd_data: [T; RV32_REGISTER_NUM_LANES],
+    pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
     pub is_jal: T,
     pub is_lui: T,
     pub xor_res: T,
@@ -45,7 +45,7 @@ pub struct Rv32JalLuiCoreAir {
 
 impl<F: Field> BaseAir<F> for Rv32JalLuiCoreAir {
     fn width(&self) -> usize {
-        Rv32JalLuiCols::<F>::width()
+        Rv32JalLuiCoreCols::<F>::width()
     }
 }
 
@@ -56,7 +56,7 @@ where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 0]; 0]>,
-    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
 {
     fn eval(
@@ -65,8 +65,8 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv32JalLuiCols<AB::Var> = (*local_core).borrow();
-        let Rv32JalLuiCols::<AB::Var> {
+        let cols: &Rv32JalLuiCoreCols<AB::Var> = (*local_core).borrow();
+        let Rv32JalLuiCoreCols::<AB::Var> {
             imm,
             rd_data: rd,
             is_jal,
@@ -89,7 +89,7 @@ where
 
         // In case of JAL constrain that last limb has at most [last_limb_bits] bits
 
-        let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LANES - 1);
+        let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
         let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1 << x));
         let additional_bits = AB::F::from_canonical_u32(additional_bits);
         self.bus
@@ -136,7 +136,7 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Rv32JalLuiCoreRecord<F: Field> {
-    pub rd_data: [F; RV32_REGISTER_NUM_LANES],
+    pub rd_data: [F; RV32_REGISTER_NUM_LIMBS],
     pub imm: F,
     pub is_jal: bool,
     pub is_lui: bool,
@@ -162,7 +162,7 @@ impl Rv32JalLuiCoreChip {
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32JalLuiCoreChip
 where
-    I::Writes: From<[[F; RV32_REGISTER_NUM_LANES]; 1]>,
+    I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
 {
     type Record = Rv32JalLuiCoreRecord<F>;
     type Air = Rv32JalLuiCoreAir;
@@ -175,7 +175,7 @@ where
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode_index = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
-        let imm = instruction.op_c;
+        let imm = instruction.c;
 
         let signed_imm = match local_opcode_index {
             JAL => {
@@ -186,12 +186,12 @@ where
             }
             LUI => imm.as_canonical_u32() as i32,
         };
-        let (to_pc, rd_data) = solve_jal_lui(local_opcode_index, from_pc, signed_imm);
+        let (to_pc, rd_data) = run_jal_lui(local_opcode_index, from_pc, signed_imm);
 
         self.xor_lookup_chip.request(rd_data[1], rd_data[2]);
         if local_opcode_index == JAL {
             self.xor_lookup_chip.request(rd_data[0], 0);
-            let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LANES - 1);
+            let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
             let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1 << x));
             self.xor_lookup_chip.request(rd_data[3], additional_bits);
         } else if local_opcode_index == LUI {
@@ -224,7 +224,7 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut Rv32JalLuiCols<F> = row_slice.borrow_mut();
+        let core_cols: &mut Rv32JalLuiCoreCols<F> = row_slice.borrow_mut();
         core_cols.rd_data = record.rd_data;
         core_cols.imm = record.imm;
         core_cols.is_jal = F::from_bool(record.is_jal);
@@ -240,11 +240,11 @@ where
 }
 
 // returns (to_pc, rd_data)
-pub(super) fn solve_jal_lui(
+pub(super) fn run_jal_lui(
     opcode: Rv32JalLuiOpcode,
     pc: u32,
     imm: i32,
-) -> (u32, [u32; RV32_REGISTER_NUM_LANES]) {
+) -> (u32, [u32; RV32_REGISTER_NUM_LIMBS]) {
     match opcode {
         JAL => {
             let rd_data = array::from_fn(|i| ((pc + 4) >> (8 * i)) & ((1 << RV32_CELL_BITS) - 1));

@@ -11,6 +11,7 @@ p3-field.workspace = true
 axvm-platform.workspace = true
 axvm-instructions.workspace = true
 stark-vm.workspace = true          # TODO: remove this dependency
+strum.workspace = true
 
 color-eyre = { git = "https://github.com/eyre-rs/eyre.git", rev = "7706273" }
 elf = "0.7.4"

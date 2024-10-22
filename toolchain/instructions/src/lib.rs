@@ -88,22 +88,22 @@ pub enum FieldExtensionOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x170]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum CastfOpcode {
-    CASTF,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
 #[opcode_offset = 0x120]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum Poseidon2Opcode {
     PERM_POS2,
     COMP_POS2,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x170]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum CastfOpcode {
+    CASTF,
 }
 
 #[derive(
@@ -178,17 +178,6 @@ impl U256Opcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x160]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum U32Opcode {
-    LUI,
-    AUIPC,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
 #[opcode_offset = 0x300]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
@@ -231,13 +220,16 @@ pub enum LessThanOpcode {
 #[allow(non_camel_case_types)]
 pub enum Rv32LoadStoreOpcode {
     LOADW,
+    /// LOADBU, LOADHU are unsigned extend opcodes, implemented in the same chip with LOADW
+    LOADBU,
+    LOADHU,
     STOREW,
     STOREH,
     STOREB,
+    HINTLOAD_RV32,
+    /// The following are signed extend opcodes
     LOADB,
     LOADH,
-    LOADBU,
-    LOADHU,
 }
 
 #[derive(
@@ -328,6 +320,19 @@ pub enum DivRemOpcode {
     DIVU,
     REM,
     REMU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x500]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32ModularArithmeticOpcode {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
 }
 
 #[derive(

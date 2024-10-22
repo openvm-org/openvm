@@ -90,7 +90,7 @@ pub struct MemoryHeapWriteRecord<T, const N: usize> {
 pub struct MemoryDataIoCols<T, const N: usize> {
     pub data: [T; N],
     pub address_space: T,
-    pub address: T,
+    pub pointer: T,
 }
 
 impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
@@ -98,7 +98,7 @@ impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
         Self {
             data: array::from_fn(|_| iter.next().unwrap()),
             address_space: iter.next().unwrap(),
-            address: iter.next().unwrap(),
+            pointer: iter.next().unwrap(),
         }
     }
 
@@ -106,7 +106,7 @@ impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
         self.data
             .iter()
             .chain(iter::once(&self.address_space))
-            .chain(iter::once(&self.address))
+            .chain(iter::once(&self.pointer))
     }
 }
 
@@ -137,12 +137,12 @@ impl<T: Clone, const N: usize> From<MemoryHeapReadRecord<T, N>> for MemoryHeapDa
             address: MemoryDataIoCols {
                 data: record.address_read.data,
                 address_space: record.address_read.address_space,
-                address: record.address_read.pointer,
+                pointer: record.address_read.pointer,
             },
             data: MemoryDataIoCols {
                 data: record.data_read.data,
                 address_space: record.data_read.address_space,
-                address: record.data_read.pointer,
+                pointer: record.data_read.pointer,
             },
         }
     }
@@ -154,12 +154,12 @@ impl<T: Clone, const N: usize> From<MemoryHeapWriteRecord<T, N>> for MemoryHeapD
             address: MemoryDataIoCols {
                 data: record.address_read.data,
                 address_space: record.address_read.address_space,
-                address: record.address_read.pointer,
+                pointer: record.address_read.pointer,
             },
             data: MemoryDataIoCols {
                 data: record.data_write.data,
                 address_space: record.data_write.address_space,
-                address: record.data_write.pointer,
+                pointer: record.data_write.pointer,
             },
         }
     }
@@ -446,18 +446,24 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    // TODO[zach]: Make finalize return a list of `MachineChip`.
-    pub fn finalize(&mut self, hasher: Option<&mut impl HasherChip<CHUNK, F>>) {
+    /// Returns the final memory state if persistent.
+    pub fn finalize(
+        &mut self,
+        hasher: Option<&mut impl HasherChip<CHUNK, F>>,
+    ) -> Option<Equipartition<F, CHUNK>> {
+        if self.result.is_some() {
+            panic!("Cannot finalize more than once");
+        }
         let mut traces = vec![];
         let mut pvs = vec![];
 
-        let records = match &mut self.interface_chip {
+        let (records, final_memory) = match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 let (final_memory, records) = self.memory.finalize::<1>();
                 traces.push(boundary_chip.generate_trace(&final_memory));
                 pvs.push(vec![]);
 
-                records
+                (records, None)
             }
             MemoryInterface::Persistent {
                 merkle_chip,
@@ -491,7 +497,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 expand_pvs.extend(initial_node.hash());
                 expand_pvs.extend(final_node.hash());
                 pvs.push(expand_pvs);
-                records
+                (records, Some(final_memory_values))
             }
         };
         for record in records {
@@ -515,6 +521,8 @@ impl<F: PrimeField32> MemoryController<F> {
             traces,
             public_values: pvs,
         });
+
+        final_memory
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>

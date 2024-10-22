@@ -4,7 +4,7 @@ use afs_primitives::{is_equal::IsEqualAir, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 
-use super::{timestamp_delta, CoreChip, CoreState};
+use super::{timestamp_delta, CoreChip};
 use crate::{
     arch::{
         instructions::{
@@ -35,25 +35,25 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         let num_public_values = core_options.num_public_values;
 
         let local_opcode_index = instruction.opcode - self.offset;
-        let a = instruction.op_a;
-        let b = instruction.op_b;
-        let c = instruction.op_c;
+        let a = instruction.a;
+        let b = instruction.b;
+        let c = instruction.c;
         let d = instruction.d;
         let e = instruction.e;
-        let f = instruction.op_f;
-        let g = instruction.op_g;
+        let f = instruction.f;
+        let g = instruction.g;
 
         let io = CoreIoCols {
             timestamp: F::from_canonical_u32(timestamp),
             pc: F::from_canonical_u32(pc),
             opcode: F::from_canonical_usize(local_opcode_index),
-            op_a: a,
-            op_b: b,
-            op_c: c,
+            a,
+            b,
+            c,
             d,
             e,
-            op_f: f,
-            op_g: g,
+            f,
+            g,
         };
 
         let mut next_pc = pc + 1;
@@ -143,6 +143,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             PUBLISH => {
                 let public_value_index = read!(d, a).as_canonical_u64() as usize;
                 let value = read!(e, b);
+                tracing::debug!(
+                    "publishing value {:?} at index {}",
+                    value,
+                    public_value_index
+                );
                 if public_value_index >= num_public_values {
                     return Err(ExecutionError::PublicValueIndexOutOfBounds(
                         pc,
@@ -290,11 +295,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             self.rows.push(cols.flatten());
         }
 
-        // Update Core chip state with all changes from this segment.
-        self.set_current_state(CoreState {
-            pc: next_pc,
-            is_done: local_opcode_index == TERMINATE,
-        });
+        if local_opcode_index == TERMINATE {
+            self.did_terminate = true;
+        }
 
         Ok(ExecutionState::new(next_pc, timestamp))
     }

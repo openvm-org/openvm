@@ -34,7 +34,7 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 29, 29, 15, PersistenceType::Volatile)
+        Self::new(29, 29, 29, 16, PersistenceType::Volatile)
     }
 }
 
@@ -76,12 +76,9 @@ impl VmConfig {
         config.add_modular_support(enabled_modulus)
     }
 
-    pub fn add_default_executor(mut self, executor: ExecutorName) -> Self {
+    pub fn add_executor(mut self, executor: ExecutorName) -> Self {
         // Some executors need to be handled in a special way, and cannot be added like other executors.
-        let not_allowed_executors = [ExecutorName::ModularAddSub, ExecutorName::ModularMultDiv];
-        if not_allowed_executors.contains(&executor) {
-            panic!("Cannot add executor for {:?}", executor);
-        }
+        // Adding these will cause a panic in the `create_chip_set` function.
         self.executors.push(executor);
         self
     }
@@ -122,10 +119,10 @@ impl VmConfig {
 impl Default for VmConfig {
     fn default() -> Self {
         Self::default_with_no_executors()
-            .add_default_executor(ExecutorName::Core)
-            .add_default_executor(ExecutorName::FieldArithmetic)
-            .add_default_executor(ExecutorName::FieldExtension)
-            .add_default_executor(ExecutorName::Poseidon2)
+            .add_executor(ExecutorName::Core)
+            .add_executor(ExecutorName::FieldArithmetic)
+            .add_executor(ExecutorName::FieldExtension)
+            .add_executor(ExecutorName::Poseidon2)
     }
 }
 
@@ -156,23 +153,24 @@ impl VmConfig {
             false,
             vec![],
         )
-        .add_default_executor(ExecutorName::Core)
+        .add_executor(ExecutorName::Core)
     }
 
     pub fn rv32() -> Self {
         Self::core()
-            .add_default_executor(ExecutorName::ArithmeticLogicUnitRv32)
-            .add_default_executor(ExecutorName::LessThanRv32)
-            .add_default_executor(ExecutorName::MultiplicationRv32)
-            .add_default_executor(ExecutorName::MultiplicationHighRv32)
-            .add_default_executor(ExecutorName::DivRemRv32)
-            .add_default_executor(ExecutorName::ShiftRv32)
-            .add_default_executor(ExecutorName::LoadStoreRv32)
-            .add_default_executor(ExecutorName::BranchEqualRv32)
-            .add_default_executor(ExecutorName::BranchLessThanRv32)
-            .add_default_executor(ExecutorName::JalLuiRv32)
-            .add_default_executor(ExecutorName::JalrRv32)
-            .add_default_executor(ExecutorName::AuipcRv32)
+            .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
+            .add_executor(ExecutorName::LessThanRv32)
+            .add_executor(ExecutorName::MultiplicationRv32)
+            .add_executor(ExecutorName::MultiplicationHighRv32)
+            .add_executor(ExecutorName::DivRemRv32)
+            .add_executor(ExecutorName::ShiftRv32)
+            .add_executor(ExecutorName::LoadStoreRv32)
+            .add_executor(ExecutorName::LoadSignExtendRv32)
+            .add_executor(ExecutorName::BranchEqualRv32)
+            .add_executor(ExecutorName::BranchLessThanRv32)
+            .add_executor(ExecutorName::JalLuiRv32)
+            .add_executor(ExecutorName::JalrRv32)
+            .add_executor(ExecutorName::AuipcRv32)
     }
 
     pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
@@ -194,6 +192,7 @@ impl VmConfig {
     }
 }
 
+// TO BE DELETED:
 #[derive(EnumCount, EnumIter, FromRepr, Clone, Debug)]
 #[repr(usize)]
 pub enum Modulus {

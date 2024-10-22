@@ -650,6 +650,7 @@ dependencies = [
  "p3-field",
  "rrs-lib",
  "stark-vm",
+ "strum",
  "test-case",
 ]
 
