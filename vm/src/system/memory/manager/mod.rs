@@ -90,7 +90,7 @@ pub struct MemoryHeapWriteRecord<T, const N: usize> {
 pub struct MemoryDataIoCols<T, const N: usize> {
     pub data: [T; N],
     pub address_space: T,
-    pub address: T,
+    pub pointer: T,
 }
 
 impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
@@ -98,7 +98,7 @@ impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
         Self {
             data: array::from_fn(|_| iter.next().unwrap()),
             address_space: iter.next().unwrap(),
-            address: iter.next().unwrap(),
+            pointer: iter.next().unwrap(),
         }
     }
 
@@ -106,7 +106,7 @@ impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
         self.data
             .iter()
             .chain(iter::once(&self.address_space))
-            .chain(iter::once(&self.address))
+            .chain(iter::once(&self.pointer))
     }
 }
 
@@ -137,12 +137,12 @@ impl<T: Clone, const N: usize> From<MemoryHeapReadRecord<T, N>> for MemoryHeapDa
             address: MemoryDataIoCols {
                 data: record.address_read.data,
                 address_space: record.address_read.address_space,
-                address: record.address_read.pointer,
+                pointer: record.address_read.pointer,
             },
             data: MemoryDataIoCols {
                 data: record.data_read.data,
                 address_space: record.data_read.address_space,
-                address: record.data_read.pointer,
+                pointer: record.data_read.pointer,
             },
         }
     }
@@ -154,12 +154,12 @@ impl<T: Clone, const N: usize> From<MemoryHeapWriteRecord<T, N>> for MemoryHeapD
             address: MemoryDataIoCols {
                 data: record.address_read.data,
                 address_space: record.address_read.address_space,
-                address: record.address_read.pointer,
+                pointer: record.address_read.pointer,
             },
             data: MemoryDataIoCols {
                 data: record.data_write.data,
                 address_space: record.data_write.address_space,
-                address: record.data_write.pointer,
+                pointer: record.data_write.pointer,
             },
         }
     }

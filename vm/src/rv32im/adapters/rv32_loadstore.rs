@@ -99,7 +99,7 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 range_bus: range_checker_chip.bus(),
-                address_max_bits: memory_controller.mem_config.pointer_max_bits,
+                pointer_max_bits: memory_controller.mem_config.pointer_max_bits,
             },
             range_checker_chip,
             offset,
@@ -155,7 +155,7 @@ pub struct Rv32LoadStoreAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
     pub range_bus: VariableRangeCheckerBus,
-    address_max_bits: usize,
+    pointer_max_bits: usize,
 }
 
 impl<F: Field> BaseAir<F> for Rv32LoadStoreAdapterAir {
@@ -226,7 +226,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         self.range_bus
             .range_check(
                 local_cols.mem_ptr_limbs[1],
-                self.address_max_bits - RV32_CELL_BITS * 2,
+                self.pointer_max_bits - RV32_CELL_BITS * 2,
             )
             .eval(builder, is_valid.clone() - is_hint.clone());
 
@@ -340,14 +340,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
-        assert!(ptr_val < (1 << self.air.address_max_bits) || local_opcode == HINTLOAD_RV32);
+        assert!(ptr_val < (1 << self.air.pointer_max_bits) || local_opcode == HINTLOAD_RV32);
         let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
         if local_opcode != HINTLOAD_RV32 {
             self.range_checker_chip
                 .add_count(mem_ptr_limbs[0], RV32_CELL_BITS * 2);
             self.range_checker_chip.add_count(
                 mem_ptr_limbs[1],
-                self.air.address_max_bits - RV32_CELL_BITS * 2,
+                self.air.pointer_max_bits - RV32_CELL_BITS * 2,
             );
         }
         let read_record = match local_opcode {
@@ -415,7 +415,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 let imm_sign = read_record.imm_sign as u32;
                 let imm_extended = imm + imm_sign * 0xffff0000;
                 let ptr = rs1_val.wrapping_add(imm_extended);
-                assert!(ptr < (1 << self.air.address_max_bits));
+                assert!(ptr < (1 << self.air.pointer_max_bits));
                 memory.write(e, F::from_canonical_u32(ptr), output.writes[0])
             }
             LOADW | LOADB | LOADH | LOADBU | LOADHU | HINTLOAD_RV32 => {

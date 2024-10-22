@@ -69,7 +69,7 @@ impl MemoryBridge {
         aux: &'a MemoryReadAuxCols<V, N>,
     ) -> MemoryReadOperation<'a, T, V, N> {
         self.read(
-            MemoryAddress::new(io.address_space, io.address),
+            MemoryAddress::new(io.address_space, io.pointer),
             io.data,
             timestamp.into(),
             aux,
@@ -120,7 +120,7 @@ impl MemoryBridge {
         aux: &'a MemoryWriteAuxCols<V, N>,
     ) -> MemoryWriteOperation<'a, T, V, N> {
         self.write(
-            MemoryAddress::new(io.address_space, io.address),
+            MemoryAddress::new(io.address_space, io.pointer),
             io.data,
             timestamp.into(),
             aux,
