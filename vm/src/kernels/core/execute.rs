@@ -4,7 +4,7 @@ use afs_primitives::{is_equal::IsEqualAir, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 
-use super::{timestamp_delta, CoreChip, CoreState};
+use super::{timestamp_delta, CoreChip};
 use crate::{
     arch::{
         instructions::{
@@ -296,10 +296,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         }
 
         // Update Core chip state with all changes from this segment.
-        self.set_current_state(CoreState {
-            pc: next_pc,
-            is_done: false, // TODO: replace CoreState with a simple pc?
-        });
+        self.set_current_pc(next_pc);
 
         Ok(ExecutionState::new(next_pc, timestamp))
     }

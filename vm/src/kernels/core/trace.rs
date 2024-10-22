@@ -24,7 +24,7 @@ impl<F: PrimeField32> CoreChip<F> {
 
     /// This must be called for each blank row and results should never be cloned; see [CoreCols::nop_row].
     fn make_blank_row(&self) -> CoreCols<F> {
-        let pc = F::from_canonical_u32(self.state.pc);
+        let pc = F::from_canonical_u32(self.pc);
         CoreCols::nop_row(self, pc)
     }
 }

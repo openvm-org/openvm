@@ -53,21 +53,6 @@ pub struct CoreOptions {
     pub num_public_values: usize,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct CoreState {
-    pub pc: u32,
-    pub is_done: bool,
-}
-
-impl CoreState {
-    pub fn initial(pc_start: u32) -> Self {
-        CoreState {
-            pc: pc_start,
-            is_done: false,
-        }
-    }
-}
-
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
@@ -79,9 +64,9 @@ pub struct Streams<F> {
 pub struct CoreChip<F: PrimeField32> {
     pub air: CoreAir,
     pub rows: Vec<Vec<F>>,
-    pub state: CoreState,
+    pub pc: u32,
     /// Program counter at the start of the current segment.
-    pub start_state: CoreState,
+    pub start_pc: u32,
     pub public_values: Vec<Option<F>>,
     pub memory_controller: MemoryControllerRef<F>,
 
@@ -105,20 +90,20 @@ impl<F: PrimeField32> CoreChip<F> {
             execution_bus,
             program_bus,
             memory_controller,
-            CoreState::initial(pc_start as u32),
+            pc_start as u32,
             offset,
         )
     }
 
     /// Sets the start state of the Core.
-    pub fn set_start_state(&mut self, state: CoreState) {
-        self.start_state = state;
-        self.state = state;
+    pub fn set_start_pc(&mut self, pc: u32) {
+        self.start_pc = pc;
+        self.pc = pc;
     }
 
     /// Sets the current state of the Core.
-    pub fn set_current_state(&mut self, state: CoreState) {
-        self.state = state;
+    pub fn set_current_pc(&mut self, pc: u32) {
+        self.pc = pc;
     }
 
     /// Sets the current state of the Core.
@@ -127,7 +112,7 @@ impl<F: PrimeField32> CoreChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
-        state: CoreState,
+        pc: u32,
         offset: usize,
     ) -> Self {
         let memory_bridge = memory_controller.borrow().memory_bridge();
@@ -139,8 +124,8 @@ impl<F: PrimeField32> CoreChip<F> {
                 offset,
             },
             rows: vec![],
-            state,
-            start_state: state,
+            pc,
+            start_pc: pc,
             public_values: vec![None; options.num_public_values],
             memory_controller,
             streams: Default::default(),

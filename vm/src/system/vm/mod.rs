@@ -11,7 +11,6 @@ pub use segment::ExecutionSegment;
 
 use crate::{
     intrinsics::hashes::poseidon2::CHUNK,
-    kernels::core::CoreState,
     system::{
         memory::Equipartition,
         program::{ExecutionError, Program},
@@ -41,7 +40,7 @@ pub struct VirtualMachine<F: PrimeField32> {
 #[derive(Clone, Debug)]
 pub struct VirtualMachineState<F: PrimeField32> {
     /// Current state of the Core
-    pub state: CoreState,
+    pub pc: u32,
     /// Input stream of the Core
     pub input_stream: VecDeque<Vec<F>>,
     /// Hint stream of the Core
@@ -89,7 +88,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
             self.config.clone(),
             program.clone(),
             VirtualMachineState {
-                state: CoreState::initial(program.pc_start),
+                pc: program.pc_start,
                 input_stream: mem::take(&mut self.input_stream),
                 hint_stream: VecDeque::new(),
             },
@@ -106,19 +105,16 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 }
             }
             segment.execute()?;
-            if segment.did_terminate() {
+            if segment.did_terminate {
                 break;
             }
 
             let config = mem::take(&mut segment.config);
             let cycle_tracker = mem::take(&mut segment.cycle_tracker);
             let state = VirtualMachineState {
-                state: CoreState {
-                    pc: segment.chip_set.connector_chip.boundary_states[1]
-                        .unwrap()
-                        .pc,
-                    is_done: false,
-                },
+                pc: segment.chip_set.connector_chip.boundary_states[1]
+                    .unwrap()
+                    .pc,
                 input_stream: mem::take(&mut segment.input_stream),
                 hint_stream: mem::take(&mut segment.hint_stream),
             };
