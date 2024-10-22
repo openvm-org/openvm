@@ -163,13 +163,12 @@ where
             )
             .eval(builder, cols.opcode_mulh_flag);
 
-        let expected_opcode = flags
-            .iter()
-            .zip(MulHOpcode::iter())
-            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
-            })
-            + AB::Expr::from_canonical_usize(self.offset);
+        let expected_opcode = flags.iter().zip(MulHOpcode::iter()).fold(
+            AB::Expr::zero(),
+            |acc, (flag, local_opcode)| {
+                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+            },
+        ) + AB::Expr::from_canonical_usize(self.offset);
 
         AdapterAirContext {
             to_pc: None,
@@ -197,6 +196,20 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIM
         range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
         offset: usize,
     ) -> Self {
+        // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
+        // < 2 * NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1
+        // bytes (with LIMB_BITS bits). XorLookup is used to sign check bytes.
+        debug_assert!(
+            range_tuple_chip.sizes()[0] == 1 << LIMB_BITS,
+            "First element of RangeTupleChecker must have size {}",
+            1 << LIMB_BITS
+        );
+        debug_assert!(
+            range_tuple_chip.sizes()[1] >= (1 << LIMB_BITS) * 2 * NUM_LIMBS as u32,
+            "Second element of RangeTupleChecker must have size of at least {}",
+            (1 << LIMB_BITS) * 2 * NUM_LIMBS as u32
+        );
+
         Self {
             air: MulHCoreAir {
                 xor_bus: xor_lookup_chip.bus(),

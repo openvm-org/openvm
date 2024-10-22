@@ -111,6 +111,20 @@ pub struct MultiplicationCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(range_tuple_chip: Arc<RangeTupleCheckerChip<2>>, offset: usize) -> Self {
+        // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
+        // < NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1 bytes
+        // (with LIMB_BITS bits). XorLookup is used to sign check bytes.
+        debug_assert!(
+            range_tuple_chip.sizes()[0] == 1 << LIMB_BITS,
+            "First element of RangeTupleChecker must have size {}",
+            1 << LIMB_BITS
+        );
+        debug_assert!(
+            range_tuple_chip.sizes()[1] >= (1 << LIMB_BITS) * NUM_LIMBS as u32,
+            "Second element of RangeTupleChecker must have size of at least {}",
+            (1 << LIMB_BITS) * NUM_LIMBS as u32
+        );
+
         Self {
             air: MultiplicationCoreAir {
                 bus: *range_tuple_chip.bus(),

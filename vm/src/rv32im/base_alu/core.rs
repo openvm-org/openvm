@@ -132,13 +132,12 @@ where
             self.bus.send(x, y, x_xor_y).eval(builder, is_valid.clone());
         }
 
-        let expected_opcode = flags
-            .iter()
-            .zip(AluOpcode::iter())
-            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
-            })
-            + AB::Expr::from_canonical_usize(self.offset);
+        let expected_opcode = flags.iter().zip(AluOpcode::iter()).fold(
+            AB::Expr::zero(),
+            |acc, (flag, local_opcode)| {
+                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+            },
+        ) + AB::Expr::from_canonical_usize(self.offset);
 
         AdapterAirContext {
             to_pc: None,
