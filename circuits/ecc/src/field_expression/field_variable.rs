@@ -49,6 +49,10 @@ impl FieldVariable {
     // Returns the index of the new variable.
     // There should be no division in the expression.
     pub fn save(&mut self) -> usize {
+        if let SymbolicExpr::Var(_) = self.expr {
+            // If self.expr is already a Var, no need to save
+            return self.builder.borrow().num_variables - 1;
+        }
         let mut builder = self.builder.borrow_mut();
         builder.num_variables += 1;
 
