@@ -56,7 +56,9 @@ where
 {
     let fib_program = fibonacci_program(a, b, n);
 
-    let vm_config = VmConfig::core().add_default_executor(ExecutorName::FieldArithmetic);
+    let vm_config = VmConfig::core()
+        .add_default_executor(ExecutorName::FieldArithmetic)
+        .add_default_executor(ExecutorName::Jal);
     gen_vm_program_test_proof_input(fib_program, vec![], vm_config)
 }
 
