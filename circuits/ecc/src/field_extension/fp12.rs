@@ -63,11 +63,11 @@ impl Fp12 {
     }
 
     pub fn mul(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp12 {
-        // c0 = cs0co0 + xi(cs1co5 + cs2co4 + cs3co3 + cs4co2 + cs5co1)
-        // c1 = cs0co1 + cs1co0 + xi(cs2co5 + cs3co4 + cs4co3 + cs5co2)
-        // c2 = cs0co2 + cs1co1 + cs2co0 + xi(cs3co5 + cs4co4 + cs5co3)
-        // c3 = cs0co3 + cs1co2 + cs2co1 + cs3co0 + xi(cs4co5 + cs5co4)
-        // c4 = cs0co4 + cs1co3 + cs2co2 + cs3co1 + cs4co0 + xi(cs5co5)
+        // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4 + cs5co5)
+        // c1 = cs0co1 + cs1co0 + cs3co0 + xi(cs2co2 + cs4co5 + cs5co4)
+        // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 +cs4co3 + xi(cs5co5)
+        // c3 = cs0co3 + cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
+        // c4 = cs0co4 + cs1co3 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
         // c5 = cs0co5 + cs1co4 + cs2co3 + cs3co2 + cs4co1 + cs5co0
         //   where cs*: self.c*, co*: other.c*
 
@@ -76,7 +76,7 @@ impl Fp12 {
         let mut c2 = self.mul_c2(other, xi);
         let mut c3 = self.mul_c3(other, xi);
         let mut c4 = self.mul_c4(other, xi);
-        let mut c5 = self.mul_c5(other, xi);
+        let mut c5 = self.mul_c5(other);
 
         c0.save();
         c1.save();
@@ -111,27 +111,27 @@ impl Fp12 {
     }
 
     fn mul_c0(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
-        // c0 = cs0co0 + xi(cs1co5 + cs2co4 + cs3co3 + cs4co2 + cs5co1)
+        // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4 + cs5co3)
         let mut cs0co0 = self.c0.mul(&mut other.c0);
         cs0co0.save();
 
-        let mut cs1co5 = self.c1.mul(&mut other.c5);
-        cs1co5.save();
-        let mut cs2co4 = self.c2.mul(&mut other.c4);
-        cs2co4.save();
-        let mut cs3co3 = self.c3.mul(&mut other.c3);
-        cs3co3.save();
-        let mut cs4co2 = self.c4.mul(&mut other.c2);
-        cs4co2.save();
-        let mut cs5co1 = self.c5.mul(&mut other.c1);
-        cs5co1.save();
-        let mut c0_xi0 = cs1co5.add(&mut cs2co4);
+        let mut cs1co2 = self.c1.mul(&mut other.c2);
+        cs1co2.save();
+        let mut cs2co1 = self.c2.mul(&mut other.c1);
+        cs2co1.save();
+        let mut cs3co5 = self.c3.mul(&mut other.c5);
+        cs3co5.save();
+        let mut cs4co4 = self.c4.mul(&mut other.c4);
+        cs4co4.save();
+        let mut cs5co3 = self.c5.mul(&mut other.c3);
+        cs5co3.save();
+        let mut c0_xi0 = cs1co2.add(&mut cs2co1);
         c0_xi0.save();
-        let mut c0_xi1 = c0_xi0.add(&mut cs3co3);
+        let mut c0_xi1 = c0_xi0.add(&mut cs3co5);
         c0_xi1.save();
-        let mut c0_xi2 = c0_xi1.add(&mut cs4co2);
+        let mut c0_xi2 = c0_xi1.add(&mut cs4co4);
         c0_xi2.save();
-        let mut c0_xi3 = c0_xi2.add(&mut cs5co1);
+        let mut c0_xi3 = c0_xi2.add(&mut cs5co3);
         c0_xi3.save();
         let mut c0_xi = xi.mul(&mut c0_xi3);
         c0_xi.save();
@@ -141,126 +141,126 @@ impl Fp12 {
     }
 
     fn mul_c1(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
-        // c1 = cs0co1 + cs1co0 + xi(cs2co5 + cs3co4 + cs4co3 + cs5co2)
+        // c1 = cs0co1 + cs1co0 + cs3co3 + xi(cs2co2 + cs4co5 + cs5co4)
         let mut cs0co1 = self.c0.mul(&mut other.c1);
         cs0co1.save();
         let mut cs1co0 = self.c1.mul(&mut other.c0);
         cs1co0.save();
+        let mut cs3co3 = self.c3.mul(&mut other.c3);
+        cs3co3.save();
         let mut c10 = cs0co1.add(&mut cs1co0);
         c10.save();
+        let mut c11 = c10.add(&mut cs3co3);
+        c11.save();
 
-        let mut cs2co5 = self.c2.mul(&mut other.c5);
-        cs2co5.save();
-        let mut cs3co4 = self.c3.mul(&mut other.c4);
-        cs3co4.save();
-        let mut cs4co3 = self.c4.mul(&mut other.c3);
-        cs4co3.save();
-        let mut cs5co2 = self.c5.mul(&mut other.c2);
-        cs5co2.save();
-        let mut c1_xi1 = cs2co5.add(&mut cs3co4);
+        let mut cs2co2 = self.c2.mul(&mut other.c2);
+        cs2co2.save();
+        let mut cs4co5 = self.c4.mul(&mut other.c5);
+        cs4co5.save();
+        let mut cs5co4 = self.c5.mul(&mut other.c4);
+        cs5co4.save();
+        let mut c1_xi0 = cs2co2.add(&mut cs4co5);
+        c1_xi0.save();
+        let mut c1_xi1 = c1_xi0.add(&mut cs5co4);
         c1_xi1.save();
-        let mut c1_xi2 = c1_xi1.add(&mut cs4co3);
-        c1_xi2.save();
-        let mut c1_xi3 = c1_xi2.add(&mut cs5co2);
-        c1_xi3.save();
-        let mut c1_xi = xi.mul(&mut c1_xi3);
+        let mut c1_xi = xi.mul(&mut c1_xi1);
         c1_xi.save();
 
-        let c1 = c10.add(&mut c1_xi);
+        let c1 = c11.add(&mut c1_xi);
         c1
     }
 
     fn mul_c2(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
-        // c2 = cs0co2 + cs1co1 + cs2co0 + xi(cs3co5 + cs4co4 + cs5co3)
+        // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 +cs4co3 + xi(cs5co5)
         let mut cs0co2 = self.c0.mul(&mut other.c2);
         cs0co2.save();
         let mut cs1co1 = self.c1.mul(&mut other.c1);
         cs1co1.save();
         let mut cs2co0 = self.c2.mul(&mut other.c0);
         cs2co0.save();
+        let mut cs3co4 = self.c3.mul(&mut other.c4);
+        cs3co4.save();
+        let mut cs4co3 = self.c4.mul(&mut other.c3);
+        cs4co3.save();
         let mut c20 = cs0co2.add(&mut cs1co1);
         c20.save();
         let mut c21 = c20.add(&mut cs2co0);
         c21.save();
+        let mut c22 = c21.add(&mut cs3co4);
+        c22.save();
+        let mut c23 = c22.add(&mut cs4co3);
+        c23.save();
 
-        let mut cs3co5 = self.c3.mul(&mut other.c5);
-        cs3co5.save();
-        let mut cs4co4 = self.c4.mul(&mut other.c4);
-        cs4co4.save();
-        let mut cs5co3 = self.c5.mul(&mut other.c3);
-        cs5co3.save();
-        let mut c2_xi0 = cs3co5.add(&mut cs4co4);
-        c2_xi0.save();
-        let mut c2_xi1 = c2_xi0.add(&mut cs5co3);
-        c2_xi1.save();
-        let mut c2_xi = xi.mul(&mut c2_xi1);
+        let mut cs5co5 = self.c5.mul(&mut other.c5);
+        cs5co5.save();
+        let mut c2_xi = xi.mul(&mut cs5co5);
         c2_xi.save();
 
-        let c2 = c21.add(&mut c2_xi);
+        let c2 = c23.add(&mut c2_xi);
         c2
     }
 
     fn mul_c3(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
-        // c3 = cs0co3 + cs1co2 + cs2co1 + cs3co0 + xi(cs4co5 + cs5co4)
+        // c3 = cs0co3 + cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
         let mut cs0co3 = self.c0.mul(&mut other.c3);
         cs0co3.save();
-        let mut cs1co2 = self.c1.mul(&mut other.c2);
-        cs1co2.save();
-        let mut cs2co1 = self.c2.mul(&mut other.c1);
-        cs2co1.save();
         let mut cs3co0 = self.c3.mul(&mut other.c0);
         cs3co0.save();
-        let mut c30 = cs0co3.add(&mut cs1co2);
+        let mut c30 = cs0co3.add(&mut cs3co0);
         c30.save();
-        let mut c31 = c30.add(&mut cs2co1);
-        c31.save();
-        let mut c32 = c31.add(&mut cs3co0);
-        c32.save();
 
-        let mut cs4co5 = self.c4.mul(&mut other.c5);
-        cs4co5.save();
-        let mut cs5co4 = self.c5.mul(&mut other.c4);
-        cs5co4.save();
-        let mut c3_xi0 = cs4co5.add(&mut cs5co4);
+        let mut cs1co5 = self.c1.mul(&mut other.c5);
+        cs1co5.save();
+        let mut cs2co4 = self.c2.mul(&mut other.c4);
+        cs2co4.save();
+        let mut cs4co2 = self.c4.mul(&mut other.c2);
+        cs4co2.save();
+        let mut cs5co1 = self.c5.mul(&mut other.c1);
+        cs5co1.save();
+        let mut c3_xi0 = cs1co5.add(&mut cs2co4);
         c3_xi0.save();
-        let mut c3_xi = xi.mul(&mut c3_xi0);
+        let mut c3_xi1 = c3_xi0.add(&mut cs4co2);
+        c3_xi1.save();
+        let mut c3_xi2 = c3_xi1.add(&mut cs5co1);
+        c3_xi2.save();
+        let mut c3_xi = xi.mul(&mut c3_xi2);
         c3_xi.save();
 
-        let c3 = c32.add(&mut c3_xi);
+        let c3 = c30.add(&mut c3_xi);
         c3
     }
 
     fn mul_c4(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
-        // c4 = cs0co4 + cs1co3 + cs2co2 + cs3co1 + cs4co0 + xi(cs5co5)
+        // c4 = cs0co4 + cs1co3 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
         let mut cs0co4 = self.c0.mul(&mut other.c4);
         cs0co4.save();
         let mut cs1co3 = self.c1.mul(&mut other.c3);
         cs1co3.save();
-        let mut cs2co2 = self.c2.mul(&mut other.c2);
-        cs2co2.save();
         let mut cs3co1 = self.c3.mul(&mut other.c1);
         cs3co1.save();
         let mut cs4co0 = self.c4.mul(&mut other.c0);
         cs4co0.save();
         let mut c40 = cs0co4.add(&mut cs1co3);
         c40.save();
-        let mut c41 = c40.add(&mut cs2co2);
+        let mut c41 = c40.add(&mut cs3co1);
         c41.save();
-        let mut c42 = c41.add(&mut cs3co1);
+        let mut c42 = c41.add(&mut cs4co0);
         c42.save();
-        let mut c43 = c42.add(&mut cs4co0);
-        c43.save();
 
-        let mut cs5co5 = self.c5.mul(&mut other.c5);
-        cs5co5.save();
-        let mut c4_xi = xi.mul(&mut cs5co5);
+        let mut cs2co5 = self.c2.mul(&mut other.c5);
+        cs2co5.save();
+        let mut cs5co2 = self.c5.mul(&mut other.c2);
+        cs5co2.save();
+        let mut c4_xi0 = cs2co5.add(&mut cs5co2);
+        c4_xi0.save();
+        let mut c4_xi = xi.mul(&mut c4_xi0);
         c4_xi.save();
 
-        let c4 = c43.add(&mut c4_xi);
+        let c4 = c42.add(&mut c4_xi);
         c4
     }
 
-    fn mul_c5(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
+    fn mul_c5(&mut self, other: &mut Fp12) -> Fp2 {
         // c5 = cs0co5 + cs1co4 + cs2co3 + cs3co2 + cs4co1 + cs5co0
         let mut cs0co5 = self.c0.mul(&mut other.c5);
         cs0co5.save();
@@ -299,7 +299,6 @@ mod tests {
         bn256::{Fq, Fq12, Fq2},
         ff::Field,
     };
-    use num_bigint_dig::BigUint;
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;
     use p3_matrix::dense::RowMajorMatrix;
@@ -313,7 +312,7 @@ mod tests {
         Fq2::new(Fq::from_raw([9, 0, 0, 0]), Fq::one())
     }
 
-    fn generate_random_fp12() -> Fq12 {
+    fn generate_random_fq12() -> Fq12 {
         let mut rng = create_seeded_rng();
         Fq12::random(&mut rng)
     }
@@ -357,19 +356,20 @@ mod tests {
         let trace = RowMajorMatrix::new(row, width);
         let range_trace = range_checker.generate_trace();
 
-        assert_eq!(vars.len(), 154);
-        let r_c0 = evaluate_biguint(&vars[142], LIMB_BITS);
-        let r_c1 = evaluate_biguint(&vars[143], LIMB_BITS);
-        let r_c2 = evaluate_biguint(&vars[144], LIMB_BITS);
-        let r_c3 = evaluate_biguint(&vars[145], LIMB_BITS);
-        let r_c4 = evaluate_biguint(&vars[146], LIMB_BITS);
-        let r_c5 = evaluate_biguint(&vars[147], LIMB_BITS);
-        let r_c6 = evaluate_biguint(&vars[148], LIMB_BITS);
-        let r_c7 = evaluate_biguint(&vars[149], LIMB_BITS);
-        let r_c8 = evaluate_biguint(&vars[150], LIMB_BITS);
-        let r_c9 = evaluate_biguint(&vars[151], LIMB_BITS);
-        let r_c10 = evaluate_biguint(&vars[152], LIMB_BITS);
-        let r_c11 = evaluate_biguint(&vars[153], LIMB_BITS);
+        let len = vars.len();
+        // assert_eq!(vars.len(), 154);
+        let r_c0 = evaluate_biguint(&vars[len - 12], LIMB_BITS);
+        let r_c1 = evaluate_biguint(&vars[len - 11], LIMB_BITS);
+        let r_c2 = evaluate_biguint(&vars[len - 10], LIMB_BITS);
+        let r_c3 = evaluate_biguint(&vars[len - 9], LIMB_BITS);
+        let r_c4 = evaluate_biguint(&vars[len - 8], LIMB_BITS);
+        let r_c5 = evaluate_biguint(&vars[len - 7], LIMB_BITS);
+        let r_c6 = evaluate_biguint(&vars[len - 6], LIMB_BITS);
+        let r_c7 = evaluate_biguint(&vars[len - 5], LIMB_BITS);
+        let r_c8 = evaluate_biguint(&vars[len - 4], LIMB_BITS);
+        let r_c9 = evaluate_biguint(&vars[len - 3], LIMB_BITS);
+        let r_c10 = evaluate_biguint(&vars[len - 2], LIMB_BITS);
+        let r_c11 = evaluate_biguint(&vars[len - 1], LIMB_BITS);
         let exp_r_c0_c0_c0 = bn254_fq_to_biguint(&r_fq12.c0.c0.c0);
         let exp_r_c0_c0_c1 = bn254_fq_to_biguint(&r_fq12.c0.c0.c1);
         let exp_r_c0_c1_c0 = bn254_fq_to_biguint(&r_fq12.c0.c1.c0);
@@ -382,6 +382,15 @@ mod tests {
         let exp_r_c1_c1_c1 = bn254_fq_to_biguint(&r_fq12.c1.c1.c1);
         let exp_r_c1_c2_c0 = bn254_fq_to_biguint(&r_fq12.c1.c2.c0);
         let exp_r_c1_c2_c1 = bn254_fq_to_biguint(&r_fq12.c1.c2.c1);
+        println!("r_c0:           {}", r_c0);
+        println!("exp_r_c0_c0_c0: {}", exp_r_c0_c0_c0);
+        println!("r_c1:           {}", r_c1);
+        println!("exp_r_c0_c0_c1: {}", exp_r_c0_c0_c1);
+        println!("r_c2:           {}", r_c2);
+        println!("exp_r_c0_c1_c0: {}", exp_r_c0_c1_c0);
+        println!("r_c3:           {}", r_c3);
+        println!("exp_r_c0_c1_c1: {}", exp_r_c0_c1_c1);
+
         assert_eq!(r_c0, exp_r_c0_c0_c0);
         assert_eq!(r_c1, exp_r_c0_c0_c1);
         assert_eq!(r_c2, exp_r_c0_c1_c0);
@@ -404,34 +413,35 @@ mod tests {
 
     // #[test]
     // fn test_fp12_add() {
-    //     let x = generate_random_fp12();
-    //     let y = generate_random_fp12();
+    //     let x = generate_random_fq12();
+    //     let y = generate_random_fq12();
     //     run_fp12_test_add(x, y, Fp12::add, |x, y| x + y, true);
     // }
 
     // #[test]
     // fn test_fp12_sub() {
-    //     let x = generate_random_fp12();
-    //     let y = generate_random_fp12();
+    //     let x = generate_random_fq12();
+    //     let y = generate_random_fq12();
     //     run_fp12_test_add(x, y, Fp12::sub, |x, y| x - y, true);
     // }
 
     #[test]
     fn test_fp12_mul() {
-        let x = generate_random_fp12();
-        let y = generate_random_fp12();
+        let x = generate_random_fq12();
+        let y = generate_random_fq12();
         // let one = Fq12::one();
         // let two = one + one;
         // let three = one + two;
-        // let x = two;
+        // let four = two + two;
+        // let x = four;
         // let y = three;
         run_fp12_test_mul(x, y, Fp12::mul, |x, y| x * y, true);
     }
 
     // #[test]
     // fn test_fp12_div() {
-    // let x = generate_random_fp12();
-    // let y = generate_random_fp12();
+    // let x = generate_random_fq12();
+    // let y = generate_random_fq12();
     // let xi = bn254_xi();
     //     test_fp12(x, y, Fp2::div, |x, y| x * y.invert().unwrap(), false);
     // }
