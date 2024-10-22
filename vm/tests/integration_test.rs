@@ -12,8 +12,8 @@ use rand::Rng;
 use stark_vm::{
     arch::{
         instructions::{
-            CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*, Keccak256Opcode::*,
-            Poseidon2Opcode::*, UsizeOpcode,
+            BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
+            Keccak256Opcode::*, Poseidon2Opcode::*, UsizeOpcode,
         },
         ExecutorName,
     },

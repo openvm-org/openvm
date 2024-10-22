@@ -37,9 +37,8 @@ use crate::{
     },
     kernels::{
         adapters::{
-            convert_adapter::ConvertAdapterChip,
-            native_adapter::{GenericNativeAdapterChip, NativeAdapterChip},
-            native_vec_heap_adapter::NativeVecHeapAdapterChip,
+            convert_adapter::ConvertAdapterChip, jump_native_adapter::JumpNativeAdapterChip,
+            native_adapter::NativeAdapterChip, native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
         branch_eq::KernelBranchEqChip,
@@ -227,7 +226,7 @@ impl VmConfig {
                 }
                 ExecutorName::BranchEqual => {
                     let chip = Rc::new(RefCell::new(KernelBranchEqChip::new(
-                        GenericNativeAdapterChip::<_, 2, 0>::new(
+                        JumpNativeAdapterChip::<_, 2, 0>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
