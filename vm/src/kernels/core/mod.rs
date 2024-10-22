@@ -38,7 +38,6 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
         LOADW2 | STOREW2 => 4,
         JAL => 1,
         BEQ | BNE => 2,
-        TERMINATE => 0,
         PUBLISH => 2,
         FAIL => 0,
         PRINTF => 1,

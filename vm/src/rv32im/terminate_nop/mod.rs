@@ -15,7 +15,7 @@ use afs_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::{Rv32TerminateNopOpcode, UsizeOpcode};
+use axvm_instructions::{Rv32NopOpcode, UsizeOpcode};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -97,7 +97,7 @@ impl<F> Rv32TerminateNopChip<F> {
         Self {
             air: Rv32TerminateNopAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                nop_opcode: offset + Rv32TerminateNopOpcode::NOP.as_usize(),
+                nop_opcode: offset + Rv32NopOpcode::NOP.as_usize(),
             },
             rows: vec![],
             offset,
@@ -112,25 +112,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32TerminateNopChip<F> {
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = Rv32TerminateNopOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32NopOpcode::from_usize(opcode - self.offset);
         self.rows.push(Rv32TerminateNopCols {
             pc: F::from_canonical_u32(from_state.pc),
             timestamp: F::from_canonical_u32(from_state.timestamp),
-            flag: F::from_bool(local_opcode_index == Rv32TerminateNopOpcode::TERMINATE)
-                + F::from_bool(local_opcode_index == Rv32TerminateNopOpcode::NOP) * F::two(),
+            flag: F::from_bool(local_opcode_index == Rv32NopOpcode::NOP),
         });
-        match local_opcode_index {
-            Rv32TerminateNopOpcode::NOP => {
-                Ok(ExecutionState::new(from_state.pc + 4, from_state.timestamp))
-            }
-            Rv32TerminateNopOpcode::TERMINATE => {
-                Ok(ExecutionState::new(from_state.pc, from_state.timestamp))
-            }
-        }
+        Ok(ExecutionState::new(from_state.pc + 4, from_state.timestamp))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        let local_opcode_index = Rv32TerminateNopOpcode::from_usize(opcode - self.offset);
+        let local_opcode_index = Rv32NopOpcode::from_usize(opcode - self.offset);
         format!("{local_opcode_index:?}")
     }
 }

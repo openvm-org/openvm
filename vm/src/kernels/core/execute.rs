@@ -137,8 +137,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                     next_pc = (F::from_canonical_u32(pc) + c).as_canonical_u32();
                 }
             }
-            TERMINATE | NOP => {
-                next_pc = pc;
+            NOP => {
+                next_pc = pc + 1;
             }
             PUBLISH => {
                 let public_value_index = read!(d, a).as_canonical_u64() as usize;
@@ -298,7 +298,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         // Update Core chip state with all changes from this segment.
         self.set_current_state(CoreState {
             pc: next_pc,
-            is_done: local_opcode_index == TERMINATE,
+            is_done: false, // TODO: replace CoreState with a simple pc?
         });
 
         Ok(ExecutionState::new(next_pc, timestamp))

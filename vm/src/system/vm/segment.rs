@@ -154,6 +154,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let opcode = instruction.opcode;
             let prev_trace_cells = self.current_trace_cells();
 
+            if opcode == TerminateOpcode::TERMINATE.with_default_offset() {
+                self.chip_set
+                    .connector_chip
+                    .end(ExecutionState::new(pc, timestamp));
+                break;
+            }
+
             // runtime only instruction handling
             // FIXME: assumes CoreOpcode has offset 0:
             if opcode == CoreOpcode::FAIL as usize {
@@ -216,7 +223,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                             now_value - prev_value;
                     }
                 }
-                if opcode == CoreOpcode::TERMINATE as usize {
+                if opcode == TerminateOpcode::TERMINATE.with_default_offset() {
                     self.update_chip_metrics();
                     // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
                     collect_metrics = false;
@@ -224,11 +231,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     metrics::counter!("total_cells_used")
                         .absolute(now_trace_cells.into_values().sum::<usize>() as u64);
                 }
-            }
-            if opcode == CoreOpcode::TERMINATE as usize
-                || opcode == Rv32TerminateNopOpcode::TERMINATE.with_default_offset()
-            {
-                break;
             }
             if self.should_segment() {
                 break;
