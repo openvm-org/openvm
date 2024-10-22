@@ -62,6 +62,16 @@ pub enum CoreOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x080]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum PublishOpcode {
+    PUBLISH,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0x100]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
