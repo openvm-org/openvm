@@ -17,7 +17,7 @@ use p3_maybe_rayon::prelude::*;
 
 use super::IsLessThanIo;
 use crate::{
-    is_less_than::IsLessThanAir,
+    is_less_than::IsLtSubAir,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
@@ -36,7 +36,7 @@ pub struct IsLessThanCols<T> {
 /// Note that this air has no const generics. The parameters such as `max_bits, decomp_limbs` are all
 /// configured in the constructor at runtime.
 #[derive(Clone, Copy)]
-pub struct IsLtTestAir(pub IsLessThanAir);
+pub struct IsLtTestAir(pub IsLtSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}
@@ -71,7 +71,7 @@ impl IsLessThanChip {
     pub fn new(max_bits: usize, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         let bus = range_checker.bus();
         Self {
-            air: IsLtTestAir(IsLessThanAir::new(bus, max_bits)),
+            air: IsLtTestAir(IsLtSubAir::new(bus, max_bits)),
             range_checker,
             pairs: vec![],
         }

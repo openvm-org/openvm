@@ -29,9 +29,9 @@ pub struct IsEqArrayAuxCols<T, const NUM: usize> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct IsEqArrayAir<const NUM: usize>;
+pub struct IsEqArraySubAir<const NUM: usize>;
 
-impl<AB: AirBuilder, const NUM: usize> SubAir<AB> for IsEqArrayAir<NUM> {
+impl<AB: AirBuilder, const NUM: usize> SubAir<AB> for IsEqArraySubAir<NUM> {
     /// `(io, diff_inv_marker)`
     type AirContext<'a> = (IsEqArrayIo<AB::Expr, NUM>, [AB::Var; NUM]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
 
@@ -57,7 +57,7 @@ impl<AB: AirBuilder, const NUM: usize> SubAir<AB> for IsEqArrayAir<NUM> {
     }
 }
 
-impl<F: Field, const NUM: usize> TraceSubRowGenerator<F> for IsEqArrayAir<NUM> {
+impl<F: Field, const NUM: usize> TraceSubRowGenerator<F> for IsEqArraySubAir<NUM> {
     /// (x, y)
     type TraceContext<'a> = (&'a [F; NUM], &'a [F; NUM]);
     /// (diff_inv_marker, out)

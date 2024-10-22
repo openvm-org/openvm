@@ -62,13 +62,13 @@ impl<T> IsLessThanIo<T> {
 /// The expected max constraint degree of `eval` is
 ///     deg(count) + max(1, deg(x), deg(y))
 ///
-/// N.B.: AssertLessThanAir could be implemented by directly passing through
-/// to IsLessThanAir with `out = AB::Expr::one()`. The only additional
+/// N.B.: AssertLtSubAir could be implemented by directly passing through
+/// to IsLtSubAir with `out = AB::Expr::one()`. The only additional
 /// constraint in this air is `assert_bool(io.out)`. However since both Airs
 /// are fundamental and the constraints are simple, we opt to keep the two
 /// versions separate.
 #[derive(Copy, Clone, Debug)]
-pub struct IsLessThanAir {
+pub struct IsLtSubAir {
     /// The bus for sends to range chip
     pub bus: VariableRangeCheckerBus,
     /// The maximum number of bits for the numbers to compare
@@ -81,7 +81,7 @@ pub struct IsLessThanAir {
     pub decomp_limbs: usize,
 }
 
-impl IsLessThanAir {
+impl IsLtSubAir {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
         let decomp_limbs = max_bits.div_ceil(bus.range_max_bits);
         Self {
@@ -159,7 +159,7 @@ impl IsLessThanAir {
     }
 }
 
-impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
+impl<AB: InteractionBuilder> SubAir<AB> for IsLtSubAir {
     type AirContext<'a> = (IsLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
 
     // constrain that out == (x < y) when count != 0
@@ -178,12 +178,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
     }
 }
 
-/// The same subair as [IsLessThanAir] except that non-range check
+/// The same subair as [IsLtSubAir] except that non-range check
 /// constraints are not imposed on the last row.
 /// Intended use case is for asserting less than between entries in
 /// adjacent rows.
 #[derive(Clone, Copy, Debug)]
-pub struct IsLtWhenTransitionAir(pub IsLessThanAir);
+pub struct IsLtWhenTransitionAir(pub IsLtSubAir);
 
 impl<AB: InteractionBuilder> SubAir<AB> for IsLtWhenTransitionAir {
     type AirContext<'a> = (IsLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
@@ -216,7 +216,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLtWhenTransitionAir {
     }
 }
 
-impl<F: Field> TraceSubRowGenerator<F> for IsLessThanAir {
+impl<F: Field> TraceSubRowGenerator<F> for IsLtSubAir {
     /// `(range_checker, x, y)`
     type TraceContext<'a> = (&'a VariableRangeCheckerChip, u32, u32);
     /// `(lower_decomp, out)`

@@ -29,7 +29,7 @@ pub struct IsLtArrayCols<T, const NUM: usize, const AUX_LEN: usize> {
 }
 
 #[derive(Clone, Copy)]
-pub struct IsLtArrayTestAir<const NUM: usize, const AUX_LEN: usize>(IsLtArrayAir<NUM>);
+pub struct IsLtArrayTestAir<const NUM: usize, const AUX_LEN: usize>(IsLtArraySubAir<NUM>);
 
 impl<F: Field, const NUM: usize, const AUX_LEN: usize> BaseAirWithPublicValues<F>
     for IsLtArrayTestAir<NUM, AUX_LEN>
@@ -80,7 +80,7 @@ pub struct IsLtArrayChip<const NUM: usize, const AUX_LEN: usize> {
 
 impl<const NUM: usize, const AUX_LEN: usize> IsLtArrayChip<NUM, AUX_LEN> {
     pub fn new(max_bits: usize, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
-        let air = IsLtArrayTestAir(IsLtArrayAir::new(range_checker.bus(), max_bits));
+        let air = IsLtArrayTestAir(IsLtArraySubAir::new(range_checker.bus(), max_bits));
         Self {
             air,
             range_checker,

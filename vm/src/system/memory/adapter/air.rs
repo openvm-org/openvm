@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, mem::size_of};
 
 use afs_primitives::{
-    is_less_than::{IsLessThanAir, IsLessThanIo},
+    is_less_than::{IsLessThanIo, IsLtSubAir},
     SubAir,
 };
 use afs_stark_backend::{
@@ -18,7 +18,7 @@ use crate::system::memory::{
 
 pub struct AccessAdapterAir<const N: usize> {
     pub memory_bus: MemoryBus,
-    pub lt_air: IsLessThanAir,
+    pub lt_air: IsLtSubAir,
 }
 
 impl<T, const N: usize> BaseAirWithPublicValues<T> for AccessAdapterAir<N> {}

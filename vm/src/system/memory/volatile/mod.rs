@@ -6,7 +6,9 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::{
-    is_less_than_array::{IsLtArrayAir, IsLtArrayAuxCols, IsLtArrayIo, IsLtArrayWhenTransitionAir},
+    is_less_than_array::{
+        IsLtArrayAuxCols, IsLtArrayIo, IsLtArraySubAir, IsLtArrayWhenTransitionAir,
+    },
     utils::implies,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
@@ -61,7 +63,7 @@ impl VolatileBoundaryAir {
         range_bus: VariableRangeCheckerBus,
     ) -> Self {
         let addr_lt_air =
-            IsLtArrayAir::<ADDR_ELTS>::new(range_bus, addr_space_max_bits.max(pointer_max_bits))
+            IsLtArraySubAir::<ADDR_ELTS>::new(range_bus, addr_space_max_bits.max(pointer_max_bits))
                 .when_transition();
         Self {
             memory_bus,

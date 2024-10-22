@@ -1,6 +1,6 @@
 use afs_primitives::{
-    assert_less_than::{AssertLessThanAir, AssertLessThanIo},
-    is_zero::{IsZeroAir, IsZeroIo},
+    assert_less_than::{AssertLessThanIo, AssertLtSubAir},
+    is_zero::{IsZeroIo, IsZeroSubAir},
     utils::not,
     var_range::VariableRangeCheckerBus,
     SubAir,
@@ -21,9 +21,9 @@ use crate::{
 };
 
 /// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will be decomposed into)
-/// for the `AssertLessThanAir` in the `MemoryOfflineChecker`.
+/// for the `AssertLtSubAir` in the `MemoryOfflineChecker`.
 /// Warning: This requires that (clk_max_bits + decomp - 1) / decomp = AUX_LEN
-///         in MemoryOfflineChecker (or whenever AssertLessThanAir is used)
+///         in MemoryOfflineChecker (or whenever AssertLtSubAir is used)
 pub(crate) const AUX_LEN: usize = 2;
 
 /// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory operations (read/write).
@@ -193,7 +193,7 @@ pub struct MemoryReadOrImmediateOperation<'a, T, V> {
 }
 
 /// The max degree of constraints is:
-/// IsZeroAir.subair_eval:
+/// IsZeroSubAir.subair_eval:
 ///         deg(enabled) + max(deg(address.address_space) + deg(aux.is_immediate),
 ///                           deg(address.address_space) + deg(aux.is_zero_aux))
 /// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
@@ -214,7 +214,7 @@ impl<'a, F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'a,
                 self.aux.is_immediate.into(),
                 enabled.clone(),
             );
-            IsZeroAir.eval(builder, (is_zero_io, self.aux.is_zero_aux));
+            IsZeroSubAir.eval(builder, (is_zero_io, self.aux.is_zero_aux));
         }
         // When `is_immediate`, the data should be the pointer value.
         builder
@@ -288,7 +288,7 @@ impl<'a, T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperati
 #[derive(Clone, Copy, Debug)]
 struct MemoryOfflineChecker {
     memory_bus: MemoryBus,
-    timestamp_lt_air: AssertLessThanAir,
+    timestamp_lt_air: AssertLtSubAir,
 }
 
 impl MemoryOfflineChecker {
@@ -296,7 +296,7 @@ impl MemoryOfflineChecker {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp);
         Self {
             memory_bus,
-            timestamp_lt_air: AssertLessThanAir::new(range_bus, clk_max_bits),
+            timestamp_lt_air: AssertLtSubAir::new(range_bus, clk_max_bits),
         }
     }
 

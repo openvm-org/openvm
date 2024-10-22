@@ -70,7 +70,7 @@ pub struct LessThanAuxCols<T, const AUX_LEN: usize> {
 /// The expected max constraint degree of `eval` is
 ///     deg(count) + max(1, deg(x), deg(y))
 #[derive(Copy, Clone, Debug)]
-pub struct AssertLessThanAir {
+pub struct AssertLtSubAir {
     /// The bus for sends to range chip
     pub bus: VariableRangeCheckerBus,
     /// The maximum number of bits for the numbers to compare
@@ -86,7 +86,7 @@ pub struct AssertLessThanAir {
     pub decomp_limbs: usize,
 }
 
-impl AssertLessThanAir {
+impl AssertLtSubAir {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
         let decomp_limbs = max_bits.div_ceil(bus.range_max_bits);
         Self {
@@ -160,7 +160,7 @@ impl AssertLessThanAir {
     }
 }
 
-impl<AB: InteractionBuilder> SubAir<AB> for AssertLessThanAir {
+impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
     type AirContext<'a> = (AssertLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
 
     // constrain that x < y
@@ -179,12 +179,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLessThanAir {
     }
 }
 
-/// The same subair as [AssertLessThanAir] except that non-range check
+/// The same subair as [AssertLtSubAir] except that non-range check
 /// constraints are not imposed on the last row.
 /// Intended use case is for asserting less than between entries in
 /// adjacent rows.
 #[derive(Clone, Copy, Debug)]
-pub struct AssertLtWhenTransitionAir(pub AssertLessThanAir);
+pub struct AssertLtWhenTransitionAir(pub AssertLtSubAir);
 
 impl<AB: InteractionBuilder> SubAir<AB> for AssertLtWhenTransitionAir {
     type AirContext<'a> = (AssertLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
@@ -212,7 +212,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtWhenTransitionAir {
     }
 }
 
-impl<F: Field> TraceSubRowGenerator<F> for AssertLessThanAir {
+impl<F: Field> TraceSubRowGenerator<F> for AssertLtSubAir {
     /// (range_checker, x, y)
     // x, y are u32 because memory records are storing u32 and there would be needless conversions. It also prevents a F: PrimeField32 trait bound.
     type TraceContext<'a> = (&'a VariableRangeCheckerChip, u32, u32);

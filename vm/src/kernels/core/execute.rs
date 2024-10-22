@@ -1,7 +1,7 @@
 use std::{array, collections::BTreeMap};
 
 use afs_primitives::{
-    is_equal::{IsEqualAir, IsEqualAuxCols},
+    is_equal::{IsEqSubAir, IsEqualAuxCols},
     TraceSubRowGenerator,
 };
 use p3_field::PrimeField32;
@@ -239,7 +239,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
             let mut read0_equals_read1 = F::zero();
             let mut is_equal_aux = IsEqualAuxCols { inv: F::zero() };
-            IsEqualAir.generate_subrow(
+            IsEqSubAir.generate_subrow(
                 (read_cols[0].value, read_cols[1].value),
                 (&mut is_equal_aux.inv, &mut read0_equals_read1),
             );

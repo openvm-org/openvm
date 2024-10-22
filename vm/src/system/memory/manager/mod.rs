@@ -10,9 +10,9 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::{
-    assert_less_than::{AssertLessThanAir, LessThanAuxCols},
-    is_less_than::IsLessThanAir,
-    is_zero::IsZeroAir,
+    assert_less_than::{AssertLtSubAir, LessThanAuxCols},
+    is_less_than::IsLtSubAir,
+    is_zero::IsZeroSubAir,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     TraceSubRowGenerator,
 };
@@ -412,7 +412,7 @@ impl<F: PrimeField32> MemoryController<F> {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.mem_config.decomp);
         MemoryAuxColsFactory {
             range_checker: self.range_checker.clone(),
-            timestamp_lt_air: AssertLessThanAir::new(range_bus, self.mem_config.clk_max_bits),
+            timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.clk_max_bits),
             _marker: Default::default(),
         }
     }
@@ -435,7 +435,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn access_adapter_air<const N: usize>(&self) -> AccessAdapterAir<N> {
-        let lt_air = IsLessThanAir::new(self.range_checker.bus(), self.mem_config.clk_max_bits);
+        let lt_air = IsLtSubAir::new(self.range_checker.bus(), self.mem_config.clk_max_bits);
         AccessAdapterAir::<N> {
             memory_bus: self.memory_bus,
             lt_air,
@@ -663,7 +663,7 @@ impl<F: PrimeField32> MemoryController<F> {
 #[derive(Clone, Debug)]
 pub struct MemoryAuxColsFactory<T> {
     range_checker: Arc<VariableRangeCheckerChip>,
-    timestamp_lt_air: AssertLessThanAir,
+    timestamp_lt_air: AssertLtSubAir,
     _marker: PhantomData<T>,
 }
 
@@ -709,7 +709,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
     ) -> MemoryReadOrImmediateAuxCols<F> {
         let mut inv = F::zero();
         let mut is_zero = F::zero();
-        IsZeroAir.generate_subrow(read.address_space, (&mut inv, &mut is_zero));
+        IsZeroSubAir.generate_subrow(read.address_space, (&mut inv, &mut is_zero));
         let timestamp_lt_cols =
             self.generate_timestamp_lt_cols(read.prev_timestamp, read.timestamp);
 

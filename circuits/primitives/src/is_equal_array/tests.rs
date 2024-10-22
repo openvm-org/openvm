@@ -21,7 +21,7 @@ use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 use test_case::test_case;
 
-use super::{IsEqArrayAir, IsEqArrayAuxCols, IsEqArrayIo};
+use super::{IsEqArrayAuxCols, IsEqArrayIo, IsEqArraySubAir};
 use crate::{SubAir, TraceSubRowGenerator};
 
 #[repr(C)]
@@ -34,7 +34,7 @@ pub struct IsEqArrayCols<T, const N: usize> {
 }
 
 #[derive(Clone, Copy)]
-pub struct IsEqArrayTestAir<const N: usize>(IsEqArrayAir<N>);
+pub struct IsEqArrayTestAir<const N: usize>(IsEqArraySubAir<N>);
 
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for IsEqArrayTestAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for IsEqArrayTestAir<N> {}
@@ -65,11 +65,11 @@ pub struct IsEqArrayChip<F, const N: usize> {
 
 impl<F: Field, const N: usize> IsEqArrayChip<F, N> {
     pub fn new(pairs: Vec<([F; N], [F; N])>) -> Self {
-        let air = IsEqArrayTestAir(IsEqArrayAir);
+        let air = IsEqArrayTestAir(IsEqArraySubAir);
         Self { air, pairs }
     }
     pub fn generate_trace(self) -> RowMajorMatrix<F> {
-        let air: IsEqArrayAir<N> = IsEqArrayAir;
+        let air: IsEqArraySubAir<N> = IsEqArraySubAir;
         assert!(self.pairs.len().is_power_of_two());
         let width = IsEqArrayCols::<F, N>::width();
         let mut rows = vec![F::zero(); width * self.pairs.len()];

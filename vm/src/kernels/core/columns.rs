@@ -1,7 +1,7 @@
 use std::{array, borrow::Borrow, collections::BTreeMap};
 
 use afs_primitives::{
-    is_equal::{IsEqualAir, IsEqualAuxCols},
+    is_equal::{IsEqSubAir, IsEqualAuxCols},
     TraceSubRowGenerator,
 };
 use itertools::Itertools;
@@ -261,7 +261,7 @@ impl<F: PrimeField32> CoreAuxCols<F> {
 
         let mut is_equal_inv = F::zero();
         let mut read0_equals_read1 = F::one();
-        IsEqualAir.generate_subrow(
+        IsEqSubAir.generate_subrow(
             (F::zero(), F::zero()),
             (&mut is_equal_inv, &mut read0_equals_read1),
         );

@@ -15,7 +15,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use test_case::test_matrix;
 
-use super::{IsEqualAir, IsEqualIo};
+use super::{IsEqSubAir, IsEqualIo};
 use crate::{SubAir, TraceSubRowGenerator};
 
 #[repr(C)]
@@ -28,7 +28,7 @@ pub struct IsEqualCols<T> {
 }
 
 #[derive(Clone, Copy)]
-pub struct IsEqTestAir(pub IsEqualAir);
+pub struct IsEqTestAir(pub IsEqSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsEqTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsEqTestAir {}
@@ -60,7 +60,7 @@ pub struct IsEqualChip<F> {
 
 impl<F: Field> IsEqualChip<F> {
     pub fn generate_trace(self) -> RowMajorMatrix<F> {
-        let air = IsEqualAir;
+        let air = IsEqSubAir;
         assert!(self.pairs.len().is_power_of_two());
         let width = IsEqualCols::<F>::width();
         let mut rows = vec![F::zero(); width * self.pairs.len()];
@@ -92,7 +92,7 @@ fn test_single_is_equal(x: u32, y: u32) {
     let trace = chip.generate_trace();
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![IsEqTestAir(IsEqualAir)],
+        any_rap_arc_vec![IsEqTestAir(IsEqSubAir)],
         vec![trace],
     )
     .expect("Verification failed");
@@ -120,7 +120,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
     disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![IsEqTestAir(IsEqualAir)],
+            any_rap_arc_vec![IsEqTestAir(IsEqSubAir)],
             vec![trace]
         )
         .err(),

@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use afs_primitives::{
-    is_equal::{IsEqualAir, IsEqualIo},
+    is_equal::{IsEqSubAir, IsEqualIo},
     SubAir,
 };
 use afs_stark_backend::{
@@ -315,7 +315,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             out: read0_equals_read1.into(),
             condition: AB::Expr::one(),
         };
-        IsEqualAir.eval(builder, (is_equal_io, is_equal_aux.inv));
+        IsEqSubAir.eval(builder, (is_equal_io, is_equal_aux.inv));
 
         // make sure program terminates or shards with NOP
         builder.when_last_row().assert_zero(

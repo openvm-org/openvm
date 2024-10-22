@@ -16,7 +16,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use test_case::test_case;
 
-use super::{IsZeroAir, IsZeroIo};
+use super::{IsZeroIo, IsZeroSubAir};
 use crate::{SubAir, TraceSubRowGenerator};
 
 #[repr(C)]
@@ -27,14 +27,14 @@ pub struct IsZeroCols<T> {
     pub inv: T,
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for IsZeroAir {}
-impl<F: Field> PartitionedBaseAir<F> for IsZeroAir {}
-impl<F: Field> BaseAir<F> for IsZeroAir {
+impl<F: Field> BaseAirWithPublicValues<F> for IsZeroSubAir {}
+impl<F: Field> PartitionedBaseAir<F> for IsZeroSubAir {}
+impl<F: Field> BaseAir<F> for IsZeroSubAir {
     fn width(&self) -> usize {
         IsZeroCols::<F>::width()
     }
 }
-impl<AB: AirBuilder> Air<AB> for IsZeroAir {
+impl<AB: AirBuilder> Air<AB> for IsZeroSubAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -52,7 +52,7 @@ pub struct IsZeroChip<F> {
 
 impl<F: Field> IsZeroChip<F> {
     pub fn generate_trace(self) -> RowMajorMatrix<F> {
-        let air = IsZeroAir;
+        let air = IsZeroSubAir;
         assert!(self.x.len().is_power_of_two());
         let width = IsZeroCols::<F>::width();
         let mut rows = vec![F::zero(); width * self.x.len()];
@@ -76,8 +76,11 @@ fn test_single_is_zero(x: u32) {
 
     assert_eq!(trace.get(0, 1), AbstractField::from_bool(x == 0));
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![IsZeroAir], vec![trace])
-        .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+        any_rap_arc_vec![IsZeroSubAir],
+        vec![trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test_case([0, 1, 2, 7], [1, 0, 0, 0] ; "0, 1, 2, 7 => 1, 0, 0, 0")]
@@ -99,8 +102,11 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
         );
     }
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![IsZeroAir], vec![trace])
-        .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+        any_rap_arc_vec![IsZeroSubAir],
+        vec![trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test_case(97 ; "97 => 0")]
@@ -115,7 +121,7 @@ fn test_single_is_zero_fail(x: u32) {
     disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![IsZeroAir],
+            any_rap_arc_vec![IsZeroSubAir],
             vec![trace]
         )
         .err(),
@@ -141,7 +147,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
         trace.row_mut(i)[1] = BabyBear::one() - trace.row_mut(i)[1];
         assert_eq!(
             BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-                any_rap_arc_vec![IsZeroAir],
+                any_rap_arc_vec![IsZeroSubAir],
                 vec![trace.clone()]
             )
             .err(),

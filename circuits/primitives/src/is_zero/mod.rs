@@ -27,9 +27,9 @@ pub struct IsZeroAuxCols<T> {
 
 /// An Air that constraints that checks if a number equals 0
 #[derive(Copy, Clone)]
-pub struct IsZeroAir;
+pub struct IsZeroSubAir;
 
-impl<AB: AirBuilder> SubAir<AB> for IsZeroAir {
+impl<AB: AirBuilder> SubAir<AB> for IsZeroSubAir {
     /// (io, inv)
     type AirContext<'a> = (IsZeroIo<AB::Expr>, AB::Var) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
 
@@ -44,7 +44,7 @@ impl<AB: AirBuilder> SubAir<AB> for IsZeroAir {
     }
 }
 
-impl<F: Field> TraceSubRowGenerator<F> for IsZeroAir {
+impl<F: Field> TraceSubRowGenerator<F> for IsZeroSubAir {
     /// `x`
     type TraceContext<'a> = F;
     /// `(inv, out)`

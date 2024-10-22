@@ -5,7 +5,7 @@ use p3_air::AirBuilder;
 use p3_field::{AbstractField, PrimeField32};
 
 use crate::{
-    is_less_than::{IsLessThanAir, LessThanAuxCols},
+    is_less_than::{IsLtSubAir, LessThanAuxCols},
     utils::not,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
@@ -79,19 +79,19 @@ impl<'a, T, const NUM: usize, const AUX_LEN: usize> From<&'a mut IsLtArrayAuxCol
 /// that all elements of both arrays `x, y` each have at most `max_bits` bits.
 ///
 /// The constraints will constrain a selector for the first index where `x[i] != y[i]` and then
-/// use [IsLessThanAir] on `x[i], y[i]`.
+/// use [IsLtSubAir] on `x[i], y[i]`.
 ///
 /// The expected max constraint degree of `eval` is
 ///     deg(count) + max(1, deg(x), deg(y))
 #[derive(Copy, Clone, Debug)]
-pub struct IsLtArrayAir<const NUM: usize> {
-    pub lt: IsLessThanAir,
+pub struct IsLtArraySubAir<const NUM: usize> {
+    pub lt: IsLtSubAir,
 }
 
-impl<const NUM: usize> IsLtArrayAir<NUM> {
+impl<const NUM: usize> IsLtArraySubAir<NUM> {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
         Self {
-            lt: IsLessThanAir::new(bus, max_bits),
+            lt: IsLtSubAir::new(bus, max_bits),
         }
     }
 
@@ -134,7 +134,7 @@ impl<const NUM: usize> IsLtArrayAir<NUM> {
         //   i is the first index where `x[i] != y[i]`. Constrains that `diff_val = y[i] - x[i]`.
         // - If `x == y`, then either
         //     - `prefix_sum = 0` and `out == 0` (below) or
-        //     - `prefix_sum = 1` and `diff_val = 0` (since all diff are zero). The IsLessThanAir
+        //     - `prefix_sum = 1` and `diff_val = 0` (since all diff are zero). The IsLtSubAir
         //       will enforce that `out = 0`.
 
         builder
@@ -147,7 +147,7 @@ impl<const NUM: usize> IsLtArrayAir<NUM> {
     }
 }
 
-impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArrayAir<NUM> {
+impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArraySubAir<NUM> {
     type AirContext<'a> = (IsLtArrayIo<AB::Expr, NUM>, IsLtArrayAuxColsRef<'a, AB::Var>) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
 
     fn eval<'a>(
@@ -164,11 +164,11 @@ impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArrayAir<NUM> 
     }
 }
 
-/// The same subair as [IsLtArrayAir] except that non-range check
+/// The same subair as [IsLtArraySubAir] except that non-range check
 /// constraints are not imposed on the last row.
 /// Intended use case is for asserting less than between entries in adjacent rows.
 #[derive(Copy, Clone, Debug)]
-pub struct IsLtArrayWhenTransitionAir<const NUM: usize>(pub IsLtArrayAir<NUM>);
+pub struct IsLtArrayWhenTransitionAir<const NUM: usize>(pub IsLtArraySubAir<NUM>);
 
 impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArrayWhenTransitionAir<NUM> {
     type AirContext<'a> = (IsLtArrayIo<AB::Expr, NUM>, IsLtArrayAuxColsRef<'a, AB::Var>) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
@@ -194,7 +194,7 @@ impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArrayWhenTrans
     }
 }
 
-impl<F: PrimeField32, const NUM: usize> TraceSubRowGenerator<F> for IsLtArrayAir<NUM> {
+impl<F: PrimeField32, const NUM: usize> TraceSubRowGenerator<F> for IsLtArraySubAir<NUM> {
     /// `(range_checker, x, y)`
     type TraceContext<'a> = (&'a VariableRangeCheckerChip, &'a [F], &'a [F]);
     /// `(aux, out)`
@@ -207,7 +207,7 @@ impl<F: PrimeField32, const NUM: usize> TraceSubRowGenerator<F> for IsLtArrayAir
         (range_checker, x, y): (&'a VariableRangeCheckerChip, &'a [F], &'a [F]),
         (aux, out): (IsLtArrayAuxColsMut<'a, F>, &'a mut F),
     ) {
-        tracing::trace!("IsLtArrayAir::generate_subrow x={:?}, y={:?}", x, y);
+        tracing::trace!("IsLtArraySubAir::generate_subrow x={:?}, y={:?}", x, y);
         let mut is_eq = true;
         *aux.diff_val = F::zero();
         for (x_i, y_i, diff_marker) in izip!(x, y, aux.diff_marker.iter_mut()) {

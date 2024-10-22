@@ -38,7 +38,7 @@ pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
 }
 
 #[derive(Clone, Copy)]
-pub struct AssertLtTestAir<const AUX_LEN: usize>(pub AssertLessThanAir);
+pub struct AssertLtTestAir<const AUX_LEN: usize>(pub AssertLtSubAir);
 
 impl<F: Field, const AUX_LEN: usize> BaseAirWithPublicValues<F> for AssertLtTestAir<AUX_LEN> {}
 impl<F: Field, const AUX_LEN: usize> PartitionedBaseAir<F> for AssertLtTestAir<AUX_LEN> {}
@@ -70,7 +70,7 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
     pub fn new(max_bits: usize, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         let bus = range_checker.bus();
         Self {
-            air: AssertLtTestAir(AssertLessThanAir::new(bus, max_bits)),
+            air: AssertLtTestAir(AssertLtSubAir::new(bus, max_bits)),
             range_checker,
             pairs: vec![],
         }
