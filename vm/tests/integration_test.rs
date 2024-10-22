@@ -314,7 +314,7 @@ fn test_vm_continuations() {
             let pvs = &air.1.raw.public_values;
 
             if air_name == "VmConnectorAir" {
-                assert_eq!(pvs.len(), 2);
+                assert_eq!(pvs.len(), 3);
 
                 // Check initial pc matches the previous final pc.
                 assert_eq!(

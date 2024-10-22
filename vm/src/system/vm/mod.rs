@@ -102,7 +102,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 pc,
                 segment.chip_set.connector_chip.boundary_states[1]
                     .unwrap()
-                    .pc
+                    .pc as u32
             );
 
             let config = mem::take(&mut segment.config);

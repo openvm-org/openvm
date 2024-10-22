@@ -26,7 +26,7 @@ pub struct VmConnectorAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
     fn num_public_values(&self) -> usize {
-        2
+        3
     }
 }
 impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
@@ -75,9 +75,14 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
 
         let initial_pc = builder.public_values()[0];
         let final_pc = builder.public_values()[1];
+        let exit_code = builder.public_values()[2];
 
         builder.when_transition().assert_eq(begin.pc, initial_pc);
         builder.when_transition().assert_eq(end.pc, final_pc);
+        builder.when_transition().assert_eq(
+            end.is_terminate * end.exit_code - (AB::Expr::one() - end.is_terminate),
+            exit_code,
+        );
 
         self.execution_bus.execute(
             builder,
@@ -98,7 +103,7 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
 #[derive(Debug)]
 pub struct VmConnectorChip<F: PrimeField32> {
     pub air: VmConnectorAir,
-    pub boundary_states: [Option<ConnectorCols<u32>>; 2],
+    pub boundary_states: [Option<ConnectorCols<i32>>; 2],
     _marker: PhantomData<F>,
 }
 
@@ -116,8 +121,8 @@ impl<F: PrimeField32> VmConnectorChip<F> {
 
     pub fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
-            pc: state.pc,
-            timestamp: state.timestamp,
+            pc: state.pc as i32,
+            timestamp: state.timestamp as i32,
             is_terminate: 0,
             exit_code: 0,
         });
@@ -126,10 +131,14 @@ impl<F: PrimeField32> VmConnectorChip<F> {
     pub fn end_if_not_yet(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
         if self.boundary_states[1].is_none() {
             self.boundary_states[1] = Some(ConnectorCols {
-                pc: state.pc,
-                timestamp: state.timestamp,
-                is_terminate: exit_code.is_some() as u32,
-                exit_code: exit_code.unwrap_or(0),
+                pc: state.pc as i32,
+                timestamp: state.timestamp as i32,
+                is_terminate: exit_code.is_some() as i32,
+                exit_code: if let Some(exit_code) = exit_code {
+                    exit_code as i32
+                } else {
+                    -1
+                },
             });
         }
     }
@@ -148,7 +157,15 @@ where
         let boundary_states = self
             .boundary_states
             .into_iter()
-            .map(|state| state.unwrap().map(Val::<SC>::from_canonical_u32))
+            .map(|state| {
+                state.unwrap().map(|x| {
+                    if x < 0 {
+                        -Val::<SC>::from_canonical_u32(-x as u32)
+                    } else {
+                        Val::<SC>::from_canonical_u32(x as u32)
+                    }
+                })
+            })
             .collect::<Vec<_>>();
 
         let trace = RowMajorMatrix::new(
@@ -158,7 +175,11 @@ where
                 .collect::<Vec<_>>(),
             self.trace_width(),
         );
-        let public_values = vec![boundary_states[0].pc, boundary_states[1].pc];
+        let public_values = vec![
+            boundary_states[0].pc,
+            boundary_states[1].pc,
+            boundary_states[1].exit_code,
+        ];
         AirProofInput::simple(Arc::new(self.air), trace, public_values)
     }
 }
