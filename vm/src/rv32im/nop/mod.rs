@@ -52,7 +52,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Rv32TerminateNopAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let Rv32TerminateNopCols {
+        let &Rv32TerminateNopCols {
             pc,
             timestamp,
             is_valid,
@@ -62,13 +62,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Rv32TerminateNopAir {
             .execute(
                 AB::Expr::from_canonical_usize(self.nop_opcode),
                 iter::empty::<AB::Expr>(),
-                ExecutionState::<AB::Expr>::new((*pc).into(), (*timestamp).into()),
-                ExecutionState::<AB::Expr>::new(
-                    (*pc).into() + AB::Expr::from_canonical_usize(4) * (*is_valid),
-                    (*timestamp).into(),
-                ),
+                ExecutionState::<AB::Expr>::new(pc, timestamp),
+                ExecutionState::<AB::Expr>::new(pc + AB::Expr::from_canonical_usize(4), timestamp),
             )
-            .eval(builder, (*is_valid).into());
+            .eval(builder, is_valid);
     }
 }
 
@@ -98,11 +95,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32TerminateNopChip<F> {
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = Rv32NopOpcode::from_usize(opcode - self.nop_opcode);
+        assert_eq!(opcode, self.nop_opcode);
         self.rows.push(Rv32TerminateNopCols {
             pc: F::from_canonical_u32(from_state.pc),
             timestamp: F::from_canonical_u32(from_state.timestamp),
-            is_valid: F::from_bool(local_opcode_index == Rv32NopOpcode::NOP),
+            is_valid: F::one(),
         });
         Ok(ExecutionState::new(from_state.pc + 4, from_state.timestamp))
     }

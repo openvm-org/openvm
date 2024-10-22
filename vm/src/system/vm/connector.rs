@@ -125,7 +125,6 @@ impl<F: PrimeField32> VmConnectorChip<F> {
 
     pub fn end_if_not_yet(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
         if self.boundary_states[1].is_none() {
-            dbg!(&state, &exit_code);
             self.boundary_states[1] = Some(ConnectorCols {
                 pc: state.pc,
                 timestamp: state.timestamp,

@@ -271,7 +271,7 @@ fn test_vm_continuations() {
         Instruction::from_isize(BNE.with_default_offset(), n, 0, -4, 0, 1),
         // publish [1]_1 as public value index [0]_0
         Instruction::from_isize(PUBLISH.with_default_offset(), 0, 1, 0, 0, 1),
-        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 1),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 1, 0, 0),
     ]);
     let expected_output = {
         let mut a = 0;
