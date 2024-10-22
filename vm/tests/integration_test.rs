@@ -726,7 +726,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         2,
         0,
         1,
-        1,
+        0,
     )); // skip fail
     instructions.push(Instruction::from_isize(
         FAIL.with_default_offset(),
