@@ -24,15 +24,15 @@ impl Fp2 {
 
     pub fn add(&mut self, other: &mut Fp2) -> Fp2 {
         Fp2 {
-            c0: self.c0.add(&mut other.c0),
-            c1: self.c1.add(&mut other.c1),
+            c0: &mut self.c0 + &mut other.c0,
+            c1: &mut self.c1 + &mut other.c1,
         }
     }
 
     pub fn sub(&mut self, other: &mut Fp2) -> Fp2 {
         Fp2 {
-            c0: self.c0.sub(&mut other.c0),
-            c1: self.c1.sub(&mut other.c1),
+            c0: &mut self.c0 - &mut other.c0,
+            c1: &mut self.c1 - &mut other.c1,
         }
     }
 
@@ -79,9 +79,42 @@ impl Fp2 {
 
     pub fn scalar_mul(&mut self, fp: &mut FieldVariable) -> Fp2 {
         Fp2 {
-            c0: self.c0.mul(fp),
-            c1: self.c1.mul(fp),
+            c0: &mut self.c0 * fp,
+            c1: &mut self.c1 * fp,
         }
+    }
+}
+
+use std::ops::{Add, Div, Mul, Sub};
+impl Add<&mut Fp2> for &mut Fp2 {
+    type Output = Fp2;
+
+    fn add(self, other: &mut Fp2) -> Self::Output {
+        Fp2::add(self, other)
+    }
+}
+
+impl Sub<&mut Fp2> for &mut Fp2 {
+    type Output = Fp2;
+
+    fn sub(self, other: &mut Fp2) -> Self::Output {
+        Fp2::sub(self, other)
+    }
+}
+
+impl Mul<&mut Fp2> for &mut Fp2 {
+    type Output = Fp2;
+
+    fn mul(self, other: &mut Fp2) -> Self::Output {
+        Fp2::mul(self, other)
+    }
+}
+
+impl Div<&mut Fp2> for &mut Fp2 {
+    type Output = Fp2;
+
+    fn div(self, other: &mut Fp2) -> Self::Output {
+        Fp2::div(self, other)
     }
 }
 
