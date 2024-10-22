@@ -41,6 +41,7 @@ impl<F: Field> BaseAir<F> for VmConnectorAir {
 }
 
 #[derive(Debug, Copy, Clone, AlignedBorrow)]
+#[repr(C)]
 pub struct ConnectorCols<T> {
     pub pc: T,
     pub timestamp: T,
@@ -128,19 +129,17 @@ impl<F: PrimeField32> VmConnectorChip<F> {
         });
     }
 
-    pub fn end_if_not_yet(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
-        if self.boundary_states[1].is_none() {
-            self.boundary_states[1] = Some(ConnectorCols {
-                pc: state.pc as i32,
-                timestamp: state.timestamp as i32,
-                is_terminate: exit_code.is_some() as i32,
-                exit_code: if let Some(exit_code) = exit_code {
-                    exit_code as i32
-                } else {
-                    -1
-                },
-            });
-        }
+    pub fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
+        self.boundary_states[1] = Some(ConnectorCols {
+            pc: state.pc as i32,
+            timestamp: state.timestamp as i32,
+            is_terminate: exit_code.is_some() as i32,
+            exit_code: if let Some(exit_code) = exit_code {
+                exit_code as i32
+            } else {
+                -1
+            },
+        });
     }
 }
 

@@ -142,7 +142,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
             if opcode == TerminateOpcode::TERMINATE.with_default_offset() {
                 self.did_terminate = true;
-                self.chip_set.connector_chip.end_if_not_yet(
+                self.chip_set.connector_chip.end(
                     ExecutionState::new(pc, timestamp),
                     Some(instruction.c.as_canonical_u32()),
                 );
@@ -214,13 +214,12 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
             }
             if self.should_segment() {
+                self.chip_set
+                    .connector_chip
+                    .end(ExecutionState::new(pc, timestamp), None);
                 break;
             }
         }
-
-        self.chip_set
-            .connector_chip
-            .end_if_not_yet(ExecutionState::new(pc, timestamp), None);
 
         self.streams = mem::take(&mut self.core_chip.borrow_mut().streams);
 
