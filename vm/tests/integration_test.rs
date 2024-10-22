@@ -13,7 +13,7 @@ use stark_vm::{
     arch::{
         instructions::{
             BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
-            Keccak256Opcode::*, Poseidon2Opcode::*, UsizeOpcode,
+            Keccak256Opcode::*, NativeBranchEqualOpcode, Poseidon2Opcode::*, UsizeOpcode,
         },
         ExecutorName,
     },
@@ -39,7 +39,9 @@ where
 }
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
-    VmConfig::core().add_default_executor(ExecutorName::FieldArithmetic)
+    VmConfig::core()
+        .add_default_executor(ExecutorName::FieldArithmetic)
+        .add_default_executor(ExecutorName::BranchEqual)
 }
 
 fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
@@ -108,7 +110,14 @@ fn test_vm_1() {
         // word[0]_1 <- word[n]_0
         Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
         // if word[0]_1 == 0 then pc += 3
-        Instruction::from_isize(BEQ.with_default_offset(), 0, 0, 3, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            0,
+            0,
+            3,
+            1,
+            0,
+        ),
         // word[0]_1 <- word[0]_1 - word[1]_0
         Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
         // word[2]_1 <- pc + 1, pc -= 2
@@ -140,7 +149,14 @@ fn test_vm_1_optional_air() {
         let instructions = vec![
             Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
             Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
-            Instruction::from_isize(BNE.with_default_offset(), 0, 0, -1, 1, 0),
+            Instruction::from_isize(
+                NativeBranchEqualOpcode(BNE).with_default_offset(),
+                0,
+                0,
+                -1,
+                1,
+                0,
+            ),
             Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
         ];
 
@@ -165,7 +181,14 @@ fn test_vm_1_optional_air() {
 fn test_vm_initial_memory() {
     // Program that fails if mem[(1, 0)] != 101.
     let program = Program::from_instructions(&[
-        Instruction::<BabyBear>::from_isize(BEQ.with_default_offset(), 0, 101, 2, 1, 0),
+        Instruction::<BabyBear>::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            0,
+            101,
+            2,
+            1,
+            0,
+        ),
         Instruction::<BabyBear>::from_isize(FAIL.with_default_offset(), 0, 0, 0, 0, 0),
         Instruction::<BabyBear>::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ]);
@@ -183,7 +206,8 @@ fn test_vm_initial_memory() {
             ..Default::default()
         },
         ..VmConfig::core()
-    };
+    }
+    .add_default_executor(ExecutorName::BranchEqual);
     let vm = VirtualMachine::new(config).with_initial_memory(initial_memory);
     air_test(vm, program);
 }
@@ -196,14 +220,22 @@ fn test_vm_1_persistent() {
         memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
         ..VmConfig::core()
     }
-    .add_default_executor(ExecutorName::FieldArithmetic);
+    .add_default_executor(ExecutorName::FieldArithmetic)
+    .add_default_executor(ExecutorName::BranchEqual);
     let pk = config.generate_pk(engine.keygen_builder());
 
     let n = 6;
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
         Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
-        Instruction::from_isize(BNE.with_default_offset(), 0, 0, -1, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            0,
+            0,
+            -1,
+            1,
+            0,
+        ),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
@@ -268,7 +300,14 @@ fn test_vm_continuations() {
         // [0]_1 <- [0]_1 + 1
         Instruction::large_from_isize(ADD.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
         // if [0]_1 != n, pc <- pc - 3
-        Instruction::from_isize(BNE.with_default_offset(), n, 0, -4, 0, 1),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            n,
+            0,
+            -4,
+            0,
+            1,
+        ),
         // publish [1]_1 as public value index [0]_0
         Instruction::from_isize(PUBLISH.with_default_offset(), 0, 1, 0, 0, 1),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 1),
@@ -293,7 +332,8 @@ fn test_vm_continuations() {
         },
         ..VmConfig::core()
     }
-    .add_default_executor(ExecutorName::FieldArithmetic);
+    .add_default_executor(ExecutorName::FieldArithmetic)
+    .add_default_executor(ExecutorName::BranchEqual);
 
     let vm = VirtualMachine::new(config).with_program_inputs(vec![(0, expected_output)]);
 
@@ -366,18 +406,35 @@ fn test_vm_without_field_arithmetic() {
         // word[0]_1 <- word[5]_0
         Instruction::from_isize(STOREW.with_default_offset(), 5, 0, 0, 0, 1),
         // if word[0]_1 != 4 then pc += 2
-        Instruction::from_isize(BNE.with_default_offset(), 0, 4, 3, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            0,
+            4,
+            3,
+            1,
+            0,
+        ),
         // word[2]_1 <- pc + 1, pc -= 2
         Instruction::from_isize(JAL.with_default_offset(), 2, -2, 0, 1, 0),
         // terminate
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= 1
-        Instruction::from_isize(BEQ.with_default_offset(), 0, 5, -1, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            0,
+            5,
+            -1,
+            1,
+            0,
+        ),
     ];
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(VirtualMachine::new(VmConfig::core()), program);
+    air_test(
+        VirtualMachine::new(VmConfig::core().add_default_executor(ExecutorName::BranchEqual)),
+        program,
+    );
 }
 
 #[test]
@@ -388,7 +445,14 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 3, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 0, 0, 0, 0, 2),
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 1, 0, 2),
-        Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            2,
+            0,
+            7,
+            1,
+            1,
+        ),
         Instruction::large_from_isize(ADD.with_default_offset(), 2, 2, 3, 1, 1, 1, 0),
         Instruction::from_isize(LOADW.with_default_offset(), 4, -2, 2, 1, 2),
         Instruction::from_isize(LOADW.with_default_offset(), 5, -1, 2, 1, 2),
@@ -419,7 +483,14 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 1, 0, 2),
         Instruction::debug(CT_END.with_default_offset(), "store"),
         Instruction::debug(CT_START.with_default_offset(), "total loop"),
-        Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 9, 1, 1), // Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            2,
+            0,
+            9,
+            1,
+            1,
+        ), // Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
         Instruction::large_from_isize(ADD.with_default_offset(), 2, 2, 3, 1, 1, 1, 0),
         Instruction::debug(CT_START.with_default_offset(), "inner loop"),
         Instruction::from_isize(LOADW.with_default_offset(), 4, -2, 2, 1, 2),
@@ -523,8 +594,22 @@ fn test_vm_hint() {
         Instruction::large_from_isize(ADD.with_default_offset(), 0, 44, 0, 1, 1, 1, 0),
         Instruction::from_isize(SHINTW.with_default_offset(), 0, 0, 0, 1, 2),
         Instruction::large_from_isize(ADD.with_default_offset(), 50, 50, 1, 1, 1, 0, 0),
-        Instruction::from_isize(BNE.with_default_offset(), 50, 38, 2013265917, 1, 1),
-        Instruction::from_isize(BNE.with_default_offset(), 50, 38, 2013265916, 1, 1),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            50,
+            38,
+            2013265917,
+            1,
+            1,
+        ),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            50,
+            38,
+            2013265916,
+            1,
+            1,
+        ),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
@@ -703,7 +788,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     // read expected result to check correctness
     for (i, expected_byte) in expected.into_iter().enumerate() {
         instructions.push(Instruction::from_isize(
-            BNE.with_default_offset(),
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
             dst + i as isize,
             expected_byte as isize,
             -(instructions.len() as isize) + 1, // jump to fail
@@ -739,7 +824,11 @@ fn test_vm_keccak() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(VmConfig::core().add_default_executor(ExecutorName::Keccak256)),
+        VirtualMachine::new(
+            VmConfig::core()
+                .add_default_executor(ExecutorName::Keccak256)
+                .add_default_executor(ExecutorName::BranchEqual),
+        ),
         program,
     );
 }
@@ -764,7 +853,11 @@ fn test_vm_keccak_non_full_round() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(VmConfig::core().add_default_executor(ExecutorName::Keccak256)),
+        VirtualMachine::new(
+            VmConfig::core()
+                .add_default_executor(ExecutorName::Keccak256)
+                .add_default_executor(ExecutorName::BranchEqual),
+        ),
         program,
     );
 }

@@ -37,7 +37,7 @@ use crate::{
     },
     kernels::{
         adapters::{
-            convert_adapter::ConvertAdapterChip, jump_native_adapter::JumpNativeAdapterChip,
+            branch_native_adapter::BranchNativeAdapterChip, convert_adapter::ConvertAdapterChip,
             native_adapter::NativeAdapterChip, native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
@@ -226,12 +226,12 @@ impl VmConfig {
                 }
                 ExecutorName::BranchEqual => {
                     let chip = Rc::new(RefCell::new(KernelBranchEqChip::new(
-                        JumpNativeAdapterChip::<_, 2, 0>::new(
+                        BranchNativeAdapterChip::<_>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchEqualCoreChip::new(offset),
+                        BranchEqualCoreChip::new(offset, 1usize),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -443,7 +443,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchEqualCoreChip::new(offset),
+                        BranchEqualCoreChip::new(offset, 4usize),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -832,9 +832,9 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CoreOpcode::default_offset(),
         ),
         ExecutorName::BranchEqual => (
-            BranchEqualOpcode::default_offset(),
+            NativeBranchEqualOpcode::default_offset(),
             BranchEqualOpcode::COUNT,
-            BranchEqualOpcode::default_offset(),
+            NativeBranchEqualOpcode::default_offset(),
         ),
         ExecutorName::FieldArithmetic => (
             FieldArithmeticOpcode::default_offset(),

@@ -57,6 +57,22 @@ pub enum CoreOpcode {
     CT_END,
 }
 
+pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
+
+impl UsizeOpcode for NativeBranchEqualOpcode {
+    fn default_offset() -> usize {
+        0x040
+    }
+
+    fn from_usize(value: usize) -> Self {
+        Self(BranchEqualOpcode::from_usize(value))
+    }
+
+    fn as_usize(&self) -> usize {
+        self.0.as_usize()
+    }
+}
+
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
