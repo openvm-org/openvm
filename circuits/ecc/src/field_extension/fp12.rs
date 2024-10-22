@@ -357,7 +357,6 @@ mod tests {
         let range_trace = range_checker.generate_trace();
 
         let len = vars.len();
-        // assert_eq!(vars.len(), 154);
         let r_c0 = evaluate_biguint(&vars[len - 12], LIMB_BITS);
         let r_c1 = evaluate_biguint(&vars[len - 11], LIMB_BITS);
         let r_c2 = evaluate_biguint(&vars[len - 10], LIMB_BITS);
@@ -382,14 +381,6 @@ mod tests {
         let exp_r_c1_c1_c1 = bn254_fq_to_biguint(&r_fq12.c1.c1.c1);
         let exp_r_c1_c2_c0 = bn254_fq_to_biguint(&r_fq12.c1.c2.c0);
         let exp_r_c1_c2_c1 = bn254_fq_to_biguint(&r_fq12.c1.c2.c1);
-        println!("r_c0:           {}", r_c0);
-        println!("exp_r_c0_c0_c0: {}", exp_r_c0_c0_c0);
-        println!("r_c1:           {}", r_c1);
-        println!("exp_r_c0_c0_c1: {}", exp_r_c0_c0_c1);
-        println!("r_c2:           {}", r_c2);
-        println!("exp_r_c0_c1_c0: {}", exp_r_c0_c1_c0);
-        println!("r_c3:           {}", r_c3);
-        println!("exp_r_c0_c1_c1: {}", exp_r_c0_c1_c1);
 
         assert_eq!(r_c0, exp_r_c0_c0_c0);
         assert_eq!(r_c1, exp_r_c0_c0_c1);
@@ -429,12 +420,6 @@ mod tests {
     fn test_fp12_mul() {
         let x = generate_random_fq12();
         let y = generate_random_fq12();
-        // let one = Fq12::one();
-        // let two = one + one;
-        // let three = one + two;
-        // let four = two + two;
-        // let x = four;
-        // let y = three;
         run_fp12_test_mul(x, y, Fp12::mul, |x, y| x * y, true);
     }
 
