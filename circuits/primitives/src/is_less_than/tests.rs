@@ -11,7 +11,7 @@ use ax_sdk::{
 };
 use derive_new::new;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field};
+use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
@@ -76,7 +76,7 @@ impl IsLessThanChip {
             pairs: vec![],
         }
     }
-    pub fn generate_trace<F: Field>(self) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: PrimeField32>(self) -> RowMajorMatrix<F> {
         assert!(self.pairs.len().is_power_of_two());
         let width: usize = BaseAir::<F>::width(&self.air);
 
@@ -84,13 +84,13 @@ impl IsLessThanChip {
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {
-                let mut row = IsLessThanColsMut::from_mut_slice(row);
+                let row = IsLessThanColsMut::from_mut_slice(row);
                 *row.x = F::from_canonical_u32(x);
                 *row.y = F::from_canonical_u32(y);
-                *row.out = F::from_bool(x < y);
-                self.air
-                    .0
-                    .generate_subrow((&self.range_checker, x, y), &mut row.lower_decomp);
+                self.air.0.generate_subrow(
+                    (&self.range_checker, *row.x, *row.y),
+                    (row.lower_decomp, row.out),
+                );
             });
 
         RowMajorMatrix::new(rows, width)

@@ -1,6 +1,6 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;
-use p3_field::{AbstractField, Field};
+use p3_field::{AbstractField, PrimeField32};
 
 use crate::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
@@ -102,19 +102,22 @@ impl IsLessThanAir {
     /// FOR INTERNAL USE ONLY.
     /// This AIR is only sound if interactions are enabled
     ///
-    /// Constraints between `io` and `aux` are only enforced when `count != 0`.
-    /// This means `aux` can be all zero independent on what `io` is by setting `count = 0`.
+    /// Constraints between `io` and `aux` are only enforced when `condition != 0`.
+    /// This means `aux` can be all zero independent on what `io` is by setting `condition = 0`.
     #[inline(always)]
-    fn eval_without_range_checks<AB: AirBuilder>(
+    pub(crate) fn eval_without_range_checks<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        io: IsLessThanIo<AB::Expr>,
+        y_minus_x: impl Into<AB::Expr>,
+        out: impl Into<AB::Expr>,
+        condition: impl Into<AB::Expr>,
         lower_decomp: &[AB::Var],
     ) {
         assert_eq!(lower_decomp.len(), self.decomp_limbs);
         // this is the desired intermediate value (i.e. y - x - 1)
         // deg(intermed_val) = deg(io)
-        let intermed_val = io.y - io.x + AB::Expr::from_canonical_usize((1 << self.max_bits) - 1);
+        let intermed_val =
+            y_minus_x.into() + AB::Expr::from_canonical_usize((1 << self.max_bits) - 1);
 
         // Construct lower from lower_decomp:
         // - each limb of lower_decomp will be range checked
@@ -126,17 +129,16 @@ impl IsLessThanAir {
                 acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
             });
 
+        let out = out.into();
         // constrain that the lower + out * 2^max_bits is the correct intermediate sum
-        // note that the intermediate value will be >= 2^limb_bits if and only if x < y, and check_val will therefore be
-        // the correct value if and only if less_than is the indicator for whether x < y
-        let check_val = lower + io.out.clone() * AB::Expr::from_canonical_usize(1 << self.max_bits);
+        let check_val = lower + out.clone() * AB::Expr::from_canonical_usize(1 << self.max_bits);
         // the degree of this constraint is expected to be deg(count) + max(deg(intermed_val), deg(lower))
-        builder.when(io.count).assert_eq(intermed_val, check_val);
-        builder.assert_bool(io.out);
+        builder.when(condition).assert_eq(intermed_val, check_val);
+        builder.assert_bool(out);
     }
 
     #[inline(always)]
-    fn eval_range_checks<AB: InteractionBuilder>(
+    pub fn eval_range_checks<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         lower_decomp: &[AB::Var],
@@ -172,7 +174,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
     {
         // Note: every AIR that uses this sub-AIR must include the range checks for soundness
         self.eval_range_checks(builder, lower_decomp, io.count.clone());
-        self.eval_without_range_checks(builder, io, lower_decomp);
+        self.eval_without_range_checks(builder, io.y - io.x, io.out, io.count, lower_decomp);
     }
 }
 
@@ -204,39 +206,49 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLtWhenTransitionAir {
     {
         self.0
             .eval_range_checks(builder, lower_decomp, io.count.clone());
-        self.0
-            .eval_without_range_checks(&mut builder.when_transition(), io, lower_decomp);
+        self.0.eval_without_range_checks(
+            &mut builder.when_transition(),
+            io.y - io.x,
+            io.out,
+            io.count,
+            lower_decomp,
+        );
     }
 }
 
-impl<F: Field> TraceSubRowGenerator<F> for IsLessThanAir {
-    /// (range_checker, x, y)
-    type TraceContext<'a> = (&'a VariableRangeCheckerChip, u32, u32);
-    /// lower_decomp
-    type ColsMut<'a> = &'a mut [F];
+impl<F: PrimeField32> TraceSubRowGenerator<F> for IsLessThanAir {
+    /// `(range_checker, x, y)`
+    type TraceContext<'a> = (&'a VariableRangeCheckerChip, F, F);
+    /// `(lower_decomp, out)`
+    type ColsMut<'a> = (&'a mut [F], &'a mut F);
 
+    /// Only use this when `count != 0`.
     #[inline(always)]
     fn generate_subrow<'a>(
         &'a self,
-        (range_checker, x, y): (&'a VariableRangeCheckerChip, u32, u32),
-        lower_decomp: &'a mut [F],
+        (range_checker, x, y): (&'a VariableRangeCheckerChip, F, F),
+        (lower_decomp, out): (&'a mut [F], &'a mut F),
     ) {
         debug_assert_eq!(lower_decomp.len(), self.decomp_limbs);
+        let x = x.as_canonical_u32();
+        let y = y.as_canonical_u32();
+        debug_assert!(
+            x < (1 << self.max_bits),
+            "{x} has more than {} bits",
+            self.max_bits
+        );
+        debug_assert!(
+            y < (1 << self.max_bits),
+            "{y} has more than {} bits",
+            self.max_bits
+        );
+        *out = F::from_bool(x < y);
 
         // obtain the lower_bits
         let check_less_than = (1 << self.max_bits) + y - x - 1;
-        let mut lower_u32 = check_less_than & ((1 << self.max_bits) - 1);
+        let lower_u32 = check_less_than & ((1 << self.max_bits) - 1);
 
         // decompose lower_u32 into limbs and range check
-        let mask = (1 << self.range_max_bits()) - 1;
-        let mut bits_remaining = self.max_bits;
-        for limb in lower_decomp.iter_mut() {
-            let limb_u32 = lower_u32 & mask;
-            *limb = F::from_canonical_u32(limb_u32);
-            range_checker.add_count(limb_u32, bits_remaining.min(self.bus.range_max_bits));
-
-            lower_u32 >>= self.range_max_bits();
-            bits_remaining = bits_remaining.saturating_sub(self.range_max_bits());
-        }
+        range_checker.decompose(lower_u32, self.max_bits, lower_decomp);
     }
 }

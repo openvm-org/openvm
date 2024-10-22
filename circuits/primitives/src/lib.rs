@@ -15,6 +15,7 @@
 //! - [is_equal]
 //! - [is_equal_array]
 //! - [is_less_than]
+//! - [is_less_than_array]
 //! - [is_zero]
 
 pub mod assert_less_than;
@@ -23,6 +24,7 @@ pub mod bitwise_op_lookup;
 pub mod is_equal;
 pub mod is_equal_array;
 pub mod is_less_than;
+pub mod is_less_than_array;
 pub mod is_zero;
 pub mod range;
 pub mod range_gate;

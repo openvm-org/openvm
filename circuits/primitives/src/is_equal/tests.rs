@@ -28,7 +28,7 @@ pub struct IsEqualCols<T> {
 }
 
 #[derive(Clone, Copy)]
-pub struct IsEqTestAir(IsEqualAir);
+pub struct IsEqTestAir(pub IsEqualAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsEqTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsEqTestAir {}
@@ -93,7 +93,7 @@ fn test_single_is_equal(x: u32, y: u32) {
     let trace = chip.generate_trace();
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![IsEqTestAir],
+        any_rap_arc_vec![IsEqTestAir(IsEqualAir)],
         vec![trace],
     )
     .expect("Verification failed");
@@ -121,7 +121,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
     disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![IsEqTestAir],
+            any_rap_arc_vec![IsEqTestAir(IsEqualAir)],
             vec![trace]
         )
         .err(),

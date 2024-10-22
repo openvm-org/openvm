@@ -33,14 +33,17 @@ pub struct IsEqArrayCols<T, const N: usize> {
     aux: IsEqArrayAuxCols<T, N>,
 }
 
-impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for IsEqArrayAir<N> {}
-impl<F: Field, const N: usize> PartitionedBaseAir<F> for IsEqArrayAir<N> {}
-impl<F: Field, const N: usize> BaseAir<F> for IsEqArrayAir<N> {
+#[derive(Clone, Copy)]
+pub struct IsEqArrayTestAir<const N: usize>(IsEqArrayAir<N>);
+
+impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for IsEqArrayTestAir<N> {}
+impl<F: Field, const N: usize> PartitionedBaseAir<F> for IsEqArrayTestAir<N> {}
+impl<F: Field, const N: usize> BaseAir<F> for IsEqArrayTestAir<N> {
     fn width(&self) -> usize {
         IsEqArrayCols::<F, N>::width()
     }
 }
-impl<AB: AirBuilder, const N: usize> Air<AB> for IsEqArrayAir<N> {
+impl<AB: AirBuilder, const N: usize> Air<AB> for IsEqArrayTestAir<N> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -51,18 +54,18 @@ impl<AB: AirBuilder, const N: usize> Air<AB> for IsEqArrayAir<N> {
             out: local.out.into(),
             condition: AB::Expr::one(),
         };
-        SubAir::eval(self, builder, (io, local.aux.diff_inv_marker));
+        self.0.eval(builder, (io, local.aux.diff_inv_marker));
     }
 }
 
 pub struct IsEqArrayChip<F, const N: usize> {
-    air: IsEqArrayAir<N>,
+    air: IsEqArrayTestAir<N>,
     pairs: Vec<([F; N], [F; N])>,
 }
 
 impl<F: Field, const N: usize> IsEqArrayChip<F, N> {
     pub fn new(pairs: Vec<([F; N], [F; N])>) -> Self {
-        let air = IsEqArrayAir;
+        let air = IsEqArrayTestAir(IsEqArrayAir);
         Self { air, pairs }
     }
     pub fn generate_trace(self) -> RowMajorMatrix<F> {

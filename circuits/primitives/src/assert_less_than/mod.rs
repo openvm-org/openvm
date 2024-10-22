@@ -2,7 +2,7 @@ use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
 use derive_new::new;
 use p3_air::AirBuilder;
-use p3_field::{AbstractField, Field};
+use p3_field::{AbstractField, PrimeField32};
 
 use crate::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
@@ -212,34 +212,34 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtWhenTransitionAir {
     }
 }
 
-impl<F: Field> TraceSubRowGenerator<F> for AssertLessThanAir {
+impl<F: PrimeField32> TraceSubRowGenerator<F> for AssertLessThanAir {
     /// (range_checker, x, y)
-    type TraceContext<'a> = (&'a VariableRangeCheckerChip, u32, u32);
+    type TraceContext<'a> = (&'a VariableRangeCheckerChip, F, F);
     /// lower_decomp
     type ColsMut<'a> = &'a mut [F];
 
     #[inline(always)]
     fn generate_subrow<'a>(
         &'a self,
-        (range_checker, x, y): (&'a VariableRangeCheckerChip, u32, u32),
+        (range_checker, x, y): (&'a VariableRangeCheckerChip, F, F),
         lower_decomp: &'a mut [F],
     ) {
+        let x = x.as_canonical_u32();
+        let y = y.as_canonical_u32();
         debug_assert!(x < y, "assert {x} < {y} failed");
         debug_assert_eq!(lower_decomp.len(), self.decomp_limbs);
+        debug_assert!(
+            x < (1 << self.max_bits),
+            "{x} has more than {} bits",
+            self.max_bits
+        );
+        debug_assert!(
+            y < (1 << self.max_bits),
+            "{y} has more than {} bits",
+            self.max_bits
+        );
 
-        // Note: if x < y then lower_u32 should already have <= max_bits bits
-        let mut lower_u32 = y - x - 1;
-        debug_assert!(lower_u32 < (1 << self.max_bits));
-        // decompose lower_u32 into limbs and range check
-        let mask = (1 << self.range_max_bits()) - 1;
-        let mut bits_remaining = self.max_bits;
-        for limb in lower_decomp.iter_mut() {
-            let limb_u32 = lower_u32 & mask;
-            *limb = F::from_canonical_u32(limb_u32);
-            range_checker.add_count(limb_u32, bits_remaining.min(self.bus.range_max_bits));
-
-            lower_u32 >>= self.range_max_bits();
-            bits_remaining = bits_remaining.saturating_sub(self.range_max_bits());
-        }
+        // Note: if x < y then y - x - 1 should already have <= max_bits bits
+        range_checker.decompose(y - x - 1, self.max_bits, lower_decomp);
     }
 }

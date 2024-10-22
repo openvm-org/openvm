@@ -151,6 +151,23 @@ impl VariableRangeCheckerChip {
         }
         RowMajorMatrix::new(rows, NUM_VARIABLE_RANGE_COLS)
     }
+
+    /// Range checks that `value` is `bits` bits by decomposing into `limbs` where all but
+    /// last limb is `range_max_bits` bits. Assumes there are enough limbs.
+    pub(crate) fn decompose<F: Field>(&self, mut value: u32, bits: usize, limbs: &mut [F]) {
+        let mask = (1 << self.range_max_bits()) - 1;
+        let mut bits_remaining = bits;
+        for limb in limbs.iter_mut() {
+            let limb_u32 = value & mask;
+            *limb = F::from_canonical_u32(limb_u32);
+            self.add_count(limb_u32, bits_remaining.min(self.range_max_bits()));
+
+            value >>= self.range_max_bits();
+            bits_remaining = bits_remaining.saturating_sub(self.range_max_bits());
+        }
+        debug_assert_eq!(value, 0);
+        debug_assert_eq!(bits_remaining, 0);
+    }
 }
 
 impl<SC: StarkGenericConfig> Chip<SC> for VariableRangeCheckerChip
