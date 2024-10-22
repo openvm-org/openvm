@@ -254,7 +254,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             };
 
             let cols = CoreCols { io, aux };
-            self.rows.push(cols.flatten());
+            self.flatten_rows.extend(cols.flatten());
         }
 
         if local_opcode_index == TERMINATE {

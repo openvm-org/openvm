@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{iter, sync::Arc};
 
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -15,11 +15,14 @@ use super::{columns::CoreCols, CoreChip};
 impl<F: PrimeField32> CoreChip<F> {
     /// Pad with NOP rows.
     pub fn pad_rows(&mut self) {
-        let curr_height = self.rows.len();
-        let correct_height = self.rows.len().next_power_of_two();
-        for _ in 0..correct_height - curr_height {
-            self.rows.push(self.make_blank_row().flatten());
-        }
+        let curr_height = self.current_trace_height();
+        let padded_height = curr_height.next_power_of_two();
+        let blank_row = self.make_blank_row();
+        self.flatten_rows.extend(
+            iter::repeat(blank_row.flatten())
+                .take(padded_height - curr_height)
+                .flatten(),
+        );
     }
 
     /// This must be called for each blank row and results should never be cloned; see [CoreCols::nop_row].
@@ -39,8 +42,9 @@ where
     fn generate_air_proof_input(mut self) -> AirProofInput<SC> {
         self.pad_rows();
 
-        let trace = RowMajorMatrix::new(self.rows.concat(), CoreCols::<Val<SC>>::get_width());
-        AirProofInput::simple_no_pis(self.air(), trace)
+        let air = self.air();
+        let trace = RowMajorMatrix::new(self.flatten_rows, CoreCols::<Val<SC>>::get_width());
+        AirProofInput::simple_no_pis(air, trace)
     }
 }
 
@@ -49,7 +53,7 @@ impl<F: PrimeField32> ChipUsageGetter for CoreChip<F> {
         get_air_name(&self.air)
     }
     fn current_trace_height(&self) -> usize {
-        self.rows.len()
+        self.flatten_rows.len() / self.trace_width()
     }
     fn trace_width(&self) -> usize {
         BaseAir::<F>::width(&self.air)

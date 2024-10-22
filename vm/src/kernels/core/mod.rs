@@ -58,7 +58,7 @@ pub struct Streams<F> {
 #[derive(Debug)]
 pub struct CoreChip<F: PrimeField32> {
     pub air: CoreAir,
-    pub rows: Vec<Vec<F>>,
+    pub flatten_rows: Vec<F>,
     pub did_terminate: bool,
     pub memory_controller: MemoryControllerRef<F>,
 
@@ -82,7 +82,7 @@ impl<F: PrimeField32> CoreChip<F> {
                 memory_bridge,
                 offset,
             },
-            rows: vec![],
+            flatten_rows: vec![],
             did_terminate: false,
             memory_controller,
             streams: Default::default(),
