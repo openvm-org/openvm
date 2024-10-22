@@ -8,7 +8,7 @@ use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 use strum::{EnumCount, IntoEnumIterator};
 
-use super::{CoreAir, CoreChip, CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE};
+use super::{CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE};
 use crate::{
     arch::instructions::CoreOpcode,
     system::memory::{
@@ -69,10 +69,10 @@ impl<T: Clone> CoreIoCols<T> {
 }
 
 impl<T: Field> CoreIoCols<T> {
-    pub fn nop_row(pc: T) -> Self {
+    pub fn nop_row(pc: u32) -> Self {
         Self {
             timestamp: T::default(),
-            pc,
+            pc: T::from_canonical_u32(pc),
             opcode: T::from_canonical_usize(CoreOpcode::NOP as usize),
             a: T::default(),
             b: T::default(),
@@ -141,7 +141,6 @@ impl<T> CoreMemoryAccessCols<T> {
 #[derive(Clone, Debug)]
 pub struct CoreAuxCols<T> {
     pub operation_flags: BTreeMap<CoreOpcode, T>,
-    pub public_value_flags: Vec<T>,
     pub reads: [CoreMemoryAccessCols<T>; CORE_MAX_READS_PER_CYCLE],
     pub writes: [CoreMemoryAccessCols<T>; CORE_MAX_WRITES_PER_CYCLE],
     pub read0_equals_read1: T,
@@ -153,7 +152,7 @@ pub struct CoreAuxCols<T> {
 }
 
 impl<T: Clone> CoreAuxCols<T> {
-    pub fn from_slice(slc: &[T], core_air: &CoreAir) -> Self {
+    pub fn from_slice(slc: &[T]) -> Self {
         let mut start = 0;
         let mut end = CoreOpcode::COUNT;
         let operation_flags_vec = slc[start..end].to_vec();
@@ -161,10 +160,6 @@ impl<T: Clone> CoreAuxCols<T> {
         for (opcode, operation_flag) in CoreOpcode::iter().zip_eq(operation_flags_vec) {
             operation_flags.insert(opcode, operation_flag);
         }
-
-        start = end;
-        end += core_air.options.num_public_values;
-        let public_value_flags = slc[start..end].to_vec();
 
         let reads = array::from_fn(|_| {
             start = end;
@@ -199,7 +194,6 @@ impl<T: Clone> CoreAuxCols<T> {
 
         Self {
             operation_flags,
-            public_value_flags,
             reads,
             writes,
             read0_equals_read1: beq_check,
@@ -215,7 +209,6 @@ impl<T: Clone> CoreAuxCols<T> {
         for opcode in CoreOpcode::iter() {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
-        flattened.extend(self.public_value_flags.clone());
         flattened.extend(
             self.reads
                 .iter()
@@ -246,9 +239,8 @@ impl<T: Clone> CoreAuxCols<T> {
         flattened
     }
 
-    pub fn get_width(core_air: &CoreAir) -> usize {
+    pub fn get_width() -> usize {
         CoreOpcode::COUNT
-            + core_air.options.num_public_values
             + CORE_MAX_READS_PER_CYCLE
                 * (CoreMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width())
             + CORE_MAX_WRITES_PER_CYCLE
@@ -261,7 +253,7 @@ impl<T: Clone> CoreAuxCols<T> {
 
 impl<F: PrimeField32> CoreAuxCols<F> {
     // TODO[jpw]: padding row should be able to be just all 0s now. Remove this function.
-    pub fn nop_row(chip: &CoreChip<F>) -> Self {
+    pub fn nop_row(pc: u32) -> Self {
         let mut operation_flags = BTreeMap::new();
         for opcode in CoreOpcode::iter() {
             operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::NOP));
@@ -275,14 +267,13 @@ impl<F: PrimeField32> CoreAuxCols<F> {
         );
         Self {
             operation_flags,
-            public_value_flags: vec![F::zero(); chip.air.options.num_public_values],
             reads: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
             writes: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
             read0_equals_read1: F::one(),
             is_equal_aux: IsEqualAuxCols::new(is_equal_inv),
             reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
-            next_pc: F::from_canonical_u32(chip.state.pc),
+            next_pc: F::from_canonical_u32(pc),
         }
     }
 }
@@ -294,9 +285,9 @@ pub struct CoreCols<T> {
 }
 
 impl<T: Clone> CoreCols<T> {
-    pub fn from_slice(slc: &[T], core_air: &CoreAir) -> Self {
+    pub fn from_slice(slc: &[T]) -> Self {
         let io = CoreIoCols::<T>::from_slice(&slc[..CoreIoCols::<T>::get_width()]);
-        let aux = CoreAuxCols::<T>::from_slice(&slc[CoreIoCols::<T>::get_width()..], core_air);
+        let aux = CoreAuxCols::<T>::from_slice(&slc[CoreIoCols::<T>::get_width()..]);
 
         Self { io, aux }
     }
@@ -307,8 +298,8 @@ impl<T: Clone> CoreCols<T> {
         flattened
     }
 
-    pub fn get_width(core_air: &CoreAir) -> usize {
-        CoreIoCols::<T>::get_width() + CoreAuxCols::<T>::get_width(core_air)
+    pub fn get_width() -> usize {
+        CoreIoCols::<T>::get_width() + CoreAuxCols::<T>::get_width()
     }
 }
 
@@ -316,10 +307,10 @@ impl<F: PrimeField32> CoreCols<F> {
     /// This function mutates internal state of some chips. It should be called once for every
     /// NOP row---results should not be cloned.
     /// TODO[zach]: Make this less surprising, probably by not doing less-than checks on dummy rows.
-    pub fn nop_row(chip: &CoreChip<F>, pc: F) -> Self {
+    pub fn nop_row(pc: u32) -> Self {
         Self {
             io: CoreIoCols::<F>::nop_row(pc),
-            aux: CoreAuxCols::<F>::nop_row(chip),
+            aux: CoreAuxCols::<F>::nop_row(pc),
         }
     }
 }

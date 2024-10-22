@@ -49,6 +49,7 @@ use crate::{
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
+        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
     old::{
         alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
@@ -56,12 +57,13 @@ use crate::{
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
-            Rv32JalrAdapterChip, Rv32LoadStoreAdapter, Rv32MultAdapter, Rv32RdWriteAdapterChip,
-            Rv32VecHeapAdapterChip,
+            Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip, Rv32MultAdapterChip,
+            Rv32RdWriteAdapterChip, Rv32VecHeapAdapterChip,
         },
         base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
         branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
         branch_lt::{BranchLessThanCoreChip, Rv32BranchLessThanChip},
+        load_sign_extend::{LoadSignExtendCoreChip, Rv32LoadSignExtendChip},
         loadstore::{LoadStoreCoreChip, Rv32LoadStoreChip},
         new_divrem::{DivRemCoreChip, Rv32DivRemChip},
         new_lt::{LessThanCoreChip, Rv32LessThanChip},
@@ -158,9 +160,6 @@ impl VmConfig {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
-        let range_tuple_bus =
-            RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, [(1 << 8), 32 * (1 << 8)]);
-        let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
         let memory_controller = match self.memory_config.persistence_type {
             PersistenceType::Volatile => {
@@ -190,8 +189,24 @@ impl VmConfig {
         let mut required_executors: BTreeSet<_> = self.executors.clone().into_iter().collect();
         let mut chips = vec![];
 
+        let mul_u256_enabled = required_executors.contains(&ExecutorName::U256Multiplication);
+        let range_tuple_bus = RangeTupleCheckerBus::new(
+            RANGE_TUPLE_CHECKER_BUS,
+            [(1 << 8), if mul_u256_enabled { 32 } else { 8 } * (1 << 8)],
+        );
+        let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+
         // CoreChip is always required even if it's not explicitly specified.
         required_executors.insert(ExecutorName::Core);
+        // PublicValuesChip is required when num_public_values > 0.
+        if self.num_public_values > 0 {
+            // Raw public values are not supported when continuation is enabled.
+            assert_ne!(
+                self.memory_config.persistence_type,
+                PersistenceType::Persistent
+            );
+            required_executors.insert(ExecutorName::PublicValues);
+        }
         // We always put Poseidon2 chips in the end. So it will be initialized separately.
         let has_poseidon_chip = required_executors.contains(&ExecutorName::Poseidon2);
         if has_poseidon_chip {
@@ -211,11 +226,9 @@ impl VmConfig {
             match executor {
                 ExecutorName::Core => {
                     let core_chip = Rc::new(RefCell::new(CoreChip::new(
-                        self.core_options(),
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        0,
                         offset,
                     )));
                     for opcode in range {
@@ -252,6 +265,21 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::FieldExtension(chip));
+                }
+                ExecutorName::PublicValues => {
+                    let chip = Rc::new(RefCell::new(PublicValuesChip::new(
+                        NativeAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        PublicValuesCoreChip::new(self.num_public_values, offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::PublicValues(chip));
                 }
                 ExecutorName::Poseidon2 => {}
                 ExecutorName::Keccak256 => {
@@ -314,7 +342,11 @@ impl VmConfig {
                 }
                 ExecutorName::MultiplicationRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MultiplicationChip::new(
-                        Rv32MultAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32MultAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         MultiplicationCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_controller.clone(),
                     )));
@@ -325,8 +357,16 @@ impl VmConfig {
                 }
                 ExecutorName::MultiplicationHighRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32MulHChip::new(
-                        Rv32MultAdapter::new(execution_bus, program_bus, memory_controller.clone()),
-                        MulHCoreChip::new(range_tuple_checker.clone(), offset),
+                        Rv32MultAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        MulHCoreChip::new(
+                            byte_xor_chip.clone(),
+                            range_tuple_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -349,7 +389,11 @@ impl VmConfig {
                 }
                 ExecutorName::DivRemRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32DivRemChip::new(
-                        Rv32MultAdapter::new(execution_bus, program_bus, memory_controller.clone()),
+                        Rv32MultAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
                         DivRemCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_controller.clone(),
                     )));
@@ -388,7 +432,13 @@ impl VmConfig {
                 }
                 ExecutorName::LoadStoreRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LoadStoreChip::new(
-                        Rv32LoadStoreAdapter::new(range_checker.clone(), offset),
+                        Rv32LoadStoreAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
                         LoadStoreCoreChip::new(offset),
                         memory_controller.clone(),
                     )));
@@ -396,6 +446,23 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::LoadStoreRv32(chip));
+                }
+                ExecutorName::LoadSignExtendRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32LoadSignExtendChip::new(
+                        Rv32LoadStoreAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
+                        LoadSignExtendCoreChip::new(range_checker.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::LoadSignExtendRv32(chip));
                 }
                 ExecutorName::BranchEqualRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BranchEqualChip::new(
@@ -802,6 +869,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             FieldExtensionOpcode::COUNT,
             FieldExtensionOpcode::default_offset(),
         ),
+        ExecutorName::PublicValues => (
+            PublishOpcode::default_offset(),
+            PublishOpcode::COUNT,
+            PublishOpcode::default_offset(),
+        ),
         ExecutorName::Poseidon2 => (
             Poseidon2Opcode::default_offset(),
             Poseidon2Opcode::COUNT,
@@ -819,7 +891,12 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
         ),
         ExecutorName::LoadStoreRv32 => (
             Rv32LoadStoreOpcode::default_offset(),
-            Rv32LoadStoreOpcode::COUNT,
+            7,
+            Rv32LoadStoreOpcode::default_offset(),
+        ),
+        ExecutorName::LoadSignExtendRv32 => (
+            Rv32LoadStoreOpcode::default_offset() + 7,
+            2,
             Rv32LoadStoreOpcode::default_offset(),
         ),
         ExecutorName::JalLuiRv32 => (

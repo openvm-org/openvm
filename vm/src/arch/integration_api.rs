@@ -124,6 +124,11 @@ pub trait VmCoreChip<F: PrimeField32, I: VmAdapterInterface<F>> {
     /// The provided `row_slice` will have length equal to `self.air().width()`.
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record);
 
+    /// Returns a list of public values to publish.
+    fn generate_public_values(&self) -> Vec<F> {
+        vec![]
+    }
+
     fn air(&self) -> &Self::Air;
 }
 
@@ -283,7 +288,11 @@ where
                 );
                 self.core.generate_trace_row(core_row, record.2);
             });
-        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
+        AirProofInput::simple(
+            air,
+            RowMajorMatrix::new(values, width),
+            self.core.generate_public_values(),
+        )
     }
 }
 

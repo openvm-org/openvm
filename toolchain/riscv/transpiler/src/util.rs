@@ -59,7 +59,7 @@ pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instructio
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-        isize_to_field(dec_insn.imm as isize),
+        F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
         F::one(), // rd is a register
         F::two(), // we load from memory
         F::zero(),
@@ -93,7 +93,7 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-        isize_to_field(dec_insn.imm as isize),
+        F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
         F::one(),
         F::two(),
         F::zero(),

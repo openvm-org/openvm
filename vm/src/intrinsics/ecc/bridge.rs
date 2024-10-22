@@ -72,9 +72,9 @@ impl EcAddUnequalVmAir {
             .execute_and_increment_pc(
                 AB::Expr::from_canonical_usize(EccOpcode::EC_ADD_NE as usize + self.offset),
                 [
-                    io.p3.address.address,
-                    io.p1.address.address,
-                    io.p2.address.address,
+                    io.p3.address.pointer,
+                    io.p1.address.pointer,
+                    io.p2.address.pointer,
                     io.p1.address.address_space,
                     io.p1.data.address_space,
                 ],
@@ -133,8 +133,8 @@ impl EcDoubleVmAir {
             .execute_and_increment_pc(
                 AB::Expr::from_canonical_usize(EccOpcode::EC_DOUBLE as usize + self.offset),
                 [
-                    io.p2.address.address.into(),
-                    io.p1.address.address.into(),
+                    io.p2.address.pointer.into(),
+                    io.p1.address.pointer.into(),
                     AB::Expr::zero(),
                     io.p1.address.address_space.into(),
                     io.p1.data.address_space.into(),

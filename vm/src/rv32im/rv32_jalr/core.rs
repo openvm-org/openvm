@@ -218,6 +218,7 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+        assert!(self.range_checker_chip.range_max_bits() >= 16);
         let Instruction { opcode, c, .. } = *instruction;
         let local_opcode_index = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
 

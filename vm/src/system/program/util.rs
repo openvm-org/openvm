@@ -28,26 +28,12 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             max_segment_len: (1 << 25) - 100,
             ..Default::default()
         }
-        .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
-        .add_canonical_modulus(), // .add_default_executor(ExecutorName::Secp256k1AddUnequal)
-                                  // .add_default_executor(ExecutorName::Secp256k1Double),
+        .add_executor(ExecutorName::ArithmeticLogicUnit256)
+        .add_canonical_modulus(), // .add_executor(ExecutorName::Secp256k1AddUnequal)
+                                  // .add_executor(ExecutorName::Secp256k1Double),
     )
     .with_input_stream(input_stream);
     vm.execute(program).unwrap();
-}
-
-pub fn execute_program_with_public_values(
-    program: Program<BabyBear>,
-    input_stream: Vec<Vec<BabyBear>>,
-    public_values: &[(usize, BabyBear)],
-) {
-    let vm = VirtualMachine::new(VmConfig {
-        num_public_values: 4,
-        ..Default::default()
-    })
-    .with_input_stream(input_stream)
-    .with_program_inputs(public_values.to_vec());
-    vm.execute(program).unwrap()
 }
 
 impl<F: Copy + Display> Display for Program<F> {

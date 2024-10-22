@@ -7,7 +7,7 @@ use afs_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use p3_air::BaseAir;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::CoreCols, CoreChip};
@@ -24,8 +24,7 @@ impl<F: PrimeField32> CoreChip<F> {
 
     /// This must be called for each blank row and results should never be cloned; see [CoreCols::nop_row].
     fn make_blank_row(&self) -> CoreCols<F> {
-        let pc = F::from_canonical_u32(self.state.pc);
-        CoreCols::nop_row(self, pc)
+        CoreCols::nop_row(0)
     }
 }
 
@@ -40,16 +39,8 @@ where
     fn generate_air_proof_input(mut self) -> AirProofInput<SC> {
         self.pad_rows();
 
-        let trace = RowMajorMatrix::new(
-            self.rows.concat(),
-            CoreCols::<Val<SC>>::get_width(&self.air),
-        );
-        let public_values = self
-            .public_values
-            .iter()
-            .map(|pv| pv.unwrap_or(Val::<SC>::zero()))
-            .collect();
-        AirProofInput::simple(self.air(), trace, public_values)
+        let trace = RowMajorMatrix::new(self.rows.concat(), CoreCols::<Val<SC>>::get_width());
+        AirProofInput::simple_no_pis(self.air(), trace)
     }
 }
 

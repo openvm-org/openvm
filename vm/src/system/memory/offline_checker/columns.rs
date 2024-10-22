@@ -14,7 +14,7 @@ use crate::system::memory::offline_checker::bridge::AUX_LEN;
 #[repr(C)]
 /// Base structure for auxiliary memory columns.
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
-pub(super) struct MemoryBaseAuxCols<T> {
+pub struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
     pub(super) prev_timestamp: T,
     /// The auxiliary columns to perform the less than check.
@@ -77,6 +77,14 @@ impl<const N: usize, T: Clone> MemoryWriteAuxCols<T, N> {
             base: MemoryBaseAuxCols::from_iterator(iter),
             prev_data: array::from_fn(|_| iter.next().unwrap()),
         }
+    }
+
+    pub fn from_base(base: MemoryBaseAuxCols<T>, prev_data: [T; N]) -> Self {
+        Self { base, prev_data }
+    }
+
+    pub fn get_base(self) -> MemoryBaseAuxCols<T> {
+        self.base
     }
 }
 

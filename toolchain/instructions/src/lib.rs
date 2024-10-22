@@ -40,7 +40,6 @@ pub enum CoreOpcode {
     BEQ,
     BNE,
     TERMINATE,
-    PUBLISH,
     FAIL,
     PRINTF,
     /// Instruction to write the next hint word into memory.
@@ -57,6 +56,16 @@ pub enum CoreOpcode {
     CT_START,
     /// Phantom instruction to end tracing
     CT_END,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x080]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum PublishOpcode {
+    PUBLISH,
 }
 
 #[derive(
@@ -220,13 +229,16 @@ pub enum LessThanOpcode {
 #[allow(non_camel_case_types)]
 pub enum Rv32LoadStoreOpcode {
     LOADW,
+    /// LOADBU, LOADHU are unsigned extend opcodes, implemented in the same chip with LOADW
+    LOADBU,
+    LOADHU,
     STOREW,
     STOREH,
     STOREB,
+    HINTLOAD_RV32,
+    /// The following are signed extend opcodes
     LOADB,
     LOADH,
-    LOADBU,
-    LOADHU,
 }
 
 #[derive(

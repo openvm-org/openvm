@@ -7,7 +7,7 @@ use afs_primitives::{
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 
-use super::{timestamp_delta, CoreChip, CoreState};
+use super::{timestamp_delta, CoreChip};
 use crate::{
     arch::{
         instructions::{
@@ -33,9 +33,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let ExecutionState { pc, mut timestamp } = from_state;
-
-        let core_options = self.air.options;
-        let num_public_values = core_options.num_public_values;
 
         let local_opcode_index = instruction.opcode - self.offset;
         let a = instruction.a;
@@ -86,8 +83,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 ));
             }};
         }
-
-        let mut public_value_flags = vec![F::zero(); num_public_values];
 
         let hint_stream = &mut self.streams.hint_stream;
 
@@ -142,38 +137,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             }
             TERMINATE | NOP => {
                 next_pc = pc;
-            }
-            PUBLISH => {
-                let public_value_index = read!(d, a).as_canonical_u64() as usize;
-                let value = read!(e, b);
-                tracing::debug!(
-                    "publishing value {:?} at index {}",
-                    value,
-                    public_value_index
-                );
-                if public_value_index >= num_public_values {
-                    return Err(ExecutionError::PublicValueIndexOutOfBounds(
-                        pc,
-                        num_public_values,
-                        public_value_index,
-                    ));
-                }
-                public_value_flags[public_value_index] = F::one();
-
-                let public_values = &mut self.public_values;
-                match public_values[public_value_index] {
-                    None => public_values[public_value_index] = Some(value),
-                    Some(existing_value) => {
-                        if value != existing_value {
-                            return Err(ExecutionError::PublicValueNotEqual(
-                                pc,
-                                public_value_index,
-                                existing_value.as_canonical_u64() as usize,
-                                value.as_canonical_u64() as usize,
-                            ));
-                        }
-                    }
-                }
             }
             PRINTF => {
                 let value = read!(d, a);
@@ -231,7 +194,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         };
         timestamp += timestamp_delta(local_opcode_index);
 
-        // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
+        // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records }
         // and move this logic into generate_trace().
         {
             let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
@@ -283,7 +246,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
             let aux = CoreAuxCols {
                 operation_flags,
-                public_value_flags,
                 reads: read_cols,
                 writes: write_cols,
                 read0_equals_read1,
@@ -297,11 +259,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             self.rows.push(cols.flatten());
         }
 
-        // Update Core chip state with all changes from this segment.
-        self.set_current_state(CoreState {
-            pc: next_pc,
-            is_done: local_opcode_index == TERMINATE,
-        });
+        if local_opcode_index == TERMINATE {
+            self.did_terminate = true;
+        }
 
         Ok(ExecutionState::new(next_pc, timestamp))
     }
