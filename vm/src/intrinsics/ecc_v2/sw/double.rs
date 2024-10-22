@@ -14,8 +14,8 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::super::{EcPoint, FIELD_ELEMENT_BITS};
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
-        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+        instructions::EccOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
+        DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
@@ -107,7 +107,8 @@ where
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[1..].concat().iter().map(|x| (*x).into()).collect();
 
-        let expected_opcode = AB::Expr::one(); // EC_DOUBLE
+        let expected_opcode = EccOpcode::EC_DOUBLE as usize;
+        let expected_opcode = AB::Expr::from_canonical_usize(expected_opcode);
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
