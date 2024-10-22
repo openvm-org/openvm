@@ -154,7 +154,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     self.update_chip_metrics();
                     #[cfg(feature = "bench-metrics")]
                     metrics::counter!("total_cells_used")
-                        .absolute(now_trace_cells.into_values().sum::<usize>() as u64);
+                        .absolute(self.current_trace_cells().into_values().sum::<usize>() as u64);
                 }
                 break;
             }
