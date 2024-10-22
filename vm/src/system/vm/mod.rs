@@ -164,12 +164,12 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         program: Program<F>,
-        input: VecDeque<Vec<F>>,
+        input: Vec<Vec<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segment = self.execute_impl(program, input)?;
+        let segment = self.execute_impl(program, input.into())?;
         Ok(segment.generate_proof_input())
     }
 

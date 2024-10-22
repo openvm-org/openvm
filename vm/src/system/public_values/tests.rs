@@ -1,132 +1,133 @@
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
-use ax_sdk::{config::baby_bear_poseidon2::BabyBearPoseidon2Config, utils::to_field_vec};
-use axvm_instructions::PublishOpcode;
+use std::sync::Arc;
+
+use afs_stark_backend::{
+    interaction::InteractionBuilder,
+    prover::types::AirProofInput,
+    rap::{AnyRap, PartitionedBaseAir},
+    utils::disable_debug_builder,
+    verifier::VerificationError,
+};
+use ax_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    utils::to_field_vec,
+};
+use p3_air::{Air, AirBuilderWithPublicValues};
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::{AbstractField, Field};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
-    arch::testing::VmChipTestBuilder,
-    kernels::adapters::native_adapter::NativeAdapterChip,
-    system::{
-        program::Instruction,
-        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
+    arch::VmCoreAir,
+    system::public_values::{
+        columns::PublicValuesCoreColsView,
+        core::{AdapterInterface, PublicValuesCoreAir},
     },
 };
 
 type F = BabyBear;
-type AdapterChip<F> = NativeAdapterChip<F, 2, 0>;
 
-fn setup_test_chip<F: PrimeField32>(
-    tester: &mut VmChipTestBuilder<F>,
-    num_pvs: usize,
-) -> PublicValuesChip<F> {
-    PublicValuesChip::new(
-        AdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_controller(),
-        ),
-        PublicValuesCoreChip::new(num_pvs, 0),
-        tester.memory_controller(),
-    )
+impl<F: Field> PartitionedBaseAir<F> for PublicValuesCoreAir {}
+
+impl<AB: InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for PublicValuesCoreAir {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let local_core = main.row_slice(0);
+        // It's never used, so pick any value.
+        let dummy_pc = local_core[0];
+        VmCoreAir::<AB, AdapterInterface<AB::Expr>>::eval(self, builder, &local_core, dummy_pc);
+    }
 }
 
 #[test]
-fn public_values_happy_path() {
-    let mut tester = VmChipTestBuilder::default();
-    let mut chip = setup_test_chip(&mut tester, 3);
-    {
-        tester.execute(
-            &mut chip,
-            Instruction::from_usize(PublishOpcode::PUBLISH as usize, [0, 12, 2, 0, 0, 0]),
-        );
-    }
+fn public_values_happy_path_1() {
+    let cols = PublicValuesCoreColsView::<F, F> {
+        is_valid: F::one(),
+        value: F::from_canonical_u32(12),
+        index: F::from_canonical_u32(2),
+        custom_pv_flags: to_field_vec(vec![0, 0, 1]),
+        _marker: Default::default(),
+    };
+    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0));
+    let trace = RowMajorMatrix::new_row(cols.flatten());
+    let pvs = to_field_vec(vec![0, 0, 12]);
 
-    let mut air_input = Chip::<BabyBearPoseidon2Config>::generate_air_proof_input(chip);
-    assert_eq!(air_input.raw.public_values, to_field_vec(vec![0, 0, 12]));
-    // If not specified, the public value could be any value.
-    air_input.raw.public_values[1] = F::from_canonical_u32(5456789);
-
-    let tester = tester.build().load_air_proof_input(air_input).finalize();
-    tester.simple_test().expect("Verification failed");
+    BabyBearPoseidon2Engine::run_test_fast(vec![AirProofInput::simple(air, trace, pvs)])
+        .expect("Verification failed");
 }
 
 #[test]
 fn public_values_neg_pv_not_match() {
-    let mut tester = VmChipTestBuilder::default();
-    let mut chip = setup_test_chip(&mut tester, 3);
-    {
-        tester.execute(
-            &mut chip,
-            Instruction::from_usize(PublishOpcode::PUBLISH as usize, [0, 12, 2, 0, 0, 0]),
-        );
-    }
-
-    let mut air_input = Chip::<BabyBearPoseidon2Config>::generate_air_proof_input(chip);
-    assert_eq!(air_input.raw.public_values, to_field_vec(vec![0, 0, 12]));
-    // Set public value to a different value.
-    air_input.raw.public_values[2] = F::from_canonical_u32(5456789);
+    let cols = PublicValuesCoreColsView::<F, F> {
+        is_valid: F::one(),
+        value: F::from_canonical_u32(12),
+        index: F::from_canonical_u32(2),
+        custom_pv_flags: to_field_vec(vec![0, 0, 1]),
+        _marker: Default::default(),
+    };
+    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0));
+    let trace = RowMajorMatrix::new_row(cols.flatten());
+    let pvs = to_field_vec(vec![0, 0, 56456]);
 
     disable_debug_builder();
-    let tester = tester.build().load_air_proof_input(air_input).finalize();
     assert_eq!(
-        tester.simple_test().err(),
+        BabyBearPoseidon2Engine::run_test_fast(vec![AirProofInput::simple(air, trace, pvs)]).err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
 }
 
 #[test]
 fn public_values_neg_index_out_of_bound() {
-    let mut tester = VmChipTestBuilder::default();
-    let mut chip = setup_test_chip(&mut tester, 3);
-    {
-        // [Negative] The public value index is 8 which is out of bounds.
-        tester.execute(
-            &mut chip,
-            Instruction::from_usize(PublishOpcode::PUBLISH as usize, [0, 12, 8, 0, 0, 0]),
-        );
-    }
-
-    let air_input = Chip::<BabyBearPoseidon2Config>::generate_air_proof_input(chip);
-    assert_eq!(air_input.raw.public_values, to_field_vec(vec![0, 0, 0]));
+    let cols = PublicValuesCoreColsView::<F, F> {
+        is_valid: F::one(),
+        value: F::from_canonical_u32(12),
+        index: F::from_canonical_u32(8),
+        custom_pv_flags: to_field_vec(vec![0, 0, 0]),
+        _marker: Default::default(),
+    };
+    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0));
+    let trace = RowMajorMatrix::new_row(cols.flatten());
+    let pvs = to_field_vec(vec![0, 0, 0]);
 
     disable_debug_builder();
-    let tester = tester.build().load_air_proof_input(air_input).finalize();
     assert_eq!(
-        tester.simple_test().err(),
+        BabyBearPoseidon2Engine::run_test_fast(vec![AirProofInput::simple(air, trace, pvs)]).err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
 }
 
 #[test]
 fn public_values_neg_double_publish() {
-    for i in 0..1 {
-        let mut tester = VmChipTestBuilder::default();
-        let mut chip = setup_test_chip(&mut tester, 3);
-        {
-            // [Negative] The 2nd public values are published twice with different values.
-            tester.execute(
-                &mut chip,
-                Instruction::from_usize(PublishOpcode::PUBLISH as usize, [0, 12, 2, 0, 0, 0]),
-            );
-            tester.execute(
-                &mut chip,
-                Instruction::from_usize(PublishOpcode::PUBLISH as usize, [0, 13, 2, 0, 0, 0]),
-            );
-        }
+    // A public value is published twice with different values. Neither of them should be accepted.
+    public_values_neg_double_publish_impl(12);
+    public_values_neg_double_publish_impl(13);
+}
 
-        let mut air_input = Chip::<BabyBearPoseidon2Config>::generate_air_proof_input(chip);
-        assert_eq!(air_input.raw.public_values, to_field_vec(vec![0, 0, 12]));
-        // No matter what the public value is 12 or 13, the proof should fail.
-        if i == 1 {
-            air_input.raw.public_values[2] = F::from_canonical_u32(13);
-        }
+fn public_values_neg_double_publish_impl(actual_pv: u32) {
+    let rows = [
+        PublicValuesCoreColsView::<F, F> {
+            is_valid: F::one(),
+            value: F::from_canonical_u32(12),
+            index: F::from_canonical_u32(0),
+            custom_pv_flags: to_field_vec(vec![0, 0, 1]),
+            _marker: Default::default(),
+        },
+        PublicValuesCoreColsView::<F, F> {
+            is_valid: F::one(),
+            value: F::from_canonical_u32(13),
+            index: F::from_canonical_u32(0),
+            custom_pv_flags: to_field_vec(vec![0, 0, 1]),
+            _marker: Default::default(),
+        },
+    ];
+    let width = rows[0].width();
+    let flatten_rows: Vec<_> = rows.into_iter().flat_map(|r| r.flatten()).collect();
+    let trace = RowMajorMatrix::new(flatten_rows, width);
+    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0));
+    let pvs = to_field_vec(vec![0, 0, actual_pv]);
 
-        disable_debug_builder();
-        let tester = tester.build().load_air_proof_input(air_input).finalize();
-        assert_eq!(
-            tester.simple_test().err(),
-            Some(VerificationError::OodEvaluationMismatch)
-        );
-    }
+    disable_debug_builder();
+    assert_eq!(
+        BabyBearPoseidon2Engine::run_test_fast(vec![AirProofInput::simple(air, trace, pvs)]).err(),
+        Some(VerificationError::OodEvaluationMismatch)
+    );
 }

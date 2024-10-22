@@ -7,12 +7,19 @@ pub(super) struct PublicValuesCoreColsView<'a, T, R> {
     /// The index of the public value to publish.
     pub index: R,
     pub custom_pv_flags: Vec<R>,
-    _marker: PhantomData<&'a T>,
+    pub(super) _marker: PhantomData<&'a T>,
 }
 
 impl<'a, T, R> PublicValuesCoreColsView<'a, T, R> {
     pub(super) fn width(&self) -> usize {
         3 + self.custom_pv_flags.len()
+    }
+    #[allow(dead_code)]
+    pub(super) fn flatten(self) -> Vec<R> {
+        [self.is_valid, self.value, self.index]
+            .into_iter()
+            .chain(self.custom_pv_flags)
+            .collect()
     }
 }
 impl<'a, T> PublicValuesCoreColsView<'a, T, &'a T> {

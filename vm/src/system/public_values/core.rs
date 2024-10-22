@@ -13,14 +13,23 @@ use crate::{
     system::{program::Instruction, public_values::columns::PublicValuesCoreColsView},
 };
 
-type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
-type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
+pub(super) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
+pub(super) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
 
 #[derive(Copy, Clone, Debug)]
 pub struct PublicValuesCoreAir {
     /// Number of custom public values to publish.
     pub num_custom_pvs: usize,
     offset: usize,
+}
+
+impl PublicValuesCoreAir {
+    pub fn new(num_custom_pvs: usize, offset: usize) -> Self {
+        Self {
+            num_custom_pvs,
+            offset,
+        }
+    }
 }
 
 impl<F: Field> BaseAir<F> for PublicValuesCoreAir {
@@ -122,23 +131,12 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
             let idx: usize = index.as_canonical_u32() as usize;
             let mut custom_pvs = self.custom_pvs.lock().unwrap();
 
-            #[allow(unused_mut)]
-            let mut flag = true;
-            // In testing, allow invalid instruction execution.
-            #[cfg(test)]
-            if idx >= custom_pvs.len() {
-                flag = false;
-            }
-
-            if flag {
-                if custom_pvs[idx].is_none() {
-                    custom_pvs[idx] = Some(value);
-                } else {
-                    // Not a hard constraint violation when publishing the same value twice but the
-                    // program should avoid that.
-                    #[cfg(not(test))]
-                    panic!("Custom public value {} already set", idx);
-                }
+            if custom_pvs[idx].is_none() {
+                custom_pvs[idx] = Some(value);
+            } else {
+                // Not a hard constraint violation when publishing the same value twice but the
+                // program should avoid that.
+                panic!("Custom public value {} already set", idx);
             }
         }
         let output = AdapterRuntimeContext {
@@ -160,19 +158,8 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
         *cols.value = record.value;
         *cols.index = record.index;
         let idx: usize = record.index.as_canonical_u32() as usize;
-
-        #[allow(unused_mut)]
-        let mut flag = true;
-        // In testing, allow out-of-bound index.
-        #[cfg(test)]
-        if idx >= cols.custom_pv_flags.len() {
-            flag = false;
-        }
-
         // Assumption: row_slice is initialized with 0s.
-        if flag {
-            *cols.custom_pv_flags[idx] = F::one();
-        }
+        *cols.custom_pv_flags[idx] = F::one();
     }
 
     fn generate_public_values(&self) -> Vec<F> {

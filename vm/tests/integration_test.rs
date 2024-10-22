@@ -6,6 +6,7 @@ use ax_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     utils::create_seeded_rng,
 };
+use axvm_instructions::PublishOpcode::PUBLISH;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
@@ -23,7 +24,7 @@ use stark_vm::{
         program::{Instruction, Program},
         vm::{
             config::{MemoryConfig, PersistenceType, VmConfig},
-            VirtualMachine,
+            SingleSegmentVM, VirtualMachine,
         },
     },
 };
@@ -155,6 +156,34 @@ fn test_vm_1_optional_air() {
             proof_input.per_air.len() < num_airs,
             "Expect less used AIRs"
         );
+        engine
+            .prove_then_verify(&pk, proof_input)
+            .expect("Verification failed");
+    }
+}
+
+#[test]
+fn test_vm_public_values() {
+    let mut vm_config = VmConfig::core();
+    vm_config.num_public_values = 3;
+    let engine =
+        BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+    let pk = vm_config.generate_pk(engine.keygen_builder());
+
+    {
+        let instructions = vec![
+            Instruction::from_usize(PUBLISH.with_default_offset(), [0, 12, 2, 0, 0, 0]),
+            Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+        ];
+
+        let program = Program::from_instructions(&instructions);
+        let vm = SingleSegmentVM::new(vm_config);
+        let pvs = vm.execute(program.clone(), vec![]).unwrap();
+        assert_eq!(
+            pvs,
+            vec![None, None, Some(BabyBear::from_canonical_u32(12))]
+        );
+        let proof_input = vm.execute_and_generate(program, vec![]).unwrap();
         engine
             .prove_then_verify(&pk, proof_input)
             .expect("Verification failed");
