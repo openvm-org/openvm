@@ -11,6 +11,7 @@ pub fn limbs_to_biguint(x: &[u32], limb_size: usize) -> BigUint {
     result
 }
 
+#[allow(dead_code)]
 // little endian.
 // Warning: This function only returns the last NUM_LIMBS*LIMB_BITS bits of
 //          the input, while the input can have more than that.

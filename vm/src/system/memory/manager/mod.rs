@@ -220,7 +220,6 @@ impl<F: PrimeField32> MemoryController<F> {
                     memory_bus,
                     mem_config.addr_space_max_bits,
                     mem_config.pointer_max_bits,
-                    mem_config.decomp,
                     range_checker.clone(),
                 ),
             },
@@ -709,8 +708,8 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         read: MemoryReadRecord<F, 1>,
     ) -> MemoryReadOrImmediateAuxCols<F> {
         let mut inv = F::zero();
-        let is_zero = F::from_bool(read.address_space.is_zero());
-        IsZeroAir.generate_subrow(read.address_space, &mut inv);
+        let mut is_zero = F::zero();
+        IsZeroAir.generate_subrow(read.address_space, (&mut inv, &mut is_zero));
         let timestamp_lt_cols =
             self.generate_timestamp_lt_cols(read.prev_timestamp, read.timestamp);
 

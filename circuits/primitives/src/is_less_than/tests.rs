@@ -87,10 +87,9 @@ impl IsLessThanChip {
                 let row = IsLessThanColsMut::from_mut_slice(row);
                 *row.x = F::from_canonical_u32(x);
                 *row.y = F::from_canonical_u32(y);
-                self.air.0.generate_subrow(
-                    (&self.range_checker, *row.x, *row.y),
-                    (row.lower_decomp, row.out),
-                );
+                self.air
+                    .0
+                    .generate_subrow((&self.range_checker, x, y), (row.lower_decomp, row.out));
             });
 
         RowMajorMatrix::new(rows, width)

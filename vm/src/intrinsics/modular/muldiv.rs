@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{
@@ -101,7 +102,7 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         assert_eq!(local.len(), BaseAir::<AB::F>::width(&self.expr));
-        SubAir::eval(&self.expr, builder, local.to_vec(), ());
+        self.expr.eval(builder, local);
 
         let FieldExprCols {
             is_valid,
@@ -236,15 +237,14 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let input = (
-            vec![record.x, record.y],
-            self.range_checker.clone(),
-            vec![record.is_mul_flag],
+        self.air.expr.generate_subrow(
+            (
+                &self.range_checker,
+                vec![record.x, record.y],
+                vec![record.is_mul_flag],
+            ),
+            row_slice,
         );
-        let row = LocalTraceInstructions::<F>::generate_trace_row(&self.air.expr, input);
-        for (i, element) in row.iter().enumerate() {
-            row_slice[i] = *element;
-        }
     }
 
     fn air(&self) -> &Self::Air {

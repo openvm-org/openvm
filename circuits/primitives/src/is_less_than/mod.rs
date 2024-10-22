@@ -1,6 +1,6 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::{AbstractField, Field};
 
 use crate::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
@@ -216,9 +216,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLtWhenTransitionAir {
     }
 }
 
-impl<F: PrimeField32> TraceSubRowGenerator<F> for IsLessThanAir {
+impl<F: Field> TraceSubRowGenerator<F> for IsLessThanAir {
     /// `(range_checker, x, y)`
-    type TraceContext<'a> = (&'a VariableRangeCheckerChip, F, F);
+    type TraceContext<'a> = (&'a VariableRangeCheckerChip, u32, u32);
     /// `(lower_decomp, out)`
     type ColsMut<'a> = (&'a mut [F], &'a mut F);
 
@@ -226,12 +226,10 @@ impl<F: PrimeField32> TraceSubRowGenerator<F> for IsLessThanAir {
     #[inline(always)]
     fn generate_subrow<'a>(
         &'a self,
-        (range_checker, x, y): (&'a VariableRangeCheckerChip, F, F),
+        (range_checker, x, y): (&'a VariableRangeCheckerChip, u32, u32),
         (lower_decomp, out): (&'a mut [F], &'a mut F),
     ) {
         debug_assert_eq!(lower_decomp.len(), self.decomp_limbs);
-        let x = x.as_canonical_u32();
-        let y = y.as_canonical_u32();
         debug_assert!(
             x < (1 << self.max_bits),
             "{x} has more than {} bits",

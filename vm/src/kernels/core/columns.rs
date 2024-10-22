@@ -183,7 +183,7 @@ impl<T: Clone> CoreAuxCols<T> {
 
         start = end;
         end += IsEqualAuxCols::<T>::width();
-        let is_equal_aux: &IsEqualAuxCols<_> = (&slc[start..end]).borrow();
+        let is_equal_aux: &IsEqualAuxCols<_> = slc[start..end].borrow();
 
         let reads_aux_cols = array::from_fn(|_| {
             start = end;
@@ -260,6 +260,7 @@ impl<T: Clone> CoreAuxCols<T> {
 }
 
 impl<F: PrimeField32> CoreAuxCols<F> {
+    // TODO[jpw]: padding row should be able to be just all 0s now. Remove this function.
     pub fn nop_row(chip: &CoreChip<F>) -> Self {
         let mut operation_flags = BTreeMap::new();
         for opcode in CoreOpcode::iter() {
@@ -267,7 +268,11 @@ impl<F: PrimeField32> CoreAuxCols<F> {
         }
 
         let mut is_equal_inv = F::zero();
-        IsEqualAir.generate_subrow((F::zero(), F::zero()), &mut is_equal_inv);
+        let mut read0_equals_read1 = F::one();
+        IsEqualAir.generate_subrow(
+            (F::zero(), F::zero()),
+            (&mut is_equal_inv, &mut read0_equals_read1),
+        );
         Self {
             operation_flags,
             public_value_flags: vec![F::zero(); chip.air.options.num_public_values],

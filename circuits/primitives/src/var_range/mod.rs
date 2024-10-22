@@ -21,6 +21,7 @@ use afs_stark_backend::{
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::{Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use tracing::instrument;
 
 mod bus;
 #[cfg(test)]
@@ -122,6 +123,11 @@ impl VariableRangeCheckerChip {
         NUM_VARIABLE_RANGE_COLS
     }
 
+    #[instrument(
+        name = "VariableRangeCheckerChip::add_count",
+        skip(self),
+        level = "trace"
+    )]
     pub fn add_count(&self, value: u32, max_bits: usize) {
         // index is 2^max_bits + value - 1 + 1 for the extra [0, 0] row
         // if each [value, max_bits] is valid, the sends multiset will be exactly the receives multiset
@@ -155,6 +161,11 @@ impl VariableRangeCheckerChip {
     /// Range checks that `value` is `bits` bits by decomposing into `limbs` where all but
     /// last limb is `range_max_bits` bits. Assumes there are enough limbs.
     pub(crate) fn decompose<F: Field>(&self, mut value: u32, bits: usize, limbs: &mut [F]) {
+        debug_assert!(
+            limbs.len() <= bits.div_ceil(self.range_max_bits()),
+            "Not enough limbs: len {}",
+            limbs.len()
+        );
         let mask = (1 << self.range_max_bits()) - 1;
         let mut bits_remaining = bits;
         for limb in limbs.iter_mut() {

@@ -138,6 +138,7 @@ impl<const NUM: usize> IsLtArrayAir<NUM> {
         //       will enforce that `out = 0`.
 
         builder
+            .when(io.count.clone())
             .when(not::<AB::Expr>(prefix_sum))
             .assert_zero(io.out.clone());
 
@@ -206,6 +207,7 @@ impl<F: PrimeField32, const NUM: usize> TraceSubRowGenerator<F> for IsLtArrayAir
         (range_checker, x, y): (&'a VariableRangeCheckerChip, &'a [F], &'a [F]),
         (aux, out): (IsLtArrayAuxColsMut<'a, F>, &'a mut F),
     ) {
+        tracing::trace!("IsLtArrayAir::generate_subrow x={:?}, y={:?}", x, y);
         let mut is_eq = true;
         *aux.diff_val = F::zero();
         for (x_i, y_i, diff_marker) in izip!(x, y, aux.diff_marker.iter_mut()) {

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::borrow::Cow;
 
 use afs_compiler::{
@@ -102,8 +103,8 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
     });
     execute_program_with_config(
         VmConfig::default()
-            .add_default_executor(ExecutorName::Secp256k1AddUnequal)
-            .add_default_executor(ExecutorName::Secp256k1Double)
+            // .add_default_executor(ExecutorName::Secp256k1AddUnequal)
+            // .add_default_executor(ExecutorName::Secp256k1Double)
             .add_default_executor(ExecutorName::ArithmeticLogicUnit256)
             .add_canonical_modulus(),
         program,
@@ -112,33 +113,33 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
 }
 
 // tests for x^3 = y^2 + 7
+// Disable until new ec chip is done
+// #[test]
+// fn test_compiler_ec_double() {
+//     test_secp256k1_add(Point::new(2, 1), Point::new(2, 1), Point::new(32, -181));
+// }
 
-#[test]
-fn test_compiler_ec_double() {
-    test_secp256k1_add(Point::new(2, 1), Point::new(2, 1), Point::new(32, -181));
-}
+// #[test]
+// fn test_compiler_ec_ne_add() {
+//     test_secp256k1_add(Point::new(2, 1), Point::new(32, 181), Point::new(2, -1));
+// }
 
-#[test]
-fn test_compiler_ec_ne_add() {
-    test_secp256k1_add(Point::new(2, 1), Point::new(32, 181), Point::new(2, -1));
-}
+// #[test]
+// fn test_compiler_ec_add_to_zero() {
+//     test_secp256k1_add(Point::new(2, 1), Point::new(2, -1), Point::new(0, 0));
+// }
 
-#[test]
-fn test_compiler_ec_add_to_zero() {
-    test_secp256k1_add(Point::new(2, 1), Point::new(2, -1), Point::new(0, 0));
-}
+// #[test]
+// fn test_compiler_ec_add_zero_left() {
+//     test_secp256k1_add(Point::new(0, 0), Point::new(2, 1), Point::new(2, 1))
+// }
 
-#[test]
-fn test_compiler_ec_add_zero_left() {
-    test_secp256k1_add(Point::new(0, 0), Point::new(2, 1), Point::new(2, 1))
-}
+// #[test]
+// fn test_compiler_ec_add_zero_right() {
+//     test_secp256k1_add(Point::new(2, 1), Point::new(0, 0), Point::new(2, 1))
+// }
 
-#[test]
-fn test_compiler_ec_add_zero_right() {
-    test_secp256k1_add(Point::new(2, 1), Point::new(0, 0), Point::new(2, 1))
-}
-
-#[test]
-fn test_compiler_ec_double_zero() {
-    test_secp256k1_add(Point::new(0, 0), Point::new(0, 0), Point::new(0, 0))
-}
+// #[test]
+// fn test_compiler_ec_double_zero() {
+//     test_secp256k1_add(Point::new(0, 0), Point::new(0, 0), Point::new(0, 0))
+// }

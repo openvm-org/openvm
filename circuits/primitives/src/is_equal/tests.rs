@@ -70,8 +70,7 @@ impl<F: Field> IsEqualChip<F> {
                 let row: &mut IsEqualCols<F> = row.borrow_mut();
                 row.x = x;
                 row.y = y;
-                row.out = F::from_bool(x == y);
-                air.generate_subrow((x, y), &mut row.inv);
+                air.generate_subrow((x, y), (&mut row.inv, &mut row.out));
             });
 
         RowMajorMatrix::new(rows, width)

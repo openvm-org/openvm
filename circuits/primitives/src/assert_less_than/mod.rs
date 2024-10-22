@@ -2,7 +2,7 @@ use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
 use derive_new::new;
 use p3_air::AirBuilder;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::{AbstractField, Field};
 
 use crate::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
@@ -131,7 +131,7 @@ impl AssertLessThanAir {
                 acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
             });
 
-        // constrain that y-x-1 is equal to the constructed lower value.
+        // constrain that y - x - 1 is equal to the constructed lower value.
         // this enforces that the intermediate value is in the range [0, 2^max_bits - 1], which is equivalent to x < y
         builder.when(io.count).assert_eq(intermed_val, lower);
         // the degree of this constraint is expected to be deg(count) + max(deg(intermed_val), deg(lower))
@@ -212,20 +212,20 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtWhenTransitionAir {
     }
 }
 
-impl<F: PrimeField32> TraceSubRowGenerator<F> for AssertLessThanAir {
+impl<F: Field> TraceSubRowGenerator<F> for AssertLessThanAir {
     /// (range_checker, x, y)
-    type TraceContext<'a> = (&'a VariableRangeCheckerChip, F, F);
+    // x, y are u32 because memory records are storing u32 and there would be needless conversions. It also prevents a F: PrimeField32 trait bound.
+    type TraceContext<'a> = (&'a VariableRangeCheckerChip, u32, u32);
     /// lower_decomp
     type ColsMut<'a> = &'a mut [F];
 
+    /// Should only be used when `io.count != 0`.
     #[inline(always)]
     fn generate_subrow<'a>(
         &'a self,
-        (range_checker, x, y): (&'a VariableRangeCheckerChip, F, F),
+        (range_checker, x, y): (&'a VariableRangeCheckerChip, u32, u32),
         lower_decomp: &'a mut [F],
     ) {
-        let x = x.as_canonical_u32();
-        let y = y.as_canonical_u32();
         debug_assert!(x < y, "assert {x} < {y} failed");
         debug_assert_eq!(lower_decomp.len(), self.decomp_limbs);
         debug_assert!(

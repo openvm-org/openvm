@@ -1,6 +1,9 @@
 use std::{array, collections::BTreeMap};
 
-use afs_primitives::is_equal::IsEqualAir;
+use afs_primitives::{
+    is_equal::{IsEqualAir, IsEqualAuxCols},
+    TraceSubRowGenerator,
+};
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 
@@ -271,13 +274,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 );
             }
 
-            let is_equal_cols = LocalTraceInstructions::generate_trace_row(
-                &IsEqualAir,
+            let mut read0_equals_read1 = F::zero();
+            let mut is_equal_aux = IsEqualAuxCols { inv: F::zero() };
+            IsEqualAir.generate_subrow(
                 (read_cols[0].value, read_cols[1].value),
+                (&mut is_equal_aux.inv, &mut read0_equals_read1),
             );
-
-            let read0_equals_read1 = is_equal_cols.io.is_equal;
-            let is_equal_aux = is_equal_cols.aux;
 
             let aux = CoreAuxCols {
                 operation_flags,

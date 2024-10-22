@@ -43,12 +43,12 @@ impl<AB: AirBuilder> SubAir<AB> for IsEqualAir {
 }
 
 impl<F: Field> TraceSubRowGenerator<F> for IsEqualAir {
-    /// `x, y`
+    /// `(x, y)`
     type TraceContext<'a> = (F, F);
-    /// `inv`
-    type ColsMut<'a> = &'a mut F;
+    /// `(inv, out)`
+    type ColsMut<'a> = (&'a mut F, &'a mut F);
 
-    fn generate_subrow<'a>(&'a self, (x, y): (F, F), inv: &'a mut F) {
-        IsZeroAir.generate_subrow(x - y, inv);
+    fn generate_subrow<'a>(&'a self, (x, y): (F, F), (inv, out): (&'a mut F, &'a mut F)) {
+        IsZeroAir.generate_subrow(x - y, (inv, out));
     }
 }

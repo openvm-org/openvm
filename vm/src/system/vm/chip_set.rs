@@ -9,8 +9,8 @@ use std::{
 
 use afs_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
-    xor::lookup::XorLookupChip,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    xor::XorLookupChip,
 };
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -29,7 +29,7 @@ use strum::EnumCount;
 use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
     intrinsics::{
-        ecc::{EcAddUnequalChip, EcDoubleChip},
+        // ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -490,31 +490,31 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::CastF(chip));
                 }
-                // TODO: make these customizable opcode classes
-                ExecutorName::Secp256k1AddUnequal => {
-                    let chip = Rc::new(RefCell::new(EcAddUnequalChip::new(
-                        execution_bus,
-                        program_bus,
-                        memory_controller.clone(),
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Secp256k1AddUnequal(chip));
-                }
-                ExecutorName::Secp256k1Double => {
-                    let chip = Rc::new(RefCell::new(EcDoubleChip::new(
-                        execution_bus,
-                        program_bus,
-                        memory_controller.clone(),
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Secp256k1Double(chip));
-                }
+                // // TODO: make these customizable opcode classes
+                // ExecutorName::Secp256k1AddUnequal => {
+                //     let chip = Rc::new(RefCell::new(EcAddUnequalChip::new(
+                //         execution_bus,
+                //         program_bus,
+                //         memory_controller.clone(),
+                //         offset,
+                //     )));
+                //     for opcode in range {
+                //         executors.insert(opcode, chip.clone().into());
+                //     }
+                //     chips.push(AxVmChip::Secp256k1AddUnequal(chip));
+                // }
+                // ExecutorName::Secp256k1Double => {
+                //     let chip = Rc::new(RefCell::new(EcDoubleChip::new(
+                //         execution_bus,
+                //         program_bus,
+                //         memory_controller.clone(),
+                //         offset,
+                //     )));
+                //     for opcode in range {
+                //         executors.insert(opcode, chip.clone().into());
+                //     }
+                //     chips.push(AxVmChip::Secp256k1Double(chip));
+                // }
                 _ => {
                     unreachable!("Unsupported executor")
                 }
@@ -892,15 +892,15 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CastfOpcode::COUNT,
             CastfOpcode::default_offset(),
         ),
-        // TODO: these should be configurable and remove from default executors
-        ExecutorName::Secp256k1AddUnequal => {
-            (EccOpcode::default_offset(), 1, EccOpcode::default_offset())
-        }
-        ExecutorName::Secp256k1Double => (
-            EccOpcode::default_offset() + 1,
-            1,
-            EccOpcode::default_offset(),
-        ),
+        // // TODO: these should be configurable and remove from default executors
+        // ExecutorName::Secp256k1AddUnequal => {
+        //     (EccOpcode::default_offset(), 1, EccOpcode::default_offset())
+        // }
+        // ExecutorName::Secp256k1Double => (
+        //     EccOpcode::default_offset() + 1,
+        //     1,
+        //     EccOpcode::default_offset(),
+        // ),
         _ => panic!("Not a default executor"),
     };
     (start..(start + len), offset)

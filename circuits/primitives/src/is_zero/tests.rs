@@ -59,8 +59,7 @@ impl<F: Field> IsZeroChip<F> {
         rows.par_chunks_mut(width).zip(self.x).for_each(|(row, x)| {
             let row: &mut IsZeroCols<F> = row.borrow_mut();
             row.x = x;
-            row.out = F::from_bool(x.is_zero());
-            air.generate_subrow(x, &mut row.inv);
+            air.generate_subrow(x, (&mut row.inv, &mut row.out));
         });
 
         RowMajorMatrix::new(rows, width)

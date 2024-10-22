@@ -45,13 +45,14 @@ impl<F: PrimeField32> MemoryController<F> {
                             row.is_right_larger = F::from_bool(left_timestamp < right_timestamp);
                         }
                     }
+                    let mut is_right_larger = F::zero(); // unused
                     air.lt_air.generate_subrow(
                         (
                             &self.range_checker,
-                            row.left_timestamp.as_canonical_u32(),
+                            row.left_timestamp.as_canonical_u32(), // TODO: needless conversion
                             row.right_timestamp.as_canonical_u32(),
                         ),
-                        &mut row.lt_aux,
+                        (&mut row.lt_aux, &mut is_right_larger),
                     );
                 }
                 RowMajorMatrix::new(values, width)

@@ -76,7 +76,7 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
         }
     }
 
-    pub fn generate_trace<F: PrimeField32>(self) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: Field>(self) -> RowMajorMatrix<F> {
         assert!(self.pairs.len().is_power_of_two());
         let width: usize = AssertLessThanCols::<F, AUX_LEN>::width();
 
@@ -87,10 +87,9 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
                 let row: &mut AssertLessThanCols<F, AUX_LEN> = row.borrow_mut();
                 row.x = F::from_canonical_u32(x);
                 row.y = F::from_canonical_u32(y);
-                self.air.0.generate_subrow(
-                    (&self.range_checker, row.x, row.y),
-                    &mut row.aux.lower_decomp,
-                );
+                self.air
+                    .0
+                    .generate_subrow((&self.range_checker, x, y), &mut row.aux.lower_decomp);
             });
 
         RowMajorMatrix::new(rows, width)

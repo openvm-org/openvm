@@ -7,7 +7,7 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::{
     utils::not,
-    xor::{bus::XorBus, lookup::XorLookupChip},
+    xor::{XorBus, XorLookupChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{AirBuilder, BaseAir};
