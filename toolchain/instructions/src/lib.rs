@@ -58,6 +58,21 @@ pub enum CoreOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x010]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum NativeLoadStoreOpcode {
+    LOADW,
+    STOREW,
+    LOADW2,
+    STOREW2,
+    /// Instruction to write the next hint word into memory.
+    SHINTW,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0x20] // these offsets gone mad tbh
 #[repr(usize)]
 #[allow(non_camel_case_types)]
