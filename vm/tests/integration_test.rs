@@ -1,3 +1,7 @@
+use afs_stark_backend::{
+    config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
+    prover::types::Proof,
+};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -7,8 +11,9 @@ use ax_sdk::{
     utils::create_seeded_rng,
 };
 use axvm_instructions::PublishOpcode::PUBLISH;
+use itertools::Itertools;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
 use stark_vm::{
     arch::{
@@ -341,6 +346,8 @@ fn test_vm_continuations() {
             0,
             1,
         ),
+        // [0]_3 <- [1]_1
+        Instruction::from_isize(ADD.with_default_offset(), 0, 1, 0, 3, 1),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ]);
 
@@ -362,59 +369,105 @@ fn test_vm_continuations() {
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let pk = vm.config.generate_pk(engine.keygen_builder());
+    let vk = pk.get_vk();
     let result = vm.execute_and_generate(program).unwrap();
 
     // Let's make sure we have at least 3 segments.
     let num_segments = result.per_segment.len();
     assert!(num_segments >= 3);
 
+    let expected_output = {
+        let mut a = 0;
+        let mut b = 1;
+        for _ in 0..n {
+            (a, b) = (b, a + b);
+            b %= BabyBear::ORDER_U32;
+        }
+        BabyBear::from_canonical_u32(a)
+    };
+
+    let proofs: Vec<Proof<_>> = result
+        .per_segment
+        .into_iter()
+        .map(|proof_input| engine.prove(&pk, proof_input))
+        .collect();
+    aggregate_segment_proofs(engine, vk, proofs, vec![expected_output]);
+}
+
+fn aggregate_segment_proofs<SC: StarkGenericConfig>(
+    engine: impl StarkEngine<SC>,
+    vk: MultiStarkVerifyingKey<SC>,
+    proofs: Vec<Proof<SC>>,
+    _expected_outputs: Vec<Val<SC>>,
+) {
     let mut prev_final_memory_root = None;
     let mut prev_final_pc = None;
 
-    for (i, proof_input) in result.per_segment.into_iter().enumerate() {
+    const VM_CONNECTOR_AIR_ID: usize = 1;
+    const MEMORY_MERKLE_AIR_ID: usize = 6;
+
+    for (i, proof) in proofs.iter().enumerate() {
+        engine
+            .verify(&vk, proof)
+            .expect("segment proof should verify");
+
+        let air_ids = proof
+            .per_air
+            .iter()
+            .map(|air_proof_data| air_proof_data.air_id)
+            .collect_vec();
+        assert!(air_ids.contains(&VM_CONNECTOR_AIR_ID));
+        assert!(air_ids.contains(&MEMORY_MERKLE_AIR_ID));
+
         // Check public values.
-        for air in &proof_input.per_air {
-            let air_name = air.1.air.name();
-            let pvs = &air.1.raw.public_values;
+        for air_proof_data in proof.per_air.iter() {
+            let pvs = &air_proof_data.public_values;
+            let air_vk = &vk.per_air[air_proof_data.air_id];
 
-            if air_name == "VmConnectorAir" {
-                assert_eq!(pvs.len(), 3);
+            match air_proof_data.air_id {
+                VM_CONNECTOR_AIR_ID => {
+                    // VmConnectorAir
+                    assert_eq!(pvs.len(), 3);
+                    assert_eq!(air_vk.params.num_public_values, 3);
 
-                // Check initial pc matches the previous final pc.
-                assert_eq!(
-                    pvs[0],
-                    if i == 0 {
-                        BabyBear::zero()
+                    // Check initial pc matches the previous final pc.
+                    assert_eq!(
+                        pvs[0],
+                        if i == 0 {
+                            Val::<SC>::zero()
+                        } else {
+                            prev_final_pc.unwrap()
+                        }
+                    );
+                    prev_final_pc = Some(pvs[1]);
+
+                    if i == proofs.len() - 1 {
+                        assert_eq!(pvs[2], Val::<SC>::zero());
                     } else {
-                        prev_final_pc.unwrap()
+                        assert_eq!(pvs[2], Val::<SC>::neg_one());
                     }
-                );
-                prev_final_pc = Some(pvs[1]);
-
-                if i == num_segments - 1 {
-                    assert_eq!(pvs[2], BabyBear::zero());
-                } else {
-                    assert_eq!(pvs[2], BabyBear::neg_one());
                 }
-            } else if air_name == "MemoryMerkleAir<8>" {
-                assert_eq!(pvs.len(), 16);
+                MEMORY_MERKLE_AIR_ID => {
+                    // MemoryMerkleAir
+                    assert_eq!(pvs.len(), 16);
+                    assert_eq!(air_vk.params.num_public_values, 16);
 
-                let (initial_memory_root, final_memory_root) = pvs.split_at(8);
+                    let (initial_memory_root, final_memory_root) = pvs.split_at(8);
 
-                // Check that initial root matches the previous final root.
-                if i != 0 {
-                    assert_eq!(initial_memory_root, prev_final_memory_root.unwrap());
+                    // Check that initial root matches the previous final root.
+                    if i != 0 {
+                        assert_eq!(initial_memory_root, prev_final_memory_root.unwrap());
+                    }
+                    prev_final_memory_root = Some(final_memory_root.to_vec());
                 }
-                prev_final_memory_root = Some(final_memory_root.to_vec());
-            } else {
-                assert_eq!(pvs.len(), 0);
+                _ => {
+                    assert_eq!(pvs.len(), 0);
+                    assert_eq!(air_vk.params.num_public_values, 0);
+                }
             }
         }
-
-        engine
-            .prove_then_verify(&pk, proof_input)
-            .expect("Verification failed");
     }
+    // TODO: Compute root of _expected_outputs and verify Merkle proof to final_memory_root.
 }
 
 #[test]
