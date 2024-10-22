@@ -1,6 +1,6 @@
 // <= 2 reads, <= 1 write, imm support
 pub mod native_adapter;
-// <= 2 reads, <= 1 write, no imm support, jump support
+// 2 reads, 0 writes, imm support, jump support
 pub mod branch_native_adapter;
 // 1 read, 1 write, arbitrary read size, arbitrary write size, no imm support
 pub mod convert_adapter;
