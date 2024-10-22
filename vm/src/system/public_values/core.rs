@@ -101,6 +101,9 @@ impl<F: PrimeField32> PublicValuesCoreChip<F> {
             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
         }
     }
+    pub fn get_custom_public_values(&self) -> Vec<Option<F>> {
+        self.custom_pvs.lock().unwrap().clone()
+    }
 }
 
 impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChip<F> {
@@ -173,10 +176,8 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
     }
 
     fn generate_public_values(&self) -> Vec<F> {
-        self.custom_pvs
-            .lock()
-            .unwrap()
-            .iter()
+        self.get_custom_public_values()
+            .into_iter()
             .map(|x| x.unwrap_or(F::zero()))
             .collect()
     }

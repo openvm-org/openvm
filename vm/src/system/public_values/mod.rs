@@ -6,7 +6,7 @@ use crate::{
 
 mod columns;
 /// Chip to publish custom public values from VM programs.
-mod core;
+pub mod core;
 #[cfg(test)]
 mod tests;
 

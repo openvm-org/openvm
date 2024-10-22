@@ -37,20 +37,6 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
     vm.execute(program).unwrap();
 }
 
-pub fn execute_program_with_public_values(
-    program: Program<BabyBear>,
-    input_stream: Vec<Vec<BabyBear>>,
-    public_values: &[(usize, BabyBear)],
-) {
-    let vm = VirtualMachine::new(VmConfig {
-        num_public_values: 4,
-        ..Default::default()
-    })
-    .with_input_stream(input_stream)
-    .with_program_inputs(public_values.to_vec());
-    vm.execute(program).unwrap()
-}
-
 impl<F: Copy + Display> Display for Program<F> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for instruction in self.instructions().iter() {

@@ -39,7 +39,6 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
         JAL => 1,
         BEQ | BNE => 2,
         TERMINATE => 0,
-        PUBLISH => 2,
         FAIL => 0,
         PRINTF => 1,
         SHINTW => 2,
@@ -47,11 +46,6 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
         CT_START | CT_END => 0,
         NOP => 0,
     }
-}
-
-#[derive(Default, Clone, Copy, Debug)]
-pub struct CoreOptions {
-    pub num_public_values: usize,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -66,7 +60,6 @@ pub struct CoreChip<F: PrimeField32> {
     pub air: CoreAir,
     pub rows: Vec<Vec<F>>,
     pub did_terminate: bool,
-    pub public_values: Vec<Option<F>>,
     pub memory_controller: MemoryControllerRef<F>,
 
     // TODO[jpw] Unclear Core should own this
@@ -77,7 +70,6 @@ pub struct CoreChip<F: PrimeField32> {
 
 impl<F: PrimeField32> CoreChip<F> {
     pub fn new(
-        options: CoreOptions,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
@@ -86,14 +78,12 @@ impl<F: PrimeField32> CoreChip<F> {
         let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: CoreAir {
-                options,
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 offset,
             },
             rows: vec![],
             did_terminate: false,
-            public_values: vec![None; options.num_public_values],
             memory_controller,
             streams: Default::default(),
             offset,

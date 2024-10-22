@@ -40,7 +40,6 @@ pub enum CoreOpcode {
     BEQ,
     BNE,
     TERMINATE,
-    PUBLISH,
     FAIL,
     PRINTF,
     /// Instruction to write the next hint word into memory.

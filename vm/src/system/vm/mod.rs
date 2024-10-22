@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, mem};
+use std::{collections::VecDeque, marker::PhantomData, mem};
 
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -10,12 +10,13 @@ use p3_field::PrimeField32;
 pub use segment::ExecutionSegment;
 
 use crate::{
+    arch::AxVmChip,
     intrinsics::hashes::poseidon2::CHUNK,
     kernels::core::Streams,
     system::{
         memory::Equipartition,
         program::{ExecutionError, Program},
-        vm::config::VmConfig,
+        vm::config::{PersistenceType, VmConfig},
     },
 };
 
@@ -25,6 +26,7 @@ pub mod connector;
 pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
+#[macro_use]
 pub mod segment;
 
 /// Parent struct that holds all execution segments, program, config.
@@ -32,8 +34,6 @@ pub struct VirtualMachine<F: PrimeField32> {
     pub config: VmConfig,
     input_stream: VecDeque<Vec<F>>,
     initial_memory: Option<Equipartition<F, CHUNK>>,
-    // TODO[zach]: Make better interface for user IOs
-    program_inputs: Vec<(usize, F)>,
 }
 
 pub struct VirtualMachineResult<SC: StarkGenericConfig> {
@@ -49,7 +49,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
             config,
             input_stream: VecDeque::new(),
             initial_memory: None,
-            program_inputs: vec![],
         }
     }
 
@@ -60,11 +59,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
 
     pub fn with_initial_memory(mut self, memory: Equipartition<F, CHUNK>) -> Self {
         self.initial_memory = Some(memory);
-        self
-    }
-
-    pub fn with_program_inputs(mut self, program_inputs: Vec<(usize, F)>) -> Self {
-        self.program_inputs = program_inputs;
         self
     }
 
@@ -85,14 +79,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
         let mut pc = program.pc_start;
 
         loop {
-            // TODO[zach]: User public values currently set on all segments on the core chip.
-            // This needs to change.
-            {
-                let mut core_chip = segment.core_chip.borrow_mut();
-                for &(idx, public_value) in self.program_inputs.iter() {
-                    core_chip.public_values[idx] = Some(public_value);
-                }
-            }
             pc = segment.execute_from_pc(pc)?;
             if segment.did_terminate() {
                 break;
@@ -141,5 +127,68 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 .map(ExecutionSegment::generate_proof_input)
                 .collect(),
         })
+    }
+}
+
+/// A single segment VM.
+pub struct SingleSegmentVM<F: PrimeField32> {
+    pub config: VmConfig,
+    _marker: PhantomData<F>,
+}
+
+impl<F: PrimeField32> SingleSegmentVM<F> {
+    pub fn new(config: VmConfig) -> Self {
+        assert_eq!(
+            config.memory_config.persistence_type,
+            PersistenceType::Volatile,
+            "Single segment VM only supports volatile memory"
+        );
+        Self {
+            config,
+            _marker: Default::default(),
+        }
+    }
+    /// Executes a program and returns the public values. None means the public value is not set.
+    pub fn execute(
+        &self,
+        program: Program<F>,
+        input: Vec<Vec<F>>,
+    ) -> Result<Vec<Option<F>>, ExecutionError> {
+        let segment = self.execute_impl(program, input.into())?;
+        let pv_chip = find_chip!(segment.chip_set, AxVmChip::PublicValues);
+        let borrowed_pv_chip = pv_chip.borrow();
+        let pvs = borrowed_pv_chip.core.get_custom_public_values();
+        Ok(pvs)
+    }
+    /// Executes a program and returns its proof input.
+    pub fn execute_and_generate<SC: StarkGenericConfig>(
+        &self,
+        program: Program<F>,
+        input: VecDeque<Vec<F>>,
+    ) -> Result<ProofInput<SC>, ExecutionError>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let segment = self.execute_impl(program, input)?;
+        Ok(segment.generate_proof_input())
+    }
+
+    fn execute_impl(
+        &self,
+        program: Program<F>,
+        input: VecDeque<Vec<F>>,
+    ) -> Result<ExecutionSegment<F>, ExecutionError> {
+        let pc_start = program.pc_start;
+        let mut segment = ExecutionSegment::new(
+            self.config.clone(),
+            program,
+            Streams {
+                input_stream: input,
+                hint_stream: VecDeque::new(),
+            },
+            None,
+        );
+        segment.execute_from_pc(pc_start)?;
+        Ok(segment)
     }
 }
