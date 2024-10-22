@@ -377,11 +377,6 @@ impl<F: PrimeField64> ProgramChip<F> {
         self.execution_frequencies[pc_index] += 1;
         Ok(self.program.instructions_and_debug_infos[&pc].clone())
     }
-
-    pub fn terminate_at(&mut self, pc: u32) {
-        let pc_index = self.get_pc_index(pc).unwrap();
-        self.execution_frequencies[pc_index] -= 1;
-    }
 }
 
 impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirProofInput<SC>

@@ -142,7 +142,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
             if opcode == TerminateOpcode::TERMINATE.with_default_offset() {
                 self.did_terminate = true;
-                self.chip_set.program_chip.terminate_at(pc);
+                self.chip_set.connector_chip.end_if_not_yet(
+                    ExecutionState::new(pc, timestamp),
+                    Some(instruction.c.as_canonical_u32()),
+                );
                 if collect_metrics {
                     self.update_chip_metrics();
                     #[cfg(feature = "bench-metrics")]
@@ -217,7 +220,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         self.chip_set
             .connector_chip
-            .end(ExecutionState::new(pc, timestamp));
+            .end_if_not_yet(ExecutionState::new(pc, timestamp), None);
 
         self.streams = mem::take(&mut self.core_chip.borrow_mut().streams);
 

@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, marker::PhantomData, sync::Arc};
 
+use afs_derive::AlignedBorrow;
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -7,15 +8,20 @@ use afs_stark_backend::{
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
+use axvm_instructions::UsizeOpcode;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use crate::arch::{ExecutionBus, ExecutionState};
+use crate::{
+    arch::{instructions::TerminateOpcode::TERMINATE, ExecutionBus, ExecutionState},
+    system::program::bridge::ProgramBus,
+};
 
 #[derive(Debug, Clone)]
 pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
@@ -26,11 +32,34 @@ impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
 impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
 impl<F: Field> BaseAir<F> for VmConnectorAir {
     fn width(&self) -> usize {
-        2
+        4
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
         Some(RowMajorMatrix::new_col(vec![F::zero(), F::one()]))
+    }
+}
+
+#[derive(Debug, Copy, Clone, AlignedBorrow)]
+pub struct ConnectorCols<T> {
+    pub pc: T,
+    pub timestamp: T,
+    pub is_terminate: T,
+    pub exit_code: T,
+}
+
+impl<T: Copy> ConnectorCols<T> {
+    fn map<F>(self, f: impl Fn(T) -> F) -> ConnectorCols<F> {
+        ConnectorCols {
+            pc: f(self.pc),
+            timestamp: f(self.timestamp),
+            is_terminate: f(self.is_terminate),
+            exit_code: f(self.exit_code),
+        }
+    }
+
+    fn flatten(&self) -> [T; 4] {
+        [self.pc, self.timestamp, self.is_terminate, self.exit_code]
     }
 }
 
@@ -41,8 +70,8 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         let prep_local = preprocessed.row_slice(0);
         let (begin, end) = (main.row_slice(0), main.row_slice(1));
 
-        let begin: &ExecutionState<AB::Var> = (*begin).borrow();
-        let end: &ExecutionState<AB::Var> = (*end).borrow();
+        let begin: &ConnectorCols<AB::Var> = (*begin).borrow();
+        let end: &ConnectorCols<AB::Var> = (*end).borrow();
 
         let initial_pc = builder.public_values()[0];
         let final_pc = builder.public_values()[1];
@@ -56,31 +85,54 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
             ExecutionState::new(end.pc, end.timestamp),
             ExecutionState::new(begin.pc, begin.timestamp),
         );
+        self.program_bus.send_instruction(
+            builder,
+            end.pc,
+            AB::Expr::from_canonical_usize(TERMINATE.with_default_offset()),
+            [AB::Expr::zero(), AB::Expr::zero(), end.exit_code.into()],
+            (AB::Expr::one() - prep_local[0]) * end.is_terminate,
+        );
     }
 }
 
 #[derive(Debug)]
 pub struct VmConnectorChip<F: PrimeField32> {
     pub air: VmConnectorAir,
-    pub boundary_states: [Option<ExecutionState<u32>>; 2],
+    pub boundary_states: [Option<ConnectorCols<u32>>; 2],
     _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32> VmConnectorChip<F> {
-    pub fn new(execution_bus: ExecutionBus) -> Self {
+    pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus) -> Self {
         Self {
-            air: VmConnectorAir { execution_bus },
+            air: VmConnectorAir {
+                execution_bus,
+                program_bus,
+            },
             boundary_states: [None, None],
             _marker: PhantomData,
         }
     }
 
     pub fn begin(&mut self, state: ExecutionState<u32>) {
-        self.boundary_states[0] = Some(state);
+        self.boundary_states[0] = Some(ConnectorCols {
+            pc: state.pc,
+            timestamp: state.timestamp,
+            is_terminate: 0,
+            exit_code: 0,
+        });
     }
 
-    pub fn end(&mut self, state: ExecutionState<u32>) {
-        self.boundary_states[1] = Some(state);
+    pub fn end_if_not_yet(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
+        if self.boundary_states[1].is_none() {
+            dbg!(&state, &exit_code);
+            self.boundary_states[1] = Some(ConnectorCols {
+                pc: state.pc,
+                timestamp: state.timestamp,
+                is_terminate: exit_code.is_some() as u32,
+                exit_code: exit_code.unwrap_or(0),
+            });
+        }
     }
 }
 
@@ -105,7 +157,7 @@ where
                 .iter()
                 .flat_map(|state| state.flatten())
                 .collect::<Vec<_>>(),
-            2,
+            self.trace_width(),
         );
         let public_values = vec![boundary_states[0].pc, boundary_states[1].pc];
         AirProofInput::simple(Arc::new(self.air), trace, public_values)
@@ -122,6 +174,6 @@ impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
     }
 
     fn trace_width(&self) -> usize {
-        2
+        4
     }
 }
