@@ -38,19 +38,20 @@ impl Fp12 {
         let c3_indices = self.c3.save();
         let c4_indices = self.c4.save();
         let c5_indices = self.c5.save();
+
         [
-            c0_indices.0,
-            c0_indices.1,
-            c1_indices.0,
-            c1_indices.1,
-            c2_indices.0,
-            c2_indices.1,
-            c3_indices.0,
-            c3_indices.1,
-            c4_indices.0,
-            c4_indices.1,
-            c5_indices.0,
-            c5_indices.1,
+            c0_indices[0],
+            c0_indices[1],
+            c1_indices[0],
+            c1_indices[1],
+            c2_indices[0],
+            c2_indices[1],
+            c3_indices[0],
+            c3_indices[1],
+            c4_indices[0],
+            c4_indices[1],
+            c5_indices[0],
+            c5_indices[1],
         ]
     }
 

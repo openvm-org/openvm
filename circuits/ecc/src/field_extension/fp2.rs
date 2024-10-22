@@ -16,10 +16,10 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
-    pub fn save(&mut self) -> (usize, usize) {
+    pub fn save(&mut self) -> [usize; 2] {
         let c0_idx = self.c0.save();
         let c1_idx = self.c1.save();
-        (c0_idx, c1_idx)
+        [c0_idx, c1_idx]
     }
 
     pub fn add(&mut self, other: &mut Fp2) -> Fp2 {
