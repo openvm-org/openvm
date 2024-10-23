@@ -21,7 +21,7 @@ use crate::{
             offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
         },
-        program::{bridge::ProgramBus, Instruction},
+        program::{Instruction, ProgramBus},
     },
 };
 
