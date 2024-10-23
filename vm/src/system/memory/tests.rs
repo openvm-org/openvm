@@ -8,7 +8,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
+use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     prover::types::AirProofInput,
@@ -41,7 +41,7 @@ use crate::{
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryWriteRecord,
         },
-        program::bridge::ProgramBus,
+        program::ProgramBus,
         vm::config::{MemoryConfig, PersistenceType},
     },
 };

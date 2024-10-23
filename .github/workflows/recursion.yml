@@ -39,5 +39,4 @@ jobs:
       - name: Run recursion crate tests
         working-directory: lib/recursion
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel
-          cargo nextest run --cargo-profile=fast --features parallel,static-verifier -- halo2::tests
+          cargo nextest run --features parallel,static-verifier

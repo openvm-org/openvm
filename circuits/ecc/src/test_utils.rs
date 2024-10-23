@@ -2,17 +2,17 @@ use std::{cell::RefCell, rc::Rc, str::FromStr, sync::Arc};
 
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use ax_sdk::utils::create_seeded_rng;
 use halo2curves_axiom::bn256::{Fq, Fq12, Fq2};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use p3_baby_bear::BabyBear;
-use p3_field::{Field, PrimeField64};
+use p3_field::PrimeField64;
 use rand::RngCore;
 
-use super::field_expression::{ExprBuilder, FieldVariableConfig};
+use super::field_expression::ExprBuilder;
 
 pub const LIMB_BITS: usize = 8;
 
@@ -37,13 +37,7 @@ pub fn setup(
         range_decomp,
         field_element_bits,
     );
-    let builder = ExprBuilder::new(
-        prime.clone(),
-        LIMB_BITS,
-        32,
-        range_checker.range_max_bits(),
-        BabyBear::bits() - 2,
-    );
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32, range_checker.range_max_bits());
     (subair, range_checker, Rc::new(RefCell::new(builder)))
 }
 
@@ -53,22 +47,6 @@ pub fn generate_random_biguint(prime: &BigUint) -> BigUint {
     let x = (0..len).map(|_| rng.next_u32()).collect();
     let x = BigUint::new(x);
     x % prime
-}
-
-#[derive(Clone)]
-pub struct TestConfig;
-impl FieldVariableConfig for TestConfig {
-    fn canonical_limb_bits() -> usize {
-        LIMB_BITS
-    }
-
-    fn max_limb_bits() -> usize {
-        29
-    }
-
-    fn num_limbs_per_field_element() -> usize {
-        32
-    }
 }
 
 pub fn evaluate_biguint(limbs: &[BabyBear], limb_bits: usize) -> BigUint {

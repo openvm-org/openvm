@@ -1,6 +1,6 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::xor::lookup::XorLookupChip;
+use afs_primitives::xor::XorLookupChip;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;

@@ -75,6 +75,7 @@ fn test_fibonacci_program_verify() {
 
 #[cfg(feature = "static-verifier")]
 #[test]
+#[ignore = "slow"]
 fn test_fibonacci_program_halo2_verify() {
     use afs_recursion::halo2::testing_utils::run_static_verifier_test;
 

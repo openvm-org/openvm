@@ -545,7 +545,7 @@ fn test_cpu_negative_hasnt_terminated() {
 //         program,
 //         true,
 //         |rows, segment: &mut ExecutionSegment<TEST_NUM_WORDS, TEST_WORD_SIZE, BabyBear>| {
-//             let is_zero_air = IsZeroAir;
+//             let is_zero_air = IsZeroSubAir;
 //             let mut is_zero_trace = is_zero_air
 //                 .generate_trace(vec![AbstractField::one()])
 //                 .clone();

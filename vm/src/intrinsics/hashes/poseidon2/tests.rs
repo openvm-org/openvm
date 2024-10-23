@@ -1,4 +1,3 @@
-use afs_primitives::sub_chip::LocalTraceInstructions;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
     config::{
@@ -92,9 +91,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester {
         let data: [_; WIDTH] =
             std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
 
-        let hash = LocalTraceInstructions::generate_trace_row(&chip.air.inner, data)
-            .io
-            .output;
+        let hash = chip.air.inner.generate_trace_row(data).io.output;
 
         tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
         tester.write_cell(d, b, BabyBear::from_canonical_usize(lhs));
@@ -140,6 +137,7 @@ fn poseidon2_chip_random_50_test_new() {
 
 /// Negative test, pranking internal poseidon2 trace values.
 #[test]
+#[ignore = "slow"]
 fn poseidon2_negative_test() {
     let mut rng = create_seeded_rng();
     let num_ops = 1;

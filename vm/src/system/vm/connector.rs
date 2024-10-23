@@ -1,4 +1,8 @@
-use std::{borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{
@@ -15,7 +19,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     arch::{instructions::TerminateOpcode::TERMINATE, ExecutionBus, ExecutionState},
-    system::program::bridge::ProgramBus,
+    system::program::ProgramBus,
 };
 
 #[derive(Debug, Clone)]
@@ -24,9 +28,17 @@ pub struct VmConnectorAir {
     pub program_bus: ProgramBus,
 }
 
+#[derive(Debug, Clone, AlignedBorrow)]
+#[repr(C)]
+pub struct VmConnectorPvs<F> {
+    pub initial_pc: F,
+    pub final_pc: F,
+    pub exit_code: F,
+}
+
 impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
     fn num_public_values(&self) -> usize {
-        3
+        VmConnectorPvs::<F>::width()
     }
 }
 impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
@@ -74,9 +86,11 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         let begin: &ConnectorCols<AB::Var> = (*begin).borrow();
         let end: &ConnectorCols<AB::Var> = (*end).borrow();
 
-        let initial_pc = builder.public_values()[0];
-        let final_pc = builder.public_values()[1];
-        let exit_code = builder.public_values()[2];
+        let &VmConnectorPvs {
+            initial_pc,
+            final_pc,
+            exit_code,
+        } = builder.public_values().borrow();
 
         builder.when_transition().assert_eq(begin.pc, initial_pc);
         builder.when_transition().assert_eq(end.pc, final_pc);
@@ -153,32 +167,27 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let boundary_states = self
-            .boundary_states
-            .into_iter()
-            .map(|state| {
-                state.unwrap().map(|x| {
-                    if x < 0 {
-                        -Val::<SC>::from_canonical_u32(-x as u32)
-                    } else {
-                        Val::<SC>::from_canonical_u32(x as u32)
-                    }
-                })
+        let [initial_state, final_state] = self.boundary_states.map(|state| {
+            state.unwrap().map(|x| {
+                if x < 0 {
+                    -Val::<SC>::from_canonical_u32(-x as u32)
+                } else {
+                    Val::<SC>::from_canonical_u32(x as u32)
+                }
             })
-            .collect::<Vec<_>>();
+        });
 
         let trace = RowMajorMatrix::new(
-            boundary_states
-                .iter()
-                .flat_map(|state| state.flatten())
-                .collect::<Vec<_>>(),
+            [initial_state.flatten(), final_state.flatten()].concat(),
             self.trace_width(),
         );
-        let public_values = vec![
-            boundary_states[0].pc,
-            boundary_states[1].pc,
-            boundary_states[1].exit_code,
-        ];
+
+        let mut public_values = vec![Val::<SC>::zero(); VmConnectorPvs::<Val<SC>>::width()];
+        *public_values.as_mut_slice().borrow_mut() = VmConnectorPvs {
+            initial_pc: initial_state.pc,
+            final_pc: final_state.pc,
+            exit_code: final_state.exit_code,
+        };
         AirProofInput::simple(Arc::new(self.air), trace, public_values)
     }
 }

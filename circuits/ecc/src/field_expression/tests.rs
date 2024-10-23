@@ -2,22 +2,22 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::{check_carry_mod_to_zero::CheckCarryModToZeroSubAir, utils::*},
-    ecc::SampleEcPoints,
-    sub_chip::LocalTraceInstructions,
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
 };
+use afs_stark_backend::interaction::InteractionBuilder;
 use ax_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use num_bigint_dig::BigUint;
-use p3_air::BaseAir;
+use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
-use p3_field::Field;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_field::AbstractField;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::RngCore;
 
-use super::{super::test_utils::*, ExprBuilder, FieldExpr, FieldVariableConfig, SymbolicExpr};
+use super::{super::test_utils::*, ExprBuilder, FieldExpr, SymbolicExpr};
 use crate::field_expression::{FieldExprCols, FieldVariable};
 
 const LIMB_BITS: usize = 8;
@@ -28,6 +28,14 @@ pub fn generate_random_biguint(prime: &BigUint) -> BigUint {
     let x = (0..len).map(|_| rng.next_u32()).collect();
     let x = BigUint::new(x);
     x % prime
+}
+
+impl<AB: InteractionBuilder> Air<AB> for FieldExpr {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let local = main.row_slice(0);
+        SubAir::eval(self, builder, &local);
+    }
 }
 
 fn setup(
@@ -51,30 +59,8 @@ fn setup(
         range_decomp,
         field_element_bits,
     );
-    let builder = ExprBuilder::new(
-        prime.clone(),
-        LIMB_BITS,
-        32,
-        range_checker.range_max_bits(),
-        BabyBear::bits() - 2,
-    );
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32, range_checker.range_max_bits());
     (subair, range_checker, Rc::new(RefCell::new(builder)))
-}
-
-#[derive(Clone)]
-pub struct TestConfig;
-impl FieldVariableConfig for TestConfig {
-    fn canonical_limb_bits() -> usize {
-        LIMB_BITS
-    }
-
-    fn max_limb_bits() -> usize {
-        29
-    }
-
-    fn num_limbs_per_field_element() -> usize {
-        32
-    }
 }
 
 #[test]
@@ -100,7 +86,8 @@ fn test_add() {
     let expected = (&x + &y) % prime;
     let inputs = vec![x, y];
 
-    let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
+    let mut row = vec![BabyBear::zero(); width];
+    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);
@@ -139,7 +126,8 @@ fn test_div() {
     let expected = (&x * &y_inv) % prime;
     let inputs = vec![x, y];
 
-    let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
+    let mut row = vec![BabyBear::zero(); width];
+    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);
@@ -182,7 +170,8 @@ fn test_auto_carry_mul() {
     let expected = (&x * &x * &y) % prime; // x4 = x3 * x1 = (x1 * x2) * x1
     let inputs = vec![x, y];
 
-    let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
+    let mut row = vec![BabyBear::zero(); width];
+    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 2);
     let generated = evaluate_biguint(&vars[1], LIMB_BITS);
@@ -227,7 +216,8 @@ fn test_auto_carry_intmul() {
     let expected = (&x * &x * BigUint::from(9u32)) % prime;
     let inputs = vec![x, y];
 
-    let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
+    let mut row = vec![BabyBear::zero(); width];
+    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 2);
     let generated = evaluate_biguint(&vars[1], LIMB_BITS);
@@ -282,103 +272,12 @@ fn test_auto_carry_add() {
     let expected = (&x * &x * BigUint::from(10u32)) % prime;
     let inputs = vec![x, y];
 
-    let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
+    let mut row = vec![BabyBear::zero(); width];
+    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 2);
     let generated = evaluate_biguint(&vars[x5_id], LIMB_BITS);
     assert_eq!(generated, expected);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
-}
-
-#[test]
-fn test_ec_add() {
-    let prime = secp256k1_coord_prime();
-    let (subair, range_checker, builder) = setup(&prime);
-
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let y1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
-    let y2 = ExprBuilder::new_input(builder.clone());
-    let dx = x2.clone() - x1.clone();
-    let dy = y2.clone() - y1.clone();
-    let lambda = dy / dx; // auto save on division.
-    let mut x3 = lambda.clone() * lambda.clone() - x1.clone() - x2;
-    x3.save();
-    let mut y3 = lambda * (x1 - x3) - y1;
-    y3.save();
-    let builder = builder.borrow().clone();
-
-    let expr = FieldExpr {
-        builder,
-        check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus(),
-    };
-    let width = BaseAir::<BabyBear>::width(&expr);
-    let (x1, y1) = SampleEcPoints[0].clone();
-    let (x2, y2) = SampleEcPoints[1].clone();
-    let (expected_x3, expected_y3) = SampleEcPoints[2].clone();
-    let inputs = vec![x1, y1, x2, y2];
-
-    let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
-    assert_eq!(vars.len(), 3); // lambda, x3, y3
-    let generated_x3 = evaluate_biguint(&vars[1], LIMB_BITS);
-    let generated_y3 = evaluate_biguint(&vars[2], LIMB_BITS);
-    assert_eq!(generated_x3, expected_x3);
-    assert_eq!(generated_y3, expected_y3);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
-}
-
-#[test]
-fn test_ec_double() {
-    let prime = secp256k1_coord_prime();
-    let (subair, range_checker, builder) = setup(&prime);
-
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let mut y1 = ExprBuilder::new_input(builder.clone());
-    let nom = (x1.clone() * x1.clone()).int_mul(3);
-    let denom = y1.int_mul(2);
-    let lambda = nom / denom;
-    let mut x3 = lambda.clone() * lambda.clone() - x1.clone() - x1.clone();
-    x3.save();
-    let mut y3 = lambda * (x1 - x3) - y1;
-    y3.save();
-    let builder = builder.borrow().clone();
-
-    let expr = FieldExpr {
-        builder,
-        check_carry_mod_to_zero: subair,
-        range_bus: range_checker.bus(),
-    };
-    let width = BaseAir::<BabyBear>::width(&expr);
-
-    let (x1, y1) = SampleEcPoints[1].clone();
-    let (expected_x3, expected_y3) = SampleEcPoints[3].clone();
-    let inputs = vec![x1, y1];
-
-    let row = expr.generate_trace_row((inputs, range_checker.clone(), vec![]));
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
-    assert_eq!(vars.len(), 3); // lambda, x3, y3
-    let generated_x3 = evaluate_biguint(&vars[1], LIMB_BITS);
-    let generated_y3 = evaluate_biguint(&vars[2], LIMB_BITS);
-    assert_eq!(generated_x3, expected_x3);
-    assert_eq!(generated_y3, expected_y3);
 
     let trace = RowMajorMatrix::new(row, width);
     let range_trace = range_checker.generate_trace();
@@ -420,7 +319,8 @@ fn test_select() {
     let inputs = vec![x, y];
     let flags = vec![false];
 
-    let row = expr.generate_trace_row((inputs, range_checker.clone(), flags));
+    let mut row = vec![BabyBear::zero(); width];
+    expr.generate_subrow((&range_checker, inputs, flags), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);
@@ -465,7 +365,8 @@ fn test_select2() {
     let inputs = vec![x, y];
     let flags = vec![true];
 
-    let row = expr.generate_trace_row((inputs, range_checker.clone(), flags));
+    let mut row = vec![BabyBear::zero(); width];
+    expr.generate_subrow((&range_checker, inputs, flags), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);

@@ -10,8 +10,8 @@ use std::{
 use afs_primitives::{
     bigint::utils::secp256k1_coord_prime,
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
-    xor::lookup::XorLookupChip,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    xor::XorLookupChip,
 };
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -87,7 +87,7 @@ use crate::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
             MemoryControllerRef, CHUNK,
         },
-        program::{bridge::ProgramBus, ProgramChip},
+        program::{ProgramBus, ProgramChip},
         vm::{
             config::{PersistenceType, VmConfig},
             connector::VmConnectorChip,
@@ -611,7 +611,6 @@ impl VmConfig {
                     chips.push(AxVmChip::CastF(chip));
                 }
                 // TODO: make these customizable opcode classes
-                // use new ones
                 ExecutorName::Secp256k1AddUnequal => {
                     let chip = Rc::new(RefCell::new(KernelEcAddNeChip::new(
                         NativeVecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
@@ -623,7 +622,6 @@ impl VmConfig {
                             secp256k1_coord_prime(),
                             32,
                             8,
-                            F::bits() - 2,
                             memory_controller.borrow().range_checker.clone(),
                             offset,
                         ),
@@ -645,7 +643,6 @@ impl VmConfig {
                             secp256k1_coord_prime(),
                             32,
                             8,
-                            F::bits() - 2,
                             memory_controller.borrow().range_checker.clone(),
                             offset,
                         ),
@@ -702,7 +699,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -724,7 +720,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -746,7 +741,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -768,7 +762,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -790,7 +783,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -812,7 +804,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));

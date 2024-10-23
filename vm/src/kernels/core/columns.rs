@@ -134,7 +134,7 @@ impl<T> CoreMemoryAccessCols<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct CoreAuxCols<T> {
     pub operation_flags: BTreeMap<CoreOpcode, T>,
     pub reads: [CoreMemoryAccessCols<T>; CORE_MAX_READS_PER_CYCLE],
@@ -249,7 +249,7 @@ impl<F: PrimeField32> CoreAuxCols<F> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct CoreCols<T> {
     pub io: CoreIoCols<T>,
     pub aux: CoreAuxCols<T>,

@@ -1,8 +1,8 @@
 use std::{borrow::Borrow, mem::size_of};
 
-use afs_primitives::is_less_than::{
-    columns::{IsLessThanAuxCols, IsLessThanIoCols},
-    IsLessThanAir,
+use afs_primitives::{
+    is_less_than::{IsLessThanIo, IsLtSubAir},
+    SubAir,
 };
 use afs_stark_backend::{
     interaction::InteractionBuilder,
@@ -13,14 +13,12 @@ use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
 use crate::system::memory::{
-    adapter::columns::AccessAdapterCols,
-    offline_checker::{MemoryBus, AUX_LEN},
-    MemoryAddress,
+    adapter::columns::AccessAdapterCols, offline_checker::MemoryBus, MemoryAddress,
 };
 
 pub struct AccessAdapterAir<const N: usize> {
     pub memory_bus: MemoryBus,
-    pub lt_air: IsLessThanAir,
+    pub lt_air: IsLtSubAir,
 }
 
 impl<T, const N: usize> BaseAirWithPublicValues<T> for AccessAdapterAir<N> {}
@@ -33,8 +31,6 @@ impl<T, const N: usize> BaseAir<T> for AccessAdapterAir<N> {
 
 impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
     fn eval(&self, builder: &mut AB) {
-        assert_eq!(self.lt_air.num_limbs, AUX_LEN);
-
         let main = builder.main();
 
         let local = main.row_slice(0);
@@ -52,17 +48,17 @@ impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
             .when(local.is_split)
             .assert_eq(local.left_timestamp, local.right_timestamp);
 
-        self.lt_air.conditional_eval(
+        self.lt_air.eval(
             builder,
-            IsLessThanIoCols {
-                x: local.left_timestamp.into(),
-                y: local.right_timestamp.into(),
-                less_than: local.is_right_larger.into(),
-            },
-            IsLessThanAuxCols {
-                lower_decomp: local.lt_aux.into(),
-            },
-            local.is_valid,
+            (
+                IsLessThanIo {
+                    x: local.left_timestamp.into(),
+                    y: local.right_timestamp.into(),
+                    out: local.is_right_larger.into(),
+                    count: local.is_valid.into(),
+                },
+                &local.lt_aux,
+            ),
         );
 
         let parent_timestamp = local.is_right_larger * local.right_timestamp

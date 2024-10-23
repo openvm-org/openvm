@@ -4,7 +4,7 @@ use afs_primitives::bigint::utils::{
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field};
+use p3_field::AbstractField;
 use rand::Rng;
 
 use super::{ModularAddSubCoreChip, ModularMulDivCoreChip};
@@ -46,7 +46,6 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         LIMB_BITS,
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
-        BabyBear::bits() - 2,
     );
     // doing 1xNUM_LIMBS reads and writes
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
@@ -163,7 +162,6 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         LIMB_BITS,
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
-        BabyBear::bits() - 2,
     );
     // doing 1xNUM_LIMBS reads and writes
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(

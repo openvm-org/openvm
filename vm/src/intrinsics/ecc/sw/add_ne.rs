@@ -2,8 +2,8 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
-    sub_chip::{LocalTraceInstructions, SubAir},
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldExprCols};
@@ -32,7 +32,6 @@ impl SwEcAddNeCoreAir {
         modulus: BigUint, // The coordinate field.
         num_limbs: usize,
         limb_bits: usize,
-        max_limb_bits: usize,
         range_bus: VariableRangeCheckerBus,
         offset: usize,
     ) -> Self {
@@ -44,13 +43,7 @@ impl SwEcAddNeCoreAir {
             range_bus.range_max_bits,
             FIELD_ELEMENT_BITS,
         );
-        let builder = ExprBuilder::new(
-            modulus,
-            limb_bits,
-            num_limbs,
-            range_bus.range_max_bits,
-            max_limb_bits,
-        );
+        let builder = ExprBuilder::new(modulus, limb_bits, num_limbs, range_bus.range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
 
         let x1 = ExprBuilder::new_input(builder.clone());
@@ -94,7 +87,7 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         assert_eq!(local.len(), BaseAir::<AB::F>::width(&self.expr));
-        SubAir::eval(&self.expr, builder, local.to_vec(), ());
+        self.expr.eval(builder, local);
 
         let FieldExprCols {
             is_valid,
@@ -137,18 +130,10 @@ impl SwEcAddNeCoreChip {
         modulus: BigUint,
         num_limbs: usize,
         limb_bits: usize,
-        max_limb_bits: usize,
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
-        let air = SwEcAddNeCoreAir::new(
-            modulus,
-            num_limbs,
-            limb_bits,
-            max_limb_bits,
-            range_checker.bus(),
-            offset,
-        );
+        let air = SwEcAddNeCoreAir::new(modulus, num_limbs, limb_bits, range_checker.bus(), offset);
         Self { air, range_checker }
     }
 }
@@ -226,15 +211,14 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let input = (
-            vec![record.p1.x, record.p1.y, record.p2.x, record.p2.y],
-            self.range_checker.clone(),
-            vec![],
+        self.air.expr.generate_subrow(
+            (
+                &self.range_checker,
+                vec![record.p1.x, record.p1.y, record.p2.x, record.p2.y],
+                vec![],
+            ),
+            row_slice,
         );
-        let row = LocalTraceInstructions::<F>::generate_trace_row(&self.air.expr, input);
-        for (i, element) in row.iter().enumerate() {
-            row_slice[i] = *element;
-        }
     }
 
     fn air(&self) -> &Self::Air {

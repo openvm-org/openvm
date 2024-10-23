@@ -8,6 +8,7 @@ use super::{
     utils::{big_uint_to_limbs, range_check},
     OverflowInt,
 };
+use crate::SubAir;
 
 #[derive(Clone)]
 pub struct CheckCarryModToZeroCols<T> {
@@ -42,14 +43,27 @@ impl CheckCarryModToZeroSubAir {
             check_carry_to_zero,
         }
     }
+}
 
-    pub fn constrain_carry_mod_to_zero<AB: InteractionBuilder>(
-        &self,
-        builder: &mut AB,
-        expr: OverflowInt<AB::Expr>,
-        cols: CheckCarryModToZeroCols<AB::Var>,
-        is_valid: AB::Var,
-    ) {
+impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
+    /// `(expr, cols, is_valid)`
+    type AirContext<'a>
+    = (OverflowInt<AB::Expr>, CheckCarryModToZeroCols<AB::Var>, AB::Var) where
+        AB::Var:'a, AB::Expr:'a,
+        AB: 'a;
+
+    fn eval<'a>(
+        &'a self,
+        builder: &'a mut AB,
+        (expr, cols, is_valid): (
+            OverflowInt<AB::Expr>,
+            CheckCarryModToZeroCols<AB::Var>,
+            AB::Var,
+        ),
+    ) where
+        AB::Var: 'a,
+        AB::Expr: 'a,
+    {
         let CheckCarryModToZeroCols { quotient, carries } = cols;
         builder.assert_bool(is_valid);
         let q_offset = AB::F::from_canonical_usize(1 << self.check_carry_to_zero.limb_bits);
@@ -78,11 +92,7 @@ impl CheckCarryModToZeroSubAir {
         );
 
         let expr = expr - overflow_q * overflow_p;
-        self.check_carry_to_zero.constrain_carry_to_zero(
-            builder,
-            expr,
-            CheckCarryToZeroCols { carries },
-            is_valid,
-        );
+        self.check_carry_to_zero
+            .eval(builder, (expr, CheckCarryToZeroCols { carries }, is_valid));
     }
 }

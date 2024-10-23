@@ -1,11 +1,9 @@
 use afs_primitives::{
-    assert_less_than::{columns::AssertLessThanIoCols, AssertLessThanAir},
-    is_zero::{
-        columns::{IsZeroCols, IsZeroIoCols},
-        IsZeroAir,
-    },
+    assert_less_than::{AssertLessThanIo, AssertLtSubAir},
+    is_zero::{IsZeroIo, IsZeroSubAir},
     utils::not,
-    var_range::bus::VariableRangeCheckerBus,
+    var_range::VariableRangeCheckerBus,
+    SubAir,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;
@@ -23,9 +21,9 @@ use crate::{
 };
 
 /// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will be decomposed into)
-/// for the `AssertLessThanAir` in the `MemoryOfflineChecker`.
+/// for the `AssertLtSubAir` in the `MemoryOfflineChecker`.
 /// Warning: This requires that (clk_max_bits + decomp - 1) / decomp = AUX_LEN
-///         in MemoryOfflineChecker (or whenever AssertLessThanAir is used)
+///         in MemoryOfflineChecker (or whenever AssertLtSubAir is used)
 pub(crate) const AUX_LEN: usize = 2;
 
 /// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory operations (read/write).
@@ -195,7 +193,7 @@ pub struct MemoryReadOrImmediateOperation<'a, T, V> {
 }
 
 /// The max degree of constraints is:
-/// IsZeroAir.subair_eval:
+/// IsZeroSubAir.subair_eval:
 ///         deg(enabled) + max(deg(address.address_space) + deg(aux.is_immediate),
 ///                           deg(address.address_space) + deg(aux.is_zero_aux))
 /// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
@@ -211,18 +209,12 @@ impl<'a, F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'a,
 
         // `is_immediate` should be an indicator for `address_space == 0` (when `enabled`).
         {
-            let addr_space_is_zero_cols = IsZeroCols::new(
-                IsZeroIoCols::new(
-                    self.address.address_space.clone(),
-                    self.aux.is_immediate.into(),
-                ),
-                self.aux.is_zero_aux.into(),
+            let is_zero_io = IsZeroIo::new(
+                self.address.address_space.clone(),
+                self.aux.is_immediate.into(),
+                enabled.clone(),
             );
-            IsZeroAir.subair_eval(
-                &mut builder.when(enabled.clone()), // when not enabled, allow aux to be all 0s no matter what
-                addr_space_is_zero_cols.io,
-                addr_space_is_zero_cols.inv,
-            );
+            IsZeroSubAir.eval(builder, (is_zero_io, self.aux.is_zero_aux));
         }
         // When `is_immediate`, the data should be the pointer value.
         builder
@@ -296,7 +288,7 @@ impl<'a, T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperati
 #[derive(Clone, Copy, Debug)]
 struct MemoryOfflineChecker {
     memory_bus: MemoryBus,
-    timestamp_lt_air: AssertLessThanAir<AUX_LEN>,
+    timestamp_lt_air: AssertLtSubAir,
 }
 
 impl MemoryOfflineChecker {
@@ -304,7 +296,7 @@ impl MemoryOfflineChecker {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp);
         Self {
             memory_bus,
-            timestamp_lt_air: AssertLessThanAir::new(range_bus, clk_max_bits),
+            timestamp_lt_air: AssertLtSubAir::new(range_bus, clk_max_bits),
         }
     }
 
@@ -318,9 +310,9 @@ impl MemoryOfflineChecker {
         base: &MemoryBaseAuxCols<AB::Var>,
         enabled: AB::Expr,
     ) {
-        let clk_lt_io_cols = AssertLessThanIoCols::new(base.prev_timestamp, timestamp.clone());
+        let lt_io = AssertLessThanIo::new(base.prev_timestamp, timestamp.clone(), enabled);
         self.timestamp_lt_air
-            .conditional_eval(builder, clk_lt_io_cols, base.clk_lt_aux, enabled);
+            .eval(builder, (lt_io, &base.clk_lt_aux.lower_decomp));
     }
 
     /// At the core, eval_bulk_access is a bunch of push_sends and push_receives.

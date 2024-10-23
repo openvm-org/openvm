@@ -26,6 +26,7 @@ num-bigint-dig.workspace = true
 num-traits.workspace = true
 num-integer.workspace = true
 lazy_static.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }
@@ -38,8 +39,8 @@ p3-keccak = { workspace = true }
 p3-merkle-tree = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-symmetric = { workspace = true }
-test-case = "3.3.1"
-ax-sdk = { path = "../../sdk" }
+test-case.workspace = true
+ax-sdk = { workspace = true }
 
 [features]
 default = ["parallel"]

@@ -10,7 +10,6 @@ use p3_util::log2_ceil_usize;
 
 pub mod check_carry_mod_to_zero;
 pub mod check_carry_to_zero;
-pub mod modular_arithmetic;
 pub mod utils;
 
 #[cfg(test)]
