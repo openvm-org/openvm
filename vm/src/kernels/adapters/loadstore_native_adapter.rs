@@ -188,7 +188,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             )
             .eval(
                 builder,
-                is_valid.clone() - is_shintw.clone() - is_loadw.clone() - is_storew.clone(),
+                is_valid.clone() - is_shintw.clone(), // - is_loadw.clone() - is_storew.clone(),
             );
 
         // TODO[yi]: Remove when vectorizing
@@ -333,6 +333,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         output: AdapterRuntimeContext<F, Self::Interface>,
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
+        let write =
+            memory.write::<NUM_CELLS>(read_record.write_as, read_record.write_ptr, output.writes);
         Ok((
             ExecutionState {
                 pc: output.to_pc.unwrap_or(from_state.pc + 1),
@@ -340,11 +342,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             },
             Self::WriteRecord {
                 from_state: from_state.map(F::from_canonical_u32),
-                write: memory.write::<NUM_CELLS>(
-                    read_record.write_as,
-                    read_record.write_ptr,
-                    output.writes,
-                ),
+                write,
             },
         ))
     }
