@@ -9,7 +9,7 @@ use backtrace::Backtrace;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 
-use crate::{arch::NUM_OPERANDS, kernels::core::READ_INSTRUCTION_BUS, rv32im::adapters::PC_BITS};
+use crate::{arch::NUM_OPERANDS, kernels::core::READ_INSTRUCTION_BUS};
 
 #[cfg(test)]
 pub mod tests;
@@ -21,6 +21,8 @@ pub mod util;
 
 pub use air::*;
 pub use bus::*;
+
+use super::PC_BITS;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]

@@ -20,10 +20,9 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::{
-        JumpUiProcessedInstruction, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-        RV_J_TYPE_IMM_BITS,
+        JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
     },
-    system::program::Instruction,
+    system::{program::Instruction, PC_BITS},
 };
 
 #[repr(C)]

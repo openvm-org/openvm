@@ -24,8 +24,7 @@ use crate::{
         adapters::jal_native_adapter::JalNativeAdapterChip,
         jal::{JalCoreChip, KernelJalChip},
     },
-    rv32im::adapters::PC_BITS,
-    system::program::Instruction,
+    system::{program::Instruction, PC_BITS},
 };
 
 type F = BabyBear;
