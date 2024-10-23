@@ -145,7 +145,7 @@ This instruction set is always enabled.
 | **BEQ**             | `a, b, offset`                                | If `[a]_d == [b]_e`, then set `pc <- pc + offset`                                                                                     |
 | **BNE**             | `a, b, offset`                                | If `[a]_d != [b]_e`, then set `pc <- pc + offset`                                                                                     |
 | **TERMINATE**       | `_, _, _`                                     | Terminates execution.                                                                                                                 |
-| **SHINTW**          | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `[[a]_d + b]_e`.                                                                     |
+| **SHINTW**          | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `[[c]_d + b]_e`.                                                                     |
 | **PUBLISH**         | `a, b, _`                                     | Constrains the public value at index `[a]_d` to equal `[b]_e`.                                                                        |
 
 #### Notes about hints
