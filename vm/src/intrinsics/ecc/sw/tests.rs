@@ -6,7 +6,7 @@ use p3_field::AbstractField;
 use super::{super::FIELD_ELEMENT_BITS, SwEcAddNeCoreChip};
 use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
-    intrinsics::ecc_v2::sw::SwEcDoubleCoreChip,
+    intrinsics::ecc::sw::SwEcDoubleCoreChip,
     rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
     system::program::Instruction,
     utils::biguint_to_limbs,

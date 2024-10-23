@@ -1,7 +1,7 @@
 use super::adapters::native_vec_heap_adapter::{NativeVecHeapAdapterAir, NativeVecHeapAdapterChip};
 use crate::{
     arch::{VmAirWrapper, VmChipWrapper},
-    intrinsics::ecc_v2::sw::{
+    intrinsics::ecc::sw::{
         SwEcAddNeCoreAir, SwEcAddNeCoreChip, SwEcDoubleCoreAir, SwEcDoubleCoreChip,
     },
 };

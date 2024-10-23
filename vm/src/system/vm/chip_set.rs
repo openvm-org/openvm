@@ -32,7 +32,7 @@ use super::Streams;
 use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
     intrinsics::{
-        ecc_v2::sw::{SwEcAddNeCoreChip, SwEcDoubleCoreChip},
+        ecc::sw::{SwEcAddNeCoreChip, SwEcDoubleCoreChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
