@@ -14,6 +14,8 @@ pub fn limbs_to_biguint(x: &[u32], limb_size: usize) -> BigUint {
 // little endian.
 // Warning: This function only returns the last NUM_LIMBS*LIMB_BITS bits of
 //          the input, while the input can have more than that.
+// not sure why lint complains... this is used in tests.
+#[allow(dead_code)]
 pub fn biguint_to_limbs<const NUM_LIMBS: usize>(
     mut x: BigUint,
     limb_size: usize,
