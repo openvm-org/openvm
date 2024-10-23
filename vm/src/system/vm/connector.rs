@@ -15,7 +15,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     arch::{instructions::TerminateOpcode::TERMINATE, ExecutionBus, ExecutionState},
-    system::program::bridge::ProgramBus,
+    system::program::ProgramBus,
 };
 
 #[derive(Debug, Clone)]

@@ -12,7 +12,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     arch::ExecutionState,
-    system::program::{bridge::ProgramBus, columns::ProgramExecutionCols, Instruction},
+    system::program::{Instruction, ProgramBus, ProgramExecutionCols},
 };
 
 mod air;

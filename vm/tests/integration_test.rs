@@ -21,6 +21,7 @@ use stark_vm::{
         ExecutorName,
     },
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
+    sdk::air_test,
     system::{
         memory::Equipartition,
         program::{Instruction, Program},
@@ -47,19 +48,6 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::BranchEqual)
         .add_executor(ExecutorName::Jal)
-}
-
-fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let pk = vm.config.generate_pk(engine.keygen_builder());
-
-    let result = vm.execute_and_generate(program).unwrap();
-
-    for proof_input in result.per_segment {
-        engine
-            .prove_then_verify(&pk, proof_input)
-            .expect("Verification failed");
-    }
 }
 
 // log_blowup = 3 for poseidon2 chip

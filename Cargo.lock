@@ -3661,6 +3661,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_xoshiro",
  "serde",
+ "stark-vm",
  "strum",
  "strum_macros",
  "test-case",

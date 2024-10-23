@@ -157,18 +157,25 @@ impl VmConfig {
     }
 
     pub fn rv32i() -> Self {
-        Self::default_with_no_executors()
-            .add_executor(ExecutorName::Nop)
-            .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
-            .add_executor(ExecutorName::LessThanRv32)
-            .add_executor(ExecutorName::ShiftRv32)
-            .add_executor(ExecutorName::LoadStoreRv32)
-            .add_executor(ExecutorName::LoadSignExtendRv32)
-            .add_executor(ExecutorName::BranchEqualRv32)
-            .add_executor(ExecutorName::BranchLessThanRv32)
-            .add_executor(ExecutorName::JalLuiRv32)
-            .add_executor(ExecutorName::JalrRv32)
-            .add_executor(ExecutorName::AuipcRv32)
+        VmConfig {
+            poseidon2_max_constraint_degree: 3,
+            memory_config: MemoryConfig {
+                persistence_type: PersistenceType::Persistent,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+        .add_executor(ExecutorName::Nop)
+        .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
+        .add_executor(ExecutorName::LessThanRv32)
+        .add_executor(ExecutorName::ShiftRv32)
+        .add_executor(ExecutorName::LoadStoreRv32)
+        .add_executor(ExecutorName::LoadSignExtendRv32)
+        .add_executor(ExecutorName::BranchEqualRv32)
+        .add_executor(ExecutorName::BranchLessThanRv32)
+        .add_executor(ExecutorName::JalLuiRv32)
+        .add_executor(ExecutorName::JalrRv32)
+        .add_executor(ExecutorName::AuipcRv32)
     }
 
     pub fn rv32im() -> Self {
