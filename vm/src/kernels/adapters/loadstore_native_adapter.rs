@@ -21,9 +21,7 @@ use crate::{
     },
     system::{
         memory::{
-            offline_checker::{
-                MemoryBridge, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
-            },
+            offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
@@ -47,7 +45,8 @@ pub struct NativeLoadStoreAdapterInterface<T, const NUM_CELLS: usize>(PhantomDat
 impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     for NativeLoadStoreAdapterInterface<T, NUM_CELLS>
 {
-    type Reads = ([T; 2], [T; NUM_CELLS]);
+    // TODO[yi]: Fix when vectorizing
+    type Reads = ([T; 2], T);
     type Writes = [T; NUM_CELLS];
     type ProcessedInstruction = NativeLoadStoreProcessedInstruction<T>;
 }
@@ -114,7 +113,9 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub g: T,
 
     pub pointer_read_aux_cols: [MemoryReadOrImmediateAuxCols<T>; 2],
-    pub data_read_aux_cols: MemoryReadAuxCols<T, NUM_CELLS>,
+    pub data_read_aux_cols: MemoryReadOrImmediateAuxCols<T>,
+    // TODO[yi]: Fix when vectorizing
+    // pub data_read_aux_cols: MemoryReadAuxCols<T, NUM_CELLS>,
     pub data_write_aux_cols: MemoryWriteAuxCols<T, NUM_CELLS>,
 }
 
@@ -141,6 +142,9 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
+        // TODO[yi]: Remove when vectorizing
+        assert_eq!(NUM_CELLS, 1);
+
         let cols: &NativeLoadStoreAdapterCols<_, NUM_CELLS> = local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -166,7 +170,8 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             )
             .eval(builder, is_valid.clone());
 
-        // second pointer read is [f]_d if loadw2 or storew2, otherwise [f]_g, disabled if SHINTW
+        // second pointer read is [f]_d if loadw2 or storew2, otherwise [f]_g,
+        // disabled if LOADW, STOREW, SHINTW
         self.memory_bridge
             .read_or_immediate(
                 MemoryAddress::new(
@@ -181,15 +186,19 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
                 timestamp_pp(),
                 &cols.pointer_read_aux_cols[1],
             )
-            .eval(builder, is_valid.clone() - is_shintw.clone());
+            .eval(
+                builder,
+                is_valid.clone() - is_shintw.clone() - is_loadw.clone() - is_storew.clone(),
+            );
 
+        // TODO[yi]: Remove when vectorizing
         // read data, disabled if SHINTW
         // standard pointer = [c]_d + [f]_g + b, degree 1
         // extended pointer = [c]_d + b + [f]_d * g, degree 2
         let standard_pointer = ctx.reads.0[0].clone() + ctx.reads.0[1].clone() + cols.b;
         let extended_pointer = ctx.reads.0[0].clone() + cols.b + ctx.reads.0[1].clone() * cols.g;
         self.memory_bridge
-            .read(
+            .read_or_immediate(
                 MemoryAddress::new(
                     utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.e, cols.d),
                     (is_storew.clone() + is_storew2.clone()) * cols.a
@@ -238,7 +247,8 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
 impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
     for NativeLoadStoreAdapterChip<F, NUM_CELLS>
 {
-    type ReadRecord = NativeLoadStoreReadRecord<F, NUM_CELLS>;
+    // TODO[yi]: Fix when vectorizing
+    type ReadRecord = NativeLoadStoreReadRecord<F, 1>;
     type WriteRecord = NativeLoadStoreWriteRecord<F, NUM_CELLS>;
     type Air = NativeLoadStoreAdapterAir<NUM_CELLS>;
     type Interface = NativeLoadStoreAdapterInterface<F, NUM_CELLS>;
@@ -293,7 +303,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             }
         };
 
-        let data_read = memory.read::<NUM_CELLS>(data_read_as, data_read_ptr);
+        // TODO[yi]: Fix when vectorizing
+        let data_read = memory.read::<1>(data_read_as, data_read_ptr);
         let record = NativeLoadStoreReadRecord {
             pointer_reads: [read1_cell, read2_cell],
             data_read,
@@ -309,7 +320,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         };
 
         Ok((
-            ([read1_cell.data[0], read2_cell.data[0]], data_read.data),
+            ([read1_cell.data[0], read2_cell.data[0]], data_read.data[0]),
             record,
         ))
     }
@@ -355,10 +366,14 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         cols.f = read_record.f;
         cols.g = read_record.g;
 
+        println!("{:?}", read_record);
+        println!("{:?}", write_record);
+
         cols.pointer_read_aux_cols = read_record
             .pointer_reads
             .map(|read| aux_cols_factory.make_read_or_immediate_aux_cols(read));
-        cols.data_read_aux_cols = aux_cols_factory.make_read_aux_cols(read_record.data_read);
+        cols.data_read_aux_cols =
+            aux_cols_factory.make_read_or_immediate_aux_cols(read_record.data_read);
         cols.data_write_aux_cols = aux_cols_factory.make_write_aux_cols(write_record.write);
     }
 

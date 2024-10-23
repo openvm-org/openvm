@@ -253,6 +253,7 @@ fn test_vm_1_persistent() {
         memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
         ..VmConfig::core()
     }
+    .add_executor(ExecutorName::LoadStore)
     .add_executor(ExecutorName::FieldArithmetic)
     .add_executor(ExecutorName::BranchEqual)
     .add_executor(ExecutorName::Jal);

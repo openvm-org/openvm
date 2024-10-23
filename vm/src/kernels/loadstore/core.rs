@@ -34,7 +34,7 @@ pub struct KernelLoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub is_shintw: T,
 
     pub pointer_reads: [T; 2],
-    pub data_read: [T; NUM_CELLS],
+    pub data_read: T,
     pub data_write: [T; NUM_CELLS],
 }
 
@@ -43,7 +43,7 @@ pub struct KernelLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub opcode: NativeLoadStoreOpcode,
 
     pub pointer_reads: [F; 2],
-    pub data_read: [F; NUM_CELLS],
+    pub data_read: F,
     pub data_write: [F; NUM_CELLS],
 }
 
@@ -67,7 +67,7 @@ impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for KernelLoadStoreCoreAir<
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<([AB::Expr; 2], [AB::Expr; NUM_CELLS])>,
+    I::Reads: From<([AB::Expr; 2], AB::Expr)>,
     I::Writes: From<[AB::Expr; NUM_CELLS]>,
     I::ProcessedInstruction: From<NativeLoadStoreProcessedInstruction<AB::Expr>>,
 {
@@ -94,17 +94,13 @@ where
         let expected_opcode = flags.iter().zip(NativeLoadStoreOpcode::iter()).fold(
             AB::Expr::zero(),
             |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode.as_usize() as u8)
+                acc + (*flag).into() * AB::Expr::from_canonical_usize(opcode.as_usize())
             },
         ) + AB::Expr::from_canonical_usize(self.offset);
 
         AdapterAirContext {
             to_pc: None,
-            reads: (
-                cols.pointer_reads.map(Into::into),
-                cols.data_read.map(Into::into),
-            )
-                .into(),
+            reads: (cols.pointer_reads.map(Into::into), cols.data_read.into()).into(),
             writes: cols.data_write.map(Into::into).into(),
             instruction: NativeLoadStoreProcessedInstruction {
                 is_valid,
@@ -138,7 +134,7 @@ impl<F: Field, const NUM_CELLS: usize> KernelLoadStoreCoreChip<F, NUM_CELLS> {
 impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
     for KernelLoadStoreCoreChip<F, NUM_CELLS>
 where
-    I::Reads: Into<([F; 2], [F; NUM_CELLS])>,
+    I::Reads: Into<([F; 2], F)>,
     I::Writes: From<[F; NUM_CELLS]>,
 {
     type Record = KernelLoadStoreCoreRecord<F, NUM_CELLS>;
@@ -154,7 +150,7 @@ where
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode - self.air.offset);
         let (pointer_reads, data_read) = reads.into();
 
-        let output = AdapterRuntimeContext::without_pc(data_read);
+        let output = AdapterRuntimeContext::without_pc([data_read; NUM_CELLS]);
         let record = KernelLoadStoreCoreRecord {
             opcode: NativeLoadStoreOpcode::from_usize(opcode - self.air.offset),
             pointer_reads,
@@ -166,7 +162,7 @@ where
                 }
                 array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
             } else {
-                data_read
+                [data_read; NUM_CELLS]
             },
         };
         Ok((output, record))
@@ -188,7 +184,7 @@ where
         cols.is_shintw = F::from_bool(record.opcode == NativeLoadStoreOpcode::SHINTW);
 
         cols.pointer_reads = record.pointer_reads.map(Into::into);
-        cols.data_read = record.data_read.map(Into::into);
+        cols.data_read = record.data_read.into();
         cols.data_write = record.data_write.map(Into::into);
     }
 
