@@ -48,6 +48,7 @@ pub struct FieldVariable {
 impl FieldVariable {
     // Returns the index of the new variable.
     // There should be no division in the expression.
+    /// This function is idempotent, i.e., if you already saved, then saving again does nothing.
     pub fn save(&mut self) -> usize {
         if let SymbolicExpr::Var(var_id) = self.expr {
             // If self.expr is already a Var, no need to save
