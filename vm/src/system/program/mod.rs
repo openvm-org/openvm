@@ -9,13 +9,7 @@ use backtrace::Backtrace;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 
-use crate::{
-    arch::{
-        instructions::CoreOpcode::{DUMMY, FAIL},
-        NUM_OPERANDS,
-    },
-    kernels::core::READ_INSTRUCTION_BUS,
-};
+use crate::{arch::NUM_OPERANDS, kernels::core::READ_INSTRUCTION_BUS};
 
 #[cfg(test)]
 pub mod tests;
@@ -129,7 +123,7 @@ impl<F: Field> Instruction<F> {
 impl<T: Default> Default for Instruction<T> {
     fn default() -> Self {
         Self {
-            opcode: DUMMY as usize,
+            opcode: 0, // there is no real default opcode, this field must always be set
             a: T::default(),
             b: T::default(),
             c: T::default(),

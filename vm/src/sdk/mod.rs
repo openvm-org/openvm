@@ -3,7 +3,7 @@ use afs_stark_backend::{
     engine::StarkEngine,
 };
 use ax_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::{ProofInputForTest, StarkFriEngine},
 };
 use p3_baby_bear::BabyBear;
@@ -15,6 +15,7 @@ use crate::system::{
 };
 
 pub fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
+    setup_tracing();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let pk = vm.config.generate_pk(engine.keygen_builder());
 
