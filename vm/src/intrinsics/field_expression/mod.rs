@@ -95,7 +95,7 @@ where
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
-            opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
+            opcode: expected_opcode,
         };
 
         let ctx: AdapterAirContext<_, DynAdapterInterface<_>> = AdapterAirContext {
