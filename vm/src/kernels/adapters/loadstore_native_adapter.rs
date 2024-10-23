@@ -7,7 +7,7 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::utils;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::BaseAir;
+use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
@@ -82,7 +82,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> NativeLoadStoreAdapterChip<F, NUM_
 pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
     pub pointer1_read: MemoryReadRecord<F, 1>,
     pub pointer2_read: Option<MemoryReadRecord<F, 1>>,
-    pub data_read: MemoryReadRecord<F, NUM_CELLS>,
+    pub data_read: Option<MemoryReadRecord<F, NUM_CELLS>>,
     pub write_as: F,
     pub write_ptr: F,
 
@@ -192,12 +192,14 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         // TODO[yi]: Remove when vectorizing
         // read data, disabled if SHINTW
         // data pointer = [c]_d + [f]_d * g + b, degree 2
+        builder
+            .when(is_valid.clone() - is_shintw.clone())
+            .assert_eq(
+                cols.data_read_as,
+                utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.e, cols.d),
+            );
         builder.assert_eq(
-            cols.data_read_as,
-            utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.e, cols.d),
-        );
-        builder.assert_eq(
-            cols.data_read_pointer,
+            (is_valid.clone() - is_shintw.clone()) * cols.data_read_pointer,
             (is_storew.clone() + is_storew2.clone()) * cols.a
                 + (is_loadw.clone() + is_loadw2.clone())
                     * (ctx.reads.0[0].clone() + cols.b + ctx.reads.0[1].clone() * cols.g),
@@ -213,12 +215,12 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         timestamp_delta += is_valid.clone() - is_shintw.clone();
 
         // data write
-        builder.assert_eq(
+        builder.when(is_valid.clone()).assert_eq(
             cols.data_write_as,
             utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.d, cols.e),
         );
         builder.assert_eq(
-            cols.data_write_pointer,
+            is_valid.clone() * cols.data_write_pointer,
             (is_loadw.clone() + is_loadw2.clone()) * cols.a
                 + (is_storew.clone() + is_storew2.clone() + is_shintw.clone())
                     * (ctx.reads.0[0].clone() + cols.b + ctx.reads.0[1].clone() * cols.g),
@@ -308,7 +310,10 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         };
 
         // TODO[yi]: Fix when vectorizing
-        let data_read = memory.read::<1>(data_read_as, data_read_ptr);
+        let data_read = match local_opcode_index {
+            SHINTW => None,
+            _ => Some(memory.read::<1>(data_read_as, data_read_ptr)),
+        };
         let record = NativeLoadStoreReadRecord {
             pointer1_read: read1_cell,
             pointer2_read: read2_cell,
@@ -330,7 +335,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
                     read1_cell.data[0],
                     read2_cell.map_or_else(F::zero, |x| x.data[0]),
                 ],
-                data_read.data[0],
+                data_read.map_or_else(F::zero, |x| x.data[0]),
             ),
             record,
         ))
@@ -375,8 +380,12 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         cols.f = read_record.f;
         cols.g = read_record.g;
 
-        cols.data_read_as = read_record.data_read.address_space;
-        cols.data_read_pointer = read_record.data_read.pointer;
+        cols.data_read_as = read_record
+            .data_read
+            .map_or_else(F::zero, |read| read.address_space);
+        cols.data_read_pointer = read_record
+            .data_read
+            .map_or_else(F::zero, |read| read.pointer);
 
         cols.data_write_as = write_record.write.address_space;
         cols.data_write_pointer = write_record.write.pointer;
@@ -388,8 +397,11 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
                 aux_cols_factory.make_read_or_immediate_aux_cols(read)
             });
-        cols.data_read_aux_cols =
-            aux_cols_factory.make_read_or_immediate_aux_cols(read_record.data_read);
+        cols.data_read_aux_cols = read_record
+            .data_read
+            .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
+                aux_cols_factory.make_read_or_immediate_aux_cols(read)
+            });
         cols.data_write_aux_cols = aux_cols_factory.make_write_aux_cols(write_record.write);
     }
 

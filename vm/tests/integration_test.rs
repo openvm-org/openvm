@@ -75,6 +75,7 @@ fn air_test_with_compress_poseidon2(
         },
         ..VmConfig::core()
     }
+    .add_executor(ExecutorName::LoadStore)
     .add_executor(ExecutorName::Poseidon2);
     let pk = vm_config.generate_pk(engine.keygen_builder());
 
