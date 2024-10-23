@@ -8,7 +8,7 @@ use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use p3_baby_bear::BabyBear;
-use p3_field::{Field, PrimeField64};
+use p3_field::PrimeField64;
 use rand::RngCore;
 
 use super::field_expression::ExprBuilder;
@@ -36,13 +36,7 @@ pub fn setup(
         range_decomp,
         field_element_bits,
     );
-    let builder = ExprBuilder::new(
-        prime.clone(),
-        LIMB_BITS,
-        32,
-        range_checker.range_max_bits(),
-        BabyBear::bits() - 2,
-    );
+    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32, range_checker.range_max_bits());
     (subair, range_checker, Rc::new(RefCell::new(builder)))
 }
 

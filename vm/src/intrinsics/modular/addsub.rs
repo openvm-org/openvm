@@ -38,7 +38,6 @@ impl ModularAddSubCoreAir {
         range_bus: usize,
         range_max_bits: usize,
         offset: usize,
-        max_limb_bits: usize,
     ) -> Self {
         assert!(modulus.bits() <= num_limbs * limb_bits);
         let subair = CheckCarryModToZeroSubAir::new(
@@ -48,8 +47,7 @@ impl ModularAddSubCoreAir {
             range_max_bits,
             FIELD_ELEMENT_BITS,
         );
-        let builder =
-            ExprBuilder::new(modulus, limb_bits, num_limbs, range_max_bits, max_limb_bits);
+        let builder = ExprBuilder::new(modulus, limb_bits, num_limbs, range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
         let x1 = ExprBuilder::new_input(builder.clone());
         let x2 = ExprBuilder::new_input(builder.clone());
@@ -136,7 +134,6 @@ impl ModularAddSubCoreChip {
         limb_bits: usize,
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
-        max_limb_bits: usize,
     ) -> Self {
         let air = ModularAddSubCoreAir::new(
             modulus,
@@ -145,7 +142,6 @@ impl ModularAddSubCoreChip {
             range_checker.bus().index,
             range_checker.range_max_bits(),
             offset,
-            max_limb_bits,
         );
         Self { air, range_checker }
     }
