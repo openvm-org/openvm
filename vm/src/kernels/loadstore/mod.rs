@@ -12,5 +12,8 @@ use super::adapters::loadstore_native_adapter::{
 
 pub type KernelLoadStoreAir<const NUM_CELLS: usize> =
     VmAirWrapper<NativeLoadStoreAdapterAir<NUM_CELLS>, KernelLoadStoreCoreAir<NUM_CELLS>>;
-pub type KernelLoadStoreChip<F, const NUM_CELLS: usize> =
-    VmChipWrapper<F, NativeLoadStoreAdapterChip<F, NUM_CELLS>, KernelLoadStoreCoreChip<NUM_CELLS>>;
+pub type KernelLoadStoreChip<F, const NUM_CELLS: usize> = VmChipWrapper<
+    F,
+    NativeLoadStoreAdapterChip<F, NUM_CELLS>,
+    KernelLoadStoreCoreChip<F, NUM_CELLS>,
+>;

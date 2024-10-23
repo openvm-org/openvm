@@ -1,10 +1,15 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+    sync::Arc,
+};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::NativeLoadStoreOpcode;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
+use parking_lot::Mutex;
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -13,7 +18,10 @@ use crate::{
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     kernels::adapters::loadstore_native_adapter::NativeLoadStoreProcessedInstruction,
-    system::program::Instruction,
+    system::{
+        program::{ExecutionError, Instruction},
+        vm::Streams,
+    },
 };
 
 #[repr(C)]
@@ -113,20 +121,22 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct KernelLoadStoreCoreChip<const NUM_CELLS: usize> {
+pub struct KernelLoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
     pub air: KernelLoadStoreCoreAir<NUM_CELLS>,
+    pub streams: Arc<Mutex<Streams<F>>>,
 }
 
-impl<const NUM_CELLS: usize> KernelLoadStoreCoreChip<NUM_CELLS> {
-    pub fn new(offset: usize) -> Self {
+impl<F: Field, const NUM_CELLS: usize> KernelLoadStoreCoreChip<F, NUM_CELLS> {
+    pub fn new(streams: Arc<Mutex<Streams<F>>>, offset: usize) -> Self {
         Self {
             air: KernelLoadStoreCoreAir::<NUM_CELLS> { offset },
+            streams,
         }
     }
 }
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
-    for KernelLoadStoreCoreChip<NUM_CELLS>
+    for KernelLoadStoreCoreChip<F, NUM_CELLS>
 where
     I::Reads: Into<([F; 2], [F; NUM_CELLS])>,
     I::Writes: From<[F; NUM_CELLS]>,
@@ -137,10 +147,11 @@ where
     fn execute_instruction(
         &self,
         instruction: &Instruction<F>,
-        _from_pc: u32,
+        from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = *instruction;
+        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode - self.air.offset);
         let (pointer_reads, data_read) = reads.into();
 
         let output = AdapterRuntimeContext::without_pc(data_read);
@@ -148,7 +159,15 @@ where
             opcode: NativeLoadStoreOpcode::from_usize(opcode - self.air.offset),
             pointer_reads,
             data_read,
-            data_write: data_read,
+            data_write: if local_opcode == NativeLoadStoreOpcode::SHINTW {
+                let mut streams = self.streams.lock();
+                if streams.hint_stream.len() < NUM_CELLS {
+                    return Err(ExecutionError::HintOutOfBounds(from_pc));
+                }
+                array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
+            } else {
+                data_read
+            },
         };
         Ok((output, record))
     }
