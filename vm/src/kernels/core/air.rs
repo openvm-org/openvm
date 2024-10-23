@@ -269,8 +269,9 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .when(AB::Expr::one() - read0_equals_read1)
             .assert_eq(next_pc, pc + c);
 
-        // NOP constraints same pc and timestamp as next row
-        let nop_flag = operation_flags[&NOP];
+        // DUMMY constraints same pc and timestamp as next row
+        // called nop for legacy reasons; to be removed
+        let nop_flag = operation_flags[&DUMMY];
         let mut when_nop = builder.when(nop_flag);
         when_nop.when_transition().assert_eq(next_pc, pc);
 

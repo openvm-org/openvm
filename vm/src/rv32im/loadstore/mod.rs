@@ -9,4 +9,4 @@ use crate::{arch::VmChipWrapper, rv32im::adapters::Rv32LoadStoreAdapterChip};
 mod tests;
 
 pub type Rv32LoadStoreChip<F> =
-    VmChipWrapper<F, Rv32LoadStoreAdapterChip<F>, LoadStoreCoreChip<RV32_REGISTER_NUM_LIMBS>>;
+    VmChipWrapper<F, Rv32LoadStoreAdapterChip<F>, LoadStoreCoreChip<F, RV32_REGISTER_NUM_LIMBS>>;

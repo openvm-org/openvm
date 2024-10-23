@@ -1,15 +1,16 @@
-use std::collections::VecDeque;
+use std::sync::Arc;
 
 use afs_primitives::xor::bus::XorBus;
 pub use air::CoreAir;
 use p3_field::PrimeField32;
+use parking_lot::Mutex;
 
 use crate::{
     arch::{
         instructions::CoreOpcode::{self, *},
         ExecutionBridge, ExecutionBus,
     },
-    system::{memory::MemoryControllerRef, program::bridge::ProgramBus},
+    system::{memory::MemoryControllerRef, program::bridge::ProgramBus, vm::Streams},
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
@@ -43,14 +44,8 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
         SHINTW => 2,
         HINT_INPUT | HINT_BITS | HINT_BYTES => 0,
         CT_START | CT_END => 0,
-        NOP => 0,
+        DUMMY => 0,
     }
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Streams<F> {
-    pub input_stream: VecDeque<Vec<F>>,
-    pub hint_stream: VecDeque<F>,
 }
 
 /// Chip for the Core. Carries all state and owns execution.
@@ -60,9 +55,7 @@ pub struct CoreChip<F: PrimeField32> {
     pub rows: Vec<Vec<F>>,
     pub did_terminate: bool,
     pub memory_controller: MemoryControllerRef<F>,
-
-    // TODO[jpw] Unclear Core should own this
-    pub streams: Streams<F>,
+    pub streams: Arc<Mutex<Streams<F>>>,
 
     offset: usize,
 }
@@ -72,6 +65,7 @@ impl<F: PrimeField32> CoreChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
+        streams: Arc<Mutex<Streams<F>>>,
         offset: usize,
     ) -> Self {
         let memory_bridge = memory_controller.borrow().memory_bridge();
@@ -84,7 +78,7 @@ impl<F: PrimeField32> CoreChip<F> {
             rows: vec![],
             did_terminate: false,
             memory_controller,
-            streams: Default::default(),
+            streams,
             offset,
         }
     }

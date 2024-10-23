@@ -3656,6 +3656,7 @@ dependencies = [
  "p3-merkle-tree",
  "p3-symmetric",
  "p3-util",
+ "parking_lot",
  "poseidon2-air",
  "rand 0.8.5",
  "rand_xoshiro",

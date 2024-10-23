@@ -31,7 +31,8 @@ pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum CoreOpcode {
-    NOP,
+    // Dummy opcode to represent padding, to be removed
+    DUMMY,
     LOADW,
     STOREW,
     LOADW2,
@@ -65,6 +66,16 @@ pub enum CoreOpcode {
 #[allow(non_camel_case_types)]
 pub enum TerminateOpcode {
     TERMINATE,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x21]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum NopOpcode {
+    NOP,
 }
 
 #[derive(
@@ -113,17 +124,6 @@ pub enum Poseidon2Opcode {
     PERM_POS2,
     COMP_POS2,
 }
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x170]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum CastfOpcode {
-    CASTF,
-}
-
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
@@ -145,17 +145,6 @@ pub enum ModularArithmeticOpcode {
     SUB,
     MUL,
     DIV,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x180]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum EccOpcode {
-    EC_ADD_NE,
-    EC_DOUBLE,
 }
 
 #[derive(
@@ -191,6 +180,27 @@ impl U256Opcode {
     pub fn shift_opcodes() -> impl Iterator<Item = U256Opcode> {
         (U256Opcode::SLL as usize..=U256Opcode::SRA as usize).map(U256Opcode::from_usize)
     }
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x170]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum CastfOpcode {
+    CASTF,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x180]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum EccOpcode {
+    EC_ADD_NE,
+    EC_DOUBLE,
 }
 
 #[derive(
@@ -244,7 +254,7 @@ pub enum Rv32LoadStoreOpcode {
     STOREW,
     STOREH,
     STOREB,
-    HINTLOAD_RV32,
+    HINT_STOREW,
     /// The following are signed extend opcodes
     LOADB,
     LOADH,
@@ -338,16 +348,6 @@ pub enum DivRemOpcode {
     DIVU,
     REM,
     REMU,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x375]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum Rv32NopOpcode {
-    NOP,
 }
 
 #[derive(

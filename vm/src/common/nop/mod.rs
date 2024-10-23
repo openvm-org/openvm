@@ -8,51 +8,48 @@ use afs_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::{Rv32NopOpcode, UsizeOpcode};
+use axvm_instructions::{NopOpcode, UsizeOpcode};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor},
-    system::program::{bridge::ProgramBus, ExecutionError, Instruction},
+    system::{
+        program::{bridge::ProgramBus, ExecutionError, Instruction},
+        DEFAULT_PC_STEP,
+    },
 };
 
 #[cfg(test)]
 mod tests;
 
 #[derive(Clone, Debug)]
-pub struct Rv32TerminateNopAir {
+pub struct NopAir {
     pub execution_bridge: ExecutionBridge,
     pub nop_opcode: usize,
 }
 
 #[derive(AlignedBorrow)]
-pub struct Rv32TerminateNopCols<T> {
+pub struct NopCols<T> {
     pub pc: T,
     pub timestamp: T,
     pub is_valid: T,
 }
 
-impl<F: Field> BaseAir<F> for Rv32TerminateNopAir {
+impl<F: Field> BaseAir<F> for NopAir {
     fn width(&self) -> usize {
-        Rv32TerminateNopCols::<F>::width()
+        NopCols::<F>::width()
     }
 }
+impl<F: Field> PartitionedBaseAir<F> for NopAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for NopAir {}
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv32TerminateNopAir {
-    fn num_public_values(&self) -> usize {
-        0
-    }
-}
-
-impl<F: Field> PartitionedBaseAir<F> for Rv32TerminateNopAir {}
-
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Rv32TerminateNopAir {
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for NopAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let &Rv32TerminateNopCols {
+        let &NopCols {
             pc,
             timestamp,
             is_valid,
@@ -63,24 +60,27 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Rv32TerminateNopAir {
                 AB::Expr::from_canonical_usize(self.nop_opcode),
                 iter::empty::<AB::Expr>(),
                 ExecutionState::<AB::Expr>::new(pc, timestamp),
-                ExecutionState::<AB::Expr>::new(pc + AB::Expr::from_canonical_usize(4), timestamp),
+                ExecutionState::<AB::Expr>::new(
+                    pc + AB::Expr::from_canonical_u32(DEFAULT_PC_STEP),
+                    timestamp,
+                ),
             )
             .eval(builder, is_valid);
     }
 }
 
-pub struct Rv32TerminateNopChip<F> {
-    pub air: Rv32TerminateNopAir,
-    pub rows: Vec<Rv32TerminateNopCols<F>>,
+pub struct NopChip<F> {
+    pub air: NopAir,
+    pub rows: Vec<NopCols<F>>,
     pub nop_opcode: usize,
 }
 
-impl<F> Rv32TerminateNopChip<F> {
+impl<F> NopChip<F> {
     pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus, offset: usize) -> Self {
         Self {
-            air: Rv32TerminateNopAir {
+            air: NopAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                nop_opcode: offset + Rv32NopOpcode::NOP.as_usize(),
+                nop_opcode: offset + NopOpcode::NOP.as_usize(),
             },
             rows: vec![],
             nop_opcode: offset,
@@ -88,7 +88,7 @@ impl<F> Rv32TerminateNopChip<F> {
     }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for Rv32TerminateNopChip<F> {
+impl<F: PrimeField32> InstructionExecutor<F> for NopChip<F> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
@@ -96,21 +96,24 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32TerminateNopChip<F> {
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction { opcode, .. } = instruction;
         assert_eq!(opcode, self.nop_opcode);
-        self.rows.push(Rv32TerminateNopCols {
+        self.rows.push(NopCols {
             pc: F::from_canonical_u32(from_state.pc),
             timestamp: F::from_canonical_u32(from_state.timestamp),
             is_valid: F::one(),
         });
-        Ok(ExecutionState::new(from_state.pc + 4, from_state.timestamp))
+        Ok(ExecutionState::new(
+            from_state.pc + DEFAULT_PC_STEP,
+            from_state.timestamp,
+        ))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        let local_opcode_index = Rv32NopOpcode::from_usize(opcode - self.nop_opcode);
+        let local_opcode_index = NopOpcode::from_usize(opcode - self.nop_opcode);
         format!("{local_opcode_index:?}")
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for Rv32TerminateNopChip<F> {
+impl<F: PrimeField32> ChipUsageGetter for NopChip<F> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -118,14 +121,14 @@ impl<F: PrimeField32> ChipUsageGetter for Rv32TerminateNopChip<F> {
         self.rows.len()
     }
     fn trace_width(&self) -> usize {
-        Rv32TerminateNopCols::<F>::width()
+        NopCols::<F>::width()
     }
     fn current_trace_cells(&self) -> usize {
         self.trace_width() * self.current_trace_height()
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for Rv32TerminateNopChip<Val<SC>>
+impl<SC: StarkGenericConfig> Chip<SC> for NopChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
@@ -136,7 +139,7 @@ where
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let curr_height = self.rows.len();
         let correct_height = self.rows.len().next_power_of_two();
-        let width = Rv32TerminateNopCols::<Val<SC>>::width();
+        let width = NopCols::<Val<SC>>::width();
 
         let trace = RowMajorMatrix::new(
             self.rows

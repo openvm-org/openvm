@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, marker::PhantomData, mem};
+use std::{collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -7,12 +7,12 @@ use afs_stark_backend::{
 };
 use metrics::VmMetrics;
 use p3_field::PrimeField32;
+use parking_lot::Mutex;
 pub use segment::ExecutionSegment;
 
 use crate::{
     arch::AxVmChip,
     intrinsics::hashes::poseidon2::CHUNK,
-    kernels::core::Streams,
     system::{
         memory::Equipartition,
         program::{ExecutionError, Program},
@@ -29,10 +29,18 @@ pub mod metrics;
 #[macro_use]
 pub mod segment;
 
+#[derive(Clone, Default, Debug)]
+pub struct Streams<F> {
+    pub input_stream: VecDeque<Vec<F>>,
+    pub hint_stream: VecDeque<F>,
+}
+
 /// Parent struct that holds all execution segments, program, config.
 pub struct VirtualMachine<F: PrimeField32> {
     pub config: VmConfig,
-    input_stream: VecDeque<Vec<F>>,
+    /// Streams are shared between `ExecutionSegment`s and within each segment shared
+    /// with any chip(s) that handle hint opcodes
+    streams: Arc<Mutex<Streams<F>>>,
     initial_memory: Option<Equipartition<F, CHUNK>>,
 }
 
@@ -47,13 +55,13 @@ impl<F: PrimeField32> VirtualMachine<F> {
     pub fn new(config: VmConfig) -> Self {
         Self {
             config,
-            input_stream: VecDeque::new(),
+            streams: Arc::new(Mutex::new(Streams::default())),
             initial_memory: None,
         }
     }
 
-    pub fn with_input_stream(mut self, input_stream: Vec<Vec<F>>) -> Self {
-        self.input_stream = VecDeque::from(input_stream);
+    pub fn with_input_stream(self, input_stream: Vec<Vec<F>>) -> Self {
+        self.streams.lock().input_stream = VecDeque::from(input_stream);
         self
     }
 
@@ -70,10 +78,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
         let mut segment = ExecutionSegment::new(
             self.config.clone(),
             program.clone(),
-            Streams {
-                input_stream: mem::take(&mut self.input_stream),
-                hint_stream: VecDeque::new(),
-            },
+            self.streams.clone(),
             self.initial_memory.take(),
         );
         let mut pc = program.pc_start;
@@ -93,13 +98,17 @@ impl<F: PrimeField32> VirtualMachine<F> {
 
             let config = mem::take(&mut segment.config);
             let cycle_tracker = mem::take(&mut segment.cycle_tracker);
-            let streams = mem::take(&mut segment.streams);
             let final_memory = mem::take(&mut segment.final_memory)
                 .expect("final memory should be set in continuations segment");
 
             segments.push(segment);
 
-            segment = ExecutionSegment::new(config, program.clone(), streams, Some(final_memory));
+            segment = ExecutionSegment::new(
+                config,
+                program.clone(),
+                self.streams.clone(),
+                Some(final_memory),
+            );
             segment.cycle_tracker = cycle_tracker;
         }
         segments.push(segment);
@@ -182,10 +191,10 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
         let mut segment = ExecutionSegment::new(
             self.config.clone(),
             program,
-            Streams {
+            Arc::new(Mutex::new(Streams {
                 input_stream: input,
                 hint_stream: VecDeque::new(),
-            },
+            })),
             None,
         );
         segment.execute_from_pc(pc_start)?;
