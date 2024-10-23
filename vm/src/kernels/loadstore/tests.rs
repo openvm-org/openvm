@@ -225,7 +225,7 @@ fn set_and_execute(
 #[test]
 fn rand_native_loadstore_test() {
     let (mut rng, mut tester, mut chip, _) = setup();
-    for _ in 0..1 {
+    for _ in 0..20 {
         set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW);
         set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW2);
         set_and_execute(&mut tester, &mut chip, &mut rng, false, SHINTW);
