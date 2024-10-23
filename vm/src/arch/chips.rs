@@ -14,13 +14,13 @@ use strum_macros::IntoStaticStr;
 use crate::{
     arch::ExecutionState,
     intrinsics::{
-        ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{ModularAddSubChip, ModularMulDivChip},
     },
     kernels::{
         castf::CastFChip,
         core::CoreChip,
+        ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
@@ -106,8 +106,8 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
     ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
-    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
-    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
+    Secp256k1AddUnequal(Rc<RefCell<KernelEcAddNeChip<F, 32>>>),
+    Secp256k1Double(Rc<RefCell<KernelEcDoubleChip<F, 32>>>),
 }
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
@@ -148,6 +148,6 @@ pub enum AxVmChip<F: PrimeField32> {
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
     ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
-    Secp256k1AddUnequal(Rc<RefCell<EcAddUnequalChip<F>>>),
-    Secp256k1Double(Rc<RefCell<EcDoubleChip<F>>>),
+    Secp256k1AddUnequal(Rc<RefCell<KernelEcAddNeChip<F, 32>>>),
+    Secp256k1Double(Rc<RefCell<KernelEcDoubleChip<F, 32>>>),
 }

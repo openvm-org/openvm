@@ -7,7 +7,7 @@ use super::{super::FIELD_ELEMENT_BITS, SwEcAddNeCoreChip};
 use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
     intrinsics::ecc_v2::sw::SwEcDoubleCoreChip,
-    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LANES},
+    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
     system::program::Instruction,
     utils::biguint_to_limbs,
 };
@@ -59,8 +59,8 @@ fn test_add_ne() {
 
     let ptr_as = 1;
     let addr_ptr1 = 0;
-    let addr_ptr2 = 3 * RV32_REGISTER_NUM_LANES;
-    let addr_ptr3 = 6 * RV32_REGISTER_NUM_LANES;
+    let addr_ptr2 = 3 * RV32_REGISTER_NUM_LIMBS;
+    let addr_ptr3 = 6 * RV32_REGISTER_NUM_LIMBS;
 
     let data_as = 2;
     let address1 = 0u32;
@@ -130,7 +130,7 @@ fn test_double() {
     let ptr_as = 1;
     let addr_ptr1 = 0;
     let addr_ptr2 = 0; // unused
-    let addr_ptr3 = 6 * RV32_REGISTER_NUM_LANES;
+    let addr_ptr3 = 6 * RV32_REGISTER_NUM_LIMBS;
 
     let data_as = 2;
     let address1 = 0u32;
