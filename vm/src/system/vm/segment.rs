@@ -31,6 +31,8 @@ pub struct ExecutionSegment<F: PrimeField32> {
     /// Shortcut to the core chip.
     pub core_chip: Rc<RefCell<CoreChip<F>>>,
 
+    // The streams should be mutated in serial without thread-safety, 
+    // but the `VmCoreChip` trait requires thread-safety.
     pub streams: Arc<Mutex<Streams<F>>>,
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
