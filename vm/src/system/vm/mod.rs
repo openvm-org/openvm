@@ -38,7 +38,8 @@ pub struct Streams<F> {
 /// Parent struct that holds all execution segments, program, config.
 pub struct VirtualMachine<F: PrimeField32> {
     pub config: VmConfig,
-    /// Streams are shared between VritualMachine, ExecutionSegment, and the chip(s) that handle hint opcodes
+    /// Streams are shared between `ExecutionSegment`s and within each segment shared
+    /// with any chip(s) that handle hint opcodes
     streams: Arc<Mutex<Streams<F>>>,
     initial_memory: Option<Equipartition<F, CHUNK>>,
 }
