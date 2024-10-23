@@ -14,7 +14,7 @@ use stark_vm::{
     arch::{
         instructions::{
             CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*, Keccak256Opcode::*,
-            Poseidon2Opcode::*, UsizeOpcode,
+            Poseidon2Opcode::*, TerminateOpcode::*, UsizeOpcode,
         },
         ExecutorName,
     },
@@ -299,7 +299,7 @@ fn test_vm_continuations() {
         Instruction::large_from_isize(ADD.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
         // if [0]_1 != n, pc <- pc - 3
         Instruction::from_isize(BNE.with_default_offset(), n, 0, -4, 0, 1),
-        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 1),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 1, 0, 0),
     ]);
 
     let config = VmConfig {
@@ -333,7 +333,7 @@ fn test_vm_continuations() {
             let pvs = &air.1.raw.public_values;
 
             if air_name == "VmConnectorAir" {
-                assert_eq!(pvs.len(), 2);
+                assert_eq!(pvs.len(), 3);
 
                 // Check initial pc matches the previous final pc.
                 assert_eq!(

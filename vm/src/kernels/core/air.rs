@@ -269,15 +269,11 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .when(AB::Expr::one() - read0_equals_read1)
             .assert_eq(next_pc, pc + c);
 
-        // NOP constraints same pc and timestamp as next row
-        let nop_flag = operation_flags[&NOP];
+        // DUMMY constraints same pc and timestamp as next row
+        // called nop for legacy reasons; to be removed
+        let nop_flag = operation_flags[&DUMMY];
         let mut when_nop = builder.when(nop_flag);
         when_nop.when_transition().assert_eq(next_pc, pc);
-
-        // TERMINATE
-        let terminate_flag = operation_flags[&TERMINATE];
-        let mut when_terminate = builder.when(terminate_flag);
-        when_terminate.when_transition().assert_eq(next_pc, pc);
 
         let mut op_timestamp: AB::Expr = timestamp.into();
 
@@ -318,10 +314,9 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         IsEqSubAir.eval(builder, (is_equal_io, is_equal_aux.inv));
 
         // make sure program terminates or shards with NOP
-        builder.when_last_row().assert_zero(
-            (opcode - AB::Expr::from_canonical_usize(TERMINATE as usize))
-                * (opcode - AB::Expr::from_canonical_usize(NOP as usize)),
-        );
+        // builder
+        //     .when_last_row()
+        //     .assert_eq(opcode, AB::Expr::from_canonical_usize(NOP as usize));
 
         // Turn on all interactions
         self.eval_interactions(builder, io, next_pc, &operation_flags);

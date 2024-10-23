@@ -30,6 +30,9 @@ impl CoreAir {
                             .fold(AB::Expr::zero(), |x, y| x + y),
                 ),
             )
-            .eval(builder, AB::Expr::one() - operation_flags[&CoreOpcode::NOP]);
+            .eval(
+                builder,
+                AB::Expr::one() - operation_flags[&CoreOpcode::DUMMY],
+            );
     }
 }

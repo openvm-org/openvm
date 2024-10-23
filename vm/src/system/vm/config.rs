@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
@@ -5,9 +7,11 @@ use afs_stark_backend::{
 use derive_new::new;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
+use super::Streams;
 use crate::{
     arch::ExecutorName,
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
@@ -107,7 +111,7 @@ impl VmConfig {
     where
         Val<SC>: PrimeField32,
     {
-        let chip_set = self.create_chip_set::<Val<SC>>();
+        let chip_set = self.create_chip_set::<Val<SC>>(Arc::new(Mutex::new(Streams::default())));
         for air in chip_set.airs() {
             keygen_builder.add_air(air);
         }
@@ -149,13 +153,11 @@ impl VmConfig {
         .add_executor(ExecutorName::Core)
     }
 
-    pub fn rv32() -> Self {
-        Self::core()
+    pub fn rv32i() -> Self {
+        Self::default_with_no_executors()
+            .add_executor(ExecutorName::Nop)
             .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
             .add_executor(ExecutorName::LessThanRv32)
-            .add_executor(ExecutorName::MultiplicationRv32)
-            .add_executor(ExecutorName::MultiplicationHighRv32)
-            .add_executor(ExecutorName::DivRemRv32)
             .add_executor(ExecutorName::ShiftRv32)
             .add_executor(ExecutorName::LoadStoreRv32)
             .add_executor(ExecutorName::LoadSignExtendRv32)
@@ -166,6 +168,13 @@ impl VmConfig {
             .add_executor(ExecutorName::AuipcRv32)
     }
 
+    pub fn rv32im() -> Self {
+        Self::rv32i()
+            .add_executor(ExecutorName::MultiplicationRv32)
+            .add_executor(ExecutorName::MultiplicationHighRv32)
+            .add_executor(ExecutorName::DivRemRv32)
+    }
+
     pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
         VmConfig {
             poseidon2_max_constraint_degree,
@@ -173,9 +182,7 @@ impl VmConfig {
             ..VmConfig::default()
         }
     }
-}
 
-impl VmConfig {
     pub fn read_config_file(file: &str) -> Result<Self, String> {
         let file_str = std::fs::read_to_string(file)
             .map_err(|_| format!("Could not load config file from: {file}"))?;

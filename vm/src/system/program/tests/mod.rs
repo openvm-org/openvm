@@ -12,7 +12,9 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::Program;
 use crate::{
-    arch::instructions::{CoreOpcode::*, FieldArithmeticOpcode::*, UsizeOpcode},
+    arch::instructions::{
+        CoreOpcode::*, FieldArithmeticOpcode::*, TerminateOpcode::*, UsizeOpcode,
+    },
     kernels::core::READ_INSTRUCTION_BUS,
     system::program::{columns::ProgramCols, Instruction, ProgramChip},
 };
