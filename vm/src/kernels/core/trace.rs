@@ -16,7 +16,7 @@ impl<F: PrimeField32> CoreChip<F> {
     /// Pad with blank rows.
     pub fn pad_rows(&mut self) {
         let curr_height = self.rows.len();
-        let mut correct_height = self.rows.len().next_power_of_two();
+        let correct_height = self.rows.len().next_power_of_two();
         for _ in 0..correct_height - curr_height {
             self.rows.push(CoreCols::blank_row().flatten());
         }
