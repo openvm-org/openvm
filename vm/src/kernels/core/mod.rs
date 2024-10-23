@@ -10,7 +10,7 @@ use crate::{
         instructions::CoreOpcode::{self, *},
         ExecutionBridge, ExecutionBus,
     },
-    system::{memory::MemoryControllerRef, program::bridge::ProgramBus, vm::Streams},
+    system::{memory::MemoryControllerRef, program::ProgramBus, vm::Streams},
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
@@ -37,8 +37,6 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,
-        JAL => 1,
-        BEQ | BNE => 2,
         FAIL => 0,
         PRINTF => 1,
         SHINTW => 2,

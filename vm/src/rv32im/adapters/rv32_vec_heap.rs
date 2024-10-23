@@ -24,7 +24,7 @@ use crate::{
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{bridge::ProgramBus, Instruction},
+        program::{Instruction, ProgramBus},
     },
 };
 

@@ -1,3 +1,4 @@
+use afs_derive::AlignedBorrow;
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder,
     interaction::InteractionBuilder,
@@ -5,9 +6,36 @@ use afs_stark_backend::{
 };
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
+use p3_matrix::Matrix;
 
-use super::{columns::ProgramCols, ProgramAir};
-use crate::system::program::columns::ProgramExecutionCols;
+use super::ProgramBus;
+
+#[derive(Copy, Clone, Debug, AlignedBorrow, PartialEq, Eq)]
+#[repr(C)]
+pub struct ProgramCols<T> {
+    pub exec: ProgramExecutionCols<T>,
+    pub exec_freq: T,
+}
+
+#[derive(Copy, Clone, Debug, AlignedBorrow, PartialEq, Eq)]
+#[repr(C)]
+pub struct ProgramExecutionCols<T> {
+    pub pc: T,
+
+    pub opcode: T,
+    pub a: T,
+    pub b: T,
+    pub c: T,
+    pub d: T,
+    pub e: T,
+    pub f: T,
+    pub g: T,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProgramAir {
+    pub bus: ProgramBus,
+}
 
 impl<F: Field> BaseAirWithPublicValues<F> for ProgramAir {}
 impl<F: Field> PartitionedBaseAir<F> for ProgramAir {
@@ -26,6 +54,12 @@ impl<F: Field> BaseAir<F> for ProgramAir {
 
 impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for ProgramAir {
     fn eval(&self, builder: &mut AB) {
-        self.eval_interactions(builder);
+        let common_trace = builder.common_main();
+        let cached_trace = &builder.cached_mains()[0];
+
+        let exec_freq = common_trace.row_slice(0)[0];
+        let exec_cols = cached_trace.row_slice(0).to_vec();
+
+        builder.push_receive(self.bus.0, exec_cols, exec_freq);
     }
 }

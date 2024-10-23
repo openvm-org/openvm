@@ -1,9 +1,5 @@
-use std::{array, borrow::Borrow, collections::BTreeMap};
+use std::{array, collections::BTreeMap};
 
-use afs_primitives::{
-    is_equal::{IsEqSubAir, IsEqualAuxCols},
-    TraceSubRowGenerator,
-};
 use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 use strum::{EnumCount, IntoEnumIterator};
@@ -143,8 +139,6 @@ pub struct CoreAuxCols<T> {
     pub operation_flags: BTreeMap<CoreOpcode, T>,
     pub reads: [CoreMemoryAccessCols<T>; CORE_MAX_READS_PER_CYCLE],
     pub writes: [CoreMemoryAccessCols<T>; CORE_MAX_WRITES_PER_CYCLE],
-    pub read0_equals_read1: T,
-    pub is_equal_aux: IsEqualAuxCols<T>,
     pub reads_aux_cols: [MemoryReadOrImmediateAuxCols<T>; CORE_MAX_READS_PER_CYCLE],
     pub writes_aux_cols: [MemoryWriteAuxCols<T, 1>; CORE_MAX_WRITES_PER_CYCLE],
 
@@ -172,14 +166,6 @@ impl<T: Clone> CoreAuxCols<T> {
             CoreMemoryAccessCols::<T>::from_slice(&slc[start..end])
         });
 
-        start = end;
-        end += 1;
-        let beq_check = slc[start].clone();
-
-        start = end;
-        end += IsEqualAuxCols::<T>::width();
-        let is_equal_aux: &IsEqualAuxCols<_> = slc[start..end].borrow();
-
         let reads_aux_cols = array::from_fn(|_| {
             start = end;
             end += MemoryReadOrImmediateAuxCols::<T>::width();
@@ -196,8 +182,6 @@ impl<T: Clone> CoreAuxCols<T> {
             operation_flags,
             reads,
             writes,
-            read0_equals_read1: beq_check,
-            is_equal_aux: is_equal_aux.clone(),
             reads_aux_cols,
             writes_aux_cols,
             next_pc,
@@ -221,8 +205,6 @@ impl<T: Clone> CoreAuxCols<T> {
                 .cloned()
                 .flat_map(CoreMemoryAccessCols::<T>::flatten),
         );
-        flattened.push(self.read0_equals_read1.clone());
-        flattened.extend([self.is_equal_aux.inv.clone()]);
         flattened.extend(
             self.reads_aux_cols
                 .iter()
@@ -246,8 +228,6 @@ impl<T: Clone> CoreAuxCols<T> {
             + CORE_MAX_WRITES_PER_CYCLE
                 * (CoreMemoryAccessCols::<T>::width() + MemoryWriteAuxCols::<T, 1>::width())
             + 1
-            + IsEqualAuxCols::<T>::width()
-            + 1
     }
 }
 
@@ -258,18 +238,10 @@ impl<F: PrimeField32> CoreAuxCols<F> {
             operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::DUMMY));
         }
 
-        let mut is_equal_inv = F::zero();
-        let mut read0_equals_read1 = F::one();
-        IsEqSubAir.generate_subrow(
-            (F::zero(), F::zero()),
-            (&mut is_equal_inv, &mut read0_equals_read1),
-        );
         Self {
             operation_flags,
             reads: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
             writes: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
-            read0_equals_read1: F::one(),
-            is_equal_aux: IsEqualAuxCols::new(is_equal_inv),
             reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
             next_pc: F::default(),

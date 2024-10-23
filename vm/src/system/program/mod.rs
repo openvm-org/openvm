@@ -4,27 +4,23 @@ use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     prover::{helper::AirProofInputTestHelper, types::AirProofInput},
 };
+use axvm_instructions::{TerminateOpcode, UsizeOpcode};
 use backtrace::Backtrace;
-use bridge::ProgramBus;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 
-use crate::{
-    arch::{
-        instructions::CoreOpcode::{DUMMY, FAIL},
-        NUM_OPERANDS,
-    },
-    kernels::core::READ_INSTRUCTION_BUS,
-};
+use crate::{arch::NUM_OPERANDS, kernels::core::READ_INSTRUCTION_BUS};
 
 #[cfg(test)]
 pub mod tests;
 
-pub mod air;
-pub mod bridge;
-pub mod columns;
-pub mod trace;
+mod air;
+mod bus;
+mod trace;
 pub mod util;
+
+pub use air::*;
+pub use bus::*;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -127,7 +123,7 @@ impl<F: Field> Instruction<F> {
 impl<T: Default> Default for Instruction<T> {
     fn default() -> Self {
         Self {
-            opcode: DUMMY as usize,
+            opcode: 0, // there is no real default opcode, this field must always be set
             a: T::default(),
             b: T::default(),
             c: T::default(),
@@ -308,11 +304,6 @@ impl<F> Program<F> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ProgramAir {
-    bus: ProgramBus,
-}
-
 #[derive(Debug)]
 pub struct ProgramChip<F> {
     pub air: ProgramAir,
@@ -343,10 +334,17 @@ impl<F: PrimeField64> ProgramChip<F> {
 
     pub fn set_program(&mut self, mut program: Program<F>) {
         let true_program_length = program.len();
+        const EXIT_CODE_FAIL: usize = 1;
         while !program.len().is_power_of_two() {
             program.instructions_and_debug_infos.insert(
-                program.len() as u32 * program.step,
-                (Instruction::from_isize(FAIL as usize, 0, 0, 0, 0, 0), None),
+                program.pc_base + program.len() as u32 * program.step,
+                (
+                    Instruction::from_usize(
+                        TerminateOpcode::TERMINATE.with_default_offset(),
+                        [0, 0, EXIT_CODE_FAIL],
+                    ),
+                    None,
+                ),
             );
         }
         self.true_program_length = true_program_length;

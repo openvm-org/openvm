@@ -1,9 +1,5 @@
 use std::borrow::Borrow;
 
-use afs_primitives::{
-    is_equal::{IsEqSubAir, IsEqualIo},
-    SubAir,
-};
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -69,8 +65,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             operation_flags,
             reads,
             writes,
-            read0_equals_read1,
-            is_equal_aux,
             reads_aux_cols,
             writes_aux_cols,
             next_pc,
@@ -213,62 +207,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .when_transition()
             .assert_eq(next_pc, pc + inst_width);
 
-        // JAL: d[a] <- pc + INST_WIDTH, pc <- pc + b
-        let jal_flag = operation_flags[&JAL];
-        write_enabled += jal_flag.into();
-
-        let mut when_jal = builder.when(jal_flag);
-
-        when_jal.assert_eq(write.address_space, d);
-        when_jal.assert_eq(write.pointer, a);
-        when_jal.assert_eq(write.value, pc + inst_width);
-
-        when_jal.when_transition().assert_eq(next_pc, pc + b);
-
-        // BEQ: If d[a] = e[b], pc <- pc + c
-        let beq_flag = operation_flags[&BEQ];
-        read1_enabled += beq_flag.into();
-        read2_enabled += beq_flag.into();
-
-        let mut when_beq = builder.when(beq_flag);
-
-        when_beq.assert_eq(read1.address_space, d);
-        when_beq.assert_eq(read1.pointer, a);
-
-        when_beq.assert_eq(read2.address_space, e);
-        when_beq.assert_eq(read2.pointer, b);
-
-        when_beq
-            .when_transition()
-            .when(read0_equals_read1)
-            .assert_eq(next_pc, pc + c);
-        when_beq
-            .when_transition()
-            .when(AB::Expr::one() - read0_equals_read1)
-            .assert_eq(next_pc, pc + inst_width);
-
-        // BNE: If d[a] != e[b], pc <- pc + c
-        let bne_flag = operation_flags[&BNE];
-        read1_enabled += bne_flag.into();
-        read2_enabled += bne_flag.into();
-
-        let mut when_bne = builder.when(bne_flag);
-
-        when_bne.assert_eq(read1.address_space, d);
-        when_bne.assert_eq(read1.pointer, a);
-
-        when_bne.assert_eq(read2.address_space, e);
-        when_bne.assert_eq(read2.pointer, b);
-
-        when_bne
-            .when_transition()
-            .when(read0_equals_read1)
-            .assert_eq(next_pc, pc + inst_width);
-        when_bne
-            .when_transition()
-            .when(AB::Expr::one() - read0_equals_read1)
-            .assert_eq(next_pc, pc + c);
-
         // DUMMY constraints same pc and timestamp as next row
         // called nop for legacy reasons; to be removed
         let nop_flag = operation_flags[&DUMMY];
@@ -302,16 +240,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
                 .eval(builder, enabled.clone());
             op_timestamp += enabled.clone();
         }
-
-        // evaluate equality between read1 and read2
-
-        let is_equal_io = IsEqualIo {
-            x: read1.value.into(),
-            y: read2.value.into(),
-            out: read0_equals_read1.into(),
-            condition: AB::Expr::one(),
-        };
-        IsEqSubAir.eval(builder, (is_equal_io, is_equal_aux.inv));
 
         // Turn on all interactions
         self.eval_interactions(builder, io, next_pc, &operation_flags);

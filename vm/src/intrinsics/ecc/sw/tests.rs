@@ -7,7 +7,7 @@ use num_traits::FromPrimitive;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::{super::FIELD_ELEMENT_BITS, SwEcAddNeCoreChip};
+use super::SwEcAddNeCoreChip;
 use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
     intrinsics::ecc::sw::SwEcDoubleCoreChip,
@@ -28,7 +28,6 @@ fn test_add_ne() {
         modulus.clone(),
         NUM_LIMBS,
         LIMB_BITS,
-        FIELD_ELEMENT_BITS - 1,
         tester.memory_controller().borrow().range_checker.clone(),
         EccOpcode::default_offset(),
     );
@@ -109,7 +108,6 @@ fn test_double() {
         modulus.clone(),
         NUM_LIMBS,
         LIMB_BITS,
-        FIELD_ELEMENT_BITS - 1,
         tester.memory_controller().borrow().range_checker.clone(),
         EccOpcode::default_offset(),
     );

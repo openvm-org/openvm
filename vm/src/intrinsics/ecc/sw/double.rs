@@ -32,7 +32,6 @@ impl SwEcDoubleCoreAir {
         modulus: BigUint, // The coordinate field.
         num_limbs: usize,
         limb_bits: usize,
-        max_limb_bits: usize,
         range_bus: VariableRangeCheckerBus,
         offset: usize,
     ) -> Self {
@@ -44,13 +43,7 @@ impl SwEcDoubleCoreAir {
             range_bus.range_max_bits,
             FIELD_ELEMENT_BITS,
         );
-        let builder = ExprBuilder::new(
-            modulus,
-            limb_bits,
-            num_limbs,
-            range_bus.range_max_bits,
-            max_limb_bits,
-        );
+        let builder = ExprBuilder::new(modulus, limb_bits, num_limbs, range_bus.range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
 
         let mut x1 = ExprBuilder::new_input(builder.clone());
@@ -135,18 +128,11 @@ impl SwEcDoubleCoreChip {
         modulus: BigUint,
         num_limbs: usize,
         limb_bits: usize,
-        max_limb_bits: usize,
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
-        let air = SwEcDoubleCoreAir::new(
-            modulus,
-            num_limbs,
-            limb_bits,
-            max_limb_bits,
-            range_checker.bus(),
-            offset,
-        );
+        let air =
+            SwEcDoubleCoreAir::new(modulus, num_limbs, limb_bits, range_checker.bus(), offset);
         Self { air, range_checker }
     }
 }

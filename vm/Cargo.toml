@@ -59,6 +59,7 @@ ax-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
+stark-vm = { workspace = true, features = ["sdk"] }
 
 [features]
 default = ["parallel", "mimalloc"]

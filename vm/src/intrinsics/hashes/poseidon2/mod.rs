@@ -19,7 +19,7 @@ use crate::{
             tree::HasherChip,
             MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{bridge::ProgramBus, ExecutionError, Instruction},
+        program::{ExecutionError, Instruction, ProgramBus},
     },
 };
 

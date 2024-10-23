@@ -51,21 +51,14 @@ pub struct ExprBuilder {
 
     // The equations to compute the newly introduced variables. For trace gen only.
     pub computes: Vec<SymbolicExpr>,
-
-    /// The max bits allowed per limb, determined by the underlying field we use to represent the field element. Typically it is `F::bits() - 2` to allow handling of negative numbers.
-    /// For example BabyBear -> 29.
-    pub(crate) max_limb_bits: usize,
 }
 
 impl ExprBuilder {
-    /// `max_limb_bits` is the max bits allowed per limb, determined by the underlying field we use to represent the field element. Typically it is `F::bits() - 2` to allow handling of negative numbers.
-    /// For example BabyBear -> 29.
     pub fn new(
         prime: BigUint,
         limb_bits: usize,
         num_limbs: usize,
         range_checker_bits: usize,
-        max_limb_bits: usize,
     ) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, prime.clone());
         Self {
@@ -81,7 +74,6 @@ impl ExprBuilder {
             carry_limbs: vec![],
             constraints: vec![],
             computes: vec![],
-            max_limb_bits,
         }
     }
 

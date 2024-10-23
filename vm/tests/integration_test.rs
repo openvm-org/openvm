@@ -1,3 +1,9 @@
+use std::borrow::Borrow;
+
+use afs_stark_backend::{
+    config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
+    prover::types::Proof,
+};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -7,24 +13,28 @@ use ax_sdk::{
     utils::create_seeded_rng,
 };
 use axvm_instructions::PublishOpcode::PUBLISH;
+use itertools::Itertools;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
 use stark_vm::{
     arch::{
         instructions::{
-            CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*, Keccak256Opcode::*,
-            Poseidon2Opcode::*, TerminateOpcode::*, UsizeOpcode,
+            BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
+            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, Poseidon2Opcode::*,
+            TerminateOpcode::*, UsizeOpcode,
         },
         ExecutorName,
     },
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
+    sdk::air_test,
     system::{
-        memory::Equipartition,
+        memory::{merkle::MemoryMerklePvs, Equipartition},
         program::{Instruction, Program},
         vm::{
             config::{MemoryConfig, PersistenceType, VmConfig},
-            SingleSegmentVM, VirtualMachine,
+            connector::VmConnectorPvs,
+            ExitCode, SingleSegmentVM, VirtualMachine,
         },
     },
 };
@@ -41,20 +51,10 @@ where
 }
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
-    VmConfig::core().add_executor(ExecutorName::FieldArithmetic)
-}
-
-fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let pk = vm.config.generate_pk(engine.keygen_builder());
-
-    let result = vm.execute_and_generate(program).unwrap();
-
-    for proof_input in result.per_segment {
-        engine
-            .prove_then_verify(&pk, proof_input)
-            .expect("Verification failed");
-    }
+    VmConfig::core()
+        .add_executor(ExecutorName::FieldArithmetic)
+        .add_executor(ExecutorName::BranchEqual)
+        .add_executor(ExecutorName::Jal)
 }
 
 // log_blowup = 3 for poseidon2 chip
@@ -110,7 +110,14 @@ fn test_vm_1() {
         // word[0]_1 <- word[n]_0
         Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
         // if word[0]_1 == 0 then pc += 3
-        Instruction::from_isize(BEQ.with_default_offset(), 0, 0, 3, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            0,
+            0,
+            3,
+            1,
+            0,
+        ),
         // word[0]_1 <- word[0]_1 - word[1]_0
         Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
         // word[2]_1 <- pc + 1, pc -= 2
@@ -142,7 +149,14 @@ fn test_vm_1_optional_air() {
         let instructions = vec![
             Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
             Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
-            Instruction::from_isize(BNE.with_default_offset(), 0, 0, -1, 1, 0),
+            Instruction::from_isize(
+                NativeBranchEqualOpcode(BNE).with_default_offset(),
+                0,
+                0,
+                -1,
+                1,
+                0,
+            ),
             Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
         ];
 
@@ -195,7 +209,14 @@ fn test_vm_public_values() {
 fn test_vm_initial_memory() {
     // Program that fails if mem[(1, 0)] != 101.
     let program = Program::from_instructions(&[
-        Instruction::<BabyBear>::from_isize(BEQ.with_default_offset(), 0, 101, 2, 1, 0),
+        Instruction::<BabyBear>::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            0,
+            101,
+            2,
+            1,
+            0,
+        ),
         Instruction::<BabyBear>::from_isize(FAIL.with_default_offset(), 0, 0, 0, 0, 0),
         Instruction::<BabyBear>::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ]);
@@ -213,7 +234,9 @@ fn test_vm_initial_memory() {
             ..Default::default()
         },
         ..VmConfig::core()
-    };
+    }
+    .add_executor(ExecutorName::BranchEqual)
+    .add_executor(ExecutorName::Jal);
     let vm = VirtualMachine::new(config).with_initial_memory(initial_memory);
     air_test(vm, program);
 }
@@ -226,14 +249,23 @@ fn test_vm_1_persistent() {
         memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
         ..VmConfig::core()
     }
-    .add_executor(ExecutorName::FieldArithmetic);
+    .add_executor(ExecutorName::FieldArithmetic)
+    .add_executor(ExecutorName::BranchEqual)
+    .add_executor(ExecutorName::Jal);
     let pk = config.generate_pk(engine.keygen_builder());
 
     let n = 6;
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1),
         Instruction::large_from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
-        Instruction::from_isize(BNE.with_default_offset(), 0, 0, -1, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            0,
+            0,
+            -1,
+            1,
+            0,
+        ),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
@@ -298,8 +330,24 @@ fn test_vm_continuations() {
         // [0]_1 <- [0]_1 + 1
         Instruction::large_from_isize(ADD.with_default_offset(), 0, 0, 1, 1, 1, 0, 0),
         // if [0]_1 != n, pc <- pc - 3
-        Instruction::from_isize(BNE.with_default_offset(), n, 0, -4, 0, 1),
-        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            n,
+            0,
+            -4,
+            0,
+            1,
+        ),
+        // [0]_3 <- [1]_1
+        Instruction::from_isize(ADD.with_default_offset(), 0, 1, 0, 3, 1),
+        Instruction::from_isize(
+            TERMINATE.with_default_offset(),
+            0,
+            0,
+            ExitCode::Success as isize,
+            0,
+            0,
+        ),
     ]);
 
     let config = VmConfig {
@@ -312,65 +360,121 @@ fn test_vm_continuations() {
         },
         ..VmConfig::core()
     }
-    .add_executor(ExecutorName::FieldArithmetic);
+    .add_executor(ExecutorName::FieldArithmetic)
+    .add_executor(ExecutorName::BranchEqual)
+    .add_executor(ExecutorName::Jal);
 
     let vm = VirtualMachine::new(config);
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let pk = vm.config.generate_pk(engine.keygen_builder());
+    let vk = pk.get_vk();
     let result = vm.execute_and_generate(program).unwrap();
 
     // Let's make sure we have at least 3 segments.
     let num_segments = result.per_segment.len();
     assert!(num_segments >= 3);
 
+    let expected_output = {
+        let mut a = 0;
+        let mut b = 1;
+        for _ in 0..n {
+            (a, b) = (b, a + b);
+            b %= BabyBear::ORDER_U32;
+        }
+        BabyBear::from_canonical_u32(a)
+    };
+
+    let proofs: Vec<Proof<_>> = result
+        .per_segment
+        .into_iter()
+        .map(|proof_input| engine.prove(&pk, proof_input))
+        .collect();
+    aggregate_segment_proofs(engine, vk, proofs, vec![expected_output]);
+}
+
+fn aggregate_segment_proofs<SC: StarkGenericConfig>(
+    engine: impl StarkEngine<SC>,
+    vk: MultiStarkVerifyingKey<SC>,
+    proofs: Vec<Proof<SC>>,
+    _expected_outputs: Vec<Val<SC>>,
+) {
     let mut prev_final_memory_root = None;
     let mut prev_final_pc = None;
 
-    for (i, proof_input) in result.per_segment.into_iter().enumerate() {
-        // Check public values.
-        for air in &proof_input.per_air {
-            let air_name = air.1.air.name();
-            let pvs = &air.1.raw.public_values;
+    // TODO: These indices should be fixed.
+    let vm_connector_air_id = vk
+        .per_air
+        .iter()
+        .position(|vk| vk.params.num_public_values == VmConnectorPvs::<Val<SC>>::width())
+        .unwrap();
+    let memory_merkle_air_id = vk
+        .per_air
+        .iter()
+        .position(|vk| vk.params.num_public_values == MemoryMerklePvs::<Val<SC>, CHUNK>::width())
+        .unwrap();
 
-            if air_name == "VmConnectorAir" {
-                assert_eq!(pvs.len(), 3);
+    for (i, proof) in proofs.iter().enumerate() {
+        engine
+            .verify(&vk, proof)
+            .expect("segment proof should verify");
+
+        let air_ids = proof
+            .per_air
+            .iter()
+            .map(|air_proof_data| air_proof_data.air_id)
+            .collect_vec();
+
+        assert!(air_ids.contains(&vm_connector_air_id));
+        assert!(air_ids.contains(&memory_merkle_air_id));
+
+        // Check public values.
+        for air_proof_data in proof.per_air.iter() {
+            let pvs = &air_proof_data.public_values;
+            let air_vk = &vk.per_air[air_proof_data.air_id];
+
+            if air_proof_data.air_id == vm_connector_air_id {
+                let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
 
                 // Check initial pc matches the previous final pc.
                 assert_eq!(
-                    pvs[0],
+                    pvs.initial_pc,
                     if i == 0 {
-                        BabyBear::zero()
+                        // TODO: Make this program PC.
+                        Val::<SC>::zero()
                     } else {
                         prev_final_pc.unwrap()
                     }
                 );
-                prev_final_pc = Some(pvs[1]);
+                prev_final_pc = Some(pvs.final_pc);
 
-                if i == num_segments - 1 {
-                    assert_eq!(pvs[2], BabyBear::zero());
+                let expected_exit_code = if i == proofs.len() - 1 {
+                    ExitCode::Success as i32
                 } else {
-                    assert_eq!(pvs[2], BabyBear::neg_one());
-                }
-            } else if air_name == "MemoryMerkleAir<8>" {
-                assert_eq!(pvs.len(), 16);
+                    ExitCode::Suspended as i32
+                };
+                let expected_exit_code_f = if expected_exit_code < 0 {
+                    -Val::<SC>::from_canonical_u32(-expected_exit_code as u32)
+                } else {
+                    Val::<SC>::from_canonical_u32(expected_exit_code as u32)
+                };
 
-                let (initial_memory_root, final_memory_root) = pvs.split_at(8);
+                assert_eq!(pvs.exit_code, expected_exit_code_f);
+            } else if air_proof_data.air_id == memory_merkle_air_id {
+                let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
                 // Check that initial root matches the previous final root.
                 if i != 0 {
-                    assert_eq!(initial_memory_root, prev_final_memory_root.unwrap());
+                    assert_eq!(pvs.initial_root, prev_final_memory_root.unwrap());
                 }
-                prev_final_memory_root = Some(final_memory_root.to_vec());
+                prev_final_memory_root = Some(pvs.final_root);
             } else {
                 assert_eq!(pvs.len(), 0);
+                assert_eq!(air_vk.params.num_public_values, 0);
             }
         }
-
-        engine
-            .prove_then_verify(&pk, proof_input)
-            .expect("Verification failed");
     }
+    // TODO: Compute root of _expected_outputs and verify Merkle proof to final_memory_root.
 }
 
 #[test]
@@ -386,18 +490,39 @@ fn test_vm_without_field_arithmetic() {
         // word[0]_1 <- word[5]_0
         Instruction::from_isize(STOREW.with_default_offset(), 5, 0, 0, 0, 1),
         // if word[0]_1 != 4 then pc += 2
-        Instruction::from_isize(BNE.with_default_offset(), 0, 4, 3, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            0,
+            4,
+            3,
+            1,
+            0,
+        ),
         // word[2]_1 <- pc + 1, pc -= 2
         Instruction::from_isize(JAL.with_default_offset(), 2, -2, 0, 1, 0),
         // terminate
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= 1
-        Instruction::from_isize(BEQ.with_default_offset(), 0, 5, -1, 1, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            0,
+            5,
+            -1,
+            1,
+            0,
+        ),
     ];
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(VirtualMachine::new(VmConfig::core()), program);
+    air_test(
+        VirtualMachine::new(
+            VmConfig::core()
+                .add_executor(ExecutorName::BranchEqual)
+                .add_executor(ExecutorName::Jal),
+        ),
+        program,
+    );
 }
 
 #[test]
@@ -408,7 +533,14 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 3, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 0, 0, 0, 0, 2),
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 1, 0, 2),
-        Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            2,
+            0,
+            7,
+            1,
+            1,
+        ),
         Instruction::large_from_isize(ADD.with_default_offset(), 2, 2, 3, 1, 1, 1, 0),
         Instruction::from_isize(LOADW.with_default_offset(), 4, -2, 2, 1, 2),
         Instruction::from_isize(LOADW.with_default_offset(), 5, -1, 2, 1, 2),
@@ -439,7 +571,14 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 1, 0, 2),
         Instruction::debug(CT_END.with_default_offset(), "store"),
         Instruction::debug(CT_START.with_default_offset(), "total loop"),
-        Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 9, 1, 1), // Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            2,
+            0,
+            9,
+            1,
+            1,
+        ), // Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
         Instruction::large_from_isize(ADD.with_default_offset(), 2, 2, 3, 1, 1, 1, 0),
         Instruction::debug(CT_START.with_default_offset(), "inner loop"),
         Instruction::from_isize(LOADW.with_default_offset(), 4, -2, 2, 1, 2),
@@ -543,8 +682,22 @@ fn test_vm_hint() {
         Instruction::large_from_isize(ADD.with_default_offset(), 0, 44, 0, 1, 1, 1, 0),
         Instruction::from_isize(SHINTW.with_default_offset(), 0, 0, 0, 1, 2),
         Instruction::large_from_isize(ADD.with_default_offset(), 50, 50, 1, 1, 1, 0, 0),
-        Instruction::from_isize(BNE.with_default_offset(), 50, 38, 2013265917, 1, 1),
-        Instruction::from_isize(BNE.with_default_offset(), 50, 38, 2013265916, 1, 1),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            50,
+            38,
+            2013265917,
+            1,
+            1,
+        ),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            50,
+            38,
+            2013265916,
+            1,
+            1,
+        ),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
@@ -652,7 +805,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         2,
         0,
         1,
-        1,
+        0,
     )); // skip fail
     instructions.push(Instruction::from_isize(
         FAIL.with_default_offset(),
@@ -723,7 +876,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     // read expected result to check correctness
     for (i, expected_byte) in expected.into_iter().enumerate() {
         instructions.push(Instruction::from_isize(
-            BNE.with_default_offset(),
+            NativeBranchEqualOpcode(BNE).with_default_offset(),
             dst + i as isize,
             expected_byte as isize,
             -(instructions.len() as isize) + 1, // jump to fail
@@ -759,7 +912,12 @@ fn test_vm_keccak() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(VmConfig::core().add_executor(ExecutorName::Keccak256)),
+        VirtualMachine::new(
+            VmConfig::core()
+                .add_executor(ExecutorName::Keccak256)
+                .add_executor(ExecutorName::BranchEqual)
+                .add_executor(ExecutorName::Jal),
+        ),
         program,
     );
 }
@@ -784,7 +942,12 @@ fn test_vm_keccak_non_full_round() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(VmConfig::core().add_executor(ExecutorName::Keccak256)),
+        VirtualMachine::new(
+            VmConfig::core()
+                .add_executor(ExecutorName::Keccak256)
+                .add_executor(ExecutorName::BranchEqual)
+                .add_executor(ExecutorName::Jal),
+        ),
         program,
     );
 }

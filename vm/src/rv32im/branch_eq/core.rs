@@ -39,6 +39,7 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
 #[derive(Copy, Clone, Debug)]
 pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
     offset: usize,
+    pc_step: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualCoreAir<NUM_LIMBS> {
@@ -105,10 +106,9 @@ where
             })
             + AB::Expr::from_canonical_usize(self.offset);
 
-        // TODO: update the default increment (i.e. 4) when opcodes are updated
         let to_pc = from_pc
             + cols.cmp_result * cols.imm
-            + not(cols.cmp_result) * AB::Expr::from_canonical_u8(4);
+            + not(cols.cmp_result) * AB::Expr::from_canonical_usize(self.pc_step);
 
         AdapterAirContext {
             to_pc: Some(to_pc),
@@ -141,9 +141,9 @@ pub struct BranchEqualCoreChip<const NUM_LIMBS: usize> {
 }
 
 impl<const NUM_LIMBS: usize> BranchEqualCoreChip<NUM_LIMBS> {
-    pub fn new(offset: usize) -> Self {
+    pub fn new(offset: usize, pc_step: usize) -> Self {
         Self {
-            air: BranchEqualCoreAir { offset },
+            air: BranchEqualCoreAir { offset, pc_step },
         }
     }
 }

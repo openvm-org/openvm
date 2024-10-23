@@ -25,7 +25,7 @@ use crate::{
     kernels::core::RANGE_CHECKER_BUS,
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
-        program::{bridge::ProgramBus, Instruction},
+        program::{Instruction, ProgramBus},
         vm::config::MemoryConfig,
     },
 };

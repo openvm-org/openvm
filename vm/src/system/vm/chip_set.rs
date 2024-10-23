@@ -41,10 +41,12 @@ use crate::{
     },
     kernels::{
         adapters::{
-            convert_adapter::ConvertAdapterChip, native_adapter::NativeAdapterChip,
+            branch_native_adapter::BranchNativeAdapterChip, convert_adapter::ConvertAdapterChip,
+            jal_native_adapter::JalNativeAdapterChip, native_adapter::NativeAdapterChip,
             native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
+        branch_eq::KernelBranchEqChip,
         castf::{CastFChip, CastFCoreChip},
         core::{
             CoreChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
@@ -53,6 +55,7 @@ use crate::{
         ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
+        jal::{JalCoreChip, KernelJalChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
         public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
@@ -84,7 +87,7 @@ use crate::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
             MemoryControllerRef, CHUNK,
         },
-        program::{bridge::ProgramBus, ProgramChip},
+        program::{ProgramBus, ProgramChip},
         vm::{
             config::{PersistenceType, VmConfig},
             connector::VmConnectorChip,
@@ -255,6 +258,36 @@ impl VmConfig {
                         executors.insert(opcode, core_chip.clone().into());
                     }
                     chips.push(AxVmChip::Core(core_chip));
+                }
+                ExecutorName::BranchEqual => {
+                    let chip = Rc::new(RefCell::new(KernelBranchEqChip::new(
+                        BranchNativeAdapterChip::<_>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        BranchEqualCoreChip::new(offset, 1usize),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::BranchEqual(chip));
+                }
+                ExecutorName::Jal => {
+                    let chip = Rc::new(RefCell::new(KernelJalChip::new(
+                        JalNativeAdapterChip::<_>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        JalCoreChip::new(offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::Jal(chip));
                 }
                 ExecutorName::FieldArithmetic => {
                     let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
@@ -491,7 +524,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchEqualCoreChip::new(offset),
+                        BranchEqualCoreChip::new(offset, 4usize),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -589,7 +622,6 @@ impl VmConfig {
                             secp256k1_coord_prime(),
                             32,
                             8,
-                            F::bits() - 2,
                             memory_controller.borrow().range_checker.clone(),
                             offset,
                         ),
@@ -611,7 +643,6 @@ impl VmConfig {
                             secp256k1_coord_prime(),
                             32,
                             8,
-                            F::bits() - 2,
                             memory_controller.borrow().range_checker.clone(),
                             offset,
                         ),
@@ -668,7 +699,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -690,7 +720,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -712,7 +741,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -734,7 +762,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -756,7 +783,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -778,7 +804,6 @@ impl VmConfig {
                             8,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
-                            F::bits() - 2,
                         ),
                         memory_controller.clone(),
                     )));
@@ -903,6 +928,16 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CoreOpcode::default_offset(),
             CoreOpcode::COUNT,
             CoreOpcode::default_offset(),
+        ),
+        ExecutorName::BranchEqual => (
+            NativeBranchEqualOpcode::default_offset(),
+            BranchEqualOpcode::COUNT,
+            NativeBranchEqualOpcode::default_offset(),
+        ),
+        ExecutorName::Jal => (
+            NativeJalOpcode::default_offset(),
+            NativeJalOpcode::COUNT,
+            NativeJalOpcode::default_offset(),
         ),
         ExecutorName::FieldArithmetic => (
             FieldArithmeticOpcode::default_offset(),
