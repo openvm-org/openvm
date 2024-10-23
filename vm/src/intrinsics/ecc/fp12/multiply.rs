@@ -1,8 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
-    sub_chip::SubAir,
+    sub_chip::{LocalTraceInstructions, SubAir},
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
@@ -22,7 +22,7 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
         MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
-    intrinsics::ecc::Fp12BigUint,
+    intrinsics::ecc::{Fp12BigUint, Fp2BigUint, FpBigUint},
     system::program::Instruction,
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
 };
@@ -61,7 +61,7 @@ impl Fp12MultiplyCoreAir {
 
         let mut x = Fp12::new(builder.clone());
         let mut y = Fp12::new(builder.clone());
-        let mut xi = Fp2::new(builder.clone());
+        let mut xi = x.xi;
         let mut res = x.mul(&mut y, &mut xi);
         res.save();
 
@@ -105,11 +105,12 @@ where
             flags,
             ..
         } = self.expr.load_vars(local);
-        assert_eq!(inputs.len(), 3);
+        assert_eq!(inputs.len(), 12 + 12 + 2);
         assert_eq!(vars.len(), 34);
-        assert_eq!(flags.len(), 1);
+        assert_eq!(flags.len(), 0);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[vars.len() - 12..]
+            .concat()
             .iter()
             .map(|x| (*x).into())
             .collect();
@@ -131,7 +132,7 @@ where
 
 pub struct Fp12MultiplyCoreChip {
     pub air: Fp12MultiplyCoreAir,
-    pub xi: Fp2,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl Fp12MultiplyCoreChip {
@@ -140,25 +141,25 @@ impl Fp12MultiplyCoreChip {
         num_limbs: usize,
         limb_bits: usize,
         max_limb_bits: usize,
-        range_bus: VariableRangeCheckerBus,
+        range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
-        xi: Fp2,
     ) -> Self {
         let air = Fp12MultiplyCoreAir::new(
             modulus,
             num_limbs,
             limb_bits,
             max_limb_bits,
-            range_bus,
+            range_checker.bus(),
             offset,
         );
-        Self { air, xi }
+        Self { air, range_checker }
     }
 }
 
 pub struct Fp12MultiplyCoreRecord {
     pub x: Fp12BigUint,
     pub y: Fp12BigUint,
+    pub xi: Fp2BigUint,
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for Fp12MultiplyCoreChip
@@ -189,40 +190,152 @@ where
 
         let data: DynArray<_> = reads.into();
         let data = data.0;
-        let x = data[..num_limbs]
-            .iter()
-            .map(|x| x.as_canonical_u32())
+        let x = data[..num_limbs * 12]
+            .chunks(num_limbs)
+            .map(|x| x.iter().map(|y| y.as_canonical_u32()).collect_vec())
             .collect_vec();
-        let y = data[..num_limbs]
-            .iter()
-            .map(|x| x.as_canonical_u32())
+        let y = data[num_limbs * 12..2 * num_limbs * 12]
+            .chunks(num_limbs)
+            .map(|x| x.iter().map(|y| y.as_canonical_u32()).collect_vec())
             .collect_vec();
-        let x_biguint = limbs_to_biguint(&x, limb_bits);
-        let y_biguint = limbs_to_biguint(&y, limb_bits);
+        let xi = data[2 * num_limbs * 12..]
+            .chunks(num_limbs)
+            .map(|x| x.iter().map(|y| y.as_canonical_u32()).collect_vec())
+            .collect_vec();
+        let x_biguint = x
+            .iter()
+            .map(|x| limbs_to_biguint(x, limb_bits))
+            .collect_vec();
+        let y_biguint = y
+            .iter()
+            .map(|y| limbs_to_biguint(y, limb_bits))
+            .collect_vec();
+        let xi_biguint = xi
+            .iter()
+            .map(|xi| limbs_to_biguint(xi, limb_bits))
+            .collect_vec();
+        let input_vec = [x_biguint.clone(), y_biguint.clone(), xi_biguint.clone()].concat();
 
-        let vars = self
-            .air
-            .expr
-            .execute(vec![x_biguint.clone(), y_biguint.clone()], vec![]);
+        let vars = self.air.expr.execute(input_vec, vec![]);
         assert_eq!(vars.len(), 34);
-        let res_biguint = vars[0].clone();
-        tracing::trace!("FP12MultiplyOpcode | {res_biguint:?} | {x_biguint:?} | {y_biguint:?}");
-        let res_limbs = biguint_to_limbs_vec(res_biguint, limb_bits, num_limbs);
+        let res_biguint_vec = vars[vars.len() - 12..].to_vec();
+        tracing::trace!("FP12MultiplyOpcode | {res_biguint_vec:?} | {x_biguint:?} | {y_biguint:?}");
+        let res_limbs = res_biguint_vec
+            .iter()
+            .flat_map(|x| biguint_to_limbs_vec(x.clone(), limb_bits, num_limbs))
+            .collect_vec();
         let writes = res_limbs
             .into_iter()
             .map(F::from_canonical_u32)
             .collect_vec();
         let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);
 
-        Ok((ctx.into(),))
+        Ok((
+            ctx.into(),
+            Fp12MultiplyCoreRecord {
+                x: Fp12BigUint {
+                    c0: Fp2BigUint {
+                        c0: FpBigUint(x_biguint[0].clone()),
+                        c1: FpBigUint(x_biguint[1].clone()),
+                    },
+                    c1: Fp2BigUint {
+                        c0: FpBigUint(x_biguint[2].clone()),
+                        c1: FpBigUint(x_biguint[3].clone()),
+                    },
+                    c2: Fp2BigUint {
+                        c0: FpBigUint(x_biguint[4].clone()),
+                        c1: FpBigUint(x_biguint[5].clone()),
+                    },
+                    c3: Fp2BigUint {
+                        c0: FpBigUint(x_biguint[6].clone()),
+                        c1: FpBigUint(x_biguint[7].clone()),
+                    },
+                    c4: Fp2BigUint {
+                        c0: FpBigUint(x_biguint[8].clone()),
+                        c1: FpBigUint(x_biguint[9].clone()),
+                    },
+                    c5: Fp2BigUint {
+                        c0: FpBigUint(x_biguint[10].clone()),
+                        c1: FpBigUint(x_biguint[11].clone()),
+                    },
+                },
+                y: Fp12BigUint {
+                    c0: Fp2BigUint {
+                        c0: FpBigUint(y_biguint[0].clone()),
+                        c1: FpBigUint(y_biguint[1].clone()),
+                    },
+                    c1: Fp2BigUint {
+                        c0: FpBigUint(y_biguint[2].clone()),
+                        c1: FpBigUint(y_biguint[3].clone()),
+                    },
+                    c2: Fp2BigUint {
+                        c0: FpBigUint(y_biguint[4].clone()),
+                        c1: FpBigUint(y_biguint[5].clone()),
+                    },
+                    c3: Fp2BigUint {
+                        c0: FpBigUint(y_biguint[6].clone()),
+                        c1: FpBigUint(y_biguint[7].clone()),
+                    },
+                    c4: Fp2BigUint {
+                        c0: FpBigUint(y_biguint[8].clone()),
+                        c1: FpBigUint(y_biguint[9].clone()),
+                    },
+                    c5: Fp2BigUint {
+                        c0: FpBigUint(y_biguint[10].clone()),
+                        c1: FpBigUint(y_biguint[11].clone()),
+                    },
+                },
+                xi: Fp2BigUint {
+                    c0: FpBigUint(xi_biguint[0].clone()),
+                    c1: FpBigUint(xi_biguint[1].clone()),
+                },
+            },
+        ))
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {
         "Fp12Multiply".to_string()
     }
 
-    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
-        todo!()
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let input = (
+            vec![
+                record.x.c0.c0.0,
+                record.x.c0.c1.0,
+                record.x.c1.c0.0,
+                record.x.c1.c1.0,
+                record.x.c2.c0.0,
+                record.x.c2.c1.0,
+                record.x.c3.c0.0,
+                record.x.c3.c1.0,
+                record.x.c4.c0.0,
+                record.x.c4.c1.0,
+                record.x.c5.c0.0,
+                record.x.c5.c1.0,
+                record.y.c0.c0.0,
+                record.y.c0.c1.0,
+                record.y.c1.c0.0,
+                record.y.c1.c1.0,
+                record.y.c2.c0.0,
+                record.y.c2.c1.0,
+                record.y.c3.c0.0,
+                record.y.c3.c1.0,
+                record.y.c4.c0.0,
+                record.y.c4.c1.0,
+                record.y.c5.c0.0,
+                record.y.c5.c1.0,
+                BigUint::from(9u32),
+                BigUint::from(1u32),
+                // record.xi.c0.0,
+                // record.xi.c1.0,
+            ],
+            self.range_checker.clone(),
+            vec![],
+        );
+        let row = LocalTraceInstructions::<F>::generate_trace_row(&self.air.expr, input);
+        for (i, element) in row.iter().enumerate() {
+            row_slice[i] = *element;
+        }
     }
 
     fn air(&self) -> &Self::Air {

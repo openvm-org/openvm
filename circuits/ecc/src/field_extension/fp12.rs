@@ -4,7 +4,6 @@ use super::Fp2;
 use crate::field_expression::{ExprBuilder, FieldVariable};
 
 /// Field extension Fp12 defined with coefficients in Fp2. Fp6-equivalent coefficients are c0: (c0, c2, c4), c1: (c1, c3, c5).
-#[derive(Clone)]
 pub struct Fp12 {
     pub c0: Fp2,
     pub c1: Fp2,

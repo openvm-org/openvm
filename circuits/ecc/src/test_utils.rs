@@ -112,3 +112,11 @@ pub fn fq12_to_biguint_vec(x: &Fq12) -> Vec<BigUint> {
 pub fn fq2_to_biguint_vec(x: &Fq2) -> Vec<BigUint> {
     vec![bn254_fq_to_biguint(&x.c0), bn254_fq_to_biguint(&x.c1)]
 }
+
+pub fn fq12_random() -> Vec<BigUint> {
+    use halo2curves_axiom::ff::Field;
+
+    let seed = create_seeded_rng();
+    let fq = Fq12::random(seed);
+    fq12_to_biguint_vec(&fq)
+}

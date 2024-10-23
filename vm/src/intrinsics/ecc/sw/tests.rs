@@ -6,7 +6,7 @@ use p3_field::AbstractField;
 use super::{super::FIELD_ELEMENT_BITS, SwEcAddNeCoreChip};
 use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
-    intrinsics::ecc::sw::SwEcDoubleCoreChip,
+    intrinsics::{ecc::sw::SwEcDoubleCoreChip, test_utils::write_ptr_reg},
     rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
     system::program::Instruction,
     utils::biguint_to_limbs,
@@ -66,17 +66,10 @@ fn test_add_ne() {
     let address1 = 0u32;
     let address2 = 128u32;
     let address3 = 256u32;
-    let mut write_reg = |reg_addr, value: u32| {
-        tester.write(
-            ptr_as,
-            reg_addr,
-            value.to_le_bytes().map(BabyBear::from_canonical_u8),
-        );
-    };
 
-    write_reg(addr_ptr1, address1);
-    write_reg(addr_ptr2, address2);
-    write_reg(addr_ptr3, address3);
+    write_ptr_reg(&mut tester, ptr_as, addr_ptr1, address1);
+    write_ptr_reg(&mut tester, ptr_as, addr_ptr2, address2);
+    write_ptr_reg(&mut tester, ptr_as, addr_ptr3, address3);
     tester.write(data_as, address1 as usize, p1_x_limbs);
     tester.write(data_as, address1 as usize + NUM_LIMBS, p1_y_limbs);
     tester.write(data_as, address2 as usize, p2_x_limbs);
@@ -135,15 +128,9 @@ fn test_double() {
     let data_as = 2;
     let address1 = 0u32;
     let address3 = 256u32;
-    let mut write_reg = |reg_addr, value: u32| {
-        tester.write(
-            ptr_as,
-            reg_addr,
-            value.to_le_bytes().map(BabyBear::from_canonical_u8),
-        );
-    };
-    write_reg(addr_ptr1, address1);
-    write_reg(addr_ptr3, address3);
+
+    write_ptr_reg(&mut tester, ptr_as, addr_ptr1, address1);
+    write_ptr_reg(&mut tester, ptr_as, addr_ptr3, address3);
     tester.write(data_as, address1 as usize, p1_x_limbs);
     tester.write(data_as, address1 as usize + NUM_LIMBS, p1_y_limbs);
 
