@@ -92,7 +92,7 @@ The following notation is used throughout this document:
 We will always have the following fixed address spaces:
 
 | Address Space | Name         |
-|---------------|--------------|
+| ------------- | ------------ |
 | `0`           | Immediates   |
 | `1`           | Registers    |
 | `2`           | Memory       |
@@ -135,18 +135,18 @@ Listed below are the instructions offered in each configuration.
 
 This instruction set is always enabled.
 
-| Mnemonic            | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                              |
-|---------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| **L** / **LOAD**    | `a, offset, c`                                | Set `[a]_d <- [[c]_d + offset]_e`. Loads a cell from one address space to another.                                                    |
-| **S** / **STORE**   | `a, offset, c`                                | Set `[[c]_d + offset]_e <- [a]_d`.                                                                                                    |
-| **L2** / **LOAD2**  | `a, offset, c, size`                          | Set `[a]_d <- [[c]_d + [f]_g * size + offset]_e`. Loads cell a from one address space to another using a variable multiple of `size`. |
-| **S2** / **STORE2** | `a, offset, c, size`                          | Set `[[c]_d + [f]_g * size + offset]_e <- [a]_d`.                                                                                     |
-| **JAL**             | `a, offset, c`                                | Jump to address and link: set `[a]_d <- (pc + INST_WIDTH)` and `pc <- pc + offset`.                                                   |
-| **BEQ**             | `a, b, offset`                                | If `[a]_d == [b]_e`, then set `pc <- pc + offset`                                                                                     |
-| **BNE**             | `a, b, offset`                                | If `[a]_d != [b]_e`, then set `pc <- pc + offset`                                                                                     |
-| **TERMINATE**       | `_, _, _`                                     | Terminates execution.                                                                                                                 |
-| **SHINTW**          | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `[[c]_d + b]_e`.                                                                     |
-| **PUBLISH**         | `a, b, _`                                     | Constrains the public value at index `[a]_d` to equal `[b]_e`.                                                                        |
+| Mnemonic            | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                           |
+| ------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **L** / **LOAD**    | `a, offset, c`                                | Set `[a]_d <- [[c]_d + offset]_e`. Loads a cell from one address space to another.                                                 |
+| **S** / **STORE**   | `a, offset, c`                                | Set `[[c]_d + offset]_e <- [a]_d`.                                                                                                 |
+| **L2** / **LOAD2**  | `a, offset, c, size`                          | Set `[a]_d <- [[c]_d + [f]_d * g + offset]_e`. Loads cell a from one address space to another using a variable multiple of `size`. |
+| **S2** / **STORE2** | `a, offset, c, size`                          | Set `[[c]_d + [f]_d * g + offset]_e <- [a]_d`.                                                                                     |
+| **JAL**             | `a, offset, c`                                | Jump to address and link: set `[a]_d <- (pc + INST_WIDTH)` and `pc <- pc + offset`.                                                |
+| **BEQ**             | `a, b, offset`                                | If `[a]_d == [b]_e`, then set `pc <- pc + offset`                                                                                  |
+| **BNE**             | `a, b, offset`                                | If `[a]_d != [b]_e`, then set `pc <- pc + offset`                                                                                  |
+| **TERMINATE**       | `_, _, _`                                     | Terminates execution.                                                                                                              |
+| **SHINTW**          | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `[[c]_d + b]_e`.                                                                  |
+| **PUBLISH**         | `a, b, _`                                     | Constrains the public value at index `[a]_d` to equal `[b]_e`.                                                                     |
 
 #### Notes about hints
 
@@ -167,7 +167,7 @@ This instruction set does native field operations. Some operations may be infeas
 additional bit size constraints.
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                            |
-|----------|-----------------------------------------------|------------------------------------------------------------------------|
+| -------- | --------------------------------------------- | ---------------------------------------------------------------------- |
 | **ADD**  | `a, b, c`                                     | Set `[a]_d <- [b]_e + [c]_f`.                                          |
 | **SUB**  | `a, b, c`                                     | Set `[a]_d <- [b]_e - [c]_f`.                                          |
 | **MUL**  | `a, b, c`                                     | Set `[a]_d <- [b]_e * [c]_f`.                                          |
@@ -186,7 +186,7 @@ All elements in the field extension can be represented as a vector `[a_0, a_1, a
 polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ over `BabyBear`.
 
 | Mnemonic    | <div style="width:170px">Operands (asm)</div> | Description                                                                                                |
-|-------------|-----------------------------------------------|------------------------------------------------------------------------------------------------------------|
+| ----------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | **FE4ADD**  | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d + [c:4]_e` with extension field addition.                                          |
 | **FE4SUB**  | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d - [c:4]_e` with extension field subtraction.                                       |
 | **BBE4MUL** | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d * [c:4]_e` with extension field multiplication.                                    |
@@ -243,7 +243,7 @@ A note on CASTF below: support for casting arbitrary field elements can also be 
 -->
 
 | Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                                                                 |
-|-----------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **CASTF** | `a, b, _`                                     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
 | **SLTU**  | `a, b, c`                                     | Set `[a]_d <- compose([b; 4]_e) < compose([c; 4]_f) ? decompose(1) : decompose(0)`. The address space `d` is not allowed to be zero.                                                                                                                                                        |
 | **LUI**   | `a, b, _`                                     | Set `[a:4]_1 <- decompose([b]_0 << 12)`. The immediate `[b]_0` is constrained to be at most 20 bits.                                                                                                                                                                                        |
@@ -276,7 +276,7 @@ The address spaces `d, e` are not allowed to be zero in any instructions below u
 #### Arithmetic Operations
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                          |
-|----------|-----------------------------------------------|------------------------------------------------------------------------------------------------------|
+| -------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | **ADD**  | `a, b, c`                                     | Set `[a:32]_d <- decompose(u256[b]_d + u256[c]_e)` where addition is mod `2^256`.                    |
 | **SUB**  | `a, b, c`                                     | Set `[a:32]_d <- decompose(u256[b]_d - u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
 | **MUL**  | `a, b, c`                                     | Set `[a:32]_d <- decompose(u256[b]_d * u256[c]_e)` where multiplication is mod `2^256`.              |
@@ -289,7 +289,7 @@ We don't need this yet:
 #### Comparison Operations
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                          |
-|----------|-----------------------------------------------|----------------------------------------------------------------------|
+| -------- | --------------------------------------------- | -------------------------------------------------------------------- |
 | **LT**   | `a, b, c`                                     | Set `[a]_d <- u256[b]_d < u256[c]_e ? decompose(1) : decompose(0)`.  |
 | **EQ**   | `a, b, c`                                     | Set `[a]_d <- u256[b]_d == u256[c]_e ? decompose(1) : decompose(0)`. |
 
@@ -303,7 +303,7 @@ conversion between limbs and the big uint is the same as for `u256` above.
 The modulus we will use for now are the coordinate field and scalar field of `secp256k1`.
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                     |
-|----------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| -------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | **ADD**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e + bigu[[c]_d]_e)` where addition is in the given (coordinate/scalar) field.       |
 | **SUB**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e - bigu[[c]_d]_e)` where subtraction is in the given (coordinate/scalar) field.    |
 | **MUL**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e * bigu[[c]_d]_e)` where multiplication is in the given (coordinate/scalar) field. |
@@ -327,7 +327,7 @@ where `compose` is the one in modular arithmetic above. And let `decompose_ec(p:
 of `compose_ec`.
 
 | Mnemonic                | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                   |
-|-------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ----------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **SECP256K1_EC_ADD_NE** | `a, b, c`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e + EcArray[[c]_d]_e)` where `+` is group operation on secp256k1. Assume the x coordinate of two inputs are distinct, the result is undefined otherwise. |
 | **SECP256K1_EC_DOUBLE** | `a, b, _`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e + EcArray[[b]_d]_e)` where `+` is group operation on secp256k1. This double the input point.                                                           |
 
@@ -338,7 +338,7 @@ We have special opcodes to enable different precompiled hash functions.
 Only subsets of these opcodes will be turned on depending on the VM use case.
 
 | Mnemonic                                                                                                                                                                                                                           | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a, b, c`                                     | Applies the Poseidon2 compression function to the inputs `[[b]_d:CHUNK]_e` and `[[c]_d:CHUNK]_e`, writing the result to `[[a]_d:CHUNK]_e`.<br/><br/>The address space `d` is **not** allowed to be `0`.                                                                                                                                                                                                                                                                                                                               |
 | **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a, b, 0`                                     | Applies the Poseidon2 permutation function to `[[b]_d:WIDTH]_e` and writes the result to `[[a]_d:WIDTH]_e`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. The address space `d` is **not** allowed to be `0`. This is nearly the same as `COMPRESS_POSEIDON2` except that the whole input state is contiguous in memory, and the full output state is written to memory.                                                                                                                  |
 | **KECCAK256**                                                                                                                                                                                                                      | `a, b, c, d, e, f`                            | Let `input` be the **variable length** byte array of length `len <- [c]_f` loaded from memory via `input[i] <- [[b]_d + i]_e` for `i = 0..len`. Let `output = keccak256(input)` as `[u8; 32]`. This opcode sets `[[a]_d + i]_e <- output[i]` for `i = 0..32`. This opcode assumes that the input memory cells are **bytes** and currently **does** range check them. **Safety:** The output is currently **not** range checked to be bytes. <!--ATTENTION: THIS MAY CHANGE IN FUTURE--> The output is written to memory as **bytes**. |
@@ -347,7 +347,7 @@ For Poseidon2, the `PID` is just some identifier to provide domain separation be
 now we can set:
 
 | `PID` | Description                                                                                                                                                                                                                                                         |
-|-------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0     | [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48) but the Mat4 used is Plonky3's with a Monty reduction |
 
 and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above. For this setting, the input (of size `WIDTH`)
@@ -359,7 +359,7 @@ size `CHUNK`, depending on the output size of the corresponding opcode.
 These instructions are never enabled. Any program that actually executes them cannot be verified.
 
 | Mnemonic   | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode  |
-|------------|-----------------------------------------------|---------------------------|
+| ---------- | --------------------------------------------- | ------------------------- |
 | **FAIL**   | `_, _, _`                                     | Causes execution to fail. |
 | **PRINTF** | `a, _, _`                                     | Prints `[a]_d`.           |
 
