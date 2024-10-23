@@ -84,10 +84,18 @@ impl<F: PrimeField32> VirtualMachine<F> {
         let mut pc = program.pc_start;
 
         loop {
-            pc = segment.execute_from_pc(pc)?;
-            if segment.did_terminate {
+            let state = segment.execute_from_pc(pc)?;
+            pc = state.pc;
+
+            if state.is_terminated {
                 break;
             }
+
+            assert_eq!(
+                self.config.memory_config.persistence_type,
+                PersistenceType::Persistent,
+                "cannot segment in volatile memory mode"
+            );
 
             assert_eq!(
                 pc,
@@ -157,6 +165,7 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
             _marker: Default::default(),
         }
     }
+
     /// Executes a program and returns the public values. None means the public value is not set.
     pub fn execute(
         &self,
@@ -169,6 +178,7 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
         let pvs = borrowed_pv_chip.core.get_custom_public_values();
         Ok(pvs)
     }
+
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,

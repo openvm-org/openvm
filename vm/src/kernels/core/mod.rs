@@ -53,7 +53,6 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
 pub struct CoreChip<F: PrimeField32> {
     pub air: CoreAir,
     pub rows: Vec<Vec<F>>,
-    pub did_terminate: bool,
     pub memory_controller: MemoryControllerRef<F>,
     pub streams: Arc<Mutex<Streams<F>>>,
 
@@ -76,7 +75,6 @@ impl<F: PrimeField32> CoreChip<F> {
                 offset,
             },
             rows: vec![],
-            did_terminate: false,
             memory_controller,
             streams,
             offset,
