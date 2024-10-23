@@ -16,8 +16,8 @@ on:
       aws_instance_type:
         type: string
         required: false
-        description: The type of EC2 instance to start
-        default: r7g.8xlarge
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
+        default: 64cpu-linux-arm64
   workflow_call:
     inputs:
       benchmark_name:
@@ -27,46 +27,20 @@ on:
       aws_instance_type:
         type: string
         required: false
-        description: The type of EC2 instance to start
-        default: r7g.8xlarge
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
+        default: 64cpu-linux-arm64	
 
 env:
-  S3_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmark/github/results
-  S3_METRICS_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmark/github/metrics
-  PUBLIC_S3_PATH: s3://axiom-public-data-staging-us-east-1/benchmark/github/flamegraphs
+  S3_PATH: s3://axiom-workflow-data-standbox-us-east-1/benchmark/github/results
+  S3_METRICS_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/metrics
+  PUBLIC_S3_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
   FEATURE_FLAGS: "bench-metrics,parallel,mimalloc"
   CMD_ARGS: ""
 
 jobs:
-  start-runner:
-    name: Start self-hosted EC2 runner
-    runs-on: [self-hosted, coordinator, staging]
-    outputs:
-      label: ${{ steps.start-ec2-runner.outputs.label }}
-      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: us-east-1
-      - name: Start EC2 runner
-        id: start-ec2-runner
-        uses: machulav/ec2-github-runner@v2
-        with:
-          mode: start
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-0d33c5daee4966517 # arm64-rust-dev-32gb
-          # ami-06dd8940c223fd887 # arm64-rust-dev-1024gb
-          ec2-instance-type: ${{ inputs.aws_instance_type }}
-          subnet-id: subnet-08094bf4edad62d10 # staging tooling private subnet
-          security-group-id: sg-09543a06c701894f8 # allow all outbound
-          iam-role-name: github-temp-runner # IAM role name to attach to the created EC2 runner
-
   bench-new:
     name: Run benchmark on workflow ref/branch
-    needs:
-      - start-runner
-    runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
+    runs-on: [runs-on,"runner=${{ inputs.aws_instance_type }}",image=arm64-rust-dev-32gb]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -224,43 +198,17 @@ jobs:
           if [[ -f $METRIC_PATH ]]; then
             s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${{ inputs.benchmark_name }}.json"
           fi
-
-  update-gh-pages:
-    name: Update github pages with new bench results
-    needs:
-      - start-runner
-      - bench-new
-    runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
+    
       - uses: actions/checkout@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           ref: gh-pages
 
-      - name: Update markdown file
+      - name: Update github pages with new bench results
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" benchmarks/${{ inputs.benchmark_name }}.md
           git add benchmarks/${{ inputs.benchmark_name }}.md
           git commit --allow-empty -m "Update benchmark result for ${{ inputs.benchmark_name }}"
           git push
 
-  stop-runner:
-    name: Stop self-hosted EC2 runner
-    needs:
-      - start-runner # required to get output from the start-runner job
-      - bench-new # wait for bench-new to finish
-      - update-gh-pages # wait for update-gh-pages to finish
-    runs-on: [self-hosted, coordinator, staging]
-    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-region: us-east-1
-      - name: Stop EC2 runner
-        uses: machulav/ec2-github-runner@v2
-        with:
-          mode: stop
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          label: ${{ needs.start-runner.outputs.label }}
-          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
