@@ -10,7 +10,7 @@ use stark_vm::system::{
 };
 use test_case::test_case;
 
-use crate::{elf::Elf, rrs::transpile};
+use crate::{elf::Elf, rrs::transpile, util::memory_image_to_equipartition};
 
 #[test]
 fn test_decode_elf() -> Result<()> {
@@ -45,7 +45,8 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     setup_tracing();
     let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
     let config = VmConfig::rv32();
-    let vm = VirtualMachine::new(config);
+    let vm = VirtualMachine::new(config)
+        .with_initial_memory(memory_image_to_equipartition(elf.memory_image));
 
     // TODO: use "execute_and_generate" when it's implemented
 

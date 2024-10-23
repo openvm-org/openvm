@@ -150,20 +150,28 @@ impl VmConfig {
     }
 
     pub fn rv32() -> Self {
-        Self::core()
-            .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
-            .add_executor(ExecutorName::LessThanRv32)
-            .add_executor(ExecutorName::MultiplicationRv32)
-            .add_executor(ExecutorName::MultiplicationHighRv32)
-            .add_executor(ExecutorName::DivRemRv32)
-            .add_executor(ExecutorName::ShiftRv32)
-            .add_executor(ExecutorName::LoadStoreRv32)
-            .add_executor(ExecutorName::LoadSignExtendRv32)
-            .add_executor(ExecutorName::BranchEqualRv32)
-            .add_executor(ExecutorName::BranchLessThanRv32)
-            .add_executor(ExecutorName::JalLuiRv32)
-            .add_executor(ExecutorName::JalrRv32)
-            .add_executor(ExecutorName::AuipcRv32)
+        Self::from_parameters(
+            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
+            MemoryConfig::new(29, 29, 29, 16, PersistenceType::Persistent),
+            0,
+            DEFAULT_MAX_SEGMENT_LEN,
+            false,
+            vec![],
+        )
+        .add_executor(ExecutorName::Core)
+        .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
+        .add_executor(ExecutorName::LessThanRv32)
+        .add_executor(ExecutorName::MultiplicationRv32)
+        .add_executor(ExecutorName::MultiplicationHighRv32)
+        .add_executor(ExecutorName::DivRemRv32)
+        .add_executor(ExecutorName::ShiftRv32)
+        .add_executor(ExecutorName::LoadStoreRv32)
+        .add_executor(ExecutorName::LoadSignExtendRv32)
+        .add_executor(ExecutorName::BranchEqualRv32)
+        .add_executor(ExecutorName::BranchLessThanRv32)
+        .add_executor(ExecutorName::JalLuiRv32)
+        .add_executor(ExecutorName::JalrRv32)
+        .add_executor(ExecutorName::AuipcRv32)
     }
 
     pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
