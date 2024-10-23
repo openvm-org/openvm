@@ -1,3 +1,5 @@
+use afs_derive::AlignedBorrow;
+
 #[derive(Debug)]
 pub struct MemoryMerkleCols<const CHUNK: usize, T> {
     // `expand_direction` =  1 corresponds to initial memory state
@@ -81,4 +83,11 @@ impl<const CHUNK: usize, T: Clone> MemoryMerkleCols<CHUNK, T> {
     pub fn get_width() -> usize {
         6 + (3 * CHUNK) + 2
     }
+}
+
+#[derive(Debug, AlignedBorrow)]
+#[repr(C)]
+pub struct MemoryMerklePvs<T, const CHUNK: usize> {
+    pub initial_root: [T; CHUNK],
+    pub final_root: [T; CHUNK],
 }

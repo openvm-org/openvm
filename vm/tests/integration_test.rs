@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use afs_stark_backend::{
     config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
     prover::types::Proof,
@@ -26,11 +28,12 @@ use stark_vm::{
     },
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     system::{
-        memory::Equipartition,
+        memory::{merkle::MemoryMerklePvs, Equipartition},
         program::{Instruction, Program},
         vm::{
             config::{MemoryConfig, PersistenceType, VmConfig},
-            SingleSegmentVM, VirtualMachine,
+            connector::VmConnectorPvs,
+            ExitCode, SingleSegmentVM, VirtualMachine,
         },
     },
 };
@@ -348,7 +351,14 @@ fn test_vm_continuations() {
         ),
         // [0]_3 <- [1]_1
         Instruction::from_isize(ADD.with_default_offset(), 0, 1, 0, 3, 1),
-        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+        Instruction::from_isize(
+            TERMINATE.with_default_offset(),
+            0,
+            0,
+            ExitCode::Success as isize,
+            0,
+            0,
+        ),
     ]);
 
     let config = VmConfig {
@@ -403,8 +413,17 @@ fn aggregate_segment_proofs<SC: StarkGenericConfig>(
     let mut prev_final_memory_root = None;
     let mut prev_final_pc = None;
 
-    const VM_CONNECTOR_AIR_ID: usize = 1;
-    const MEMORY_MERKLE_AIR_ID: usize = 6;
+    // TODO: These indices should be fixed.
+    let vm_connector_air_id = vk
+        .per_air
+        .iter()
+        .position(|vk| vk.params.num_public_values == VmConnectorPvs::<Val<SC>>::width())
+        .unwrap();
+    let memory_merkle_air_id = vk
+        .per_air
+        .iter()
+        .position(|vk| vk.params.num_public_values == MemoryMerklePvs::<Val<SC>, CHUNK>::width())
+        .unwrap();
 
     for (i, proof) in proofs.iter().enumerate() {
         engine
@@ -416,54 +435,53 @@ fn aggregate_segment_proofs<SC: StarkGenericConfig>(
             .iter()
             .map(|air_proof_data| air_proof_data.air_id)
             .collect_vec();
-        assert!(air_ids.contains(&VM_CONNECTOR_AIR_ID));
-        assert!(air_ids.contains(&MEMORY_MERKLE_AIR_ID));
+
+        assert!(air_ids.contains(&vm_connector_air_id));
+        assert!(air_ids.contains(&memory_merkle_air_id));
 
         // Check public values.
         for air_proof_data in proof.per_air.iter() {
             let pvs = &air_proof_data.public_values;
             let air_vk = &vk.per_air[air_proof_data.air_id];
 
-            match air_proof_data.air_id {
-                VM_CONNECTOR_AIR_ID => {
-                    // VmConnectorAir
-                    assert_eq!(pvs.len(), 3);
-                    assert_eq!(air_vk.params.num_public_values, 3);
+            if air_proof_data.air_id == vm_connector_air_id {
+                let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
 
-                    // Check initial pc matches the previous final pc.
-                    assert_eq!(
-                        pvs[0],
-                        if i == 0 {
-                            Val::<SC>::zero()
-                        } else {
-                            prev_final_pc.unwrap()
-                        }
-                    );
-                    prev_final_pc = Some(pvs[1]);
-
-                    if i == proofs.len() - 1 {
-                        assert_eq!(pvs[2], Val::<SC>::zero());
+                // Check initial pc matches the previous final pc.
+                assert_eq!(
+                    pvs.initial_pc,
+                    if i == 0 {
+                        // TODO: Make this program PC.
+                        Val::<SC>::zero()
                     } else {
-                        assert_eq!(pvs[2], Val::<SC>::neg_one());
+                        prev_final_pc.unwrap()
                     }
-                }
-                MEMORY_MERKLE_AIR_ID => {
-                    // MemoryMerkleAir
-                    assert_eq!(pvs.len(), 16);
-                    assert_eq!(air_vk.params.num_public_values, 16);
+                );
+                prev_final_pc = Some(pvs.final_pc);
 
-                    let (initial_memory_root, final_memory_root) = pvs.split_at(8);
+                let expected_exit_code = if i == proofs.len() - 1 {
+                    ExitCode::Success as i32
+                } else {
+                    ExitCode::Suspended as i32
+                };
+                let expected_exit_code_f = if expected_exit_code < 0 {
+                    -Val::<SC>::from_canonical_u32(-expected_exit_code as u32)
+                } else {
+                    Val::<SC>::from_canonical_u32(expected_exit_code as u32)
+                };
 
-                    // Check that initial root matches the previous final root.
-                    if i != 0 {
-                        assert_eq!(initial_memory_root, prev_final_memory_root.unwrap());
-                    }
-                    prev_final_memory_root = Some(final_memory_root.to_vec());
+                assert_eq!(pvs.exit_code, expected_exit_code_f);
+            } else if air_proof_data.air_id == memory_merkle_air_id {
+                let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
+
+                // Check that initial root matches the previous final root.
+                if i != 0 {
+                    assert_eq!(pvs.initial_root, prev_final_memory_root.unwrap());
                 }
-                _ => {
-                    assert_eq!(pvs.len(), 0);
-                    assert_eq!(air_vk.params.num_public_values, 0);
-                }
+                prev_final_memory_root = Some(pvs.final_root);
+            } else {
+                assert_eq!(pvs.len(), 0);
+                assert_eq!(air_vk.params.num_public_values, 0);
             }
         }
     }
