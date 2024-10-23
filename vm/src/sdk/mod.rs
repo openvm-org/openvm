@@ -1,11 +1,31 @@
-use afs_stark_backend::config::{StarkGenericConfig, Val};
-use ax_sdk::engine::ProofInputForTest;
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
+};
+use ax_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    engine::{ProofInputForTest, StarkFriEngine},
+};
+use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 
 use crate::system::{
     program::Program,
     vm::{config::VmConfig, VirtualMachine},
 };
+
+pub fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let pk = vm.config.generate_pk(engine.keygen_builder());
+
+    let result = vm.execute_and_generate(program).unwrap();
+
+    for proof_input in result.per_segment {
+        engine
+            .prove_then_verify(&pk, proof_input)
+            .expect("Verification failed");
+    }
+}
 
 /// Generates the VM STARK circuit, in the form of AIRs and traces, but does not
 /// do any proving. Output is the payload of everything the prover needs.
