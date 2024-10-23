@@ -198,6 +198,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
                 cols.data_read_as,
                 utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.e, cols.d),
             );
+        // TODO[yi]: Do we need to check for overflow?
         builder.assert_eq(
             (is_valid.clone() - is_shintw.clone()) * cols.data_read_pointer,
             (is_storew.clone() + is_storew2.clone()) * cols.a
@@ -219,6 +220,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             cols.data_write_as,
             utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.d, cols.e),
         );
+        // TODO[yi]: Do we need to check for overflow?
         builder.assert_eq(
             is_valid.clone() * cols.data_write_pointer,
             (is_loadw.clone() + is_loadw2.clone()) * cols.a
