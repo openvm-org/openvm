@@ -1,0 +1,35 @@
+name: eDSL Compiler Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "vm/**"
+      - "toolchain/compiler/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  AXIOM_FAST_TEST: "1"
+
+jobs:
+  tests:
+    runs-on: ubuntu-arm64-16core-64ram
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Run compiler tests
+        working-directory: toolchain/compiler
+        run: |
+          cargo nextest run --cargo-profile=fast --features parallel
