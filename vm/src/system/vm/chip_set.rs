@@ -617,7 +617,7 @@ impl VmConfig {
             match executor {
                 ExecutorName::ModularAddSub => {
                     let new_chip = Rc::new(RefCell::new(KernelModularAddSubChip::new(
-                        NativeVecHeapAdapterChip::<F, 1, 1, 1, 32, 32>::new(
+                        NativeVecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -639,7 +639,7 @@ impl VmConfig {
                 }
                 ExecutorName::ModularMultDiv => {
                     let new_chip = Rc::new(RefCell::new(KernelModularMulDivChip::new(
-                        NativeVecHeapAdapterChip::<F, 1, 1, 1, 32, 32>::new(
+                        NativeVecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
