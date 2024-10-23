@@ -11,7 +11,7 @@ use p3_field::{Field, PrimeField64};
 
 use crate::{
     arch::{
-        instructions::CoreOpcode::{FAIL, NOP},
+        instructions::CoreOpcode::{DUMMY, FAIL},
         NUM_OPERANDS,
     },
     kernels::core::READ_INSTRUCTION_BUS,
@@ -127,7 +127,7 @@ impl<F: Field> Instruction<F> {
 impl<T: Default> Default for Instruction<T> {
     fn default() -> Self {
         Self {
-            opcode: NOP as usize,
+            opcode: DUMMY as usize,
             a: T::default(),
             b: T::default(),
             c: T::default(),
@@ -354,20 +354,9 @@ impl<F: PrimeField64> ProgramChip<F> {
         self.program = program;
     }
 
-    pub fn get_instruction(
-        &mut self,
-        pc: u32,
-    ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
+    fn get_pc_index(&self, pc: u32) -> Result<usize, ExecutionError> {
         let step = self.program.step;
         let pc_base = self.program.pc_base;
-
-        assert_eq!(
-            (pc - pc_base) % step,
-            0,
-            "pc = {} is not a multiple of step = {}",
-            pc,
-            step
-        );
         let pc_index = ((pc - pc_base) / step) as usize;
         if !(0..self.true_program_length).contains(&pc_index) {
             return Err(ExecutionError::PcOutOfBounds(
@@ -377,6 +366,14 @@ impl<F: PrimeField64> ProgramChip<F> {
                 self.true_program_length,
             ));
         }
+        Ok(pc_index)
+    }
+
+    pub fn get_instruction(
+        &mut self,
+        pc: u32,
+    ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
+        let pc_index = self.get_pc_index(pc)?;
         self.execution_frequencies[pc_index] += 1;
         Ok(self.program.instructions_and_debug_infos[&pc].clone())
     }

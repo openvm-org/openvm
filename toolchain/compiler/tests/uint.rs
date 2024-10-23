@@ -91,9 +91,9 @@ fn test_compiler_256_mul() {
             max_segment_len: (1 << 25) - 100,
             ..Default::default()
         }
-        .add_default_executor(ExecutorName::BranchEqual)
-        .add_default_executor(ExecutorName::Jal)
-        .add_default_executor(ExecutorName::U256Multiplication),
+        .add_executor(ExecutorName::BranchEqual)
+        .add_executor(ExecutorName::Jal)
+        .add_executor(ExecutorName::U256Multiplication),
         program,
         vec![],
     );
@@ -286,9 +286,9 @@ fn test_compiler_256_sll_srl() {
             max_segment_len: (1 << 25) - 100,
             ..Default::default()
         }
-        .add_default_executor(ExecutorName::BranchEqual)
-        .add_default_executor(ExecutorName::Jal)
-        .add_default_executor(ExecutorName::Shift256),
+        .add_executor(ExecutorName::BranchEqual)
+        .add_executor(ExecutorName::Jal)
+        .add_executor(ExecutorName::Shift256),
         program,
         vec![],
     );
@@ -347,9 +347,9 @@ fn test_compiler_256_sra() {
             max_segment_len: (1 << 25) - 100,
             ..Default::default()
         }
-        .add_default_executor(ExecutorName::BranchEqual)
-        .add_default_executor(ExecutorName::Jal)
-        .add_default_executor(ExecutorName::Shift256),
+        .add_executor(ExecutorName::BranchEqual)
+        .add_executor(ExecutorName::Jal)
+        .add_executor(ExecutorName::Shift256),
         program,
         vec![],
     );

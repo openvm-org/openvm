@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{CoreAuxCols, CoreCols, CoreIoCols},
-    CoreOptions, INST_WIDTH,
+    INST_WIDTH,
 };
 use crate::{
     arch::{instructions::CoreOpcode::*, ExecutionBridge},
@@ -21,7 +21,6 @@ use crate::{
 /// Air for the Core. Carries no state and does not own execution.
 #[derive(Clone, Debug)]
 pub struct CoreAir {
-    pub options: CoreOptions,
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
 
@@ -31,27 +30,21 @@ pub struct CoreAir {
 impl<F: Field> PartitionedBaseAir<F> for CoreAir {}
 impl<F: Field> BaseAir<F> for CoreAir {
     fn width(&self) -> usize {
-        CoreCols::<F>::get_width(self)
+        CoreCols::<F>::get_width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for CoreAir {
-    fn num_public_values(&self) -> usize {
-        self.options.num_public_values
-    }
-}
+impl<F: Field> BaseAirWithPublicValues<F> for CoreAir {}
 
 impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
     // TODO: continuation verification checks program counters match up [INT-1732]
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        // TODO: move these public values to the connector chip?
-
         let inst_width = AB::F::from_canonical_u32(INST_WIDTH);
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
-        let local_cols = CoreCols::from_slice(local, self);
+        let local_cols = CoreCols::from_slice(local);
 
         let CoreCols { io, aux } = local_cols;
 
@@ -70,7 +63,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         let CoreAuxCols {
             operation_flags,
-            public_value_flags,
             reads,
             writes,
             reads_aux_cols,
@@ -215,43 +207,11 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             .when_transition()
             .assert_eq(next_pc, pc + inst_width);
 
-        // NOP constraints same pc and timestamp as next row
-        let nop_flag = operation_flags[&NOP];
+        // DUMMY constraints same pc and timestamp as next row
+        // called nop for legacy reasons; to be removed
+        let nop_flag = operation_flags[&DUMMY];
         let mut when_nop = builder.when(nop_flag);
         when_nop.when_transition().assert_eq(next_pc, pc);
-
-        // TERMINATE
-        let terminate_flag = operation_flags[&TERMINATE];
-        let mut when_terminate = builder.when(terminate_flag);
-        when_terminate.when_transition().assert_eq(next_pc, pc);
-
-        // PUBLISH
-
-        let publish_flag = operation_flags[&PUBLISH];
-        read1_enabled += publish_flag.into();
-        read2_enabled += publish_flag.into();
-
-        let mut sum_flags = AB::Expr::zero();
-        let mut match_public_value_index = AB::Expr::zero();
-        let mut match_public_value = AB::Expr::zero();
-        for (i, &flag) in public_value_flags.iter().enumerate() {
-            builder.assert_bool(flag);
-            sum_flags = sum_flags + flag;
-            match_public_value_index += flag * AB::F::from_canonical_usize(i);
-            match_public_value += flag * builder.public_values()[i].into();
-        }
-
-        let mut when_publish = builder.when(publish_flag);
-
-        when_publish.assert_one(sum_flags);
-        when_publish.assert_eq(read1.value, match_public_value_index);
-        when_publish.assert_eq(read2.value, match_public_value);
-
-        when_publish.assert_eq(read1.address_space, d);
-        when_publish.assert_eq(read1.pointer, a);
-
-        when_publish.assert_eq(read2.address_space, e);
-        when_publish.assert_eq(read2.pointer, b);
 
         let mut op_timestamp: AB::Expr = timestamp.into();
 
@@ -282,10 +242,9 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         }
 
         // make sure program terminates or shards with NOP
-        builder.when_last_row().assert_zero(
-            (opcode - AB::Expr::from_canonical_usize(TERMINATE as usize))
-                * (opcode - AB::Expr::from_canonical_usize(NOP as usize)),
-        );
+        // builder
+        //     .when_last_row()
+        //     .assert_eq(opcode, AB::Expr::from_canonical_usize(NOP as usize));
 
         // Turn on all interactions
         self.eval_interactions(builder, io, next_pc, &operation_flags);

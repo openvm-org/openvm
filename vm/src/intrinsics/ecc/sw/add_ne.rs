@@ -1,20 +1,21 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
-    var_range::bus::VariableRangeCheckerBus,
+    sub_chip::{LocalTraceInstructions, SubAir},
+    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use afs_stark_backend::rap::BaseAirWithPublicValues;
-use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr};
+use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldExprCols};
 use num_bigint_dig::BigUint;
-use p3_air::{AirBuilder, BaseAir};
-use p3_field::{Field, PrimeField32};
+use p3_air::BaseAir;
+use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::super::FIELD_ELEMENT_BITS;
+use super::super::{EcPoint, FIELD_ELEMENT_BITS};
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
+        instructions::EccOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
+        DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     system::program::Instruction,
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
@@ -80,25 +81,55 @@ impl<F: Field> BaseAir<F> for SwEcAddNeCoreAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for SwEcAddNeCoreAir {}
 
-impl<AB: AirBuilder, I> VmCoreAir<AB, I> for SwEcAddNeCoreAir
+impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for SwEcAddNeCoreAir
 where
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<Vec<AB::Expr>>,
-    I::Writes: From<Vec<AB::Expr>>,
-    I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
+    AdapterAirContext<AB::Expr, I>:
+        From<AdapterAirContext<AB::Expr, DynAdapterInterface<AB::Expr>>>,
 {
     fn eval(
         &self,
-        _builder: &mut AB,
-        _local: &[AB::Var],
+        builder: &mut AB,
+        local: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        todo!()
+        assert_eq!(local.len(), BaseAir::<AB::F>::width(&self.expr));
+        SubAir::eval(&self.expr, builder, local.to_vec(), ());
+
+        let FieldExprCols {
+            is_valid,
+            inputs,
+            vars,
+            flags,
+            ..
+        } = self.expr.load_vars(local);
+        assert_eq!(inputs.len(), 4);
+        assert_eq!(vars.len(), 3);
+        assert_eq!(flags.len(), 0);
+        let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
+        let writes: Vec<AB::Expr> = vars[1..].concat().iter().map(|x| (*x).into()).collect();
+
+        let expected_opcode = EccOpcode::EC_ADD_NE as usize;
+        let expected_opcode = AB::Expr::from_canonical_usize(expected_opcode);
+
+        let instruction = MinimalInstruction {
+            is_valid: is_valid.into(),
+            opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
+        };
+
+        let ctx: AdapterAirContext<_, DynAdapterInterface<_>> = AdapterAirContext {
+            to_pc: None,
+            reads: reads.into(),
+            writes: writes.into(),
+            instruction: instruction.into(),
+        };
+        ctx.into()
     }
 }
 
 pub struct SwEcAddNeCoreChip {
     pub air: SwEcAddNeCoreAir,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 impl SwEcAddNeCoreChip {
@@ -107,7 +138,7 @@ impl SwEcAddNeCoreChip {
         num_limbs: usize,
         limb_bits: usize,
         max_limb_bits: usize,
-        range_bus: VariableRangeCheckerBus,
+        range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
         let air = SwEcAddNeCoreAir::new(
@@ -115,20 +146,25 @@ impl SwEcAddNeCoreChip {
             num_limbs,
             limb_bits,
             max_limb_bits,
-            range_bus,
+            range_checker.bus(),
             offset,
         );
-        Self { air }
+        Self { air, range_checker }
     }
+}
+
+pub struct SwEcAddNeCoreRecord {
+    pub p1: EcPoint,
+    pub p2: EcPoint,
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for SwEcAddNeCoreChip
 where
     I: VmAdapterInterface<F>,
-    I::Reads: Into<Vec<F>>,
-    I::Writes: From<Vec<F>>,
+    I::Reads: Into<DynArray<F>>,
+    AdapterRuntimeContext<F, I>: From<AdapterRuntimeContext<F, DynAdapterInterface<F>>>,
 {
-    type Record = ();
+    type Record = SwEcAddNeCoreRecord;
     type Air = SwEcAddNeCoreAir;
 
     fn execute_instruction(
@@ -140,7 +176,8 @@ where
         // Input: 2 EcPoint<Fp>, so total 4 field elements.
         let field_element_limbs = self.air.expr.canonical_num_limbs();
         let limb_bits = self.air.expr.canonical_limb_bits();
-        let data: Vec<F> = reads.into();
+        let data: DynArray<_> = reads.into();
+        let data = data.0;
         assert_eq!(data.len(), 4 * field_element_limbs);
         let data_u32: Vec<u32> = data.iter().map(|x| x.as_canonical_u32()).collect();
 
@@ -158,25 +195,29 @@ where
             limb_bits,
         );
 
-        let vars = self.air.expr.execute(vec![x1, y1, x2, y2], vec![]);
+        let vars = self
+            .air
+            .expr
+            .execute(vec![x1.clone(), y1.clone(), x2.clone(), y2.clone()], vec![]);
         assert_eq!(vars.len(), 3); // lambda, x3, y3
         let x3 = vars[1].clone();
         let y3 = vars[2].clone();
 
         let x3_limbs = biguint_to_limbs_vec(x3, limb_bits, field_element_limbs);
         let y3_limbs = biguint_to_limbs_vec(y3, limb_bits, field_element_limbs);
+        let writes = [x3_limbs, y3_limbs]
+            .concat()
+            .into_iter()
+            .map(|x| F::from_canonical_u32(x))
+            .collect::<Vec<_>>();
+        let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);
 
         Ok((
-            AdapterRuntimeContext {
-                to_pc: None,
-                writes: [x3_limbs, y3_limbs]
-                    .concat()
-                    .into_iter()
-                    .map(|x| F::from_canonical_u32(x))
-                    .collect::<Vec<_>>()
-                    .into(),
+            ctx.into(),
+            SwEcAddNeCoreRecord {
+                p1: EcPoint { x: x1, y: y1 },
+                p2: EcPoint { x: x2, y: y2 },
             },
-            (),
         ))
     }
 
@@ -184,8 +225,16 @@ where
         "SwEcAddNe".to_string()
     }
 
-    fn generate_trace_row(&self, _row_slice: &mut [F], _record: Self::Record) {
-        todo!()
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let input = (
+            vec![record.p1.x, record.p1.y, record.p2.x, record.p2.y],
+            self.range_checker.clone(),
+            vec![],
+        );
+        let row = LocalTraceInstructions::<F>::generate_trace_row(&self.air.expr, input);
+        for (i, element) in row.iter().enumerate() {
+            row_slice[i] = *element;
+        }
     }
 
     fn air(&self) -> &Self::Air {

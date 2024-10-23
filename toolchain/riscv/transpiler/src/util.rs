@@ -1,7 +1,7 @@
+use axvm_instructions::{NopOpcode, TerminateOpcode, UsizeOpcode};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
 use stark_vm::{
-    arch::instructions::CoreOpcode,
     rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
     system::program::{isize_to_field, Instruction},
 };
@@ -152,24 +152,25 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
     )
 }
 
-/// Create a new [`Instruction`] that is not implemented.
+/// Create a new [`Instruction`] that exits with code 1.
 pub fn unimp<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: CoreOpcode::FAIL as usize,
+        opcode: TerminateOpcode::TERMINATE.with_default_offset(),
+        c: F::one(),
         ..Default::default()
     }
 }
 
 pub fn nop<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: CoreOpcode::NOP as usize,
+        opcode: NopOpcode::NOP.with_default_offset(),
         ..Default::default()
     }
 }
 
 pub fn terminate<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: CoreOpcode::TERMINATE as usize,
+        opcode: TerminateOpcode::TERMINATE.with_default_offset(),
         ..Default::default()
     }
 }

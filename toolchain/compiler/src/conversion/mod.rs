@@ -611,7 +611,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Halt => vec![
             // terminate
             inst(
-                options.opcode_with_offset(CoreOpcode::TERMINATE),
+                options.opcode_with_offset(TerminateOpcode::TERMINATE),
                 F::zero(),
                 F::zero(),
                 F::zero(),
@@ -903,11 +903,12 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 vec![]
             }
         }
-        AsmInstruction::Publish(val, index) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::PUBLISH),
-            i32_f(index),
-            i32_f(val),
+        AsmInstruction::Publish(val, index) => vec![inst_med(
+            options.opcode_with_offset(PublishOpcode::PUBLISH),
             F::zero(),
+            i32_f(val),
+            i32_f(index),
+            AS::Immediate,
             AS::Memory,
             AS::Memory,
         )],

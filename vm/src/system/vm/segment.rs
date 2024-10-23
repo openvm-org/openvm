@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::BTreeMap, mem, ops::DerefMut, rc::Rc};
+use std::{cell::RefCell, collections::BTreeMap, ops::DerefMut, rc::Rc, sync::Arc};
 
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -11,12 +11,13 @@ use itertools::zip_eq;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
+use parking_lot::Mutex;
 
-use super::{cycle_tracker::CycleTracker, VmConfig, VmMetrics};
+use super::{cycle_tracker::CycleTracker, Streams, VmConfig, VmMetrics};
 use crate::{
     arch::{instructions::*, AxVmChip, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
-    kernels::core::{CoreChip, Streams},
+    kernels::core::CoreChip,
     system::{
         memory::{Equipartition, CHUNK},
         program::{DebugInfo, ExecutionError, Program},
@@ -30,7 +31,9 @@ pub struct ExecutionSegment<F: PrimeField32> {
     /// Shortcut to the core chip.
     pub core_chip: Rc<RefCell<CoreChip<F>>>,
 
-    pub streams: Streams<F>,
+    // The streams should be mutated in serial without thread-safety,
+    // but the `VmCoreChip` trait requires thread-safety.
+    pub streams: Arc<Mutex<Streams<F>>>,
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
 
@@ -38,6 +41,8 @@ pub struct ExecutionSegment<F: PrimeField32> {
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,
+
+    pub(crate) did_terminate: bool,
 }
 
 pub struct SegmentResult<SC: StarkGenericConfig> {
@@ -82,10 +87,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     pub fn new(
         config: VmConfig,
         program: Program<F>,
-        streams: Streams<F>,
+        streams: Arc<Mutex<Streams<F>>>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
     ) -> Self {
-        let mut chip_set = config.create_chip_set();
+        let mut chip_set = config.create_chip_set(streams.clone());
         chip_set.program_chip.set_program(program);
 
         let core_chip = find_chip!(chip_set, AxVmChip::Core);
@@ -105,22 +110,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             final_memory: None,
             collected_metrics: Default::default(),
             cycle_tracker: CycleTracker::new(),
+            did_terminate: false,
         }
-    }
-
-    pub fn did_terminate(&self) -> bool {
-        self.core_chip.borrow().did_terminate
     }
 
     /// Stopping is triggered by should_segment()
     pub fn execute_from_pc(&mut self, mut pc: u32) -> Result<u32, ExecutionError> {
         let mut timestamp = self.chip_set.memory_controller.borrow().timestamp();
 
-        let mut collect_metrics = self.config.collect_metrics;
+        let collect_metrics = self.config.collect_metrics;
         // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
-
-        self.core_chip.borrow_mut().streams = mem::take(&mut self.streams);
 
         self.chip_set
             .connector_chip
@@ -139,7 +139,26 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             );
 
             let opcode = instruction.opcode;
-            let prev_trace_cells = self.current_trace_cells();
+            let prev_trace_cells = if collect_metrics {
+                self.current_trace_cells()
+            } else {
+                BTreeMap::new()
+            };
+
+            if opcode == TerminateOpcode::TERMINATE.with_default_offset() {
+                self.did_terminate = true;
+                self.chip_set.connector_chip.end(
+                    ExecutionState::new(pc, timestamp),
+                    Some(instruction.c.as_canonical_u32()),
+                );
+                if collect_metrics {
+                    self.update_chip_metrics();
+                    #[cfg(feature = "bench-metrics")]
+                    metrics::counter!("total_cells_used")
+                        .absolute(self.current_trace_cells().into_values().sum::<usize>() as u64);
+                }
+                break;
+            }
 
             // runtime only instruction handling
             // FIXME: assumes CoreOpcode has offset 0:
@@ -198,28 +217,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                             now_value - prev_value;
                     }
                 }
-                if opcode == CoreOpcode::TERMINATE as usize {
-                    self.update_chip_metrics();
-                    // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
-                    collect_metrics = false;
-                    #[cfg(feature = "bench-metrics")]
-                    metrics::counter!("total_cells_used")
-                        .absolute(now_trace_cells.into_values().sum::<usize>() as u64);
-                }
-            }
-            if opcode == CoreOpcode::TERMINATE as usize {
-                break;
             }
             if self.should_segment() {
+                self.chip_set
+                    .connector_chip
+                    .end(ExecutionState::new(pc, timestamp), None);
                 break;
             }
         }
-
-        self.chip_set
-            .connector_chip
-            .end(ExecutionState::new(pc, timestamp));
-
-        self.streams = mem::take(&mut self.core_chip.borrow_mut().streams);
 
         if collect_metrics {
             self.update_chip_metrics();

@@ -14,7 +14,7 @@ use super::Program;
 use crate::{
     arch::instructions::{
         BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
-        NativeJalOpcode::*, UsizeOpcode,
+        NativeJalOpcode::*, TerminateOpcode::*, UsizeOpcode,
     },
     kernels::core::READ_INSTRUCTION_BUS,
     system::program::{columns::ProgramCols, Instruction, ProgramChip},

@@ -22,6 +22,7 @@ ax-sdk = { workspace = true, optional = true }
 ax-ecc-primitives = { workspace = true }
 axvm-instructions = { workspace = true }
 
+parking_lot.workspace = true
 enum-utils = "0.1.1"
 strum = { workspace = true }
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
