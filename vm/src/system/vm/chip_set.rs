@@ -30,6 +30,7 @@ use strum::EnumCount;
 use super::Streams;
 use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
+    common::nop::NopChip,
     intrinsics::{
         ecc::{EcAddUnequalChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -229,6 +230,17 @@ impl VmConfig {
                 }
             }
             match executor {
+                ExecutorName::Nop => {
+                    let nop_chip = Rc::new(RefCell::new(NopChip::new(
+                        execution_bus,
+                        program_bus,
+                        offset,
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, nop_chip.clone().into());
+                    }
+                    chips.push(AxVmChip::Nop(nop_chip));
+                }
                 ExecutorName::Core => {
                     let core_chip = Rc::new(RefCell::new(CoreChip::new(
                         execution_bus,
@@ -860,6 +872,11 @@ fn shift_range(r: Range<usize>, x: usize) -> Range<usize> {
 
 fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
     let (start, len, offset) = match executor {
+        ExecutorName::Nop => (
+            NopOpcode::default_offset(),
+            NopOpcode::COUNT,
+            NopOpcode::default_offset(),
+        ),
         ExecutorName::Core => (
             CoreOpcode::default_offset(),
             CoreOpcode::COUNT,

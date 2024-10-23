@@ -155,6 +155,7 @@ impl VmConfig {
 
     pub fn rv32() -> Self {
         Self::core()
+            .add_executor(ExecutorName::Nop)
             .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
             .add_executor(ExecutorName::LessThanRv32)
             .add_executor(ExecutorName::MultiplicationRv32)
