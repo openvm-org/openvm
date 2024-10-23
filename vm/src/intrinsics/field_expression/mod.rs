@@ -23,17 +23,11 @@ use crate::{
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
     pub offset: usize,
-
-    pub output_indices: Vec<usize>,
 }
 
 impl FieldExpressionCoreAir {
-    pub fn new(expr: FieldExpr, offset: usize, output_indices: Vec<usize>) -> Self {
-        Self {
-            expr,
-            offset,
-            output_indices,
-        }
+    pub fn new(expr: FieldExpr, offset: usize) -> Self {
+        Self { expr, offset }
     }
 
     pub fn num_inputs(&self) -> usize {
@@ -46,6 +40,10 @@ impl FieldExpressionCoreAir {
 
     pub fn num_flags(&self) -> usize {
         self.expr.builder.num_flags
+    }
+
+    pub fn output_indices(&self) -> &[usize] {
+        &self.expr.builder.output_indices
     }
 }
 
@@ -83,7 +81,7 @@ where
         assert_eq!(flags.len(), self.num_flags());
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = self
-            .output_indices
+            .output_indices()
             .iter()
             .map(|&i| vars[i].clone())
             .collect::<Vec<_>>()
@@ -92,7 +90,7 @@ where
             .map(|x| (*x).into())
             .collect();
 
-        // TODO: how to do opcode?
+        // TODO: flags -> opcode
         let expected_opcode = AB::Expr::from_canonical_usize(self.offset);
 
         let instruction = MinimalInstruction {
@@ -119,6 +117,22 @@ pub struct FieldExpressionCoreChip {
     pub range_checker: Arc<VariableRangeCheckerChip>,
 
     pub name: String,
+}
+
+impl FieldExpressionCoreChip {
+    pub fn new(
+        expr: FieldExpr,
+        offset: usize,
+        range_checker: Arc<VariableRangeCheckerChip>,
+        name: &str,
+    ) -> Self {
+        let air = FieldExpressionCoreAir { expr, offset };
+        Self {
+            air,
+            range_checker,
+            name: name.to_string(),
+        }
+    }
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for FieldExpressionCoreChip
@@ -163,7 +177,7 @@ where
 
         let outputs: Vec<BigUint> = self
             .air
-            .output_indices
+            .output_indices()
             .iter()
             .map(|&i| vars[i].clone())
             .collect();
