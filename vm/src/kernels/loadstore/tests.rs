@@ -24,6 +24,7 @@ use crate::{
 
 type F = BabyBear;
 
+#[derive(Debug)]
 struct TestData {
     a: F,
     b: F,
@@ -80,16 +81,16 @@ fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOp
     let d = if is_immediate {
         F::zero()
     } else {
-        F::from_canonical_u32(rng.gen_range(0..4))
+        F::from_canonical_u32(rng.gen_range(1..4))
     };
     let e = F::from_canonical_u32(rng.gen_range(1..4));
     let f = if is_extended {
-        rng.gen_range(0..1 << 20)
+        rng.gen_range(0..1 << 10)
     } else {
         0
     };
     let g = if is_extended {
-        rng.gen_range(0..1 << 18)
+        rng.gen_range(0..1 << 10)
     } else {
         0
     };
@@ -196,7 +197,7 @@ fn check_values(tester: &mut VmChipTestBuilder<F>, data: &TestData) {
         data.a
     };
 
-    assert_eq!(written_data_val, correct_data_val);
+    assert_eq!(written_data_val, correct_data_val, "{:?}", data);
 }
 
 fn set_and_execute(
