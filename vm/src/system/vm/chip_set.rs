@@ -33,7 +33,7 @@ use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
     common::nop::NopChip,
     intrinsics::{
-        ecc::sw::{ec_add_ne_expr, SwEcDoubleCoreChip},
+        ecc::sw::{ec_add_ne_expr, ec_double_expr},
         field_expression::FieldExpressionCoreChip,
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
@@ -639,18 +639,23 @@ impl VmConfig {
                     chips.push(AxVmChip::Secp256k1AddUnequal(chip));
                 }
                 ExecutorName::Secp256k1Double => {
+                    let expr = ec_double_expr(
+                        secp256k1_coord_prime(),
+                        32,
+                        8,
+                        memory_controller.borrow().range_checker.bus(),
+                    );
                     let chip = Rc::new(RefCell::new(KernelEcDoubleChip::new(
                         NativeVecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        SwEcDoubleCoreChip::new(
-                            secp256k1_coord_prime(),
-                            32,
-                            8,
-                            memory_controller.borrow().range_checker.clone(),
+                        FieldExpressionCoreChip::new(
+                            expr,
                             offset,
+                            memory_controller.borrow().range_checker.clone(),
+                            "EcDouble",
                         ),
                         memory_controller.clone(),
                     )));
