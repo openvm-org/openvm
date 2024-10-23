@@ -251,12 +251,11 @@ fn test_vm_1_persistent() {
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
         memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
-        ..VmConfig::core()
+        ..VmConfig::default_with_no_executors()
     }
     .add_executor(ExecutorName::LoadStore)
     .add_executor(ExecutorName::FieldArithmetic)
-    .add_executor(ExecutorName::BranchEqual)
-    .add_executor(ExecutorName::Jal);
+    .add_executor(ExecutorName::BranchEqual);
     let pk = config.generate_pk(engine.keygen_builder());
 
     let n = 6;
