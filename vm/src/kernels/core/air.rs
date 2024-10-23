@@ -9,10 +9,7 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::{CoreAuxCols, CoreCols, CoreIoCols};
-use crate::{
-    arch::{instructions::CoreOpcode::*, ExecutionBridge},
-    system::memory::offline_checker::MemoryBridge,
-};
+use crate::{arch::ExecutionBridge, system::memory::offline_checker::MemoryBridge};
 
 /// Air for the Core. Carries no state and does not own execution.
 #[derive(Clone, Debug)]
@@ -43,7 +40,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         let CoreCols { io, aux } = local_cols;
 
-        let CoreIoCols { pc, opcode, .. } = io;
+        let CoreIoCols { opcode, .. } = io;
 
         let CoreAuxCols {
             operation_flags,
@@ -65,12 +62,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         builder
             .when(is_core_opcode.clone())
             .assert_eq(opcode, match_opcode);
-
-        // DUMMY constraints same pc and timestamp as next row
-        // called nop for legacy reasons; to be removed
-        let nop_flag = operation_flags[&DUMMY];
-        let mut when_nop = builder.when(nop_flag);
-        when_nop.when_transition().assert_eq(next_pc, pc);
 
         // Turn on all interactions
         self.eval_interactions(builder, io, next_pc, &operation_flags);

@@ -184,7 +184,7 @@ where
         cols.is_shintw = F::from_bool(record.opcode == NativeLoadStoreOpcode::SHINTW);
 
         cols.pointer_reads = record.pointer_reads.map(Into::into);
-        cols.data_read = record.data_read.into();
+        cols.data_read = record.data_read;
         cols.data_write = record.data_write.map(Into::into);
     }
 

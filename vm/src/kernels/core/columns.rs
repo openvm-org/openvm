@@ -89,11 +89,9 @@ impl<T: Clone> CoreAuxCols<T> {
         for (opcode, operation_flag) in CoreOpcode::iter().zip_eq(operation_flags_vec) {
             operation_flags.insert(opcode, operation_flag);
         }
-        let next_pc = slc[end].clone();
-
         Self {
             operation_flags,
-            next_pc,
+            next_pc: slc[end].clone(),
         }
     }
 
