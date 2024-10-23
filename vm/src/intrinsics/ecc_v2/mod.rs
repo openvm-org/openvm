@@ -1,4 +1,4 @@
-// pub mod fp12;
+pub mod fp12;
 pub mod sw;
 
 // Babybear

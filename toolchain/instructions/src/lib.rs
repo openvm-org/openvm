@@ -178,6 +178,20 @@ impl U256Opcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x198]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum FP12Opcode {
+    ADD,
+    SUB,
+    MUL,
+    SCMUL,
+    DIV,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0x300]
 #[repr(usize)]
 #[allow(non_camel_case_types)]

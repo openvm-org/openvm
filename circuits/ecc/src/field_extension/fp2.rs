@@ -3,7 +3,6 @@ use std::{cell::RefCell, rc::Rc};
 use crate::field_expression::{ExprBuilder, FieldVariable};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
-#[derive(Clone)]
 pub struct Fp2 {
     pub c0: FieldVariable,
     pub c1: FieldVariable,
