@@ -113,6 +113,12 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub f: T,
     pub g: T,
 
+    pub data_read_as: T,
+    pub data_read_pointer: T,
+
+    pub data_write_as: T,
+    pub data_write_pointer: T,
+
     pub pointer_read_aux_cols: [MemoryReadOrImmediateAuxCols<T>; 2],
     pub data_read_aux_cols: MemoryReadOrImmediateAuxCols<T>,
     // TODO[yi]: Fix when vectorizing
@@ -186,14 +192,19 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         // TODO[yi]: Remove when vectorizing
         // read data, disabled if SHINTW
         // data pointer = [c]_d + [f]_d * g + b, degree 2
-        let data_pointer = ctx.reads.0[0].clone() + cols.b + ctx.reads.0[1].clone() * cols.g;
+        builder.assert_eq(
+            cols.data_read_as,
+            utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.e, cols.d),
+        );
+        builder.assert_eq(
+            cols.data_read_pointer,
+            (is_storew.clone() + is_storew2.clone()) * cols.a
+                + (is_loadw.clone() + is_loadw2.clone())
+                    * (ctx.reads.0[0].clone() + cols.b + ctx.reads.0[1].clone() * cols.g),
+        );
         self.memory_bridge
             .read_or_immediate(
-                MemoryAddress::new(
-                    utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.e, cols.d),
-                    (is_storew.clone() + is_storew2.clone()) * cols.a
-                        + (is_loadw.clone() + is_loadw2.clone()) * data_pointer.clone(),
-                ),
+                MemoryAddress::new(cols.data_read_as, cols.data_read_pointer),
                 ctx.reads.1.clone(),
                 timestamp + timestamp_delta.clone(),
                 &cols.data_read_aux_cols,
@@ -201,16 +212,20 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             .eval(builder, is_valid.clone() - is_shintw.clone());
         timestamp_delta += is_valid.clone() - is_shintw.clone();
 
-        // TODO[yi]: Handle getting data if hint
         // data write
+        builder.assert_eq(
+            cols.data_write_as,
+            utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.d, cols.e),
+        );
+        builder.assert_eq(
+            cols.data_write_pointer,
+            (is_loadw.clone() + is_loadw2.clone()) * cols.a
+                + (is_storew.clone() + is_storew2.clone() + is_shintw.clone())
+                    * (ctx.reads.0[0].clone() + cols.b + ctx.reads.0[1].clone() * cols.g),
+        );
         self.memory_bridge
             .write(
-                MemoryAddress::new(
-                    utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.d, cols.e),
-                    (is_loadw.clone() + is_loadw2.clone()) * cols.a
-                        + (is_storew.clone() + is_storew2.clone() + is_shintw.clone())
-                            * data_pointer.clone(),
-                ),
+                MemoryAddress::new(cols.data_write_as, cols.data_write_pointer),
                 ctx.writes.clone(),
                 timestamp + timestamp_delta.clone(),
                 &cols.data_write_aux_cols,
@@ -359,6 +374,12 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         cols.e = read_record.e;
         cols.f = read_record.f;
         cols.g = read_record.g;
+
+        cols.data_read_as = read_record.data_read.address_space;
+        cols.data_read_pointer = read_record.data_read.pointer;
+
+        cols.data_write_as = write_record.write.address_space;
+        cols.data_write_pointer = write_record.write.pointer;
 
         cols.pointer_read_aux_cols[0] =
             aux_cols_factory.make_read_or_immediate_aux_cols(read_record.pointer1_read);

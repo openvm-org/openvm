@@ -1,7 +1,8 @@
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
+        FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
     utils::create_seeded_rng,
@@ -101,6 +102,7 @@ fn air_test_with_compress_poseidon2(
 
 #[test]
 fn test_vm_1() {
+    setup_tracing();
     let n = 6;
     /*
     Instruction 0 assigns word[0]_1 to n.
