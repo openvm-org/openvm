@@ -65,7 +65,7 @@ name = "small_e2e"
 required-features = ["bench-metrics"]
 
 [features]
-default = ["parallel", "mimalloc"]
+default = ["parallel", "mimalloc", "static-verifier"]
 parallel = ["afs-stark-backend/parallel"]
 static-verifier = [
     "afs-compiler/halo2-compiler",

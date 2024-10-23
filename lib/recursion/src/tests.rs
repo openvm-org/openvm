@@ -49,8 +49,8 @@ where
         fields: vec![vec![1, 1], vec![1, 2], vec![3, 4], vec![888, 999]],
     });
     send_chip2.load_data(DummyInteractionData {
-        count: vec![4],
-        fields: vec![vec![3, 4]],
+        count: vec![4, 0],
+        fields: vec![vec![3, 4], vec![0, 0]],
     });
     recv_chip.load_data(DummyInteractionData {
         count: vec![1, 2, 8, 0],
