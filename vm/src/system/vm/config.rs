@@ -153,14 +153,11 @@ impl VmConfig {
         .add_executor(ExecutorName::Core)
     }
 
-    pub fn rv32() -> Self {
-        Self::core()
+    pub fn rv32i() -> Self {
+        Self::default_with_no_executors()
             .add_executor(ExecutorName::Nop)
             .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
             .add_executor(ExecutorName::LessThanRv32)
-            .add_executor(ExecutorName::MultiplicationRv32)
-            .add_executor(ExecutorName::MultiplicationHighRv32)
-            .add_executor(ExecutorName::DivRemRv32)
             .add_executor(ExecutorName::ShiftRv32)
             .add_executor(ExecutorName::LoadStoreRv32)
             .add_executor(ExecutorName::LoadSignExtendRv32)
@@ -171,6 +168,13 @@ impl VmConfig {
             .add_executor(ExecutorName::AuipcRv32)
     }
 
+    pub fn rv32im() -> Self {
+        Self::rv32i()
+            .add_executor(ExecutorName::MultiplicationRv32)
+            .add_executor(ExecutorName::MultiplicationHighRv32)
+            .add_executor(ExecutorName::DivRemRv32)
+    }
+
     pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
         VmConfig {
             poseidon2_max_constraint_degree,
@@ -178,9 +182,7 @@ impl VmConfig {
             ..VmConfig::default()
         }
     }
-}
 
-impl VmConfig {
     pub fn read_config_file(file: &str) -> Result<Self, String> {
         let file_str = std::fs::read_to_string(file)
             .map_err(|_| format!("Could not load config file from: {file}"))?;
