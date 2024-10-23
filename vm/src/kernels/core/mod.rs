@@ -44,7 +44,7 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
         SHINTW => 2,
         HINT_INPUT | HINT_BITS | HINT_BYTES => 0,
         CT_START | CT_END => 0,
-        NOP => 0,
+        DUMMY => 0,
     }
 }
 

@@ -11,7 +11,7 @@ use p3_field::{Field, PrimeField64};
 
 use crate::{
     arch::{
-        instructions::CoreOpcode::{FAIL, NOP},
+        instructions::CoreOpcode::{DUMMY, FAIL},
         NUM_OPERANDS,
     },
     kernels::core::READ_INSTRUCTION_BUS,
@@ -127,7 +127,7 @@ impl<F: Field> Instruction<F> {
 impl<T: Default> Default for Instruction<T> {
     fn default() -> Self {
         Self {
-            opcode: NOP as usize,
+            opcode: DUMMY as usize,
             a: T::default(),
             b: T::default(),
             c: T::default(),

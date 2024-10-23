@@ -132,7 +132,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                     next_pc = (F::from_canonical_u32(pc) + c).as_canonical_u32();
                 }
             }
-            NOP => {
+            DUMMY => {
                 unreachable!()
             }
             PRINTF => {

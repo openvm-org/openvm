@@ -73,7 +73,7 @@ impl<T: Field> CoreIoCols<T> {
         Self {
             timestamp: T::default(),
             pc: T::from_canonical_u32(pc),
-            opcode: T::from_canonical_usize(CoreOpcode::NOP as usize),
+            opcode: T::from_canonical_usize(CoreOpcode::DUMMY as usize),
             a: T::default(),
             b: T::default(),
             c: T::default(),
@@ -255,7 +255,7 @@ impl<F: PrimeField32> CoreAuxCols<F> {
     pub fn nop_row(pc: u32) -> Self {
         let mut operation_flags = BTreeMap::new();
         for opcode in CoreOpcode::iter() {
-            operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::NOP));
+            operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::DUMMY));
         }
 
         let is_equal_cols =

@@ -31,7 +31,8 @@ pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum CoreOpcode {
-    NOP,
+    // Dummy opcode to represent padding, to be removed
+    DUMMY,
     LOADW,
     STOREW,
     LOADW2,
@@ -65,6 +66,16 @@ pub enum CoreOpcode {
 #[allow(non_camel_case_types)]
 pub enum TerminateOpcode {
     TERMINATE,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x21]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum NopOpcode {
+    NOP,
 }
 
 #[derive(
@@ -338,16 +349,6 @@ pub enum DivRemOpcode {
     DIVU,
     REM,
     REMU,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x375]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum Rv32NopOpcode {
-    NOP,
 }
 
 #[derive(
