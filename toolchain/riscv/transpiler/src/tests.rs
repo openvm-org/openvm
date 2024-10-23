@@ -65,7 +65,8 @@ fn test_rv32i_prove(elf_path: &str) -> Result<()> {
     let instructions = transpile::<BabyBear>(&elf.instructions);
     let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
     let config = VmConfig::rv32i();
-    let vm = VirtualMachine::new(config);
+    let vm = VirtualMachine::new(config)
+        .with_initial_memory(memory_image_to_equipartition(elf.memory_image));
 
     air_test(vm, program);
     Ok(())
@@ -80,7 +81,8 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     setup_tracing();
     let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
     let config = VmConfig::rv32im().add_canonical_modulus();
-    let vm = VirtualMachine::new(config);
+    let vm = VirtualMachine::new(config)
+        .with_initial_memory(memory_image_to_equipartition(elf.memory_image));
 
     vm.execute(program)?;
     Ok(())

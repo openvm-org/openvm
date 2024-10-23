@@ -186,7 +186,7 @@ pub fn memory_image_to_equipartition<F: PrimeField32>(
 ) -> Equipartition<F, 8> {
     let mut result = Equipartition::new();
     for (addr, word) in memory_image {
-        let key = (F::two(), (addr / 4) as usize);
+        let key = (F::two(), (addr / 8) as usize);
         let shift = addr as usize % 8;
         result.entry(key).or_insert([F::zero(); 8])[shift..shift + 4]
             .copy_from_slice(&word.to_le_bytes().map(F::from_canonical_u8));
