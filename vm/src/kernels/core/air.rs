@@ -4,6 +4,7 @@ use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
+use axvm_instructions::CoreOpcode;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -40,7 +41,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
 
         let CoreCols { io, aux } = local_cols;
 
-        let CoreIoCols { opcode, .. } = io;
+        let CoreIoCols { pc, opcode, .. } = io;
 
         let CoreAuxCols {
             operation_flags,
@@ -62,6 +63,10 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         builder
             .when(is_core_opcode.clone())
             .assert_eq(opcode, match_opcode);
+
+        let nop_flag = operation_flags[&CoreOpcode::DUMMY];
+        let mut when_nop = builder.when(nop_flag);
+        when_nop.when_transition().assert_eq(next_pc, pc);
 
         // Turn on all interactions
         self.eval_interactions(builder, io, next_pc, &operation_flags);

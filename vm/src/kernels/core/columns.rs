@@ -114,6 +114,7 @@ impl<F: PrimeField32> CoreAuxCols<F> {
         let mut operation_flags = BTreeMap::new();
         for opcode in CoreOpcode::iter() {
             operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::DUMMY));
+            // operation_flags.insert(opcode, F::zero());
         }
 
         Self {
