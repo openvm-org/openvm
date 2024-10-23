@@ -39,7 +39,6 @@ pub enum CoreOpcode {
     JAL,
     BEQ,
     BNE,
-    TERMINATE,
     FAIL,
     PRINTF,
     /// Instruction to write the next hint word into memory.
@@ -56,6 +55,16 @@ pub enum CoreOpcode {
     CT_START,
     /// Phantom instruction to end tracing
     CT_END,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x20] // these offsets gone mad tbh
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum TerminateOpcode {
+    TERMINATE,
 }
 
 #[derive(
@@ -329,6 +338,16 @@ pub enum DivRemOpcode {
     DIVU,
     REM,
     REMU,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x375]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32NopOpcode {
+    NOP,
 }
 
 #[derive(

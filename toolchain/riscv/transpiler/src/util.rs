@@ -1,3 +1,4 @@
+use axvm_instructions::{TerminateOpcode, UsizeOpcode};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
 use stark_vm::{
@@ -169,7 +170,7 @@ pub fn nop<F: PrimeField32>() -> Instruction<F> {
 
 pub fn terminate<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: CoreOpcode::TERMINATE as usize,
+        opcode: TerminateOpcode::TERMINATE.with_default_offset(),
         ..Default::default()
     }
 }

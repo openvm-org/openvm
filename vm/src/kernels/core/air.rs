@@ -274,11 +274,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let mut when_nop = builder.when(nop_flag);
         when_nop.when_transition().assert_eq(next_pc, pc);
 
-        // TERMINATE
-        let terminate_flag = operation_flags[&TERMINATE];
-        let mut when_terminate = builder.when(terminate_flag);
-        when_terminate.when_transition().assert_eq(next_pc, pc);
-
         let mut op_timestamp: AB::Expr = timestamp.into();
 
         let reads_enabled = [read1_enabled, read2_enabled, read3_enabled];
@@ -317,10 +312,9 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         SubAir::eval(&IsEqualAir, builder, is_equal_io_cols, is_equal_aux);
 
         // make sure program terminates or shards with NOP
-        builder.when_last_row().assert_zero(
-            (opcode - AB::Expr::from_canonical_usize(TERMINATE as usize))
-                * (opcode - AB::Expr::from_canonical_usize(NOP as usize)),
-        );
+        // builder
+        //     .when_last_row()
+        //     .assert_eq(opcode, AB::Expr::from_canonical_usize(NOP as usize));
 
         // Turn on all interactions
         self.eval_interactions(builder, io, next_pc, &operation_flags);

@@ -132,8 +132,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                     next_pc = (F::from_canonical_u32(pc) + c).as_canonical_u32();
                 }
             }
-            TERMINATE | NOP => {
-                next_pc = pc;
+            NOP => {
+                unreachable!()
             }
             PRINTF => {
                 let value = read!(d, a);
@@ -261,10 +261,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
             let cols = CoreCols { io, aux };
             self.rows.push(cols.flatten());
-        }
-
-        if local_opcode_index == TERMINATE {
-            self.did_terminate = true;
         }
 
         Ok(ExecutionState::new(next_pc, timestamp))
