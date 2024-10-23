@@ -26,6 +26,8 @@ use crate::{
 
 pub mod symbolic_expression;
 pub mod symbolic_variable;
+#[cfg(test)]
+mod tests;
 
 /// Symbolic constraints for a single AIR with interactions.
 /// The constraints contain the constraints on the logup partial sums.

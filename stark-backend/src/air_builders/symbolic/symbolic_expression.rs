@@ -110,6 +110,44 @@ impl<F: Field> SymbolicExpression<F> {
     pub fn next(&self) -> Self {
         self.rotate(1)
     }
+    pub fn clean_unnecessary_const(self) -> Self {
+        match &self {
+            SymbolicExpression::Add { x, y, .. } => {
+                if let SymbolicExpression::Constant(cv) = x.as_ref() {
+                    if *cv == F::zero() {
+                        return y.as_ref().clone();
+                    }
+                }
+            }
+            SymbolicExpression::Sub { x, y, .. } => {
+                if let SymbolicExpression::Constant(cv) = x.as_ref() {
+                    if *cv == F::zero() {
+                        return -y.as_ref().clone();
+                    }
+                }
+                if let SymbolicExpression::Constant(cv) = y.as_ref() {
+                    if *cv == F::zero() {
+                        return x.as_ref().clone();
+                    }
+                }
+            }
+            SymbolicExpression::Mul { x, y, .. } => {
+                if let SymbolicExpression::Constant(cv) = x.as_ref() {
+                    if *cv == F::zero() {
+                        return SymbolicExpression::Constant(F::zero());
+                    }
+                    if *cv == F::one() {
+                        return y.as_ref().clone();
+                    }
+                    if *cv == -F::one() {
+                        return -y.as_ref().clone();
+                    }
+                }
+            }
+            _ => {}
+        }
+        self
+    }
 }
 
 impl<F: Field> Default for SymbolicExpression<F> {
@@ -187,8 +225,57 @@ impl<F: Field> Add for SymbolicExpression<F> {
 
     fn add(self, rhs: Self) -> Self {
         let degree_multiple = self.degree_multiple().max(rhs.degree_multiple());
+        let (lhs, rhs) = if let SymbolicExpression::Constant(_) = &rhs {
+            (rhs, self)
+        } else {
+            (self, rhs)
+        };
+        match (&lhs, &rhs) {
+            (SymbolicExpression::Constant(lv), SymbolicExpression::Constant(rv)) => {
+                return Self::Constant(*lv + *rv);
+            }
+            (SymbolicExpression::Constant(lv), _) => {
+                if *lv == F::zero() {
+                    return rhs;
+                }
+                match &rhs {
+                    SymbolicExpression::Add { x, y, .. } => match (x.as_ref(), y.as_ref()) {
+                        (SymbolicExpression::Constant(xv), _) => {
+                            return SymbolicExpression::Add {
+                                x: Arc::new(SymbolicExpression::Constant(*lv + *xv)),
+                                y: y.clone(),
+                                degree_multiple,
+                            }
+                            .clean_unnecessary_const()
+                        }
+                        (_, _) => {}
+                    },
+                    SymbolicExpression::Sub { x, y, .. } => match (x.as_ref(), y.as_ref()) {
+                        (SymbolicExpression::Constant(xv), _) => {
+                            return SymbolicExpression::Sub {
+                                x: Arc::new(SymbolicExpression::Constant(*lv + *xv)),
+                                y: y.clone(),
+                                degree_multiple,
+                            }
+                            .clean_unnecessary_const()
+                        }
+                        (_, SymbolicExpression::Constant(yv)) => {
+                            return SymbolicExpression::Sub {
+                                x: x.clone(),
+                                y: Arc::new(SymbolicExpression::Constant(*yv - *lv)),
+                                degree_multiple,
+                            }
+                            .clean_unnecessary_const()
+                        }
+                        (_, _) => {}
+                    },
+                    _ => {}
+                }
+            }
+            (_, _) => {}
+        }
         Self::Add {
-            x: Arc::new(self),
+            x: Arc::new(lhs),
             y: Arc::new(rhs),
             degree_multiple,
         }
@@ -232,6 +319,88 @@ impl<F: Field> Sub for SymbolicExpression<F> {
 
     fn sub(self, rhs: Self) -> Self {
         let degree_multiple = self.degree_multiple().max(rhs.degree_multiple());
+        match (&self, &rhs) {
+            (SymbolicExpression::Constant(lv), SymbolicExpression::Constant(rv)) => {
+                return Self::Constant(*lv - *rv);
+            }
+            (SymbolicExpression::Constant(lv), _) => {
+                if *lv == F::zero() {
+                    return -rhs;
+                }
+                match &rhs {
+                    SymbolicExpression::Add { x, y, .. } => match (x.as_ref(), y.as_ref()) {
+                        (SymbolicExpression::Constant(xv), _) => {
+                            return SymbolicExpression::Sub {
+                                x: Arc::new(SymbolicExpression::Constant(*lv - *xv)),
+                                y: y.clone(),
+                                degree_multiple,
+                            }
+                            .clean_unnecessary_const()
+                        }
+                        (_, _) => {}
+                    },
+                    SymbolicExpression::Sub { x, y, .. } => match (x.as_ref(), y.as_ref()) {
+                        (SymbolicExpression::Constant(xv), _) => {
+                            return SymbolicExpression::Add {
+                                x: Arc::new(SymbolicExpression::Constant(*lv - *xv)),
+                                y: y.clone(),
+                                degree_multiple,
+                            }
+                            .clean_unnecessary_const()
+                        }
+                        (_, SymbolicExpression::Constant(yv)) => {
+                            return SymbolicExpression::Sub {
+                                x: Arc::new(SymbolicExpression::Constant(*lv + *yv)),
+                                y: x.clone(),
+                                degree_multiple,
+                            }
+                            .clean_unnecessary_const()
+                        }
+                        (_, _) => {}
+                    },
+                    _ => {}
+                }
+            }
+            (_, SymbolicExpression::Constant(rv)) => {
+                if *rv == F::zero() {
+                    return rhs;
+                }
+                match &self {
+                    SymbolicExpression::Add { x, y, .. } => match (x.as_ref(), y.as_ref()) {
+                        (SymbolicExpression::Constant(xv), _) => {
+                            return SymbolicExpression::Add {
+                                x: Arc::new(SymbolicExpression::Constant(*xv - *rv)),
+                                y: y.clone(),
+                                degree_multiple,
+                            }
+                            .clean_unnecessary_const();
+                        }
+                        (_, _) => {}
+                    },
+                    SymbolicExpression::Sub { x, y, .. } => match (x.as_ref(), y.as_ref()) {
+                        (SymbolicExpression::Constant(xv), _) => {
+                            return SymbolicExpression::Sub {
+                                x: Arc::new(SymbolicExpression::Constant(*xv - *rv)),
+                                y: y.clone(),
+                                degree_multiple,
+                            }
+                            .clean_unnecessary_const();
+                        }
+                        (_, SymbolicExpression::Constant(yv)) => {
+                            return SymbolicExpression::Sub {
+                                x: x.clone(),
+                                y: Arc::new(SymbolicExpression::Constant(*yv + *rv)),
+                                degree_multiple,
+                            }
+                            .clean_unnecessary_const();
+                        }
+                        (_, _) => {}
+                    },
+                    _ => {}
+                }
+            }
+            (_, _) => {}
+        }
         Self::Sub {
             x: Arc::new(self),
             y: Arc::new(rhs),
@@ -265,6 +434,50 @@ impl<F: Field> Neg for SymbolicExpression<F> {
 
     fn neg(self) -> Self {
         let degree_multiple = self.degree_multiple();
+        match &self {
+            SymbolicExpression::Constant(c) => return Self::Constant(-*c),
+            SymbolicExpression::Add {
+                x,
+                y,
+                degree_multiple,
+            } => {
+                if let SymbolicExpression::Constant(xv) = &x.as_ref() {
+                    return SymbolicExpression::Sub {
+                        x: Arc::new(SymbolicExpression::Constant(-*xv)),
+                        y: y.clone(),
+                        degree_multiple: *degree_multiple,
+                    };
+                }
+            }
+            SymbolicExpression::Sub {
+                x,
+                y,
+                degree_multiple,
+            } => {
+                return SymbolicExpression::Sub {
+                    x: y.clone(),
+                    y: x.clone(),
+                    degree_multiple: *degree_multiple,
+                };
+            }
+            SymbolicExpression::Neg { x, .. } => {
+                return x.as_ref().clone();
+            }
+            SymbolicExpression::Mul {
+                x,
+                y,
+                degree_multiple,
+            } => {
+                if let SymbolicExpression::Constant(xv) = &x.as_ref() {
+                    return SymbolicExpression::Mul {
+                        x: Arc::new(SymbolicExpression::Constant(-*xv)),
+                        y: y.clone(),
+                        degree_multiple: *degree_multiple,
+                    };
+                }
+            }
+            _ => {}
+        }
         Self::Neg {
             x: Arc::new(self),
             degree_multiple,
@@ -276,10 +489,47 @@ impl<F: Field> Mul for SymbolicExpression<F> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
+        let (lhs, rhs) = if let SymbolicExpression::Constant(_) = &rhs {
+            (rhs, self)
+        } else {
+            (self, rhs)
+        };
+        match (&lhs, &rhs) {
+            (SymbolicExpression::Constant(lv), SymbolicExpression::Constant(rv)) => {
+                return Self::Constant(*lv * *rv);
+            }
+            (SymbolicExpression::Constant(lv), _) => {
+                if *lv == F::zero() {
+                    return Self::Constant(F::zero());
+                }
+                if *lv == F::one() {
+                    return rhs;
+                }
+                match &rhs {
+                    SymbolicExpression::Mul {
+                        x,
+                        y,
+                        degree_multiple,
+                    } => match (x.as_ref(), y.as_ref()) {
+                        (SymbolicExpression::Constant(xv), _) => {
+                            return SymbolicExpression::Mul {
+                                x: Arc::new(SymbolicExpression::Constant(*lv * *xv)),
+                                y: y.clone(),
+                                degree_multiple: *degree_multiple,
+                            }
+                            .clean_unnecessary_const()
+                        }
+                        (_, _) => {}
+                    },
+                    _ => {}
+                }
+            }
+            (_, _) => {}
+        }
         #[allow(clippy::suspicious_arithmetic_impl)]
-        let degree_multiple = self.degree_multiple() + rhs.degree_multiple();
+        let degree_multiple = lhs.degree_multiple() + rhs.degree_multiple();
         Self::Mul {
-            x: Arc::new(self),
+            x: Arc::new(lhs),
             y: Arc::new(rhs),
             degree_multiple,
         }
