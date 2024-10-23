@@ -1,10 +1,7 @@
 use std::iter;
 
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
-use p3_field::{AbstractField, Field};
-use p3_matrix::Matrix;
-
-use super::ProgramAir;
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_field::AbstractField;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProgramBus(pub usize);
@@ -29,20 +26,5 @@ impl ProgramBus {
             ),
             multiplicity,
         );
-    }
-}
-
-impl ProgramAir {
-    pub fn eval_interactions<F: Field, AB: PartitionedAirBuilder<F = F> + InteractionBuilder>(
-        &self,
-        builder: &mut AB,
-    ) {
-        let common_trace = builder.common_main();
-        let cached_trace = &builder.cached_mains()[0];
-
-        let exec_freq = common_trace.row_slice(0)[0];
-        let exec_cols = cached_trace.row_slice(0).to_vec();
-
-        builder.push_receive(self.bus.0, exec_cols, exec_freq);
     }
 }

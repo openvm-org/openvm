@@ -10,7 +10,7 @@ use crate::{
         instructions::CoreOpcode::{self, *},
         ExecutionBridge, ExecutionBus,
     },
-    system::{memory::MemoryControllerRef, program::bridge::ProgramBus, vm::Streams},
+    system::{memory::MemoryControllerRef, program::ProgramBus, vm::Streams},
 };
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
@@ -37,8 +37,6 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,
-        JAL => 1,
-        BEQ | BNE => 2,
         FAIL => 0,
         PRINTF => 1,
         SHINTW => 2,
@@ -53,7 +51,6 @@ fn timestamp_delta(opcode: CoreOpcode) -> u32 {
 pub struct CoreChip<F: PrimeField32> {
     pub air: CoreAir,
     pub rows: Vec<Vec<F>>,
-    pub did_terminate: bool,
     pub memory_controller: MemoryControllerRef<F>,
     pub streams: Arc<Mutex<Streams<F>>>,
 
@@ -76,7 +73,6 @@ impl<F: PrimeField32> CoreChip<F> {
                 offset,
             },
             rows: vec![],
-            did_terminate: false,
             memory_controller,
             streams,
             offset,

@@ -102,6 +102,8 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
     });
     execute_program_with_config(
         VmConfig::default()
+            .add_executor(ExecutorName::BranchEqual)
+            .add_executor(ExecutorName::Jal)
             .add_executor(ExecutorName::Secp256k1AddUnequal)
             .add_executor(ExecutorName::Secp256k1Double)
             .add_executor(ExecutorName::ArithmeticLogicUnit256)

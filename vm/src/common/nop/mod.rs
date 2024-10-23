@@ -16,7 +16,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use crate::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor},
     system::{
-        program::{bridge::ProgramBus, ExecutionError, Instruction},
+        program::{ExecutionError, Instruction, ProgramBus},
         DEFAULT_PC_STEP,
     },
 };

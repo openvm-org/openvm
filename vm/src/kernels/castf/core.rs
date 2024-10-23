@@ -29,6 +29,7 @@ pub(crate) const FINAL_LIMB_BITS: usize = 6;
 pub struct CastFCoreCols<T> {
     pub in_val: T,
     pub out_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub is_valid: T,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -87,7 +88,7 @@ where
             reads: [[intermed_val]].into(),
             writes: [cols.out_val.map(Into::into)].into(),
             instruction: MinimalInstruction {
-                is_valid: AB::Expr::one(),
+                is_valid: cols.is_valid.into(),
                 opcode: AB::Expr::from_canonical_usize(CastfOpcode::CASTF as usize + self.offset),
             }
             .into(),
@@ -170,6 +171,7 @@ where
         let cols: &mut CastFCoreCols<F> = row_slice.borrow_mut();
         cols.in_val = record.in_val;
         cols.out_val = record.out_val;
+        cols.is_valid = F::one();
     }
 
     fn air(&self) -> &Self::Air {

@@ -68,6 +68,8 @@ where
     let fib_program = bench_program();
 
     let vm_config = VmConfig::default_with_no_executors()
+        .add_executor(ExecutorName::BranchEqual)
+        .add_executor(ExecutorName::Jal)
         .add_executor(ExecutorName::Keccak256)
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::FieldExtension);

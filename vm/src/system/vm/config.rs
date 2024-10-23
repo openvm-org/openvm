@@ -123,6 +123,8 @@ impl Default for VmConfig {
     fn default() -> Self {
         Self::default_with_no_executors()
             .add_executor(ExecutorName::Core)
+            .add_executor(ExecutorName::BranchEqual)
+            .add_executor(ExecutorName::Jal)
             .add_executor(ExecutorName::FieldArithmetic)
             .add_executor(ExecutorName::FieldExtension)
             .add_executor(ExecutorName::Poseidon2)
@@ -154,14 +156,14 @@ impl VmConfig {
     }
 
     pub fn rv32i() -> Self {
-        Self::from_parameters(
-            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
-            MemoryConfig::new(29, 29, 29, 16, PersistenceType::Persistent),
-            0,
-            DEFAULT_MAX_SEGMENT_LEN,
-            false,
-            vec![],
-        )
+        VmConfig {
+            poseidon2_max_constraint_degree: 3,
+            memory_config: MemoryConfig {
+                persistence_type: PersistenceType::Persistent,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
         .add_executor(ExecutorName::Nop)
         .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
         .add_executor(ExecutorName::LessThanRv32)

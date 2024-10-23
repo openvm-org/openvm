@@ -13,18 +13,13 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::{columns::CoreCols, CoreChip};
 
 impl<F: PrimeField32> CoreChip<F> {
-    /// Pad with NOP rows.
+    /// Pad with blank rows.
     pub fn pad_rows(&mut self) {
         let curr_height = self.rows.len();
         let correct_height = self.rows.len().next_power_of_two();
         for _ in 0..correct_height - curr_height {
-            self.rows.push(self.make_blank_row().flatten());
+            self.rows.push(CoreCols::blank_row().flatten());
         }
-    }
-
-    /// This must be called for each blank row and results should never be cloned; see [CoreCols::nop_row].
-    fn make_blank_row(&self) -> CoreCols<F> {
-        CoreCols::nop_row(0)
     }
 }
 

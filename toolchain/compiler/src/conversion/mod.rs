@@ -486,7 +486,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             vec![
                 // pc <- labels[label], mem[dst] <- pc
                 inst(
-                    options.opcode_with_offset(CoreOpcode::JAL),
+                    options.opcode_with_offset(NativeJalOpcode::JAL),
                     i32_f(dst),
                     labels(label) - pc,
                     F::zero(),
@@ -498,7 +498,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Bne(label, lhs, rhs) => vec![
             // if mem[lhs] != mem[rhs], pc <- labels[label]
             inst(
-                options.opcode_with_offset(CoreOpcode::BNE),
+                options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs),
                 i32_f(rhs),
                 labels(label) - pc,
@@ -509,7 +509,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::BneI(label, lhs, rhs) => vec![
             // if mem[lhs] != rhs, pc <- labels[label]
             inst(
-                options.opcode_with_offset(CoreOpcode::BNE),
+                options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs),
                 rhs,
                 labels(label) - pc,
@@ -520,7 +520,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Beq(label, lhs, rhs) => vec![
             // if mem[lhs] == mem[rhs], pc <- labels[label]
             inst(
-                options.opcode_with_offset(CoreOpcode::BEQ),
+                options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BEQ)),
                 i32_f(lhs),
                 i32_f(rhs),
                 labels(label) - pc,
@@ -531,7 +531,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::BeqI(label, lhs, rhs) => vec![
             // if mem[lhs] == rhs, pc <- labels[label]
             inst(
-                options.opcode_with_offset(CoreOpcode::BEQ),
+                options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BEQ)),
                 i32_f(lhs),
                 rhs,
                 labels(label) - pc,
@@ -543,7 +543,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .map(|i|
             // if mem[lhs + i] != mem[rhs +i] for i = 0..4, pc <- labels[label]
             inst(
-                options.opcode_with_offset(CoreOpcode::BNE),
+                options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
                 labels(label) - (pc + F::from_canonical_usize(i)),
@@ -555,7 +555,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .map(|i|
             // if mem[lhs + i] != rhs[i] for i = 0..4, pc <- labels[label]
             inst(
-                options.opcode_with_offset(CoreOpcode::BNE),
+                options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
                 labels(label) - (pc + F::from_canonical_usize(i)),
@@ -568,7 +568,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .map(|i|
             // if mem[lhs + i] == mem[rhs + i] for i = 0..4, pc <- labels[label]
             inst(
-                if i == 0 { options.opcode_with_offset(CoreOpcode::BEQ) } else { options.opcode_with_offset(CoreOpcode::BNE) },
+                if i == 0 { options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BEQ)) } else { options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)) },
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
                 if i == 0 {
@@ -585,7 +585,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .map(|i|
             // if mem[lhs + i] == rhs[i] for i = 0..4, pc <- labels[label]
             inst(
-                if i == 0 { options.opcode_with_offset(CoreOpcode::BEQ) } else { options.opcode_with_offset(CoreOpcode::BNE) },
+                if i == 0 { options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BEQ)) } else { options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)) },
                 i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
                 if i == 0 {
