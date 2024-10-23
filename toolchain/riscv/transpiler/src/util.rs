@@ -1,14 +1,9 @@
-use std::collections::BTreeMap;
-
 use axvm_instructions::{NopOpcode, TerminateOpcode, UsizeOpcode};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
 use stark_vm::{
     rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
-    system::{
-        memory::Equipartition,
-        program::{isize_to_field, Instruction},
-    },
+    system::program::{isize_to_field, Instruction},
 };
 
 fn i12_to_u24(imm: i32) -> u32 {
@@ -178,18 +173,4 @@ pub fn terminate<F: PrimeField32>() -> Instruction<F> {
         opcode: TerminateOpcode::TERMINATE.with_default_offset(),
         ..Default::default()
     }
-}
-
-/// Converts our memory image (u32 -> u32) into the Equipartition for Poseidon ((as, label) -> [F; 8])
-pub fn memory_image_to_equipartition<F: PrimeField32>(
-    memory_image: BTreeMap<u32, u32>,
-) -> Equipartition<F, 8> {
-    let mut result = Equipartition::new();
-    for (addr, word) in memory_image {
-        let key = (F::two(), (addr / 8) as usize);
-        let shift = addr as usize % 8;
-        result.entry(key).or_insert([F::zero(); 8])[shift..shift + 4]
-            .copy_from_slice(&word.to_le_bytes().map(F::from_canonical_u8));
-    }
-    result
 }

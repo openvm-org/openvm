@@ -1,6 +1,6 @@
 // Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT License
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
-use std::{cmp::min, collections::BTreeMap};
+use std::cmp::min;
 
 use axvm_platform::WORD_SIZE;
 use color_eyre::eyre::{self, bail, ContextCompat};
@@ -10,6 +10,10 @@ use elf::{
     file::Class,
     ElfBytes,
 };
+use p3_field::PrimeField32;
+use stark_vm::system::{memory::Equipartition, program::Program};
+
+use crate::rrs::transpile;
 
 /// RISC-V 32IM ELF (Executable and Linkable Format) File.
 ///
@@ -22,29 +26,16 @@ use elf::{
 /// This format is commonly used in embedded systems and is supported by many compilers.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub(crate) struct Elf {
-    /// The instructions of the program encoded as 32-bits.
-    pub(crate) instructions: Vec<u32>,
-    /// The start address of the program.
-    pub(crate) pc_start: u32,
-    /// The base address of the program.
-    pub(crate) pc_base: u32,
-    /// The initial memory image, useful for global constants.
-    pub(crate) memory_image: BTreeMap<u32, u32>,
+pub(crate) struct AxVmExe<F> {
+    pub(crate) program: Program<F>,
+    pub(crate) memory_image: Equipartition<F, 8>,
 }
 
-impl Elf {
-    /// Create a new [Elf].
-    pub(crate) const fn new(
-        instructions: Vec<u32>,
-        pc_start: u32,
-        pc_base: u32,
-        memory_image: BTreeMap<u32, u32>,
-    ) -> Self {
+impl<F: PrimeField32> AxVmExe<F> {
+    /// Create a new [AxVmExe].
+    pub(crate) const fn new(program: Program<F>, memory_image: Equipartition<F, 8>) -> Self {
         Self {
-            instructions,
-            pc_start,
-            pc_base,
+            program,
             memory_image,
         }
     }
@@ -59,7 +50,13 @@ impl Elf {
     /// Reference: [Executable and Linkable Format](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
     #[allow(dead_code)]
     pub(crate) fn decode(input: &[u8], max_mem: u32) -> eyre::Result<Self> {
-        let mut image: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut image: Equipartition<F, 8> = Equipartition::new();
+        let mut insert = |addr: u32, word: u32| {
+            let key = (F::two(), (addr / 8) as usize);
+            let shift = addr as usize % 8;
+            image.entry(key).or_insert([F::zero(); 8])[shift..shift + 4]
+                .copy_from_slice(&word.to_le_bytes().map(F::from_canonical_u8));
+        };
 
         // Parse the ELF file assuming that it is little-endian..
         let elf = ElfBytes::<LittleEndian>::minimal_parse(input)
@@ -139,7 +136,7 @@ impl Elf {
 
                 // If we are reading past the end of the file, then break.
                 if i >= file_size {
-                    image.insert(addr, 0);
+                    insert(addr, 0);
                     continue;
                 }
 
@@ -151,13 +148,16 @@ impl Elf {
                     let byte = input.get(offset).context("Invalid segment offset")?;
                     word |= u32::from(*byte) << (j * 8);
                 }
-                image.insert(addr, word);
+                insert(addr, word);
                 if (segment.p_flags & PF_X) != 0 {
                     instructions.push(word);
                 }
             }
         }
 
-        Ok(Elf::new(instructions, entry, base_address, image))
+        Ok(AxVmExe::new(
+            Program::from_instructions_and_step(&transpile(&instructions), 4, entry, base_address),
+            image,
+        ))
     }
 }
