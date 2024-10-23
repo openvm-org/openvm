@@ -36,8 +36,8 @@ jobs:
         run: |
           rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
           cargo +nightly build --release
-          diff target/riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program ../../../transpiler/data/rv32im-fibonacci-program-elf-release
-          diff target/riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program ../../../transpiler/data/rv32im-fibonacci-program-elf-release || exit 1
+          # TODO: aarch and linux builds have different ELFs
+          # diff target/riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program ../../../transpiler/data/rv32im-fibonacci-program-elf-release
 
       - name: Run transpiler tests
         working-directory: toolchain/riscv/transpiler
