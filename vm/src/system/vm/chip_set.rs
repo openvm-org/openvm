@@ -42,8 +42,9 @@ use crate::{
     kernels::{
         adapters::{
             branch_native_adapter::BranchNativeAdapterChip, convert_adapter::ConvertAdapterChip,
-            jal_native_adapter::JalNativeAdapterChip, native_adapter::NativeAdapterChip,
-            native_vec_heap_adapter::NativeVecHeapAdapterChip,
+            jal_native_adapter::JalNativeAdapterChip,
+            loadstore_native_adapter::NativeLoadStoreAdapterChip,
+            native_adapter::NativeAdapterChip, native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
         branch_eq::KernelBranchEqChip,
@@ -56,6 +57,7 @@ use crate::{
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
         jal::{JalCoreChip, KernelJalChip},
+        loadstore::{KernelLoadStoreChip, KernelLoadStoreCoreChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
         public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
@@ -258,6 +260,22 @@ impl VmConfig {
                         executors.insert(opcode, core_chip.clone().into());
                     }
                     chips.push(AxVmChip::Core(core_chip));
+                }
+                ExecutorName::LoadStore => {
+                    let chip = Rc::new(RefCell::new(KernelLoadStoreChip::<F, 1>::new(
+                        NativeLoadStoreAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            offset,
+                        ),
+                        KernelLoadStoreCoreChip::new(streams.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::LoadStore(chip));
                 }
                 ExecutorName::BranchEqual => {
                     let chip = Rc::new(RefCell::new(KernelBranchEqChip::new(
@@ -937,6 +955,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CoreOpcode::default_offset(),
             CoreOpcode::COUNT,
             CoreOpcode::default_offset(),
+        ),
+        ExecutorName::LoadStore => (
+            NativeLoadStoreOpcode::default_offset(),
+            NativeLoadStoreOpcode::COUNT,
+            NativeLoadStoreOpcode::default_offset(),
         ),
         ExecutorName::BranchEqual => (
             NativeBranchEqualOpcode::default_offset(),

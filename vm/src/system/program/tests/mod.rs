@@ -13,8 +13,8 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use super::Program;
 use crate::{
     arch::instructions::{
-        BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
-        NativeJalOpcode::*, TerminateOpcode::*, UsizeOpcode,
+        BranchEqualOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
+        NativeJalOpcode::*, NativeLoadStoreOpcode::*, TerminateOpcode::*, UsizeOpcode,
     },
     kernels::core::READ_INSTRUCTION_BUS,
     system::program::{columns::ProgramCols, Instruction, ProgramChip},

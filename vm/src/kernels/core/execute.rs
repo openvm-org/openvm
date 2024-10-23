@@ -1,4 +1,4 @@
-use std::{array, collections::BTreeMap};
+use std::collections::BTreeMap;
 
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
@@ -12,14 +12,8 @@ use crate::{
         },
         ExecutionState, InstructionExecutor,
     },
-    kernels::core::{
-        columns::{CoreAuxCols, CoreCols, CoreIoCols, CoreMemoryAccessCols},
-        CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE,
-    },
-    system::{
-        memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
-        program::{ExecutionError, Instruction},
-    },
+    kernels::core::columns::{CoreAuxCols, CoreCols, CoreIoCols},
+    system::program::{ExecutionError, Instruction},
 };
 
 impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
@@ -54,29 +48,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let next_pc = pc + 1;
 
-        let mut write_records = vec![];
-        let mut read_records = vec![];
-
         macro_rules! read {
             ($addr_space: expr, $pointer: expr) => {{
-                assert!(read_records.len() < CORE_MAX_READS_PER_CYCLE);
-                read_records.push(
-                    self.memory_controller
-                        .borrow_mut()
-                        .read_cell($addr_space, $pointer),
-                );
-                read_records[read_records.len() - 1].data[0]
-            }};
-        }
-
-        macro_rules! write {
-            ($addr_space: expr, $pointer: expr, $data: expr) => {{
-                assert!(write_records.len() < CORE_MAX_WRITES_PER_CYCLE);
-                write_records.push(self.memory_controller.borrow_mut().write_cell(
-                    $addr_space,
-                    $pointer,
-                    $data,
-                ));
+                self.memory_controller
+                    .borrow_mut()
+                    .read_cell($addr_space, $pointer)
+                    .data[0]
             }};
         }
 
@@ -84,32 +61,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let local_opcode_index = CoreOpcode::from_usize(local_opcode_index);
         match local_opcode_index {
-            // d[a] <- e[d[c] + b]
-            LOADW => {
-                let base_pointer = read!(d, c);
-                let value = read!(e, base_pointer + b);
-                write!(d, a, value);
-            }
-            // e[d[c] + b] <- d[a]
-            STOREW => {
-                let base_pointer = read!(d, c);
-                let value = read!(d, a);
-                write!(e, base_pointer + b, value);
-            }
-            // d[a] <- e[d[c] + b + d[f] * g]
-            LOADW2 => {
-                let base_pointer = read!(d, c);
-                let index = read!(d, f);
-                let value = read!(e, base_pointer + b + index * g);
-                write!(d, a, value);
-            }
-            // e[d[c] + b + mem[f] * g] <- d[a]
-            STOREW2 => {
-                let base_pointer = read!(d, c);
-                let value = read!(d, a);
-                let index = read!(d, f);
-                write!(e, base_pointer + b + index * g, value);
-            }
             DUMMY => {
                 unreachable!()
             }
@@ -156,17 +107,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                     val >>= 8;
                 }
             }
-            // e[d[a] + b] <- hint_stream.next()
-            SHINTW => {
-                let hint = match streams.hint_stream.pop_front() {
-                    Some(hint) => hint,
-                    None => {
-                        return Err(ExecutionError::HintOutOfBounds(pc));
-                    }
-                };
-                let base_pointer = read!(d, a);
-                write!(e, base_pointer + b, hint);
-            }
             CT_START | CT_END => {
                 // Advance program counter, but don't do anything else
                 // TODO: move handling of these instructions outside CoreChip
@@ -178,38 +118,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records }
         // and move this logic into generate_trace().
         {
-            let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
-
-            let read_cols = array::from_fn(|i| {
-                read_records
-                    .get(i)
-                    .map_or_else(CoreMemoryAccessCols::disabled, |read| {
-                        CoreMemoryAccessCols::from_read_record(*read)
-                    })
-            });
-            let reads_aux_cols = array::from_fn(|i| {
-                read_records
-                    .get(i)
-                    .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
-                        aux_cols_factory.make_read_or_immediate_aux_cols(*read)
-                    })
-            });
-
-            let write_cols = array::from_fn(|i| {
-                write_records
-                    .get(i)
-                    .map_or_else(CoreMemoryAccessCols::disabled, |write| {
-                        CoreMemoryAccessCols::from_write_record(*write)
-                    })
-            });
-            let writes_aux_cols = array::from_fn(|i| {
-                write_records
-                    .get(i)
-                    .map_or_else(MemoryWriteAuxCols::disabled, |write| {
-                        aux_cols_factory.make_write_aux_cols(*write)
-                    })
-            });
-
             let mut operation_flags = BTreeMap::new();
             for other_opcode in CoreOpcode::iter() {
                 operation_flags.insert(
@@ -220,10 +128,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
             let aux = CoreAuxCols {
                 operation_flags,
-                reads: read_cols,
-                writes: write_cols,
-                reads_aux_cols,
-                writes_aux_cols,
                 next_pc: F::from_canonical_u32(next_pc),
             };
 

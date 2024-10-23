@@ -14,8 +14,8 @@ use stark_vm::{
     arch::{
         instructions::{
             BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
-            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, Poseidon2Opcode::*,
-            TerminateOpcode::*, UsizeOpcode,
+            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
+            NativeLoadStoreOpcode::*, Poseidon2Opcode::*, TerminateOpcode::*, UsizeOpcode,
         },
         ExecutorName,
     },
@@ -42,6 +42,7 @@ where
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig::core()
+        .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::BranchEqual)
         .add_executor(ExecutorName::Jal)
@@ -458,6 +459,7 @@ fn test_vm_without_field_arithmetic() {
     air_test(
         VirtualMachine::new(
             VmConfig::core()
+                .add_executor(ExecutorName::LoadStore)
                 .add_executor(ExecutorName::BranchEqual)
                 .add_executor(ExecutorName::Jal),
         ),
@@ -563,6 +565,7 @@ fn test_vm_field_extension_arithmetic() {
 
     let vm = VirtualMachine::new(
         VmConfig::core()
+            .add_executor(ExecutorName::LoadStore)
             .add_executor(ExecutorName::FieldArithmetic)
             .add_executor(ExecutorName::FieldExtension),
     );
@@ -596,6 +599,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
             memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
             ..VmConfig::core()
         }
+        .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::FieldExtension),
     );
@@ -854,6 +858,7 @@ fn test_vm_keccak() {
     air_test(
         VirtualMachine::new(
             VmConfig::core()
+                .add_executor(ExecutorName::LoadStore)
                 .add_executor(ExecutorName::Keccak256)
                 .add_executor(ExecutorName::BranchEqual)
                 .add_executor(ExecutorName::Jal),
@@ -884,6 +889,7 @@ fn test_vm_keccak_non_full_round() {
     air_test(
         VirtualMachine::new(
             VmConfig::core()
+                .add_executor(ExecutorName::LoadStore)
                 .add_executor(ExecutorName::Keccak256)
                 .add_executor(ExecutorName::BranchEqual)
                 .add_executor(ExecutorName::Jal),

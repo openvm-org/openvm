@@ -33,14 +33,8 @@ pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
 pub enum CoreOpcode {
     // Dummy opcode to represent padding, to be removed
     DUMMY,
-    LOADW,
-    STOREW,
-    LOADW2,
-    STOREW2,
     FAIL,
     PRINTF,
-    /// Instruction to write the next hint word into memory.
-    SHINTW,
 
     // TODO: move these to a separate class, PhantomOpcode or something
     /// Phantom instruction to prepare the next input vector for hinting.
