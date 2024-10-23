@@ -44,7 +44,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let instructions = transpile::<BabyBear>(&elf.instructions);
     setup_tracing();
     let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
-    let config = VmConfig::rv32();
+    let config = VmConfig::rv32im();
     let vm = VirtualMachine::new(config);
 
     // TODO: use "execute_and_generate" when it's implemented
@@ -61,7 +61,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let instructions = transpile::<BabyBear>(&elf.instructions);
     setup_tracing();
     let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
-    let config = VmConfig::rv32().add_canonical_modulus();
+    let config = VmConfig::rv32im().add_canonical_modulus();
     let vm = VirtualMachine::new(config);
 
     vm.execute(program)?;

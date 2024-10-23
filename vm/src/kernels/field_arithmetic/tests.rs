@@ -95,8 +95,6 @@ fn new_field_arithmetic_air_test() {
         assert_eq!(result, tester.read_cell(result_as, result_address));
     }
 
-    println!("done");
-
     let mut tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 

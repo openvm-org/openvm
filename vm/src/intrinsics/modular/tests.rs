@@ -55,7 +55,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     );
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
-    let num_tests = 1;
+    let num_tests = 50;
     let mut all_ops = vec![];
     let mut all_a = vec![];
     let mut all_b = vec![];

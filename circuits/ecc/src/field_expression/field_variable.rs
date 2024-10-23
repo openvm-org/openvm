@@ -48,6 +48,7 @@ pub struct FieldVariable {
 impl FieldVariable {
     // Returns the index of the new variable.
     // There should be no division in the expression.
+    /// This function is idempotent, i.e., if you already saved, then saving again does nothing.
     pub fn save(&mut self) -> usize {
         if let SymbolicExpr::Var(var_id) = self.expr {
             // If self.expr is already a Var, no need to save
@@ -82,6 +83,16 @@ impl FieldVariable {
         self.builder.borrow().limb_bits
     }
 
+    fn get_q_limbs(expr: SymbolicExpr, builder: &ExprBuilder) -> usize {
+        let constraint_expr = SymbolicExpr::Sub(
+            Box::new(expr),
+            Box::new(SymbolicExpr::Var(builder.num_variables)),
+        );
+        let (q_limbs, _) =
+            constraint_expr.constraint_limbs(&builder.prime, builder.limb_bits, builder.num_limbs);
+        q_limbs
+    }
+
     fn save_if_overflow(
         a: &mut FieldVariable,
         b: &mut FieldVariable,
@@ -92,12 +103,7 @@ impl FieldVariable {
         debug_assert_eq!(canonical_limb_bits, b.builder.borrow().limb_bits);
 
         let builder = a.builder.borrow();
-        let constraint_expr = SymbolicExpr::Sub(
-            Box::new(expr),
-            Box::new(SymbolicExpr::Var(builder.num_variables)),
-        );
-        let (q_limbs, _) =
-            constraint_expr.constraint_limbs(&builder.prime, builder.limb_bits, builder.num_limbs);
+        let q_limbs = FieldVariable::get_q_limbs(expr, &builder);
         let canonical_limb_max_abs = (1 << canonical_limb_bits) - 1;
 
         // The constraint equation is expr - new_var - qp.
@@ -133,7 +139,6 @@ impl FieldVariable {
             limb_max_fn,
         );
         // Do again to check if the other also needs to be saved.
-        // remake expr as self and other might have been changed.
         FieldVariable::save_if_overflow(
             self,
             other,
@@ -214,8 +219,16 @@ impl FieldVariable {
     }
 
     pub fn square(&mut self) -> FieldVariable {
+        let canonical_limb_bits = self.builder.borrow().limb_bits;
         let builder = self.builder.borrow();
+        let expr = SymbolicExpr::Mul(Box::new(self.expr.clone()), Box::new(self.expr.clone()));
+        let q_limbs = FieldVariable::get_q_limbs(expr, &builder);
+        let canonical_limb_max_abs = (1 << canonical_limb_bits) - 1;
+
         let limb_max_abs = self.limb_max_abs * self.limb_max_abs * self.expr_limbs;
+        let limb_max_abs = limb_max_abs
+            + canonical_limb_max_abs  // new var
+            + canonical_limb_max_abs * canonical_limb_max_abs * min(q_limbs, builder.num_limbs); // qp
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let (_, carry_bits) = get_carry_max_abs_and_bits(max_overflow_bits, builder.limb_bits);
         drop(builder);
@@ -239,7 +252,13 @@ impl FieldVariable {
         let builder = self.builder.borrow();
         let max_limb_bits = builder.max_limb_bits;
         assert!(scalar.unsigned_abs() < (1 << max_limb_bits));
+
+        let q_limbs = FieldVariable::get_q_limbs(self.expr.clone(), &builder);
+        let canonical_limb_max_abs = (1 << builder.limb_bits) - 1;
         let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
+        let limb_max_abs = limb_max_abs
+            + canonical_limb_max_abs  // new var
+            + canonical_limb_max_abs * canonical_limb_max_abs * min(q_limbs, builder.num_limbs); // qp
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let (_, carry_bits) = get_carry_max_abs_and_bits(max_overflow_bits, builder.limb_bits);
         drop(builder);

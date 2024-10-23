@@ -79,7 +79,7 @@ fn run_rv32_branch_eq_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_controller(),
         ),
-        BranchEqualCoreChip::new(0),
+        BranchEqualCoreChip::new(0, 4),
         tester.memory_controller(),
     );
 
@@ -126,7 +126,7 @@ fn rv32_bne_rand_test() {
 
 #[test]
 fn execute_pc_increment_sanity_test() {
-    let core = BranchEqualCoreChip::<RV32_REGISTER_NUM_LIMBS>::new(0);
+    let core = BranchEqualCoreChip::<RV32_REGISTER_NUM_LIMBS>::new(0, 4);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchEqualOpcode::BEQ.as_usize(),

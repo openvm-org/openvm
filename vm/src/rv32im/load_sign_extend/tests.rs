@@ -74,7 +74,7 @@ fn set_and_execute(
     let ptr_val = imm_ext.wrapping_add(compose(rs1));
     tester.write(1, b, rs1);
 
-    let is_load = [LOADW, LOADH, LOADB, LOADHU, LOADBU, HINTLOAD_RV32].contains(&opcode);
+    let is_load = [LOADH, LOADB].contains(&opcode);
     let some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
     let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
@@ -100,9 +100,9 @@ fn set_and_execute(
         read_data,
         some_prev_data,
     );
-    if is_load && opcode != HINTLOAD_RV32 {
+    if is_load {
         assert_eq!(write_data, tester.read::<4>(1, a));
-    } else if !is_load {
+    } else if !is_load && opcode != HINT_STOREW {
         assert_eq!(write_data, tester.read::<4>(2, ptr_val as usize));
     }
 }

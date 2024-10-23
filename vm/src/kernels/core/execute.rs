@@ -1,6 +1,5 @@
 use std::{array, collections::BTreeMap};
 
-use afs_primitives::{is_equal::IsEqualAir, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 
@@ -15,7 +14,7 @@ use crate::{
     },
     kernels::core::{
         columns::{CoreAuxCols, CoreCols, CoreIoCols, CoreMemoryAccessCols},
-        CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+        CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE,
     },
     system::{
         memory::offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
@@ -30,9 +29,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let ExecutionState { pc, mut timestamp } = from_state;
-
-        let core_options = self.air.options;
-        let num_public_values = core_options.num_public_values;
 
         let local_opcode_index = instruction.opcode - self.offset;
         let a = instruction.a;
@@ -56,7 +52,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             g,
         };
 
-        let mut next_pc = pc + 1;
+        let next_pc = pc + 1;
 
         let mut write_records = vec![];
         let mut read_records = vec![];
@@ -84,9 +80,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             }};
         }
 
-        let mut public_value_flags = vec![F::zero(); num_public_values];
-
-        let hint_stream = &mut self.streams.hint_stream;
+        let mut streams = self.streams.lock();
 
         let local_opcode_index = CoreOpcode::from_usize(local_opcode_index);
         match local_opcode_index {
@@ -116,85 +110,36 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let index = read!(d, f);
                 write!(e, base_pointer + b + index * g, value);
             }
-            // d[a] <- pc + INST_WIDTH, pc <- pc + b
-            JAL => {
-                write!(d, a, F::from_canonical_u32(pc + INST_WIDTH));
-                next_pc = (F::from_canonical_u32(pc) + b).as_canonical_u32();
-            }
-            // If d[a] = e[b], pc <- pc + c
-            BEQ => {
-                let left = read!(d, a);
-                let right = read!(e, b);
-                if left == right {
-                    next_pc = (F::from_canonical_u32(pc) + c).as_canonical_u32();
-                }
-            }
-            // If d[a] != e[b], pc <- pc + c
-            BNE => {
-                let left = read!(d, a);
-                let right = read!(e, b);
-                if left != right {
-                    next_pc = (F::from_canonical_u32(pc) + c).as_canonical_u32();
-                }
-            }
-            TERMINATE | NOP => {
-                next_pc = pc;
-            }
-            PUBLISH => {
-                let public_value_index = read!(d, a).as_canonical_u64() as usize;
-                let value = read!(e, b);
-                tracing::debug!(
-                    "publishing value {:?} at index {}",
-                    value,
-                    public_value_index
-                );
-                if public_value_index >= num_public_values {
-                    return Err(ExecutionError::PublicValueIndexOutOfBounds(
-                        pc,
-                        num_public_values,
-                        public_value_index,
-                    ));
-                }
-                public_value_flags[public_value_index] = F::one();
-
-                let public_values = &mut self.public_values;
-                match public_values[public_value_index] {
-                    None => public_values[public_value_index] = Some(value),
-                    Some(existing_value) => {
-                        if value != existing_value {
-                            return Err(ExecutionError::PublicValueNotEqual(
-                                pc,
-                                public_value_index,
-                                existing_value.as_canonical_u64() as usize,
-                                value.as_canonical_u64() as usize,
-                            ));
-                        }
-                    }
-                }
+            DUMMY => {
+                unreachable!()
             }
             PRINTF => {
                 let value = read!(d, a);
                 println!("{}", value);
             }
             HINT_INPUT => {
-                let hint = match self.streams.input_stream.pop_front() {
+                let hint = match streams.input_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
                         return Err(ExecutionError::EndOfInputStream(pc));
                     }
                 };
-                hint_stream.clear();
-                hint_stream.push_back(F::from_canonical_usize(hint.len()));
-                hint_stream.extend(hint);
+                streams.hint_stream.clear();
+                streams
+                    .hint_stream
+                    .push_back(F::from_canonical_usize(hint.len()));
+                streams.hint_stream.extend(hint);
             }
             HINT_BITS => {
                 let val = self.memory_controller.borrow().unsafe_read_cell(d, a);
                 let mut val = val.as_canonical_u32();
 
                 let len = c.as_canonical_u32();
-                hint_stream.clear();
+                streams.hint_stream.clear();
                 for _ in 0..len {
-                    hint_stream.push_back(F::from_canonical_u32(val & 1));
+                    streams
+                        .hint_stream
+                        .push_back(F::from_canonical_u32(val & 1));
                     val >>= 1;
                 }
             }
@@ -203,15 +148,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 let mut val = val.as_canonical_u32();
 
                 let len = c.as_canonical_u32();
-                hint_stream.clear();
+                streams.hint_stream.clear();
                 for _ in 0..len {
-                    hint_stream.push_back(F::from_canonical_u32(val & 0xff));
+                    streams
+                        .hint_stream
+                        .push_back(F::from_canonical_u32(val & 0xff));
                     val >>= 8;
                 }
             }
             // e[d[a] + b] <- hint_stream.next()
             SHINTW => {
-                let hint = match hint_stream.pop_front() {
+                let hint = match streams.hint_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
                         return Err(ExecutionError::HintOutOfBounds(pc));
@@ -228,7 +175,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         };
         timestamp += timestamp_delta(local_opcode_index);
 
-        // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records, public_value_index }
+        // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records }
         // and move this logic into generate_trace().
         {
             let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
@@ -271,21 +218,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
                 );
             }
 
-            let is_equal_cols = LocalTraceInstructions::generate_trace_row(
-                &IsEqualAir,
-                (read_cols[0].value, read_cols[1].value),
-            );
-
-            let read0_equals_read1 = is_equal_cols.io.is_equal;
-            let is_equal_aux = is_equal_cols.aux;
-
             let aux = CoreAuxCols {
                 operation_flags,
-                public_value_flags,
                 reads: read_cols,
                 writes: write_cols,
-                read0_equals_read1,
-                is_equal_aux,
                 reads_aux_cols,
                 writes_aux_cols,
                 next_pc: F::from_canonical_u32(next_pc),
@@ -293,10 +229,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
             let cols = CoreCols { io, aux };
             self.rows.push(cols.flatten());
-        }
-
-        if local_opcode_index == TERMINATE {
-            self.did_terminate = true;
         }
 
         Ok(ExecutionState::new(next_pc, timestamp))

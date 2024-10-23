@@ -10,6 +10,8 @@ use ax_ecc_primitives::{
     field_expression::{ExprBuilder, FieldExpr, FieldExprCols},
     field_extension::{Fp12, Fp2},
 };
+use axvm_instructions::FP12Opcode;
+use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -17,10 +19,12 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use super::super::FIELD_ELEMENT_BITS;
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, MinimalInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
+        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
+    intrinsics::ecc::Fp12BigUint,
     system::program::Instruction,
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
 };
 
 #[derive(Clone)]
@@ -73,8 +77,7 @@ impl Fp12MultiplyCoreAir {
 
 impl<F: Field> BaseAir<F> for Fp12MultiplyCoreAir {
     fn width(&self) -> usize {
-        // BaseAir::<F>::width(&self.expr)
-        todo!()
+        BaseAir::<F>::width(&self.expr)
     }
 }
 
@@ -103,10 +106,13 @@ where
             ..
         } = self.expr.load_vars(local);
         assert_eq!(inputs.len(), 3);
-        assert_eq!(vars.len(), 1);
+        assert_eq!(vars.len(), 34);
         assert_eq!(flags.len(), 1);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
-        let writes: Vec<AB::Expr> = vars[0].iter().map(|x| (*x).into()).collect();
+        let writes: Vec<AB::Expr> = vars[vars.len() - 12..]
+            .iter()
+            .map(|x| (*x).into())
+            .collect();
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
@@ -150,13 +156,19 @@ impl Fp12MultiplyCoreChip {
     }
 }
 
+pub struct Fp12MultiplyCoreRecord {
+    pub x: Fp12BigUint,
+    pub y: Fp12BigUint,
+}
+
 impl<F: PrimeField32, I> VmCoreChip<F, I> for Fp12MultiplyCoreChip
 where
     I: VmAdapterInterface<F>,
-    I::Reads: Into<Vec<F>>,
-    I::Writes: From<Vec<F>>,
+    I::Reads: Into<DynArray<F>>,
+    I::Writes: From<DynArray<F>>,
+    AdapterRuntimeContext<F, I>: From<AdapterRuntimeContext<F, DynAdapterInterface<F>>>,
 {
-    type Record = ();
+    type Record = Fp12MultiplyCoreRecord;
     type Air = Fp12MultiplyCoreAir;
 
     fn execute_instruction(
@@ -165,7 +177,44 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        todo!()
+        let num_limbs = self.air.expr.canonical_num_limbs();
+        let limb_bits = self.air.expr.canonical_limb_bits();
+        // let Instruction { opcode, .. } = instruction.clone();
+        // let local_opcode_index = opcode - self.air.offset;
+        // let local_opcode = FP12Opcode::from_usize(local_opcode_index);
+        // let mul_flag = match local_opcode {
+        //     FP12Opcode::MUL => true,
+        //     _ => panic!("Unsupported opcode: {:?}", local_opcode),
+        // };
+
+        let data: DynArray<_> = reads.into();
+        let data = data.0;
+        let x = data[..num_limbs]
+            .iter()
+            .map(|x| x.as_canonical_u32())
+            .collect_vec();
+        let y = data[..num_limbs]
+            .iter()
+            .map(|x| x.as_canonical_u32())
+            .collect_vec();
+        let x_biguint = limbs_to_biguint(&x, limb_bits);
+        let y_biguint = limbs_to_biguint(&y, limb_bits);
+
+        let vars = self
+            .air
+            .expr
+            .execute(vec![x_biguint.clone(), y_biguint.clone()], vec![]);
+        assert_eq!(vars.len(), 34);
+        let res_biguint = vars[0].clone();
+        tracing::trace!("FP12MultiplyOpcode | {res_biguint:?} | {x_biguint:?} | {y_biguint:?}");
+        let res_limbs = biguint_to_limbs_vec(res_biguint, limb_bits, num_limbs);
+        let writes = res_limbs
+            .into_iter()
+            .map(F::from_canonical_u32)
+            .collect_vec();
+        let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);
+
+        Ok((ctx.into(),))
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {

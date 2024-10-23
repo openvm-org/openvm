@@ -1,22 +1,20 @@
-use std::{cell::RefCell, collections::BTreeMap, mem, ops::DerefMut, rc::Rc};
+use std::{collections::BTreeMap, ops::DerefMut, sync::Arc};
 
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    prover::types::{AirProofInput, ProofInput},
+    prover::types::ProofInput,
     ChipUsageGetter,
 };
 use backtrace::Backtrace;
 use itertools::zip_eq;
 use p3_field::PrimeField32;
-use p3_matrix::Matrix;
-use p3_util::log2_strict_usize;
+use parking_lot::Mutex;
 
-use super::{cycle_tracker::CycleTracker, VmConfig, VmMetrics};
+use super::{cycle_tracker::CycleTracker, Streams, VmConfig, VmMetrics};
 use crate::{
     arch::{instructions::*, AxVmChip, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
-    kernels::core::{CoreChip, Streams},
     system::{
         memory::{Equipartition, CHUNK},
         program::{DebugInfo, ExecutionError, Program},
@@ -27,10 +25,10 @@ use crate::{
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
     pub chip_set: VmChipSet<F>,
-    /// Shortcut to the core chip.
-    pub core_chip: Rc<RefCell<CoreChip<F>>>,
 
-    pub streams: Streams<F>,
+    // The streams should be mutated in serial without thread-safety,
+    // but the `VmCoreChip` trait requires thread-safety.
+    pub streams: Arc<Mutex<Streams<F>>>,
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
 
@@ -40,25 +38,9 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub(crate) collected_metrics: VmMetrics,
 }
 
-pub struct SegmentResult<SC: StarkGenericConfig> {
-    pub air_proof_inputs: Vec<AirProofInput<SC>>,
-}
-
-impl<SC: StarkGenericConfig> SegmentResult<SC> {
-    pub fn max_log_degree(&self) -> usize {
-        self.air_proof_inputs
-            .iter()
-            .flat_map(|air_proof_input| {
-                air_proof_input
-                    .raw
-                    .common_main
-                    .as_ref()
-                    .map(|trace| trace.height())
-            })
-            .map(log2_strict_usize)
-            .max()
-            .unwrap()
-    }
+pub struct ExecutionSegmentState {
+    pub pc: u32,
+    pub is_terminated: bool,
 }
 
 macro_rules! find_chip {
@@ -82,13 +64,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     pub fn new(
         config: VmConfig,
         program: Program<F>,
-        streams: Streams<F>,
+        streams: Arc<Mutex<Streams<F>>>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
     ) -> Self {
-        let mut chip_set = config.create_chip_set();
+        let mut chip_set = config.create_chip_set(streams.clone());
         chip_set.program_chip.set_program(program);
-
-        let core_chip = find_chip!(chip_set, AxVmChip::Core);
 
         if let Some(initial_memory) = initial_memory {
             chip_set
@@ -100,7 +80,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         Self {
             config,
             chip_set,
-            core_chip,
             streams,
             final_memory: None,
             collected_metrics: Default::default(),
@@ -108,23 +87,22 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
     }
 
-    pub fn did_terminate(&self) -> bool {
-        self.core_chip.borrow().did_terminate
-    }
-
     /// Stopping is triggered by should_segment()
-    pub fn execute_from_pc(&mut self, mut pc: u32) -> Result<u32, ExecutionError> {
+    pub fn execute_from_pc(
+        &mut self,
+        mut pc: u32,
+    ) -> Result<ExecutionSegmentState, ExecutionError> {
         let mut timestamp = self.chip_set.memory_controller.borrow().timestamp();
 
-        let mut collect_metrics = self.config.collect_metrics;
+        let collect_metrics = self.config.collect_metrics;
         // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
-
-        self.core_chip.borrow_mut().streams = mem::take(&mut self.streams);
 
         self.chip_set
             .connector_chip
             .begin(ExecutionState::new(pc, timestamp));
+
+        let mut did_terminate = false;
 
         loop {
             let (instruction, debug_info) = self.chip_set.program_chip.get_instruction(pc)?;
@@ -139,7 +117,26 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             );
 
             let opcode = instruction.opcode;
-            let prev_trace_cells = self.current_trace_cells();
+            let prev_trace_cells = if collect_metrics {
+                self.current_trace_cells()
+            } else {
+                BTreeMap::new()
+            };
+
+            if opcode == TerminateOpcode::TERMINATE.with_default_offset() {
+                did_terminate = true;
+                self.chip_set.connector_chip.end(
+                    ExecutionState::new(pc, timestamp),
+                    Some(instruction.c.as_canonical_u32()),
+                );
+                if collect_metrics {
+                    self.update_chip_metrics();
+                    #[cfg(feature = "bench-metrics")]
+                    metrics::counter!("total_cells_used")
+                        .absolute(self.current_trace_cells().into_values().sum::<usize>() as u64);
+                }
+                break;
+            }
 
             // runtime only instruction handling
             // FIXME: assumes CoreOpcode has offset 0:
@@ -198,28 +195,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                             now_value - prev_value;
                     }
                 }
-                if opcode == CoreOpcode::TERMINATE as usize {
-                    self.update_chip_metrics();
-                    // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
-                    collect_metrics = false;
-                    #[cfg(feature = "bench-metrics")]
-                    metrics::counter!("total_cells_used")
-                        .absolute(now_trace_cells.into_values().sum::<usize>() as u64);
-                }
-            }
-            if opcode == CoreOpcode::TERMINATE as usize {
-                break;
             }
             if self.should_segment() {
+                self.chip_set
+                    .connector_chip
+                    .end(ExecutionState::new(pc, timestamp), None);
                 break;
             }
         }
-
-        self.chip_set
-            .connector_chip
-            .end(ExecutionState::new(pc, timestamp));
-
-        self.streams = mem::take(&mut self.core_chip.borrow_mut().streams);
 
         if collect_metrics {
             self.update_chip_metrics();
@@ -239,7 +222,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             PersistenceType::Volatile => memory_controller.finalize(None::<&mut Poseidon2Chip<F>>),
         };
 
-        Ok(pc)
+        Ok(ExecutionSegmentState {
+            pc,
+            is_terminated: did_terminate,
+        })
     }
 
     /// Generate ProofInput to prove the segment. Should be called after ::execute
@@ -247,15 +233,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let Self {
-            chip_set,
-            core_chip,
-            ..
-        } = self;
-        // Drop all strong references to chips other than self.chips, which will be consumed next.
-        drop(core_chip);
-
-        chip_set.generate_proof_input()
+        self.chip_set.generate_proof_input()
     }
 
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.

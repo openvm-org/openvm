@@ -31,16 +31,12 @@ pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum CoreOpcode {
-    NOP,
+    // Dummy opcode to represent padding, to be removed
+    DUMMY,
     LOADW,
     STOREW,
     LOADW2,
     STOREW2,
-    JAL,
-    BEQ,
-    BNE,
-    TERMINATE,
-    PUBLISH,
     FAIL,
     PRINTF,
     /// Instruction to write the next hint word into memory.
@@ -57,6 +53,62 @@ pub enum CoreOpcode {
     CT_START,
     /// Phantom instruction to end tracing
     CT_END,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x20] // these offsets gone mad tbh
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum TerminateOpcode {
+    TERMINATE,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x21]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum NopOpcode {
+    NOP,
+}
+
+pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
+
+impl UsizeOpcode for NativeBranchEqualOpcode {
+    fn default_offset() -> usize {
+        0x030
+    }
+
+    fn from_usize(value: usize) -> Self {
+        Self(BranchEqualOpcode::from_usize(value))
+    }
+
+    fn as_usize(&self) -> usize {
+        self.0.as_usize()
+    }
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x040]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum NativeJalOpcode {
+    JAL,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x080]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum PublishOpcode {
+    PUBLISH,
 }
 
 #[derive(
@@ -95,17 +147,6 @@ pub enum Poseidon2Opcode {
     PERM_POS2,
     COMP_POS2,
 }
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x170]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum CastfOpcode {
-    CASTF,
-}
-
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
@@ -127,17 +168,6 @@ pub enum ModularArithmeticOpcode {
     SUB,
     MUL,
     DIV,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x180]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum EccOpcode {
-    EC_ADD_NE,
-    EC_DOUBLE,
 }
 
 #[derive(
@@ -173,6 +203,27 @@ impl U256Opcode {
     pub fn shift_opcodes() -> impl Iterator<Item = U256Opcode> {
         (U256Opcode::SLL as usize..=U256Opcode::SRA as usize).map(U256Opcode::from_usize)
     }
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x170]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum CastfOpcode {
+    CASTF,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x180]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum EccOpcode {
+    EC_ADD_NE,
+    EC_DOUBLE,
 }
 
 #[derive(
@@ -240,7 +291,7 @@ pub enum Rv32LoadStoreOpcode {
     STOREW,
     STOREH,
     STOREB,
-    HINTLOAD_RV32,
+    HINT_STOREW,
     /// The following are signed extend opcodes
     LOADB,
     LOADH,

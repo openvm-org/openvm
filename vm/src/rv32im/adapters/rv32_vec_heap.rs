@@ -28,7 +28,7 @@ use crate::{
     },
 };
 
-/// This adapter reads from R (R = 1 or 2) pointers and writes to 1 pointer.
+/// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers
 ///   are read from registers (address space 1).
 /// * Reads take the form of `NUM_READS` consecutive reads of size `READ_SIZE`
@@ -308,10 +308,6 @@ impl<
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 2);
 
-        let mut reg_addrs = [b; R];
-        if R == 2 {
-            reg_addrs[1] = c;
-        }
         let mut rs_vals = [0; R];
         let rs_records: [_; R] = from_fn(|i| {
             let addr = if i == 0 { b } else { c };

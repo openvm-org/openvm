@@ -3,7 +3,8 @@ use std::{cell::RefCell, rc::Rc};
 use super::Fp2;
 use crate::field_expression::{ExprBuilder, FieldVariable};
 
-/// Field extension of Fp12 defined with coefficients in Fp2. Fp6-equivalent coefficients are c0: (c0, c2, c4), c1: (c1, c3, c5).
+/// Field extension Fp12 defined with coefficients in Fp2. Fp6-equivalent coefficients are c0: (c0, c2, c4), c1: (c1, c3, c5).
+#[derive(Clone)]
 pub struct Fp12 {
     pub c0: Fp2,
     pub c1: Fp2,
@@ -295,8 +296,6 @@ mod tests {
         let trace = RowMajorMatrix::new(row, width);
         let range_trace = range_checker.generate_trace();
 
-        let len = vars.len();
-        println!("indices: {:?}", indices);
         let r_c0 = evaluate_biguint(&vars[indices[0]], LIMB_BITS);
         let r_c1 = evaluate_biguint(&vars[indices[1]], LIMB_BITS);
         let r_c2 = evaluate_biguint(&vars[indices[2]], LIMB_BITS);

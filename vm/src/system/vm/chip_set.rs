@@ -8,6 +8,7 @@ use std::{
 };
 
 use afs_primitives::{
+    bigint::utils::secp256k1_coord_prime,
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::lookup::XorLookupChip,
@@ -23,13 +24,16 @@ use axvm_instructions::*;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
+use parking_lot::Mutex;
 use poseidon2_air::poseidon2::Poseidon2Config;
 use strum::EnumCount;
 
+use super::Streams;
 use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
+    common::nop::NopChip,
     intrinsics::{
-        ecc::{EcAddUnequalChip, EcDoubleChip},
+        ecc::sw::{SwEcAddNeCoreChip, SwEcDoubleCoreChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -37,18 +41,23 @@ use crate::{
     },
     kernels::{
         adapters::{
-            convert_adapter::ConvertAdapterChip, native_adapter::NativeAdapterChip,
+            branch_native_adapter::BranchNativeAdapterChip, convert_adapter::ConvertAdapterChip,
+            jal_native_adapter::JalNativeAdapterChip, native_adapter::NativeAdapterChip,
             native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
+        branch_eq::KernelBranchEqChip,
         castf::{CastFChip, CastFCoreChip},
         core::{
             CoreChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
             READ_INSTRUCTION_BUS,
         },
+        ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
+        jal::{JalCoreChip, KernelJalChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
+        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
     old::{
         alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
@@ -151,7 +160,10 @@ impl<F: PrimeField32> VmChipSet<F> {
 }
 
 impl VmConfig {
-    pub fn create_chip_set<F: PrimeField32>(&self) -> VmChipSet<F> {
+    pub fn create_chip_set<F: PrimeField32>(
+        &self,
+        streams: Arc<Mutex<Streams<F>>>,
+    ) -> VmChipSet<F> {
         let execution_bus = ExecutionBus(0);
         let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
         let memory_bus = MemoryBus(1);
@@ -197,6 +209,15 @@ impl VmConfig {
 
         // CoreChip is always required even if it's not explicitly specified.
         required_executors.insert(ExecutorName::Core);
+        // PublicValuesChip is required when num_public_values > 0.
+        if self.num_public_values > 0 {
+            // Raw public values are not supported when continuation is enabled.
+            assert_ne!(
+                self.memory_config.persistence_type,
+                PersistenceType::Persistent
+            );
+            required_executors.insert(ExecutorName::PublicValues);
+        }
         // We always put Poseidon2 chips in the end. So it will be initialized separately.
         let has_poseidon_chip = required_executors.contains(&ExecutorName::Poseidon2);
         if has_poseidon_chip {
@@ -214,18 +235,59 @@ impl VmConfig {
                 }
             }
             match executor {
+                ExecutorName::Nop => {
+                    let nop_chip = Rc::new(RefCell::new(NopChip::new(
+                        execution_bus,
+                        program_bus,
+                        offset,
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, nop_chip.clone().into());
+                    }
+                    chips.push(AxVmChip::Nop(nop_chip));
+                }
                 ExecutorName::Core => {
                     let core_chip = Rc::new(RefCell::new(CoreChip::new(
-                        self.core_options(),
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
+                        streams.clone(),
                         offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, core_chip.clone().into());
                     }
                     chips.push(AxVmChip::Core(core_chip));
+                }
+                ExecutorName::BranchEqual => {
+                    let chip = Rc::new(RefCell::new(KernelBranchEqChip::new(
+                        BranchNativeAdapterChip::<_>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        BranchEqualCoreChip::new(offset, 1usize),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::BranchEqual(chip));
+                }
+                ExecutorName::Jal => {
+                    let chip = Rc::new(RefCell::new(KernelJalChip::new(
+                        JalNativeAdapterChip::<_>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        JalCoreChip::new(offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::Jal(chip));
                 }
                 ExecutorName::FieldArithmetic => {
                     let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
@@ -256,6 +318,21 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::FieldExtension(chip));
+                }
+                ExecutorName::PublicValues => {
+                    let chip = Rc::new(RefCell::new(PublicValuesChip::new(
+                        NativeAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        PublicValuesCoreChip::new(self.num_public_values, offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::PublicValues(chip));
                 }
                 ExecutorName::Poseidon2 => {}
                 ExecutorName::Keccak256 => {
@@ -415,7 +492,7 @@ impl VmConfig {
                             range_checker.clone(),
                             offset,
                         ),
-                        LoadStoreCoreChip::new(offset),
+                        LoadStoreCoreChip::new(streams.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -447,7 +524,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchEqualCoreChip::new(offset),
+                        BranchEqualCoreChip::new(offset, 4usize),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -534,12 +611,23 @@ impl VmConfig {
                     chips.push(AxVmChip::CastF(chip));
                 }
                 // TODO: make these customizable opcode classes
+                // use new ones
                 ExecutorName::Secp256k1AddUnequal => {
-                    let chip = Rc::new(RefCell::new(EcAddUnequalChip::new(
-                        execution_bus,
-                        program_bus,
+                    let chip = Rc::new(RefCell::new(KernelEcAddNeChip::new(
+                        NativeVecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        SwEcAddNeCoreChip::new(
+                            secp256k1_coord_prime(),
+                            32,
+                            8,
+                            F::bits() - 2,
+                            memory_controller.borrow().range_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -547,11 +635,21 @@ impl VmConfig {
                     chips.push(AxVmChip::Secp256k1AddUnequal(chip));
                 }
                 ExecutorName::Secp256k1Double => {
-                    let chip = Rc::new(RefCell::new(EcDoubleChip::new(
-                        execution_bus,
-                        program_bus,
+                    let chip = Rc::new(RefCell::new(KernelEcDoubleChip::new(
+                        NativeVecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        SwEcDoubleCoreChip::new(
+                            secp256k1_coord_prime(),
+                            32,
+                            8,
+                            F::bits() - 2,
+                            memory_controller.borrow().range_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -593,7 +691,7 @@ impl VmConfig {
             match executor {
                 ExecutorName::ModularAddSub => {
                     let new_chip = Rc::new(RefCell::new(KernelModularAddSubChip::new(
-                        NativeVecHeapAdapterChip::<F, 1, 1, 32, 32>::new(
+                        NativeVecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -615,7 +713,7 @@ impl VmConfig {
                 }
                 ExecutorName::ModularMultDiv => {
                     let new_chip = Rc::new(RefCell::new(KernelModularMulDivChip::new(
-                        NativeVecHeapAdapterChip::<F, 1, 1, 32, 32>::new(
+                        NativeVecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -736,7 +834,7 @@ impl VmConfig {
             chips.push(AxVmChip::RangeTupleChecker(range_tuple_checker));
         }
 
-        let connector_chip = VmConnectorChip::new(execution_bus);
+        let connector_chip = VmConnectorChip::new(execution_bus, program_bus);
 
         VmChipSet {
             executors,
@@ -830,10 +928,25 @@ fn shift_range(r: Range<usize>, x: usize) -> Range<usize> {
 
 fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
     let (start, len, offset) = match executor {
+        ExecutorName::Nop => (
+            NopOpcode::default_offset(),
+            NopOpcode::COUNT,
+            NopOpcode::default_offset(),
+        ),
         ExecutorName::Core => (
             CoreOpcode::default_offset(),
             CoreOpcode::COUNT,
             CoreOpcode::default_offset(),
+        ),
+        ExecutorName::BranchEqual => (
+            NativeBranchEqualOpcode::default_offset(),
+            BranchEqualOpcode::COUNT,
+            NativeBranchEqualOpcode::default_offset(),
+        ),
+        ExecutorName::Jal => (
+            NativeJalOpcode::default_offset(),
+            NativeJalOpcode::COUNT,
+            NativeJalOpcode::default_offset(),
         ),
         ExecutorName::FieldArithmetic => (
             FieldArithmeticOpcode::default_offset(),
@@ -844,6 +957,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             FieldExtensionOpcode::default_offset(),
             FieldExtensionOpcode::COUNT,
             FieldExtensionOpcode::default_offset(),
+        ),
+        ExecutorName::PublicValues => (
+            PublishOpcode::default_offset(),
+            PublishOpcode::COUNT,
+            PublishOpcode::default_offset(),
         ),
         ExecutorName::Poseidon2 => (
             Poseidon2Opcode::default_offset(),
