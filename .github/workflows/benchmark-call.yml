@@ -13,7 +13,7 @@ on:
           - tiny_e2e
           - alu256_e2e
           - small_e2e
-      aws_instance_type:
+      instance_type:
         type: string
         required: false
         description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
@@ -24,7 +24,7 @@ on:
         type: string
         required: true
         description: The name of the benchmark to run
-      aws_instance_type:
+      instance_type:
         type: string
         required: false
         description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
@@ -40,7 +40,7 @@ env:
 jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
-    runs-on: [runs-on,"runner=${{ inputs.aws_instance_type }}",image=arm64-rust-dev-32gb]
+    runs-on: [runs-on,"runner=${{ inputs.instance_type }}",image=arm64-rust-dev-32gb]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -146,7 +146,7 @@ jobs:
             done
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
-          echo "AWS Instance Type: [${{ inputs.aws_instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.aws_instance_type }})" >> $RESULT_PATH
+          echo "AWS Instance Type: [${{ inputs.instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.instance_type }})" >> $RESULT_PATH
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
           s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
 
