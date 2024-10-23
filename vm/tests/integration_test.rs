@@ -341,7 +341,7 @@ fn test_vm_continuations() {
             0,
             1,
         ),
-        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 1, 0, 0),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ]);
 
     let config = VmConfig {
@@ -365,7 +365,8 @@ fn test_vm_continuations() {
     let result = vm.execute_and_generate(program).unwrap();
 
     // Let's make sure we have at least 3 segments.
-    assert!(result.per_segment.len() >= 3);
+    let num_segments = result.per_segment.len();
+    assert!(num_segments >= 3);
 
     let mut prev_final_memory_root = None;
     let mut prev_final_pc = None;
@@ -389,6 +390,12 @@ fn test_vm_continuations() {
                     }
                 );
                 prev_final_pc = Some(pvs[1]);
+
+                if i == num_segments - 1 {
+                    assert_eq!(pvs[2], BabyBear::zero());
+                } else {
+                    assert_eq!(pvs[2], BabyBear::neg_one());
+                }
             } else if air_name == "MemoryMerkleAir<8>" {
                 assert_eq!(pvs.len(), 16);
 

@@ -241,11 +241,6 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
             op_timestamp += enabled.clone();
         }
 
-        // make sure program terminates or shards with NOP
-        // builder
-        //     .when_last_row()
-        //     .assert_eq(opcode, AB::Expr::from_canonical_usize(NOP as usize));
-
         // Turn on all interactions
         self.eval_interactions(builder, io, next_pc, &operation_flags);
     }
