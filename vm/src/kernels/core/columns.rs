@@ -69,10 +69,10 @@ impl<T: Clone> CoreIoCols<T> {
 }
 
 impl<T: Field> CoreIoCols<T> {
-    pub fn nop_row(pc: u32) -> Self {
+    pub fn blank_row() -> Self {
         Self {
             timestamp: T::default(),
-            pc: T::from_canonical_u32(pc),
+            pc: T::default(),
             opcode: T::from_canonical_usize(CoreOpcode::DUMMY as usize),
             a: T::default(),
             b: T::default(),
@@ -252,7 +252,7 @@ impl<T: Clone> CoreAuxCols<T> {
 }
 
 impl<F: PrimeField32> CoreAuxCols<F> {
-    pub fn nop_row(pc: u32) -> Self {
+    pub fn blank_row() -> Self {
         let mut operation_flags = BTreeMap::new();
         for opcode in CoreOpcode::iter() {
             operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::DUMMY));
@@ -268,7 +268,7 @@ impl<F: PrimeField32> CoreAuxCols<F> {
             is_equal_aux: is_equal_cols.aux,
             reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
             writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
-            next_pc: F::from_canonical_u32(pc),
+            next_pc: F::default(),
         }
     }
 }
@@ -299,13 +299,10 @@ impl<T: Clone> CoreCols<T> {
 }
 
 impl<F: PrimeField32> CoreCols<F> {
-    /// This function mutates internal state of some chips. It should be called once for every
-    /// NOP row---results should not be cloned.
-    /// TODO[zach]: Make this less surprising, probably by not doing less-than checks on dummy rows.
-    pub fn nop_row(pc: u32) -> Self {
+    pub fn blank_row() -> Self {
         Self {
-            io: CoreIoCols::<F>::nop_row(pc),
-            aux: CoreAuxCols::<F>::nop_row(pc),
+            io: CoreIoCols::<F>::blank_row(),
+            aux: CoreAuxCols::<F>::blank_row(),
         }
     }
 }
