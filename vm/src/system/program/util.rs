@@ -28,7 +28,6 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             max_segment_len: (1 << 25) - 100,
             ..Default::default()
         }
-        .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::ArithmeticLogicUnit256)
         .add_canonical_modulus()
         .add_executor(ExecutorName::Secp256k1AddUnequal)

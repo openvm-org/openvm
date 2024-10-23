@@ -150,20 +150,22 @@ where
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode - self.air.offset);
         let (pointer_reads, data_read) = reads.into();
 
-        let output = AdapterRuntimeContext::without_pc([data_read; NUM_CELLS]);
+        let data_write = if local_opcode == NativeLoadStoreOpcode::SHINTW {
+            let mut streams = self.streams.lock();
+            if streams.hint_stream.len() < NUM_CELLS {
+                return Err(ExecutionError::HintOutOfBounds(from_pc));
+            }
+            array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
+        } else {
+            [data_read; NUM_CELLS]
+        };
+
+        let output = AdapterRuntimeContext::without_pc(data_write);
         let record = KernelLoadStoreCoreRecord {
             opcode: NativeLoadStoreOpcode::from_usize(opcode - self.air.offset),
             pointer_reads,
             data_read,
-            data_write: if local_opcode == NativeLoadStoreOpcode::SHINTW {
-                let mut streams = self.streams.lock();
-                if streams.hint_stream.len() < NUM_CELLS {
-                    return Err(ExecutionError::HintOutOfBounds(from_pc));
-                }
-                array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
-            } else {
-                [data_read; NUM_CELLS]
-            },
+            data_write,
         };
         Ok((output, record))
     }
