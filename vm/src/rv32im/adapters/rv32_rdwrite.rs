@@ -22,7 +22,7 @@ use crate::{
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryWriteRecord,
         },
-        program::{bridge::ProgramBus, Instruction},
+        program::{Instruction, ProgramBus},
     },
 };
 

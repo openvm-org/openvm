@@ -10,7 +10,7 @@ use crate::{
     },
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
-        program::{bridge::ProgramBus, ExecutionError, Instruction},
+        program::{ExecutionError, Instruction, ProgramBus},
     },
 };
 

@@ -87,7 +87,7 @@ use crate::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
             MemoryControllerRef, CHUNK,
         },
-        program::{bridge::ProgramBus, ProgramChip},
+        program::{ProgramBus, ProgramChip},
         vm::{
             config::{PersistenceType, VmConfig},
             connector::VmConnectorChip,

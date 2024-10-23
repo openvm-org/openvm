@@ -41,7 +41,7 @@ use crate::{
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryWriteRecord,
         },
-        program::bridge::ProgramBus,
+        program::ProgramBus,
         vm::config::{MemoryConfig, PersistenceType},
     },
 };
