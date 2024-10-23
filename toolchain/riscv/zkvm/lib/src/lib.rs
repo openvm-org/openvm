@@ -171,7 +171,7 @@ unsafe extern "C" fn __start() -> ! {
 }
 
 #[cfg(target_os = "zkvm")]
-// static STACK_TOP: u32 = axvm_platform::memory::STACK_TOP;
+static STACK_TOP: u32 = axvm_platform::memory::STACK_TOP;
 
 // Entry point; sets up global pointer and stack pointer and passes
 // to zkvm_start.  TODO: when asm_const is stabilized, use that here
@@ -186,10 +186,11 @@ _start:
     .option norelax;
     la gp, __global_pointer$;
     .option pop;
-    lui sp, 0x200 // ATTENTION: this hardcodes the stack size, undo this once initial memory image is supported
+    la sp, {0};
+    lw sp, 0(sp);
     call __start;
 "#,
-    // sym STACK_TOP
+    sym STACK_TOP
 );
 
 /// Require that accesses to behind the given pointer before the memory
