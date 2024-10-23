@@ -9,7 +9,7 @@ use backtrace::Backtrace;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 
-use crate::{arch::NUM_OPERANDS, kernels::core::READ_INSTRUCTION_BUS};
+use crate::{arch::NUM_OPERANDS, kernels::core::READ_INSTRUCTION_BUS, rv32im::adapters::PC_BITS};
 
 #[cfg(test)]
 pub mod tests;
@@ -214,6 +214,8 @@ pub struct Program<F> {
     pub pc_base: u32,
 }
 
+const MAX_ALLOWED_PC: u32 = 1 << PC_BITS;
+
 impl<F> Program<F> {
     pub fn from_instructions_and_step(
         instructions: &[Instruction<F>],
@@ -224,6 +226,7 @@ impl<F> Program<F> {
     where
         F: Clone,
     {
+        assert!(pc_base + (instructions.len() as u32 - 1) * step < MAX_ALLOWED_PC);
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
@@ -249,6 +252,7 @@ impl<F> Program<F> {
     where
         F: Clone,
     {
+        assert!(instructions.len() as u32 - 1 < MAX_ALLOWED_PC);
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
