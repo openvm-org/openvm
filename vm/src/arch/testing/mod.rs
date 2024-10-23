@@ -15,7 +15,10 @@ use ax_sdk::{
 use itertools::izip;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::{
+    dense::{DenseMatrix, RowMajorMatrix},
+    Matrix,
+};
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
@@ -220,6 +223,7 @@ impl VmChipTester {
         }
         self
     }
+
     pub fn load_air_proof_input(mut self, air_proof_input: AirProofInput<SC>) -> Self {
         self.air_proof_inputs.push(air_proof_input);
         self
@@ -232,6 +236,17 @@ impl VmChipTester {
     ) -> Self {
         let mut air_proof_input = chip.generate_air_proof_input();
         air_proof_input.raw.common_main = Some(trace);
+        self.air_proof_inputs.push(air_proof_input);
+        self
+    }
+
+    pub fn load_and_prank_trace<C: Chip<SC>, F>(mut self, chip: C, modify_trace: F) -> Self
+    where
+        F: Fn(&mut DenseMatrix<BabyBear>),
+    {
+        let mut air_proof_input = chip.generate_air_proof_input();
+        let trace = air_proof_input.raw.common_main.as_mut().unwrap();
+        modify_trace(trace);
         self.air_proof_inputs.push(air_proof_input);
         self
     }

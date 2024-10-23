@@ -8,11 +8,10 @@ use afs_derive::AlignedBorrow;
 use afs_primitives::{
     bigint::utils::big_uint_to_num_limbs,
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-    utils::not,
-    xor::{bus::XorBus, lookup::XorLookupChip},
+    utils::{not, select},
+    xor::{XorBus, XorLookupChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use itertools::fold;
 use num_bigint_dig::BigUint;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -38,7 +37,7 @@ pub struct DivRemCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
     // Flags to indicate special cases.
     pub zero_divisor: T,
-    pub signed_overflow: T,
+    pub r_zero: T,
 
     // Sign of b and c respectively, while q_sign = b_sign ^ c_sign if q is non-zero
     // and is 0 otherwise. sign_xor = b_sign ^ c_sign always.
@@ -117,6 +116,7 @@ where
 
         // Constrain that b = (c * q + r') % 2^{NUM_LIMBS * LIMB_BITS} and range check
         // each element in q.
+        let b_ext = cols.b_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
         let c_ext = cols.c_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
         let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
         let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
@@ -127,7 +127,7 @@ where
             } else {
                 carry[i - 1].clone()
             } + (0..=i).fold(r[i].into(), |ac, k| ac + (c[k] * q[i - k]));
-            carry[i] = AB::Expr::from(carry_divide) * (expected_limb - b[i]);
+            carry[i] = (expected_limb - b[i]) * carry_divide;
         }
 
         for (q, carry) in q.iter().zip(carry.iter()) {
@@ -150,17 +150,15 @@ where
                 acc + (c[k] * q[NUM_LIMBS + j - k])
             }) + (0..(j + 1)).fold(AB::Expr::zero(), |acc, k| {
                 acc + (c[k] * q_ext.clone()) + (q[k] * c_ext.clone())
-            });
+            }) + (AB::Expr::one() - cols.r_zero) * b_ext.clone();
             // Technically there are ways to constrain that c * q is in range without
             // using a range checker, but because we already have to range check each
             // limb of r it requires no additional columns to also range check each
             // carry_ext.
             //
-            // Note also that really we should have added the sign extension of r to
-            // expected_limb and set carry_ext = (expected_limb - r_sign) / 2^LIMB_BITS,
-            // but because we expect the sign of r to be the sign of b both changes
-            // cancel each other out.
-            carry_ext[j] = AB::Expr::from(carry_divide) * expected_limb;
+            // Note that the sign of r is not equal to the sign of b only when r = 0.
+            // Flag column r_zero tracks this special case.
+            carry_ext[j] = (expected_limb - b_ext.clone()) * carry_divide;
         }
 
         for (r, carry) in r.iter().zip(carry_ext.iter()) {
@@ -169,14 +167,10 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        // Handle special cases. We can have either a zero divisor or signed overflow,
-        // or neither.
-        let signed = cols.opcode_div_flag + cols.opcode_rem_flag;
-        let special_case = cols.zero_divisor + cols.signed_overflow;
+        // Handle special cases. We can have either at most one of a zero divisor,
+        // or a 0 remainder. Signed overflow falls under the latter.
+        let special_case = cols.zero_divisor + cols.r_zero;
         builder.assert_bool(special_case.clone());
-        builder
-            .when(special_case.clone())
-            .assert_eq(cols.q_sign, signed.clone());
 
         builder.assert_bool(cols.zero_divisor);
         let mut when_zero_divisor = builder.when(cols.zero_divisor);
@@ -186,25 +180,19 @@ where
             when_zero_divisor.assert_eq(r[i], b[i]);
         }
 
-        builder.assert_bool(cols.signed_overflow);
-        let mut when_signed_overflow = builder.when(cols.signed_overflow);
-        when_signed_overflow.assert_one(signed.clone());
-        for i in 0..NUM_LIMBS {
-            // Note we do not need to check b = 0b100... here, as it is the only in-range
-            // integer such that b = q and b = - q (as constrained below)
-            when_signed_overflow.assert_eq(c[i], AB::F::from_canonical_u32((1 << LIMB_BITS) - 1));
-            when_signed_overflow.assert_eq(q[i], b[i]);
-            when_signed_overflow.assert_zero(r[i]);
-        }
+        builder.assert_bool(cols.r_zero);
+        r.iter()
+            .for_each(|r_i| builder.when(cols.r_zero).assert_zero(*r_i));
 
         // Constrain the correctness of b_sign and c_sign. Note that we do not need to
-        // check that the sign of r is b_sign since we cannot have r' <_u c if this is
-        // not the case.
+        // check that the sign of r is b_sign since we cannot have r' <_u c (or c <_u r'
+        // if c is negative) if this is not the case.
         //
         // To constrain the correctness of q_sign we make sure if q is non-zero then
         // q_sign = b_sign ^ c_sign, and if q_sign = 1 then q is non-zero. Note q_sum
         // is guaranteed to be non-zero if q is non-zero since we've range checked each
         // limb of q to be within [0, 2^LIMB_BITS) already.
+        let signed = cols.opcode_div_flag + cols.opcode_rem_flag;
         let mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
 
         builder.assert_bool(cols.b_sign);
@@ -223,10 +211,10 @@ where
         let nonzero_q = q.iter().fold(AB::Expr::zero(), |acc, q| acc + *q);
         builder.assert_bool(cols.q_sign);
         builder
-            .when(nonzero_q * not::<AB::Expr>(special_case.clone()))
+            .when(nonzero_q * not(cols.zero_divisor))
             .assert_eq(cols.q_sign, cols.sign_xor);
         builder
-            .when((cols.q_sign - cols.sign_xor) * not::<AB::Expr>(special_case.clone()))
+            .when((cols.q_sign - cols.sign_xor) * not(cols.zero_divisor))
             .assert_zero(cols.q_sign);
 
         self.xor_bus
@@ -267,7 +255,7 @@ where
             } else {
                 AB::Expr::zero()
             };
-            carry_lt[i] = AB::Expr::from(carry_divide) * (last_carry.clone() + r[i] + r_p[i]);
+            carry_lt[i] = (last_carry.clone() + r[i] + r_p[i]) * carry_divide;
             builder.when(cols.sign_xor).assert_zero(
                 (carry_lt[i].clone() - last_carry) * (carry_lt[i].clone() - AB::Expr::one()),
             );
@@ -309,8 +297,7 @@ where
         ) + AB::Expr::from_canonical_usize(self.offset);
 
         let is_div = cols.opcode_div_flag + cols.opcode_divu_flag;
-        let a =
-            array::from_fn(|i| (is_div.clone() * q[i]) + (not::<AB::Expr>(is_div.clone()) * r[i]));
+        let a = array::from_fn(|i| select(is_div.clone(), q[i], r[i]));
 
         AdapterAirContext {
             to_pc: None,
@@ -372,7 +359,7 @@ pub struct DivRemCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub q: [T; NUM_LIMBS],
     pub r: [T; NUM_LIMBS],
     pub zero_divisor: T,
-    pub signed_overflow: T,
+    pub r_zero: T,
     pub b_sign: T,
     pub c_sign: T,
     pub q_sign: T,
@@ -408,9 +395,10 @@ where
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
-        let (q, r, b_sign, c_sign, case) = run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &b, &c);
+        let (q, r, b_sign, c_sign, q_sign, case) =
+            run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &b, &c);
 
-        let carries = run_mul_carries::<NUM_LIMBS, LIMB_BITS>(is_signed, &c, &q, &r);
+        let carries = run_mul_carries::<NUM_LIMBS, LIMB_BITS>(is_signed, &c, &q, &r, q_sign);
         for i in 0..NUM_LIMBS {
             self.range_tuple_chip.add_count(&[q[i], carries[i]]);
             self.range_tuple_chip
@@ -418,20 +406,20 @@ where
         }
 
         let mask = 1 << (LIMB_BITS - 1);
-        let q_sign = (q[NUM_LIMBS - 1] & mask) != 0 && is_signed;
         let sign_xor = b_sign ^ c_sign;
         let r_prime = if sign_xor {
             negate::<NUM_LIMBS, LIMB_BITS>(&r)
         } else {
             r
         };
+        let r_zero = r.iter().all(|&v| v == 0) && case != 1;
 
         if is_signed {
             self.xor_lookup_chip.request(b[NUM_LIMBS - 1], mask);
             self.xor_lookup_chip.request(c[NUM_LIMBS - 1], mask);
         }
 
-        let (lt_diff_idx, lt_diff_val) = if case == 0 {
+        let (lt_diff_idx, lt_diff_val) = if case == 0 && !r_zero {
             let idx = run_sltu_diff_idx(&c, &r_prime, c_sign);
             let val = if c_sign {
                 r_prime[idx] - c[idx]
@@ -455,7 +443,7 @@ where
             q: q.map(F::from_canonical_u32),
             r: r.map(F::from_canonical_u32),
             zero_divisor: F::from_bool(case == 1),
-            signed_overflow: F::from_bool(case == 2),
+            r_zero: F::from_bool(r_zero),
             b_sign: F::from_bool(b_sign),
             c_sign: F::from_bool(c_sign),
             q_sign: F::from_bool(q_sign),
@@ -480,7 +468,7 @@ where
         row_slice.q = record.q;
         row_slice.r = record.r;
         row_slice.zero_divisor = record.zero_divisor;
-        row_slice.signed_overflow = record.signed_overflow;
+        row_slice.r_zero = record.r_zero;
         row_slice.b_sign = record.b_sign;
         row_slice.c_sign = record.c_sign;
         row_slice.q_sign = record.q_sign;
@@ -500,37 +488,28 @@ where
     }
 }
 
-// Returns (quotient, remainder, x_sign, y_sign, case) where case = 0 for normal, 1 for zero
-// divisor, and 2 for signed overflow
+// Returns (quotient, remainder, x_sign, y_sign, q_sign, case) where case = 0 for normal, 1
+// for zero divisor, and 2 for signed overflow
 pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     signed: bool,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
-) -> ([u32; NUM_LIMBS], [u32; NUM_LIMBS], bool, bool, u8) {
-    let x_sign = if signed {
-        x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1
-    } else {
-        false
-    };
-    let y_sign = if signed {
-        y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1
-    } else {
-        false
-    };
+) -> ([u32; NUM_LIMBS], [u32; NUM_LIMBS], bool, bool, bool, u8) {
+    let x_sign = signed && (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1);
+    let y_sign = signed && (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1);
+    let max_limb = (1 << LIMB_BITS) - 1;
 
-    let zero_divisor = fold(y, true, |b, y_val| b && (*y_val == 0));
-    let overflow = fold(
-        &x[..(NUM_LIMBS - 1)],
-        x[NUM_LIMBS - 1] == 1 << (LIMB_BITS - 1),
-        |b, x_val| b && (*x_val == 0),
-    ) && fold(y, true, |b, y_val| b && (*y_val == (1 << LIMB_BITS) - 1))
+    let zero_divisor = y.iter().all(|val| *val == 0);
+    let overflow = x[NUM_LIMBS - 1] == 1 << (LIMB_BITS - 1)
+        && x[..(NUM_LIMBS - 1)].iter().all(|val| *val == 0)
+        && y.iter().all(|val| *val == max_limb)
         && x_sign
         && y_sign;
 
     if zero_divisor {
-        return ([(1 << LIMB_BITS) - 1; NUM_LIMBS], *x, x_sign, y_sign, 1);
+        return ([max_limb; NUM_LIMBS], *x, x_sign, y_sign, signed, 1);
     } else if overflow {
-        return (*x, [0; NUM_LIMBS], x_sign, y_sign, 2);
+        return (*x, [0; NUM_LIMBS], x_sign, y_sign, false, 2);
     }
 
     let x_abs = if x_sign {
@@ -554,6 +533,7 @@ pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     } else {
         biguint_to_limbs::<NUM_LIMBS, LIMB_BITS>(&q_big)
     };
+    let q_sign = signed && (q[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1);
 
     // In C |q * y| <= |x|, which means if x is negative then r <= 0 and vice versa.
     let r = if x_sign {
@@ -562,7 +542,7 @@ pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         biguint_to_limbs::<NUM_LIMBS, LIMB_BITS>(&r_big)
     };
 
-    (q, r, x_sign, y_sign, 0)
+    (q, r, x_sign, y_sign, q_sign, 0)
 }
 
 pub(super) fn run_sltu_diff_idx<const NUM_LIMBS: usize>(
@@ -586,6 +566,7 @@ pub(super) fn run_mul_carries<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     d: &[u32; NUM_LIMBS],
     q: &[u32; NUM_LIMBS],
     r: &[u32; NUM_LIMBS],
+    q_sign: bool,
 ) -> Vec<u32> {
     let mut carry = vec![0u32; 2 * NUM_LIMBS];
     for i in 0..NUM_LIMBS {
@@ -596,17 +577,22 @@ pub(super) fn run_mul_carries<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         carry[i] = val >> LIMB_BITS;
     }
 
+    let q_ext = if q_sign && signed {
+        (1 << LIMB_BITS) - 1
+    } else {
+        0
+    };
     let d_ext =
         (d[NUM_LIMBS - 1] >> (LIMB_BITS - 1)) * if signed { (1 << LIMB_BITS) - 1 } else { 0 };
-    let q_ext =
-        (q[NUM_LIMBS - 1] >> (LIMB_BITS - 1)) * if signed { (1 << LIMB_BITS) - 1 } else { 0 };
+    let r_ext =
+        (r[NUM_LIMBS - 1] >> (LIMB_BITS - 1)) * if signed { (1 << LIMB_BITS) - 1 } else { 0 };
     let mut d_prefix = 0;
     let mut q_prefix = 0;
 
     for i in 0..NUM_LIMBS {
         d_prefix += d[i];
         q_prefix += q[i];
-        let mut val = carry[NUM_LIMBS + i - 1] + d_prefix * q_ext + q_prefix * d_ext;
+        let mut val = carry[NUM_LIMBS + i - 1] + d_prefix * q_ext + q_prefix * d_ext + r_ext;
         for j in (i + 1)..NUM_LIMBS {
             val += d[j] * q[NUM_LIMBS + i - j];
         }
