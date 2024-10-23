@@ -11,7 +11,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField64};
 use rand::RngCore;
 
-use super::field_expression::{ExprBuilder, FieldVariableConfig};
+use super::field_expression::ExprBuilder;
 
 pub const LIMB_BITS: usize = 8;
 
@@ -52,22 +52,6 @@ pub fn generate_random_biguint(prime: &BigUint) -> BigUint {
     let x = (0..len).map(|_| rng.next_u32()).collect();
     let x = BigUint::new(x);
     x % prime
-}
-
-#[derive(Clone)]
-pub struct TestConfig;
-impl FieldVariableConfig for TestConfig {
-    fn canonical_limb_bits() -> usize {
-        LIMB_BITS
-    }
-
-    fn max_limb_bits() -> usize {
-        29
-    }
-
-    fn num_limbs_per_field_element() -> usize {
-        32
-    }
 }
 
 pub fn evaluate_biguint(limbs: &[BabyBear], limb_bits: usize) -> BigUint {

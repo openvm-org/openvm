@@ -17,7 +17,7 @@ use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use super::{super::test_utils::*, ExprBuilder, FieldExpr, FieldVariableConfig, SymbolicExpr};
+use super::{super::test_utils::*, ExprBuilder, FieldExpr, SymbolicExpr};
 use crate::field_expression::{FieldExprCols, FieldVariable};
 
 const LIMB_BITS: usize = 8;
@@ -59,22 +59,6 @@ fn setup(
         BabyBear::bits() - 2,
     );
     (subair, range_checker, Rc::new(RefCell::new(builder)))
-}
-
-#[derive(Clone)]
-pub struct TestConfig;
-impl FieldVariableConfig for TestConfig {
-    fn canonical_limb_bits() -> usize {
-        LIMB_BITS
-    }
-
-    fn max_limb_bits() -> usize {
-        29
-    }
-
-    fn num_limbs_per_field_element() -> usize {
-        32
-    }
 }
 
 #[test]
