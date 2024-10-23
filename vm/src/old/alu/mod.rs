@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::xor::lookup::XorLookupChip;
+use afs_primitives::xor::XorLookupChip;
 use air::ArithmeticLogicCoreAir;
 use p3_field::PrimeField32;
 

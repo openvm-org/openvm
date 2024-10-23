@@ -169,6 +169,13 @@ impl Witnessable<C> for Proof<BabyBearPoseidon2OuterConfig> {
     type WitnessVariable = StarkProofVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
+        if builder.flags.static_only {
+            // Check that the trace heights are sorted
+            assert!(
+                self.per_air.windows(2).all(|w| w[0].degree >= w[1].degree),
+                "Static verifier requires trace heights to be sorted descending"
+            );
+        }
         let commitments = self.commitments.read(builder);
         let opening = self.opening.read(builder);
         let per_air = self.per_air.read(builder);

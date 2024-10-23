@@ -12,7 +12,7 @@ use num_bigint_dig::BigUint;
 use num_traits::FromPrimitive;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
-use p3_field::{Field, PrimeField64};
+use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::RngCore;
 
@@ -23,8 +23,8 @@ use super::super::{
     CanonicalUint, DefaultLimbConfig, OverflowInt,
 };
 use crate::{
-    sub_chip::{AirConfig, LocalTraceInstructions},
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir,
 };
 
 // Testing AIR:
@@ -78,10 +78,6 @@ pub struct TestCarryAir<const N: usize> {
     pub limb_bits: usize,
 }
 
-impl AirConfig for TestCarryAir<N> {
-    type Cols<T> = TestCarryCols<N, T>;
-}
-
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for TestCarryAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for TestCarryAir<N> {}
 impl<F: Field, const N: usize> BaseAir<F> for TestCarryAir<N> {
@@ -107,20 +103,16 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
         let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(y, self.limb_bits);
         let expr = (x_overflow.clone() * x_overflow.clone()) - y_overflow.clone();
 
-        self.test_carry_sub_air.constrain_carry_to_zero(
-            builder,
-            expr,
-            CheckCarryToZeroCols { carries },
-            is_valid,
-        );
+        self.test_carry_sub_air
+            .eval(builder, (expr, CheckCarryToZeroCols { carries }, is_valid));
     }
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
-    type LocalInput = (BigUint, BigUint, Arc<VariableRangeCheckerChip>);
-
-    fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
-        let (x, y, range_checker) = input;
+impl TestCarryAir<N> {
+    fn generate_trace_row<F: Field>(
+        &self,
+        (x, y, range_checker): (BigUint, BigUint, &VariableRangeCheckerChip),
+    ) -> TestCarryCols<N, F> {
         let x_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(&x, Some(N));
         let x_overflow: OverflowInt<isize> = x_canonical.into();
         let y_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(&y, Some(2 * N));
@@ -181,7 +173,7 @@ fn test_x_square_minus_y(x: BigUint, y: BigUint) {
         limb_bits,
     };
     let row = test_air
-        .generate_trace_row((x, y, range_checker.clone()))
+        .generate_trace_row((x, y, &range_checker))
         .flatten();
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&test_air));
     let range_trace = range_checker.generate_trace();

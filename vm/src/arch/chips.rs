@@ -2,8 +2,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_derive::{Chip, ChipUsageGetter};
 use afs_primitives::{
-    range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip,
-    xor::lookup::XorLookupChip,
+    range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip, xor::XorLookupChip,
 };
 use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;

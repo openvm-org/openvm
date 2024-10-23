@@ -8,7 +8,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
+use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     prover::types::AirProofInput,

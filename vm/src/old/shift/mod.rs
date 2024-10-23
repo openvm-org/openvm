@@ -1,6 +1,6 @@
 use std::{array, sync::Arc};
 
-use afs_primitives::{var_range::VariableRangeCheckerChip, xor::lookup::XorLookupChip};
+use afs_primitives::{var_range::VariableRangeCheckerChip, xor::XorLookupChip};
 use air::ShiftCoreAir;
 use p3_field::PrimeField32;
 

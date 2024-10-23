@@ -1,6 +1,6 @@
 use std::{collections::HashSet, iter, sync::Arc};
 
-use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
+use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
@@ -10,6 +10,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
+use test_log::test;
 
 use crate::{
     kernels::core::RANGE_CHECKER_BUS,
@@ -27,7 +28,7 @@ fn boundary_air_test() {
 
     const MEMORY_BUS: usize = 1;
     const MAX_ADDRESS_SPACE: usize = 4;
-    const LIMB_BITS: usize = 29;
+    const LIMB_BITS: usize = 15;
     const MAX_VAL: usize = 1 << LIMB_BITS;
     const DECOMP: usize = 8;
     let memory_bus = MemoryBus(1);
@@ -42,8 +43,7 @@ fn boundary_air_test() {
 
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, DECOMP);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-    let boundary_chip =
-        VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, DECOMP, range_checker.clone());
+    let boundary_chip = VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
 
     let mut final_memory = TimestampedEquipartition::new();
 

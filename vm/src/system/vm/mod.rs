@@ -44,6 +44,13 @@ pub struct VirtualMachine<F: PrimeField32> {
     initial_memory: Option<Equipartition<F, CHUNK>>,
 }
 
+#[repr(i32)]
+pub enum ExitCode {
+    Success = 0,
+    Error = 1,
+    Suspended = -1, // Continuations
+}
+
 pub struct VirtualMachineResult<SC: StarkGenericConfig> {
     pub per_segment: Vec<ProofInput<SC>>,
 }

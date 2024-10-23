@@ -1,10 +1,12 @@
 use afs_compiler::ir::Witness;
 use ax_sdk::{
-    config::baby_bear_poseidon2_outer::{
-        BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine,
+    config::{
+        baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
+        setup_tracing_with_log_level,
     },
     engine::{ProofInputForTest, StarkFriEngine},
 };
+use tracing::Level;
 
 use crate::{
     config::outer::new_from_outer_multi_vk,
@@ -23,11 +25,14 @@ fn test_fibonacci() {
 
 #[test]
 fn test_interactions() {
-    // Please make sure kzg trusted params are downloaded before running the test.
     run_recursive_test(interaction_test_proof_input::<BabyBearPoseidon2OuterConfig>())
 }
 
-fn run_recursive_test(test_proof_input: ProofInputForTest<BabyBearPoseidon2OuterConfig>) {
+fn run_recursive_test(mut test_proof_input: ProofInputForTest<BabyBearPoseidon2OuterConfig>) {
+    setup_tracing_with_log_level(Level::WARN);
+    test_proof_input
+        .per_air
+        .sort_by(|a, b| b.raw.height().cmp(&a.raw.height()));
     let vparams =
         <BabyBearPoseidon2OuterEngine as StarkFriEngine<BabyBearPoseidon2OuterConfig>>::run_test_fast(
             test_proof_input.per_air,

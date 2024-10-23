@@ -123,7 +123,7 @@ impl<F: PrimeField32> CoreAuxCols<F> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct CoreCols<T> {
     pub io: CoreIoCols<T>,
     pub aux: CoreAuxCols<T>,

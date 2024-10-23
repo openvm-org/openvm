@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 use itertools::Itertools;
 use p3_field::Field;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
@@ -146,5 +146,27 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
 impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
     pub fn validate(&self, proof_input: &ProofInput<SC>) -> bool {
         self.get_vk().validate(proof_input)
+    }
+}
+
+impl<F: Field> AirProofRawInput<F> {
+    pub fn height(&self) -> usize {
+        let mut height = None;
+        for m in self.cached_mains.iter() {
+            if let Some(h) = height {
+                assert_eq!(h, m.height());
+            } else {
+                height = Some(m.height());
+            }
+        }
+        let common_h = self.common_main.as_ref().map(|trace| trace.height());
+        if let Some(h) = height {
+            if let Some(common_h) = common_h {
+                assert_eq!(h, common_h);
+            }
+            h
+        } else {
+            common_h.unwrap_or(0)
+        }
     }
 }

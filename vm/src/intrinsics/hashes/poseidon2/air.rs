@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 
-use afs_primitives::sub_chip::AirConfig;
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -30,10 +29,6 @@ pub struct Poseidon2VmAir<T> {
     pub direct: bool, // Whether direct interactions are enabled.
 
     pub(super) offset: usize,
-}
-
-impl<F> AirConfig for Poseidon2VmAir<F> {
-    type Cols<T> = Poseidon2VmCols<T>;
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for Poseidon2VmAir<F> {}

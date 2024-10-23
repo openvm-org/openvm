@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::borrow::Cow;
 
 use afs_compiler::{
@@ -114,7 +115,6 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
 }
 
 // tests for x^3 = y^2 + 7
-
 #[test]
 fn test_compiler_ec_double() {
     test_secp256k1_add(Point::new(2, 1), Point::new(2, 1), Point::new(32, -181));

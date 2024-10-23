@@ -1,6 +1,6 @@
 use std::{array, borrow::Borrow};
 
-use afs_primitives::{utils, xor::bus::XorBus};
+use afs_primitives::{utils, xor::XorBus};
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

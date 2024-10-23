@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-afs-stark-backend = { path = "../../stark-backend" }
-afs-compiler = { path = "../../toolchain/compiler", features = ["sdk"] }
-ax-sdk = { path = "../../sdk" }                                # TODO: feature-gate sdk
-afs-derive = { path = "../../derive" }
-stark-vm = { path = "../../vm", features = ["sdk"] }
-ax-ecc-lib = { path = "../ecc" }
-afs-primitives = { path = "../../circuits/primitives" }
+afs-stark-backend = { workspace = true }
+afs-compiler = { workspace = true, features = ["sdk"] }
+ax-sdk = { workspace = true }
+afs-derive = { workspace = true }
+stark-vm = { workspace = true, features = ["sdk"] }
+ax-ecc-lib = { workspace = true }
+afs-primitives = { workspace = true }
 
 p3-air = { workspace = true }
 p3-field = { workspace = true }
@@ -45,7 +45,7 @@ metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 
 [dev-dependencies]
-afs-primitives = { path = "../../circuits/primitives" }
+afs-primitives.workspace = true
 
 [[bin]]
 name = "verify_fibair"
@@ -65,7 +65,7 @@ name = "small_e2e"
 required-features = ["bench-metrics"]
 
 [features]
-default = []
+default = ["parallel", "mimalloc"]
 parallel = ["afs-stark-backend/parallel"]
 static-verifier = [
     "afs-compiler/halo2-compiler",

@@ -55,9 +55,10 @@ p3-symmetric = { workspace = true }
 zkhash = { workspace = true }
 rand_xoshiro = "0.6.0"
 ark-ff = { version = "^0.4.0", default-features = false }
-ax-sdk = { path = "../sdk" }
+ax-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
+lazy_static.workspace = true
 stark-vm = { workspace = true, features = ["sdk"] }
 
 [features]

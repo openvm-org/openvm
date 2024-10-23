@@ -2,7 +2,7 @@ use std::{array, sync::Arc};
 
 use afs_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-    xor::lookup::XorLookupChip,
+    xor::XorLookupChip,
 };
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;

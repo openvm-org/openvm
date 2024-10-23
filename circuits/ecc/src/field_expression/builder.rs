@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ops::Deref, rc::Rc, sync::Arc};
+use std::{cell::RefCell, ops::Deref, rc::Rc};
 
 use afs_primitives::{
     bigint::{
@@ -7,8 +7,8 @@ use afs_primitives::{
         utils::*,
         OverflowInt,
     },
-    sub_chip::{AirConfig, LocalTraceInstructions, SubAir},
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
 };
 use afs_stark_backend::{
     interaction::InteractionBuilder,
@@ -16,9 +16,8 @@ use afs_stark_backend::{
 };
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
-use p3_air::{Air, AirBuilder, BaseAir};
+use p3_air::{AirBuilder, BaseAir};
 use p3_field::{Field, PrimeField64};
-use p3_matrix::Matrix;
 
 use super::{FieldVariable, SymbolicExpr};
 
@@ -52,21 +51,14 @@ pub struct ExprBuilder {
 
     // The equations to compute the newly introduced variables. For trace gen only.
     pub computes: Vec<SymbolicExpr>,
-
-    /// The max bits allowed per limb, determined by the underlying field we use to represent the field element. Typically it is `F::bits() - 2` to allow handling of negative numbers.
-    /// For example BabyBear -> 29.
-    pub(crate) max_limb_bits: usize,
 }
 
 impl ExprBuilder {
-    /// `max_limb_bits` is the max bits allowed per limb, determined by the underlying field we use to represent the field element. Typically it is `F::bits() - 2` to allow handling of negative numbers.
-    /// For example BabyBear -> 29.
     pub fn new(
         prime: BigUint,
         limb_bits: usize,
         num_limbs: usize,
         range_checker_bits: usize,
-        max_limb_bits: usize,
     ) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, prime.clone());
         Self {
@@ -82,7 +74,6 @@ impl ExprBuilder {
             carry_limbs: vec![],
             constraints: vec![],
             computes: vec![],
-            max_limb_bits,
         }
     }
 
@@ -158,20 +149,16 @@ impl<F: Field> BaseAir<F> for FieldExpr {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for FieldExpr {
-    fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let local = main.row_slice(0);
-        let local = local.to_vec();
-        SubAir::eval(self, builder, local, ());
-    }
-}
-
 impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
-    type IoView = Vec<AB::Var>;
-    type AuxView = ();
+    /// The sub-row slice owned by the expression builder.
+    type AirContext<'a> = &'a [AB::Var]
+    where AB: 'a, AB::Var: 'a, AB::Expr: 'a;
 
-    fn eval(&self, builder: &mut AB, io: Vec<AB::Var>, _aux: ()) {
+    fn eval<'a>(&'a self, builder: &'a mut AB, local: &'a [AB::Var])
+    where
+        AB::Var: 'a,
+        AB::Expr: 'a,
+    {
         let FieldExprCols {
             is_valid,
             inputs,
@@ -179,7 +166,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             q_limbs,
             carry_limbs,
             flags,
-        } = self.load_vars(&io);
+        } = self.load_vars(local);
         let inputs = load_overflow::<AB>(inputs, self.limb_bits);
         let vars = load_overflow::<AB>(vars, self.limb_bits);
 
@@ -188,14 +175,16 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         }
         for i in 0..self.constraints.len() {
             let expr = self.constraints[i].evaluate_overflow_expr::<AB>(&inputs, &vars, &flags);
-            self.check_carry_mod_to_zero.constrain_carry_mod_to_zero(
+            self.check_carry_mod_to_zero.eval(
                 builder,
-                expr,
-                CheckCarryModToZeroCols {
-                    carries: carry_limbs[i].clone(),
-                    quotient: q_limbs[i].clone(),
-                },
-                is_valid,
+                (
+                    expr,
+                    CheckCarryModToZeroCols {
+                        carries: carry_limbs[i].clone(),
+                        quotient: q_limbs[i].clone(),
+                    },
+                    is_valid,
+                ),
             )
         }
 
@@ -225,16 +214,15 @@ pub struct FieldExprCols<T> {
     pub flags: Vec<T>,
 }
 
-impl AirConfig for FieldExpr {
-    // No column struct.
-    type Cols<T> = Vec<T>;
-}
+impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
+    type TraceContext<'a> = (&'a VariableRangeCheckerChip, Vec<BigUint>, Vec<bool>);
+    type ColsMut<'a> = &'a mut [F];
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExpr {
-    type LocalInput = (Vec<BigUint>, Arc<VariableRangeCheckerChip>, Vec<bool>);
-
-    fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-        let (inputs, range_checker, flags) = local_input;
+    fn generate_subrow<'a>(
+        &'a self,
+        (range_checker, inputs, flags): (&'a VariableRangeCheckerChip, Vec<BigUint>, Vec<bool>),
+        sub_row: &'a mut [F],
+    ) {
         assert_eq!(inputs.len(), self.num_input);
         // Remove this if this is no longer the case in the future.
         assert_eq!(self.num_variables, self.constraints.len());
@@ -317,15 +305,18 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for FieldExpr {
             .map(|x| vec_isize_to_f::<F>(x.limbs.clone()))
             .collect::<Vec<_>>();
 
-        [
-            vec![F::one()],
-            input_limbs.concat(),
-            vars_limbs.concat(),
-            all_q.concat(),
-            all_carry.concat(),
-            flags.iter().map(|x| F::from_bool(*x)).collect::<Vec<_>>(),
-        ]
-        .concat()
+        // TODO: avoid all these copies and directly allocate
+        sub_row.copy_from_slice(
+            &[
+                vec![F::one()],
+                input_limbs.concat(),
+                vars_limbs.concat(),
+                all_q.concat(),
+                all_carry.concat(),
+                flags.iter().map(|x| F::from_bool(*x)).collect::<Vec<_>>(),
+            ]
+            .concat(),
+        );
     }
 }
 

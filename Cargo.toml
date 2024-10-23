@@ -71,6 +71,7 @@ afs-compiler = { path = "toolchain/compiler", default-features = false }
 stark-vm = { path = "vm", default-features = false }
 afs-primitives = { path = "circuits/primitives", default-features = false }
 ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
+ax-ecc-lib = { path = "lib/ecc", default-features = false }
 afs-derive = { path = "derive", default-features = false }
 ax-sdk = { path = "sdk", default-features = false }
 afs-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }

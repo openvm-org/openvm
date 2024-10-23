@@ -85,7 +85,7 @@ impl Fp2 {
 
 #[cfg(test)]
 mod tests {
-    use afs_primitives::sub_chip::LocalTraceInstructions;
+    use afs_primitives::TraceSubRowGenerator;
     use ax_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
@@ -97,6 +97,7 @@ mod tests {
     use num_bigint_dig::BigUint;
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;
+    use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
 
     use super::{
@@ -155,7 +156,8 @@ mod tests {
         let r_fp2 = fq2_fn(&x_fp2, &y_fp2);
         let inputs = two_fp2_input(&x_fp2, &y_fp2);
 
-        let row = air.generate_trace_row((inputs, range_checker.clone(), vec![]));
+        let mut row = vec![BabyBear::zero(); width];
+        air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
         let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);
         let range_trace = range_checker.generate_trace();
@@ -226,8 +228,8 @@ mod tests {
             fq_to_biguint(&z_fp2.c0),
             fq_to_biguint(&z_fp2.c1),
         ];
-
-        let row = air.generate_trace_row((inputs, range_checker.clone(), vec![]));
+        let mut row = vec![BabyBear::zero(); width];
+        air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
         let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);
         let range_trace = range_checker.generate_trace();

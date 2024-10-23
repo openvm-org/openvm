@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::xor::lookup::XorLookupChip;
+use afs_primitives::xor::XorLookupChip;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{
     config::{

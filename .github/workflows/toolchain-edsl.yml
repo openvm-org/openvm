@@ -1,4 +1,4 @@
-name: STARK Recursion Tests
+name: eDSL Compiler Tests
 
 on:
   push:
@@ -6,11 +6,8 @@ on:
   pull_request:
     branches: ["main"]
     paths:
-      - "stark-backend/**"
-      - "circuits/primitives/**"
       - "vm/**"
       - "toolchain/compiler/**"
-      - "lib/recursion/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -28,15 +25,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
-      - name: Install solc # svm should support arm64 linux
-        run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
-      - name: Run recursion crate tests
-        working-directory: lib/recursion
+      - name: Run compiler tests
+        working-directory: toolchain/compiler
         run: |
-          cargo nextest run --features parallel,static-verifier
+          cargo nextest run --cargo-profile=fast --features parallel

@@ -6,14 +6,13 @@ use color_eyre::eyre::Result;
 use p3_baby_bear::BabyBear;
 use stark_vm::{
     sdk::air_test,
-    system::{
-        program::Program,
-        vm::{config::VmConfig, VirtualMachine},
-    },
+    system::vm::{config::VmConfig, VirtualMachine},
 };
 use test_case::test_case;
 
-use crate::{elf::Elf, rrs::transpile};
+use crate::{elf::Elf, rrs::transpile, AxVmExe};
+
+type F = BabyBear;
 
 #[test]
 fn test_decode_elf() -> Result<()> {
@@ -44,15 +43,14 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    let instructions = transpile::<BabyBear>(&elf.instructions);
+    let exe = AxVmExe::<F>::from_elf(elf);
     setup_tracing();
-    let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
     let config = VmConfig::rv32im();
-    let vm = VirtualMachine::new(config);
+    let vm = VirtualMachine::new(config).with_initial_memory(exe.memory_image);
 
     // TODO: use "execute_and_generate" when it's implemented
 
-    vm.execute(program)?;
+    vm.execute(exe.program)?;
     Ok(())
 }
 
@@ -61,12 +59,11 @@ fn test_rv32i_prove(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    let instructions = transpile::<BabyBear>(&elf.instructions);
-    let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
+    let exe = AxVmExe::from_elf(elf);
     let config = VmConfig::rv32i();
-    let vm = VirtualMachine::new(config);
+    let vm = VirtualMachine::new(config).with_initial_memory(exe.memory_image);
 
-    air_test(vm, program);
+    air_test(vm, exe.program);
     Ok(())
 }
 
@@ -75,12 +72,11 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    let instructions = transpile::<BabyBear>(&elf.instructions);
+    let exe = AxVmExe::<F>::from_elf(elf);
     setup_tracing();
-    let program = Program::from_instructions_and_step(&instructions, 4, elf.pc_start, elf.pc_base);
     let config = VmConfig::rv32im().add_canonical_modulus();
-    let vm = VirtualMachine::new(config);
+    let vm = VirtualMachine::new(config).with_initial_memory(exe.memory_image);
 
-    vm.execute(program)?;
+    vm.execute(exe.program)?;
     Ok(())
 }

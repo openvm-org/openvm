@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -6,7 +8,9 @@ use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleBus, MemoryMerkleCols};
+use crate::system::memory::merkle::{
+    MemoryDimensions, MemoryMerkleBus, MemoryMerkleCols, MemoryMerklePvs,
+};
 
 #[derive(Clone, Debug)]
 pub struct MemoryMerkleAir<const CHUNK: usize> {
@@ -22,7 +26,7 @@ impl<const CHUNK: usize, F: Field> BaseAir<F> for MemoryMerkleAir<CHUNK> {
 }
 impl<const CHUNK: usize, F: Field> BaseAirWithPublicValues<F> for MemoryMerkleAir<CHUNK> {
     fn num_public_values(&self) -> usize {
-        2 * CHUNK
+        MemoryMerklePvs::<F, CHUNK>::width()
     }
 }
 
@@ -102,15 +106,17 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
         );
 
         // constrain public values
+        let &MemoryMerklePvs::<_, CHUNK> {
+            initial_root,
+            final_root,
+        } = builder.public_values().borrow();
         for i in 0..CHUNK {
-            let initial_hash_elem = builder.public_values()[i];
-            let final_hash_elem = builder.public_values()[CHUNK + i];
             builder
                 .when_first_row()
-                .assert_eq(local.parent_hash[i], initial_hash_elem);
+                .assert_eq(local.parent_hash[i], initial_root[i]);
             builder
                 .when_first_row()
-                .assert_eq(next.parent_hash[i], final_hash_elem);
+                .assert_eq(next.parent_hash[i], final_root[i]);
         }
 
         self.eval_interactions(builder, local);

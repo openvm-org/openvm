@@ -1,6 +1,6 @@
 use std::{array, sync::Arc};
 
-use afs_primitives::xor::lookup::XorLookupChip;
+use afs_primitives::xor::XorLookupChip;
 use ax_sdk::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
