@@ -128,106 +128,98 @@ impl Fp12 {
 
     fn mul_c0(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4 + cs5co3)
-        let mut cs0co0 = self.c0.mul(&mut other.c0);
-        let mut cs1co2 = self.c1.mul(&mut other.c2);
-        let mut cs2co1 = self.c2.mul(&mut other.c1);
-        let mut cs3co5 = self.c3.mul(&mut other.c5);
-        let mut cs4co4 = self.c4.mul(&mut other.c4);
-        let mut cs5co3 = self.c5.mul(&mut other.c3);
-        let mut c0_xi0 = cs1co2.add(&mut cs2co1);
-        let mut c0_xi1 = c0_xi0.add(&mut cs3co5);
-        let mut c0_xi2 = c0_xi1.add(&mut cs4co4);
-        let mut c0_xi3 = c0_xi2.add(&mut cs5co3);
-        let mut c0_xi = c0_xi3.const_mul(xi);
+        let mut main_sum = self.c0.mul(&mut other.c0);
+        let mut xi_sum = self
+            .c1
+            .mul(&mut other.c2)
+            .add(&mut self.c2.mul(&mut other.c1))
+            .add(&mut self.c3.mul(&mut other.c5))
+            .add(&mut self.c4.mul(&mut other.c4))
+            .add(&mut self.c5.mul(&mut other.c3));
+        main_sum.add(&mut xi_sum.const_mul(xi))
 
-        cs0co0.add(&mut c0_xi)
+        // let mut cs0co0 = self.c0.mul(&mut other.c0);
+        // let mut cs1co2 = self.c1.mul(&mut other.c2);
+        // let mut cs2co1 = self.c2.mul(&mut other.c1);
+        // let mut cs3co5 = self.c3.mul(&mut other.c5);
+        // let mut cs4co4 = self.c4.mul(&mut other.c4);
+        // let mut cs5co3 = self.c5.mul(&mut other.c3);
+        // let mut c0_xi0 = cs1co2.add(&mut cs2co1);
+        // let mut c0_xi1 = c0_xi0.add(&mut cs3co5);
+        // let mut c0_xi2 = c0_xi1.add(&mut cs4co4);
+        // let mut c0_xi3 = c0_xi2.add(&mut cs5co3);
+        // let mut c0_xi = c0_xi3.const_mul(xi);
+
+        // cs0co0.add(&mut c0_xi)
     }
 
     fn mul_c1(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c1 = cs0co1 + cs1co0 + cs3co3 + xi(cs2co2 + cs4co5 + cs5co4)
-        let mut cs0co1 = self.c0.mul(&mut other.c1);
-        let mut cs1co0 = self.c1.mul(&mut other.c0);
-        let mut cs3co3 = self.c3.mul(&mut other.c3);
-        let mut c10 = cs0co1.add(&mut cs1co0);
-        let mut c11 = c10.add(&mut cs3co3);
-
-        let mut cs2co2 = self.c2.mul(&mut other.c2);
-        let mut cs4co5 = self.c4.mul(&mut other.c5);
-        let mut cs5co4 = self.c5.mul(&mut other.c4);
-        let mut c1_xi0 = cs2co2.add(&mut cs4co5);
-        let mut c1_xi1 = c1_xi0.add(&mut cs5co4);
-        let mut c1_xi = c1_xi1.const_mul(xi);
-
-        c11.add(&mut c1_xi)
+        let mut main_sum = self
+            .c0
+            .mul(&mut other.c1)
+            .add(&mut self.c1.mul(&mut other.c0))
+            .add(&mut self.c3.mul(&mut other.c3));
+        let mut xi_sum = self
+            .c2
+            .mul(&mut other.c2)
+            .add(&mut self.c4.mul(&mut other.c5))
+            .add(&mut self.c5.mul(&mut other.c4));
+        main_sum.add(&mut xi_sum.const_mul(xi))
     }
 
     fn mul_c2(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 +cs4co3 + xi(cs5co5)
-        let mut cs0co2 = self.c0.mul(&mut other.c2);
-        let mut cs1co1 = self.c1.mul(&mut other.c1);
-        let mut cs2co0 = self.c2.mul(&mut other.c0);
-        let mut cs3co4 = self.c3.mul(&mut other.c4);
-        let mut cs4co3 = self.c4.mul(&mut other.c3);
-        let mut c20 = cs0co2.add(&mut cs1co1);
-        let mut c21 = c20.add(&mut cs2co0);
-        let mut c22 = c21.add(&mut cs3co4);
-        let mut c23 = c22.add(&mut cs4co3);
-
-        let mut cs5co5 = self.c5.mul(&mut other.c5);
-        let mut c2_xi = cs5co5.const_mul(xi);
-
-        c23.add(&mut c2_xi)
+        let mut main_sum = self
+            .c0
+            .mul(&mut other.c2)
+            .add(&mut self.c1.mul(&mut other.c1))
+            .add(&mut self.c2.mul(&mut other.c0))
+            .add(&mut self.c3.mul(&mut other.c4))
+            .add(&mut self.c4.mul(&mut other.c3));
+        let mut xi_sum = self.c5.mul(&mut other.c5);
+        main_sum.add(&mut xi_sum.const_mul(xi))
     }
 
     fn mul_c3(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c3 = cs0co3 + cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
-        let mut cs0co3 = self.c0.mul(&mut other.c3);
-        let mut cs3co0 = self.c3.mul(&mut other.c0);
-        let mut c30 = cs0co3.add(&mut cs3co0);
-
-        let mut cs1co5 = self.c1.mul(&mut other.c5);
-        let mut cs2co4 = self.c2.mul(&mut other.c4);
-        let mut cs4co2 = self.c4.mul(&mut other.c2);
-        let mut cs5co1 = self.c5.mul(&mut other.c1);
-        let mut c3_xi0 = cs1co5.add(&mut cs2co4);
-        let mut c3_xi1 = c3_xi0.add(&mut cs4co2);
-        let mut c3_xi2 = c3_xi1.add(&mut cs5co1);
-        let mut c3_xi = c3_xi2.const_mul(xi);
-
-        c30.add(&mut c3_xi)
+        let mut main_sum = self
+            .c0
+            .mul(&mut other.c3)
+            .add(&mut self.c3.mul(&mut other.c0));
+        let mut xi_sum = self
+            .c1
+            .mul(&mut other.c5)
+            .add(&mut self.c2.mul(&mut other.c4))
+            .add(&mut self.c4.mul(&mut other.c2))
+            .add(&mut self.c5.mul(&mut other.c1));
+        main_sum.add(&mut xi_sum.const_mul(xi))
     }
 
     fn mul_c4(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c4 = cs0co4 + cs1co3 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
-        let mut cs0co4 = self.c0.mul(&mut other.c4);
-        let mut cs1co3 = self.c1.mul(&mut other.c3);
-        let mut cs3co1 = self.c3.mul(&mut other.c1);
-        let mut cs4co0 = self.c4.mul(&mut other.c0);
-        let mut c40 = cs0co4.add(&mut cs1co3);
-        let mut c41 = c40.add(&mut cs3co1);
-        let mut c42 = c41.add(&mut cs4co0);
-
-        let mut cs2co5 = self.c2.mul(&mut other.c5);
-        let mut cs5co2 = self.c5.mul(&mut other.c2);
-        let mut c4_xi0 = cs2co5.add(&mut cs5co2);
-        let mut c4_xi = c4_xi0.const_mul(xi);
-
-        c42.add(&mut c4_xi)
+        let mut main_sum = self
+            .c0
+            .mul(&mut other.c4)
+            .add(&mut self.c1.mul(&mut other.c3))
+            .add(&mut self.c3.mul(&mut other.c1))
+            .add(&mut self.c4.mul(&mut other.c0));
+        let mut xi_sum = self
+            .c2
+            .mul(&mut other.c5)
+            .add(&mut self.c5.mul(&mut other.c2));
+        main_sum.add(&mut xi_sum.const_mul(xi))
     }
 
     fn mul_c5(&mut self, other: &mut Fp12) -> Fp2 {
         // c5 = cs0co5 + cs1co4 + cs2co3 + cs3co2 + cs4co1 + cs5co0
-        let mut cs0co5 = self.c0.mul(&mut other.c5);
-        let mut cs1co4 = self.c1.mul(&mut other.c4);
-        let mut cs2co3 = self.c2.mul(&mut other.c3);
-        let mut cs3co2 = self.c3.mul(&mut other.c2);
-        let mut cs4co1 = self.c4.mul(&mut other.c1);
-        let mut cs5co0 = self.c5.mul(&mut other.c0);
-        let mut c50 = cs0co5.add(&mut cs1co4);
-        let mut c51 = c50.add(&mut cs2co3);
-        let mut c52 = c51.add(&mut cs3co2);
-        let mut c53 = c52.add(&mut cs4co1);
-        c53.add(&mut cs5co0)
+        self.c0
+            .mul(&mut other.c5)
+            .add(&mut self.c1.mul(&mut other.c4))
+            .add(&mut self.c2.mul(&mut other.c3))
+            .add(&mut self.c3.mul(&mut other.c2))
+            .add(&mut self.c4.mul(&mut other.c1))
+            .add(&mut self.c5.mul(&mut other.c0))
     }
 }
 
@@ -238,10 +230,7 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
     };
-    use halo2curves_axiom::{
-        bn256::{Fq, Fq12, Fq2},
-        ff::Field,
-    };
+    use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
@@ -353,7 +342,7 @@ mod tests {
     //     run_fp12_test_add(x, y, Fp12::sub, |x, y| x - y, true);
     // }
 
-    /// Must be run with RUST_MIN_STACK=8388608
+    // NOTE[yj]: Must be run with RUST_MIN_STACK=8388608
     #[test]
     fn test_fp12_mul() {
         let x = generate_random_fq12();
