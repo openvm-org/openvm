@@ -11,6 +11,7 @@ pub struct Fp12 {
     pub c3: Fp2,
     pub c4: Fp2,
     pub c5: Fp2,
+    pub xi: Fp2,
 }
 
 impl Fp12 {
@@ -21,6 +22,7 @@ impl Fp12 {
         let c3 = Fp2::new(builder.clone());
         let c4 = Fp2::new(builder.clone());
         let c5 = Fp2::new(builder.clone());
+        let xi = Fp2::new(builder.clone());
         Fp12 {
             c0,
             c1,
@@ -28,16 +30,18 @@ impl Fp12 {
             c3,
             c4,
             c5,
+            xi,
         }
     }
 
-    pub fn save(&mut self) -> [usize; 12] {
+    pub fn save(&mut self) -> [usize; 14] {
         let c0_indices = self.c0.save();
         let c1_indices = self.c1.save();
         let c2_indices = self.c2.save();
         let c3_indices = self.c3.save();
         let c4_indices = self.c4.save();
         let c5_indices = self.c5.save();
+        let xi_indices = self.xi.save();
 
         [
             c0_indices[0],
@@ -52,6 +56,8 @@ impl Fp12 {
             c4_indices[1],
             c5_indices[0],
             c5_indices[1],
+            xi_indices[0],
+            xi_indices[1],
         ]
     }
 
@@ -63,6 +69,7 @@ impl Fp12 {
             c3: self.c3.add(&mut other.c3),
             c4: self.c4.add(&mut other.c4),
             c5: self.c5.add(&mut other.c5),
+            xi: self.xi.clone(),
         }
     }
 
@@ -74,6 +81,7 @@ impl Fp12 {
             c3: self.c3.sub(&mut other.c3),
             c4: self.c4.sub(&mut other.c4),
             c5: self.c5.sub(&mut other.c5),
+            xi: self.xi.clone(),
         }
     }
 
@@ -99,6 +107,7 @@ impl Fp12 {
         c3.save();
         c4.save();
         c5.save();
+        xi.save();
 
         Fp12 {
             c0,
@@ -107,6 +116,7 @@ impl Fp12 {
             c3,
             c4,
             c5,
+            xi: self.xi.clone(),
         }
     }
 
@@ -122,6 +132,7 @@ impl Fp12 {
             c3: self.c3.scalar_mul(fp),
             c4: self.c4.scalar_mul(fp),
             c5: self.c5.scalar_mul(fp),
+            xi: self.xi.clone(),
         }
     }
 
@@ -232,7 +243,7 @@ impl Fp12 {
 
 #[cfg(test)]
 mod tests {
-    use afs_primitives::sub_chip::LocalTraceInstructions;
+    use afs_primitives::TraceSubRowGenerator;
     use ax_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
@@ -243,6 +254,7 @@ mod tests {
     };
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;
+    use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
 
     use super::{
@@ -290,7 +302,8 @@ mod tests {
         inputs.extend(fq12_to_biguint_vec(&y_fq12));
         inputs.extend(fq2_to_biguint_vec(&xi));
 
-        let row = air.generate_trace_row((inputs, range_checker.clone(), vec![]));
+        let mut row = vec![BabyBear::zero(); width];
+        air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
         let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);
         let range_trace = range_checker.generate_trace();

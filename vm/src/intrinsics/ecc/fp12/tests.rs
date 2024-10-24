@@ -30,7 +30,7 @@ fn test_fp12_multiply() {
         // FP12Opcode::default_offset(),
         0x198 + 2,
     );
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 14, 12, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -52,27 +52,31 @@ fn test_fp12_multiply() {
             biguint_to_limbs::<NUM_LIMBS>(y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
         })
         .collect::<Vec<[BabyBear; NUM_LIMBS]>>();
-    // let xi_limbs = xi
-    //     .iter()
-    //     .map(|xi| {
-    //         biguint_to_limbs::<NUM_LIMBS>(xi.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
-    //     })
-    //     .collect::<Vec<[BabyBear; NUM_LIMBS]>>();
+    let xi_limbs = xi
+        .iter()
+        .map(|xi| {
+            biguint_to_limbs::<NUM_LIMBS>(xi.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
+        })
+        .collect::<Vec<[BabyBear; NUM_LIMBS]>>();
 
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
 
-    let res = chip.core.air.expr.execute([x, y, xi].concat(), vec![]);
-    assert_eq!(res.len(), 34);
+    let res = chip
+        .core
+        .air
+        .expr
+        .execute([x, xi.clone(), y, xi].concat(), vec![]);
+    assert_eq!(res.len(), 38);
 
     let ptr_as = 1;
     let addr_ptr1 = 0;
     let addr_ptr2 = 14 * RV32_REGISTER_NUM_LIMBS;
-    let addr_ptr3 = addr_ptr2 + 12 * RV32_REGISTER_NUM_LIMBS;
+    let addr_ptr3 = addr_ptr2 + 14 * RV32_REGISTER_NUM_LIMBS;
 
     let data_as = 2;
     let address1 = 0u32;
     let address2 = 14 * 128u32;
-    let address3 = address2 + 12 * 128u32;
+    let address3 = address2 + 14 * 128u32;
 
     write_ptr_reg(&mut tester, ptr_as, addr_ptr1, address1);
     write_ptr_reg(&mut tester, ptr_as, addr_ptr2, address2);
@@ -84,14 +88,19 @@ fn test_fp12_multiply() {
         tester.write(data_as, address2 as usize + i * NUM_LIMBS, y_limbs[i]);
     }
 
-    // Write xi into address2
-    // for i in 0..2 {
-    //     tester.write(
-    //         data_as,
-    //         address2 as usize + (12 + i) * NUM_LIMBS,
-    //         xi_limbs[i],
-    //     );
-    // }
+    // Tmp: Write xi into address2
+    for i in 0..2 {
+        tester.write(
+            data_as,
+            address1 as usize + (12 + i) * NUM_LIMBS,
+            xi_limbs[i],
+        );
+        tester.write(
+            data_as,
+            address2 as usize + (12 + i) * NUM_LIMBS,
+            xi_limbs[i],
+        );
+    }
 
     let instruction = Instruction::from_isize(
         chip.core.air.offset + FP12Opcode::MUL as usize,

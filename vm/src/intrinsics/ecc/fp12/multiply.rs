@@ -2,8 +2,8 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
-    sub_chip::{LocalTraceInstructions, SubAir},
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::{
@@ -38,7 +38,6 @@ impl Fp12MultiplyCoreAir {
         modulus: BigUint,
         num_limbs: usize,
         limb_bits: usize,
-        max_limb_bits: usize,
         range_bus: VariableRangeCheckerBus,
         offset: usize,
     ) -> Self {
@@ -50,18 +49,12 @@ impl Fp12MultiplyCoreAir {
             range_bus.range_max_bits,
             FIELD_ELEMENT_BITS,
         );
-        let builder = ExprBuilder::new(
-            modulus,
-            limb_bits,
-            num_limbs,
-            range_bus.range_max_bits,
-            max_limb_bits,
-        );
+        let builder = ExprBuilder::new(modulus, limb_bits, num_limbs, range_bus.range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
 
         let mut x = Fp12::new(builder.clone());
         let mut y = Fp12::new(builder.clone());
-        let mut xi = x.xi;
+        let mut xi = x.xi.clone();
         let mut res = x.mul(&mut y, &mut xi);
         res.save();
 
@@ -96,7 +89,7 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         assert_eq!(local.len(), BaseAir::<AB::F>::width(&self.expr));
-        SubAir::eval(&self.expr, builder, local.to_vec(), ());
+        self.expr.eval(builder, local);
 
         let FieldExprCols {
             is_valid,
@@ -105,8 +98,8 @@ where
             flags,
             ..
         } = self.expr.load_vars(local);
-        assert_eq!(inputs.len(), 12 + 12 + 2);
-        assert_eq!(vars.len(), 34);
+        assert_eq!(inputs.len(), 12 + 12 + 2 + 2);
+        assert_eq!(vars.len(), 38);
         assert_eq!(flags.len(), 0);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[vars.len() - 12..]
@@ -144,14 +137,8 @@ impl Fp12MultiplyCoreChip {
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
-        let air = Fp12MultiplyCoreAir::new(
-            modulus,
-            num_limbs,
-            limb_bits,
-            max_limb_bits,
-            range_checker.bus(),
-            offset,
-        );
+        let air =
+            Fp12MultiplyCoreAir::new(modulus, num_limbs, limb_bits, range_checker.bus(), offset);
         Self { air, range_checker }
     }
 }
@@ -214,10 +201,16 @@ where
             .iter()
             .map(|xi| limbs_to_biguint(xi, limb_bits))
             .collect_vec();
-        let input_vec = [x_biguint.clone(), y_biguint.clone(), xi_biguint.clone()].concat();
+        let input_vec = [
+            x_biguint.clone(),
+            xi_biguint.clone(),
+            y_biguint.clone(),
+            xi_biguint.clone(),
+        ]
+        .concat();
 
         let vars = self.air.expr.execute(input_vec, vec![]);
-        assert_eq!(vars.len(), 34);
+        assert_eq!(vars.len(), 38);
         let res_biguint_vec = vars[vars.len() - 12..].to_vec();
         tracing::trace!("FP12MultiplyOpcode | {res_biguint_vec:?} | {x_biguint:?} | {y_biguint:?}");
         let res_limbs = res_biguint_vec
@@ -298,44 +291,39 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let input = (
-            vec![
-                record.x.c0.c0.0,
-                record.x.c0.c1.0,
-                record.x.c1.c0.0,
-                record.x.c1.c1.0,
-                record.x.c2.c0.0,
-                record.x.c2.c1.0,
-                record.x.c3.c0.0,
-                record.x.c3.c1.0,
-                record.x.c4.c0.0,
-                record.x.c4.c1.0,
-                record.x.c5.c0.0,
-                record.x.c5.c1.0,
-                record.y.c0.c0.0,
-                record.y.c0.c1.0,
-                record.y.c1.c0.0,
-                record.y.c1.c1.0,
-                record.y.c2.c0.0,
-                record.y.c2.c1.0,
-                record.y.c3.c0.0,
-                record.y.c3.c1.0,
-                record.y.c4.c0.0,
-                record.y.c4.c1.0,
-                record.y.c5.c0.0,
-                record.y.c5.c1.0,
-                BigUint::from(9u32),
-                BigUint::from(1u32),
-                // record.xi.c0.0,
-                // record.xi.c1.0,
-            ],
-            self.range_checker.clone(),
-            vec![],
-        );
-        let row = LocalTraceInstructions::<F>::generate_trace_row(&self.air.expr, input);
-        for (i, element) in row.iter().enumerate() {
-            row_slice[i] = *element;
-        }
+        let input = vec![
+            record.x.c0.c0.0,
+            record.x.c0.c1.0,
+            record.x.c1.c0.0,
+            record.x.c1.c1.0,
+            record.x.c2.c0.0,
+            record.x.c2.c1.0,
+            record.x.c3.c0.0,
+            record.x.c3.c1.0,
+            record.x.c4.c0.0,
+            record.x.c4.c1.0,
+            record.x.c5.c0.0,
+            record.x.c5.c1.0,
+            record.xi.c0.0.clone(),
+            record.xi.c1.0.clone(),
+            record.y.c0.c0.0,
+            record.y.c0.c1.0,
+            record.y.c1.c0.0,
+            record.y.c1.c1.0,
+            record.y.c2.c0.0,
+            record.y.c2.c1.0,
+            record.y.c3.c0.0,
+            record.y.c3.c1.0,
+            record.y.c4.c0.0,
+            record.y.c4.c1.0,
+            record.y.c5.c0.0,
+            record.y.c5.c1.0,
+            record.xi.c0.0,
+            record.xi.c1.0,
+        ];
+        self.air
+            .expr
+            .generate_subrow((&self.range_checker, input, vec![]), row_slice);
     }
 
     fn air(&self) -> &Self::Air {
