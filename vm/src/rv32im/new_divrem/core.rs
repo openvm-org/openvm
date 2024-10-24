@@ -177,7 +177,6 @@ where
         for i in 0..NUM_LIMBS {
             when_zero_divisor.assert_zero(c[i]);
             when_zero_divisor.assert_eq(q[i], AB::F::from_canonical_u32((1 << LIMB_BITS) - 1));
-            when_zero_divisor.assert_eq(r[i], b[i]);
         }
 
         builder.assert_bool(cols.r_zero);
@@ -443,7 +442,7 @@ where
             q: q.map(F::from_canonical_u32),
             r: r.map(F::from_canonical_u32),
             zero_divisor: F::from_bool(case == 1),
-            r_zero: F::from_bool(r_zero),
+            r_zero: F::from_bool(r_zero && case != 1),
             b_sign: F::from_bool(b_sign),
             c_sign: F::from_bool(c_sign),
             q_sign: F::from_bool(q_sign),

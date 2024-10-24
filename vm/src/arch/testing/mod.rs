@@ -240,9 +240,9 @@ impl VmChipTester {
         self
     }
 
-    pub fn load_and_prank_trace<C: Chip<SC>, F>(mut self, chip: C, modify_trace: F) -> Self
+    pub fn load_and_prank_trace<C: Chip<SC>, P>(mut self, chip: C, modify_trace: P) -> Self
     where
-        F: Fn(&mut DenseMatrix<BabyBear>),
+        P: Fn(&mut DenseMatrix<BabyBear>),
     {
         let mut air_proof_input = chip.generate_air_proof_input();
         let trace = air_proof_input.raw.common_main.as_mut().unwrap();

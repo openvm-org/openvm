@@ -126,7 +126,7 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
     }
 
     // Test special cases in addition to random cases (i.e. zero divisor with b > 0,
-    // zero divisor with b < 0, r = 0, and signed overflow).
+    // zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
     run_rv32_divrem_rand_write_execute(
         opcode,
         &mut tester,
@@ -157,6 +157,14 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
         &mut chip,
         [0, 0, 0, 127],
         [0, 1, 0, 0],
+        &mut rng,
+    );
+    run_rv32_divrem_rand_write_execute(
+        opcode,
+        &mut tester,
+        &mut chip,
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
         &mut rng,
     );
     run_rv32_divrem_rand_write_execute(
@@ -374,6 +382,19 @@ fn rv32_divrem_unsigned_high_mult_negative_test() {
 }
 
 #[test]
+fn rv32_divrem_unsigned_zero_divisor_wrong_r_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [254, 255, 255, 255];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        r: Some([255, 255, 255, 255]),
+        r_prime: Some([255, 255, 255, 255]),
+        diff_val: Some(255),
+        ..Default::default()
+    };
+    run_rv32_divrem_negative_test(false, b, c, &prank_vals, true);
+}
+
+#[test]
 fn rv32_divrem_signed_wrong_q_negative_test() {
     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
@@ -434,6 +455,19 @@ fn rv32_divrem_signed_r_wrong_prime_negative_test() {
         ..Default::default()
     };
     run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
+}
+
+#[test]
+fn rv32_divrem_signed_zero_divisor_wrong_r_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [254, 255, 255, 255];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        r: Some([255, 255, 255, 255]),
+        r_prime: Some([1, 0, 0, 0]),
+        diff_val: Some(1),
+        ..Default::default()
+    };
+    run_rv32_divrem_negative_test(true, b, c, &prank_vals, true);
 }
 
 #[test]
