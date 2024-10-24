@@ -11,7 +11,7 @@ use p3_field::PrimeField32;
 
 use super::adapters::native_vec_heap_adapter::NativeVecHeapAdapterChip;
 use crate::{
-    arch::{ExecutionState, InstructionExecutor, Result, VmChipWrapper},
+    arch::{instructions::EccOpcode, ExecutionState, InstructionExecutor, Result, VmChipWrapper},
     intrinsics::{
         ecc::sw::{ec_add_ne_expr, ec_double_expr},
         field_expression::FieldExpressionCoreChip,
@@ -43,6 +43,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize> KernelEcAddNeChip<F, NUM_LIMBS> {
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
+            vec![EccOpcode::EC_ADD_NE as usize],
             memory_controller.borrow().range_checker.clone(),
             "EcAddNe",
         );
@@ -74,6 +75,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize> KernelEcDoubleChip<F, NUM_LIMBS> {
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
+            vec![EccOpcode::EC_DOUBLE as usize],
             memory_controller.borrow().range_checker.clone(),
             "EcDouble",
         );
