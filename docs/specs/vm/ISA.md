@@ -161,14 +161,9 @@ All load/store instructions always do block accesses of block size `4`, even for
 | STOREH_RV32 | `a,b,c,1,2` | `[rv_ptr(b,c):2]_2 <- [b:2]_1`                                                                                                   |
 | STOREW_RV32 | `a,b,c,1,2` | `[rv_ptr(b,c):4]_2 <- [b:4]_1`                                                                                                   |
 
-#### Branch/Jump
+#### Branch/Jump/Upper Immediate
 
 For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 1`.
-
-For branch instructions, no range checks are done. The instructions assume that operand `i32(c)` is in `[-2^24,2^24)`.
-Assuming the program is valid, the program bus will invalidate any instruction where `from_pc` or `to_pc` is not in `[0, 2^PC_BITS)` where `PC_BITS = 30`. We will only use base field `F` satisfying `2^PC_BITS + 2*2^24 < F::modulus()` so `to_pc = from_pc + c` is only valid if `i32(from_pc) + i32(c)` is in `[0, 2^PC_BITS)`.
-
-For jump instructions, the same considerations above for `pc` apply. However for JALR_RV32 there is a range check to account for 2's complement and sign extensions, detailed below.
 
 | Name       | Operands      | Description                                                                                                                                                                                                                                                                                                                       |
 | ---------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -183,12 +178,15 @@ For jump instructions, the same considerations above for `pc` apply. However for
 | LUI_RV32   | `a,_,c,1,_,1` | `[a:4]_1 = u32(c) << 12`. Here `i32(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                                                   |
 | AUIPC_RV32 | `a,_,c,1,_,_` | `[a:4]_1 = decompose(pc) + (decompose(c) << 12)`. Here `i32(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                           |
 
-For JALR_RV32, there are special considerations. We treat `c` in `[0, 2^16)` as a raw encoding of 16-bits. Within the instruction, the 16-bits are interpreted in 2's complement and sign extended to 32-bits. Then it is added to the register value `i32([b:4]_1)`. In order to cast the resulting `i32` in 2's complement to a field element, we must check it is in `[0, 2^PC_BITS)`. This involves checking the top `32 - PC_BITS` bits are all zeros.
+For branch and JAL_RV32 instructions, the instructions assume that the operand `i32(c)` is in `[-2^24,2^24)`. The assignment `pc += c` is done as field elements.
+In valid programs, the `from_pc` is always in `[0, 2^PC_BITS)`. We will only use base field `F` satisfying `2^PC_BITS + 2*2^24 < F::modulus()` so `to_pc = from_pc + c` is only valid if `i32(from_pc) + i32(c)` is in `[0, 2^PC_BITS)`.
+
+For JALR_RV32, we treat `c` in `[0, 2^16)` as a raw encoding of 16-bits. Within the instruction, the 16-bits are interpreted in 2's complement and sign extended to 32-bits. Then it is added to the register value `i32([b:4]_1)`, where 32-bit overflow is ignored. The instruction is only valid if the resulting `i32` is in range `[0, 2^PC_BITS)`. The result is then cast to `u32` and then to `F` and assigned to `pc`.
 
 For LUI_RV32 and AUIPC_RV32, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits. The instruction does not need to interpret whether the register is signed or unsigned.
 For AUIPC_RV32, the addition is treated as unchecked `u32` addition since that is the same as `i32` addition at the bit level.
 
-The `f` operand in JAL_RV32, JALR_RV32 is necessary for transpiler compatibility with RISC-V's handling of `x0` register. For LUI_RV32 we set `f = 1` because the chip is shared with JAL_RV32. Note that AUIPC_RV32 does not have any condition for the register write.
+Note that AUIPC_RV32 does not have any condition for the register write.
 
 #### Multiplication Extension
 
