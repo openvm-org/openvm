@@ -381,3 +381,12 @@ impl Div<&FieldVariable> for &FieldVariable {
         FieldVariable::div(self, rhs)
     }
 }
+
+#[derive(Clone)]
+pub struct FpConst(pub usize);
+
+impl FieldVariable {
+    pub fn const_mul(&mut self, c: &FpConst) -> FieldVariable {
+        self.int_mul(c.0 as isize)
+    }
+}

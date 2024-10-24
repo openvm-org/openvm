@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::field_expression::{ExprBuilder, FieldVariable};
+use crate::field_expression::{ExprBuilder, FieldVariable, FpConst};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
 pub struct Fp2 {
@@ -80,6 +80,19 @@ impl Fp2 {
             c0: self.c0.mul(fp),
             c1: self.c1.mul(fp),
         }
+    }
+}
+
+pub struct Fp2Const {
+    pub c0: FpConst,
+    pub c1: FpConst,
+}
+
+impl Fp2 {
+    pub fn const_mul(&mut self, other: &mut Fp2Const) -> Fp2 {
+        let c0 = self.c0.const_mul(&other.c0) - self.c1.const_mul(&other.c1);
+        let c1 = self.c0.const_mul(&other.c1) + self.c1.const_mul(&other.c0);
+        Fp2 { c0, c1 }
     }
 }
 
