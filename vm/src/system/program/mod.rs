@@ -216,7 +216,7 @@ pub struct Program<F> {
     pub pc_base: u32,
 }
 
-const MAX_ALLOWED_PC: u32 = 1 << PC_BITS;
+const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
 
 impl<F> Program<F> {
     pub fn from_instructions_and_step(
@@ -230,7 +230,7 @@ impl<F> Program<F> {
     {
         assert!(
             instructions.is_empty()
-                || pc_base + (instructions.len() as u32 - 1) * step < MAX_ALLOWED_PC
+                || pc_base + (instructions.len() as u32 - 1) * step <= MAX_ALLOWED_PC
         );
         Self {
             instructions_and_debug_infos: instructions
@@ -257,7 +257,7 @@ impl<F> Program<F> {
     where
         F: Clone,
     {
-        assert!(instructions.is_empty() || instructions.len() as u32 - 1 < MAX_ALLOWED_PC);
+        assert!(instructions.is_empty() || instructions.len() as u32 - 1 <= MAX_ALLOWED_PC);
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
