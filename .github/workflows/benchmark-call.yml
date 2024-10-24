@@ -204,6 +204,12 @@ jobs:
         with:
           ref: gh-pages
 
+      - name: set up git
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
       - name: Update github pages with new bench results
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
