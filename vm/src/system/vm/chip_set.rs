@@ -84,15 +84,13 @@ use crate::{
         rv32_jalr::{Rv32JalrChip, Rv32JalrCoreChip},
     },
     system::{
+        connector::VmConnectorChip,
         memory::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
             MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
         },
         program::{ProgramBus, ProgramChip},
-        vm::{
-            config::{PersistenceType, VmConfig},
-            connector::VmConnectorChip,
-        },
+        vm::config::{PersistenceType, VmConfig},
     },
 };
 
