@@ -31,8 +31,6 @@ pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum CoreOpcode {
-    // Dummy opcode to represent padding, to be removed
-    DUMMY,
     FAIL,
     PRINTF,
 

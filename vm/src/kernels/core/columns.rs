@@ -10,15 +10,12 @@ use crate::arch::instructions::CoreOpcode;
 pub struct CoreIoCols<T> {
     pub timestamp: T,
     pub pc: T,
-
     pub opcode: T,
     pub a: T,
     pub b: T,
     pub c: T,
     pub d: T,
     pub e: T,
-    pub f: T,
-    pub g: T,
 }
 
 impl<T: Clone> CoreIoCols<T> {
@@ -32,8 +29,6 @@ impl<T: Clone> CoreIoCols<T> {
             c: slc[5].clone(),
             d: slc[6].clone(),
             e: slc[7].clone(),
-            f: slc[8].clone(),
-            g: slc[9].clone(),
         }
     }
 
@@ -47,13 +42,11 @@ impl<T: Clone> CoreIoCols<T> {
             self.c.clone(),
             self.d.clone(),
             self.e.clone(),
-            self.f.clone(),
-            self.g.clone(),
         ]
     }
 
     pub fn get_width() -> usize {
-        10
+        8
     }
 }
 
@@ -62,22 +55,20 @@ impl<T: Field> CoreIoCols<T> {
         Self {
             timestamp: T::default(),
             pc: T::default(),
-            opcode: T::from_canonical_usize(CoreOpcode::DUMMY as usize),
+            opcode: T::default(),
             a: T::default(),
             b: T::default(),
             c: T::default(),
             d: T::default(),
             e: T::default(),
-            f: T::default(),
-            g: T::default(),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoreAuxCols<T> {
+    pub is_valid: T,
     pub operation_flags: BTreeMap<CoreOpcode, T>,
-    pub next_pc: T,
 }
 
 impl<T: Clone> CoreAuxCols<T> {
@@ -90,8 +81,8 @@ impl<T: Clone> CoreAuxCols<T> {
             operation_flags.insert(opcode, operation_flag);
         }
         Self {
+            is_valid: slc[end].clone(),
             operation_flags,
-            next_pc: slc[end].clone(),
         }
     }
 
@@ -100,7 +91,7 @@ impl<T: Clone> CoreAuxCols<T> {
         for opcode in CoreOpcode::iter() {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
-        flattened.push(self.next_pc.clone());
+        flattened.push(self.is_valid.clone());
         flattened
     }
 
@@ -113,12 +104,12 @@ impl<F: PrimeField32> CoreAuxCols<F> {
     pub fn blank_row() -> Self {
         let mut operation_flags = BTreeMap::new();
         for opcode in CoreOpcode::iter() {
-            operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::DUMMY));
+            operation_flags.insert(opcode, F::zero());
         }
 
         Self {
+            is_valid: F::zero(),
             operation_flags,
-            next_pc: F::default(),
         }
     }
 }
