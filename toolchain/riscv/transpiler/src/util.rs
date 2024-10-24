@@ -173,9 +173,10 @@ pub fn nop<F: PrimeField32>() -> Instruction<F> {
     }
 }
 
-pub fn terminate<F: PrimeField32>() -> Instruction<F> {
+pub fn terminate<F: PrimeField32>(code: u8) -> Instruction<F> {
     Instruction {
         opcode: TerminateOpcode::TERMINATE.with_default_offset(),
+        c: F::from_canonical_u8(code),
         ..Default::default()
     }
 }

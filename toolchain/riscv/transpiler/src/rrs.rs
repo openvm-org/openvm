@@ -250,7 +250,10 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
     match opcode {
         0x0b => {
             match funct3 {
-                0b000 => Some(terminate()),
+                0b000 => {
+                    let funct7 = (instruction_u32 >> 25) & 0x7f;
+                    Some(terminate(funct7 as u8))
+                }
                 0b001 => {
                     // keccak or poseidon
                     None
@@ -318,7 +321,7 @@ pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instru
         // TODO: we probably want to forbid such instructions, but for now we just skip them
         if *instruction_u32 == 115 {
             eprintln!("trying to transpile ecall ({:x})", instruction_u32);
-            instructions.push(terminate());
+            instructions.push(terminate(1));
             continue;
         }
         let instruction = process_instruction(&mut transpiler, *instruction_u32)
