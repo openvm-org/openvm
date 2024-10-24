@@ -6,10 +6,7 @@ use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
 use crate::{
-    arch::{
-        instructions::CoreOpcode::{self, *},
-        ExecutionBridge, ExecutionBus,
-    },
+    arch::{ExecutionBridge, ExecutionBus},
     system::{memory::MemoryControllerRef, program::ProgramBus, vm::Streams},
 };
 // TODO[zach]: Restore tests once we have control flow chip.
@@ -30,16 +27,6 @@ pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const BYTE_XOR_BUS: XorBus = XorBus(8);
 pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
 
-fn timestamp_delta(opcode: CoreOpcode) -> u32 {
-    match opcode {
-        FAIL => 0,
-        PRINTF => 1,
-        HINT_INPUT | HINT_BITS | HINT_BYTES => 0,
-        CT_START | CT_END => 0,
-    }
-}
-
-/// Chip for the Core. Carries all state and owns execution.
 #[derive(Debug)]
 pub struct CoreChip<F: PrimeField32> {
     pub air: CoreAir,

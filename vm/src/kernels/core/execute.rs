@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 
-use super::{timestamp_delta, CoreChip};
+use super::CoreChip;
 use crate::{
     arch::{
         instructions::{
@@ -22,7 +22,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
-        let ExecutionState { pc, mut timestamp } = from_state;
+        let ExecutionState { pc, timestamp } = from_state;
 
         let local_opcode_index = instruction.opcode - self.offset;
         let Instruction { a, b, c, d, e, .. } = instruction;
@@ -38,21 +38,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             e,
         };
 
-        macro_rules! read {
-            ($addr_space: expr, $pointer: expr) => {{
-                self.memory_controller
-                    .borrow_mut()
-                    .read_cell($addr_space, $pointer)
-                    .data[0]
-            }};
-        }
-
         let mut streams = self.streams.lock();
 
         let local_opcode_index = CoreOpcode::from_usize(local_opcode_index);
         match local_opcode_index {
             PRINTF => {
-                let value = read!(d, a);
+                let value = self.memory_controller.borrow().unsafe_read_cell(d, a);
                 println!("{}", value);
             }
             HINT_INPUT => {
@@ -100,7 +91,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             }
             _ => unreachable!(),
         };
-        timestamp += timestamp_delta(local_opcode_index);
 
         // TODO[zach]: Only collect a record of { from_state, instruction, read_records, write_records }
         // and move this logic into generate_trace().
@@ -122,7 +112,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             self.rows.push(cols.flatten());
         }
 
-        Ok(ExecutionState::new(pc + 1, timestamp))
+        self.memory_controller.borrow_mut().increment_timestamp();
+        Ok(ExecutionState::new(
+            pc + 1,
+            self.memory_controller.borrow().timestamp(),
+        ))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

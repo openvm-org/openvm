@@ -166,6 +166,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     instruction,
                     ExecutionState::new(pc, timestamp),
                 )?;
+                assert!(next_state.timestamp > timestamp);
                 if collect_metrics {
                     opcode_name = Some(executor.get_opcode_name(opcode));
                 }
