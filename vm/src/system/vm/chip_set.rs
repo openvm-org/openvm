@@ -8,7 +8,6 @@ use std::{
 };
 
 use afs_primitives::{
-    bigint::utils::secp256k1_coord_prime,
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::XorLookupChip,
@@ -33,8 +32,6 @@ use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
     common::nop::NopChip,
     intrinsics::{
-        ecc::sw::{ec_add_ne_expr, ec_double_expr},
-        field_expression::FieldExpressionCoreChip,
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -613,25 +610,15 @@ impl VmConfig {
                 }
                 // TODO: make these customizable opcode classes
                 ExecutorName::Secp256k1AddUnequal => {
-                    let expr = ec_add_ne_expr(
-                        secp256k1_coord_prime(),
-                        32,
-                        8,
-                        memory_controller.borrow().range_checker.bus(),
-                    );
                     let chip = Rc::new(RefCell::new(KernelEcAddNeChip::new(
                         NativeVecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        FieldExpressionCoreChip::new(
-                            expr,
-                            offset,
-                            memory_controller.borrow().range_checker.clone(),
-                            "EcAddNe",
-                        ),
                         memory_controller.clone(),
+                        8,
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -639,25 +626,15 @@ impl VmConfig {
                     chips.push(AxVmChip::Secp256k1AddUnequal(chip));
                 }
                 ExecutorName::Secp256k1Double => {
-                    let expr = ec_double_expr(
-                        secp256k1_coord_prime(),
-                        32,
-                        8,
-                        memory_controller.borrow().range_checker.bus(),
-                    );
                     let chip = Rc::new(RefCell::new(KernelEcDoubleChip::new(
                         NativeVecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        FieldExpressionCoreChip::new(
-                            expr,
-                            offset,
-                            memory_controller.borrow().range_checker.clone(),
-                            "EcDouble",
-                        ),
                         memory_controller.clone(),
+                        8,
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
