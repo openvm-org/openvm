@@ -254,20 +254,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     }
 
     fn current_trace_cells(&self) -> BTreeMap<String, usize> {
-        zip_eq(
-            self.chip_set.memory_controller.borrow().air_names(),
-            self.chip_set
-                .memory_controller
-                .borrow()
-                .current_trace_cells(),
-        )
-        .chain(
-            self.chip_set
-                .chips
-                .iter()
-                .map(|chip| (chip.air_name(), chip.current_trace_cells())),
-        )
-        .collect()
+        self.chip_set.current_trace_cells()
     }
 
     pub(crate) fn update_chip_metrics(&mut self) {

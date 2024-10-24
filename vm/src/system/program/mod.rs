@@ -3,6 +3,7 @@ use std::{collections::HashMap, error::Error, fmt::Display, sync::Arc};
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     prover::{helper::AirProofInputTestHelper, types::AirProofInput},
+    ChipUsageGetter,
 };
 use axvm_instructions::{TerminateOpcode, UsizeOpcode};
 use backtrace::Backtrace;
@@ -386,5 +387,19 @@ where
         let cached_trace = program_chip.generate_cached_trace();
         let common_trace = program_chip.generate_trace();
         AirProofInput::cached_traces_no_pis(Arc::new(air), vec![cached_trace], common_trace)
+    }
+}
+
+impl<F: PrimeField64> ChipUsageGetter for ProgramChip<F> {
+    fn air_name(&self) -> String {
+        "ProgramChip".to_string()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.true_program_length
+    }
+
+    fn trace_width(&self) -> usize {
+        1
     }
 }

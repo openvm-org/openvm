@@ -18,9 +18,10 @@ use afs_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::{AirProofInput, ProofInput},
     rap::AnyRap,
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use axvm_instructions::*;
+use itertools::zip_eq;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
@@ -118,6 +119,18 @@ pub struct VmChipSet<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> VmChipSet<F> {
+    pub(crate) fn current_trace_cells(&self) -> BTreeMap<String, usize> {
+        iter::once(get_name_and_cells(&self.program_chip))
+            .chain([get_name_and_cells(&self.connector_chip)])
+            .chain(self.public_values_chip.as_ref().map(get_name_and_cells))
+            .chain(zip_eq(
+                self.memory_controller.borrow().air_names(),
+                self.memory_controller.borrow().current_trace_cells(),
+            ))
+            .chain(self.chips.iter().map(get_name_and_cells))
+            .chain([get_name_and_cells(&self.range_checker_chip)])
+            .collect()
+    }
     pub(crate) fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -1125,4 +1138,8 @@ impl<SC: StarkGenericConfig> ChipSetProofInputBuilder<SC> {
             per_air: self.proof_input_per_air,
         }
     }
+}
+
+fn get_name_and_cells(chip: &impl ChipUsageGetter) -> (String, usize) {
+    (chip.air_name(), chip.current_trace_cells())
 }
