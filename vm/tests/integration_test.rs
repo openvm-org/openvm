@@ -29,12 +29,12 @@ use stark_vm::{
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     sdk::air_test,
     system::{
+        connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{merkle::MemoryMerklePvs, Equipartition},
         program::{Instruction, Program},
         vm::{
             chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID},
             config::{MemoryConfig, PersistenceType, VmConfig},
-            connector::VmConnectorPvs,
             ExitCode, SingleSegmentVM, VirtualMachine,
         },
     },
@@ -432,18 +432,21 @@ fn aggregate_segment_proofs<SC: StarkGenericConfig>(
                 );
                 prev_final_pc = Some(pvs.final_pc);
 
-                let expected_exit_code = if i == proofs.len() - 1 {
-                    ExitCode::Success as i32
-                } else {
-                    ExitCode::Suspended as i32
-                };
-                let expected_exit_code_f = if expected_exit_code < 0 {
-                    -Val::<SC>::from_canonical_u32(-expected_exit_code as u32)
-                } else {
-                    Val::<SC>::from_canonical_u32(expected_exit_code as u32)
-                };
+                let expected_is_terminate = i == proofs.len() - 1;
+                assert_eq!(
+                    pvs.is_terminate,
+                    Val::<SC>::from_bool(expected_is_terminate)
+                );
 
-                assert_eq!(pvs.exit_code, expected_exit_code_f);
+                let expected_exit_code = if expected_is_terminate {
+                    ExitCode::Success as u32
+                } else {
+                    DEFAULT_SUSPEND_EXIT_CODE
+                };
+                assert_eq!(
+                    pvs.exit_code,
+                    Val::<SC>::from_canonical_u32(expected_exit_code)
+                );
             } else if air_proof_data.air_id == MERKLE_AIR_ID {
                 let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 

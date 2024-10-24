@@ -21,7 +21,6 @@ use crate::{
 
 pub mod chip_set;
 pub mod config;
-pub mod connector;
 pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
@@ -107,7 +106,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 pc,
                 segment.chip_set.connector_chip.boundary_states[1]
                     .unwrap()
-                    .pc as u32
+                    .pc
             );
 
             let config = mem::take(&mut segment.config);
