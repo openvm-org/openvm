@@ -47,7 +47,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e'))) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
-      aws_instance_type: r7g.16xlarge
+      instance_type: 64cpu-linux-arm64
       benchmark_name: tiny_e2e
     secrets: inherit
 
@@ -61,7 +61,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e'))) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
-      aws_instance_type: r7g.16xlarge
+      instance_type: 64cpu-linux-arm64
       benchmark_name: alu256_e2e
     secrets: inherit
 
@@ -75,6 +75,6 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e'))) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
-      aws_instance_type: r7g.16xlarge
+      instance_type: 64cpu-linux-arm64
       benchmark_name: small_e2e
     secrets: inherit
