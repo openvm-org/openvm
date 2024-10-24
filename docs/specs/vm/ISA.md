@@ -145,21 +145,21 @@ In all ALU instructions, the operand `d` is fixed to be `1`. The operand `e` mus
 #### Load/Store
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1` and `e = 2`.
-We will use shorthand `rv_ptr(b, c) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as `i32`. This means we interpret `c` as the 2's complement encoding of a 16-bit integer, sign extend it to 32-bits, and then perform signed 32-bit addition with the value of the register `[b:4]_1`.
+We will use shorthand `rv{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as `i32`. This means we interpret `c` as the 2's complement encoding of a 16-bit integer, sign extend it to 32-bits, and then perform signed 32-bit addition with the value of the register `[b:4]_1`.
 Memory access to `ptr: i32` is only valid if `0 <= ptr < 2^addr_max_bits`, in which case it is an access to `F::from_canonical_u32(ptr as u32)`.
 
 All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32, STOREB_RV32.
 
-| Name        | Operands    | Description                                                                                                                      |
-| ----------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| LOADB_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv_ptr(b,c):1]_2)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
-| LOADH_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv_ptr(b,c):2]_2)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
-| LOADW_RV32  | `a,b,c,1,2` | `[a:4]_1 = [rv_ptr(b,c):4]_2`                                                                                                    |
-| LOADBU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([rv_ptr(b,c):1]_2)` Must zero-extend the number read from memory.                                         |
-| LOADHU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([rv_ptr(b,c):2]_2)` Must zero-extend the number read from memory.                                         |
-| STOREB_RV32 | `a,b,c,1,2` | `[rv_ptr(b,c):1]_2 <- [b:1]_1`                                                                                                   |
-| STOREH_RV32 | `a,b,c,1,2` | `[rv_ptr(b,c):2]_2 <- [b:2]_1`                                                                                                   |
-| STOREW_RV32 | `a,b,c,1,2` | `[rv_ptr(b,c):4]_2 <- [b:4]_1`                                                                                                   |
+| Name        | Operands    | Description                                                                                                                   |
+| ----------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| LOADB_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv{c}(b):1]_2)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
+| LOADH_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv{c}(b):2]_2)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
+| LOADW_RV32  | `a,b,c,1,2` | `[a:4]_1 = [rv{c}(b):4]_2`                                                                                                    |
+| LOADBU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([rv{c}(b):1]_2)` Must zero-extend the number read from memory.                                         |
+| LOADHU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([rv{c}(b):2]_2)` Must zero-extend the number read from memory.                                         |
+| STOREB_RV32 | `a,b,c,1,2` | `[rv{c}(b):1]_2 <- [b:1]_1`                                                                                                   |
+| STOREH_RV32 | `a,b,c,1,2` | `[rv{c}(b):2]_2 <- [b:2]_1`                                                                                                   |
+| STOREW_RV32 | `a,b,c,1,2` | `[rv{c}(b):4]_2 <- [b:4]_1`                                                                                                   |
 
 #### Branch/Jump/Upper Immediate
 
@@ -217,13 +217,19 @@ RV32 intrinsics are custom axVM opcodes that are meant to be transpiled from cus
 The instruction definitions are custom, but they are still meant to be compatible with the RV32 architecture --
 in particular the instructions read values from RV32 registers.
 
-| Name              | Operands    | Description                                                                          |
-| ----------------- | ----------- | ------------------------------------------------------------------------------------ |
-| HINTSTORE_RV32<W> | `a,b,c,d,e` | `[rv_ptr(a)+b:W]_e = next W cells from hint stream` same range checks as STOREW_RV32 |
+We use the same notation for `rv{c}(b)` as in `LOADW_RV32` and `STOREW_RV32`.
+
+| Name           | Operands    | Description                                                                       |
+| -------------- | ----------- | --------------------------------------------------------------------------------- |
+| HINTSTORE_RV32 | `_,b,c,_,2` | `[rv{c}(b):4]_2 = next 4 bytes from hint stream`. Only valid if bytes are stored. |
+
+#### Hashes
+
+#### U256 ALU
+
+#### U256 Multiplication
 
 ### Native Kernel Instructions
-
-This instruction set is always enabled.
 
 | Mnemonic            | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                           |
 | ------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
