@@ -1,11 +1,10 @@
 use std::{iter, sync::Arc};
 
-use afs_stark_backend::prover::{helper::AirProofInputTestHelper, types::AirProofInput};
+use afs_stark_backend::prover::types::AirProofInput;
 use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
 };
-use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -28,9 +27,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         execution_frequencies[pc as usize] += 1;
         chip.get_instruction(pc).unwrap();
     }
-    let air = chip.air.clone();
-    let cached_trace = chip.generate_cached_trace();
-    let main_trace = chip.generate_trace();
+    let program_proof_input = chip.generate_air_proof_input(None);
 
     let counter_air = DummyInteractionAir::new(9, true, READ_INSTRUCTION_BUS);
     let mut program_cells = vec![];
@@ -50,17 +47,17 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     }
 
     // Pad program cells with zeroes to make height a power of two.
-    let width = BaseAir::<BabyBear>::width(&air);
+    let width = 10;
     let desired_height = instructions.len().next_power_of_two();
     let cells_to_add = (desired_height - instructions.len()) * width;
     program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
 
     let counter_trace = RowMajorMatrix::new(program_cells, 10);
-    println!("trace height = {}", main_trace.height());
+    println!("trace height = {}", instructions.len());
     println!("counter trace height = {}", counter_trace.height());
 
     BabyBearPoseidon2Engine::run_test_fast(vec![
-        AirProofInput::cached_traces_no_pis(Arc::new(air), vec![cached_trace], main_trace),
+        program_proof_input,
         AirProofInput::simple_no_pis(Arc::new(counter_air), counter_trace),
     ])
     .expect("Verification failed");
@@ -148,9 +145,7 @@ fn test_program_negative() {
     for pc in 0..instructions.len() {
         chip.get_instruction(pc as u32).unwrap();
     }
-    let air = chip.air.clone();
-    let cached_trace = chip.generate_cached_trace();
-    let common_trace = chip.generate_trace();
+    let program_proof_input = chip.generate_air_proof_input(None);
 
     let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
@@ -170,7 +165,7 @@ fn test_program_negative() {
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
     BabyBearPoseidon2Engine::run_test_fast(vec![
-        AirProofInput::cached_traces_no_pis(Arc::new(air), vec![cached_trace], common_trace),
+        program_proof_input,
         AirProofInput::simple_no_pis(Arc::new(counter_air), counter_trace),
     ])
     .expect("Verification failed");

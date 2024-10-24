@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, sync::Arc};
 
 use afs_stark_backend::{
     config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
@@ -196,13 +196,14 @@ fn test_vm_public_values() {
         ];
 
         let program = Program::from_instructions(&instructions);
+        let committed_program = Arc::new(program.commit(engine.config.pcs()));
         let vm = SingleSegmentVM::new(vm_config);
         let pvs = vm.execute(program.clone(), vec![]).unwrap();
         assert_eq!(
             pvs,
             vec![None, None, Some(BabyBear::from_canonical_u32(12))]
         );
-        let proof_input = vm.execute_and_generate(program, vec![]).unwrap();
+        let proof_input = vm.execute_and_generate(committed_program, vec![]).unwrap();
         engine
             .prove_then_verify(&pk, proof_input)
             .expect("Verification failed");

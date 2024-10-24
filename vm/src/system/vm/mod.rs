@@ -14,7 +14,7 @@ use crate::{
     intrinsics::hashes::poseidon2::CHUNK,
     system::{
         memory::Equipartition,
-        program::{ExecutionError, Program},
+        program::{trace::CommittedProgram, ExecutionError, Program},
         vm::config::{PersistenceType, VmConfig},
     },
 };
@@ -147,7 +147,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
         Ok(VirtualMachineResult {
             per_segment: segments
                 .into_iter()
-                .map(ExecutionSegment::generate_proof_input)
+                .map(|seg| seg.generate_proof_input(None))
                 .collect(),
         })
     }
@@ -191,14 +191,14 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        program: Program<F>,
+        commited_program: Arc<CommittedProgram<SC>>,
         input: Vec<Vec<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segment = self.execute_impl(program, input.into())?;
-        Ok(segment.generate_proof_input())
+        let segment = self.execute_impl(commited_program.program.clone(), input.into())?;
+        Ok(segment.generate_proof_input(Some(commited_program.committed_trace_data.clone())))
     }
 
     fn execute_impl(
