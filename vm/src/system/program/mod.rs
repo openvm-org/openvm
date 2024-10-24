@@ -1,10 +1,6 @@
-use std::{collections::HashMap, error::Error, fmt::Display, sync::Arc};
+use std::{collections::HashMap, error::Error, fmt::Display};
 
-use afs_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    prover::{helper::AirProofInputTestHelper, types::AirProofInput},
-    ChipUsageGetter,
-};
+use afs_stark_backend::ChipUsageGetter;
 use axvm_instructions::{TerminateOpcode, UsizeOpcode};
 use backtrace::Backtrace;
 use itertools::Itertools;
@@ -17,7 +13,7 @@ pub mod tests;
 
 mod air;
 mod bus;
-mod trace;
+pub mod trace;
 pub mod util;
 
 pub use air::*;
@@ -384,18 +380,6 @@ impl<F: PrimeField64> ProgramChip<F> {
         let pc_index = self.get_pc_index(pc)?;
         self.execution_frequencies[pc_index] += 1;
         Ok(self.program.instructions_and_debug_infos[&pc].clone())
-    }
-}
-
-impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirProofInput<SC>
-where
-    Val<SC>: PrimeField64,
-{
-    fn from(program_chip: ProgramChip<Val<SC>>) -> Self {
-        let air = program_chip.air.clone();
-        let cached_trace = program_chip.generate_cached_trace();
-        let common_trace = program_chip.generate_trace();
-        AirProofInput::cached_traces_no_pis(Arc::new(air), vec![cached_trace], common_trace)
     }
 }
 

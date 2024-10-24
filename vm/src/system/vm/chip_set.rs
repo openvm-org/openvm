@@ -16,7 +16,7 @@ use afs_primitives::{
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    prover::types::{AirProofInput, ProofInput},
+    prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
@@ -149,7 +149,10 @@ impl<F: PrimeField32> VmChipSet<F> {
             .collect()
     }
 
-    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(self) -> ProofInput<SC>
+    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
+        self,
+        cached_program: Option<CommittedTraceData<SC>>,
+    ) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
@@ -161,7 +164,7 @@ impl<F: PrimeField32> VmChipSet<F> {
         let mut pi_builder = ChipSetProofInputBuilder::new();
         // System: Program Chip
         debug_assert_eq!(pi_builder.curr_air_id, PROGRAM_AIR_ID);
-        pi_builder.add_air_proof_input(self.program_chip.into());
+        pi_builder.add_air_proof_input(self.program_chip.generate_air_proof_input(cached_program));
         // System: Connector Chip
         debug_assert_eq!(pi_builder.curr_air_id, CONNECTOR_AIR_ID);
         pi_builder.add_air_proof_input(self.connector_chip.generate_air_proof_input());
