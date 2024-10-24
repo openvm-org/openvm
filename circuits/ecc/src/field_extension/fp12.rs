@@ -138,7 +138,7 @@ impl Fp12 {
         let mut c0_xi1 = c0_xi0.add(&mut cs3co5);
         let mut c0_xi2 = c0_xi1.add(&mut cs4co4);
         let mut c0_xi3 = c0_xi2.add(&mut cs5co3);
-        let mut c0_xi = const_mul(&mut c0_xi3, xi);
+        let mut c0_xi = c0_xi3.const_mul(xi);
 
         cs0co0.add(&mut c0_xi)
     }
@@ -156,7 +156,7 @@ impl Fp12 {
         let mut cs5co4 = self.c5.mul(&mut other.c4);
         let mut c1_xi0 = cs2co2.add(&mut cs4co5);
         let mut c1_xi1 = c1_xi0.add(&mut cs5co4);
-        let mut c1_xi = const_mul(&mut c1_xi1, xi);
+        let mut c1_xi = c1_xi1.const_mul(xi);
 
         c11.add(&mut c1_xi)
     }
@@ -174,7 +174,7 @@ impl Fp12 {
         let mut c23 = c22.add(&mut cs4co3);
 
         let mut cs5co5 = self.c5.mul(&mut other.c5);
-        let mut c2_xi = const_mul(&mut cs5co5, xi);
+        let mut c2_xi = cs5co5.const_mul(xi);
 
         c23.add(&mut c2_xi)
     }
@@ -192,7 +192,7 @@ impl Fp12 {
         let mut c3_xi0 = cs1co5.add(&mut cs2co4);
         let mut c3_xi1 = c3_xi0.add(&mut cs4co2);
         let mut c3_xi2 = c3_xi1.add(&mut cs5co1);
-        let mut c3_xi = const_mul(&mut c3_xi2, xi);
+        let mut c3_xi = c3_xi2.const_mul(xi);
 
         c30.add(&mut c3_xi)
     }
@@ -210,7 +210,7 @@ impl Fp12 {
         let mut cs2co5 = self.c2.mul(&mut other.c5);
         let mut cs5co2 = self.c5.mul(&mut other.c2);
         let mut c4_xi0 = cs2co5.add(&mut cs5co2);
-        let mut c4_xi = const_mul(&mut c4_xi0, xi);
+        let mut c4_xi = c4_xi0.const_mul(xi);
 
         c42.add(&mut c4_xi)
     }
@@ -229,12 +229,6 @@ impl Fp12 {
         let mut c53 = c52.add(&mut cs4co1);
         c53.add(&mut cs5co0)
     }
-}
-
-fn const_mul(x: &mut Fp2, c: [isize; 2]) -> Fp2 {
-    let c0 = x.c0.int_mul(c[0]) - x.c1.int_mul(c[1]);
-    let c1 = x.c0.int_mul(c[1]) + x.c1.int_mul(c[0]);
-    Fp2 { c0, c1 }
 }
 
 #[cfg(test)]
@@ -258,10 +252,6 @@ mod tests {
         *,
     };
 
-    fn bn254_xi() -> Fq2 {
-        Fq2::new(Fq::from_raw([9, 0, 0, 0]), Fq::one())
-    }
-
     fn generate_random_fq12() -> Fq12 {
         let mut rng = create_seeded_rng();
         Fq12::random(&mut rng)
@@ -270,6 +260,7 @@ mod tests {
     fn run_fp12_test_mul(
         x: Fq12,
         y: Fq12,
+        xi: [isize; 2],
         fp12_fn: impl Fn(&mut Fp12, &mut Fp12, [isize; 2]) -> Fp12,
         fq12_fn: impl Fn(&Fq12, &Fq12) -> Fq12,
     ) {
@@ -278,7 +269,6 @@ mod tests {
 
         let mut x_fp12 = Fp12::new(builder.clone());
         let mut y_fp12 = Fp12::new(builder.clone());
-        let xi = [9, 1];
         let mut r = fp12_fn(&mut x_fp12, &mut y_fp12, xi);
         let indices = r.save();
 
@@ -368,7 +358,8 @@ mod tests {
     fn test_fp12_mul() {
         let x = generate_random_fq12();
         let y = generate_random_fq12();
-        run_fp12_test_mul(x, y, Fp12::mul, |x, y| x * y);
+        let xi = [9, 1];
+        run_fp12_test_mul(x, y, xi, Fp12::mul, |x, y| x * y);
     }
 
     // #[test]

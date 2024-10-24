@@ -83,6 +83,12 @@ impl Fp2 {
             c1: &mut self.c1 * fp,
         }
     }
+
+    pub fn const_mul(&mut self, c: [isize; 2]) -> Fp2 {
+        let c0 = self.c0.int_mul(c[0]) - self.c1.int_mul(c[1]);
+        let c1 = self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]);
+        Fp2 { c0, c1 }
+    }
 }
 
 use std::ops::{Add, Div, Mul, Sub};
@@ -125,11 +131,7 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
     };
-    use halo2curves_axiom::{
-        bn256::{Fq, Fq2, G1},
-        ff::Field,
-        group::Group,
-    };
+    use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use num_bigint_dig::BigUint;
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;

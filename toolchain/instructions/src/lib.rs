@@ -235,8 +235,7 @@ pub enum EccOpcode {
 pub enum FP12Opcode {
     ADD,
     SUB,
-    MUL,
-    SCMUL,
+    BN254_MUL,
     DIV,
 }
 

@@ -8,12 +8,12 @@ use afs_primitives::{
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::{
     field_expression::{ExprBuilder, FieldExpr, FieldExprCols},
-    field_extension::{Fp12, Fp2},
+    field_extension::Fp12,
 };
-use axvm_instructions::FP12Opcode;
+use axvm_instructions::{FP12Opcode, UsizeOpcode};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
-use p3_air::{AirBuilder, BaseAir};
+use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::super::FIELD_ELEMENT_BITS;
@@ -127,7 +127,6 @@ where
 pub struct Fp12MultiplyCoreChip {
     pub air: Fp12MultiplyCoreAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
-    pub xi: [isize; 2],
 }
 
 impl Fp12MultiplyCoreChip {
@@ -137,8 +136,12 @@ impl Fp12MultiplyCoreChip {
         limb_bits: usize,
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
-        xi: [isize; 2],
     ) -> Self {
+        let local_opcode = FP12Opcode::from_usize(offset - FP12Opcode::default_offset());
+        let xi: [isize; 2] = match local_opcode {
+            FP12Opcode::BN254_MUL => [9, 1],
+            _ => panic!("Unsupported opcode: {:?}", local_opcode),
+        };
         let air = Fp12MultiplyCoreAir::new(
             modulus,
             num_limbs,
@@ -147,18 +150,13 @@ impl Fp12MultiplyCoreChip {
             offset,
             xi,
         );
-        Self {
-            air,
-            range_checker,
-            xi,
-        }
+        Self { air, range_checker }
     }
 }
 
 pub struct Fp12MultiplyCoreRecord {
     pub x: Fp12BigUint,
     pub y: Fp12BigUint,
-    pub xi: [isize; 2],
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for Fp12MultiplyCoreChip
@@ -179,28 +177,17 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let num_limbs = self.air.expr.canonical_num_limbs();
         let limb_bits = self.air.expr.canonical_limb_bits();
-        // let Instruction { opcode, .. } = instruction.clone();
-        // let local_opcode_index = opcode - self.air.offset;
-        // let local_opcode = FP12Opcode::from_usize(local_opcode_index);
-        // let mul_flag = match local_opcode {
-        //     FP12Opcode::MUL => true,
-        //     _ => panic!("Unsupported opcode: {:?}", local_opcode),
-        // };
 
-        let data: DynArray<_> = reads.into();
-        let data = data.0;
-        let x = data[..num_limbs * 12]
+        let input: DynArray<_> = reads.into();
+        let input = input.0;
+        let x = input[..num_limbs * 12]
             .chunks(num_limbs)
             .map(|x| x.iter().map(|y| y.as_canonical_u32()).collect_vec())
             .collect_vec();
-        let y = data[num_limbs * 12..2 * num_limbs * 12]
+        let y = input[num_limbs * 12..]
             .chunks(num_limbs)
             .map(|x| x.iter().map(|y| y.as_canonical_u32()).collect_vec())
             .collect_vec();
-        // let xi = data[2 * num_limbs * 12..]
-        //     .chunks(num_limbs)
-        //     .map(|x| x.iter().map(|y| y.as_canonical_u32()).collect_vec())
-        //     .collect_vec();
         let x_biguint = x
             .iter()
             .map(|x| limbs_to_biguint(x, limb_bits))
@@ -209,10 +196,6 @@ where
             .iter()
             .map(|y| limbs_to_biguint(y, limb_bits))
             .collect_vec();
-        // let xi_biguint = xi
-        //     .iter()
-        //     .map(|xi| limbs_to_biguint(xi, limb_bits))
-        //     .collect_vec();
         let input_vec = [x_biguint.clone(), y_biguint.clone()].concat();
 
         let vars = self.air.expr.execute(input_vec, vec![]);
@@ -284,7 +267,6 @@ where
                         c1: FpBigUint(y_biguint[11].clone()),
                     },
                 },
-                xi: self.xi,
             },
         ))
     }
