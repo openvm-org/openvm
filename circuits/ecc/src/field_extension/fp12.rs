@@ -11,7 +11,6 @@ pub struct Fp12 {
     pub c3: Fp2,
     pub c4: Fp2,
     pub c5: Fp2,
-    pub xi: Fp2,
 }
 
 impl Fp12 {
@@ -22,7 +21,7 @@ impl Fp12 {
         let c3 = Fp2::new(builder.clone());
         let c4 = Fp2::new(builder.clone());
         let c5 = Fp2::new(builder.clone());
-        let xi = Fp2::new(builder.clone());
+
         Fp12 {
             c0,
             c1,
@@ -30,18 +29,16 @@ impl Fp12 {
             c3,
             c4,
             c5,
-            xi,
         }
     }
 
-    pub fn save(&mut self) -> [usize; 14] {
+    pub fn save(&mut self) -> [usize; 12] {
         let c0_indices = self.c0.save();
         let c1_indices = self.c1.save();
         let c2_indices = self.c2.save();
         let c3_indices = self.c3.save();
         let c4_indices = self.c4.save();
         let c5_indices = self.c5.save();
-        let xi_indices = self.xi.save();
 
         [
             c0_indices[0],
@@ -56,8 +53,6 @@ impl Fp12 {
             c4_indices[1],
             c5_indices[0],
             c5_indices[1],
-            xi_indices[0],
-            xi_indices[1],
         ]
     }
 
@@ -69,7 +64,6 @@ impl Fp12 {
             c3: self.c3.add(&mut other.c3),
             c4: self.c4.add(&mut other.c4),
             c5: self.c5.add(&mut other.c5),
-            xi: self.xi.clone(),
         }
     }
 
@@ -81,11 +75,10 @@ impl Fp12 {
             c3: self.c3.sub(&mut other.c3),
             c4: self.c4.sub(&mut other.c4),
             c5: self.c5.sub(&mut other.c5),
-            xi: self.xi.clone(),
         }
     }
 
-    pub fn mul(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp12 {
+    pub fn mul(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp12 {
         // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4 + cs5co5)
         // c1 = cs0co1 + cs1co0 + cs3co0 + xi(cs2co2 + cs4co5 + cs5co4)
         // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 +cs4co3 + xi(cs5co5)
@@ -107,7 +100,6 @@ impl Fp12 {
         c3.save();
         c4.save();
         c5.save();
-        xi.save();
 
         Fp12 {
             c0,
@@ -116,11 +108,10 @@ impl Fp12 {
             c3,
             c4,
             c5,
-            xi: self.xi.clone(),
         }
     }
 
-    pub fn div(&mut self, _other: &mut Fp12, _xi: &mut Fp2) -> Fp12 {
+    pub fn div(&mut self, _other: &mut Fp12, _xi: [isize; 2]) -> Fp12 {
         todo!()
     }
 
@@ -132,11 +123,10 @@ impl Fp12 {
             c3: self.c3.scalar_mul(fp),
             c4: self.c4.scalar_mul(fp),
             c5: self.c5.scalar_mul(fp),
-            xi: self.xi.clone(),
         }
     }
 
-    fn mul_c0(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
+    fn mul_c0(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4 + cs5co3)
         let mut cs0co0 = self.c0.mul(&mut other.c0);
         let mut cs1co2 = self.c1.mul(&mut other.c2);
@@ -146,14 +136,14 @@ impl Fp12 {
         let mut cs5co3 = self.c5.mul(&mut other.c3);
         let mut c0_xi0 = cs1co2.add(&mut cs2co1);
         let mut c0_xi1 = c0_xi0.add(&mut cs3co5);
-        let mut c0_xi2 = c0_xi1.add(&mut cs4co4); // auto save
+        let mut c0_xi2 = c0_xi1.add(&mut cs4co4);
         let mut c0_xi3 = c0_xi2.add(&mut cs5co3);
-        let mut c0_xi = xi.mul(&mut c0_xi3); // auto save
+        let mut c0_xi = const_mul(&mut c0_xi3, xi);
 
         cs0co0.add(&mut c0_xi)
     }
 
-    fn mul_c1(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
+    fn mul_c1(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c1 = cs0co1 + cs1co0 + cs3co3 + xi(cs2co2 + cs4co5 + cs5co4)
         let mut cs0co1 = self.c0.mul(&mut other.c1);
         let mut cs1co0 = self.c1.mul(&mut other.c0);
@@ -166,12 +156,12 @@ impl Fp12 {
         let mut cs5co4 = self.c5.mul(&mut other.c4);
         let mut c1_xi0 = cs2co2.add(&mut cs4co5);
         let mut c1_xi1 = c1_xi0.add(&mut cs5co4);
-        let mut c1_xi = xi.mul(&mut c1_xi1);
+        let mut c1_xi = const_mul(&mut c1_xi1, xi);
 
         c11.add(&mut c1_xi)
     }
 
-    fn mul_c2(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
+    fn mul_c2(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 +cs4co3 + xi(cs5co5)
         let mut cs0co2 = self.c0.mul(&mut other.c2);
         let mut cs1co1 = self.c1.mul(&mut other.c1);
@@ -184,12 +174,12 @@ impl Fp12 {
         let mut c23 = c22.add(&mut cs4co3);
 
         let mut cs5co5 = self.c5.mul(&mut other.c5);
-        let mut c2_xi = xi.mul(&mut cs5co5);
+        let mut c2_xi = const_mul(&mut cs5co5, xi);
 
         c23.add(&mut c2_xi)
     }
 
-    fn mul_c3(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
+    fn mul_c3(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c3 = cs0co3 + cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
         let mut cs0co3 = self.c0.mul(&mut other.c3);
         let mut cs3co0 = self.c3.mul(&mut other.c0);
@@ -202,12 +192,12 @@ impl Fp12 {
         let mut c3_xi0 = cs1co5.add(&mut cs2co4);
         let mut c3_xi1 = c3_xi0.add(&mut cs4co2);
         let mut c3_xi2 = c3_xi1.add(&mut cs5co1);
-        let mut c3_xi = xi.mul(&mut c3_xi2);
+        let mut c3_xi = const_mul(&mut c3_xi2, xi);
 
         c30.add(&mut c3_xi)
     }
 
-    fn mul_c4(&mut self, other: &mut Fp12, xi: &mut Fp2) -> Fp2 {
+    fn mul_c4(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
         // c4 = cs0co4 + cs1co3 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
         let mut cs0co4 = self.c0.mul(&mut other.c4);
         let mut cs1co3 = self.c1.mul(&mut other.c3);
@@ -220,7 +210,7 @@ impl Fp12 {
         let mut cs2co5 = self.c2.mul(&mut other.c5);
         let mut cs5co2 = self.c5.mul(&mut other.c2);
         let mut c4_xi0 = cs2co5.add(&mut cs5co2);
-        let mut c4_xi = xi.mul(&mut c4_xi0);
+        let mut c4_xi = const_mul(&mut c4_xi0, xi);
 
         c42.add(&mut c4_xi)
     }
@@ -239,6 +229,12 @@ impl Fp12 {
         let mut c53 = c52.add(&mut cs4co1);
         c53.add(&mut cs5co0)
     }
+}
+
+fn const_mul(x: &mut Fp2, c: [isize; 2]) -> Fp2 {
+    let c0 = x.c0.int_mul(c[0]) - x.c1.int_mul(c[1]);
+    let c1 = x.c0.int_mul(c[1]) + x.c1.int_mul(c[0]);
+    Fp2 { c0, c1 }
 }
 
 #[cfg(test)]
@@ -274,7 +270,7 @@ mod tests {
     fn run_fp12_test_mul(
         x: Fq12,
         y: Fq12,
-        fp12_fn: impl Fn(&mut Fp12, &mut Fp12, &mut Fp2) -> Fp12,
+        fp12_fn: impl Fn(&mut Fp12, &mut Fp12, [isize; 2]) -> Fp12,
         fq12_fn: impl Fn(&Fq12, &Fq12) -> Fq12,
     ) {
         let prime = bn254_prime();
@@ -282,8 +278,8 @@ mod tests {
 
         let mut x_fp12 = Fp12::new(builder.clone());
         let mut y_fp12 = Fp12::new(builder.clone());
-        let mut xi_fp2 = Fp2::new(builder.clone());
-        let mut r = fp12_fn(&mut x_fp12, &mut y_fp12, &mut xi_fp2);
+        let xi = [9, 1];
+        let mut r = fp12_fn(&mut x_fp12, &mut y_fp12, xi);
         let indices = r.save();
 
         let builder = builder.borrow().clone();
@@ -296,11 +292,11 @@ mod tests {
 
         let x_fq12 = x;
         let y_fq12 = y;
-        let xi = bn254_xi();
+        // let xi = bn254_xi();
         let r_fq12 = fq12_fn(&x_fq12, &y_fq12);
         let mut inputs = fq12_to_biguint_vec(&x_fq12);
         inputs.extend(fq12_to_biguint_vec(&y_fq12));
-        inputs.extend(fq2_to_biguint_vec(&xi));
+        // inputs.extend(fq2_to_biguint_vec(&xi));
 
         let mut row = vec![BabyBear::zero(); width];
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
@@ -367,6 +363,7 @@ mod tests {
     //     run_fp12_test_add(x, y, Fp12::sub, |x, y| x - y, true);
     // }
 
+    /// Must be run with RUST_MIN_STACK=8388608
     #[test]
     fn test_fp12_mul() {
         let x = generate_random_fq12();

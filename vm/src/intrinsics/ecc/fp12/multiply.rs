@@ -31,6 +31,7 @@ use crate::{
 pub struct Fp12MultiplyCoreAir {
     pub expr: FieldExpr,
     pub offset: usize,
+    pub xi: [isize; 2],
 }
 
 impl Fp12MultiplyCoreAir {
@@ -40,6 +41,7 @@ impl Fp12MultiplyCoreAir {
         limb_bits: usize,
         range_bus: VariableRangeCheckerBus,
         offset: usize,
+        xi: [isize; 2],
     ) -> Self {
         assert!(modulus.bits() <= num_limbs * limb_bits);
         let subair = CheckCarryModToZeroSubAir::new(
@@ -54,8 +56,7 @@ impl Fp12MultiplyCoreAir {
 
         let mut x = Fp12::new(builder.clone());
         let mut y = Fp12::new(builder.clone());
-        let mut xi = x.xi.clone();
-        let mut res = x.mul(&mut y, &mut xi);
+        let mut res = x.mul(&mut y, xi);
         res.save();
 
         let builder = builder.borrow().clone();
@@ -64,7 +65,7 @@ impl Fp12MultiplyCoreAir {
             check_carry_mod_to_zero: subair,
             range_bus,
         };
-        Self { expr, offset }
+        Self { expr, offset, xi }
     }
 }
 
@@ -98,8 +99,8 @@ where
             flags,
             ..
         } = self.expr.load_vars(local);
-        assert_eq!(inputs.len(), 12 + 12 + 2 + 2);
-        assert_eq!(vars.len(), 38);
+        assert_eq!(inputs.len(), 12 + 12);
+        assert_eq!(vars.len(), 33);
         assert_eq!(flags.len(), 0);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[vars.len() - 12..]
@@ -126,6 +127,7 @@ where
 pub struct Fp12MultiplyCoreChip {
     pub air: Fp12MultiplyCoreAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
+    pub xi: [isize; 2],
 }
 
 impl Fp12MultiplyCoreChip {
@@ -133,20 +135,30 @@ impl Fp12MultiplyCoreChip {
         modulus: BigUint,
         num_limbs: usize,
         limb_bits: usize,
-        max_limb_bits: usize,
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
+        xi: [isize; 2],
     ) -> Self {
-        let air =
-            Fp12MultiplyCoreAir::new(modulus, num_limbs, limb_bits, range_checker.bus(), offset);
-        Self { air, range_checker }
+        let air = Fp12MultiplyCoreAir::new(
+            modulus,
+            num_limbs,
+            limb_bits,
+            range_checker.bus(),
+            offset,
+            xi,
+        );
+        Self {
+            air,
+            range_checker,
+            xi,
+        }
     }
 }
 
 pub struct Fp12MultiplyCoreRecord {
     pub x: Fp12BigUint,
     pub y: Fp12BigUint,
-    pub xi: Fp2BigUint,
+    pub xi: [isize; 2],
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for Fp12MultiplyCoreChip
@@ -185,10 +197,10 @@ where
             .chunks(num_limbs)
             .map(|x| x.iter().map(|y| y.as_canonical_u32()).collect_vec())
             .collect_vec();
-        let xi = data[2 * num_limbs * 12..]
-            .chunks(num_limbs)
-            .map(|x| x.iter().map(|y| y.as_canonical_u32()).collect_vec())
-            .collect_vec();
+        // let xi = data[2 * num_limbs * 12..]
+        //     .chunks(num_limbs)
+        //     .map(|x| x.iter().map(|y| y.as_canonical_u32()).collect_vec())
+        //     .collect_vec();
         let x_biguint = x
             .iter()
             .map(|x| limbs_to_biguint(x, limb_bits))
@@ -197,20 +209,14 @@ where
             .iter()
             .map(|y| limbs_to_biguint(y, limb_bits))
             .collect_vec();
-        let xi_biguint = xi
-            .iter()
-            .map(|xi| limbs_to_biguint(xi, limb_bits))
-            .collect_vec();
-        let input_vec = [
-            x_biguint.clone(),
-            xi_biguint.clone(),
-            y_biguint.clone(),
-            xi_biguint.clone(),
-        ]
-        .concat();
+        // let xi_biguint = xi
+        //     .iter()
+        //     .map(|xi| limbs_to_biguint(xi, limb_bits))
+        //     .collect_vec();
+        let input_vec = [x_biguint.clone(), y_biguint.clone()].concat();
 
         let vars = self.air.expr.execute(input_vec, vec![]);
-        assert_eq!(vars.len(), 38);
+        assert_eq!(vars.len(), 33);
         let res_biguint_vec = vars[vars.len() - 12..].to_vec();
         tracing::trace!("FP12MultiplyOpcode | {res_biguint_vec:?} | {x_biguint:?} | {y_biguint:?}");
         let res_limbs = res_biguint_vec
@@ -278,10 +284,7 @@ where
                         c1: FpBigUint(y_biguint[11].clone()),
                     },
                 },
-                xi: Fp2BigUint {
-                    c0: FpBigUint(xi_biguint[0].clone()),
-                    c1: FpBigUint(xi_biguint[1].clone()),
-                },
+                xi: self.xi,
             },
         ))
     }
@@ -304,8 +307,6 @@ where
             record.x.c4.c1.0,
             record.x.c5.c0.0,
             record.x.c5.c1.0,
-            record.xi.c0.0.clone(),
-            record.xi.c1.0.clone(),
             record.y.c0.c0.0,
             record.y.c0.c1.0,
             record.y.c1.c0.0,
@@ -318,8 +319,6 @@ where
             record.y.c4.c1.0,
             record.y.c5.c0.0,
             record.y.c5.c1.0,
-            record.xi.c0.0,
-            record.xi.c1.0,
         ];
         self.air
             .expr
