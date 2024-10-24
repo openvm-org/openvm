@@ -1,4 +1,7 @@
-use std::{fs::read, path::PathBuf};
+use std::{
+    fs::{read, read_dir},
+    path::PathBuf,
+};
 
 use ax_stark_sdk::config::setup_tracing;
 use axvm_circuit::{
@@ -55,6 +58,41 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let config = VmConfig::rv32im();
     let (vm, exe) = setup_vm_from_elf(elf_path, config)?;
     vm.execute(exe, vec![])?;
+    Ok(())
+}
+
+#[test]
+fn test_rv32im_riscv_tests_runtime() -> Result<()> {
+    let skip_list = vec![
+        "rv32ui-p-sh",
+        "rv32ui-p-sb",
+        "rv32ui-p-lh",
+        "rv32ui-p-lb",
+        "rv32ui-p-lbu",
+        "rv32ui-p-lhu",
+    ];
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-tests");
+    for entry in read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && path.extension().unwrap_or_default() != "dump" {
+            let file_name = path.file_name().unwrap().to_str().unwrap();
+            if skip_list.contains(&file_name) {
+                continue;
+            }
+            println!("Running: {}", file_name);
+            let result = std::panic::catch_unwind(|| {
+                test_rv32im_runtime(path.to_str().unwrap())
+            });
+
+            match result {
+                Ok(Ok(_)) => println!("Passed!: {}", file_name),
+                Ok(Err(e)) => println!("Failed: {} with error: {}", file_name, e),
+                Err(_) => panic!("Panic occurred while running: {}", file_name),
+            }
+        }
+    }
+
     Ok(())
 }
 

@@ -1,0 +1,50 @@
+
+rv32ui-p-jal:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <test_2>:
+   0:	00200193          	li	gp,2
+   4:	00000093          	li	ra,0
+   8:	0100026f          	jal	tp,18 <target_2>
+
+0000000c <linkaddr_2>:
+   c:	00000013          	nop
+  10:	00000013          	nop
+  14:	0400006f          	j	54 <fail>
+
+00000018 <target_2>:
+  18:	00000117          	auipc	sp,0x0
+  1c:	ff410113          	addi	sp,sp,-12 # c <linkaddr_2>
+  20:	02411a63          	bne	sp,tp,54 <fail>
+
+00000024 <test_3>:
+  24:	00300193          	li	gp,3
+  28:	00100093          	li	ra,1
+  2c:	0140006f          	j	40 <test_3+0x1c>
+  30:	00108093          	addi	ra,ra,1
+  34:	00108093          	addi	ra,ra,1
+  38:	00108093          	addi	ra,ra,1
+  3c:	00108093          	addi	ra,ra,1
+  40:	00108093          	addi	ra,ra,1
+  44:	00108093          	addi	ra,ra,1
+  48:	00300393          	li	t2,3
+  4c:	00709463          	bne	ra,t2,54 <fail>
+  50:	02301063          	bne	zero,gp,70 <pass>
+
+00000054 <fail>:
+  54:	0ff0000f          	fence
+  58:	00018063          	beqz	gp,58 <fail+0x4>
+  5c:	00119193          	slli	gp,gp,0x1
+  60:	0011e193          	ori	gp,gp,1
+  64:	05d00893          	li	a7,93
+  68:	00018513          	mv	a0,gp
+  6c:	00000073          	ecall
+
+00000070 <pass>:
+  70:	0ff0000f          	fence
+  74:	00100193          	li	gp,1
+  78:	05d00893          	li	a7,93
+  7c:	00000513          	li	a0,0
+  80:	00000073          	ecall

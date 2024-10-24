@@ -1,0 +1,94 @@
+
+rv32um-p-rem:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <test_2>:
+   0:	00200193          	li	gp,2
+   4:	01400593          	li	a1,20
+   8:	00600613          	li	a2,6
+   c:	02c5e733          	rem	a4,a1,a2
+  10:	00200393          	li	t2,2
+  14:	0c771463          	bne	a4,t2,dc <fail>
+
+00000018 <test_3>:
+  18:	00300193          	li	gp,3
+  1c:	fec00593          	li	a1,-20
+  20:	00600613          	li	a2,6
+  24:	02c5e733          	rem	a4,a1,a2
+  28:	ffe00393          	li	t2,-2
+  2c:	0a771863          	bne	a4,t2,dc <fail>
+
+00000030 <test_4>:
+  30:	00400193          	li	gp,4
+  34:	01400593          	li	a1,20
+  38:	ffa00613          	li	a2,-6
+  3c:	02c5e733          	rem	a4,a1,a2
+  40:	00200393          	li	t2,2
+  44:	08771c63          	bne	a4,t2,dc <fail>
+
+00000048 <test_5>:
+  48:	00500193          	li	gp,5
+  4c:	fec00593          	li	a1,-20
+  50:	ffa00613          	li	a2,-6
+  54:	02c5e733          	rem	a4,a1,a2
+  58:	ffe00393          	li	t2,-2
+  5c:	08771063          	bne	a4,t2,dc <fail>
+
+00000060 <test_6>:
+  60:	00600193          	li	gp,6
+  64:	800005b7          	lui	a1,0x80000
+  68:	00100613          	li	a2,1
+  6c:	02c5e733          	rem	a4,a1,a2
+  70:	00000393          	li	t2,0
+  74:	06771463          	bne	a4,t2,dc <fail>
+
+00000078 <test_7>:
+  78:	00700193          	li	gp,7
+  7c:	800005b7          	lui	a1,0x80000
+  80:	fff00613          	li	a2,-1
+  84:	02c5e733          	rem	a4,a1,a2
+  88:	00000393          	li	t2,0
+  8c:	04771863          	bne	a4,t2,dc <fail>
+
+00000090 <test_8>:
+  90:	00800193          	li	gp,8
+  94:	800005b7          	lui	a1,0x80000
+  98:	00000613          	li	a2,0
+  9c:	02c5e733          	rem	a4,a1,a2
+  a0:	800003b7          	lui	t2,0x80000
+  a4:	02771c63          	bne	a4,t2,dc <fail>
+
+000000a8 <test_9>:
+  a8:	00900193          	li	gp,9
+  ac:	00100593          	li	a1,1
+  b0:	00000613          	li	a2,0
+  b4:	02c5e733          	rem	a4,a1,a2
+  b8:	00100393          	li	t2,1
+  bc:	02771063          	bne	a4,t2,dc <fail>
+
+000000c0 <test_10>:
+  c0:	00a00193          	li	gp,10
+  c4:	00000593          	li	a1,0
+  c8:	00000613          	li	a2,0
+  cc:	02c5e733          	rem	a4,a1,a2
+  d0:	00000393          	li	t2,0
+  d4:	00771463          	bne	a4,t2,dc <fail>
+  d8:	02301063          	bne	zero,gp,f8 <pass>
+
+000000dc <fail>:
+  dc:	0ff0000f          	fence
+  e0:	00018063          	beqz	gp,e0 <fail+0x4>
+  e4:	00119193          	slli	gp,gp,0x1
+  e8:	0011e193          	ori	gp,gp,1
+  ec:	05d00893          	li	a7,93
+  f0:	00018513          	mv	a0,gp
+  f4:	00000073          	ecall
+
+000000f8 <pass>:
+  f8:	0ff0000f          	fence
+  fc:	00100193          	li	gp,1
+ 100:	05d00893          	li	a7,93
+ 104:	00000513          	li	a0,0
+ 108:	00000073          	ecall

@@ -1,0 +1,12 @@
+
+rv32ui-p-simple:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <_end-0x1000>:
+   0:	0ff0000f          	fence
+   4:	00100193          	li	gp,1
+   8:	05d00893          	li	a7,93
+   c:	00000513          	li	a0,0
+  10:	00000073          	ecall

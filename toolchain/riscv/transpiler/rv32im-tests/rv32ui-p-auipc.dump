@@ -1,0 +1,45 @@
+
+rv32ui-p-auipc:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <test_2>:
+   0:	00200193          	li	gp,2
+   4:	00000013          	nop
+   8:	00002517          	auipc	a0,0x2
+   c:	71c50513          	addi	a0,a0,1820 # 2724 <_end+0x16dc>
+  10:	004005ef          	jal	a1,14 <test_2+0x14>
+  14:	40b50533          	sub	a0,a0,a1
+  18:	000023b7          	lui	t2,0x2
+  1c:	71038393          	addi	t2,t2,1808 # 2710 <_end+0x16c8>
+  20:	02751463          	bne	a0,t2,48 <fail>
+
+00000024 <test_3>:
+  24:	00300193          	li	gp,3
+  28:	ffffe517          	auipc	a0,0xffffe
+  2c:	8fc50513          	addi	a0,a0,-1796 # ffffd924 <_end+0xffffc8dc>
+  30:	004005ef          	jal	a1,34 <test_3+0x10>
+  34:	40b50533          	sub	a0,a0,a1
+  38:	ffffe3b7          	lui	t2,0xffffe
+  3c:	8f038393          	addi	t2,t2,-1808 # ffffd8f0 <_end+0xffffc8a8>
+  40:	00751463          	bne	a0,t2,48 <fail>
+  44:	02301063          	bne	zero,gp,64 <pass>
+
+00000048 <fail>:
+  48:	0ff0000f          	fence
+  4c:	00018063          	beqz	gp,4c <fail+0x4>
+  50:	00119193          	slli	gp,gp,0x1
+  54:	0011e193          	ori	gp,gp,1
+  58:	05d00893          	li	a7,93
+  5c:	00018513          	mv	a0,gp
+  60:	00000073          	ecall
+
+00000064 <pass>:
+  64:	0ff0000f          	fence
+  68:	00100193          	li	gp,1
+  6c:	05d00893          	li	a7,93
+  70:	00000513          	li	a0,0
+  74:	00000073          	ecall
+  78:	0000                	.insn	2, 0x
+  7a:	0000                	.insn	2, 0x
