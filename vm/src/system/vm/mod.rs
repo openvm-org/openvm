@@ -11,7 +11,6 @@ use parking_lot::Mutex;
 pub use segment::ExecutionSegment;
 
 use crate::{
-    arch::AxVmChip,
     intrinsics::hashes::poseidon2::CHUNK,
     system::{
         memory::Equipartition,
@@ -180,9 +179,12 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
         input: Vec<Vec<F>>,
     ) -> Result<Vec<Option<F>>, ExecutionError> {
         let segment = self.execute_impl(program, input.into())?;
-        let pv_chip = find_chip!(segment.chip_set, AxVmChip::PublicValues);
-        let borrowed_pv_chip = pv_chip.borrow();
-        let pvs = borrowed_pv_chip.core.get_custom_public_values();
+        let pvs = if let Some(pv_chip) = segment.chip_set.public_values_chip {
+            let borrowed_pv_chip = pv_chip.borrow();
+            borrowed_pv_chip.core.get_custom_public_values()
+        } else {
+            vec![]
+        };
         Ok(pvs)
     }
 

@@ -63,6 +63,8 @@ use crate::system::memory::{
 };
 
 pub const CHUNK: usize = 8;
+/// The offset of the Merkle AIR in AIRs of MemoryController.
+pub const MERKLE_AIR_OFFSET: usize = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimestampedValues<T, const N: usize> {
@@ -488,10 +490,12 @@ impl<F: PrimeField32> MemoryController<F> {
                     hasher,
                 );
 
+                debug_assert_eq!(traces.len(), MERKLE_AIR_OFFSET);
                 traces.push(expand_trace);
                 let mut expand_pvs = vec![];
                 expand_pvs.extend(initial_node.hash());
                 expand_pvs.extend(final_node.hash());
+                debug_assert_eq!(pvs.len(), MERKLE_AIR_OFFSET);
                 pvs.push(expand_pvs);
                 (records, Some(final_memory_values))
             }
@@ -555,6 +559,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 ..
             } => {
                 airs.push(Arc::new(boundary_chip.air.clone()));
+                debug_assert_eq!(airs.len(), MERKLE_AIR_OFFSET);
                 airs.push(Arc::new(merkle_chip.air.clone()));
             }
         }

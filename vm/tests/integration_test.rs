@@ -13,7 +13,6 @@ use ax_sdk::{
     utils::create_seeded_rng,
 };
 use axvm_instructions::PublishOpcode::PUBLISH;
-use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
@@ -32,6 +31,7 @@ use stark_vm::{
         memory::{merkle::MemoryMerklePvs, Equipartition},
         program::{Instruction, Program},
         vm::{
+            chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID},
             config::{MemoryConfig, PersistenceType, VmConfig},
             connector::VmConnectorPvs,
             ExitCode, SingleSegmentVM, VirtualMachine,
@@ -402,38 +402,17 @@ fn aggregate_segment_proofs<SC: StarkGenericConfig>(
     let mut prev_final_memory_root = None;
     let mut prev_final_pc = None;
 
-    // TODO: These indices should be fixed.
-    let vm_connector_air_id = vk
-        .per_air
-        .iter()
-        .position(|vk| vk.params.num_public_values == VmConnectorPvs::<Val<SC>>::width())
-        .unwrap();
-    let memory_merkle_air_id = vk
-        .per_air
-        .iter()
-        .position(|vk| vk.params.num_public_values == MemoryMerklePvs::<Val<SC>, CHUNK>::width())
-        .unwrap();
-
     for (i, proof) in proofs.iter().enumerate() {
         engine
             .verify(&vk, proof)
             .expect("segment proof should verify");
-
-        let air_ids = proof
-            .per_air
-            .iter()
-            .map(|air_proof_data| air_proof_data.air_id)
-            .collect_vec();
-
-        assert!(air_ids.contains(&vm_connector_air_id));
-        assert!(air_ids.contains(&memory_merkle_air_id));
 
         // Check public values.
         for air_proof_data in proof.per_air.iter() {
             let pvs = &air_proof_data.public_values;
             let air_vk = &vk.per_air[air_proof_data.air_id];
 
-            if air_proof_data.air_id == vm_connector_air_id {
+            if air_proof_data.air_id == CONNECTOR_AIR_ID {
                 let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
 
                 // Check initial pc matches the previous final pc.
@@ -460,7 +439,7 @@ fn aggregate_segment_proofs<SC: StarkGenericConfig>(
                 };
 
                 assert_eq!(pvs.exit_code, expected_exit_code_f);
-            } else if air_proof_data.air_id == memory_merkle_air_id {
+            } else if air_proof_data.air_id == MERKLE_AIR_ID {
                 let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
                 // Check that initial root matches the previous final root.

@@ -125,7 +125,6 @@ pub enum AxVmChip<F: PrimeField32> {
     Jal(Rc<RefCell<KernelJalChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
-    PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
