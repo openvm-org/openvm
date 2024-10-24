@@ -21,7 +21,7 @@ pub struct MemoryMerkleAir<const CHUNK: usize> {
 impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<CHUNK> {}
 impl<const CHUNK: usize, F: Field> BaseAir<F> for MemoryMerkleAir<CHUNK> {
     fn width(&self) -> usize {
-        MemoryMerkleCols::<CHUNK, F>::get_width()
+        MemoryMerkleCols::<F, CHUNK>::width()
     }
 }
 impl<const CHUNK: usize, F: Field> BaseAirWithPublicValues<F> for MemoryMerkleAir<CHUNK> {
@@ -35,10 +35,9 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
-        let local = MemoryMerkleCols::<CHUNK, AB::Var>::from_slice(&local);
-        let next = main.row_slice(1);
-        let next = MemoryMerkleCols::<CHUNK, AB::Var>::from_slice(&next);
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let local: &MemoryMerkleCols<_, CHUNK> = (*local).borrow();
+        let next: &MemoryMerkleCols<_, CHUNK> = (*next).borrow();
 
         // `expand_direction` should be -1, 0, 1
         builder.assert_eq(

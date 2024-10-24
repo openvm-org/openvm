@@ -1,5 +1,6 @@
 use std::{
     array,
+    borrow::BorrowMut,
     collections::{BTreeMap, BTreeSet, HashSet},
 };
 
@@ -11,7 +12,7 @@ use ax_sdk::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
 use crate::system::memory::{
@@ -26,21 +27,6 @@ use crate::system::memory::{
 mod util;
 
 const DEFAULT_CHUNK: usize = 8;
-
-#[test]
-fn test_flatten_fromslice_roundtrip() {
-    let num_cols = MemoryMerkleCols::<DEFAULT_CHUNK, usize>::get_width();
-    let all_cols = (0..num_cols).collect::<Vec<usize>>();
-
-    let cols_numbered = MemoryMerkleCols::<DEFAULT_CHUNK, _>::from_slice(&all_cols);
-    let flattened = cols_numbered.flatten();
-
-    for (i, col) in flattened.iter().enumerate() {
-        assert_eq!(*col, all_cols[i]);
-    }
-
-    assert_eq!(num_cols, flattened.len());
-}
 
 fn test<const CHUNK: usize>(
     memory_dimensions: MemoryDimensions,
@@ -291,21 +277,14 @@ fn expand_test_negative() {
     let mut chip =
         MemoryMerkleChip::<DEFAULT_CHUNK, _>::new(memory_dimensions, MemoryMerkleBus(20));
 
-    let (trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
-    let mut new_rows = vec![];
-    for i in 0..trace.height() {
-        let row: Vec<_> = trace.row(i).collect();
-        let mut cols = MemoryMerkleCols::<DEFAULT_CHUNK, _>::from_slice(&row);
-        if cols.expand_direction == BabyBear::neg_one() {
-            cols.left_direction_different = BabyBear::zero();
-            cols.right_direction_different = BabyBear::zero();
+    let (mut trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
+    for row in trace.rows_mut() {
+        let row: &mut MemoryMerkleCols<_, DEFAULT_CHUNK> = row.borrow_mut();
+        if row.expand_direction == BabyBear::neg_one() {
+            row.left_direction_different = BabyBear::zero();
+            row.right_direction_different = BabyBear::zero();
         }
-        new_rows.extend(cols.flatten());
     }
-    let new_trace = RowMajorMatrix::new(
-        new_rows,
-        MemoryMerkleCols::<DEFAULT_CHUNK, BabyBear>::get_width(),
-    );
 
     let mut public_values = vec![vec![]; 2];
     public_values[0].extend(tree.hash());
@@ -314,7 +293,7 @@ fn expand_test_negative() {
     let hash_test_chip_air = hash_test_chip.air();
     BabyBearPoseidon2Engine::run_simple_test_fast(
         any_rap_arc_vec![chip.air, hash_test_chip_air],
-        vec![new_trace, hash_test_chip.trace()],
+        vec![trace, hash_test_chip.trace()],
         public_values,
     )
     .expect("This should occur");
