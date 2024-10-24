@@ -291,6 +291,7 @@ impl VmConfig {
                     let nop_chip = Rc::new(RefCell::new(NopChip::new(
                         execution_bus,
                         program_bus,
+                        memory_controller.clone(),
                         offset,
                     )));
                     for opcode in range {
