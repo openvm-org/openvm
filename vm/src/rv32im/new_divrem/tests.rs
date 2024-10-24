@@ -217,10 +217,10 @@ type Rv32DivRemTestChip<F> =
     VmChipWrapper<F, TestAdapterChip<F>, DivRemCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
 
 #[derive(Default, Clone, Copy)]
-struct DivRemPrankValues<const RV32_REGISTER_NUM_LIMBS: usize> {
-    pub q: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    pub r: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    pub r_prime: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+struct DivRemPrankValues<const NUM_LIMBS: usize> {
+    pub q: Option<[u32; NUM_LIMBS]>,
+    pub r: Option<[u32; NUM_LIMBS]>,
+    pub r_prime: Option<[u32; NUM_LIMBS]>,
     pub diff_val: Option<u32>,
     pub zero_divisor: Option<bool>,
     pub r_zero: Option<bool>,
