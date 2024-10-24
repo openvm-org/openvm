@@ -127,20 +127,20 @@ All instructions below assume that all memory cells in address spaces `1` and `2
 
 #### ALU
 
-In all ALU instructions, the operand `d` is fixed to be `1`. We use the same instruction to handle both the register-register (R-type) and register-immediate (I-type) arithmetic instructions by allowing the operand `e` to be either `0` or `1`. When `e = 0`, the `c` operand is expected to be of the form `F::from_canonical_u32(c_i16 as i24 as u24 as u32)` where `c_i16` is type `i16`. In other words we take signed 16-bits in two's complement, sign extend to 24-bits, consider the 24-bits as unsigned integer, and convert to field element. In the instructions below, `[c:4]_0` should be interpreted as `c_i16 as i32` sign extended to 32-bits.
+In all ALU instructions, the operand `d` is fixed to be `1`. The operand `e` must be either `0` or `1`. When `e = 0`, the `c` operand is expected to be of the form `F::from_canonical_u32(c_i16 as i24 as u24 as u32)` where `c_i16` is type `i16`. In other words we take signed 16-bits in two's complement, sign extend to 24-bits, consider the 24-bits as unsigned integer, and convert to field element. In the instructions below, `[c:4]_0` should be interpreted as `c_i16 as i32` sign extended to 32-bits.
 
-| Name      | Operands    | Description                                                               |
-| --------- | ----------- | ------------------------------------------------------------------------- |
-| ADD_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 + [c:4]_e`                                             |
-| SUB_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 - [c:4]_e`                                             |
-| XOR_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 ^ [c:4]_e`                                             |
-| OR_RV32   | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 \| [c:4]_e`                                            |
-| AND_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 & [c:4]_e`                                             |
-| SLL_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 << [c:4]_e`                                            |
-| SRL_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 >> [c:4]_e`                                            |
-| SRA_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 >> [c:4]_e` MSB extends                                |
-| SLT_RV32  | `a,b,c,1,e` | `[a:4]_1 = i32([b:4]_1) < i32([c:4]_e) ? sign_extend(1) : sign_extend(0)` |
-| SLTU_RV32 | `a,b,c,1,e` | `[a:4]_1 = u32([b:4]_1) < u32([c:4]_e) ? sign_extend(1) : sign_extend(0)` |
+| Name      | Operands    | Description                                                                                              |
+| --------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| ADD_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 + [c:4]_e`. Overflow is ignored and the lower 32-bits are written to the destination. |
+| SUB_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 - [c:4]_e`. Overflow is ignored and the lower 32-bits are written to the destination. |
+| XOR_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 ^ [c:4]_e`                                                                            |
+| OR_RV32   | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 \| [c:4]_e`                                                                           |
+| AND_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 & [c:4]_e`                                                                            |
+| SLL_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 << [c:4]_e`                                                                           |
+| SRL_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 >> [c:4]_e`                                                                           |
+| SRA_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 >> [c:4]_e` MSB extends                                                               |
+| SLT_RV32  | `a,b,c,1,e` | `[a:4]_1 = i32([b:4]_1) < i32([c:4]_e) ? sign_extend(1) : sign_extend(0)`                                |
+| SLTU_RV32 | `a,b,c,1,e` | `[a:4]_1 = u32([b:4]_1) < u32([c:4]_e) ? sign_extend(1) : sign_extend(0)`                                |
 
 #### Load/Store
 
