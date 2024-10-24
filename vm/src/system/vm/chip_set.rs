@@ -8,7 +8,6 @@ use std::{
 };
 
 use afs_primitives::{
-    bigint::utils::secp256k1_coord_prime,
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::XorLookupChip,
@@ -34,7 +33,6 @@ use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
     common::nop::NopChip,
     intrinsics::{
-        ecc::sw::{SwEcAddNeCoreChip, SwEcDoubleCoreChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -676,14 +674,9 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        SwEcAddNeCoreChip::new(
-                            secp256k1_coord_prime(),
-                            32,
-                            8,
-                            memory_controller.borrow().range_checker.clone(),
-                            offset,
-                        ),
                         memory_controller.clone(),
+                        8,
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -697,14 +690,9 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        SwEcDoubleCoreChip::new(
-                            secp256k1_coord_prime(),
-                            32,
-                            8,
-                            memory_controller.borrow().range_checker.clone(),
-                            offset,
-                        ),
                         memory_controller.clone(),
+                        8,
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
