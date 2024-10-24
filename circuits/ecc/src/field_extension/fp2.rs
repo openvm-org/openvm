@@ -91,39 +91,6 @@ impl Fp2 {
     }
 }
 
-use std::ops::{Add, Div, Mul, Sub};
-impl Add<&mut Fp2> for &mut Fp2 {
-    type Output = Fp2;
-
-    fn add(self, other: &mut Fp2) -> Self::Output {
-        Fp2::add(self, other)
-    }
-}
-
-impl Sub<&mut Fp2> for &mut Fp2 {
-    type Output = Fp2;
-
-    fn sub(self, other: &mut Fp2) -> Self::Output {
-        Fp2::sub(self, other)
-    }
-}
-
-impl Mul<&mut Fp2> for &mut Fp2 {
-    type Output = Fp2;
-
-    fn mul(self, other: &mut Fp2) -> Self::Output {
-        Fp2::mul(self, other)
-    }
-}
-
-impl Div<&mut Fp2> for &mut Fp2 {
-    type Output = Fp2;
-
-    fn div(self, other: &mut Fp2) -> Self::Output {
-        Fp2::div(self, other)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use afs_primitives::TraceSubRowGenerator;

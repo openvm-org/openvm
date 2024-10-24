@@ -137,20 +137,6 @@ impl Fp12 {
             .add(&mut self.c4.mul(&mut other.c4))
             .add(&mut self.c5.mul(&mut other.c3));
         main_sum.add(&mut xi_sum.const_mul(xi))
-
-        // let mut cs0co0 = self.c0.mul(&mut other.c0);
-        // let mut cs1co2 = self.c1.mul(&mut other.c2);
-        // let mut cs2co1 = self.c2.mul(&mut other.c1);
-        // let mut cs3co5 = self.c3.mul(&mut other.c5);
-        // let mut cs4co4 = self.c4.mul(&mut other.c4);
-        // let mut cs5co3 = self.c5.mul(&mut other.c3);
-        // let mut c0_xi0 = cs1co2.add(&mut cs2co1);
-        // let mut c0_xi1 = c0_xi0.add(&mut cs3co5);
-        // let mut c0_xi2 = c0_xi1.add(&mut cs4co4);
-        // let mut c0_xi3 = c0_xi2.add(&mut cs5co3);
-        // let mut c0_xi = c0_xi3.const_mul(xi);
-
-        // cs0co0.add(&mut c0_xi)
     }
 
     fn mul_c1(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
