@@ -68,12 +68,13 @@ The following notation is used throughout this document:
 
 We will always have the following fixed address spaces:
 
-| Address Space | Name        |
-| ------------- | ----------- |
-| `0`           | Immediates  |
-| `1`           | Registers   |
-| `2`           | User Memory |
-| `3`           | User IO     |
+| Address Space | Name          |
+| ------------- | ------------- |
+| `0`           | Immediates    |
+| `1`           | Registers     |
+| `2`           | User Memory   |
+| `3`           | User IO       |
+| `4`           | Native Kernel |
 
 Address space `0` is not a real address space: it is reserved for denoting immediates: We define `[a]_0 = a`.
 
@@ -108,18 +109,10 @@ We will use the following notation:
 
 ### Common
 
-| Name      | Operands  | Description                                                                                                                                                                                                    |
-| --------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TERMINATE | `_, _, c` | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                                                                                                               |
-| NOP       | `a`       | Does nothing from the circuit perspective except setting `to_pc = from_pc + DEFAULT_PC_STEP`. The system may use `a` to decide to execute phantom instructions (see below), which may affect trace generation. |
-
-`TERMINATE` will be an intrinsic, given in RISC-V by:
-| Name | RV Opcode[6:0] | FMT | funct3 | imm[11:0] |
-| --------- | -------------- | --- | ------ | --------- |
-| TERMINATE | 0001011 | I | 000 | `c` |
-
-where `imm = c.as_canonical_u32()` and we only allow it to be up to 12-bits.
-We already have `nop` as a pseudo-instruction in RISC-V, and the transpiler will transpile any instruction involving register `x0` that it deems to be a nop to `NOP`.
+| Name      | Operands  | Description                                                                                                        |
+| --------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| TERMINATE | `_, _, c` | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                   |
+| PHANTOM   | `_, _, c` | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run. |
 
 ### RV32IM Support
 
@@ -151,20 +144,22 @@ In all ALU instructions, the operand `d` is fixed to be `1`. We use the same ins
 
 #### Load/Store
 
-For all load/store instructions, we assume the operand `c` is in `[-2^11, 2^11)`, and we fix address spaces `d = 1` and `e = 2`.
-We will use shorthand `rv_ptr(b) := i32([b:4]_1)` to mean the value of a RISC-V 32-bit register as signed integer.
-When we then write `[rv_ptr(b) + c:W]_2`, we mean that the signed addition `rv_ptr(b) + i32(c)` is range checked such that `0 <= rv_ptr(b) + i32(c) <= 2^addr_bits - W` and then we access the memory at the field element `F::from_canonical_u32(rv_ptr(b) + i32(c))` in address space `2`. Regardless of `W`, the load/store instructions always do block accesses of block size `4`.
+For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1` and `e = 2`.
+We will use shorthand `rv_ptr(b, c) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as `i32`. This means we interpret `c` as the 2's complement encoding of a 16-bit integer, sign extend it to 32-bits, and then perform signed 32-bit addition with the value of the register `[b:4]_1`.
+Memory access to `ptr: i32` is only valid if `0 <= ptr < 2^addr_max_bits`, in which case it is an access to `F::from_canonical_u32(ptr as u32)`.
 
-| Name        | Operands    | Description                                                                                                                        |
-| ----------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| LOADB_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv_ptr(b) + c:1]_2)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
-| LOADH_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv_ptr(b) + c:2]_2)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
-| LOADW_RV32  | `a,b,c,1,2` | `[a:4]_1 = [rv_ptr(b) + c:4]_2`                                                                                                    |
-| LOADBU_RV32 | `a,b,c,1,2` | `[a:4]_d = zero_extend([rv_ptr(b) + c:1]_2)` Must zero-extend the number read from memory.                                         |
-| LOADHU_RV32 | `a,b,c,1,2` | `[a:4]_d = zero_extend([rv_ptr(b) + c:2]_2)` Must zero-extend the number read from memory.                                         |
-| STOREB_RV32 | `a,b,c,1,2` | `[rv_ptr(b) + c:1]_2 <- [b:1]_1`                                                                                                   |
-| STOREH_RV32 | `a,b,c,1,2` | `[rv_ptr(b) + c:2]_2 <- [b:2]_1`                                                                                                   |
-| STOREW_RV32 | `a,b,c,1,2` | `[rv_ptr(b) + c:4]_2 <- [b:4]_1`                                                                                                   |
+All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32, STOREB_RV32.
+
+| Name        | Operands    | Description                                                                                                                      |
+| ----------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| LOADB_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv_ptr(b,c):1]_2)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
+| LOADH_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv_ptr(b,c):2]_2)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
+| LOADW_RV32  | `a,b,c,1,2` | `[a:4]_1 = [rv_ptr(b,c):4]_2`                                                                                                    |
+| LOADBU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([rv_ptr(b,c):1]_2)` Must zero-extend the number read from memory.                                         |
+| LOADHU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([rv_ptr(b,c):2]_2)` Must zero-extend the number read from memory.                                         |
+| STOREB_RV32 | `a,b,c,1,2` | `[rv_ptr(b,c):1]_2 <- [b:1]_1`                                                                                                   |
+| STOREH_RV32 | `a,b,c,1,2` | `[rv_ptr(b,c):2]_2 <- [b:2]_1`                                                                                                   |
+| STOREW_RV32 | `a,b,c,1,2` | `[rv_ptr(b,c):4]_2 <- [b:4]_1`                                                                                                   |
 
 #### Branch/Jump
 
@@ -212,11 +207,17 @@ This section needs more details.
 
 #### System Calls
 
+Currently we have no need for `ECALLBREAK`, but we include it for future use.
+
 | Name       | Operands | Description                                                                                                                                                                                              |
 | ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ECALLBREAK | `c`      | This instruction has no operands except immediate `c = 0x0` or `0x1`. `c = 0x0` is ECALL. Custom functionality determined by reading register values. `c = 0x1` is EBREAK. Transfer control to debugger. |
+| ECALLBREAK | `_,_,c`  | This instruction has no operands except immediate `c = 0x0` or `0x1`. `c = 0x0` is ECALL. Custom functionality determined by reading register values. `c = 0x1` is EBREAK. Transfer control to debugger. |
 
 ### RV32 Intrinsics
+
+RV32 intrinsics are custom axVM opcodes that are meant to be transpiled from custom RISC-V instructions.
+The instruction definitions are custom, but they are still meant to be compatible with the RV32 architecture --
+in particular the instructions read values from RV32 registers.
 
 | Name              | Operands    | Description                                                                          |
 | ----------------- | ----------- | ------------------------------------------------------------------------------------ |
