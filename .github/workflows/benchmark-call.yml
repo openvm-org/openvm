@@ -200,15 +200,18 @@ jobs:
           fi
     
       - uses: actions/checkout@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           ref: gh-pages
 
       - name: set up git
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          
+
       - name: Update github pages with new bench results
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" benchmarks/${{ inputs.benchmark_name }}.md
           git add benchmarks/${{ inputs.benchmark_name }}.md
