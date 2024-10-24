@@ -225,6 +225,10 @@ We use the same notation for `rv{c}(b)` as in `LOADW_RV32` and `STOREW_RV32`.
 
 #### Hashes
 
+| Name           | Operands    | Description                                                     |
+| -------------- | ----------- | --------------------------------------------------------------- |
+| KECCAK256_RV32 | `a,b,c,1,e` | `[rv{0}(a):32]_e = keccak256([rv{0}(b)..rv{0}(b)+rv{0}(c)]_e)`. |
+
 #### U256 ALU
 
 #### U256 Multiplication
