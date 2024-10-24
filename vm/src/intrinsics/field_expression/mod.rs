@@ -19,12 +19,19 @@ use crate::{
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
+    // global opcode offset
     pub offset: usize,
+    // The opcodes handled by this air
+    pub local_opcode_indices: Vec<usize>,
 }
 
 impl FieldExpressionCoreAir {
-    pub fn new(expr: FieldExpr, offset: usize) -> Self {
-        Self { expr, offset }
+    pub fn new(expr: FieldExpr, offset: usize, local_opcode_indices: Vec<usize>) -> Self {
+        Self {
+            expr,
+            offset,
+            local_opcode_indices,
+        }
     }
 
     pub fn num_inputs(&self) -> usize {
@@ -87,8 +94,9 @@ where
             .map(|x| (*x).into())
             .collect();
 
-        // TODO: flags -> opcode
-        let expected_opcode = AB::Expr::from_canonical_usize(self.offset);
+        // TODO: flags -> opcode. Right now assume only one opcode per air.
+        let expected_opcode =
+            AB::Expr::from_canonical_usize(self.offset + self.local_opcode_indices[0]);
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
@@ -120,10 +128,15 @@ impl FieldExpressionCoreChip {
     pub fn new(
         expr: FieldExpr,
         offset: usize,
+        local_opcode_indices: Vec<usize>,
         range_checker: Arc<VariableRangeCheckerChip>,
         name: &str,
     ) -> Self {
-        let air = FieldExpressionCoreAir { expr, offset };
+        let air = FieldExpressionCoreAir {
+            expr,
+            offset,
+            local_opcode_indices,
+        };
         Self {
             air,
             range_checker,
