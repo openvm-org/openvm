@@ -63,7 +63,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
 
 #[test]
 fn test_rv32im_riscv_tests_runtime() -> Result<()> {
-    let skip_list = vec![
+    let skip_list = [
         "rv32ui-p-sh",
         "rv32ui-p-sb",
         "rv32ui-p-lh",
@@ -81,9 +81,7 @@ fn test_rv32im_riscv_tests_runtime() -> Result<()> {
                 continue;
             }
             println!("Running: {}", file_name);
-            let result = std::panic::catch_unwind(|| {
-                test_rv32im_runtime(path.to_str().unwrap())
-            });
+            let result = std::panic::catch_unwind(|| test_rv32im_runtime(path.to_str().unwrap()));
 
             match result {
                 Ok(Ok(_)) => println!("Passed!: {}", file_name),
