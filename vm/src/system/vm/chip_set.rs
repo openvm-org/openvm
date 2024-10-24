@@ -8,7 +8,6 @@ use std::{
 };
 
 use afs_primitives::{
-    bigint::utils::secp256k1_coord_prime,
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::XorLookupChip,
@@ -16,11 +15,12 @@ use afs_primitives::{
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    prover::types::{AirProofInput, ProofInput},
+    prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     rap::AnyRap,
-    Chip,
+    Chip, ChipUsageGetter,
 };
 use axvm_instructions::*;
+use itertools::zip_eq;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
@@ -33,7 +33,6 @@ use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
     common::nop::NopChip,
     intrinsics::{
-        ecc::sw::{SwEcAddNeCoreChip, SwEcDoubleCoreChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -42,8 +41,9 @@ use crate::{
     kernels::{
         adapters::{
             branch_native_adapter::BranchNativeAdapterChip, convert_adapter::ConvertAdapterChip,
-            jal_native_adapter::JalNativeAdapterChip, native_adapter::NativeAdapterChip,
-            native_vec_heap_adapter::NativeVecHeapAdapterChip,
+            jal_native_adapter::JalNativeAdapterChip,
+            loadstore_native_adapter::NativeLoadStoreAdapterChip,
+            native_adapter::NativeAdapterChip, native_vec_heap_adapter::NativeVecHeapAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
         branch_eq::KernelBranchEqChip,
@@ -56,6 +56,7 @@ use crate::{
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
         jal::{JalCoreChip, KernelJalChip},
+        loadstore::{KernelLoadStoreChip, KernelLoadStoreCoreChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
         public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
@@ -83,17 +84,24 @@ use crate::{
         rv32_jalr::{Rv32JalrChip, Rv32JalrCoreChip},
     },
     system::{
+        connector::VmConnectorChip,
         memory::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
-            MemoryControllerRef, CHUNK,
+            MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
         },
         program::{ProgramBus, ProgramChip},
-        vm::{
-            config::{PersistenceType, VmConfig},
-            connector::VmConnectorChip,
-        },
+        vm::config::{PersistenceType, VmConfig},
     },
 };
+
+pub const PROGRAM_AIR_ID: usize = 0;
+pub const CONNECTOR_AIR_ID: usize = 1;
+/// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
+/// using persistent memory.
+pub const PUBLIC_VALUES_AIR_ID: usize = 2;
+/// If VM uses persistent memory, all AIRs of MemoryController are added after ConnectorChip.
+/// Merkle AIR commits start/final memory states.
+pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
 pub struct VmChipSet<F: PrimeField32> {
     pub executors: BTreeMap<usize, AxVmInstructionExecutor<F>>,
@@ -101,12 +109,26 @@ pub struct VmChipSet<F: PrimeField32> {
     // ATTENTION: chip destruction should follow the following field order:
     pub program_chip: ProgramChip<F>,
     pub connector_chip: VmConnectorChip<F>,
+    /// PublicValuesChip is disabled when num_public_values == 0.
+    pub public_values_chip: Option<Rc<RefCell<PublicValuesChip<F>>>>,
     pub chips: Vec<AxVmChip<F>>,
     pub memory_controller: MemoryControllerRef<F>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
 impl<F: PrimeField32> VmChipSet<F> {
+    pub(crate) fn current_trace_cells(&self) -> BTreeMap<String, usize> {
+        iter::once(get_name_and_cells(&self.program_chip))
+            .chain([get_name_and_cells(&self.connector_chip)])
+            .chain(self.public_values_chip.as_ref().map(get_name_and_cells))
+            .chain(zip_eq(
+                self.memory_controller.borrow().air_names(),
+                self.memory_controller.borrow().current_trace_cells(),
+            ))
+            .chain(self.chips.iter().map(get_name_and_cells))
+            .chain([get_name_and_cells(&self.range_checker_chip)])
+            .collect()
+    }
     pub(crate) fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -116,13 +138,17 @@ impl<F: PrimeField32> VmChipSet<F> {
         let connector_rap: Arc<dyn AnyRap<SC>> = Arc::new(self.connector_chip.air.clone());
         [program_rap, connector_rap]
             .into_iter()
-            .chain(self.chips.iter().map(|chip| chip.air()))
+            .chain(self.public_values_chip.as_ref().map(|chip| chip.air()))
             .chain(self.memory_controller.borrow().airs())
+            .chain(self.chips.iter().map(|chip| chip.air()))
             .chain(iter::once(self.range_checker_chip.air()))
             .collect()
     }
 
-    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(self) -> ProofInput<SC>
+    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
+        self,
+        cached_program: Option<CommittedTraceData<SC>>,
+    ) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
@@ -131,15 +157,25 @@ impl<F: PrimeField32> VmChipSet<F> {
         // Drop all strong references to chips other than self.chips, which will be consumed next.
         drop(self.executors);
 
-        // System: Program Chip
         let mut pi_builder = ChipSetProofInputBuilder::new();
-        pi_builder.add_air_proof_input(self.program_chip.into());
+        // System: Program Chip
+        debug_assert_eq!(pi_builder.curr_air_id, PROGRAM_AIR_ID);
+        pi_builder.add_air_proof_input(self.program_chip.generate_air_proof_input(cached_program));
         // System: Connector Chip
+        debug_assert_eq!(pi_builder.curr_air_id, CONNECTOR_AIR_ID);
         pi_builder.add_air_proof_input(self.connector_chip.generate_air_proof_input());
-        // Non-system chips
-        for chip in self.chips {
+        // Kernel: PublicValues Chip
+        if let Some(chip) = self.public_values_chip {
+            debug_assert_eq!(pi_builder.curr_air_id, PUBLIC_VALUES_AIR_ID);
             pi_builder.add_air_proof_input(chip.generate_air_proof_input());
         }
+        // Non-system chips: ONLY AirProofInput generation to release strong references.
+        // Will be added after MemoryController for AIR ordering.
+        let non_sys_inputs: Vec<_> = self
+            .chips
+            .into_iter()
+            .map(|chip| chip.generate_air_proof_input())
+            .collect();
         // System: Memory Controller
         {
             // memory
@@ -152,6 +188,10 @@ impl<F: PrimeField32> VmChipSet<F> {
                 pi_builder.add_air_proof_input(air_proof_input);
             }
         }
+        // Non-system chips
+        non_sys_inputs
+            .into_iter()
+            .for_each(|input| pi_builder.add_air_proof_input(input));
         // System: Range Checker Chip
         pi_builder.add_air_proof_input(self.range_checker_chip.generate_air_proof_input());
 
@@ -210,14 +250,26 @@ impl VmConfig {
         // CoreChip is always required even if it's not explicitly specified.
         required_executors.insert(ExecutorName::Core);
         // PublicValuesChip is required when num_public_values > 0.
-        if self.num_public_values > 0 {
+        let public_values_chip = if self.num_public_values > 0 {
             // Raw public values are not supported when continuation is enabled.
             assert_ne!(
                 self.memory_config.persistence_type,
                 PersistenceType::Persistent
             );
-            required_executors.insert(ExecutorName::PublicValues);
-        }
+            let (range, offset) = default_executor_range(ExecutorName::PublicValues);
+            let chip = Rc::new(RefCell::new(PublicValuesChip::new(
+                NativeAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+                PublicValuesCoreChip::new(self.num_public_values, offset),
+                memory_controller.clone(),
+            )));
+            for opcode in range {
+                executors.insert(opcode, chip.clone().into());
+            }
+            Some(chip)
+        } else {
+            required_executors.remove(&ExecutorName::PublicValues);
+            None
+        };
         // We always put Poseidon2 chips in the end. So it will be initialized separately.
         let has_poseidon_chip = required_executors.contains(&ExecutorName::Poseidon2);
         if has_poseidon_chip {
@@ -258,6 +310,22 @@ impl VmConfig {
                         executors.insert(opcode, core_chip.clone().into());
                     }
                     chips.push(AxVmChip::Core(core_chip));
+                }
+                ExecutorName::LoadStore => {
+                    let chip = Rc::new(RefCell::new(KernelLoadStoreChip::<F, 1>::new(
+                        NativeLoadStoreAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            offset,
+                        ),
+                        KernelLoadStoreCoreChip::new(streams.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::LoadStore(chip));
                 }
                 ExecutorName::BranchEqual => {
                     let chip = Rc::new(RefCell::new(KernelBranchEqChip::new(
@@ -319,21 +387,7 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::FieldExtension(chip));
                 }
-                ExecutorName::PublicValues => {
-                    let chip = Rc::new(RefCell::new(PublicValuesChip::new(
-                        NativeAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        PublicValuesCoreChip::new(self.num_public_values, offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::PublicValues(chip));
-                }
+                ExecutorName::PublicValues => {}
                 ExecutorName::Poseidon2 => {}
                 ExecutorName::Keccak256 => {
                     let chip = Rc::new(RefCell::new(KeccakVmChip::new(
@@ -618,14 +672,9 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        SwEcAddNeCoreChip::new(
-                            secp256k1_coord_prime(),
-                            32,
-                            8,
-                            memory_controller.borrow().range_checker.clone(),
-                            offset,
-                        ),
                         memory_controller.clone(),
+                        8,
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -639,14 +688,9 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        SwEcDoubleCoreChip::new(
-                            secp256k1_coord_prime(),
-                            32,
-                            8,
-                            memory_controller.borrow().range_checker.clone(),
-                            offset,
-                        ),
                         memory_controller.clone(),
+                        8,
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -831,6 +875,7 @@ impl VmConfig {
             executors,
             program_chip,
             connector_chip,
+            public_values_chip,
             chips,
             memory_controller,
             range_checker_chip: range_checker,
@@ -928,6 +973,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CoreOpcode::default_offset(),
             CoreOpcode::COUNT,
             CoreOpcode::default_offset(),
+        ),
+        ExecutorName::LoadStore => (
+            NativeLoadStoreOpcode::default_offset(),
+            NativeLoadStoreOpcode::COUNT,
+            NativeLoadStoreOpcode::default_offset(),
         ),
         ExecutorName::BranchEqual => (
             NativeBranchEqualOpcode::default_offset(),
@@ -1100,4 +1150,8 @@ impl<SC: StarkGenericConfig> ChipSetProofInputBuilder<SC> {
             per_air: self.proof_input_per_air,
         }
     }
+}
+
+fn get_name_and_cells(chip: &impl ChipUsageGetter) -> (String, usize) {
+    (chip.air_name(), chip.current_trace_cells())
 }

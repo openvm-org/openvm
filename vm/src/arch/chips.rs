@@ -25,6 +25,7 @@ use crate::{
         field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
         jal::KernelJalChip,
+        loadstore::KernelLoadStoreChip,
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
         public_values::PublicValuesChip,
     },
@@ -79,6 +80,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Nop(Rc<RefCell<NopChip<F>>>),
     Core(Rc<RefCell<CoreChip<F>>>),
+    LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
     BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
     Jal(Rc<RefCell<KernelJalChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
@@ -121,11 +123,11 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
 pub enum AxVmChip<F: PrimeField32> {
     Nop(Rc<RefCell<NopChip<F>>>),
     Core(Rc<RefCell<CoreChip<F>>>),
+    LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
     BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
     Jal(Rc<RefCell<KernelJalChip<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
-    PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),

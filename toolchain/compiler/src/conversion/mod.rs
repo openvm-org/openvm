@@ -437,7 +437,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::LoadF(dst, src, index, size, offset) => vec![
             // mem[dst] <- mem[mem[src] + mem[index] * size + offset]
             inst_large(
-                options.opcode_with_offset(CoreOpcode::LOADW2),
+                options.opcode_with_offset(NativeLoadStoreOpcode::LOADW2),
                 i32_f(dst),
                 offset,
                 i32_f(src),
@@ -450,7 +450,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::LoadFI(dst, src, index, size, offset) => vec![
             // mem[dst] <- mem[mem[src] + index * size + offset]
             inst(
-                options.opcode_with_offset(CoreOpcode::LOADW),
+                options.opcode_with_offset(NativeLoadStoreOpcode::LOADW),
                 i32_f(dst),
                 index * size + offset,
                 i32_f(src),
@@ -461,7 +461,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::StoreF(val, addr, index, size, offset) => vec![
             // mem[mem[addr] + mem[index] * size + offset] <- mem[val]
             inst_large(
-                options.opcode_with_offset(CoreOpcode::STOREW2),
+                options.opcode_with_offset(NativeLoadStoreOpcode::STOREW2),
                 i32_f(val),
                 offset,
                 i32_f(addr),
@@ -474,7 +474,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::StoreFI(val, addr, index, size, offset) => vec![
             // mem[mem[addr] + index * size + offset] <- mem[val]
             inst(
-                options.opcode_with_offset(CoreOpcode::STOREW),
+                options.opcode_with_offset(NativeLoadStoreOpcode::STOREW),
                 i32_f(val),
                 index * size + offset,
                 i32_f(addr),
@@ -644,10 +644,10 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::SHINTW),
-            i32_f(val),
-            offset,
+            options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
             F::zero(),
+            offset,
+            i32_f(val),
             AS::Memory,
             AS::Memory,
         )],
@@ -659,7 +659,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             }
         }
         AsmInstruction::ImmF(dst, val) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::STOREW),
+            options.opcode_with_offset(NativeLoadStoreOpcode::STOREW),
             val,
             F::zero(),
             i32_f(dst),
@@ -667,7 +667,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::CopyF(dst, src) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::LOADW),
+            options.opcode_with_offset(NativeLoadStoreOpcode::LOADW),
             i32_f(dst),
             F::zero(),
             i32_f(src),
@@ -925,7 +925,7 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
 ) -> Program<F> {
     // mem[0] <- 0
     let init_register_0 = inst(
-        options.opcode_with_offset(CoreOpcode::STOREW),
+        options.opcode_with_offset(NativeLoadStoreOpcode::STOREW),
         F::zero(),
         F::zero(),
         i32_f(0),

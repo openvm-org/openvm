@@ -31,16 +31,8 @@ pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum CoreOpcode {
-    // Dummy opcode to represent padding, to be removed
-    DUMMY,
-    LOADW,
-    STOREW,
-    LOADW2,
-    STOREW2,
     FAIL,
     PRINTF,
-    /// Instruction to write the next hint word into memory.
-    SHINTW,
 
     // TODO: move these to a separate class, PhantomOpcode or something
     /// Phantom instruction to prepare the next input vector for hinting.
@@ -53,6 +45,21 @@ pub enum CoreOpcode {
     CT_START,
     /// Phantom instruction to end tracing
     CT_END,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x010]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum NativeLoadStoreOpcode {
+    LOADW,
+    STOREW,
+    LOADW2,
+    STOREW2,
+    /// Instruction to write the next hint word into memory.
+    SHINTW,
 }
 
 #[derive(

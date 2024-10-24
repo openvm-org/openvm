@@ -1,31 +1,21 @@
-use std::{array, collections::BTreeMap};
+use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 use strum::{EnumCount, IntoEnumIterator};
 
-use super::{CORE_MAX_READS_PER_CYCLE, CORE_MAX_WRITES_PER_CYCLE};
-use crate::{
-    arch::instructions::CoreOpcode,
-    system::memory::{
-        offline_checker::{MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
-        MemoryReadRecord, MemoryWriteRecord,
-    },
-};
+use crate::arch::instructions::CoreOpcode;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoreIoCols<T> {
     pub timestamp: T,
     pub pc: T,
-
     pub opcode: T,
     pub a: T,
     pub b: T,
     pub c: T,
     pub d: T,
     pub e: T,
-    pub f: T,
-    pub g: T,
 }
 
 impl<T: Clone> CoreIoCols<T> {
@@ -39,8 +29,6 @@ impl<T: Clone> CoreIoCols<T> {
             c: slc[5].clone(),
             d: slc[6].clone(),
             e: slc[7].clone(),
-            f: slc[8].clone(),
-            g: slc[9].clone(),
         }
     }
 
@@ -54,13 +42,11 @@ impl<T: Clone> CoreIoCols<T> {
             self.c.clone(),
             self.d.clone(),
             self.e.clone(),
-            self.f.clone(),
-            self.g.clone(),
         ]
     }
 
     pub fn get_width() -> usize {
-        10
+        8
     }
 }
 
@@ -69,122 +55,34 @@ impl<T: Field> CoreIoCols<T> {
         Self {
             timestamp: T::default(),
             pc: T::default(),
-            opcode: T::from_canonical_usize(CoreOpcode::DUMMY as usize),
+            opcode: T::default(),
             a: T::default(),
             b: T::default(),
             c: T::default(),
             d: T::default(),
             e: T::default(),
-            f: T::default(),
-            g: T::default(),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CoreMemoryAccessCols<T> {
-    pub address_space: T,
-    pub pointer: T,
-    pub value: T,
-}
-
-impl<F: Field> CoreMemoryAccessCols<F> {
-    pub fn disabled() -> Self {
-        CoreMemoryAccessCols {
-            address_space: F::one(),
-            pointer: F::zero(),
-            value: F::zero(),
-        }
-    }
-
-    pub fn from_read_record(read: MemoryReadRecord<F, 1>) -> Self {
-        CoreMemoryAccessCols {
-            address_space: read.address_space,
-            pointer: read.pointer,
-            value: read.value(),
-        }
-    }
-
-    pub fn from_write_record(write: MemoryWriteRecord<F, 1>) -> Self {
-        CoreMemoryAccessCols {
-            address_space: write.address_space,
-            pointer: write.pointer,
-            value: write.value(),
-        }
-    }
-}
-
-impl<T: Clone> CoreMemoryAccessCols<T> {
-    pub fn from_slice(slc: &[T]) -> Self {
-        Self {
-            address_space: slc[0].clone(),
-            pointer: slc[1].clone(),
-            value: slc[2].clone(),
-        }
-    }
-}
-
-impl<T> CoreMemoryAccessCols<T> {
-    pub fn flatten(self) -> Vec<T> {
-        vec![self.address_space, self.pointer, self.value]
-    }
-
-    pub fn width() -> usize {
-        3
-    }
-}
-
-#[derive(Clone, Debug)]
 pub struct CoreAuxCols<T> {
+    pub is_valid: T,
     pub operation_flags: BTreeMap<CoreOpcode, T>,
-    pub reads: [CoreMemoryAccessCols<T>; CORE_MAX_READS_PER_CYCLE],
-    pub writes: [CoreMemoryAccessCols<T>; CORE_MAX_WRITES_PER_CYCLE],
-    pub reads_aux_cols: [MemoryReadOrImmediateAuxCols<T>; CORE_MAX_READS_PER_CYCLE],
-    pub writes_aux_cols: [MemoryWriteAuxCols<T, 1>; CORE_MAX_WRITES_PER_CYCLE],
-
-    pub next_pc: T,
 }
 
 impl<T: Clone> CoreAuxCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
-        let mut start = 0;
-        let mut end = CoreOpcode::COUNT;
+        let start = 0;
+        let end = CoreOpcode::COUNT;
         let operation_flags_vec = slc[start..end].to_vec();
         let mut operation_flags = BTreeMap::new();
         for (opcode, operation_flag) in CoreOpcode::iter().zip_eq(operation_flags_vec) {
             operation_flags.insert(opcode, operation_flag);
         }
-
-        let reads = array::from_fn(|_| {
-            start = end;
-            end += CoreMemoryAccessCols::<T>::width();
-            CoreMemoryAccessCols::<T>::from_slice(&slc[start..end])
-        });
-        let writes = array::from_fn(|_| {
-            start = end;
-            end += CoreMemoryAccessCols::<T>::width();
-            CoreMemoryAccessCols::<T>::from_slice(&slc[start..end])
-        });
-
-        let reads_aux_cols = array::from_fn(|_| {
-            start = end;
-            end += MemoryReadOrImmediateAuxCols::<T>::width();
-            MemoryReadOrImmediateAuxCols::from_slice(&slc[start..end])
-        });
-        let writes_aux_cols = array::from_fn(|_| {
-            start = end;
-            end += MemoryWriteAuxCols::<T, 1>::width();
-            MemoryWriteAuxCols::from_slice(&slc[start..end])
-        });
-        let next_pc = slc[end].clone();
-
         Self {
+            is_valid: slc[end].clone(),
             operation_flags,
-            reads,
-            writes,
-            reads_aux_cols,
-            writes_aux_cols,
-            next_pc,
         }
     }
 
@@ -193,41 +91,12 @@ impl<T: Clone> CoreAuxCols<T> {
         for opcode in CoreOpcode::iter() {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
-        flattened.extend(
-            self.reads
-                .iter()
-                .cloned()
-                .flat_map(CoreMemoryAccessCols::<T>::flatten),
-        );
-        flattened.extend(
-            self.writes
-                .iter()
-                .cloned()
-                .flat_map(CoreMemoryAccessCols::<T>::flatten),
-        );
-        flattened.extend(
-            self.reads_aux_cols
-                .iter()
-                .cloned()
-                .flat_map(MemoryReadOrImmediateAuxCols::flatten),
-        );
-        flattened.extend(
-            self.writes_aux_cols
-                .iter()
-                .cloned()
-                .flat_map(MemoryWriteAuxCols::flatten),
-        );
-        flattened.push(self.next_pc.clone());
+        flattened.push(self.is_valid.clone());
         flattened
     }
 
     pub fn get_width() -> usize {
-        CoreOpcode::COUNT
-            + CORE_MAX_READS_PER_CYCLE
-                * (CoreMemoryAccessCols::<T>::width() + MemoryReadOrImmediateAuxCols::<T>::width())
-            + CORE_MAX_WRITES_PER_CYCLE
-                * (CoreMemoryAccessCols::<T>::width() + MemoryWriteAuxCols::<T, 1>::width())
-            + 1
+        CoreOpcode::COUNT + 1
     }
 }
 
@@ -235,16 +104,12 @@ impl<F: PrimeField32> CoreAuxCols<F> {
     pub fn blank_row() -> Self {
         let mut operation_flags = BTreeMap::new();
         for opcode in CoreOpcode::iter() {
-            operation_flags.insert(opcode, F::from_bool(opcode == CoreOpcode::DUMMY));
+            operation_flags.insert(opcode, F::zero());
         }
 
         Self {
+            is_valid: F::zero(),
             operation_flags,
-            reads: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
-            writes: array::from_fn(|_| CoreMemoryAccessCols::disabled()),
-            reads_aux_cols: array::from_fn(|_| MemoryReadOrImmediateAuxCols::disabled()),
-            writes_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::disabled()),
-            next_pc: F::default(),
         }
     }
 }

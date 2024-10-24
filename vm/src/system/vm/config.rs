@@ -123,6 +123,7 @@ impl Default for VmConfig {
     fn default() -> Self {
         Self::default_with_no_executors()
             .add_executor(ExecutorName::Core)
+            .add_executor(ExecutorName::LoadStore)
             .add_executor(ExecutorName::BranchEqual)
             .add_executor(ExecutorName::Jal)
             .add_executor(ExecutorName::FieldArithmetic)

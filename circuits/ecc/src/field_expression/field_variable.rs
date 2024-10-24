@@ -69,6 +69,12 @@ impl FieldVariable {
         builder.num_variables - 1
     }
 
+    pub fn save_output(&mut self) {
+        let index = self.save();
+        let mut builder = self.builder.borrow_mut();
+        builder.output_indices.push(index);
+    }
+
     pub fn canonical_limb_bits(&self) -> usize {
         self.builder.borrow().limb_bits
     }

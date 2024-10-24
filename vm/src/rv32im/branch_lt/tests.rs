@@ -18,10 +18,10 @@ use crate::{
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::adapters::{
-        JumpUiProcessedInstruction, Rv32BranchAdapterChip, PC_BITS, RV32_CELL_BITS,
-        RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
+        JumpUiProcessedInstruction, Rv32BranchAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        RV_B_TYPE_IMM_BITS,
     },
-    system::program::Instruction,
+    system::{program::Instruction, PC_BITS},
 };
 
 type F = BabyBear;

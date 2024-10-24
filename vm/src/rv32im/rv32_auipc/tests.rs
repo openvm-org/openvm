@@ -23,10 +23,10 @@ use crate::{
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
-        adapters::{Rv32RdWriteAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+        adapters::{Rv32RdWriteAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         rv32_auipc::run_auipc,
     },
-    system::program::Instruction,
+    system::{program::Instruction, PC_BITS},
 };
 
 const IMM_BITS: usize = 24;

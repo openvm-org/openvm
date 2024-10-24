@@ -207,7 +207,7 @@ where
         (
             RowMajorMatrix::new(common_main_val, 1),
             CommittedTraceData {
-                raw_data: cached_trace,
+                raw_data: Arc::new(cached_trace),
                 prover_data,
             },
         )
@@ -247,7 +247,7 @@ impl<'a, SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'a, SC> {
                 air: self.air(),
                 cached_mains_pdata: vec![cached_main.prover_data],
                 raw: AirProofRawInput {
-                    cached_mains: vec![Arc::new(cached_main.raw_data)],
+                    cached_mains: vec![cached_main.raw_data],
                     common_main: Some(common_main),
                     public_values: vec![],
                 },

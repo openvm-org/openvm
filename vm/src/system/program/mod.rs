@@ -1,9 +1,6 @@
-use std::{collections::HashMap, error::Error, fmt::Display, sync::Arc};
+use std::{collections::HashMap, error::Error, fmt::Display};
 
-use afs_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    prover::{helper::AirProofInputTestHelper, types::AirProofInput},
-};
+use afs_stark_backend::ChipUsageGetter;
 use axvm_instructions::{TerminateOpcode, UsizeOpcode};
 use backtrace::Backtrace;
 use itertools::Itertools;
@@ -16,11 +13,13 @@ pub mod tests;
 
 mod air;
 mod bus;
-mod trace;
+pub mod trace;
 pub mod util;
 
 pub use air::*;
 pub use bus::*;
+
+use super::PC_BITS;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -214,6 +213,8 @@ pub struct Program<F> {
     pub pc_base: u32,
 }
 
+const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
+
 impl<F> Program<F> {
     pub fn from_instructions_and_step(
         instructions: &[Instruction<F>],
@@ -224,6 +225,10 @@ impl<F> Program<F> {
     where
         F: Clone,
     {
+        assert!(
+            instructions.is_empty()
+                || pc_base + (instructions.len() as u32 - 1) * step <= MAX_ALLOWED_PC
+        );
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
@@ -249,6 +254,7 @@ impl<F> Program<F> {
     where
         F: Clone,
     {
+        assert!(instructions.is_empty() || instructions.len() as u32 - 1 <= MAX_ALLOWED_PC);
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
@@ -377,14 +383,16 @@ impl<F: PrimeField64> ProgramChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> From<ProgramChip<Val<SC>>> for AirProofInput<SC>
-where
-    Val<SC>: PrimeField64,
-{
-    fn from(program_chip: ProgramChip<Val<SC>>) -> Self {
-        let air = program_chip.air.clone();
-        let cached_trace = program_chip.generate_cached_trace();
-        let common_trace = program_chip.generate_trace();
-        AirProofInput::cached_traces_no_pis(Arc::new(air), vec![cached_trace], common_trace)
+impl<F: PrimeField64> ChipUsageGetter for ProgramChip<F> {
+    fn air_name(&self) -> String {
+        "ProgramChip".to_string()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.true_program_length
+    }
+
+    fn trace_width(&self) -> usize {
+        1
     }
 }

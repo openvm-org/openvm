@@ -11,18 +11,16 @@ use parking_lot::Mutex;
 pub use segment::ExecutionSegment;
 
 use crate::{
-    arch::AxVmChip,
     intrinsics::hashes::poseidon2::CHUNK,
     system::{
         memory::Equipartition,
-        program::{ExecutionError, Program},
+        program::{trace::CommittedProgram, ExecutionError, Program},
         vm::config::{PersistenceType, VmConfig},
     },
 };
 
 pub mod chip_set;
 pub mod config;
-pub mod connector;
 pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
@@ -108,7 +106,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 pc,
                 segment.chip_set.connector_chip.boundary_states[1]
                     .unwrap()
-                    .pc as u32
+                    .pc
             );
 
             let config = mem::take(&mut segment.config);
@@ -148,7 +146,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
         Ok(VirtualMachineResult {
             per_segment: segments
                 .into_iter()
-                .map(ExecutionSegment::generate_proof_input)
+                .map(|seg| seg.generate_proof_input(None))
                 .collect(),
         })
     }
@@ -180,23 +178,26 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
         input: Vec<Vec<F>>,
     ) -> Result<Vec<Option<F>>, ExecutionError> {
         let segment = self.execute_impl(program, input.into())?;
-        let pv_chip = find_chip!(segment.chip_set, AxVmChip::PublicValues);
-        let borrowed_pv_chip = pv_chip.borrow();
-        let pvs = borrowed_pv_chip.core.get_custom_public_values();
+        let pvs = if let Some(pv_chip) = segment.chip_set.public_values_chip {
+            let borrowed_pv_chip = pv_chip.borrow();
+            borrowed_pv_chip.core.get_custom_public_values()
+        } else {
+            vec![]
+        };
         Ok(pvs)
     }
 
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        program: Program<F>,
+        commited_program: Arc<CommittedProgram<SC>>,
         input: Vec<Vec<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segment = self.execute_impl(program, input.into())?;
-        Ok(segment.generate_proof_input())
+        let segment = self.execute_impl(commited_program.program.clone(), input.into())?;
+        Ok(segment.generate_proof_input(Some(commited_program.committed_trace_data.clone())))
     }
 
     fn execute_impl(

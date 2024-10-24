@@ -22,6 +22,13 @@ use crate::{
     system::program::ProgramBus,
 };
 
+#[cfg(test)]
+mod tests;
+
+/// When a program hasn't terminated. There is no constraints on the exit code.
+/// But we will use this value when generating the proof.
+pub const DEFAULT_SUSPEND_EXIT_CODE: u32 = 42;
+
 #[derive(Debug, Clone)]
 pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
@@ -34,6 +41,7 @@ pub struct VmConnectorPvs<F> {
     pub initial_pc: F,
     pub final_pc: F,
     pub exit_code: F,
+    pub is_terminate: F,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
@@ -90,14 +98,18 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
             initial_pc,
             final_pc,
             exit_code,
+            is_terminate,
         } = builder.public_values().borrow();
 
         builder.when_transition().assert_eq(begin.pc, initial_pc);
         builder.when_transition().assert_eq(end.pc, final_pc);
-        builder.when_transition().assert_eq(
-            end.is_terminate * end.exit_code - (AB::Expr::one() - end.is_terminate),
-            exit_code,
-        );
+        builder
+            .when_transition()
+            .when(end.is_terminate)
+            .assert_eq(end.exit_code, exit_code);
+        builder
+            .when_transition()
+            .assert_eq(end.is_terminate, is_terminate);
 
         self.execution_bus.execute(
             builder,
@@ -118,7 +130,7 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
 #[derive(Debug)]
 pub struct VmConnectorChip<F: PrimeField32> {
     pub air: VmConnectorAir,
-    pub boundary_states: [Option<ConnectorCols<i32>>; 2],
+    pub boundary_states: [Option<ConnectorCols<u32>>; 2],
     _marker: PhantomData<F>,
 }
 
@@ -136,8 +148,8 @@ impl<F: PrimeField32> VmConnectorChip<F> {
 
     pub fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
-            pc: state.pc as i32,
-            timestamp: state.timestamp as i32,
+            pc: state.pc,
+            timestamp: state.timestamp,
             is_terminate: 0,
             exit_code: 0,
         });
@@ -145,14 +157,10 @@ impl<F: PrimeField32> VmConnectorChip<F> {
 
     pub fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
         self.boundary_states[1] = Some(ConnectorCols {
-            pc: state.pc as i32,
-            timestamp: state.timestamp as i32,
-            is_terminate: exit_code.is_some() as i32,
-            exit_code: if let Some(exit_code) = exit_code {
-                exit_code as i32
-            } else {
-                -1
-            },
+            pc: state.pc,
+            timestamp: state.timestamp,
+            is_terminate: exit_code.is_some() as u32,
+            exit_code: exit_code.unwrap_or(DEFAULT_SUSPEND_EXIT_CODE),
         });
     }
 }
@@ -167,15 +175,9 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let [initial_state, final_state] = self.boundary_states.map(|state| {
-            state.unwrap().map(|x| {
-                if x < 0 {
-                    -Val::<SC>::from_canonical_u32(-x as u32)
-                } else {
-                    Val::<SC>::from_canonical_u32(x as u32)
-                }
-            })
-        });
+        let [initial_state, final_state] = self
+            .boundary_states
+            .map(|state| state.unwrap().map(Val::<SC>::from_canonical_u32));
 
         let trace = RowMajorMatrix::new(
             [initial_state.flatten(), final_state.flatten()].concat(),
@@ -187,6 +189,7 @@ where
             initial_pc: initial_state.pc,
             final_pc: final_state.pc,
             exit_code: final_state.exit_code,
+            is_terminate: final_state.is_terminate,
         };
         AirProofInput::simple(Arc::new(self.air), trace, public_values)
     }

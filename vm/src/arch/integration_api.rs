@@ -288,6 +288,7 @@ where
                 );
                 self.core.generate_trace_row(core_row, record.2);
             });
+
         AirProofInput::simple(
             air,
             RowMajorMatrix::new(values, width),

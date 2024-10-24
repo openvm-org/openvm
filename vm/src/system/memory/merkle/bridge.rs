@@ -15,7 +15,7 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: MemoryMerkleCols<CHUNK, AB::Var>,
+        local: &MemoryMerkleCols<AB::Var, CHUNK>,
     ) {
         // interaction does not occur for first two rows;
         // for those, parent hash value comes from public values

@@ -29,20 +29,13 @@ pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const BYTE_XOR_BUS: XorBus = XorBus(8);
 pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
-pub const CORE_MAX_READS_PER_CYCLE: usize = 3;
-pub const CORE_MAX_WRITES_PER_CYCLE: usize = 1;
-pub const CORE_MAX_ACCESSES_PER_CYCLE: usize = CORE_MAX_READS_PER_CYCLE + CORE_MAX_WRITES_PER_CYCLE;
 
 fn timestamp_delta(opcode: CoreOpcode) -> u32 {
     match opcode {
-        LOADW | STOREW => 3,
-        LOADW2 | STOREW2 => 4,
         FAIL => 0,
         PRINTF => 1,
-        SHINTW => 2,
         HINT_INPUT | HINT_BITS | HINT_BYTES => 0,
         CT_START | CT_END => 0,
-        DUMMY => 0,
     }
 }
 

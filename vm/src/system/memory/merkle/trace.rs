@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{borrow::BorrowMut, cmp::Reverse, collections::HashSet, sync::Arc};
 
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -41,29 +41,28 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             0,
             hasher,
         );
-        while !rows.len().is_power_of_two() {
-            rows.push(unused_row::<CHUNK, F>());
-        }
         // important that this sort be stable,
         // because we need the initial root to be first and the final root to be second
-        rows.sort_by_key(|row| -(row.parent_height.as_canonical_u64() as i32));
-        let trace = RowMajorMatrix::new(
-            rows.iter().flat_map(MemoryMerkleCols::flatten).collect(),
-            MemoryMerkleCols::<CHUNK, F>::get_width(),
-        );
+        rows.sort_by_key(|row| Reverse(row.parent_height));
+
+        let width = MemoryMerkleCols::<F, CHUNK>::width();
+        let height = rows.len().next_power_of_two();
+        let mut trace = vec![F::zero(); width * height];
+
+        for (trace_row, row) in trace.chunks_exact_mut(width).zip(rows) {
+            *trace_row.borrow_mut() = row;
+        }
+
+        let trace = RowMajorMatrix::new(trace, width);
         (trace, final_tree)
     }
-}
-
-fn unused_row<const CHUNK: usize, F: PrimeField32>() -> MemoryMerkleCols<CHUNK, F> {
-    MemoryMerkleCols::from_slice(&vec![F::zero(); MemoryMerkleCols::<CHUNK, F>::get_width()])
 }
 
 struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     memory_dimensions: MemoryDimensions,
     final_memory: &'a Equipartition<F, CHUNK>,
     touched_nodes: &'a HashSet<(usize, usize, usize)>,
-    trace_rows: &'a mut Vec<MemoryMerkleCols<CHUNK, F>>,
+    trace_rows: &'a mut Vec<MemoryMerkleCols<F, CHUNK>>,
 }
 
 impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {

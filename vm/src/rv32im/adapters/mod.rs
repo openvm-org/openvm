@@ -27,8 +27,6 @@ pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
-pub const PC_BITS: usize = 30;
-
 use p3_field::PrimeField32;
 
 use crate::system::memory::{MemoryController, MemoryReadRecord};

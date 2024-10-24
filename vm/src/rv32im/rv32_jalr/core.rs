@@ -23,9 +23,9 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::{
-        compose, JumpUiProcessedInstruction, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        compose, JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
-    system::program::Instruction,
+    system::{program::Instruction, PC_BITS},
 };
 
 const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;

@@ -24,12 +24,10 @@ use crate::{
     },
     kernels::core::BYTE_XOR_BUS,
     rv32im::{
-        adapters::{
-            compose, Rv32JalrAdapterChip, PC_BITS, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-        },
+        adapters::{compose, Rv32JalrAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         rv32_jalr::{run_jalr, Rv32JalrCoreCols},
     },
-    system::program::Instruction,
+    system::{program::Instruction, PC_BITS},
 };
 
 const IMM_BITS: usize = 16;

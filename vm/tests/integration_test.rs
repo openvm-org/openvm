@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, sync::Arc};
 
 use afs_stark_backend::{
     config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
@@ -7,13 +7,13 @@ use afs_stark_backend::{
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
+        FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
     utils::create_seeded_rng,
 };
 use axvm_instructions::PublishOpcode::PUBLISH;
-use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
@@ -21,19 +21,20 @@ use stark_vm::{
     arch::{
         instructions::{
             BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
-            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, Poseidon2Opcode::*,
-            TerminateOpcode::*, UsizeOpcode,
+            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
+            NativeLoadStoreOpcode::*, Poseidon2Opcode::*, TerminateOpcode::*, UsizeOpcode,
         },
         ExecutorName,
     },
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     sdk::air_test,
     system::{
+        connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{merkle::MemoryMerklePvs, Equipartition},
         program::{Instruction, Program},
         vm::{
+            chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID},
             config::{MemoryConfig, PersistenceType, VmConfig},
-            connector::VmConnectorPvs,
             ExitCode, SingleSegmentVM, VirtualMachine,
         },
     },
@@ -52,6 +53,7 @@ where
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig::core()
+        .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::BranchEqual)
         .add_executor(ExecutorName::Jal)
@@ -82,6 +84,7 @@ fn air_test_with_compress_poseidon2(
         },
         ..VmConfig::core()
     }
+    .add_executor(ExecutorName::LoadStore)
     .add_executor(ExecutorName::Poseidon2);
     let pk = vm_config.generate_pk(engine.keygen_builder());
 
@@ -97,6 +100,7 @@ fn air_test_with_compress_poseidon2(
 
 #[test]
 fn test_vm_1() {
+    setup_tracing();
     let n = 6;
     /*
     Instruction 0 assigns word[0]_1 to n.
@@ -192,13 +196,14 @@ fn test_vm_public_values() {
         ];
 
         let program = Program::from_instructions(&instructions);
+        let committed_program = Arc::new(program.commit(engine.config.pcs()));
         let vm = SingleSegmentVM::new(vm_config);
         let pvs = vm.execute(program.clone(), vec![]).unwrap();
         assert_eq!(
             pvs,
             vec![None, None, Some(BabyBear::from_canonical_u32(12))]
         );
-        let proof_input = vm.execute_and_generate(program, vec![]).unwrap();
+        let proof_input = vm.execute_and_generate(committed_program, vec![]).unwrap();
         engine
             .prove_then_verify(&pk, proof_input)
             .expect("Verification failed");
@@ -247,11 +252,11 @@ fn test_vm_1_persistent() {
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
         memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
-        ..VmConfig::core()
+        ..VmConfig::default_with_no_executors()
     }
+    .add_executor(ExecutorName::LoadStore)
     .add_executor(ExecutorName::FieldArithmetic)
-    .add_executor(ExecutorName::BranchEqual)
-    .add_executor(ExecutorName::Jal);
+    .add_executor(ExecutorName::BranchEqual);
     let pk = config.generate_pk(engine.keygen_builder());
 
     let n = 6;
@@ -402,38 +407,17 @@ fn aggregate_segment_proofs<SC: StarkGenericConfig>(
     let mut prev_final_memory_root = None;
     let mut prev_final_pc = None;
 
-    // TODO: These indices should be fixed.
-    let vm_connector_air_id = vk
-        .per_air
-        .iter()
-        .position(|vk| vk.params.num_public_values == VmConnectorPvs::<Val<SC>>::width())
-        .unwrap();
-    let memory_merkle_air_id = vk
-        .per_air
-        .iter()
-        .position(|vk| vk.params.num_public_values == MemoryMerklePvs::<Val<SC>, CHUNK>::width())
-        .unwrap();
-
     for (i, proof) in proofs.iter().enumerate() {
         engine
             .verify(&vk, proof)
             .expect("segment proof should verify");
-
-        let air_ids = proof
-            .per_air
-            .iter()
-            .map(|air_proof_data| air_proof_data.air_id)
-            .collect_vec();
-
-        assert!(air_ids.contains(&vm_connector_air_id));
-        assert!(air_ids.contains(&memory_merkle_air_id));
 
         // Check public values.
         for air_proof_data in proof.per_air.iter() {
             let pvs = &air_proof_data.public_values;
             let air_vk = &vk.per_air[air_proof_data.air_id];
 
-            if air_proof_data.air_id == vm_connector_air_id {
+            if air_proof_data.air_id == CONNECTOR_AIR_ID {
                 let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
 
                 // Check initial pc matches the previous final pc.
@@ -448,19 +432,22 @@ fn aggregate_segment_proofs<SC: StarkGenericConfig>(
                 );
                 prev_final_pc = Some(pvs.final_pc);
 
-                let expected_exit_code = if i == proofs.len() - 1 {
-                    ExitCode::Success as i32
-                } else {
-                    ExitCode::Suspended as i32
-                };
-                let expected_exit_code_f = if expected_exit_code < 0 {
-                    -Val::<SC>::from_canonical_u32(-expected_exit_code as u32)
-                } else {
-                    Val::<SC>::from_canonical_u32(expected_exit_code as u32)
-                };
+                let expected_is_terminate = i == proofs.len() - 1;
+                assert_eq!(
+                    pvs.is_terminate,
+                    Val::<SC>::from_bool(expected_is_terminate)
+                );
 
-                assert_eq!(pvs.exit_code, expected_exit_code_f);
-            } else if air_proof_data.air_id == memory_merkle_air_id {
+                let expected_exit_code = if expected_is_terminate {
+                    ExitCode::Success as u32
+                } else {
+                    DEFAULT_SUSPEND_EXIT_CODE
+                };
+                assert_eq!(
+                    pvs.exit_code,
+                    Val::<SC>::from_canonical_u32(expected_exit_code)
+                );
+            } else if air_proof_data.air_id == MERKLE_AIR_ID {
                 let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
                 // Check that initial root matches the previous final root.
@@ -518,6 +505,7 @@ fn test_vm_without_field_arithmetic() {
     air_test(
         VirtualMachine::new(
             VmConfig::core()
+                .add_executor(ExecutorName::LoadStore)
                 .add_executor(ExecutorName::BranchEqual)
                 .add_executor(ExecutorName::Jal),
         ),
@@ -623,6 +611,7 @@ fn test_vm_field_extension_arithmetic() {
 
     let vm = VirtualMachine::new(
         VmConfig::core()
+            .add_executor(ExecutorName::LoadStore)
             .add_executor(ExecutorName::FieldArithmetic)
             .add_executor(ExecutorName::FieldExtension),
     );
@@ -656,6 +645,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
             memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
             ..VmConfig::core()
         }
+        .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::FieldExtension),
     );
@@ -914,6 +904,7 @@ fn test_vm_keccak() {
     air_test(
         VirtualMachine::new(
             VmConfig::core()
+                .add_executor(ExecutorName::LoadStore)
                 .add_executor(ExecutorName::Keccak256)
                 .add_executor(ExecutorName::BranchEqual)
                 .add_executor(ExecutorName::Jal),
@@ -944,6 +935,7 @@ fn test_vm_keccak_non_full_round() {
     air_test(
         VirtualMachine::new(
             VmConfig::core()
+                .add_executor(ExecutorName::LoadStore)
                 .add_executor(ExecutorName::Keccak256)
                 .add_executor(ExecutorName::BranchEqual)
                 .add_executor(ExecutorName::Jal),

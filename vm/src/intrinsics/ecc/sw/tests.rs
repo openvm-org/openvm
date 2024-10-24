@@ -7,10 +7,10 @@ use num_traits::FromPrimitive;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::SwEcAddNeCoreChip;
+use super::{ec_add_ne_expr, ec_double_expr};
 use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
-    intrinsics::{ecc::sw::SwEcDoubleCoreChip, test_utils::write_ptr_reg},
+    intrinsics::{field_expression::FieldExpressionCoreChip, test_utils::write_ptr_reg},
     rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
     system::program::Instruction,
     utils::biguint_to_limbs,
@@ -24,12 +24,17 @@ type F = BabyBear;
 fn test_add_ne() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = secp256k1_coord_prime();
-    let core = SwEcAddNeCoreChip::new(
-        modulus.clone(),
+    let expr = ec_add_ne_expr(
+        modulus,
         NUM_LIMBS,
         LIMB_BITS,
-        tester.memory_controller().borrow().range_checker.clone(),
+        tester.memory_controller().borrow().range_checker.bus(),
+    );
+    let core = FieldExpressionCoreChip::new(
+        expr,
         EccOpcode::default_offset(),
+        tester.memory_controller().borrow().range_checker.clone(),
+        "EcAddNe",
     );
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
@@ -97,12 +102,17 @@ fn test_add_ne() {
 fn test_double() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = secp256k1_coord_prime();
-    let core = SwEcDoubleCoreChip::new(
-        modulus.clone(),
+    let expr = ec_double_expr(
+        modulus,
         NUM_LIMBS,
         LIMB_BITS,
-        tester.memory_controller().borrow().range_checker.clone(),
+        tester.memory_controller().borrow().range_checker.bus(),
+    );
+    let core = FieldExpressionCoreChip::new(
+        expr,
         EccOpcode::default_offset(),
+        tester.memory_controller().borrow().range_checker.clone(),
+        "EcDouble",
     );
     let adapter = Rv32VecHeapAdapterChip::<F, 1, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
