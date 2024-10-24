@@ -4,7 +4,6 @@ use afs_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use axvm_instructions::CoreOpcode;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -39,36 +38,26 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CoreAir {
         let local: &[AB::Var] = (*local).borrow();
         let local_cols = CoreCols::from_slice(local);
 
-        let CoreCols { io, aux } = local_cols;
+        let CoreCols { io, aux } = &local_cols;
 
-        let CoreIoCols { pc, opcode, .. } = io;
+        let &CoreIoCols { opcode, .. } = io;
 
-        let CoreAuxCols {
-            operation_flags,
-            next_pc,
+        let &CoreAuxCols {
+            is_valid,
+            ref operation_flags,
         } = aux;
 
-        // set correct operation flag
-        for &flag in operation_flags.values() {
-            builder.assert_bool(flag);
-        }
+        builder.assert_bool(is_valid);
 
-        let mut is_core_opcode = AB::Expr::zero();
+        // set correct operation flag
         let mut match_opcode = AB::Expr::zero();
         for (&opcode, &flag) in operation_flags.iter() {
-            is_core_opcode += flag.into();
+            builder.assert_bool(flag);
             match_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
         }
-        builder.assert_bool(is_core_opcode.clone());
-        builder
-            .when(is_core_opcode.clone())
-            .assert_eq(opcode, match_opcode);
-
-        let nop_flag = operation_flags[&CoreOpcode::DUMMY];
-        let mut when_nop = builder.when(nop_flag);
-        when_nop.when_transition().assert_eq(next_pc, pc);
+        builder.when(is_valid).assert_eq(opcode, match_opcode);
 
         // Turn on all interactions
-        self.eval_interactions(builder, io, next_pc, &operation_flags);
+        self.eval_interactions(builder, io, aux);
     }
 }

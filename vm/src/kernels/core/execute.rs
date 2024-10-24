@@ -25,13 +25,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
         let ExecutionState { pc, mut timestamp } = from_state;
 
         let local_opcode_index = instruction.opcode - self.offset;
-        let a = instruction.a;
-        let b = instruction.b;
-        let c = instruction.c;
-        let d = instruction.d;
-        let e = instruction.e;
-        let f = instruction.f;
-        let g = instruction.g;
+        let Instruction { a, b, c, d, e, .. } = instruction;
 
         let io = CoreIoCols {
             timestamp: F::from_canonical_u32(timestamp),
@@ -42,11 +36,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             c,
             d,
             e,
-            f,
-            g,
         };
-
-        let next_pc = pc + 1;
 
         macro_rules! read {
             ($addr_space: expr, $pointer: expr) => {{
@@ -61,9 +51,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         let local_opcode_index = CoreOpcode::from_usize(local_opcode_index);
         match local_opcode_index {
-            DUMMY => {
-                unreachable!()
-            }
             PRINTF => {
                 let value = read!(d, a);
                 println!("{}", value);
@@ -127,15 +114,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
             }
 
             let aux = CoreAuxCols {
+                is_valid: F::one(),
                 operation_flags,
-                next_pc: F::from_canonical_u32(next_pc),
             };
 
             let cols = CoreCols { io, aux };
             self.rows.push(cols.flatten());
         }
 
-        Ok(ExecutionState::new(next_pc, timestamp))
+        Ok(ExecutionState::new(pc + 1, timestamp))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
