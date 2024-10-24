@@ -251,8 +251,8 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
         0x0b => {
             match funct3 {
                 0b000 => {
-                    let funct7 = (instruction_u32 >> 25) & 0x7f;
-                    Some(terminate(funct7 as u8))
+                    let imm = (instruction_u32 >> 20) & 0xfffff;
+                    Some(terminate(imm.try_into().expect("exit code must be byte")))
                 }
                 0b001 => {
                     // keccak or poseidon

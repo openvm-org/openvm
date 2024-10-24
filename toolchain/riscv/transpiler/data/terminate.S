@@ -10,7 +10,7 @@
 .endm
 
 .macro terminate ec
-	.insn r CUSTOM_0, 0, \ec, x0, x0, x0
+	.insn i CUSTOM_0, 0, x0, x0, \ec
 .endm
 
 .global _start
