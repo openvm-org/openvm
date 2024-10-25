@@ -66,10 +66,10 @@ pub struct NativeVectorizedWriteRecord<F: Field, const N: usize> {
 #[derive(AlignedBorrow)]
 pub struct NativeVectorizedAdapterCols<T, const N: usize> {
     pub from_state: ExecutionState<T>,
-    pub a_idx: T,
+    pub a_pointer: T,
     pub ab_as: T,
-    pub b_idx: T,
-    pub c_idx: T,
+    pub b_pointer: T,
+    pub c_pointer: T,
     pub c_as: T,
     pub reads_aux: [MemoryReadAuxCols<T, N>; 2],
     pub writes_aux: [MemoryWriteAuxCols<T, N>; 1],
@@ -106,7 +106,7 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(cols.ab_as, cols.b_idx),
+                MemoryAddress::new(cols.ab_as, cols.b_pointer),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &cols.reads_aux[0],
@@ -115,7 +115,7 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(cols.c_as, cols.c_idx),
+                MemoryAddress::new(cols.c_as, cols.c_pointer),
                 ctx.reads[1].clone(),
                 timestamp_pp(),
                 &cols.reads_aux[1],
@@ -124,7 +124,7 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(cols.ab_as, cols.a_idx),
+                MemoryAddress::new(cols.ab_as, cols.a_pointer),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &cols.writes_aux[0],
@@ -134,7 +134,13 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
         self.execution_bridge
             .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
-                [cols.a_idx, cols.b_idx, cols.c_idx, cols.ab_as, cols.c_as],
+                [
+                    cols.a_pointer,
+                    cols.b_pointer,
+                    cols.c_pointer,
+                    cols.ab_as,
+                    cols.c_as,
+                ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
                 (1, ctx.to_pc),
@@ -206,10 +212,10 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         let row_slice: &mut NativeVectorizedAdapterCols<_, N> = row_slice.borrow_mut();
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.a_idx = write_record.a.pointer;
+        row_slice.a_pointer = write_record.a.pointer;
         row_slice.ab_as = write_record.a.address_space;
-        row_slice.b_idx = read_record.b.pointer;
-        row_slice.c_idx = read_record.c.pointer;
+        row_slice.b_pointer = read_record.b.pointer;
+        row_slice.c_pointer = read_record.c.pointer;
         row_slice.c_as = read_record.c.address_space;
 
         row_slice.reads_aux = [

@@ -148,7 +148,7 @@ fn negative_castf_memread_test() {
         .split_at_mut(ConvertAdapterCols::<F, 1, 4>::width())
         .0
         .borrow_mut();
-    cols.b_idx += F::one();
+    cols.b_pointer += F::one();
 
     let rc_p_input = range_checker_chip.generate_air_proof_input();
 
@@ -186,7 +186,7 @@ fn negative_castf_memwrite_test() {
         .split_at_mut(ConvertAdapterCols::<F, 1, 4>::width())
         .0
         .borrow_mut();
-    cols.a_idx += F::one();
+    cols.a_pointer += F::one();
 
     let rc_p_input = range_checker_chip.generate_air_proof_input();
 
