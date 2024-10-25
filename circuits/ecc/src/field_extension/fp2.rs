@@ -15,9 +15,17 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
-    pub fn save(&mut self) {
-        self.c0.save();
-        self.c1.save();
+    pub fn save(&mut self) -> [usize; 2] {
+        let c0_idx = self.c0.save();
+        let c1_idx = self.c1.save();
+        [c0_idx, c1_idx]
+    }
+
+    pub fn save_output(&mut self) {
+        let [c0_idx, c1_idx] = self.save();
+        let mut builder = self.c0.builder.borrow_mut();
+        builder.output_indices.push(c0_idx);
+        builder.output_indices.push(c1_idx);
     }
 
     pub fn add(&mut self, other: &mut Fp2) -> Fp2 {
@@ -37,6 +45,12 @@ impl Fp2 {
     pub fn mul(&mut self, other: &mut Fp2) -> Fp2 {
         let c0 = &mut self.c0 * &mut other.c0 - &mut self.c1 * &mut other.c1;
         let c1 = &mut self.c0 * &mut other.c1 + &mut self.c1 * &mut other.c0;
+        Fp2 { c0, c1 }
+    }
+
+    pub fn square(&mut self) -> Fp2 {
+        let c0 = self.c0.square() - self.c1.square();
+        let c1 = (&mut self.c0 * &mut self.c1).int_mul(2);
         Fp2 { c0, c1 }
     }
 
@@ -80,6 +94,12 @@ impl Fp2 {
             c0: self.c0.mul(fp),
             c1: self.c1.mul(fp),
         }
+    }
+
+    pub fn int_mul(&mut self, c: [isize; 2]) -> Fp2 {
+        let c0 = self.c0.int_mul(c[0]) - self.c1.int_mul(c[1]);
+        let c1 = self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]);
+        Fp2 { c0, c1 }
     }
 }
 

@@ -1,3 +1,4 @@
+pub mod pairing;
 pub mod sw;
 
 // Babybear
