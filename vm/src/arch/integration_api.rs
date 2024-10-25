@@ -458,7 +458,7 @@ impl<T> VmAdapterInterface<T> for DynAdapterInterface<T> {
 }
 
 /// Newtype to implement `From`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DynArray<T>(pub Vec<T>);
 
 // =================================================================================================

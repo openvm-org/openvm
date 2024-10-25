@@ -5,7 +5,10 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::xor::{XorBus, XorLookupChip};
+use afs_primitives::{
+    utils::not,
+    xor::{XorBus, XorLookupChip},
+};
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -99,7 +102,6 @@ where
         builder
             .assert_zero(c_diff.clone() * (AB::Expr::from_canonical_u32(1 << LIMB_BITS) - c_diff));
 
-        // TODO: after negative tests are implemented, optimize to lower degree as in branch
         for i in (0..NUM_LIMBS).rev() {
             let diff = (if i == NUM_LIMBS - 1 {
                 cols.c_msb_f - cols.b_msb_f
@@ -108,13 +110,13 @@ where
             }) * (AB::Expr::from_canonical_u8(2) * cols.cmp_result - AB::Expr::one());
             prefix_sum += marker[i].into();
             builder.assert_bool(marker[i]);
-            builder.assert_zero((AB::Expr::one() - prefix_sum.clone()) * diff.clone());
+            builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
             builder.when(marker[i]).assert_eq(cols.diff_val, diff);
         }
 
         builder.assert_bool(prefix_sum.clone());
         builder
-            .when(AB::Expr::one() - prefix_sum)
+            .when(not::<AB::Expr>(prefix_sum.clone()))
             .assert_zero(cols.cmp_result);
 
         self.bus
@@ -132,7 +134,7 @@ where
                 cols.diff_val - AB::Expr::one(),
                 AB::F::zero(),
             )
-            .eval(builder, is_valid.clone());
+            .eval(builder, prefix_sum);
 
         let expected_opcode = flags
             .iter()
@@ -241,7 +243,9 @@ where
         };
         let xor_res = self.xor_lookup_chip.request(b_msb_xor, c_msb_xor);
 
-        let diff_val = if diff_idx == (NUM_LIMBS - 1) {
+        let diff_val = if diff_idx == NUM_LIMBS {
+            0
+        } else if diff_idx == (NUM_LIMBS - 1) {
             if cmp_result {
                 c_msb_f - b_msb_f
             } else {
@@ -254,8 +258,9 @@ where
             b[diff_idx] - c[diff_idx]
         };
 
-        // TODO: update XorLookupChip to either be BitwiseOperation or range check
-        self.xor_lookup_chip.request(diff_val - 1, diff_val - 1);
+        if diff_idx != NUM_LIMBS {
+            self.xor_lookup_chip.request(diff_val - 1, diff_val - 1);
+        }
 
         let mut writes = [0u32; NUM_LIMBS];
         writes[0] = cmp_result as u32;

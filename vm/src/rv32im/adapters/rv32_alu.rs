@@ -5,7 +5,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::utils;
+use afs_primitives::utils::not;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -131,7 +131,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
             + rs2_limbs[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS)
             + rs2_sign.clone() * AB::Expr::from_canonical_usize(1 << (2 * RV32_CELL_BITS));
         builder.assert_bool(local.rs2_as);
-        let mut rs2_imm_when = builder.when(utils::not(local.rs2_as));
+        let mut rs2_imm_when = builder.when(not(local.rs2_as));
         rs2_imm_when.assert_eq(local.rs2, rs2_imm);
         rs2_imm_when.assert_eq(rs2_sign.clone(), rs2_limbs[3].clone());
         rs2_imm_when.assert_zero(

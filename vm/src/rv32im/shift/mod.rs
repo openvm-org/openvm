@@ -7,8 +7,8 @@ pub use core::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv32BaseAluChip<F> = VmChipWrapper<
+pub type Rv32ShiftChip<F> = VmChipWrapper<
     F,
     Rv32BaseAluAdapterChip<F>,
-    BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    ShiftCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;

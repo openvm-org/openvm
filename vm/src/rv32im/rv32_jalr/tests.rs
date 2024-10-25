@@ -206,12 +206,7 @@ fn run_negative_jalr_test(
         .load_air_proof_input(chip_input)
         .load(xor_lookup_chip)
         .finalize();
-    let msg = format!(
-        "Expected verification to fail with {:?}, but it didn't",
-        &expected_error
-    );
-    let result = tester.simple_test();
-    assert_eq!(result.err(), Some(expected_error), "{}", msg);
+    tester.simple_test_with_expected_error(expected_error);
 }
 
 #[test]

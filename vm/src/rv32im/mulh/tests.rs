@@ -1,29 +1,38 @@
-use std::{array, sync::Arc};
+use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     xor::XorLookupChip,
 };
+use afs_stark_backend::{
+    utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
+};
 use ax_sdk::utils::create_seeded_rng;
+use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use rand::{rngs::StdRng, Rng};
+use p3_matrix::{
+    dense::{DenseMatrix, RowMajorMatrix},
+    Matrix,
+};
+use rand::rngs::StdRng;
 
 use super::core::run_mulh;
 use crate::{
     arch::{
         instructions::MulHOpcode,
-        testing::{memory::gen_pointer, VmChipTestBuilder},
-        InstructionExecutor,
+        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
     },
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-        new_mulh::{MulHCoreChip, Rv32MulHChip},
+        mulh::{MulHCoreChip, MulHCoreCols, Rv32MulHChip},
     },
     system::{
         program::Instruction,
         vm::chip_set::{BYTE_XOR_BUS, RANGE_TUPLE_CHECKER_BUS},
     },
+    utils::generate_long_number,
 };
 
 type F = BabyBear;
@@ -35,12 +44,6 @@ type F = BabyBear;
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
 
-fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    rng: &mut StdRng,
-) -> [u32; NUM_LIMBS] {
-    array::from_fn(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-}
-
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_mulh_rand_write_execute<E: InstructionExecutor<F>>(
     opcode: MulHOpcode,
@@ -50,9 +53,9 @@ fn run_rv32_mulh_rand_write_execute<E: InstructionExecutor<F>>(
     c: [u32; RV32_REGISTER_NUM_LIMBS],
     rng: &mut StdRng,
 ) {
-    let rs1 = gen_pointer(rng, 32);
-    let rs2 = gen_pointer(rng, 32);
-    let rd = gen_pointer(rng, 32);
+    let rs1 = gen_pointer(rng, 4);
+    let rs2 = gen_pointer(rng, 4);
+    let rd = gen_pointer(rng, 4);
 
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
@@ -109,17 +112,17 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
 
 #[test]
 fn rv32_mulh_rand_test() {
-    run_rv32_mulh_rand_test(MulHOpcode::MULH, 12);
+    run_rv32_mulh_rand_test(MulHOpcode::MULH, 100);
 }
 
 #[test]
 fn rv32_mulhsu_rand_test() {
-    run_rv32_mulh_rand_test(MulHOpcode::MULHSU, 12);
+    run_rv32_mulh_rand_test(MulHOpcode::MULHSU, 100);
 }
 
 #[test]
 fn rv32_mulhu_rand_test() {
-    run_rv32_mulh_rand_test(MulHOpcode::MULHU, 12);
+    run_rv32_mulh_rand_test(MulHOpcode::MULHU, 100);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -130,7 +133,232 @@ fn rv32_mulhu_rand_test() {
 /// A dummy adapter is used so memory interactions don't indirectly cause false passes.
 ///////////////////////////////////////////////////////////////////////////////////////
 
-// TODO: write negative tests
+type Rv32MulHTestChip<F> =
+    VmChipWrapper<F, TestAdapterChip<F>, MulHCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+
+#[allow(clippy::too_many_arguments)]
+fn run_rv32_mulh_negative_test(
+    opcode: MulHOpcode,
+    a: [u32; RV32_REGISTER_NUM_LIMBS],
+    b: [u32; RV32_REGISTER_NUM_LIMBS],
+    c: [u32; RV32_REGISTER_NUM_LIMBS],
+    a_mul: [u32; RV32_REGISTER_NUM_LIMBS],
+    b_ext: u32,
+    c_ext: u32,
+    interaction_error: bool,
+) {
+    const MAX_NUM_LIMBS: u32 = 32;
+    let range_tuple_bus = RangeTupleCheckerBus::new(
+        RANGE_TUPLE_CHECKER_BUS,
+        [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
+    );
+    let range_tuple_chip = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = Rv32MulHTestChip::<F>::new(
+        TestAdapterChip::new(
+            vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
+            vec![None],
+            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
+        ),
+        MulHCoreChip::new(xor_lookup_chip.clone(), range_tuple_chip.clone(), 0),
+        tester.memory_controller(),
+    );
+
+    tester.execute(
+        &mut chip,
+        Instruction::from_usize(opcode as usize, [0, 0, 0, 1, 0]),
+    );
+
+    let trace_width = chip.trace_width();
+    let adapter_width = BaseAir::<F>::width(chip.adapter.air());
+    let (_, _, carry, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
+
+    range_tuple_chip.clear();
+    for i in 0..RV32_REGISTER_NUM_LIMBS {
+        range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
+        range_tuple_chip.add_count(&[a[i], carry[RV32_REGISTER_NUM_LIMBS + i]]);
+    }
+
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut values = trace.row_slice(0).to_vec();
+        let cols: &mut MulHCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
+            values.split_at_mut(adapter_width).1.borrow_mut();
+        cols.a = a.map(F::from_canonical_u32);
+        cols.a_mul = a_mul.map(F::from_canonical_u32);
+        cols.b_ext = F::from_canonical_u32(b_ext);
+        cols.c_ext = F::from_canonical_u32(c_ext);
+        *trace = RowMajorMatrix::new(values, trace_width);
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(chip, modify_trace)
+        .load(xor_lookup_chip)
+        .load(range_tuple_chip)
+        .finalize();
+    tester.simple_test_with_expected_error(if interaction_error {
+        VerificationError::NonZeroCumulativeSum
+    } else {
+        VerificationError::OodEvaluationMismatch
+    });
+}
+
+#[test]
+fn rv32_mulh_wrong_a_mul_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULH,
+        [130, 9, 135, 241],
+        [197, 85, 150, 32],
+        [51, 109, 78, 142],
+        [63, 247, 125, 234],
+        0,
+        255,
+        true,
+    );
+}
+
+#[test]
+fn rv32_mulh_wrong_a_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULH,
+        [130, 9, 135, 242],
+        [197, 85, 150, 32],
+        [51, 109, 78, 142],
+        [63, 247, 125, 232],
+        0,
+        255,
+        true,
+    );
+}
+
+#[test]
+fn rv32_mulh_wrong_ext_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULH,
+        [1, 0, 0, 0],
+        [0, 0, 0, 128],
+        [2, 0, 0, 0],
+        [0, 0, 0, 0],
+        0,
+        0,
+        true,
+    );
+}
+
+#[test]
+fn rv32_mulh_invalid_ext_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULH,
+        [3, 2, 2, 2],
+        [0, 0, 0, 128],
+        [2, 0, 0, 0],
+        [0, 0, 0, 0],
+        1,
+        0,
+        false,
+    );
+}
+
+#[test]
+fn rv32_mulhsu_wrong_a_mul_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULHSU,
+        [174, 40, 246, 202],
+        [197, 85, 150, 160],
+        [51, 109, 78, 142],
+        [63, 247, 125, 105],
+        255,
+        0,
+        true,
+    );
+}
+
+#[test]
+fn rv32_mulhsu_wrong_a_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULHSU,
+        [174, 40, 246, 201],
+        [197, 85, 150, 160],
+        [51, 109, 78, 142],
+        [63, 247, 125, 104],
+        255,
+        0,
+        true,
+    );
+}
+
+#[test]
+fn rv32_mulhsu_wrong_b_ext_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULHSU,
+        [1, 0, 0, 0],
+        [0, 0, 0, 128],
+        [2, 0, 0, 0],
+        [0, 0, 0, 0],
+        0,
+        0,
+        true,
+    );
+}
+
+#[test]
+fn rv32_mulhsu_wrong_c_ext_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULHSU,
+        [0, 0, 0, 64],
+        [0, 0, 0, 128],
+        [0, 0, 0, 128],
+        [0, 0, 0, 0],
+        255,
+        255,
+        false,
+    );
+}
+
+#[test]
+fn rv32_mulhu_wrong_a_mul_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULHU,
+        [130, 9, 135, 241],
+        [197, 85, 150, 32],
+        [51, 109, 78, 142],
+        [63, 247, 125, 234],
+        0,
+        0,
+        true,
+    );
+}
+
+#[test]
+fn rv32_mulhu_wrong_a_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULHU,
+        [130, 9, 135, 240],
+        [197, 85, 150, 32],
+        [51, 109, 78, 142],
+        [63, 247, 125, 232],
+        0,
+        0,
+        true,
+    );
+}
+
+#[test]
+fn rv32_mulhu_wrong_ext_negative_test() {
+    run_rv32_mulh_negative_test(
+        MulHOpcode::MULHU,
+        [255, 255, 255, 255],
+        [0, 0, 0, 128],
+        [2, 0, 0, 0],
+        [0, 0, 0, 0],
+        255,
+        0,
+        false,
+    );
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
