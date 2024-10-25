@@ -3,7 +3,7 @@ use std::{fs::read, path::PathBuf};
 use ax_stark_sdk::config::setup_tracing;
 use axvm_circuit::{
     arch::{VirtualMachine, VmConfig},
-    sdk::air_test,
+    sdk::{air_test, air_test_with_min_segments},
 };
 use axvm_instructions::program::Program;
 use axvm_platform::memory::MEM_SIZE;
@@ -66,6 +66,17 @@ fn test_rv32i_prove(elf_path: &str) -> Result<()> {
     let config = VmConfig::rv32i();
     let (vm, program) = setup_vm_from_elf(elf_path, config)?;
     air_test(vm, program);
+    Ok(())
+}
+
+#[test_case("data/rv32im-fibonacci-large-program-elf-release")]
+fn test_rv32i_continuations(elf_path: &str) -> Result<()> {
+    let config = VmConfig {
+        max_segment_len: (1 << 18) - 1,
+        ..VmConfig::rv32i()
+    };
+    let (vm, program) = setup_vm_from_elf(elf_path, config)?;
+    air_test_with_min_segments(vm, program, 3);
     Ok(())
 }
 

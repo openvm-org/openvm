@@ -8,7 +8,7 @@ use ax_stark_backend::{
 };
 use axvm_instructions::{instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
-use itertools::zip_eq;
+use itertools::{zip_eq, Itertools};
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
@@ -254,17 +254,32 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {
-        self.chip_set
-            .memory_controller
-            .borrow()
+        for chip in self.chip_set.chips.iter() {
+            if chip.current_trace_height() > self.config.max_segment_len {
+                tracing::info!(
+                    "Should segment because chip {} has height {}",
+                    chip.air_name(),
+                    chip.current_trace_height()
+                );
+                return true;
+            }
+        }
+        let memory_controller = self.chip_set.memory_controller.borrow();
+        for (height, air_name) in memory_controller
             .current_trace_heights()
-            .iter()
-            .any(|&h| h > self.config.max_segment_len)
-            || self
-                .chip_set
-                .chips
-                .iter()
-                .any(|chip| chip.current_trace_height() > self.config.max_segment_len)
+            .into_iter()
+            .zip_eq(memory_controller.air_names())
+        {
+            if height > self.config.max_segment_len {
+                tracing::info!(
+                    "Should segment because air {} has height {}",
+                    air_name,
+                    height
+                );
+                return true;
+            }
+        }
+        false
     }
 
     fn current_trace_cells(&self) -> BTreeMap<String, usize> {

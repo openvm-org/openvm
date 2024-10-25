@@ -320,9 +320,10 @@ pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instru
     let mut transpiler = InstructionTranspiler::<F>(PhantomData);
     for instruction_u32 in instructions_u32 {
         // TODO: we probably want to forbid such instructions, but for now we just skip them
+        // TODO: properly handle exit
         if *instruction_u32 == 115 {
             eprintln!("trying to transpile ecall ({:x})", instruction_u32);
-            instructions.push(terminate(1));
+            instructions.push(terminate(0));
             continue;
         }
         let instruction = process_instruction(&mut transpiler, *instruction_u32)
