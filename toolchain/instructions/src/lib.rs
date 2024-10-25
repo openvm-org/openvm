@@ -240,7 +240,7 @@ pub enum EccOpcode {
 #[opcode_offset = 0x198]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Fp12Opcode {
+enum Fp12Opcode {
     ADD,
     SUB,
     MUL,

@@ -136,7 +136,7 @@ impl Fp12 {
             .add(&mut self.c3.mul(&mut other.c5))
             .add(&mut self.c4.mul(&mut other.c4))
             .add(&mut self.c5.mul(&mut other.c3));
-        main_sum.add(&mut xi_sum.const_mul(xi))
+        main_sum.add(&mut xi_sum.int_mul(xi))
     }
 
     fn mul_c1(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
@@ -151,7 +151,7 @@ impl Fp12 {
             .mul(&mut other.c2)
             .add(&mut self.c4.mul(&mut other.c5))
             .add(&mut self.c5.mul(&mut other.c4));
-        main_sum.add(&mut xi_sum.const_mul(xi))
+        main_sum.add(&mut xi_sum.int_mul(xi))
     }
 
     fn mul_c2(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
@@ -164,7 +164,7 @@ impl Fp12 {
             .add(&mut self.c3.mul(&mut other.c4))
             .add(&mut self.c4.mul(&mut other.c3));
         let mut xi_sum = self.c5.mul(&mut other.c5);
-        main_sum.add(&mut xi_sum.const_mul(xi))
+        main_sum.add(&mut xi_sum.int_mul(xi))
     }
 
     fn mul_c3(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
@@ -179,7 +179,7 @@ impl Fp12 {
             .add(&mut self.c2.mul(&mut other.c4))
             .add(&mut self.c4.mul(&mut other.c2))
             .add(&mut self.c5.mul(&mut other.c1));
-        main_sum.add(&mut xi_sum.const_mul(xi))
+        main_sum.add(&mut xi_sum.int_mul(xi))
     }
 
     fn mul_c4(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp2 {
@@ -194,7 +194,7 @@ impl Fp12 {
             .c2
             .mul(&mut other.c5)
             .add(&mut self.c5.mul(&mut other.c2));
-        main_sum.add(&mut xi_sum.const_mul(xi))
+        main_sum.add(&mut xi_sum.int_mul(xi))
     }
 
     fn mul_c5(&mut self, other: &mut Fp12) -> Fp2 {
@@ -259,8 +259,8 @@ mod tests {
         let y_fq12 = y;
         // let xi = bn254_xi();
         let r_fq12 = fq12_fn(&x_fq12, &y_fq12);
-        let mut inputs = fq12_to_biguint_vec(&x_fq12);
-        inputs.extend(fq12_to_biguint_vec(&y_fq12));
+        let mut inputs = bn254_fq12_to_biguint_vec(&x_fq12);
+        inputs.extend(bn254_fq12_to_biguint_vec(&y_fq12));
         // inputs.extend(fq2_to_biguint_vec(&xi));
 
         let mut row = vec![BabyBear::zero(); width];

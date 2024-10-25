@@ -8,6 +8,7 @@ const NUM_OPS: usize = 4;
 pub trait Curve {
     fn modulus() -> BigUint;
     fn order() -> BigUint;
+    fn xi() -> [isize; 2];
 }
 
 pub struct Bn254Fp12Opcode(Fp12Opcode);
@@ -20,12 +21,17 @@ impl Curve for Bn254Fp12Opcode {
         )
         .unwrap()
     }
+
     fn order() -> BigUint {
         BigUint::from_str_radix(
             "21888242871839275222246405745257275088548364400416034343698204186575808495617",
             10,
         )
         .unwrap()
+    }
+
+    fn xi() -> [isize; 2] {
+        [9, 1]
     }
 }
 
@@ -53,12 +59,17 @@ impl Curve for Bls12381Fp12Opcode {
         )
         .unwrap()
     }
+
     fn order() -> BigUint {
         BigUint::from_str_radix(
             "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
             16,
         )
         .unwrap()
+    }
+
+    fn xi() -> [isize; 2] {
+        [1, 1]
     }
 }
 
