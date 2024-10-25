@@ -83,8 +83,8 @@ fn test_add_ne() {
         reg3 as isize,
         reg1 as isize,
         reg2 as isize,
-        1 as isize,
-        2 as isize,
+        1_isize,
+        2_isize,
     );
 
     tester.execute(&mut chip, instruction);
@@ -142,8 +142,8 @@ fn test_double() {
         reg3 as isize,
         reg1 as isize,
         reg1 as isize,
-        1 as isize,
-        2 as isize,
+        1_isize,
+        2_isize,
     );
 
     tester.execute(&mut chip, instruction);
