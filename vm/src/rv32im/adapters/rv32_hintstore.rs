@@ -9,7 +9,7 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{AirBuilder, BaseAir};
+use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
 use super::{compose, RV32_REGISTER_NUM_LIMBS};
@@ -88,7 +88,7 @@ pub struct Rv32HintStoreReadRecord<F: Field> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32HintStoreWriteRecord<F: Field> {
-    pub from_state: ExecutionState<F>,
+    pub from_state: ExecutionState<u32>,
     pub write: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
 }
 
@@ -160,15 +160,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
         let inv = AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2)).inverse();
         let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
 
-        builder.when(is_valid.clone()).assert_bool(carry.clone());
+        builder.assert_bool(carry.clone());
 
-        builder
-            .when(is_valid.clone())
-            .assert_bool(local_cols.imm_sign);
+        builder.assert_bool(local_cols.imm_sign);
         let imm_extend_limb =
             local_cols.imm_sign * AB::F::from_canonical_u32((1 << (RV32_CELL_BITS * 2)) - 1);
         let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
-        builder.when(is_valid.clone()).assert_bool(carry.clone());
+        builder.assert_bool(carry.clone());
 
         // preventing mem_ptr overflow
         self.range_bus
@@ -287,7 +285,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord {
-                from_state: from_state.map(F::from_canonical_u32),
+                from_state,
                 write: write_record,
             },
         ))
@@ -301,7 +299,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let adapter_cols: &mut Rv32HintStoreAdapterCols<_> = row_slice.borrow_mut();
-        adapter_cols.from_state = write_record.from_state;
+        adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         adapter_cols.rs1_data = read_record.rs1_record.data;
         adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(read_record.rs1_record);
         adapter_cols.rs1_ptr = read_record.rs1_ptr;

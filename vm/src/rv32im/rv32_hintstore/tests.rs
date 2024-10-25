@@ -1,15 +1,16 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 use afs_primitives::xor::XorLookupChip;
-use afs_stark_backend::{
-    utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
-};
+use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};
 use num_traits::WrappingSub;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::{
+    dense::{DenseMatrix, RowMajorMatrix},
+    Matrix,
+};
 use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 
@@ -31,22 +32,12 @@ use crate::{
         program::Instruction,
         vm::{chip_set::BYTE_XOR_BUS, Streams},
     },
+    utils::{u32_into_limbs, u32_sign_extend},
 };
 
 const IMM_BITS: usize = 16;
 
 type F = BabyBear;
-
-fn into_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize>(num: u32) -> [u32; NUM_LIMBS] {
-    array::from_fn(|i| (num >> (LIMB_BITS * i)) & ((1 << LIMB_BITS) - 1))
-}
-fn sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
-    if num & (1 << (IMM_BITS - 1)) != 0 {
-        num | (u32::MAX - (1 << IMM_BITS) + 1)
-    } else {
-        num
-    }
-}
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
@@ -57,7 +48,7 @@ fn set_and_execute(
     imm: Option<u32>,
 ) {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_ext = sign_extend::<IMM_BITS>(imm);
+    let imm_ext = u32_sign_extend::<IMM_BITS>(imm);
     let ptr_val = rng.gen_range(
         0..(1
             << (tester
@@ -68,7 +59,7 @@ fn set_and_execute(
                 - 2)),
     ) << 2;
     let rs1 = rs1
-        .unwrap_or(into_limbs::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        .unwrap_or(u32_into_limbs::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
             ptr_val.wrapping_sub(&imm_ext),
         ))
         .map(F::from_canonical_u32);
@@ -166,35 +157,24 @@ fn run_negative_hintstore_test(
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
 
-    let hintstore_trace_width = chip.trace_width();
-    let mut chip_input = chip.generate_air_proof_input();
-    let hintstore_trace = chip_input.raw.common_main.as_mut().unwrap();
-    {
-        let mut trace_row = hintstore_trace.row_slice(0).to_vec();
-
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
-
         let core_cols: &mut Rv32HintStoreCoreCols<F> = core_row.borrow_mut();
-
         if let Some(data) = data {
             core_cols.data = data.map(F::from_canonical_u32);
         }
-        *hintstore_trace = RowMajorMatrix::new(trace_row, hintstore_trace_width);
-    }
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
 
     drop(range_checker_chip);
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_air_proof_input(chip_input)
+        .load_and_prank_trace(chip, modify_trace)
         .load(xor_lookup_chip)
         .finalize();
-    let msg = format!(
-        "Expected verification to fail with {:?}, but it didn't",
-        &expected_error
-    );
-    let result = tester.simple_test();
-    assert_eq!(result.err(), Some(expected_error), "{}", msg);
+    tester.simple_test_with_expected_error(expected_error);
 }
 
 #[test]

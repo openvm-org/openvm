@@ -177,7 +177,6 @@ where
         core_cols.is_valid = F::one();
         core_cols.data = record.data;
         core_cols.xor_range_check = record.xor_range_check;
-        println!("{:?}", core_cols);
     }
 
     fn air(&self) -> &Self::Air {

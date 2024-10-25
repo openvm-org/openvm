@@ -121,7 +121,7 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreWriteRecord<F: Field> {
-    pub from_state: ExecutionState<F>,
+    pub from_state: ExecutionState<u32>,
     /// This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores
     pub write: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
     pub rd_rs2_ptr: F,
@@ -395,7 +395,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord {
-                from_state: from_state.map(F::from_canonical_u32),
+                from_state,
                 write: write_record,
                 rd_rs2_ptr: a,
             },
@@ -410,7 +410,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
         let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
-        adapter_cols.from_state = write_record.from_state;
+        adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         adapter_cols.rs1_data = read_record.rs1_record.data;
         adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(read_record.rs1_record);
         adapter_cols.rs1_ptr = read_record.rs1_ptr;
