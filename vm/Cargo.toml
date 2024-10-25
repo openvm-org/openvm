@@ -21,6 +21,8 @@ afs-derive = { workspace = true }
 ax-sdk = { workspace = true, optional = true }
 ax-ecc-primitives = { workspace = true }
 axvm-instructions = { workspace = true }
+halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", branch = "test/visibility"}
+ax-ecc-execution = { workspace = true }
 
 parking_lot.workspace = true
 enum-utils = "0.1.1"

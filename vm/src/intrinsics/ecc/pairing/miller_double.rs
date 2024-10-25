@@ -50,3 +50,87 @@ pub fn miller_double_expr(
         range_bus,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use ark_ff::Zero;
+    use ax_ecc_execution::common::{miller_double_step, EcPoint};
+    use ax_ecc_primitives::test_utils::{bls12_381_prime, bn254_prime};
+    use axvm_instructions::UsizeOpcode;
+    // use halo2curves_axiom::bls12_381::{Fq, Fq2, G2Affine};
+    use halo2curves_axiom::bn256::{Fq, Fq2, G2Affine};
+    use num_traits::{FromPrimitive, Pow};
+    use p3_baby_bear::BabyBear;
+    use p3_field::AbstractField;
+    use rand::{rngs::StdRng, SeedableRng};
+
+    use super::*;
+    use crate::{
+        arch::{instructions::PairingOpcode, testing::VmChipTestBuilder, VmChipWrapper},
+        intrinsics::field_expression::FieldExpressionCoreChip,
+        rv32im::adapters::Rv32VecHeapAdapterChip,
+        utils::{biguint_to_limbs, rv32_write_heap_default},
+    };
+
+    fn fq_to_biguint(fq: Fq) -> BigUint {
+        let base: u128 = 1 << 64;
+        let base = BigUint::from_u128(base).unwrap();
+        let mut result = BigUint::zero();
+        for (i, &n) in fq.0.iter().enumerate() {
+            result += BigUint::from_u64(n).unwrap() * base.pow(i as u32);
+        }
+        result
+    }
+
+    type F = BabyBear;
+    const NUM_LIMBS: usize = 32;
+    const LIMB_BITS: usize = 8;
+    #[test]
+    #[allow(non_snake_case)]
+    fn test_miller_double() {
+        let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let modulus = bn254_prime();
+        let expr = miller_double_expr(
+            modulus,
+            NUM_LIMBS,
+            LIMB_BITS,
+            tester.memory_controller().borrow().range_checker.bus(),
+        );
+        let core = FieldExpressionCoreChip::new(
+            expr,
+            PairingOpcode::default_offset(),
+            vec![PairingOpcode::MILLER_DOUBLE as usize],
+            tester.memory_controller().borrow().range_checker.clone(),
+            "MillerDouble",
+        );
+        let adapter = Rv32VecHeapAdapterChip::<F, 1, 4, 8, NUM_LIMBS, NUM_LIMBS>::new(
+            tester.execution_bus(),
+            tester.program_bus(),
+            tester.memory_controller(),
+        );
+        let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+
+        let mut rng0 = StdRng::seed_from_u64(2);
+        let Q = G2Affine::random(&mut rng0);
+        let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
+        let (Q_acc_init, l_init) = miller_double_step::<Fq, Fq2>(Q_ecpoint.clone());
+
+        let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(fq_to_biguint);
+        let result = chip.core.air.expr.execute(inputs.to_vec(), vec![]);
+        // check result
+
+        let input_limbs = inputs
+            .map(|x| biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS).map(BabyBear::from_canonical_u32));
+
+        let instruction = rv32_write_heap_default(
+            &mut tester,
+            input_limbs.to_vec(),
+            vec![],
+            chip.core.air.offset + PairingOpcode::MILLER_DOUBLE as usize,
+        );
+
+        tester.execute(&mut chip, instruction);
+        let tester = tester.build().load(chip).finalize();
+        tester.simple_test().expect("Verification failed");
+    }
+}

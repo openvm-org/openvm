@@ -70,6 +70,7 @@ afs-stark-backend = { path = "stark-backend", default-features = false }
 afs-compiler = { path = "toolchain/compiler", default-features = false }
 stark-vm = { path = "vm", default-features = false }
 afs-primitives = { path = "circuits/primitives", default-features = false }
+ax-ecc-execution = { path = "lib/ecc-execution", default-features = false }
 ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
 ax-ecc-lib = { path = "lib/ecc", default-features = false }
 afs-derive = { path = "derive", default-features = false }

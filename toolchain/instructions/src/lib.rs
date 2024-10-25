@@ -236,6 +236,16 @@ pub enum EccOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x190]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum PairingOpcode {
+    MILLER_DOUBLE,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0x300]
 #[repr(usize)]
 #[allow(non_camel_case_types)]

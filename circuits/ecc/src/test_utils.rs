@@ -6,7 +6,7 @@ use afs_primitives::{
 };
 use ax_sdk::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
-use num_traits::{FromPrimitive, Zero};
+use num_traits::{FromPrimitive, Num, Zero};
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField64;
 use rand::RngCore;
@@ -61,5 +61,10 @@ pub fn bn254_prime() -> BigUint {
     BigUint::from_str(
         "21888242871839275222246405745257275088696311157297823662689037894645226208583",
     )
+    .unwrap()
+}
+
+pub fn bls12_381_prime() -> BigUint {
+    BigUint::from_str_radix("1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab", 16)
     .unwrap()
 }
