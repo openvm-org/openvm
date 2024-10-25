@@ -25,7 +25,7 @@ use afs_stark_backend::{
 use itertools::{izip, zip_eq};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use p3_air::BaseAir;
-use p3_field::{Field, PrimeField32};
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_strict_usize;
 
@@ -34,19 +34,16 @@ use super::{
     offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
     volatile::VolatileBoundaryChip,
 };
-use crate::{
-    kernels::core::RANGE_CHECKER_BUS,
-    system::{
-        memory::{
-            adapter::AccessAdapterAir,
-            manager::memory::{AccessAdapterRecord, Memory},
-            offline_checker::{
-                MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
-                MemoryWriteAuxCols, AUX_LEN,
-            },
+use crate::system::{
+    memory::{
+        adapter::AccessAdapterAir,
+        manager::memory::{AccessAdapterRecord, Memory},
+        offline_checker::{
+            MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
+            MemoryWriteAuxCols, AUX_LEN,
         },
-        vm::config::MemoryConfig,
     },
+    vm::{chip_set::RANGE_CHECKER_BUS, config::MemoryConfig},
 };
 
 pub mod dimensions;
@@ -193,7 +190,7 @@ pub type TimestampedEquipartition<F, const N: usize> =
 pub type Equipartition<F, const N: usize> = BTreeMap<(F, usize), [F; N]>;
 
 #[derive(Clone, Debug)]
-pub struct MemoryController<F: Field> {
+pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
     pub(crate) mem_config: MemoryConfig,
@@ -762,16 +759,19 @@ mod tests {
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::MemoryController;
-    use crate::{
-        kernels::core::RANGE_CHECKER_BUS,
-        system::{memory::offline_checker::MemoryBus, vm::config::MemoryConfig},
+    use crate::system::{
+        memory::offline_checker::MemoryBus,
+        vm::{
+            chip_set::{MEMORY_BUS, RANGE_CHECKER_BUS},
+            config::MemoryConfig,
+        },
     };
 
     #[test]
     fn test_no_adapter_records_for_singleton_accesses() {
         type F = BabyBear;
 
-        let memory_bus = MemoryBus(1);
+        let memory_bus = MemoryBus(MEMORY_BUS);
         let memory_config = MemoryConfig::default();
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));

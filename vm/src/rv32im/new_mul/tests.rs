@@ -13,12 +13,11 @@ use crate::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
         InstructionExecutor,
     },
-    kernels::core::RANGE_TUPLE_CHECKER_BUS,
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         new_mul::{MultiplicationCoreChip, Rv32MultiplicationChip},
     },
-    system::program::Instruction,
+    system::{program::Instruction, vm::chip_set::RANGE_TUPLE_CHECKER_BUS},
 };
 
 type F = BabyBear;

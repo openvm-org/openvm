@@ -6,7 +6,7 @@ use backtrace::Backtrace;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 
-use crate::{arch::NUM_OPERANDS, kernels::core::READ_INSTRUCTION_BUS};
+use crate::{arch::NUM_OPERANDS, system::vm::chip_set::READ_INSTRUCTION_BUS};
 
 #[cfg(test)]
 pub mod tests;

@@ -12,13 +12,14 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
-use crate::xor::{bus::XorBus, XorLookupChip};
+use crate::xor::XorLookupChip;
+
+// duplicated here from vm/src/system/vm/chip_set.rs to avoid importing vm in afs-primitives
+const BYTE_XOR_BUS: usize = 10;
 
 #[test]
 fn test_xor_limbs_chip() {
     let mut rng = create_seeded_rng();
-
-    let bus = XorBus(0);
 
     const M: usize = 6;
     const LOG_XOR_REQUESTS: usize = 2;
@@ -28,7 +29,7 @@ fn test_xor_limbs_chip() {
     const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
     const NUM_REQUESTERS: usize = 1 << LOG_NUM_REQUESTERS;
 
-    let xor_chip = XorLookupChip::<M>::new(bus);
+    let xor_chip = XorLookupChip::<M>::new(BYTE_XOR_BUS);
 
     let requesters_lists = (0..NUM_REQUESTERS)
         .map(|_| {
@@ -44,7 +45,7 @@ fn test_xor_limbs_chip() {
         .collect::<Vec<Vec<(u32, Vec<u32>)>>>();
 
     let requesters = (0..NUM_REQUESTERS)
-        .map(|_| DummyInteractionAir::new(3, true, 0))
+        .map(|_| DummyInteractionAir::new(3, true, BYTE_XOR_BUS))
         .collect::<Vec<DummyInteractionAir>>();
 
     let requesters_traces = requesters_lists
@@ -87,15 +88,13 @@ fn test_xor_limbs_chip() {
 fn negative_test_xor_limbs_chip() {
     let mut rng = create_seeded_rng();
 
-    let bus = XorBus(0);
-
     const M: usize = 6;
     const LOG_XOR_REQUESTS: usize = 3;
 
     const MAX_INPUT: u32 = 1 << M;
     const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
 
-    let xor_chip = XorLookupChip::<M>::new(bus);
+    let xor_chip = XorLookupChip::<M>::new(BYTE_XOR_BUS);
 
     let pairs = (0..XOR_REQUESTS)
         .map(|_| {
@@ -106,7 +105,7 @@ fn negative_test_xor_limbs_chip() {
         })
         .collect::<Vec<(u32, Vec<u32>)>>();
 
-    let requester = DummyInteractionAir::new(3, true, 0);
+    let requester = DummyInteractionAir::new(3, true, BYTE_XOR_BUS);
 
     let requester_trace = RowMajorMatrix::new(
         pairs

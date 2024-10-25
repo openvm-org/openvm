@@ -10,14 +10,14 @@ use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
 use super::bus::MemoryBus;
-use crate::{
-    kernels::core::RANGE_CHECKER_BUS,
-    system::memory::{
+use crate::system::{
+    memory::{
         offline_checker::columns::{
             MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
         },
         MemoryAddress, MemoryDataIoCols,
     },
+    vm::chip_set::RANGE_CHECKER_BUS,
 };
 
 /// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will be decomposed into)

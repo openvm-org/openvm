@@ -98,7 +98,7 @@ pub struct XorLookupChip<const M: usize> {
 }
 
 impl<const M: usize> XorLookupChip<M> {
-    pub fn new(bus: XorBus) -> Self {
+    pub fn new(bus: usize) -> Self {
         let mut count = vec![];
         for _ in 0..(1 << M) {
             let mut row = vec![];
@@ -108,7 +108,7 @@ impl<const M: usize> XorLookupChip<M> {
             count.push(row);
         }
         Self {
-            air: XorLookupAir::new(bus),
+            air: XorLookupAir::new(XorBus(bus)),
             count,
         }
     }

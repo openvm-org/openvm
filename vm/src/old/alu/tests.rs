@@ -16,9 +16,8 @@ use crate::{
         instructions::U256Opcode,
         testing::{memory::gen_pointer, VmChipTestBuilder},
     },
-    kernels::core::BYTE_XOR_BUS,
     old::alu::run_alu,
-    system::program::Instruction,
+    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS},
 };
 
 type F = BabyBear;

@@ -245,12 +245,15 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
 
 fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruction<F> {
     let opcode = (instruction_u32 & 0x7f) as u8;
-    let funct3 = ((instruction_u32 >> 12) & 3) as u8; // All our instructions are R- or I-type
+    let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R- or I-type
 
     match opcode {
         0x0b => {
             match funct3 {
-                0b000 => Some(terminate()),
+                0b000 => {
+                    let imm = (instruction_u32 >> 20) & 0xfff;
+                    Some(terminate(imm.try_into().expect("exit code must be byte")))
+                }
                 0b001 => {
                     // keccak or poseidon
                     None
@@ -315,10 +318,11 @@ pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instru
     let mut instructions = Vec::new();
     let mut transpiler = InstructionTranspiler::<F>(PhantomData);
     for instruction_u32 in instructions_u32 {
+        dbg!(instruction_u32);
         // TODO: we probably want to forbid such instructions, but for now we just skip them
         if *instruction_u32 == 115 {
             eprintln!("trying to transpile ecall ({:x})", instruction_u32);
-            instructions.push(terminate());
+            instructions.push(terminate(1));
             continue;
         }
         let instruction = process_instruction(&mut transpiler, *instruction_u32)

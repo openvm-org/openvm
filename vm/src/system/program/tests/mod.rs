@@ -15,8 +15,10 @@ use crate::{
         BranchEqualOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
         NativeJalOpcode::*, NativeLoadStoreOpcode::*, TerminateOpcode::*, UsizeOpcode,
     },
-    kernels::core::READ_INSTRUCTION_BUS,
-    system::program::{Instruction, ProgramChip},
+    system::{
+        program::{Instruction, ProgramChip},
+        vm::chip_set::READ_INSTRUCTION_BUS,
+    },
 };
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {

@@ -83,7 +83,7 @@ pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) 
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-        F::from_canonical_u32(i12_to_u24(dec_insn.shamt as i32)),
+        F::from_canonical_u32(dec_insn.shamt),
         F::one(),  // rd and rs1 are registers
         F::zero(), // rs2 is an immediate
         F::zero(),
@@ -173,9 +173,10 @@ pub fn nop<F: PrimeField32>() -> Instruction<F> {
     }
 }
 
-pub fn terminate<F: PrimeField32>() -> Instruction<F> {
+pub fn terminate<F: PrimeField32>(code: u8) -> Instruction<F> {
     Instruction {
         opcode: TerminateOpcode::TERMINATE.with_default_offset(),
+        c: F::from_canonical_u8(code),
         ..Default::default()
     }
 }

@@ -22,12 +22,11 @@ use crate::{
         testing::VmChipTestBuilder,
         VmAdapterChip,
     },
-    kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{compose, Rv32JalrAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         rv32_jalr::{run_jalr, Rv32JalrCoreCols},
     },
-    system::{program::Instruction, PC_BITS},
+    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS, PC_BITS},
 };
 
 const IMM_BITS: usize = 16;

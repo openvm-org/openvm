@@ -5,7 +5,7 @@ use poseidon2_air::poseidon2::columns::Poseidon2IoCols;
 use super::{air::Poseidon2VmAir, columns::Poseidon2VmIoCols, WIDTH};
 use crate::{
     arch::{instructions::Poseidon2Opcode::PERM_POS2, ExecutionState},
-    kernels::core::POSEIDON2_DIRECT_BUS,
+    system::vm::chip_set::POSEIDON2_DIRECT_BUS,
 };
 
 impl<F: Field> Poseidon2VmAir<F> {

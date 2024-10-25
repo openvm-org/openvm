@@ -34,7 +34,6 @@ use super::{Equipartition, MemoryAuxColsFactory, MemoryController, MemoryReadRec
 use crate::{
     arch::{testing::memory::gen_pointer, ExecutionBus},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
-    kernels::core::RANGE_CHECKER_BUS,
     system::{
         memory::{
             merkle::MemoryMerkleBus,
@@ -42,7 +41,13 @@ use crate::{
             MemoryAddress, MemoryWriteRecord,
         },
         program::ProgramBus,
-        vm::config::{MemoryConfig, PersistenceType},
+        vm::{
+            chip_set::{
+                EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS, RANGE_CHECKER_BUS,
+                READ_INSTRUCTION_BUS,
+            },
+            config::{MemoryConfig, PersistenceType},
+        },
     },
 };
 
@@ -225,7 +230,7 @@ fn generate_trace<F: PrimeField32>(
 /// which sends reads/writes over [MemoryBridge].
 #[test]
 fn test_memory_controller() {
-    let memory_bus = MemoryBus(1);
+    let memory_bus = MemoryBus(MEMORY_BUS);
     let memory_config = MemoryConfig {
         persistence_type: PersistenceType::Volatile,
         ..Default::default()
@@ -258,8 +263,8 @@ fn test_memory_controller() {
 
 #[test]
 fn test_memory_controller_persistent() {
-    let memory_bus = MemoryBus(1);
-    let merkle_bus = MemoryMerkleBus(20);
+    let memory_bus = MemoryBus(MEMORY_BUS);
+    let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
     let memory_config = MemoryConfig {
         persistence_type: PersistenceType::Persistent,
         ..Default::default()
@@ -285,18 +290,19 @@ fn test_memory_controller_persistent() {
     };
 
     let dummy_memory_controller = MemoryController::with_volatile_memory(
-        MemoryBus(0),
+        MemoryBus(MEMORY_BUS),
         MemoryConfig::default(),
         Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-            0, 1,
+            RANGE_CHECKER_BUS,
+            1,
         ))),
     );
 
     let mut poseidon_chip = Poseidon2Chip::from_poseidon2_config(
         Poseidon2Config::<16, BabyBear>::new_p3_baby_bear_16(),
         3,
-        ExecutionBus(0),
-        ProgramBus(0),
+        ExecutionBus(EXECUTION_BUS),
+        ProgramBus(READ_INSTRUCTION_BUS),
         Rc::new(RefCell::new(dummy_memory_controller)),
         0,
     );

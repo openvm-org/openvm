@@ -14,8 +14,9 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor},
+    arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, PcIncOrSet},
     system::{
+        memory::MemoryControllerRef,
         program::{ExecutionError, Instruction, ProgramBus},
         DEFAULT_PC_STEP,
     },
@@ -56,33 +57,38 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for NopAir {
         } = (*local).borrow();
 
         self.execution_bridge
-            .execute(
+            .execute_and_increment_or_set_pc(
                 AB::Expr::from_canonical_usize(self.nop_opcode),
                 iter::empty::<AB::Expr>(),
                 ExecutionState::<AB::Expr>::new(pc, timestamp),
-                ExecutionState::<AB::Expr>::new(
-                    pc + AB::Expr::from_canonical_u32(DEFAULT_PC_STEP),
-                    timestamp,
-                ),
+                AB::Expr::one(),
+                PcIncOrSet::Inc(AB::Expr::from_canonical_u32(DEFAULT_PC_STEP)),
             )
             .eval(builder, is_valid);
     }
 }
 
-pub struct NopChip<F> {
+pub struct NopChip<F: Field> {
     pub air: NopAir,
     pub rows: Vec<NopCols<F>>,
     pub nop_opcode: usize,
+    memory: MemoryControllerRef<F>,
 }
 
-impl<F> NopChip<F> {
-    pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus, offset: usize) -> Self {
+impl<F: Field> NopChip<F> {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory_controller: MemoryControllerRef<F>,
+        offset: usize,
+    ) -> Self {
         Self {
             air: NopAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 nop_opcode: offset + NopOpcode::NOP.as_usize(),
             },
             rows: vec![],
+            memory: memory_controller,
             nop_opcode: offset,
         }
     }
@@ -101,9 +107,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for NopChip<F> {
             timestamp: F::from_canonical_u32(from_state.timestamp),
             is_valid: F::one(),
         });
+        self.memory.borrow_mut().increment_timestamp();
         Ok(ExecutionState::new(
             from_state.pc + DEFAULT_PC_STEP,
-            from_state.timestamp,
+            from_state.timestamp + 1,
         ))
     }
 

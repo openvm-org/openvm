@@ -23,8 +23,7 @@ use crate::{
         testing::{VmChipTestBuilder, VmChipTester},
     },
     intrinsics::hashes::keccak::hasher::columns::KeccakVmCols,
-    kernels::core::BYTE_XOR_BUS,
-    system::program::Instruction,
+    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS},
 };
 
 fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {

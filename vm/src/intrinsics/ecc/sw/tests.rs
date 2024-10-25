@@ -33,6 +33,7 @@ fn test_add_ne() {
     let core = FieldExpressionCoreChip::new(
         expr,
         EccOpcode::default_offset(),
+        vec![EccOpcode::EC_ADD_NE as usize],
         tester.memory_controller().borrow().range_checker.clone(),
         "EcAddNe",
     );
@@ -111,6 +112,7 @@ fn test_double() {
     let core = FieldExpressionCoreChip::new(
         expr,
         EccOpcode::default_offset(),
+        vec![EccOpcode::EC_DOUBLE as usize],
         tester.memory_controller().borrow().range_checker.clone(),
         "EcDouble",
     );
@@ -155,6 +157,9 @@ fn test_double() {
         data_as as isize,
     );
     tester.execute(&mut chip, instruction);
+    let tester = tester.build().load(chip).finalize();
+
+    tester.simple_test().expect("Verification failed");
 }
 
 lazy_static::lazy_static! {
