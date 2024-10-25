@@ -6,10 +6,9 @@ use p3_field::AbstractField;
 use super::fp12_multiply_expr;
 use crate::{
     arch::{testing::VmChipTestBuilder, VmChipWrapper},
-    intrinsics::{field_expression::FieldExpressionCoreChip, test_utils::write_ptr_reg},
-    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
-    system::program::Instruction,
-    utils::biguint_to_limbs,
+    intrinsics::field_expression::FieldExpressionCoreChip,
+    rv32im::adapters::Rv32VecHeapAdapterChip,
+    utils::{biguint_to_limbs, rv32_write_heap_default},
 };
 
 type F = BabyBear;
@@ -61,33 +60,11 @@ fn test_fp12_multiply_bn254() {
 
     let _res = chip.core.air.expr.execute([x, y].concat(), vec![]);
 
-    let ptr_as = 1;
-    let addr_ptr1 = 0;
-    let addr_ptr2 = 12 * RV32_REGISTER_NUM_LIMBS;
-    let addr_ptr3 = addr_ptr2 + 12 * RV32_REGISTER_NUM_LIMBS;
-
-    let data_as = 2;
-    let address1 = 0u32;
-    let address2 = 12 * 128u32;
-    let address3 = address2 + 12 * 128u32;
-
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr1, address1);
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr2, address2);
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr3, address3);
-
-    // Write x and y into address1 and address2
-    for i in 0..12 {
-        tester.write(data_as, address1 as usize + i * NUM_LIMBS, x_limbs[i]);
-        tester.write(data_as, address2 as usize + i * NUM_LIMBS, y_limbs[i]);
-    }
-
-    let instruction = Instruction::from_isize(
+    let instruction = rv32_write_heap_default(
+        &mut tester,
+        x_limbs,
+        y_limbs,
         chip.core.air.offset + Fp12Opcode::MUL as usize,
-        addr_ptr3 as isize,
-        addr_ptr1 as isize,
-        addr_ptr2 as isize,
-        ptr_as as isize,
-        data_as as isize,
     );
     tester.execute(&mut chip, instruction);
 
@@ -95,7 +72,9 @@ fn test_fp12_multiply_bn254() {
     tester.simple_test().expect("Verification failed");
 }
 
+// NOTE[yj]: This test requires RUST_MIN_STACK=8388608 to run without overflowing the stack, so it is ignored by the test runner for now
 #[test]
+#[ignore]
 fn test_fp12_multiply_bls12381() {
     const NUM_LIMBS: usize = 64;
     const LIMB_BITS: usize = 8;
@@ -142,33 +121,11 @@ fn test_fp12_multiply_bls12381() {
 
     let _res = chip.core.air.expr.execute([x, y].concat(), vec![]);
 
-    let ptr_as = 1;
-    let addr_ptr1 = 0;
-    let addr_ptr2 = 12 * RV32_REGISTER_NUM_LIMBS;
-    let addr_ptr3 = addr_ptr2 + 12 * RV32_REGISTER_NUM_LIMBS;
-
-    let data_as = 2;
-    let address1 = 0u32;
-    let address2 = 12 * 128u32;
-    let address3 = address2 + 12 * 128u32;
-
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr1, address1);
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr2, address2);
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr3, address3);
-
-    // Write x and y into address1 and address2
-    for i in 0..12 {
-        tester.write(data_as, address1 as usize + i * NUM_LIMBS, x_limbs[i]);
-        tester.write(data_as, address2 as usize + i * NUM_LIMBS, y_limbs[i]);
-    }
-
-    let instruction = Instruction::from_isize(
+    let instruction = rv32_write_heap_default(
+        &mut tester,
+        x_limbs,
+        y_limbs,
         chip.core.air.offset + Fp12Opcode::MUL as usize,
-        addr_ptr3 as isize,
-        addr_ptr1 as isize,
-        addr_ptr2 as isize,
-        ptr_as as isize,
-        data_as as isize,
     );
     tester.execute(&mut chip, instruction);
 
