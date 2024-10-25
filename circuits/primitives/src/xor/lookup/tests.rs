@@ -45,7 +45,7 @@ fn test_xor_limbs_chip() {
         .collect::<Vec<Vec<(u32, Vec<u32>)>>>();
 
     let requesters = (0..NUM_REQUESTERS)
-        .map(|_| DummyInteractionAir::new(3, true, 0))
+        .map(|_| DummyInteractionAir::new(3, true, BYTE_XOR_BUS))
         .collect::<Vec<DummyInteractionAir>>();
 
     let requesters_traces = requesters_lists
@@ -105,7 +105,7 @@ fn negative_test_xor_limbs_chip() {
         })
         .collect::<Vec<(u32, Vec<u32>)>>();
 
-    let requester = DummyInteractionAir::new(3, true, 0);
+    let requester = DummyInteractionAir::new(3, true, BYTE_XOR_BUS);
 
     let requester_trace = RowMajorMatrix::new(
         pairs
