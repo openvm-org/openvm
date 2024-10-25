@@ -25,7 +25,7 @@ use afs_stark_backend::{
 use itertools::{izip, zip_eq};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use p3_air::BaseAir;
-use p3_field::{Field, PrimeField32};
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_strict_usize;
 
@@ -193,7 +193,7 @@ pub type TimestampedEquipartition<F, const N: usize> =
 pub type Equipartition<F, const N: usize> = BTreeMap<(F, usize), [F; N]>;
 
 #[derive(Clone, Debug)]
-pub struct MemoryController<F: Field> {
+pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
     pub(crate) mem_config: MemoryConfig,

@@ -94,19 +94,21 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 .push(syn::parse_quote! { SC: afs_stark_backend::config::StarkGenericConfig });
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
-            let mut new_generics = generics.clone();
-            let where_clause = new_generics.make_where_clause();
-            where_clause.predicates.push(syn::parse_quote! { afs_stark_backend::config::Domain<SC>: afs_stark_backend::p3_commit::PolynomialSpace<Val = F>
-            });
             // Check if the struct has only one unnamed field
-            match &inner.fields {
+            let inner_ty = match &inner.fields {
                 Fields::Unnamed(fields) => {
                     if fields.unnamed.len() != 1 {
                         panic!("Only one unnamed field is supported");
                     }
+                    fields.unnamed.first().unwrap().ty.clone()
                 }
                 _ => panic!("Only unnamed fields are supported"),
-            }
+            };
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: afs_stark_backend::Chip<SC> });
             quote! {
                 impl #impl_generics afs_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
                     fn air(&self) -> std::sync::Arc<dyn afs_stark_backend::rap::AnyRap<SC>> {
@@ -156,9 +158,9 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             new_generics
                 .params
                 .push(syn::parse_quote! { SC: afs_stark_backend::config::StarkGenericConfig });
-
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
+            // Implement Chip whenever the inner type implements Chip
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(syn::parse_quote! { afs_stark_backend::config::Domain<SC>: afs_stark_backend::p3_commit::PolynomialSpace<Val = F>
@@ -199,16 +201,23 @@ pub fn chip_usage_getter_derive(input: TokenStream) -> TokenStream {
     match &ast.data {
         Data::Struct(inner) => {
             // Check if the struct has only one unnamed field
-            match &inner.fields {
+            let inner_ty = match &inner.fields {
                 Fields::Unnamed(fields) => {
                     if fields.unnamed.len() != 1 {
                         panic!("Only one unnamed field is supported");
                     }
+                    fields.unnamed.first().unwrap().ty.clone()
                 }
                 _ => panic!("Only unnamed fields are supported"),
-            }
+            };
+            // Implement ChipUsageGetter whenever the inner type implements ChipUsageGetter
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: afs_stark_backend::ChipUsageGetter });
             quote! {
-                impl #impl_generics afs_stark_backend::ChipUsageGetter for #name #ty_generics {
+                impl #impl_generics afs_stark_backend::ChipUsageGetter for #name #ty_generics #where_clause {
                     fn air_name(&self) -> String {
                         self.0.air_name()
                     }
@@ -429,18 +438,24 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
     match &ast.data {
         Data::Struct(inner) => {
             // Check if the struct has only one unnamed field
-            match &inner.fields {
+            let inner_ty = match &inner.fields {
                 Fields::Unnamed(fields) => {
                     if fields.unnamed.len() != 1 {
                         panic!("Only one unnamed field is supported");
                     }
+                    fields.unnamed.first().unwrap().ty.clone()
                 }
                 _ => panic!("Only unnamed fields are supported"),
-            }
+            };
             // Assume F is already generic of the field.
             // Also assume this is used in VM crate.
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: crate::arch::InstructionExecutor<F> });
             quote! {
-                impl #impl_generics crate::arch::InstructionExecutor<F> for #name #ty_generics {
+                impl #impl_generics crate::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
                         instruction: crate::system::program::Instruction<F>,
