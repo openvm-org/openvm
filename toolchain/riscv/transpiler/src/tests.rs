@@ -18,6 +18,7 @@ fn setup_vm_from_elf(elf_path: &str, config: VmConfig) -> Result<(VirtualMachine
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
+    dbg!(&elf.instructions);
     let exe = AxVmExe::<F>::from_elf(elf);
     let vm = VirtualMachine::new(config).with_initial_memory(exe.memory_image);
     Ok((vm, exe.program))
@@ -32,6 +33,9 @@ fn test_decode_elf() -> Result<()> {
     Ok(())
 }
 
+// To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
+// `riscv64-unknown-elf-gcc -march=rv32im -mabi=ilp32 -nostartfiles -e _start -Ttext 0 fib.S -o rv32im-fib-from-as`
+// riscv64-unknown-elf-gcc supports rv32im if you set -march target
 #[test_case("data/rv32im-fib-from-as")]
 #[test_case("data/rv32im-intrin-from-as")]
 fn test_generate_program(elf_path: &str) -> Result<()> {
@@ -52,7 +56,6 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     setup_tracing();
     let config = VmConfig::rv32im();
     let (vm, program) = setup_vm_from_elf(elf_path, config)?;
-    // TODO: use "execute_and_generate" when it's implemented
     vm.execute(program)?;
     Ok(())
 }
