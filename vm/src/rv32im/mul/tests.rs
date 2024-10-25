@@ -23,7 +23,7 @@ use crate::{
     },
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-        new_mul::{MultiplicationCoreChip, MultiplicationCoreCols, Rv32MultiplicationChip},
+        mul::{MultiplicationCoreChip, MultiplicationCoreCols, Rv32MultiplicationChip},
     },
     system::{program::Instruction, vm::chip_set::RANGE_TUPLE_CHECKER_BUS},
     utils::generate_long_number,

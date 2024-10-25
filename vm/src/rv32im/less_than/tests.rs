@@ -23,7 +23,7 @@ use crate::{
     },
     rv32im::{
         adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-        new_lt::LessThanCoreCols,
+        less_than::LessThanCoreCols,
     },
     system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS},
     utils::{generate_long_number, generate_rv32_is_type_immediate, i32_to_f},

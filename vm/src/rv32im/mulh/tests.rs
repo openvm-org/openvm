@@ -26,7 +26,7 @@ use crate::{
     },
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-        new_mulh::{MulHCoreChip, MulHCoreCols, Rv32MulHChip},
+        mulh::{MulHCoreChip, MulHCoreCols, Rv32MulHChip},
     },
     system::{
         program::Instruction,

@@ -34,10 +34,10 @@ use crate::{
     },
     rv32im::{
         base_alu::Rv32BaseAluChip, branch_eq::Rv32BranchEqualChip,
-        branch_lt::Rv32BranchLessThanChip, load_sign_extend::Rv32LoadSignExtendChip,
-        loadstore::Rv32LoadStoreChip, new_divrem::Rv32DivRemChip, new_lt::Rv32LessThanChip,
-        new_mul::Rv32MultiplicationChip, new_mulh::Rv32MulHChip, new_shift::Rv32ShiftChip,
-        rv32_auipc::Rv32AuipcChip, rv32_jal_lui::Rv32JalLuiChip, rv32_jalr::Rv32JalrChip,
+        branch_lt::Rv32BranchLessThanChip, divrem::Rv32DivRemChip, less_than::Rv32LessThanChip,
+        load_sign_extend::Rv32LoadSignExtendChip, loadstore::Rv32LoadStoreChip,
+        mul::Rv32MultiplicationChip, mulh::Rv32MulHChip, rv32_auipc::Rv32AuipcChip,
+        rv32_jal_lui::Rv32JalLuiChip, rv32_jalr::Rv32JalrChip, shift::Rv32ShiftChip,
     },
     system::program::{ExecutionError, Instruction},
 };

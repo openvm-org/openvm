@@ -26,7 +26,7 @@ use crate::{
     },
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-        new_divrem::{
+        divrem::{
             run_mul_carries, run_sltu_diff_idx, DivRemCoreChip, DivRemCoreCols,
             DivRemCoreSpecialCase, Rv32DivRemChip,
         },
