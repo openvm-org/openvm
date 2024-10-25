@@ -1,4 +1,4 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{array, borrow::BorrowMut};
 
 use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
@@ -9,7 +9,6 @@ use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 
 use super::{run_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
@@ -26,7 +25,7 @@ use crate::{
         adapters::{compose, Rv32LoadStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         loadstore::LoadStoreCoreCols,
     },
-    system::{program::Instruction, vm::Streams},
+    system::program::Instruction,
 };
 
 const IMM_BITS: usize = 16;
@@ -85,13 +84,7 @@ fn set_and_execute(
         tester.write(2, ptr_val as usize, read_data);
     } else {
         tester.write(2, ptr_val as usize, some_prev_data);
-        if opcode != HINT_STOREW {
-            tester.write(1, a, read_data);
-        } else {
-            for data in read_data {
-                chip.core.streams.lock().hint_stream.push_back(data);
-            }
-        }
+        tester.write(1, a, read_data);
     }
 
     tester.execute(
@@ -130,11 +123,8 @@ fn rand_loadstore_test() {
         Rv32LoadStoreOpcode::default_offset(),
     );
 
-    let inner = LoadStoreCoreChip::new(
-        Arc::new(Mutex::new(Streams::default())),
-        Rv32LoadStoreOpcode::default_offset(),
-    );
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
+    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
+    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.memory_controller());
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -144,7 +134,6 @@ fn rand_loadstore_test() {
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None);
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None);
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);
     }
 
     drop(range_checker_chip);
@@ -165,7 +154,7 @@ fn run_negative_loadstore_test(
     opcode: Rv32LoadStoreOpcode,
     read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     prev_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    opcodes: Option<[bool; 7]>,
+    opcodes: Option<[bool; 6]>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
@@ -178,12 +167,9 @@ fn run_negative_loadstore_test(
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadStoreCoreChip::new(
-        Arc::new(Mutex::new(Streams::default())),
-        Rv32LoadStoreOpcode::default_offset(),
-    );
+    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.memory_controller());
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
 
@@ -212,7 +198,6 @@ fn run_negative_loadstore_test(
             core_cols.opcode_storew_flag = F::from_bool(opcodes[3]);
             core_cols.opcode_storeh_flag = F::from_bool(opcodes[4]);
             core_cols.opcode_storeb_flag = F::from_bool(opcodes[5]);
-            core_cols.opcode_hint_storew_flag = F::from_bool(opcodes[6]);
         }
         *loadstore_trace = RowMajorMatrix::new(trace_row, loadstore_trace_width);
     }
@@ -250,7 +235,7 @@ fn negative_loadstore_tests() {
         LOADHU,
         None,
         None,
-        Some([true, false, false, false, false, false, false]),
+        Some([true, false, false, false, false, false]),
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -271,11 +256,8 @@ fn execute_roundtrip_sanity_test() {
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadStoreCoreChip::new(
-        Arc::new(Mutex::new(Streams::default())),
-        Rv32LoadStoreOpcode::default_offset(),
-    );
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, inner, tester.memory_controller());
+    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
+    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.memory_controller());
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {
@@ -285,7 +267,6 @@ fn execute_roundtrip_sanity_test() {
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None);
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None);
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);
     }
 }
 

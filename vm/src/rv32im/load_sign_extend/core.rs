@@ -134,7 +134,6 @@ where
                 is_valid,
                 opcode: expected_opcode,
                 is_load: AB::Expr::one(),
-                is_hint: AB::Expr::zero(),
             }
             .into(),
         }

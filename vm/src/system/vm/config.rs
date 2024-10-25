@@ -171,6 +171,7 @@ impl VmConfig {
         .add_executor(ExecutorName::ShiftRv32)
         .add_executor(ExecutorName::LoadStoreRv32)
         .add_executor(ExecutorName::LoadSignExtendRv32)
+        .add_executor(ExecutorName::HintStoreRv32)
         .add_executor(ExecutorName::BranchEqualRv32)
         .add_executor(ExecutorName::BranchLessThanRv32)
         .add_executor(ExecutorName::JalLuiRv32)

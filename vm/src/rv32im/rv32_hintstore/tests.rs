@@ -1,5 +1,6 @@
-use std::{array, borrow::BorrowMut};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
+use afs_primitives::xor::XorLookupChip;
 use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
@@ -9,23 +10,27 @@ use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_write_data_sign_extend, LoadSignExtendCoreChip, Rv32LoadSignExtendChip};
+use super::{run_hint_store_data, Rv32HintStoreChip, Rv32HintStoreCoreChip};
 use crate::{
     arch::{
         instructions::{
-            Rv32LoadStoreOpcode::{self, *},
+            Rv32HintStoreOpcode::{self, *},
             UsizeOpcode,
         },
         testing::{memory::gen_pointer, VmChipTestBuilder},
         VmAdapterChip,
     },
     rv32im::{
-        adapters::{compose, Rv32LoadStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-        load_sign_extend::LoadSignExtendCoreCols,
+        adapters::{compose, Rv32HintStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+        rv32_hintstore::Rv32HintStoreCoreCols,
     },
-    system::program::Instruction,
+    system::{
+        program::Instruction,
+        vm::{chip_set::BYTE_XOR_BUS, Streams},
+    },
 };
 
 const IMM_BITS: usize = 16;
@@ -45,15 +50,14 @@ fn sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Rv32LoadSignExtendChip<F>,
+    chip: &mut Rv32HintStoreChip<F>,
     rng: &mut StdRng,
-    opcode: Rv32LoadStoreOpcode,
+    opcode: Rv32HintStoreOpcode,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
 ) {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm_ext = sign_extend::<IMM_BITS>(imm);
-
     let ptr_val = rng.gen_range(
         0..(1
             << (tester
@@ -68,33 +72,27 @@ fn set_and_execute(
             ptr_val.wrapping_sub(&imm_ext),
         ))
         .map(F::from_canonical_u32);
-    let a = gen_pointer(rng, 4);
     let b = gen_pointer(rng, 4);
 
     let ptr_val = imm_ext.wrapping_add(compose(rs1));
     tester.write(1, b, rs1);
 
-    let some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
     let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
-    tester.write(1, a, some_prev_data);
-    tester.write(2, ptr_val as usize, read_data);
+        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
+    for data in read_data {
+        chip.core.streams.lock().hint_stream.push_back(data);
+    }
 
     tester.execute(
         chip,
         Instruction::from_usize(
-            opcode as usize + Rv32LoadStoreOpcode::default_offset(),
-            [a, b, imm as usize, 1, 2],
+            opcode as usize + Rv32HintStoreOpcode::default_offset(),
+            [0, b, imm as usize, 1, 2],
         ),
     );
 
-    let write_data = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
-        opcode,
-        read_data,
-        some_prev_data,
-    );
-    assert_eq!(write_data, tester.read::<4>(1, a));
+    let write_data = run_hint_store_data(opcode, read_data);
+    assert_eq!(write_data, tester.read::<4>(2, ptr_val as usize));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -104,29 +102,33 @@ fn set_and_execute(
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
 #[test]
-fn rand_loadstore_test() {
+fn rand_hintstore_test() {
     setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
+    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let adapter = Rv32HintStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
         range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::default_offset(),
     );
-    let core =
-        LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::default_offset());
-    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.memory_controller());
 
-    let num_tests: usize = 1;
+    let core = Rv32HintStoreCoreChip::new(
+        Arc::new(Mutex::new(Streams::default())),
+        xor_lookup_chip.clone(),
+        Rv32HintStoreOpcode::default_offset(),
+    );
+    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
+
+    let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None);
-        // set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);
     }
 
-    let tester = tester.build().load(chip).finalize();
+    drop(range_checker_chip);
+    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -139,61 +141,54 @@ fn rand_loadstore_test() {
 ///////////////////////////////////////////////////////////////////////////////////////
 
 #[allow(clippy::too_many_arguments)]
-fn run_negative_loadstore_test(
-    opcode: Rv32LoadStoreOpcode,
-    read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    most_sig_bit: Option<u32>,
-    opcodes: Option<[bool; 2]>,
+fn run_negative_hintstore_test(
+    opcode: Rv32HintStoreOpcode,
+    data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
+    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let adapter = Rv32HintStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
         range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::default_offset(),
     );
-    let core = LoadSignExtendCoreChip::new(
-        range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::default_offset(),
+    let core = Rv32HintStoreCoreChip::new(
+        Arc::new(Mutex::new(Streams::default())),
+        xor_lookup_chip.clone(),
+        Rv32HintStoreOpcode::default_offset(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
 
-    let loadstore_trace_width = chip.trace_width();
+    let hintstore_trace_width = chip.trace_width();
     let mut chip_input = chip.generate_air_proof_input();
-    let loadstore_trace = chip_input.raw.common_main.as_mut().unwrap();
+    let hintstore_trace = chip_input.raw.common_main.as_mut().unwrap();
     {
-        let mut trace_row = loadstore_trace.row_slice(0).to_vec();
+        let mut trace_row = hintstore_trace.row_slice(0).to_vec();
 
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
 
-        let core_cols: &mut LoadSignExtendCoreCols<F, RV32_REGISTER_NUM_LIMBS> =
-            core_row.borrow_mut();
+        let core_cols: &mut Rv32HintStoreCoreCols<F> = core_row.borrow_mut();
 
-        if let Some(read_data) = read_data {
-            core_cols.read_data = read_data.map(F::from_canonical_u32);
+        if let Some(data) = data {
+            core_cols.data = data.map(F::from_canonical_u32);
         }
-
-        if let Some(most_sig_bit) = most_sig_bit {
-            core_cols.most_sig_bit = F::from_canonical_u32(most_sig_bit);
-        }
-
-        if let Some(opcodes) = opcodes {
-            core_cols.opcode_loadb_flag = F::from_bool(opcodes[0]);
-            core_cols.opcode_loadh_flag = F::from_bool(opcodes[1]);
-        }
-        *loadstore_trace = RowMajorMatrix::new(trace_row, loadstore_trace_width);
+        *hintstore_trace = RowMajorMatrix::new(trace_row, hintstore_trace_width);
     }
 
     drop(range_checker_chip);
     disable_debug_builder();
-    let tester = tester.build().load_air_proof_input(chip_input).finalize();
+    let tester = tester
+        .build()
+        .load_air_proof_input(chip_input)
+        .load(xor_lookup_chip)
+        .finalize();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
         &expected_error
@@ -203,28 +198,10 @@ fn run_negative_loadstore_test(
 }
 
 #[test]
-fn negative_loadstore_tests() {
-    run_negative_loadstore_test(
-        LOADB,
-        Some([92, 187, 45, 118]),
-        None,
-        None,
-        VerificationError::NonZeroCumulativeSum,
-    );
-
-    run_negative_loadstore_test(
-        LOADB,
-        Some([5, 132, 77, 250]),
-        Some(1),
-        None,
-        VerificationError::NonZeroCumulativeSum,
-    );
-
-    run_negative_loadstore_test(
-        LOADH,
-        None,
-        None,
-        Some([true, false]),
+fn negative_hintstore_tests() {
+    run_negative_hintstore_test(
+        HINT_STOREW,
+        Some([92, 187, 45, 280]),
         VerificationError::NonZeroCumulativeSum,
     );
 }
@@ -238,40 +215,29 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
+    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let adapter = Rv32HintStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
         range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::default_offset(),
     );
-    let core =
-        LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::default_offset());
-    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.memory_controller());
+    let core = Rv32HintStoreCoreChip::new(
+        Arc::new(Mutex::new(Streams::default())),
+        xor_lookup_chip.clone(),
+        Rv32HintStoreOpcode::default_offset(),
+    );
+    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
 
-    let num_tests: usize = 10;
+    let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);
     }
 }
 
 #[test]
-fn solve_loadh_sanity_test() {
-    let read_data = [34, 159, 237, 112].map(F::from_canonical_u32);
-    let prev_data = [94, 183, 56, 241].map(F::from_canonical_u32);
-    let write_data = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
-        LOADH, read_data, prev_data,
-    );
-    assert_eq!(write_data, [34, 159, 255, 255].map(F::from_canonical_u32));
-}
-
-#[test]
-fn solve_loadb_sanity_test() {
-    let read_data = [103, 151, 78, 219].map(F::from_canonical_u32);
-    let prev_data = [53, 180, 29, 244].map(F::from_canonical_u32);
-    let write_data = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
-        LOADB, read_data, prev_data,
-    );
-    assert_eq!(write_data, [103, 0, 0, 0].map(F::from_canonical_u32));
+fn run_hintstorew_sanity_test() {
+    let read_data = [138, 45, 202, 76].map(F::from_canonical_u32);
+    let store_write_data = run_hint_store_data(HINT_STOREW, read_data);
+    assert_eq!(store_write_data, read_data);
 }

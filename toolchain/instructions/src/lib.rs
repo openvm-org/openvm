@@ -284,10 +284,19 @@ pub enum Rv32LoadStoreOpcode {
     STOREW,
     STOREH,
     STOREB,
-    HINT_STOREW,
     /// The following are signed extend opcodes
     LOADB,
     LOADH,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x325]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32HintStoreOpcode {
+    HINT_STOREW,
 }
 
 #[derive(

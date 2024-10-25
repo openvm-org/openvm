@@ -10,5 +10,6 @@ pub mod new_mul;
 pub mod new_mulh;
 pub mod new_shift;
 pub mod rv32_auipc;
+pub mod rv32_hintstore;
 pub mod rv32_jal_lui;
 pub mod rv32_jalr;
