@@ -389,6 +389,16 @@ pub enum Rv32ModularArithmeticOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x600]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum FriFoldOpcode {
+    FRI_FOLD,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0xdeadaf]
 #[repr(usize)]
 #[allow(non_camel_case_types)]

@@ -47,8 +47,8 @@ impl<T> MemoryBaseAuxCols<T> {
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, Eq, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
-    pub(super) base: MemoryBaseAuxCols<T>,
-    pub(super) prev_data: [T; N],
+    pub base: MemoryBaseAuxCols<T>,
+    pub prev_data: [T; N],
 }
 
 impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
