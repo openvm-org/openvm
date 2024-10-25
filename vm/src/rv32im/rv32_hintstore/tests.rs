@@ -14,7 +14,7 @@ use p3_matrix::{
 use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_hint_store_data, Rv32HintStoreChip, Rv32HintStoreCoreChip};
+use super::{Rv32HintStoreChip, Rv32HintStoreCoreChip};
 use crate::{
     arch::{
         instructions::{
@@ -82,7 +82,7 @@ fn set_and_execute(
         ),
     );
 
-    let write_data = run_hint_store_data(opcode, read_data);
+    let write_data = read_data;
     assert_eq!(write_data, tester.read::<4>(2, ptr_val as usize));
 }
 
@@ -213,11 +213,4 @@ fn execute_roundtrip_sanity_test() {
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);
     }
-}
-
-#[test]
-fn run_hintstorew_sanity_test() {
-    let read_data = [138, 45, 202, 76].map(F::from_canonical_u32);
-    let store_write_data = run_hint_store_data(HINT_STOREW, read_data);
-    assert_eq!(store_write_data, read_data);
 }

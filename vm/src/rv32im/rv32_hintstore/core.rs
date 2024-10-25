@@ -135,19 +135,17 @@ where
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
-        instruction: &Instruction<F>,
+        _instruction: &Instruction<F>,
         from_pc: u32,
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode = Rv32HintStoreOpcode::from_usize(instruction.opcode - self.air.offset);
-
         let mut streams = self.streams.lock();
         if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS {
             return Err(ExecutionError::HintOutOfBounds(from_pc));
         }
         let data: [F; RV32_REGISTER_NUM_LIMBS] =
             array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
-        let write_data = run_hint_store_data(local_opcode, data);
+        let write_data = data;
 
         let output = AdapterRuntimeContext::without_pc([write_data]);
         let xor_range_check = array::from_fn(|i| {
@@ -182,11 +180,4 @@ where
     fn air(&self) -> &Self::Air {
         &self.air
     }
-}
-
-pub(super) fn run_hint_store_data<F: PrimeField32>(
-    _opcode: Rv32HintStoreOpcode,
-    read_data: [F; RV32_REGISTER_NUM_LIMBS],
-) -> [F; RV32_REGISTER_NUM_LIMBS] {
-    read_data
 }
