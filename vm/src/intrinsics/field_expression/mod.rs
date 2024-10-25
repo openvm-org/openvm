@@ -21,7 +21,12 @@ pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
     // global opcode offset
     pub offset: usize,
+
     // The opcodes handled by this air
+    // Assumptions:
+    // 1. local_opcode_indices is of size 1 or 2.
+    // 2. When it's size 2, there is exactly one flag to tell us which opcode to use.
+    //    and otherwise there is no flag.
     pub local_opcode_indices: Vec<usize>,
 }
 
@@ -94,9 +99,24 @@ where
             .map(|x| (*x).into())
             .collect();
 
-        // TODO: flags -> opcode. Right now assume only one opcode per air.
-        let expected_opcode =
-            AB::Expr::from_canonical_usize(self.offset + self.local_opcode_indices[0]);
+        // no flags -> local_opcode_indices[0]
+        // flag = 1 -> local_opcode_indices[0]
+        // flag = 0 -> local_opcode_indices[1]
+        let opcode_index_to_use = if flags.is_empty() {
+            AB::Expr::zero()
+        } else {
+            AB::Expr::one() - flags[0]
+        };
+        let second_opcode = if self.local_opcode_indices.len() > 1 {
+            self.local_opcode_indices[1]
+        } else {
+            0 // value doesn't matter as it will times a zero
+        };
+        let opcode_index = AB::Expr::from_canonical_usize(second_opcode)
+            * opcode_index_to_use.clone()
+            + AB::Expr::from_canonical_usize(self.local_opcode_indices[0])
+                * (AB::Expr::one() - opcode_index_to_use);
+        let expected_opcode = AB::Expr::from_canonical_usize(self.offset) + opcode_index;
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
@@ -176,10 +196,13 @@ where
             inputs.push(input);
         }
 
-        // TODO: local_opcode_index -> flags
         let Instruction { opcode, .. } = instruction.clone();
-        let _local_opcode_index = opcode - self.air.offset;
-        let flags = vec![];
+        let local_opcode_index = opcode - self.air.offset;
+        let flags = if self.air.local_opcode_indices.len() == 1 {
+            vec![]
+        } else {
+            vec![local_opcode_index == self.air.local_opcode_indices[0]]
+        };
         assert_eq!(flags.len(), self.air.num_flags());
 
         let vars = self.air.expr.execute(inputs.clone(), flags);
