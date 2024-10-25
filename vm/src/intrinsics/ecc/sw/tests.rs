@@ -12,7 +12,7 @@ use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
     intrinsics::field_expression::FieldExpressionCoreChip,
     rv32im::adapters::Rv32VecHeapAdapterChip,
-    utils::{biguint_to_limbs, rv32_write_memory},
+    utils::biguint_to_limbs,
 };
 
 const NUM_LIMBS: usize = 32;
@@ -65,8 +65,7 @@ fn test_add_ne() {
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
 
-    let instruction = rv32_write_memory(
-        &mut tester,
+    let instruction = tester.rv32_write_heap_default(
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
         chip.core.air.offset + EccOpcode::EC_ADD_NE as usize,
@@ -113,8 +112,7 @@ fn test_double() {
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
-    let instruction = rv32_write_memory(
-        &mut tester,
+    let instruction = tester.rv32_write_heap_default(
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
         chip.core.air.offset + EccOpcode::EC_DOUBLE as usize,

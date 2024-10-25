@@ -23,6 +23,7 @@ use tracing::Level;
 use crate::{
     arch::ExecutionState,
     kernels::core::RANGE_CHECKER_BUS,
+    rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
         program::{Instruction, ProgramBus},
@@ -133,6 +134,62 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn memory_controller(&self) -> MemoryControllerRef<F> {
         self.memory.controller.clone()
+    }
+
+    // Write to some default addresses in the heap.
+    pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
+        &mut self,
+        addr1_writes: Vec<[F; NUM_LIMBS]>,
+        addr2_writes: Vec<[F; NUM_LIMBS]>,
+        opcode_with_offset: usize,
+    ) -> Instruction<F> {
+        let ptr_as = 1;
+        let addr_ptr1 = 0;
+        let addr_ptr2 = if addr2_writes.is_empty() {
+            0
+        } else {
+            3 * RV32_REGISTER_NUM_LIMBS
+        };
+        let addr_ptr3 = 6 * RV32_REGISTER_NUM_LIMBS;
+
+        let data_as = 2;
+        let address1 = 0u32;
+        let address2 = 128u32;
+        let address3 = 256u32;
+        // Write to registers.
+        self.write(
+            ptr_as,
+            addr_ptr1,
+            address1.to_le_bytes().map(F::from_canonical_u8),
+        );
+        if !addr2_writes.is_empty() {
+            self.write(
+                ptr_as,
+                addr_ptr2,
+                address2.to_le_bytes().map(F::from_canonical_u8),
+            );
+        }
+        self.write(
+            ptr_as,
+            addr_ptr3,
+            address3.to_le_bytes().map(F::from_canonical_u8),
+        );
+        // Write to heap.
+        for (i, &addr1_write) in addr1_writes.iter().enumerate() {
+            self.write(data_as, address1 as usize + i * NUM_LIMBS, addr1_write);
+        }
+        for (i, &addr2_write) in addr2_writes.iter().enumerate() {
+            self.write(data_as, address2 as usize + i * NUM_LIMBS, addr2_write);
+        }
+
+        Instruction::from_isize(
+            opcode_with_offset,
+            addr_ptr3 as isize,
+            addr_ptr1 as isize,
+            addr_ptr2 as isize,
+            ptr_as as isize,
+            data_as as isize,
+        )
     }
 }
 
