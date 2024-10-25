@@ -84,7 +84,7 @@ impl Fp2 {
         }
     }
 
-    pub fn const_mul(&mut self, c: [isize; 2]) -> Fp2 {
+    pub fn int_mul(&mut self, c: [isize; 2]) -> Fp2 {
         let c0 = self.c0.int_mul(c[0]) - self.c1.int_mul(c[1]);
         let c1 = self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]);
         Fp2 { c0, c1 }

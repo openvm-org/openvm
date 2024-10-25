@@ -39,7 +39,7 @@ jobs:
       - name: Run ecc-lib crate tests
         working-directory: lib/ecc
         run: |
-          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast --features parallel
+          cargo nextest run --cargo-profile=fast --features parallel
 
       - name: Run ecc-execution crate tests
         working-directory: lib/ecc-execution
@@ -49,4 +49,4 @@ jobs:
       - name: Run ecc-circuits crate tests
         working-directory: circuits/ecc
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel
+          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast --features parallel

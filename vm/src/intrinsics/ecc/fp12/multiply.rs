@@ -10,7 +10,7 @@ use ax_ecc_primitives::{
     field_expression::{ExprBuilder, FieldExpr, FieldExprCols},
     field_extension::Fp12,
 };
-use axvm_instructions::{FP12Opcode, UsizeOpcode};
+use axvm_instructions::{Fp12Opcode, UsizeOpcode};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
@@ -137,9 +137,9 @@ impl Fp12MultiplyCoreChip {
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
-        let local_opcode = FP12Opcode::from_usize(offset - FP12Opcode::default_offset());
+        let local_opcode = Fp12Opcode::from_usize(offset - Fp12Opcode::default_offset());
         let xi: [isize; 2] = match local_opcode {
-            FP12Opcode::BN254_MUL => [9, 1],
+            Fp12Opcode::MUL => [9, 1],
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
         let air = Fp12MultiplyCoreAir::new(

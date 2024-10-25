@@ -1,5 +1,5 @@
 use ax_ecc_primitives::test_utils::{bn254_prime, fq12_random};
-use axvm_instructions::{FP12Opcode, UsizeOpcode};
+use axvm_instructions::{Bls12381Fp12Opcode, Bn254Fp12Opcode, UsizeOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
@@ -17,7 +17,7 @@ const LIMB_BITS: usize = 8;
 type F = BabyBear;
 
 #[test]
-fn test_fp12_multiply() {
+fn test_fp12_multiply_bn254() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = bn254_prime();
     let core = Fp12MultiplyCoreChip::new(
@@ -25,7 +25,7 @@ fn test_fp12_multiply() {
         NUM_LIMBS,
         LIMB_BITS,
         tester.memory_controller().borrow().range_checker.clone(),
-        FP12Opcode::default_offset() + FP12Opcode::BN254_MUL as usize,
+        Bn254Fp12Opcode::default_offset() + Bn254Fp12Opcode::MUL as usize,
     );
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),

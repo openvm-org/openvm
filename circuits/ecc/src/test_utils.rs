@@ -5,7 +5,7 @@ use afs_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use ax_sdk::utils::create_seeded_rng;
-use halo2curves_axiom::bn256::{Fq, Fq12, Fq2};
+use halo2curves_axiom::{bls12_381, bn256};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use p3_baby_bear::BabyBear;
@@ -65,12 +65,12 @@ pub fn bn254_prime() -> BigUint {
     .unwrap()
 }
 
-pub fn bn254_fq_to_biguint(fq: &Fq) -> BigUint {
+pub fn bn254_fq_to_biguint(fq: &bn256::Fq) -> BigUint {
     let bytes = fq.to_bytes();
     BigUint::from_bytes_le(&bytes)
 }
 
-pub fn fq12_to_biguint_vec(x: &Fq12) -> Vec<BigUint> {
+pub fn fq12_to_biguint_vec(x: &bn256::Fq12) -> Vec<BigUint> {
     vec![
         bn254_fq_to_biguint(&x.c0.c0.c0),
         bn254_fq_to_biguint(&x.c0.c0.c1),
@@ -87,7 +87,7 @@ pub fn fq12_to_biguint_vec(x: &Fq12) -> Vec<BigUint> {
     ]
 }
 
-pub fn fq2_to_biguint_vec(x: &Fq2) -> Vec<BigUint> {
+pub fn fq2_to_biguint_vec(x: &bn256::Fq2) -> Vec<BigUint> {
     vec![bn254_fq_to_biguint(&x.c0), bn254_fq_to_biguint(&x.c1)]
 }
 

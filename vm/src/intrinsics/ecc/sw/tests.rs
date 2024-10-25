@@ -147,7 +147,7 @@ fn test_double() {
     tester.write(data_as, address1 as usize + NUM_LIMBS, p1_y_limbs);
 
     let instruction = Instruction::from_isize(
-        chip.core.air.offset + EccOpcode::EC_DOUBLE as usize,
+        chip.core.air.offset + 1000, //EccOpcode::EC_DOUBLE as usize,
         addr_ptr3 as isize,
         addr_ptr1 as isize,
         addr_ptr2 as isize,
