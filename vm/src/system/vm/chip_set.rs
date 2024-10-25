@@ -509,7 +509,11 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        DivRemCoreChip::new(range_tuple_checker.clone(), offset),
+                        DivRemCoreChip::new(
+                            byte_xor_chip.clone(),
+                            range_tuple_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {

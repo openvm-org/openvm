@@ -15,7 +15,10 @@ use ax_sdk::{
 use itertools::izip;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::{
+    dense::{DenseMatrix, RowMajorMatrix},
+    Matrix,
+};
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
@@ -53,6 +56,8 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
     rng: StdRng,
+    default_register: usize,
+    default_pointer: usize,
 }
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
@@ -68,6 +73,8 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             execution: ExecutionTester::new(execution_bus),
             program: ProgramTester::new(program_bus),
             rng,
+            default_register: 0,
+            default_pointer: 0,
         }
     }
 
@@ -121,6 +128,18 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.write(address_space, pointer, value);
     }
 
+    pub fn write_heap<const NUM_LIMBS: usize>(
+        &mut self,
+        register: usize,
+        pointer: usize,
+        writes: Vec<[F; NUM_LIMBS]>,
+    ) {
+        self.write(1usize, register, [F::from_canonical_usize(pointer)]);
+        for (i, &write) in writes.iter().enumerate() {
+            self.write(2usize, pointer + i * NUM_LIMBS, write);
+        }
+    }
+
     pub fn execution_bus(&self) -> ExecutionBus {
         self.execution.bus
     }
@@ -135,6 +154,39 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn memory_controller(&self) -> MemoryControllerRef<F> {
         self.memory.controller.clone()
+    }
+
+    pub fn get_default_register(&mut self, increment: usize) -> usize {
+        self.default_register += increment;
+        self.default_register - increment
+    }
+
+    pub fn get_default_pointer(&mut self, increment: usize) -> usize {
+        self.default_pointer += increment;
+        self.default_pointer - increment
+    }
+
+    pub fn write_heap_pointer_default(
+        &mut self,
+        reg_increment: usize,
+        pointer_increment: usize,
+    ) -> (usize, usize) {
+        let register = self.get_default_register(reg_increment);
+        let pointer = self.get_default_pointer(pointer_increment);
+        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        (register, pointer)
+    }
+
+    pub fn write_heap_default<const NUM_LIMBS: usize>(
+        &mut self,
+        reg_increment: usize,
+        pointer_increment: usize,
+        writes: Vec<[F; NUM_LIMBS]>,
+    ) -> (usize, usize) {
+        let register = self.get_default_register(reg_increment);
+        let pointer = self.get_default_pointer(pointer_increment);
+        self.write_heap(register, pointer, writes);
+        (register, pointer)
     }
 }
 
@@ -170,6 +222,8 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             execution: ExecutionTester::new(ExecutionBus(EXECUTION_BUS)),
             program: ProgramTester::new(ProgramBus(READ_INSTRUCTION_BUS)),
             rng: StdRng::seed_from_u64(0),
+            default_register: 0,
+            default_pointer: 0,
         }
     }
 }
@@ -220,6 +274,7 @@ impl VmChipTester {
         }
         self
     }
+
     pub fn load_air_proof_input(mut self, air_proof_input: AirProofInput<SC>) -> Self {
         self.air_proof_inputs.push(air_proof_input);
         self
@@ -232,6 +287,17 @@ impl VmChipTester {
     ) -> Self {
         let mut air_proof_input = chip.generate_air_proof_input();
         air_proof_input.raw.common_main = Some(trace);
+        self.air_proof_inputs.push(air_proof_input);
+        self
+    }
+
+    pub fn load_and_prank_trace<C: Chip<SC>, P>(mut self, chip: C, modify_trace: P) -> Self
+    where
+        P: Fn(&mut DenseMatrix<BabyBear>),
+    {
+        let mut air_proof_input = chip.generate_air_proof_input();
+        let trace = air_proof_input.raw.common_main.as_mut().unwrap();
+        modify_trace(trace);
         self.air_proof_inputs.push(air_proof_input);
         self
     }
