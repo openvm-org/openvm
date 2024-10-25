@@ -12,18 +12,20 @@ use crate::{
 /// Test helper trait for AirProofInput
 /// Don't use this trait in production code
 pub trait AirProofInputTestHelper<SC: StarkGenericConfig> {
-    fn cached_traces_no_pis(
+    fn cached_traces(
         air: Arc<dyn AnyRap<SC>>,
         cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
         common_trace: RowMajorMatrix<Val<SC>>,
+        pvs: Vec<Val<SC>>,
     ) -> Self;
 }
 
 impl<SC: StarkGenericConfig> AirProofInputTestHelper<SC> for AirProofInput<SC> {
-    fn cached_traces_no_pis(
+    fn cached_traces(
         air: Arc<dyn AnyRap<SC>>,
         cached_traces: Vec<RowMajorMatrix<Val<SC>>>,
         common_trace: RowMajorMatrix<Val<SC>>,
+        pvs: Vec<Val<SC>>,
     ) -> Self {
         Self {
             air,
@@ -31,7 +33,7 @@ impl<SC: StarkGenericConfig> AirProofInputTestHelper<SC> for AirProofInput<SC> {
             raw: AirProofRawInput {
                 cached_mains: cached_traces.into_iter().map(Arc::new).collect(),
                 common_main: Some(common_trace),
-                public_values: vec![],
+                public_values: pvs,
             },
         }
     }

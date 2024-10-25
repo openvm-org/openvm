@@ -26,7 +26,12 @@ impl<AB: InteractionBuilder> Air<AB> for ProgramDummyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local = local.iter().map(|x| (*x).into()).collect::<Vec<AB::Expr>>();
+        // Skip pc_start
+        let local = local
+            .iter()
+            .skip(1)
+            .map(|x| (*x).into())
+            .collect::<Vec<AB::Expr>>();
         builder.push_receive(
             self.bus.0,
             local[..local.len() - 1].iter().cloned(),

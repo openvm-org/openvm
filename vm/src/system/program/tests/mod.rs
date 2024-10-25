@@ -21,7 +21,7 @@ use crate::{
     },
 };
 
-fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
+fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>, pc_start_in_pvs: u32) {
     let instructions = program.instructions();
     let mut chip = ProgramChip::new_with_program(program);
     let mut execution_frequencies = vec![0; instructions.len()];
@@ -29,7 +29,8 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         execution_frequencies[pc as usize] += 1;
         chip.get_instruction(pc).unwrap();
     }
-    let program_proof_input = chip.generate_air_proof_input(None);
+    let mut program_proof_input = chip.generate_air_proof_input(None);
+    program_proof_input.raw.public_values[0] = BabyBear::from_canonical_u32(pc_start_in_pvs);
 
     let counter_air = DummyInteractionAir::new(9, true, READ_INSTRUCTION_BUS);
     let mut program_cells = vec![];
@@ -60,7 +61,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
 
     BabyBearPoseidon2Engine::run_test_fast(vec![
         program_proof_input,
-        AirProofInput::simple_no_pis(Arc::new(counter_air), counter_trace),
+        AirProofInput::simple(Arc::new(counter_air), counter_trace, vec![BabyBear::zero()]),
     ])
     .expect("Verification failed");
 }
@@ -93,8 +94,21 @@ fn test_program_1() {
     ];
 
     let program = Program::from_instructions(&instructions);
+    let pc_start = program.pc_start;
+    interaction_test(program, vec![0, 3, 2, 5], pc_start);
+}
 
-    interaction_test(program, vec![0, 3, 2, 5]);
+#[test]
+#[should_panic(expected = "constraints had nonzero value on row 0")]
+fn test_program_wrong_pc_start() {
+    let instructions = vec![
+        // terminate
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+    let pc_start = program.pc_start;
+    interaction_test(program, vec![0], pc_start + 1);
 }
 
 #[test]
@@ -128,8 +142,8 @@ fn test_program_without_field_arithmetic() {
     ];
 
     let program = Program::from_instructions(&instructions);
-
-    interaction_test(program, vec![0, 2, 4, 1]);
+    let pc_start = program.pc_start;
+    interaction_test(program, vec![0, 2, 4, 1], pc_start);
 }
 
 #[test]

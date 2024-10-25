@@ -14,7 +14,7 @@ use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 
-use super::{Instruction, Program, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};
+use super::{Instruction, Program, ProgramChip, ProgramExecutionCols, ProgramPvs, EXIT_CODE_FAIL};
 
 /// A program with a committed cached trace.
 pub struct CommittedProgram<SC: StarkGenericConfig> {
@@ -46,6 +46,10 @@ impl<F: PrimeField64> ProgramChip<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
+        let mut public_values = vec![F::zero(); ProgramPvs::<F>::width()];
+        *public_values.as_mut_slice().borrow_mut() = ProgramPvs {
+            pc_start: F::from_canonical_u32(self.program.pc_start),
+        };
         let air = Arc::new(self.air);
         let common_trace = RowMajorMatrix::new_col(
             self.execution_frequencies
@@ -60,14 +64,15 @@ impl<F: PrimeField64> ProgramChip<F> {
                 raw: AirProofRawInput {
                     cached_mains: vec![cached_trace.raw_data],
                     common_main: Some(common_trace),
-                    public_values: vec![],
+                    public_values,
                 },
             }
         } else {
-            AirProofInput::cached_traces_no_pis(
+            AirProofInput::cached_traces(
                 air,
                 vec![generate_cached_trace(&self.program)],
                 common_trace,
+                public_values,
             )
         }
     }
@@ -96,6 +101,7 @@ fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatri
         .for_each(|(row, (pc, instruction))| {
             let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
             *row = ProgramExecutionCols {
+                pc_start: F::from_canonical_u32(program.pc_start),
                 pc: F::from_canonical_u32(pc),
                 opcode: F::from_canonical_usize(instruction.opcode),
                 a: instruction.a,
