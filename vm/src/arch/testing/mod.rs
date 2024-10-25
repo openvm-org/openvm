@@ -306,6 +306,15 @@ impl VmChipTester {
         self.test(baby_bear_poseidon2::default_engine)
     }
 
+    pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {
+        let msg = format!(
+            "Expected verification to fail with {:?}, but it didn't",
+            &expected_error
+        );
+        let result = self.simple_test();
+        assert_eq!(result.err(), Some(expected_error), "{}", msg);
+    }
+
     fn max_trace_height(&self) -> usize {
         self.air_proof_inputs
             .iter()

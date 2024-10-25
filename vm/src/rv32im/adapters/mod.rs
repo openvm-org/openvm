@@ -29,7 +29,10 @@ pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
 use p3_field::PrimeField32;
 
-use crate::system::memory::{MemoryController, MemoryReadRecord};
+use crate::{
+    arch::DynArray,
+    system::memory::{MemoryController, MemoryReadRecord},
+};
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.
@@ -60,4 +63,25 @@ pub struct JumpUiProcessedInstruction<T> {
     /// Absolute opcode number
     pub opcode: T,
     pub immediate: T,
+}
+
+impl<T> From<DynArray<T>> for JumpUiProcessedInstruction<T> {
+    fn from(m: DynArray<T>) -> Self {
+        let mut m = m.0.into_iter();
+        JumpUiProcessedInstruction {
+            is_valid: m.next().unwrap(),
+            opcode: m.next().unwrap(),
+            immediate: m.next().unwrap(),
+        }
+    }
+}
+
+impl<T> From<JumpUiProcessedInstruction<T>> for DynArray<T> {
+    fn from(instruction: JumpUiProcessedInstruction<T>) -> Self {
+        DynArray::from(vec![
+            instruction.is_valid,
+            instruction.opcode,
+            instruction.immediate,
+        ])
+    }
 }

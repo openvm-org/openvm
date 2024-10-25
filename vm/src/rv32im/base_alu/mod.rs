@@ -1,3 +1,4 @@
+use super::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::{arch::VmChipWrapper, rv32im::adapters::Rv32BaseAluAdapterChip};
 
 mod core;
@@ -6,5 +7,8 @@ pub use core::*;
 #[cfg(test)]
 mod tests;
 
-// TODO: Replace current ALU256 module upon completion
-pub type Rv32BaseAluChip<F> = VmChipWrapper<F, Rv32BaseAluAdapterChip<F>, BaseAluCoreChip<4, 8>>;
+pub type Rv32BaseAluChip<F> = VmChipWrapper<
+    F,
+    Rv32BaseAluAdapterChip<F>,
+    BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+>;
