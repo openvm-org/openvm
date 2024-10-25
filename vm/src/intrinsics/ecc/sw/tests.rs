@@ -11,7 +11,8 @@ use super::{ec_add_ne_expr, ec_double_expr};
 use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
     intrinsics::field_expression::FieldExpressionCoreChip,
-    rv32im::adapters::Rv32VecHeapAdapterChip,
+    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
+    system::program::Instruction,
     utils::biguint_to_limbs,
 };
 
@@ -65,11 +66,27 @@ fn test_add_ne() {
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
 
-    let instruction = tester.rv32_write_heap_default(
+    let (reg1, _) = tester.write_heap_default::<NUM_LIMBS>(
+        RV32_REGISTER_NUM_LIMBS,
+        128,
         vec![p1_x_limbs, p1_y_limbs],
-        vec![p2_x_limbs, p2_y_limbs],
-        chip.core.air.offset + EccOpcode::EC_ADD_NE as usize,
     );
+    let (reg2, _) = tester.write_heap_default::<NUM_LIMBS>(
+        RV32_REGISTER_NUM_LIMBS,
+        128,
+        vec![p2_x_limbs, p2_y_limbs],
+    );
+    let (reg3, _) = tester.write_heap_pointer_default(RV32_REGISTER_NUM_LIMBS, 128);
+
+    let instruction = Instruction::from_isize(
+        chip.core.air.offset + EccOpcode::EC_ADD_NE as usize,
+        reg3 as isize,
+        reg1 as isize,
+        reg2 as isize,
+        1 as isize,
+        2 as isize,
+    );
+
     tester.execute(&mut chip, instruction);
 
     let tester = tester.build().load(chip).finalize();
@@ -112,11 +129,23 @@ fn test_double() {
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
-    let instruction = tester.rv32_write_heap_default(
+
+    let (reg1, _) = tester.write_heap_default::<NUM_LIMBS>(
+        RV32_REGISTER_NUM_LIMBS,
+        128,
         vec![p1_x_limbs, p1_y_limbs],
-        vec![],
-        chip.core.air.offset + EccOpcode::EC_DOUBLE as usize,
     );
+    let (reg3, _) = tester.write_heap_pointer_default(RV32_REGISTER_NUM_LIMBS, 128);
+
+    let instruction = Instruction::from_isize(
+        chip.core.air.offset + EccOpcode::EC_DOUBLE as usize,
+        reg3 as isize,
+        reg1 as isize,
+        reg1 as isize,
+        1 as isize,
+        2 as isize,
+    );
+
     tester.execute(&mut chip, instruction);
     let tester = tester.build().load(chip).finalize();
 

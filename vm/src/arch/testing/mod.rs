@@ -23,7 +23,6 @@ use tracing::Level;
 use crate::{
     arch::ExecutionState,
     kernels::core::RANGE_CHECKER_BUS,
-    rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
         program::{Instruction, ProgramBus},
@@ -52,6 +51,8 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
     rng: StdRng,
+    default_register: usize,
+    default_pointer: usize,
 }
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
@@ -67,6 +68,8 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             execution: ExecutionTester::new(execution_bus),
             program: ProgramTester::new(program_bus),
             rng,
+            default_register: 0,
+            default_pointer: 0,
         }
     }
 
@@ -120,6 +123,18 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.write(address_space, pointer, value);
     }
 
+    pub fn write_heap<const NUM_LIMBS: usize>(
+        &mut self,
+        register: usize,
+        pointer: usize,
+        writes: Vec<[F; NUM_LIMBS]>,
+    ) {
+        self.write(1usize, register, [F::from_canonical_usize(pointer)]);
+        for (i, &write) in writes.iter().enumerate() {
+            self.write(2usize, pointer + i * NUM_LIMBS, write);
+        }
+    }
+
     pub fn execution_bus(&self) -> ExecutionBus {
         self.execution.bus
     }
@@ -136,60 +151,37 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.controller.clone()
     }
 
-    // Write to some default addresses in the heap.
-    pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
+    pub fn get_default_register(&mut self, increment: usize) -> usize {
+        self.default_register += increment;
+        self.default_register - increment
+    }
+
+    pub fn get_default_pointer(&mut self, increment: usize) -> usize {
+        self.default_pointer += increment;
+        self.default_pointer - increment
+    }
+
+    pub fn write_heap_pointer_default(
         &mut self,
-        addr1_writes: Vec<[F; NUM_LIMBS]>,
-        addr2_writes: Vec<[F; NUM_LIMBS]>,
-        opcode_with_offset: usize,
-    ) -> Instruction<F> {
-        let ptr_as = 1;
-        let addr_ptr1 = 0;
-        let addr_ptr2 = if addr2_writes.is_empty() {
-            0
-        } else {
-            3 * RV32_REGISTER_NUM_LIMBS
-        };
-        let addr_ptr3 = 6 * RV32_REGISTER_NUM_LIMBS;
+        reg_increment: usize,
+        pointer_increment: usize,
+    ) -> (usize, usize) {
+        let register = self.get_default_register(reg_increment);
+        let pointer = self.get_default_pointer(pointer_increment);
+        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        (register, pointer)
+    }
 
-        let data_as = 2;
-        let address1 = 0u32;
-        let address2 = 128u32;
-        let address3 = 256u32;
-        // Write to registers.
-        self.write(
-            ptr_as,
-            addr_ptr1,
-            address1.to_le_bytes().map(F::from_canonical_u8),
-        );
-        if !addr2_writes.is_empty() {
-            self.write(
-                ptr_as,
-                addr_ptr2,
-                address2.to_le_bytes().map(F::from_canonical_u8),
-            );
-        }
-        self.write(
-            ptr_as,
-            addr_ptr3,
-            address3.to_le_bytes().map(F::from_canonical_u8),
-        );
-        // Write to heap.
-        for (i, &addr1_write) in addr1_writes.iter().enumerate() {
-            self.write(data_as, address1 as usize + i * NUM_LIMBS, addr1_write);
-        }
-        for (i, &addr2_write) in addr2_writes.iter().enumerate() {
-            self.write(data_as, address2 as usize + i * NUM_LIMBS, addr2_write);
-        }
-
-        Instruction::from_isize(
-            opcode_with_offset,
-            addr_ptr3 as isize,
-            addr_ptr1 as isize,
-            addr_ptr2 as isize,
-            ptr_as as isize,
-            data_as as isize,
-        )
+    pub fn write_heap_default<const NUM_LIMBS: usize>(
+        &mut self,
+        reg_increment: usize,
+        pointer_increment: usize,
+        writes: Vec<[F; NUM_LIMBS]>,
+    ) -> (usize, usize) {
+        let register = self.get_default_register(reg_increment);
+        let pointer = self.get_default_pointer(pointer_increment);
+        self.write_heap(register, pointer, writes);
+        (register, pointer)
     }
 }
 
@@ -222,6 +214,8 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             execution: ExecutionTester::new(ExecutionBus(0)),
             program: ProgramTester::new(ProgramBus(2)),
             rng: StdRng::seed_from_u64(0),
+            default_register: 0,
+            default_pointer: 0,
         }
     }
 }
