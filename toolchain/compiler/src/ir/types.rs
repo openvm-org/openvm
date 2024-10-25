@@ -205,7 +205,7 @@ impl<C: Config> Variable<C> for Usize<C::N> {
         rhs: impl Into<Self::Expression>,
         builder: &mut Builder<C>,
     ) {
-        Var::<C::N>::assert_eq(lhs, rhs, builder);
+        Var::<C::N>::assert_ne(lhs, rhs, builder);
     }
 
     fn eval(builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {

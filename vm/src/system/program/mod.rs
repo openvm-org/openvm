@@ -1,7 +1,6 @@
 use std::{collections::HashMap, error::Error, fmt::Display};
 
 use afs_stark_backend::ChipUsageGetter;
-use axvm_instructions::{TerminateOpcode, UsizeOpcode};
 use backtrace::Backtrace;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
@@ -20,7 +19,9 @@ pub use air::*;
 pub use bus::*;
 
 use super::PC_BITS;
+use crate::system::program::trace::padding_instruction;
 
+const EXIT_CODE_FAIL: usize = 1;
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
@@ -340,17 +341,10 @@ impl<F: PrimeField64> ProgramChip<F> {
 
     pub fn set_program(&mut self, mut program: Program<F>) {
         let true_program_length = program.len();
-        const EXIT_CODE_FAIL: usize = 1;
         while !program.len().is_power_of_two() {
             program.instructions_and_debug_infos.insert(
                 program.pc_base + program.len() as u32 * program.step,
-                (
-                    Instruction::from_usize(
-                        TerminateOpcode::TERMINATE.with_default_offset(),
-                        [0, 0, EXIT_CODE_FAIL],
-                    ),
-                    None,
-                ),
+                (padding_instruction(), None),
             );
         }
         self.true_program_length = true_program_length;

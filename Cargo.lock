@@ -590,6 +590,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "axiom-vm"
+version = "0.1.0"
+dependencies = [
+ "afs-compiler",
+ "afs-derive",
+ "afs-recursion",
+ "ax-sdk",
+ "p3-baby-bear",
+ "serde",
+ "serde_json",
+ "stark-vm",
+]
+
+[[package]]
 name = "axvm"
 version = "0.1.0"
 dependencies = [

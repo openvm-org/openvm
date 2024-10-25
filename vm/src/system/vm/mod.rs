@@ -150,6 +150,24 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 .collect(),
         })
     }
+    pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
+        mut self,
+        committed_program: Arc<CommittedProgram<SC>>,
+    ) -> Result<VirtualMachineResult<SC>, ExecutionError>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let segments = self.execute_segments(committed_program.program.clone())?;
+
+        Ok(VirtualMachineResult {
+            per_segment: segments
+                .into_iter()
+                .map(|seg| {
+                    seg.generate_proof_input(Some(committed_program.committed_trace_data.clone()))
+                })
+                .collect(),
+        })
+    }
 }
 
 /// A single segment VM.

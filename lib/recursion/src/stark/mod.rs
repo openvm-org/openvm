@@ -72,7 +72,12 @@ impl VerifierProgram<InnerConfig> {
         let pcs = TwoAdicFriPcsVariable {
             config: const_fri_config(&mut builder, fri_params),
         };
-        StarkVerifier::verify::<DuplexChallengerVariable<_>>(&mut builder, &pcs, constants, &input);
+        StarkVerifier::verify::<DuplexChallengerVariable<_>>(
+            &mut builder,
+            &pcs,
+            &constants,
+            &input,
+        );
 
         builder.cycle_tracker_end("VerifierProgram");
         builder.halt();
@@ -94,7 +99,7 @@ where
     pub fn verify<CH: ChallengerVariable<C>>(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
-        m_advice: MultiStarkVerificationAdvice<C>,
+        m_advice: &MultiStarkVerificationAdvice<C>,
         proof: &StarkProofVariable<C>,
     ) {
         let mut challenger = CH::new(builder);
@@ -106,7 +111,7 @@ where
     pub fn verify_raps(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
-        m_advice: MultiStarkVerificationAdvice<C>,
+        m_advice: &MultiStarkVerificationAdvice<C>,
         challenger: &mut impl ChallengerVariable<C>,
         proof: &StarkProofVariable<C>,
     ) where
@@ -114,7 +119,7 @@ where
         C::EF: TwoAdicField,
     {
         let air_ids = proof.get_air_ids(builder);
-        let m_advice_var = get_advice_per_air(builder, &m_advice, &air_ids);
+        let m_advice_var = get_advice_per_air(builder, m_advice, &air_ids);
         let StarkProofVariable::<C> {
             commitments,
             opening,
