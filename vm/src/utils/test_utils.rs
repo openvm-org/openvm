@@ -70,15 +70,15 @@ pub fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     array::from_fn(|_| rng.gen_range(0..(1 << LIMB_BITS)))
 }
 
-pub fn generate_rv32_immediate(
+pub fn generate_rv32_is_type_immediate(
     rng: &mut StdRng,
-) -> (Option<usize>, [u32; RV32_REGISTER_NUM_LIMBS]) {
+) -> (usize, [u32; RV32_REGISTER_NUM_LIMBS]) {
     let mut imm: u32 = rng.gen_range(0..(1 << RV_IS_TYPE_IMM_BITS));
     if (imm & 0x800) != 0 {
         imm |= !0xFFF
     }
     (
-        Some((imm & 0xFFFFFF) as usize),
+        (imm & 0xFFFFFF) as usize,
         [
             imm as u8,
             (imm >> 8) as u8,

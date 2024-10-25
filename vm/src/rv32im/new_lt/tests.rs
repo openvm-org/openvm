@@ -26,7 +26,7 @@ use crate::{
         new_lt::LessThanCoreCols,
     },
     system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS},
-    utils::{generate_long_number, generate_rv32_immediate, i32_to_f},
+    utils::{generate_long_number, generate_rv32_is_type_immediate, i32_to_f},
 };
 
 type F = BabyBear;
@@ -99,7 +99,8 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
                 generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng),
             )
         } else {
-            generate_rv32_immediate(&mut rng)
+            let (imm, c) = generate_rv32_is_type_immediate(&mut rng);
+            (Some(imm), c)
         };
         run_rv32_lt_rand_write_execute(&mut tester, &mut chip, opcode, b, c, c_imm, &mut rng);
     }
