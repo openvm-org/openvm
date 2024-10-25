@@ -19,7 +19,6 @@ use crate::{
         testing::VmChipTestBuilder,
         VmAdapterChip,
     },
-    kernels::core::BYTE_XOR_BUS,
     rv32im::{
         adapters::{
             Rv32CondRdWriteAdapterChip, Rv32CondRdWriteAdapterCols, RV32_CELL_BITS,
@@ -27,7 +26,7 @@ use crate::{
         },
         rv32_jal_lui::Rv32JalLuiCoreCols,
     },
-    system::{program::Instruction, PC_BITS},
+    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS, PC_BITS},
 };
 
 const IMM_BITS: usize = 20;

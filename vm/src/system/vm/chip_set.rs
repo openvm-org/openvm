@@ -10,7 +10,7 @@ use std::{
 use afs_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    xor::XorLookupChip,
+    xor::{XorBus, XorLookupChip},
 };
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -48,10 +48,7 @@ use crate::{
         },
         branch_eq::KernelBranchEqChip,
         castf::{CastFChip, CastFCoreChip},
-        core::{
-            CoreChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
-            READ_INSTRUCTION_BUS,
-        },
+        core::CoreChip,
         ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
@@ -93,6 +90,15 @@ use crate::{
         vm::config::{PersistenceType, VmConfig},
     },
 };
+
+pub const EXECUTION_BUS: usize = 0;
+pub const MEMORY_BUS: usize = 1;
+pub const MEMORY_MERKLE_BUS: usize = 12;
+pub const READ_INSTRUCTION_BUS: usize = 8;
+pub const RANGE_CHECKER_BUS: usize = 4;
+pub const POSEIDON2_DIRECT_BUS: usize = 6;
+pub const BYTE_XOR_BUS: XorBus = XorBus(8);
+pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
 
 pub const PROGRAM_AIR_ID: usize = 0;
 pub const CONNECTOR_AIR_ID: usize = 1;
@@ -204,10 +210,10 @@ impl VmConfig {
         &self,
         streams: Arc<Mutex<Streams<F>>>,
     ) -> VmChipSet<F> {
-        let execution_bus = ExecutionBus(0);
+        let execution_bus = ExecutionBus(EXECUTION_BUS);
         let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
-        let memory_bus = MemoryBus(1);
-        let merkle_bus = MemoryMerkleBus(12);
+        let memory_bus = MemoryBus(MEMORY_BUS);
+        let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));

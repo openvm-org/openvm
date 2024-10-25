@@ -16,12 +16,11 @@ use crate::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
         BasicAdapterInterface, InstructionExecutor, VmCoreChip,
     },
-    kernels::core::BYTE_XOR_BUS,
     rv32im::adapters::{
         JumpUiProcessedInstruction, Rv32BranchAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
         RV_B_TYPE_IMM_BITS,
     },
-    system::{program::Instruction, PC_BITS},
+    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS, PC_BITS},
 };
 
 type F = BabyBear;

@@ -188,8 +188,8 @@ fn poseidon2_negative_test() {
 //
 //     let mut chip = Poseidon2Chip::<16, BabyBear>::from_poseidon2_config(
 //         Poseidon2Config::default(),
-//         ExecutionBus(0),
-//         MemoryTester::new(MemoryBus(1)).chip(),
+//         ExecutionBus(EXECUTION_BUS),
+//         MemoryTester::new(MemoryBus(MEMORY_BUS)).chip(),
 //     );
 //
 //     let outs: [[BabyBear; CHUNKS]; NUM_OPS] =

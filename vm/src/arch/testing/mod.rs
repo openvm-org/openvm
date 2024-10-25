@@ -22,11 +22,13 @@ use tracing::Level;
 
 use crate::{
     arch::ExecutionState,
-    kernels::core::RANGE_CHECKER_BUS,
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
         program::{Instruction, ProgramBus},
-        vm::config::MemoryConfig,
+        vm::{
+            chip_set::{EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS},
+            config::MemoryConfig,
+        },
     },
 };
 
@@ -158,12 +160,15 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let memory_controller =
-            MemoryController::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
+        let memory_controller = MemoryController::with_volatile_memory(
+            MemoryBus(MEMORY_BUS),
+            mem_config,
+            range_checker,
+        );
         Self {
             memory: MemoryTester::new(Rc::new(RefCell::new(memory_controller))),
-            execution: ExecutionTester::new(ExecutionBus(0)),
-            program: ProgramTester::new(ProgramBus(2)),
+            execution: ExecutionTester::new(ExecutionBus(EXECUTION_BUS)),
+            program: ProgramTester::new(ProgramBus(READ_INSTRUCTION_BUS)),
             rng: StdRng::seed_from_u64(0),
         }
     }

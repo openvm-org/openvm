@@ -14,8 +14,7 @@ use crate::{
         instructions::U256Opcode,
         testing::{memory::gen_pointer, VmChipTestBuilder},
     },
-    kernels::core::RANGE_TUPLE_CHECKER_BUS,
-    system::program::Instruction,
+    system::{program::Instruction, vm::chip_set::RANGE_TUPLE_CHECKER_BUS},
 };
 
 type F = BabyBear;

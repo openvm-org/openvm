@@ -34,19 +34,16 @@ use super::{
     offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
     volatile::VolatileBoundaryChip,
 };
-use crate::{
-    kernels::core::RANGE_CHECKER_BUS,
-    system::{
-        memory::{
-            adapter::AccessAdapterAir,
-            manager::memory::{AccessAdapterRecord, Memory},
-            offline_checker::{
-                MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
-                MemoryWriteAuxCols, AUX_LEN,
-            },
+use crate::system::{
+    memory::{
+        adapter::AccessAdapterAir,
+        manager::memory::{AccessAdapterRecord, Memory},
+        offline_checker::{
+            MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
+            MemoryWriteAuxCols, AUX_LEN,
         },
-        vm::config::MemoryConfig,
     },
+    vm::{chip_set::RANGE_CHECKER_BUS, config::MemoryConfig},
 };
 
 pub mod dimensions;
@@ -762,16 +759,19 @@ mod tests {
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::MemoryController;
-    use crate::{
-        kernels::core::RANGE_CHECKER_BUS,
-        system::{memory::offline_checker::MemoryBus, vm::config::MemoryConfig},
+    use crate::system::{
+        memory::offline_checker::MemoryBus,
+        vm::{
+            chip_set::{MEMORY_BUS, RANGE_CHECKER_BUS},
+            config::MemoryConfig,
+        },
     };
 
     #[test]
     fn test_no_adapter_records_for_singleton_accesses() {
         type F = BabyBear;
 
-        let memory_bus = MemoryBus(1);
+        let memory_bus = MemoryBus(MEMORY_BUS);
         let memory_config = MemoryConfig::default();
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
