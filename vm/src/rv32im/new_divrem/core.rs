@@ -192,7 +192,7 @@ where
         // is guaranteed to be non-zero if q is non-zero since we've range checked each
         // limb of q to be within [0, 2^LIMB_BITS) already.
         let signed = cols.opcode_div_flag + cols.opcode_rem_flag;
-        let mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
+        let sign_mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
 
         builder.assert_bool(cols.b_sign);
         builder.assert_bool(cols.c_sign);
@@ -210,24 +210,28 @@ where
         let nonzero_q = q.iter().fold(AB::Expr::zero(), |acc, q| acc + *q);
         builder.assert_bool(cols.q_sign);
         builder
-            .when(nonzero_q * not(cols.zero_divisor))
+            .when(nonzero_q)
+            .when(not(cols.zero_divisor))
             .assert_eq(cols.q_sign, cols.sign_xor);
         builder
-            .when((cols.q_sign - cols.sign_xor) * not(cols.zero_divisor))
+            .when_ne(cols.q_sign, cols.sign_xor)
+            .when(not(cols.zero_divisor))
             .assert_zero(cols.q_sign);
 
         self.xor_bus
             .send(
                 b[NUM_LIMBS - 1],
-                mask,
-                b[NUM_LIMBS - 1] + mask - cols.b_sign * mask * AB::Expr::from_canonical_u32(2),
+                sign_mask,
+                b[NUM_LIMBS - 1] + sign_mask
+                    - cols.b_sign * sign_mask * AB::Expr::from_canonical_u32(2),
             )
             .eval(builder, signed.clone());
         self.xor_bus
             .send(
                 c[NUM_LIMBS - 1],
-                mask,
-                c[NUM_LIMBS - 1] + mask - cols.c_sign * mask * AB::Expr::from_canonical_u32(2),
+                sign_mask,
+                c[NUM_LIMBS - 1] + sign_mask
+                    - cols.c_sign * sign_mask * AB::Expr::from_canonical_u32(2),
             )
             .eval(builder, signed.clone());
 
@@ -262,7 +266,8 @@ where
                 .when(cols.sign_xor)
                 .assert_one((r_p[i] - AB::F::from_canonical_u32(1 << LIMB_BITS)) * cols.r_inv[i]);
             builder
-                .when(cols.sign_xor * not::<AB::Expr>(carry_lt[i].clone()))
+                .when(cols.sign_xor)
+                .when(not::<AB::Expr>(carry_lt[i].clone()))
                 .assert_zero(r_p[i]);
         }
 
@@ -369,6 +374,14 @@ pub struct DivRemCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub lt_diff_idx: usize,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub(super) enum DivRemCoreSpecialCase {
+    None,
+    ZeroDivisor,
+    SignedOverflow,
+}
+
 impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     VmCoreChip<F, I> for DivRemCoreChip<NUM_LIMBS, LIMB_BITS>
 where
@@ -404,21 +417,21 @@ where
                 .add_count(&[r[i], carries[i + NUM_LIMBS]]);
         }
 
-        let mask = 1 << (LIMB_BITS - 1);
+        let sign_mask = 1 << (LIMB_BITS - 1);
         let sign_xor = b_sign ^ c_sign;
         let r_prime = if sign_xor {
             negate::<NUM_LIMBS, LIMB_BITS>(&r)
         } else {
             r
         };
-        let r_zero = r.iter().all(|&v| v == 0) && case != 1;
+        let r_zero = r.iter().all(|&v| v == 0) && case != DivRemCoreSpecialCase::ZeroDivisor;
 
         if is_signed {
-            self.xor_lookup_chip.request(b[NUM_LIMBS - 1], mask);
-            self.xor_lookup_chip.request(c[NUM_LIMBS - 1], mask);
+            self.xor_lookup_chip.request(b[NUM_LIMBS - 1], sign_mask);
+            self.xor_lookup_chip.request(c[NUM_LIMBS - 1], sign_mask);
         }
 
-        let (lt_diff_idx, lt_diff_val) = if case == 0 && !r_zero {
+        let (lt_diff_idx, lt_diff_val) = if case == DivRemCoreSpecialCase::None && !r_zero {
             let idx = run_sltu_diff_idx(&c, &r_prime, c_sign);
             let val = if c_sign {
                 r_prime[idx] - c[idx]
@@ -441,8 +454,8 @@ where
             c: data[1],
             q: q.map(F::from_canonical_u32),
             r: r.map(F::from_canonical_u32),
-            zero_divisor: F::from_bool(case == 1),
-            r_zero: F::from_bool(r_zero && case != 1),
+            zero_divisor: F::from_bool(case == DivRemCoreSpecialCase::ZeroDivisor),
+            r_zero: F::from_bool(r_zero),
             b_sign: F::from_bool(b_sign),
             c_sign: F::from_bool(c_sign),
             q_sign: F::from_bool(q_sign),
@@ -493,7 +506,14 @@ pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     signed: bool,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
-) -> ([u32; NUM_LIMBS], [u32; NUM_LIMBS], bool, bool, bool, u8) {
+) -> (
+    [u32; NUM_LIMBS],
+    [u32; NUM_LIMBS],
+    bool,
+    bool,
+    bool,
+    DivRemCoreSpecialCase,
+) {
     let x_sign = signed && (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1);
     let y_sign = signed && (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1);
     let max_limb = (1 << LIMB_BITS) - 1;
@@ -506,9 +526,23 @@ pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         && y_sign;
 
     if zero_divisor {
-        return ([max_limb; NUM_LIMBS], *x, x_sign, y_sign, signed, 1);
+        return (
+            [max_limb; NUM_LIMBS],
+            *x,
+            x_sign,
+            y_sign,
+            signed,
+            DivRemCoreSpecialCase::ZeroDivisor,
+        );
     } else if overflow {
-        return (*x, [0; NUM_LIMBS], x_sign, y_sign, false, 2);
+        return (
+            *x,
+            [0; NUM_LIMBS],
+            x_sign,
+            y_sign,
+            false,
+            DivRemCoreSpecialCase::SignedOverflow,
+        );
     }
 
     let x_abs = if x_sign {
@@ -541,7 +575,7 @@ pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         biguint_to_limbs::<NUM_LIMBS, LIMB_BITS>(&r_big)
     };
 
-    (q, r, x_sign, y_sign, q_sign, 0)
+    (q, r, x_sign, y_sign, q_sign, DivRemCoreSpecialCase::None)
 }
 
 pub(super) fn run_sltu_diff_idx<const NUM_LIMBS: usize>(

@@ -27,7 +27,8 @@ use crate::{
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         new_divrem::{
-            run_mul_carries, run_sltu_diff_idx, DivRemCoreChip, DivRemCoreCols, Rv32DivRemChip,
+            run_mul_carries, run_sltu_diff_idx, DivRemCoreChip, DivRemCoreCols,
+            DivRemCoreSpecialCase, Rv32DivRemChip,
         },
     },
     system::{
@@ -288,7 +289,7 @@ fn run_rv32_divrem_negative_test(
             xor_lookup_chip.request(b[RV32_REGISTER_NUM_LIMBS - 1], mask);
             xor_lookup_chip.request(c[RV32_REGISTER_NUM_LIMBS - 1], mask);
         }
-        if case == 0 {
+        if case == DivRemCoreSpecialCase::None {
             xor_lookup_chip.request(diff_val - 1, diff_val - 1);
         }
     }
@@ -524,7 +525,7 @@ fn run_divrem_unsigned_sanity_test() {
     assert!(!x_sign);
     assert!(!y_sign);
     assert!(!q_sign);
-    assert_eq!(case, 0);
+    assert_eq!(case, DivRemCoreSpecialCase::None);
 }
 
 #[test]
@@ -542,7 +543,7 @@ fn run_divrem_unsigned_zero_divisor_test() {
     assert!(!x_sign);
     assert!(!y_sign);
     assert!(!q_sign);
-    assert_eq!(case, 1);
+    assert_eq!(case, DivRemCoreSpecialCase::ZeroDivisor);
 }
 
 #[test]
@@ -561,7 +562,7 @@ fn run_divrem_signed_sanity_test() {
     assert!(x_sign);
     assert!(!y_sign);
     assert!(q_sign);
-    assert_eq!(case, 0);
+    assert_eq!(case, DivRemCoreSpecialCase::None);
 }
 
 #[test]
@@ -579,7 +580,7 @@ fn run_divrem_signed_zero_divisor_test() {
     assert!(x_sign);
     assert!(!y_sign);
     assert!(q_sign);
-    assert_eq!(case, 1);
+    assert_eq!(case, DivRemCoreSpecialCase::ZeroDivisor);
 }
 
 #[test]
@@ -597,7 +598,7 @@ fn run_divrem_signed_overflow_test() {
     assert!(x_sign);
     assert!(y_sign);
     assert!(!q_sign);
-    assert_eq!(case, 2);
+    assert_eq!(case, DivRemCoreSpecialCase::SignedOverflow);
 }
 
 #[test]
@@ -616,7 +617,7 @@ fn run_divrem_signed_min_dividend_test() {
     assert!(x_sign);
     assert!(y_sign);
     assert!(!q_sign);
-    assert_eq!(case, 0);
+    assert_eq!(case, DivRemCoreSpecialCase::None);
 }
 
 #[test]
@@ -634,7 +635,7 @@ fn run_divrem_zero_quotient_test() {
     assert!(x_sign);
     assert!(!y_sign);
     assert!(!q_sign);
-    assert_eq!(case, 0);
+    assert_eq!(case, DivRemCoreSpecialCase::None);
 }
 
 #[test]
