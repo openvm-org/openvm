@@ -10,7 +10,7 @@ use std::{
 use afs_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    xor::{XorBus, XorLookupChip},
+    xor::XorLookupChip,
 };
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -93,12 +93,13 @@ use crate::{
 
 pub const EXECUTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
-pub const MEMORY_MERKLE_BUS: usize = 12;
-pub const READ_INSTRUCTION_BUS: usize = 8;
 pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
-pub const BYTE_XOR_BUS: XorBus = XorBus(8);
+pub const READ_INSTRUCTION_BUS: usize = 8;
+pub const BYTE_XOR_BUS: usize = 10;
+//pub const BYTE_XOR_BUS: XorBus = XorBus(8);
 pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
+pub const MEMORY_MERKLE_BUS: usize = 12;
 
 pub const PROGRAM_AIR_ID: usize = 0;
 pub const CONNECTOR_AIR_ID: usize = 1;
