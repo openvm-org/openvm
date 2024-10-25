@@ -1,4 +1,4 @@
-use num_bigint::BigUint;
+use num_bigint_dig::BigUint;
 use num_traits::Num;
 
 use crate::{Fp12Opcode, UsizeOpcode};

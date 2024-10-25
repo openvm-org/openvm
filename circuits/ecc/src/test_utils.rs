@@ -4,7 +4,7 @@ use afs_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use ax_sdk::utils::create_seeded_rng;
+use ax_sdk::utils::{create_seeded_rng, create_seeded_rng_with_seed};
 use halo2curves_axiom::{bls12_381, bn256};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
@@ -91,10 +91,10 @@ pub fn bn254_fq2_to_biguint_vec(x: &bn256::Fq2) -> Vec<BigUint> {
     vec![bn254_fq_to_biguint(&x.c0), bn254_fq_to_biguint(&x.c1)]
 }
 
-pub fn bn254_fq12_random() -> Vec<BigUint> {
+pub fn bn254_fq12_random(seed: u64) -> Vec<BigUint> {
     use halo2curves_axiom::ff::Field;
 
-    let seed = create_seeded_rng();
+    let seed = create_seeded_rng_with_seed(seed);
     let fq = bn256::Fq12::random(seed);
     bn254_fq12_to_biguint_vec(&fq)
 }
@@ -132,10 +132,10 @@ pub fn bls12381_fq2_to_biguint_vec(x: &bls12_381::Fq2) -> Vec<BigUint> {
     vec![bls12381_fq_to_biguint(&x.c0), bls12381_fq_to_biguint(&x.c1)]
 }
 
-pub fn bls12381_fq12_random() -> Vec<BigUint> {
+pub fn bls12381_fq12_random(seed: u64) -> Vec<BigUint> {
     use halo2curves_axiom::ff::Field;
 
-    let seed = create_seeded_rng();
+    let seed = create_seeded_rng_with_seed(seed);
     let fq = bls12_381::Fq12::random(seed);
     bls12381_fq12_to_biguint_vec(&fq)
 }

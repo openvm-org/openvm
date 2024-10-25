@@ -608,7 +608,7 @@ name = "axvm-instructions"
 version = "0.1.0"
 dependencies = [
  "axvm-instructions-derive",
- "num-bigint 0.4.6",
+ "num-bigint-dig",
  "num-traits",
  "p3-baby-bear",
  "p3-field",

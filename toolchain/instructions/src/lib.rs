@@ -4,10 +4,12 @@ use axvm_instructions_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 pub mod config;
-pub mod curves;
+mod curves;
 /// Module with traits and constants for RISC-V instruction definitions for custom axVM instructions.
 pub mod riscv;
 pub mod utils;
+
+pub use curves::*;
 
 pub trait UsizeOpcode {
     fn default_offset() -> usize;
@@ -240,7 +242,7 @@ pub enum EccOpcode {
 #[opcode_offset = 0x198]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-enum Fp12Opcode {
+pub enum Fp12Opcode {
     ADD,
     SUB,
     MUL,

@@ -1,4 +1,4 @@
-use num_bigint::BigUint;
+use num_bigint_dig::BigUint;
 use num_traits::Num;
 
 pub fn parse_biguint_auto(s: &str) -> Option<BigUint> {

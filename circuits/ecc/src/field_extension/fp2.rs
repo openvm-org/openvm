@@ -22,6 +22,11 @@ impl Fp2 {
         [c0_idx, c1_idx]
     }
 
+    pub fn save_output(&mut self) {
+        self.c0.save_output();
+        self.c1.save_output();
+    }
+
     pub fn add(&mut self, other: &mut Fp2) -> Fp2 {
         Fp2 {
             c0: &mut self.c0 + &mut other.c0,

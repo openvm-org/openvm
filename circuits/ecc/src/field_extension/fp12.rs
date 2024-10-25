@@ -56,6 +56,15 @@ impl Fp12 {
         ]
     }
 
+    pub fn save_output(&mut self) {
+        self.c0.save_output();
+        self.c1.save_output();
+        self.c2.save_output();
+        self.c3.save_output();
+        self.c4.save_output();
+        self.c5.save_output();
+    }
+
     pub fn add(&mut self, other: &mut Fp12) -> Fp12 {
         Fp12 {
             c0: self.c0.add(&mut other.c0),
@@ -257,11 +266,9 @@ mod tests {
 
         let x_fq12 = x;
         let y_fq12 = y;
-        // let xi = bn254_xi();
         let r_fq12 = fq12_fn(&x_fq12, &y_fq12);
         let mut inputs = bn254_fq12_to_biguint_vec(&x_fq12);
         inputs.extend(bn254_fq12_to_biguint_vec(&y_fq12));
-        // inputs.extend(fq2_to_biguint_vec(&xi));
 
         let mut row = vec![BabyBear::zero(); width];
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
@@ -328,7 +335,6 @@ mod tests {
     //     run_fp12_test_add(x, y, Fp12::sub, |x, y| x - y, true);
     // }
 
-    // NOTE[yj]: Must be run with RUST_MIN_STACK=8388608
     #[test]
     fn test_fp12_mul() {
         let x = generate_random_fq12();
@@ -336,12 +342,4 @@ mod tests {
         let xi = [9, 1];
         run_fp12_test_mul(x, y, xi, Fp12::mul, |x, y| x * y);
     }
-
-    // #[test]
-    // fn test_fp12_div() {
-    // let x = generate_random_fq12();
-    // let y = generate_random_fq12();
-    // let xi = bn254_xi();
-    //     test_fp12(x, y, Fp2::div, |x, y| x * y.invert().unwrap(), false);
-    // }
 }

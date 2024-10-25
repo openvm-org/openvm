@@ -10,7 +10,7 @@ use p3_field::AbstractField;
 use super::{ec_add_ne_expr, ec_double_expr};
 use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
-    intrinsics::{field_expression::FieldExpressionCoreChip, test_utils::write_ptr_reg},
+    intrinsics::field_expression::FieldExpressionCoreChip,
     rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
     system::program::Instruction,
     utils::biguint_to_limbs,
@@ -75,10 +75,17 @@ fn test_add_ne() {
     let address1 = 0u32;
     let address2 = 128u32;
     let address3 = 256u32;
+    let mut write_reg = |reg_addr, value: u32| {
+        tester.write(
+            ptr_as,
+            reg_addr,
+            value.to_le_bytes().map(BabyBear::from_canonical_u8),
+        );
+    };
 
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr1, address1);
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr2, address2);
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr3, address3);
+    write_reg(addr_ptr1, address1);
+    write_reg(addr_ptr2, address2);
+    write_reg(addr_ptr3, address3);
     tester.write(data_as, address1 as usize, p1_x_limbs);
     tester.write(data_as, address1 as usize + NUM_LIMBS, p1_y_limbs);
     tester.write(data_as, address2 as usize, p2_x_limbs);
@@ -142,14 +149,20 @@ fn test_double() {
     let data_as = 2;
     let address1 = 0u32;
     let address3 = 256u32;
-
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr1, address1);
-    write_ptr_reg(&mut tester, ptr_as, addr_ptr3, address3);
+    let mut write_reg = |reg_addr, value: u32| {
+        tester.write(
+            ptr_as,
+            reg_addr,
+            value.to_le_bytes().map(BabyBear::from_canonical_u8),
+        );
+    };
+    write_reg(addr_ptr1, address1);
+    write_reg(addr_ptr3, address3);
     tester.write(data_as, address1 as usize, p1_x_limbs);
     tester.write(data_as, address1 as usize + NUM_LIMBS, p1_y_limbs);
 
     let instruction = Instruction::from_isize(
-        chip.core.air.offset + 1000, //EccOpcode::EC_DOUBLE as usize,
+        chip.core.air.offset + EccOpcode::EC_DOUBLE as usize,
         addr_ptr3 as isize,
         addr_ptr1 as isize,
         addr_ptr2 as isize,
