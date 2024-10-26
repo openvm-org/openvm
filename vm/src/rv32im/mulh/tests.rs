@@ -8,6 +8,7 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -28,10 +29,7 @@ use crate::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         mulh::{MulHCoreChip, MulHCoreCols, Rv32MulHChip},
     },
-    system::{
-        program::Instruction,
-        vm::chip_set::{BYTE_XOR_BUS, RANGE_TUPLE_CHECKER_BUS},
-    },
+    system::vm::chip_set::{BYTE_XOR_BUS, RANGE_TUPLE_CHECKER_BUS},
     utils::generate_long_number,
 };
 

@@ -18,13 +18,15 @@ use ax_sdk::{
     },
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
-use stark_vm::system::{
-    connector::VmConnectorPvs,
-    memory::merkle::MemoryMerklePvs,
-    program::Program,
-    vm::{
-        chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_CACHED_TRACE_INDEX},
-        config::VmConfig,
+use stark_vm::{
+    arch::instructions::program::Program,
+    system::{
+        connector::VmConnectorPvs,
+        memory::merkle::MemoryMerklePvs,
+        vm::{
+            chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_CACHED_TRACE_INDEX},
+            config::VmConfig,
+        },
     },
 };
 

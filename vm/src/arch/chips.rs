@@ -4,6 +4,7 @@ use afs_derive::{Chip, ChipUsageGetter};
 use afs_primitives::{
     range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip, xor::XorLookupChip,
 };
+use axvm_instructions::instruction::Instruction;
 use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
@@ -39,7 +40,7 @@ use crate::{
         mul::Rv32MultiplicationChip, mulh::Rv32MulHChip, rv32_auipc::Rv32AuipcChip,
         rv32_jal_lui::Rv32JalLuiChip, rv32_jalr::Rv32JalrChip, shift::Rv32ShiftChip,
     },
-    system::program::{ExecutionError, Instruction},
+    system::program::ExecutionError,
 };
 
 #[enum_dispatch]

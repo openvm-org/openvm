@@ -8,13 +8,13 @@ use afs_stark_backend::{
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     },
 };
-use axvm_instructions::{TerminateOpcode, UsizeOpcode};
+use axvm_instructions::{program::Program, TerminateOpcode, UsizeOpcode};
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 
-use super::{Instruction, Program, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};
+use super::{Instruction, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};
 
 /// A program with a committed cached trace.
 pub struct CommittedProgram<SC: StarkGenericConfig> {
@@ -22,18 +22,18 @@ pub struct CommittedProgram<SC: StarkGenericConfig> {
     pub program: Program<Val<SC>>,
 }
 
-impl<F: PrimeField64> Program<F> {
-    pub fn commit<SC: StarkGenericConfig>(&self, pcs: &SC::Pcs) -> CommittedProgram<SC>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        let cached_trace = generate_cached_trace(self);
+impl<SC: StarkGenericConfig> CommittedProgram<SC>
+where
+    Val<SC>: PrimeField64,
+{
+    pub fn commit(program: &Program<Val<SC>>, pcs: &SC::Pcs) -> CommittedProgram<SC> {
+        let cached_trace = generate_cached_trace(program);
         CommittedProgram {
             committed_trace_data: CommittedTraceData {
                 raw_data: Arc::new(cached_trace.clone()),
                 prover_data: TraceCommitter::new(pcs).commit(vec![cached_trace]),
             },
-            program: self.clone(),
+            program: program.clone(),
         }
     }
 }

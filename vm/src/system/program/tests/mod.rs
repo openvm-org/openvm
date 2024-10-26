@@ -5,22 +5,18 @@ use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
 };
+use axvm_instructions::{instruction::Instruction, program::Program};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use super::Program;
 use crate::{
     arch::instructions::{
         BranchEqualOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
         NativeJalOpcode::*, NativeLoadStoreOpcode::*, TerminateOpcode::*, UsizeOpcode,
     },
-    system::{
-        program::{Instruction, ProgramChip},
-        vm::chip_set::READ_INSTRUCTION_BUS,
-    },
+    system::{program::ProgramChip, vm::chip_set::READ_INSTRUCTION_BUS},
 };
-
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let instructions = program.instructions();
     let mut chip = ProgramChip::new_with_program(program);

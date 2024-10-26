@@ -19,9 +19,9 @@ use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
 use stark_vm::{
-    arch::ExecutorName,
+    arch::{instructions::program::Program, ExecutorName},
     sdk::gen_vm_program_test_proof_input,
-    system::{program::Program, vm::config::VmConfig},
+    system::vm::config::VmConfig,
 };
 use tracing::info_span;
 

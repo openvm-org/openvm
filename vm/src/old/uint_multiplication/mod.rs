@@ -10,7 +10,7 @@ use crate::{
     },
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
-        program::{ExecutionError, Instruction, ProgramBus},
+        program::{ExecutionError, ProgramBus},
     },
 };
 
@@ -20,6 +20,7 @@ mod columns;
 mod trace;
 
 pub use air::*;
+use axvm_instructions::instruction::Instruction;
 pub use columns::*;
 
 #[cfg(test)]

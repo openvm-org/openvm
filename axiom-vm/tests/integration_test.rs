@@ -12,9 +12,12 @@ use ax_sdk::{
 };
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
 use p3_baby_bear::BabyBear;
-use stark_vm::system::vm::{
-    config::{MemoryConfig, PersistenceType, VmConfig},
-    SingleSegmentVM, VirtualMachine,
+use stark_vm::system::{
+    program::trace::CommittedProgram,
+    vm::{
+        config::{MemoryConfig, PersistenceType, VmConfig},
+        SingleSegmentVM, VirtualMachine,
+    },
 };
 
 type C = InnerConfig;
@@ -56,7 +59,7 @@ fn test_1() {
         builder.halt();
         builder.compile_isa()
     };
-    let committed_program = Arc::new(program.commit(engine.config.pcs()));
+    let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
 
     let app_vm = VirtualMachine::new(axiom_vm_pk.app_vm_config.clone());
     let app_vm_result = app_vm

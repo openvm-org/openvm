@@ -12,18 +12,16 @@ use afs_primitives::{
     xor::{XorBus, XorLookupChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use num_bigint_dig::BigUint;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
-use crate::{
-    arch::{
-        instructions::{DivRemOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
-    },
-    system::program::Instruction,
+use crate::arch::{
+    instructions::{DivRemOpcode, UsizeOpcode},
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]

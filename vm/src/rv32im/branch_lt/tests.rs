@@ -5,6 +5,7 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::{instruction::Instruction, program::PC_BITS};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -32,7 +33,7 @@ use crate::{
         },
         branch_lt::BranchLessThanCoreCols,
     },
-    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS, PC_BITS},
+    system::vm::chip_set::BYTE_XOR_BUS,
     utils::{generate_long_number, i32_to_f},
 };
 

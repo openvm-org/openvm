@@ -1,11 +1,15 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{error::Error, fmt::Display};
 
 use afs_stark_backend::ChipUsageGetter;
-use backtrace::Backtrace;
-use itertools::Itertools;
-use p3_field::{Field, PrimeField64};
+pub use air::*;
+use axvm_instructions::{
+    instruction::{DebugInfo, Instruction},
+    program::Program,
+};
+pub use bus::*;
+use p3_field::PrimeField64;
 
-use crate::{arch::NUM_OPERANDS, system::vm::chip_set::READ_INSTRUCTION_BUS};
+use crate::system::{program::trace::padding_instruction, vm::chip_set::READ_INSTRUCTION_BUS};
 
 #[cfg(test)]
 pub mod tests;
@@ -15,126 +19,7 @@ mod bus;
 pub mod trace;
 pub mod util;
 
-pub use air::*;
-pub use bus::*;
-
-use super::PC_BITS;
-use crate::system::program::trace::padding_instruction;
-
 const EXIT_CODE_FAIL: usize = 1;
-#[allow(clippy::too_many_arguments)]
-#[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
-pub struct Instruction<F> {
-    pub opcode: usize,
-    pub a: F,
-    pub b: F,
-    pub c: F,
-    pub d: F,
-    pub e: F,
-    pub f: F,
-    pub g: F,
-    pub debug: String,
-}
-
-pub fn isize_to_field<F: Field>(value: isize) -> F {
-    if value < 0 {
-        return F::neg_one() * F::from_canonical_usize(value.unsigned_abs());
-    }
-    F::from_canonical_usize(value as usize)
-}
-
-impl<F: Field> Instruction<F> {
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_isize(opcode: usize, a: isize, b: isize, c: isize, d: isize, e: isize) -> Self {
-        Self {
-            opcode,
-            a: isize_to_field::<F>(a),
-            b: isize_to_field::<F>(b),
-            c: isize_to_field::<F>(c),
-            d: isize_to_field::<F>(d),
-            e: isize_to_field::<F>(e),
-            f: isize_to_field::<F>(0),
-            g: isize_to_field::<F>(0),
-            debug: String::new(),
-        }
-    }
-
-    pub fn from_usize<const N: usize>(opcode: usize, operands: [usize; N]) -> Self {
-        let mut operands = operands.to_vec();
-        while operands.len() < NUM_OPERANDS {
-            operands.push(0);
-        }
-        let operands = operands
-            .into_iter()
-            .map(F::from_canonical_usize)
-            .collect_vec();
-        Self {
-            opcode,
-            a: operands[0],
-            b: operands[1],
-            c: operands[2],
-            d: operands[3],
-            e: operands[4],
-            f: operands[5],
-            g: operands[6],
-            debug: String::new(),
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn large_from_isize(
-        opcode: usize,
-        a: isize,
-        b: isize,
-        c: isize,
-        d: isize,
-        e: isize,
-        f: isize,
-        g: isize,
-    ) -> Self {
-        Self {
-            opcode,
-            a: isize_to_field::<F>(a),
-            b: isize_to_field::<F>(b),
-            c: isize_to_field::<F>(c),
-            d: isize_to_field::<F>(d),
-            e: isize_to_field::<F>(e),
-            f: isize_to_field::<F>(f),
-            g: isize_to_field::<F>(g),
-            debug: String::new(),
-        }
-    }
-
-    pub fn debug(opcode: usize, debug: &str) -> Self {
-        Self {
-            opcode,
-            a: F::zero(),
-            b: F::zero(),
-            c: F::zero(),
-            d: F::zero(),
-            e: F::zero(),
-            f: F::zero(),
-            g: F::zero(),
-            debug: String::from(debug),
-        }
-    }
-}
-
-impl<T: Default> Default for Instruction<T> {
-    fn default() -> Self {
-        Self {
-            opcode: 0, // there is no real default opcode, this field must always be set
-            a: T::default(),
-            b: T::default(),
-            c: T::default(),
-            d: T::default(),
-            e: T::default(),
-            f: T::default(),
-            g: T::default(),
-            debug: String::new(),
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum ExecutionError {
@@ -185,131 +70,6 @@ impl Display for ExecutionError {
 }
 
 impl Error for ExecutionError {}
-
-#[derive(Debug, Clone, Default)]
-pub struct DebugInfo {
-    pub dsl_instruction: String,
-    pub trace: Option<Backtrace>,
-}
-
-impl DebugInfo {
-    pub fn new(dsl_instruction: String, trace: Option<Backtrace>) -> Self {
-        Self {
-            dsl_instruction,
-            trace,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct Program<F> {
-    /// A map from program counter to instruction.
-    /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
-    /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.
-    pub instructions_and_debug_infos: HashMap<u32, (Instruction<F>, Option<DebugInfo>)>,
-    pub step: u32,
-
-    // these two are needed to calculate the index for execution_frequencies
-    pub pc_start: u32,
-    pub pc_base: u32,
-}
-
-const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
-
-impl<F> Program<F> {
-    pub fn from_instructions_and_step(
-        instructions: &[Instruction<F>],
-        step: u32,
-        pc_start: u32,
-        pc_base: u32,
-    ) -> Self
-    where
-        F: Clone,
-    {
-        assert!(
-            instructions.is_empty()
-                || pc_base + (instructions.len() as u32 - 1) * step <= MAX_ALLOWED_PC
-        );
-        Self {
-            instructions_and_debug_infos: instructions
-                .iter()
-                .enumerate()
-                .map(|(index, instruction)| {
-                    (
-                        index as u32 * step + pc_base,
-                        ((*instruction).clone(), None),
-                    )
-                })
-                .collect(),
-            step,
-            pc_start,
-            pc_base,
-        }
-    }
-
-    // We assume that pc_start = pc_base = 0 everywhere except the RISC-V programs, until we need otherwise
-    pub fn from_instructions_and_debug_infos(
-        instructions: &[Instruction<F>],
-        debug_infos: &[Option<DebugInfo>],
-    ) -> Self
-    where
-        F: Clone,
-    {
-        assert!(instructions.is_empty() || instructions.len() as u32 - 1 <= MAX_ALLOWED_PC);
-        Self {
-            instructions_and_debug_infos: instructions
-                .iter()
-                .zip(debug_infos.iter())
-                .enumerate()
-                .map(|(index, (instruction, debug_info))| {
-                    (
-                        index as u32,
-                        ((*instruction).clone(), (*debug_info).clone()),
-                    )
-                })
-                .collect(),
-            step: 1,
-            pc_start: 0,
-            pc_base: 0,
-        }
-    }
-
-    pub fn from_instructions(instructions: &[Instruction<F>]) -> Self
-    where
-        F: Clone,
-    {
-        Self::from_instructions_and_step(instructions, 1, 0, 0)
-    }
-
-    pub fn len(&self) -> usize {
-        self.instructions_and_debug_infos.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.instructions_and_debug_infos.is_empty()
-    }
-
-    pub fn instructions(&self) -> Vec<Instruction<F>>
-    where
-        F: Clone,
-    {
-        self.instructions_and_debug_infos
-            .iter()
-            .sorted_by_key(|(pc, _)| *pc)
-            .map(|(_, (instruction, _))| instruction)
-            .cloned()
-            .collect()
-    }
-
-    pub fn debug_infos(&self) -> Vec<Option<DebugInfo>> {
-        self.instructions_and_debug_infos
-            .iter()
-            .sorted_by_key(|(pc, _)| *pc)
-            .map(|(_, (_, debug_info))| debug_info)
-            .cloned()
-            .collect()
-    }
-}
 
 #[derive(Debug)]
 pub struct ProgramChip<F> {

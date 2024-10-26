@@ -2,6 +2,7 @@ use afs_primitives::bigint::utils::{
     big_uint_mod_inverse, secp256k1_coord_prime, secp256k1_scalar_prime,
 };
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::instruction::Instruction;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -15,7 +16,6 @@ use crate::{
         VmChipWrapper,
     },
     rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
-    system::program::Instruction,
     utils::biguint_to_limbs,
 };
 
