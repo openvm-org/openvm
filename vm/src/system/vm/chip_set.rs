@@ -26,6 +26,7 @@ use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use poseidon2_air::poseidon2::Poseidon2Config;
+use program::DEFAULT_PC_STEP;
 use strum::EnumCount;
 
 use super::Streams;
@@ -88,7 +89,6 @@ use crate::{
         },
         program::{ProgramBus, ProgramChip},
         vm::config::{PersistenceType, VmConfig},
-        DEFAULT_PC_STEP,
     },
 };
 

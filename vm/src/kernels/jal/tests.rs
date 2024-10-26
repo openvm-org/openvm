@@ -4,6 +4,10 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -24,9 +28,7 @@ use crate::{
         adapters::jal_native_adapter::JalNativeAdapterChip,
         jal::{JalCoreChip, KernelJalChip},
     },
-    system::{program::Instruction, DEFAULT_PC_STEP, PC_BITS},
 };
-
 type F = BabyBear;
 
 fn set_and_execute(

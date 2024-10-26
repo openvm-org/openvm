@@ -1,8 +1,9 @@
 use afs_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::program::DEFAULT_PC_STEP;
 use p3_field::AbstractField;
 
 use super::{columns::CoreIoCols, CoreAir};
-use crate::{arch::ExecutionState, kernels::core::columns::CoreAuxCols, system::DEFAULT_PC_STEP};
+use crate::{arch::ExecutionState, kernels::core::columns::CoreAuxCols};
 
 impl CoreAir {
     pub fn eval_interactions<AB: InteractionBuilder>(

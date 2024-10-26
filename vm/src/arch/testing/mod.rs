@@ -12,6 +12,7 @@ use ax_sdk::{
     },
     engine::StarkEngine,
 };
+use axvm_instructions::instruction::Instruction;
 use itertools::izip;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
@@ -27,14 +28,13 @@ use crate::{
     arch::ExecutionState,
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
-        program::{Instruction, ProgramBus},
+        program::ProgramBus,
         vm::{
             chip_set::{EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS},
             config::MemoryConfig,
         },
     },
 };
-
 pub mod execution;
 pub mod memory;
 pub mod program;

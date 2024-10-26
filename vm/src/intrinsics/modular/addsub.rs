@@ -7,7 +7,7 @@ use afs_primitives::{
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldExprCols, FieldVariable};
-use axvm_instructions::Rv32ModularArithmeticOpcode;
+use axvm_instructions::{instruction::Instruction, Rv32ModularArithmeticOpcode};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
@@ -19,7 +19,6 @@ use crate::{
         instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
         DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
-    system::program::Instruction,
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
 };
 

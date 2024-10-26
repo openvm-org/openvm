@@ -3,6 +3,7 @@ use std::{array, borrow::BorrowMut, iter, sync::Arc};
 use afs_primitives::xor::XorLookupChip;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -17,7 +18,7 @@ use crate::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
     },
     old::alu::run_alu,
-    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS},
+    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 type F = BabyBear;

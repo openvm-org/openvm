@@ -9,6 +9,10 @@ repository.workspace = true
 [dependencies]
 p3-field.workspace = true
 axvm-instructions-derive.workspace = true
+
+backtrace.workspace = true
+derive-new.workspace = true
+itertools.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 serde.workspace = true

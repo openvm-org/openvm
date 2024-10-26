@@ -5,6 +5,7 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::{instruction::Instruction, program::PC_BITS};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -25,7 +26,7 @@ use crate::{
         adapters::{Rv32RdWriteAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         rv32_auipc::run_auipc,
     },
-    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS, PC_BITS},
+    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 const IMM_BITS: usize = 24;

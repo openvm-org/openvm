@@ -10,6 +10,7 @@ use afs_primitives::{
     xor::{XorBus, XorLookupChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
@@ -21,7 +22,6 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::JumpUiProcessedInstruction,
-    system::program::Instruction,
 };
 
 #[repr(C)]

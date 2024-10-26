@@ -10,6 +10,7 @@ use afs_primitives::{
     xor::{XorBus, XorLookupChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::{instruction::Instruction, program::PC_BITS};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -25,7 +26,6 @@ use crate::{
     rv32im::adapters::{
         compose, JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
-    system::{program::Instruction, PC_BITS},
 };
 
 const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;

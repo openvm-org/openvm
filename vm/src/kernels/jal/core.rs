@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_instructions::NativeJalOpcode;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, NativeJalOpcode};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -12,7 +12,6 @@ use crate::{
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     rv32im::adapters::JumpUiProcessedInstruction,
-    system::{program::Instruction, DEFAULT_PC_STEP},
 };
 
 #[repr(C)]

@@ -8,7 +8,9 @@ use afs_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::{NopOpcode, UsizeOpcode};
+use axvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, NopOpcode, UsizeOpcode,
+};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -17,8 +19,7 @@ use crate::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, PcIncOrSet},
     system::{
         memory::MemoryControllerRef,
-        program::{ExecutionError, Instruction, ProgramBus},
-        DEFAULT_PC_STEP,
+        program::{ExecutionError, ProgramBus},
     },
 };
 

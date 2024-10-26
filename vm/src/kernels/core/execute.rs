@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 
@@ -13,10 +14,7 @@ use crate::{
         ExecutionState, InstructionExecutor,
     },
     kernels::core::columns::{CoreAuxCols, CoreCols, CoreIoCols},
-    system::{
-        program::{ExecutionError, Instruction},
-        DEFAULT_PC_STEP,
-    },
+    system::program::ExecutionError,
 };
 
 impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {

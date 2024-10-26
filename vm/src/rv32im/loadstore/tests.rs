@@ -4,6 +4,7 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
 use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};
+use axvm_instructions::instruction::Instruction;
 use num_traits::WrappingSub;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -26,7 +27,7 @@ use crate::{
         adapters::{compose, Rv32LoadStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         loadstore::LoadStoreCoreCols,
     },
-    system::{program::Instruction, vm::Streams},
+    system::vm::Streams,
 };
 
 const IMM_BITS: usize = 16;

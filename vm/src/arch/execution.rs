@@ -2,12 +2,10 @@ use std::{array::from_fn, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_field::{AbstractField, Field};
 
-use crate::system::{
-    program::{ExecutionError, Instruction, ProgramBus},
-    DEFAULT_PC_STEP,
-};
+use crate::system::program::{ExecutionError, ProgramBus};
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
 

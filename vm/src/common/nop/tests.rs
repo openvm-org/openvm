@@ -1,13 +1,9 @@
-use axvm_instructions::NopOpcode;
+use axvm_instructions::{instruction::Instruction, NopOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 
 use super::NopChip;
-use crate::{
-    arch::{instructions::UsizeOpcode, testing::VmChipTestBuilder, ExecutionState},
-    system::program::Instruction,
-};
-
+use crate::arch::{instructions::UsizeOpcode, testing::VmChipTestBuilder, ExecutionState};
 type F = BabyBear;
 
 #[test]

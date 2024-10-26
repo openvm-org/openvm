@@ -7,12 +7,13 @@ use afs_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use air::ProgramDummyAir;
+use axvm_instructions::instruction::Instruction;
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     arch::ExecutionState,
-    system::program::{Instruction, ProgramBus, ProgramExecutionCols},
+    system::program::{ProgramBus, ProgramExecutionCols},
 };
 
 mod air;

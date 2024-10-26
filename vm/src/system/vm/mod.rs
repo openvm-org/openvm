@@ -5,6 +5,7 @@ use afs_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::ProofInput,
 };
+use axvm_instructions::program::Program;
 use metrics::VmMetrics;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
@@ -14,7 +15,7 @@ use crate::{
     intrinsics::hashes::poseidon2::CHUNK,
     system::{
         memory::Equipartition,
-        program::{trace::CommittedProgram, ExecutionError, Program},
+        program::{trace::CommittedProgram, ExecutionError},
         vm::config::{PersistenceType, VmConfig},
     },
 };

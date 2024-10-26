@@ -7,6 +7,7 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::xor::{XorBus, XorLookupChip};
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::{instruction::Instruction, program::PC_BITS};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -22,9 +23,7 @@ use crate::{
     rv32im::adapters::{
         JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
     },
-    system::{program::Instruction, PC_BITS},
 };
-
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv32JalLuiCoreCols<T> {

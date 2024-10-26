@@ -10,8 +10,7 @@ use crate::{
     },
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
-        program::{ExecutionError, Instruction, ProgramBus},
-        DEFAULT_PC_STEP,
+        program::{ExecutionError, ProgramBus},
     },
 };
 
@@ -21,6 +20,7 @@ mod columns;
 mod trace;
 
 pub use air::*;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 pub use columns::*;
 
 #[cfg(test)]

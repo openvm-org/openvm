@@ -36,6 +36,7 @@ dependencies = [
  "afs-derive",
  "afs-primitives",
  "ax-sdk",
+ "axvm-instructions",
  "backtrace",
  "cfg-if",
  "hex",
@@ -622,6 +623,9 @@ name = "axvm-instructions"
 version = "0.1.0"
 dependencies = [
  "axvm-instructions-derive",
+ "backtrace",
+ "derive-new",
+ "itertools 0.13.0",
  "num-bigint 0.4.6",
  "num-traits",
  "p3-baby-bear",

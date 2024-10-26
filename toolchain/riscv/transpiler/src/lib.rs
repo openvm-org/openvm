@@ -1,9 +1,10 @@
 //! A transpiler from custom RISC-V ELFs to axVM machine code.
 
+use axvm_instructions::program::{Program, DEFAULT_PC_STEP};
 use elf::Elf;
 use p3_field::PrimeField32;
 use rrs::transpile;
-use stark_vm::system::{memory::Equipartition, program::Program, DEFAULT_PC_STEP};
+use stark_vm::system::memory::Equipartition;
 use util::memory_image_to_equipartition;
 
 pub mod elf;

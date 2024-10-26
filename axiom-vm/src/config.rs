@@ -47,7 +47,7 @@ impl AxiomVmProvingKey {
         }
         .build_program(app_vm_pk.get_vk());
         let committed_leaf_program =
-            Arc::new(leaf_program.commit::<BabyBearPoseidon2Config>(engine.config.pcs()));
+            Arc::new(CommittedProgram::commit(&leaf_program, engine.config.pcs()));
         Self {
             fri_params: config.fri_params,
             app_vm_config: config.app_vm_config,

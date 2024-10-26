@@ -15,6 +15,7 @@ pub mod utils;
 mod tests;
 
 pub use air::KeccakVmAir;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 
 use crate::{
     arch::{
@@ -23,8 +24,7 @@ use crate::{
     },
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
-        program::{ExecutionError, Instruction, ProgramBus},
-        DEFAULT_PC_STEP,
+        program::{ExecutionError, ProgramBus},
     },
 };
 

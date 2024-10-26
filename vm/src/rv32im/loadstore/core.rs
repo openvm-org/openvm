@@ -6,6 +6,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 use parking_lot::Mutex;
@@ -21,12 +22,8 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::LoadStoreProcessedInstruction,
-    system::{
-        program::{ExecutionError, Instruction},
-        vm::Streams,
-    },
+    system::{program::ExecutionError, vm::Streams},
 };
-
 /// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
 /// This chip uses read_data and prev_data to get the write_data
 #[repr(C)]
