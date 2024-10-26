@@ -96,14 +96,8 @@ fn main() {
         let vdata = info_span!("Inner Verifier", group = "inner_verifier").in_scope(|| {
             let (program, witness_stream) =
                 build_verification_program(vdata, compiler_options.clone());
-            let inner_verifier_stf = gen_vm_program_test_proof_input(
-                program,
-                witness_stream,
-                VmConfig {
-                    num_public_values: 4,
-                    ..Default::default()
-                },
-            );
+            let inner_verifier_stf =
+                gen_vm_program_test_proof_input(program, witness_stream, VmConfig::aggregation(7));
             inner_verifier_stf
                 .run_test(&BabyBearPoseidon2Engine::new(
                     // log_blowup = 3 because of poseidon2 chip.
@@ -116,14 +110,8 @@ fn main() {
         info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
             let (program, witness_stream) =
                 build_verification_program(vdata, compiler_options.clone());
-            let outer_verifier_sft = gen_vm_program_test_proof_input(
-                program,
-                witness_stream,
-                VmConfig {
-                    num_public_values: 4,
-                    ..Default::default()
-                },
-            );
+            let outer_verifier_sft =
+                gen_vm_program_test_proof_input(program, witness_stream, VmConfig::aggregation(7));
             afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
                 outer_verifier_sft,
                 // log_blowup = 3 because of poseidon2 chip.

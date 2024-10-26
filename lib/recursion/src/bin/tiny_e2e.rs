@@ -81,14 +81,8 @@ fn main() {
         #[cfg(feature = "static-verifier")]
         info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
             let (program, witness_stream) = build_verification_program(vdata, compiler_options);
-            let inner_verifier_sft = gen_vm_program_test_proof_input(
-                program,
-                witness_stream,
-                VmConfig {
-                    num_public_values: 4,
-                    ..Default::default()
-                },
-            );
+            let inner_verifier_sft =
+                gen_vm_program_test_proof_input(program, witness_stream, VmConfig::aggregation(7));
             afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
                 inner_verifier_sft,
                 // log_blowup = 3 because of poseidon2 chip.
