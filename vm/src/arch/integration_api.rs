@@ -47,8 +47,8 @@ pub trait VmAdapterChip<F> {
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
     /// This is called at the start of instruction execution.
     ///
-    /// The implementor may choose to store data in this struct, for example in an [Option], which will later be taken
-    /// when `postprocess` is called.
+    /// The implementor may choose to store data in the `Self::ReadRecord` struct, for example in
+    /// an [Option], which will later be sent to the `postprocess` method.
     #[allow(clippy::type_complexity)]
     fn preprocess(
         &mut self,
@@ -59,8 +59,8 @@ pub trait VmAdapterChip<F> {
         Self::ReadRecord,
     )>;
 
-    /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)` of the full
-    /// adapter record for this instruction. This **must** be called after `preprocess`.
+    /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)`
+    /// of the full adapter record for this instruction. This is guaranteed to be called after `preprocess`.
     fn postprocess(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -70,7 +70,7 @@ pub trait VmAdapterChip<F> {
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)>;
 
-    /// Should mutate `row_slice` to populate with values corresponding to `record`.
+    /// Populates `row_slice` with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
     /// This function will be called for each row in the trace which is being used, and all other
     /// rows in the trace will be filled with zeroes.   
@@ -120,7 +120,7 @@ pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
 
     fn get_opcode_name(&self, opcode: usize) -> String;
 
-    /// Should mutate `row_slice` to populate with values corresponding to `record`.
+    /// Populates `row_slice` with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
     /// This function will be called for each row in the trace which is being used, and all other
     /// rows in the trace will be filled with zeroes.
