@@ -1,4 +1,4 @@
-name: VM STARK and Compiler Tests
+name: Axiom VM Tests
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
       - "stark-backend/**"
       - "circuits/primitives/**"
       - "vm/**"
+      - "axiom-vm/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -32,7 +33,7 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run vm crate tests
-        working-directory: vm
+      - name: Run axiom-vm crate tests
+        working-directory: axiom-vm
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel
+          cargo nextest run --features parallel
