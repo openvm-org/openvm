@@ -211,18 +211,6 @@ pub enum EccOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x198]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum Fp12Opcode {
-    ADD,
-    SUB,
-    MUL,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
 #[opcode_offset = 0x300]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
@@ -274,16 +262,6 @@ pub enum Rv32LoadStoreOpcode {
     /// The following are signed extend opcodes
     LOADB,
     LOADH,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x325]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum Rv32HintStoreOpcode {
-    HINT_STOREW,
 }
 
 #[derive(
@@ -379,6 +357,16 @@ pub enum DivRemOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
+#[opcode_offset = 0x400]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32HintStoreOpcode {
+    HINT_STOREW,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
 #[opcode_offset = 0x500]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
@@ -387,6 +375,18 @@ pub enum Rv32ModularArithmeticOpcode {
     SUB,
     MUL,
     DIV,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x700]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Fp12Opcode {
+    ADD,
+    SUB,
+    MUL,
 }
 
 #[derive(
