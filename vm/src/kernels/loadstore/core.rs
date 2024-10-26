@@ -17,7 +17,7 @@ use crate::{
         instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, Result,
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
-    kernels::adapters::loadstore_native_adapter::NativeLoadStoreProcessedInstruction,
+    kernels::adapters::loadstore_native_adapter::NativeLoadStoreInstruction,
     system::{program::ExecutionError, vm::Streams},
 };
 #[repr(C)]
@@ -65,7 +65,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<([AB::Expr; 2], AB::Expr)>,
     I::Writes: From<[AB::Expr; NUM_CELLS]>,
-    I::ProcessedInstruction: From<NativeLoadStoreProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<NativeLoadStoreInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -98,7 +98,7 @@ where
             to_pc: None,
             reads: (cols.pointer_reads.map(Into::into), cols.data_read.into()).into(),
             writes: cols.data_write.map(Into::into).into(),
-            instruction: NativeLoadStoreProcessedInstruction {
+            instruction: NativeLoadStoreInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 is_loadw: cols.is_loadw.into(),

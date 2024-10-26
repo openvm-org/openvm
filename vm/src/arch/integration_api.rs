@@ -29,8 +29,6 @@ pub trait VmAdapterInterface<T> {
     /// This will typically include `is_valid`, which indicates whether the trace row
     /// is being used and `opcode` to indicate which opcode is being executed if the
     /// VmChip supports multiple opcodes.
-    /// May include the `to_pc`.
-    /// Typically this should not include address spaces.
     type ProcessedInstruction;
 }
 

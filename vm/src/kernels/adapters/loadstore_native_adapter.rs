@@ -30,7 +30,7 @@ use crate::{
     },
 };
 
-pub struct NativeLoadStoreProcessedInstruction<T> {
+pub struct NativeLoadStoreInstruction<T> {
     pub is_valid: T,
     // Absolute opcode number
     pub opcode: T,
@@ -49,7 +49,7 @@ impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     // TODO[yi]: Fix when vectorizing
     type Reads = ([T; 2], T);
     type Writes = [T; NUM_CELLS];
-    type ProcessedInstruction = NativeLoadStoreProcessedInstruction<T>;
+    type ProcessedInstruction = NativeLoadStoreInstruction<T>;
 }
 
 #[derive(Clone, Debug)]
