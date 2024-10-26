@@ -7,13 +7,12 @@ use num_traits::FromPrimitive;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::SwEcAddNeCoreChip;
+use super::{ec_add_ne_expr, ec_double_expr};
 use crate::{
     arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
-    intrinsics::ecc::sw::SwEcDoubleCoreChip,
-    rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
-    system::program::Instruction,
-    utils::biguint_to_limbs,
+    intrinsics::field_expression::FieldExpressionCoreChip,
+    rv32im::adapters::Rv32VecHeapAdapterChip,
+    utils::{biguint_to_limbs, rv32_write_heap_default},
 };
 
 const NUM_LIMBS: usize = 32;
@@ -24,12 +23,18 @@ type F = BabyBear;
 fn test_add_ne() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = secp256k1_coord_prime();
-    let core = SwEcAddNeCoreChip::new(
-        modulus.clone(),
+    let expr = ec_add_ne_expr(
+        modulus,
         NUM_LIMBS,
         LIMB_BITS,
-        tester.memory_controller().borrow().range_checker.clone(),
+        tester.memory_controller().borrow().range_checker.bus(),
+    );
+    let core = FieldExpressionCoreChip::new(
+        expr,
         EccOpcode::default_offset(),
+        vec![EccOpcode::EC_ADD_NE as usize],
+        tester.memory_controller().borrow().range_checker.clone(),
+        "EcAddNe",
     );
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
@@ -60,39 +65,13 @@ fn test_add_ne() {
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
 
-    let ptr_as = 1;
-    let addr_ptr1 = 0;
-    let addr_ptr2 = 3 * RV32_REGISTER_NUM_LIMBS;
-    let addr_ptr3 = 6 * RV32_REGISTER_NUM_LIMBS;
-
-    let data_as = 2;
-    let address1 = 0u32;
-    let address2 = 128u32;
-    let address3 = 256u32;
-    let mut write_reg = |reg_addr, value: u32| {
-        tester.write(
-            ptr_as,
-            reg_addr,
-            value.to_le_bytes().map(BabyBear::from_canonical_u8),
-        );
-    };
-
-    write_reg(addr_ptr1, address1);
-    write_reg(addr_ptr2, address2);
-    write_reg(addr_ptr3, address3);
-    tester.write(data_as, address1 as usize, p1_x_limbs);
-    tester.write(data_as, address1 as usize + NUM_LIMBS, p1_y_limbs);
-    tester.write(data_as, address2 as usize, p2_x_limbs);
-    tester.write(data_as, address2 as usize + NUM_LIMBS, p2_y_limbs);
-
-    let instruction = Instruction::from_isize(
+    let instruction = rv32_write_heap_default(
+        &mut tester,
+        vec![p1_x_limbs, p1_y_limbs],
+        vec![p2_x_limbs, p2_y_limbs],
         chip.core.air.offset + EccOpcode::EC_ADD_NE as usize,
-        addr_ptr3 as isize,
-        addr_ptr1 as isize,
-        addr_ptr2 as isize,
-        ptr_as as isize,
-        data_as as isize,
     );
+
     tester.execute(&mut chip, instruction);
 
     let tester = tester.build().load(chip).finalize();
@@ -104,12 +83,18 @@ fn test_add_ne() {
 fn test_double() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = secp256k1_coord_prime();
-    let core = SwEcDoubleCoreChip::new(
-        modulus.clone(),
+    let expr = ec_double_expr(
+        modulus,
         NUM_LIMBS,
         LIMB_BITS,
-        tester.memory_controller().borrow().range_checker.clone(),
+        tester.memory_controller().borrow().range_checker.bus(),
+    );
+    let core = FieldExpressionCoreChip::new(
+        expr,
         EccOpcode::default_offset(),
+        vec![EccOpcode::EC_DOUBLE as usize],
+        tester.memory_controller().borrow().range_checker.clone(),
+        "EcDouble",
     );
     let adapter = Rv32VecHeapAdapterChip::<F, 1, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
@@ -129,35 +114,18 @@ fn test_double() {
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
-    let ptr_as = 1;
-    let addr_ptr1 = 0;
-    let addr_ptr2 = 0; // unused
-    let addr_ptr3 = 6 * RV32_REGISTER_NUM_LIMBS;
 
-    let data_as = 2;
-    let address1 = 0u32;
-    let address3 = 256u32;
-    let mut write_reg = |reg_addr, value: u32| {
-        tester.write(
-            ptr_as,
-            reg_addr,
-            value.to_le_bytes().map(BabyBear::from_canonical_u8),
-        );
-    };
-    write_reg(addr_ptr1, address1);
-    write_reg(addr_ptr3, address3);
-    tester.write(data_as, address1 as usize, p1_x_limbs);
-    tester.write(data_as, address1 as usize + NUM_LIMBS, p1_y_limbs);
-
-    let instruction = Instruction::from_isize(
+    let instruction = rv32_write_heap_default(
+        &mut tester,
+        vec![p1_x_limbs, p1_y_limbs],
+        vec![],
         chip.core.air.offset + EccOpcode::EC_DOUBLE as usize,
-        addr_ptr3 as isize,
-        addr_ptr1 as isize,
-        addr_ptr2 as isize,
-        ptr_as as isize,
-        data_as as isize,
     );
+
     tester.execute(&mut chip, instruction);
+    let tester = tester.build().load(chip).finalize();
+
+    tester.simple_test().expect("Verification failed");
 }
 
 lazy_static::lazy_static! {

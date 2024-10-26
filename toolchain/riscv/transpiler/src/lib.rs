@@ -1,9 +1,10 @@
 //! A transpiler from custom RISC-V ELFs to axVM machine code.
 
+use axvm_instructions::program::{Program, DEFAULT_PC_STEP};
 use elf::Elf;
 use p3_field::PrimeField32;
 use rrs::transpile;
-use stark_vm::system::{memory::Equipartition, program::Program};
+use stark_vm::system::memory::Equipartition;
 use util::memory_image_to_equipartition;
 
 pub mod elf;
@@ -25,7 +26,7 @@ impl<F: PrimeField32> AxVmExe<F> {
     pub fn from_elf(elf: Elf) -> Self {
         let program = Program::from_instructions_and_step(
             &transpile(&elf.instructions),
-            4,
+            DEFAULT_PC_STEP,
             elf.pc_start,
             elf.pc_base,
         );

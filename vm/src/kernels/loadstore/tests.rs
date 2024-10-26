@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use parking_lot::Mutex;
@@ -19,7 +20,7 @@ use crate::{
         adapters::loadstore_native_adapter::NativeLoadStoreAdapterChip,
         loadstore::KernelLoadStoreCoreChip,
     },
-    system::{program::Instruction, vm::Streams},
+    system::vm::Streams,
 };
 
 type F = BabyBear;

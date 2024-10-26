@@ -2,7 +2,7 @@ use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
 use p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
-use stark_vm::system::program::DebugInfo;
+use stark_vm::arch::instructions::instruction::DebugInfo;
 
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
@@ -598,9 +598,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::HintBitsU(_) => {
                     todo!()
-                }
-                DslIr::HintBytes(var, len) => {
-                    self.push(AsmInstruction::HintBytes(var.fp(), len), debug_info);
                 }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
                     (Array::Dyn(dst, _), Array::Dyn(src, _)) => self.push(

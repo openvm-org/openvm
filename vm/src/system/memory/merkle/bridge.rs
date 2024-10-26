@@ -3,9 +3,9 @@ use std::iter;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use crate::{
-    kernels::core::POSEIDON2_DIRECT_BUS,
-    system::memory::merkle::{MemoryMerkleAir, MemoryMerkleCols},
+use crate::system::{
+    memory::merkle::{MemoryMerkleAir, MemoryMerkleCols},
+    vm::chip_set::POSEIDON2_DIRECT_BUS,
 };
 
 #[derive(Copy, Clone, Debug)]

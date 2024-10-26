@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
+use axvm_instructions::instruction::{DebugInfo, Instruction};
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
+use program::DEFAULT_PC_STEP;
 use stark_vm::{
-    arch::instructions::*,
-    system::{
-        program::{DebugInfo, Instruction, Program},
-        vm::config::Modulus,
-    },
+    arch::instructions::{program::Program, *},
+    system::vm::config::Modulus,
 };
 use strum::EnumCount;
 
@@ -117,20 +116,6 @@ fn inst_large<F: PrimeField64>(
         f,
         g,
         debug: String::new(),
-    }
-}
-
-fn dbg<F: PrimeField64>(opcode: usize, debug: String) -> Instruction<F> {
-    Instruction {
-        opcode,
-        a: F::zero(),
-        b: F::zero(),
-        c: F::zero(),
-        d: F::zero(),
-        e: F::zero(),
-        f: F::zero(),
-        g: F::zero(),
-        debug,
     }
 }
 
@@ -363,61 +348,33 @@ pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
 
 fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
-    options: &CompilerOptions,
+    _options: &CompilerOptions,
 ) -> Vec<Instruction<F>> {
     let word_size_i32 = 1;
 
     match instruction {
-        AsmInstruction::PrintV(src) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::PRINTF),
+        AsmInstruction::PrintV(src) => vec![Instruction::phantom(
+            PhantomInstruction::PrintF,
             i32_f(src),
             F::zero(),
-            F::zero(),
-            AS::Memory,
-            AS::Immediate,
+            0,
         )],
-        AsmInstruction::PrintF(src) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::PRINTF),
+        AsmInstruction::PrintF(src) => vec![Instruction::phantom(
+            PhantomInstruction::PrintF,
             i32_f(src),
             F::zero(),
-            F::zero(),
-            AS::Memory,
-            AS::Immediate,
+            0,
         )],
-        AsmInstruction::PrintE(src) => vec![
-            inst(
-                options.opcode_with_offset(CoreOpcode::PRINTF),
-                i32_f(src),
-                F::zero(),
-                F::zero(),
-                AS::Memory,
-                AS::Immediate,
-            ),
-            inst(
-                options.opcode_with_offset(CoreOpcode::PRINTF),
-                i32_f(src + word_size_i32),
-                F::zero(),
-                F::zero(),
-                AS::Memory,
-                AS::Immediate,
-            ),
-            inst(
-                options.opcode_with_offset(CoreOpcode::PRINTF),
-                i32_f(src + 2 * word_size_i32),
-                F::zero(),
-                F::zero(),
-                AS::Memory,
-                AS::Immediate,
-            ),
-            inst(
-                options.opcode_with_offset(CoreOpcode::PRINTF),
-                i32_f(src + 3 * word_size_i32),
-                F::zero(),
-                F::zero(),
-                AS::Memory,
-                AS::Immediate,
-            ),
-        ],
+        AsmInstruction::PrintE(src) => (0..EF::D as i32)
+            .map(|i| {
+                Instruction::phantom(
+                    PhantomInstruction::PrintF,
+                    i32_f(src + i * word_size_i32),
+                    F::zero(),
+                    0,
+                )
+            })
+            .collect(),
         _ => panic!(
             "Illegal argument to convert_print_instruction: {:?}",
             instruction
@@ -425,6 +382,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     }
 }
 
+/// Warning: for extension field branch instructions, the `pc, labels` **must** be using `DEFAULT_PC_STEP`.
 fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
     debug_info: Option<DebugInfo>,
@@ -546,7 +504,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
-                labels(label) - (pc + F::from_canonical_usize(i)),
+                labels(label) - (pc + F::from_canonical_usize(i * DEFAULT_PC_STEP as usize)),
                 AS::Memory,
                 AS::Memory,
             ))
@@ -558,7 +516,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
-                labels(label) - (pc + F::from_canonical_usize(i)),
+                labels(label) - (pc + F::from_canonical_usize(i * DEFAULT_PC_STEP as usize)),
                 AS::Memory,
                 AS::Immediate,
             ))
@@ -572,9 +530,9 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
                 if i == 0 {
-                    labels(label) - (pc + F::from_canonical_usize(EF::D - 1))
+                    labels(label) - (pc + F::from_canonical_usize((EF::D - 1) * DEFAULT_PC_STEP as usize))
                 } else {
-                    F::from_canonical_usize(i + 1)
+                    F::from_canonical_usize((i + 1) * DEFAULT_PC_STEP as usize)
                 },
                 AS::Memory,
                 AS::Memory,
@@ -589,29 +547,21 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
                 if i == 0 {
-                    labels(label) - (pc + F::from_canonical_usize(EF::D - 1))
+                    labels(label) - (pc + F::from_canonical_usize((EF::D - 1) * DEFAULT_PC_STEP as usize))
                 } else {
-                    F::from_canonical_usize(i + 1)
+                    F::from_canonical_usize((i + 1) * DEFAULT_PC_STEP as usize)
                 },
                 AS::Memory,
                 AS::Immediate,
             ))
             .collect(),
         AsmInstruction::Trap => vec![
-            // pc <- -1 (causes trace generation to fail)
-            inst(
-                options.opcode_with_offset(CoreOpcode::FAIL),
-                F::zero(),
-                F::zero(),
-                F::zero(),
-                AS::Immediate,
-                AS::Immediate,
-            ),
+            Instruction::phantom(PhantomInstruction::DebugPanic, F::zero(), F::zero(), 0),
         ],
         AsmInstruction::Halt => vec![
             // terminate
             inst(
-                options.opcode_with_offset(TerminateOpcode::TERMINATE),
+                options.opcode_with_offset(CommonOpcode::TERMINATE),
                 F::zero(),
                 F::zero(),
                 F::zero(),
@@ -619,30 +569,12 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
         ],
-        AsmInstruction::HintInputVec() => vec![inst(
-            options.opcode_with_offset(CoreOpcode::HINT_INPUT),
-            F::zero(),
-            F::zero(),
-            F::zero(),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::HintBits(src, len) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::HINT_BITS),
-            i32_f(src),
-            F::zero(),
-            F::from_canonical_u32(len),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::HintBytes(src, len) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::HINT_BYTES),
-            i32_f(src),
-            F::zero(),
-            F::from_canonical_u32(len),
-            AS::Memory,
-            AS::Memory,
-        )],
+        AsmInstruction::HintInputVec() => vec![
+            Instruction::phantom(PhantomInstruction::HintInput, F::zero(), F::zero(), 0)
+        ],
+        AsmInstruction::HintBits(src, len) => vec![
+            Instruction::phantom(PhantomInstruction::HintBits, i32_f(src), F::from_canonical_u32(len), AS::Memory as u16)
+        ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
             F::zero(),
@@ -891,14 +823,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::CycleTrackerStart(name) => {
             if options.enable_cycle_tracker {
-                vec![dbg(options.opcode_with_offset(CoreOpcode::CT_START), name)]
+                vec![Instruction::debug(PhantomInstruction::CtStart, &name)]
             } else {
                 vec![]
             }
         }
         AsmInstruction::CycleTrackerEnd(name) => {
             if options.enable_cycle_tracker {
-                vec![dbg(options.opcode_with_offset(CoreOpcode::CT_END), name)]
+                vec![Instruction::debug(PhantomInstruction::CtEnd, &name)]
             } else {
                 vec![]
             }
@@ -935,19 +867,20 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
     let init_debug_info = None;
 
     let mut block_start = vec![];
-    let mut pc = 1;
+    let mut pc_idx = 1;
     for block in program.blocks.iter() {
-        block_start.push(pc);
+        block_start.push(pc_idx * DEFAULT_PC_STEP);
 
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
+            // This is used to just to get the number of instructions in the block
             let instructions = convert_instruction::<F, EF>(
                 instruction.clone(),
                 debug_info.clone(),
-                F::from_canonical_usize(pc),
+                F::from_canonical_u32(pc_idx * DEFAULT_PC_STEP),
                 |label| label,
                 &options,
             );
-            pc += instructions.len();
+            pc_idx += instructions.len() as u32;
         }
     }
 
@@ -956,27 +889,29 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
     for block in program.blocks.iter() {
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
             let cur_size = instructions_and_debug_infos.len() as u32;
+            let cur_pc = cur_size * DEFAULT_PC_STEP;
 
             let labels =
-                |label: F| F::from_canonical_usize(block_start[label.as_canonical_u64() as usize]);
+                |label: F| F::from_canonical_u32(block_start[label.as_canonical_u64() as usize]);
             let result = convert_instruction(
                 instruction.clone(),
                 debug_info.clone(),
-                F::from_canonical_u32(cur_size),
+                F::from_canonical_u32(cur_pc),
                 labels,
                 &options,
             );
 
-            for (index, (instruction, debug_info)) in result.instructions_and_debug_infos.iter() {
-                instructions_and_debug_infos
-                    .insert(cur_size + index, (instruction.clone(), debug_info.clone()));
+            for (local_pc, (instruction, debug_info)) in result.instructions_and_debug_infos {
+                let existing = instructions_and_debug_infos
+                    .insert(cur_pc + local_pc, (instruction.clone(), debug_info.clone()));
+                assert!(existing.is_none(), "pc should not already exist");
             }
         }
     }
 
     Program {
         instructions_and_debug_infos,
-        step: 1,
+        step: DEFAULT_PC_STEP,
         pc_start: 0,
         pc_base: 0,
     }

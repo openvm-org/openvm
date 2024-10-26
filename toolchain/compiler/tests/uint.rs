@@ -91,9 +91,11 @@ fn test_compiler_256_mul() {
             max_segment_len: (1 << 25) - 100,
             ..Default::default()
         }
+        .add_executor(ExecutorName::Phantom)
         .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::BranchEqual)
         .add_executor(ExecutorName::Jal)
+        .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::U256Multiplication),
         program,
         vec![],
@@ -290,7 +292,8 @@ fn test_compiler_256_sll_srl() {
         .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::BranchEqual)
         .add_executor(ExecutorName::Jal)
-        .add_executor(ExecutorName::Shift256),
+        .add_executor(ExecutorName::Shift256)
+        .add_executor(ExecutorName::FieldArithmetic),
         program,
         vec![],
     );
@@ -352,7 +355,8 @@ fn test_compiler_256_sra() {
         .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::BranchEqual)
         .add_executor(ExecutorName::Jal)
-        .add_executor(ExecutorName::Shift256),
+        .add_executor(ExecutorName::Shift256)
+        .add_executor(ExecutorName::FieldArithmetic),
         program,
         vec![],
     );

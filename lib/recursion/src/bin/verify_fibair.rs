@@ -31,7 +31,7 @@ fn main() {
         recursive_stark_test(
             vdata,
             compiler_options,
-            VmConfig::aggregation(7),
+            VmConfig::aggregation(4, 7),
             &BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(
                 3,
             )),

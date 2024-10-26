@@ -4,6 +4,7 @@ use afs_derive::{Chip, ChipUsageGetter};
 use afs_primitives::{
     range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip, xor::XorLookupChip,
 };
+use axvm_instructions::instruction::Instruction;
 use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ use strum_macros::IntoStaticStr;
 
 use crate::{
     arch::ExecutionState,
-    common::nop::NopChip,
+    common::phantom::PhantomChip,
     intrinsics::{
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{ModularAddSubChip, ModularMulDivChip},
@@ -20,7 +21,6 @@ use crate::{
     kernels::{
         branch_eq::KernelBranchEqChip,
         castf::CastFChip,
-        core::CoreChip,
         ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
@@ -32,14 +32,8 @@ use crate::{
     old::{
         alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
     },
-    rv32im::{
-        base_alu::Rv32BaseAluChip, branch_eq::Rv32BranchEqualChip,
-        branch_lt::Rv32BranchLessThanChip, load_sign_extend::Rv32LoadSignExtendChip,
-        loadstore::Rv32LoadStoreChip, new_divrem::Rv32DivRemChip, new_lt::Rv32LessThanChip,
-        new_mul::Rv32MultiplicationChip, new_mulh::Rv32MulHChip, new_shift::Rv32ShiftChip,
-        rv32_auipc::Rv32AuipcChip, rv32_jal_lui::Rv32JalLuiChip, rv32_jalr::Rv32JalrChip,
-    },
-    system::program::{ExecutionError, Instruction},
+    rv32im::*,
+    system::program::ExecutionError,
 };
 
 #[enum_dispatch]
@@ -78,8 +72,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum AxVmInstructionExecutor<F: PrimeField32> {
-    Nop(Rc<RefCell<NopChip<F>>>),
-    Core(Rc<RefCell<CoreChip<F>>>),
+    Phantom(Rc<RefCell<PhantomChip<F>>>),
     LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
     BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
     Jal(Rc<RefCell<KernelJalChip<F>>>),
@@ -99,6 +92,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
     LoadSignExtendRv32(Rc<RefCell<Rv32LoadSignExtendChip<F>>>),
+    HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
     BranchEqualRv32(Rc<RefCell<Rv32BranchEqualChip<F>>>),
     BranchLessThanRv32(Rc<RefCell<Rv32BranchLessThanChip<F>>>),
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
@@ -121,8 +115,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
 /// each chip. Change of the order may cause break changes of VKs.
 #[derive(Clone, IntoStaticStr, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
-    Nop(Rc<RefCell<NopChip<F>>>),
-    Core(Rc<RefCell<CoreChip<F>>>),
+    Phantom(Rc<RefCell<PhantomChip<F>>>),
     LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
     BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
     Jal(Rc<RefCell<KernelJalChip<F>>>),
@@ -144,6 +137,7 @@ pub enum AxVmChip<F: PrimeField32> {
     Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
     LoadSignExtendRv32(Rc<RefCell<Rv32LoadSignExtendChip<F>>>),
+    HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
     BranchEqualRv32(Rc<RefCell<Rv32BranchEqualChip<F>>>),
     BranchLessThanRv32(Rc<RefCell<Rv32BranchLessThanChip<F>>>),
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),

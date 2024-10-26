@@ -15,13 +15,16 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use crate::system::memory::{
-    merkle::{
-        columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions, MemoryMerkleBus,
-        MemoryMerkleChip,
+use crate::system::{
+    memory::{
+        merkle::{
+            columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
+            MemoryMerkleBus, MemoryMerkleChip,
+        },
+        tree::MemoryNode,
+        Equipartition,
     },
-    tree::MemoryNode,
-    Equipartition,
+    vm::chip_set::MEMORY_MERKLE_BUS,
 };
 
 mod util;
@@ -39,7 +42,7 @@ fn test<const CHUNK: usize>(
         address_height,
         as_offset,
     } = memory_dimensions;
-    let merkle_bus = MemoryMerkleBus(20);
+    let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
 
     // checking validity of test data
     for (&(address_space, label), value) in final_memory {
@@ -239,7 +242,7 @@ fn expand_test_no_accesses() {
     );
 
     let mut chip: MemoryMerkleChip<DEFAULT_CHUNK, _> =
-        MemoryMerkleChip::new(memory_dimensions, MemoryMerkleBus(20));
+        MemoryMerkleChip::new(memory_dimensions, MemoryMerkleBus(MEMORY_MERKLE_BUS));
 
     let (trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
 
@@ -274,8 +277,10 @@ fn expand_test_negative() {
         &hash_test_chip,
     );
 
-    let mut chip =
-        MemoryMerkleChip::<DEFAULT_CHUNK, _>::new(memory_dimensions, MemoryMerkleBus(20));
+    let mut chip = MemoryMerkleChip::<DEFAULT_CHUNK, _>::new(
+        memory_dimensions,
+        MemoryMerkleBus(MEMORY_MERKLE_BUS),
+    );
 
     let (mut trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
     for row in trace.rows_mut() {

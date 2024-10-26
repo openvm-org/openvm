@@ -86,7 +86,43 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
     let (_, ty_generics, _) = generics.split_for_impl();
 
     match &ast.data {
-        Data::Struct(_) => unimplemented!("Structs are not supported yet"),
+        Data::Struct(inner) => {
+            let generics = &ast.generics;
+            let mut new_generics = generics.clone();
+            new_generics
+                .params
+                .push(syn::parse_quote! { SC: afs_stark_backend::config::StarkGenericConfig });
+            let (impl_generics, _, _) = new_generics.split_for_impl();
+
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: afs_stark_backend::Chip<SC> });
+            quote! {
+                impl #impl_generics afs_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
+                    fn air(&self) -> std::sync::Arc<dyn afs_stark_backend::rap::AnyRap<SC>> {
+                        self.0.air()
+                    }
+                    fn generate_air_proof_input(self) -> afs_stark_backend::prover::types::AirProofInput<SC> {
+                        self.0.generate_air_proof_input()
+                    }
+                    fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, afs_stark_backend::prover::types::AirProofInput<SC>) {
+                        self.0.generate_air_proof_input_with_id(air_id)
+                    }
+                }
+            }.into()
+        }
         Data::Enum(e) => {
             let variants = e
                 .variants
@@ -122,9 +158,9 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             new_generics
                 .params
                 .push(syn::parse_quote! { SC: afs_stark_backend::config::StarkGenericConfig });
-
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
+            // Implement Chip whenever the inner type implements Chip
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(syn::parse_quote! { afs_stark_backend::config::Domain<SC>: afs_stark_backend::p3_commit::PolynomialSpace<Val = F>
@@ -163,7 +199,38 @@ pub fn chip_usage_getter_derive(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, _) = generics.split_for_impl();
 
     match &ast.data {
-        Data::Struct(_) => unimplemented!("Structs are not supported yet"),
+        Data::Struct(inner) => {
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            // Implement ChipUsageGetter whenever the inner type implements ChipUsageGetter
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: afs_stark_backend::ChipUsageGetter });
+            quote! {
+                impl #impl_generics afs_stark_backend::ChipUsageGetter for #name #ty_generics #where_clause {
+                    fn air_name(&self) -> String {
+                        self.0.air_name()
+                    }
+                    fn current_trace_height(&self) -> usize {
+                        self.0.current_trace_height()
+                    }
+                    fn trace_width(&self) -> usize {
+                        self.0.trace_width()
+                    }
+                }
+            }
+            .into()
+        }
         Data::Enum(e) => {
             let (air_name_arms, current_trace_height_arms, trace_width_arms): (Vec<_>, Vec<_>, Vec<_>) =
                 multiunzip(e.variants.iter().map(|variant| {
@@ -357,5 +424,54 @@ pub fn hintable_derive(input: TokenStream) -> TokenStream {
     match new_struct {
         Ok(new_struct) => new_struct.into(),
         Err(err) => err.into(),
+    }
+}
+
+#[proc_macro_derive(InstructionExecutor)]
+pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (impl_generics, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            // Assume F is already generic of the field.
+            // Also assume this is used in VM crate.
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: crate::arch::InstructionExecutor<F> });
+            quote! {
+                impl #impl_generics crate::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
+                    fn execute(
+                        &mut self,
+                        instruction: axvm_instructions::instruction::Instruction<F>,
+                        from_state: crate::arch::ExecutionState<u32>,
+                    ) -> crate::arch::Result<crate::arch::ExecutionState<u32>> {
+                        self.0.execute(instruction, from_state)
+                    }
+
+                    fn get_opcode_name(&self, opcode: usize) -> String {
+                        self.0.get_opcode_name(opcode)
+                    }
+                }
+            }
+            .into()
+        }
+        Data::Enum(_) => unimplemented!("Enums are not supported"),
+        Data::Union(_) => unimplemented!("Unions are not supported"),
     }
 }

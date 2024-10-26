@@ -6,7 +6,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_instructions::NativeLoadStoreOpcode;
+use axvm_instructions::{instruction::Instruction, NativeLoadStoreOpcode};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 use parking_lot::Mutex;
@@ -17,13 +17,9 @@ use crate::{
         instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, Result,
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
-    kernels::adapters::loadstore_native_adapter::NativeLoadStoreProcessedInstruction,
-    system::{
-        program::{ExecutionError, Instruction},
-        vm::Streams,
-    },
+    kernels::adapters::loadstore_native_adapter::NativeLoadStoreInstruction,
+    system::{program::ExecutionError, vm::Streams},
 };
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct KernelLoadStoreCoreCols<T, const NUM_CELLS: usize> {
@@ -69,7 +65,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<([AB::Expr; 2], AB::Expr)>,
     I::Writes: From<[AB::Expr; NUM_CELLS]>,
-    I::ProcessedInstruction: From<NativeLoadStoreProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<NativeLoadStoreInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -102,7 +98,7 @@ where
             to_pc: None,
             reads: (cols.pointer_reads.map(Into::into), cols.data_read.into()).into(),
             writes: cols.data_write.map(Into::into).into(),
-            instruction: NativeLoadStoreProcessedInstruction {
+            instruction: NativeLoadStoreInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 is_loadw: cols.is_loadw.into(),

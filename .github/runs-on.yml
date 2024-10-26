@@ -1,0 +1,14 @@
+images:
+  arm64-rust-dev-32gb:
+    platform: "linux"
+    arch: "arm64"
+    owner: "912452651013"
+    name: "arm64-rust-dev-32gb"
+    ami: "ami-0d33c5daee4966517"
+
+  arm64-rust-dev-1024gb:
+    platform: "linux"
+    arch: "arm64"
+    owner: "912452651013"
+    name: "arm64-rust-dev-1024gb"
+    ami: "ami-06dd8940c223fd887"

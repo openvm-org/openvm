@@ -49,20 +49,15 @@ afs-primitives.workspace = true
 
 [[bin]]
 name = "verify_fibair"
-required-features = ["bench-metrics"]
 
 [[bin]]
 name = "tiny_e2e"
-harness = false
-required-features = ["bench-metrics"]
 
 [[bin]]
 name = "alu256_e2e"
-required-features = ["bench-metrics"]
 
 [[bin]]
 name = "small_e2e"
-required-features = ["bench-metrics"]
 
 [features]
 default = ["parallel", "mimalloc"]

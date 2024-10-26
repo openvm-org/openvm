@@ -137,6 +137,12 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
+    pub fn clear(&self) {
+        for val in &self.count {
+            val.store(0, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
         let rows = self
             .count

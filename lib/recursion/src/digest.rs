@@ -18,6 +18,12 @@ impl<C: Config> DigestVal<C> {
             DigestVal::N(v) => v.len(),
         }
     }
+    pub fn is_empty(&self) -> bool {
+        match self {
+            DigestVal::F(v) => v.is_empty(),
+            DigestVal::N(v) => v.is_empty(),
+        }
+    }
 }
 
 #[derive(Clone)]

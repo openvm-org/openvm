@@ -26,7 +26,7 @@ const WORD_SIZE: usize = 1;
 ///
 /// It will create a [air::MemoryDummyAir] to add messages to MemoryBus.
 #[derive(Clone, Debug)]
-pub struct MemoryTester<F: PrimeField32> {
+pub struct MemoryTester<F> {
     pub bus: MemoryBus,
     pub controller: MemoryControllerRef<F>,
     /// Log of raw bus messages

@@ -6,6 +6,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -21,7 +22,7 @@ use crate::{
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{Instruction, ProgramBus},
+        program::ProgramBus,
     },
 };
 
@@ -67,8 +68,8 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize>
 #[derive(AlignedBorrow)]
 pub struct ConvertAdapterCols<T, const READ_SIZE: usize, const WRITE_SIZE: usize> {
     pub from_state: ExecutionState<T>,
-    pub a_idx: T,
-    pub b_idx: T,
+    pub a_pointer: T,
+    pub b_pointer: T,
     pub a_as: T,
     pub b_as: T,
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; 1],
@@ -111,7 +112,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(cols.b_as, cols.b_idx),
+                MemoryAddress::new(cols.b_as, cols.b_pointer),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &cols.reads_aux[0],
@@ -120,7 +121,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(cols.a_as, cols.a_idx),
+                MemoryAddress::new(cols.a_as, cols.a_pointer),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &cols.writes_aux[0],
@@ -131,15 +132,15 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
             .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [
-                    cols.a_idx.into(),
-                    cols.b_idx.into(),
+                    cols.a_pointer.into(),
+                    cols.b_pointer.into(),
                     AB::Expr::zero(),
                     cols.a_as.into(),
                     cols.b_as.into(),
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
@@ -186,7 +187,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
 
         Ok((
             ExecutionState {
-                pc: from_state.pc + 1,
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord {
@@ -206,9 +207,9 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
         let row_slice: &mut ConvertAdapterCols<_, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.a_idx = write_record.writes[0].pointer;
+        row_slice.a_pointer = write_record.writes[0].pointer;
         row_slice.a_as = write_record.writes[0].address_space;
-        row_slice.b_idx = read_record.reads[0].pointer;
+        row_slice.b_pointer = read_record.reads[0].pointer;
         row_slice.b_as = read_record.reads[0].address_space;
 
         row_slice.reads_aux = [aux_cols_factory.make_read_aux_cols(read_record.reads[0])];

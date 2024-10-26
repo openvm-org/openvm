@@ -27,9 +27,9 @@ use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
 use stark_vm::{
-    arch::ExecutorName,
+    arch::{instructions::program::Program, ExecutorName},
     sdk::gen_vm_program_test_proof_input,
-    system::{program::Program, vm::config::VmConfig},
+    system::vm::config::VmConfig,
 };
 use tracing::info_span;
 
@@ -113,6 +113,10 @@ where
     let vm_config = VmConfig {
         ..Default::default()
     }
+    .add_executor(ExecutorName::BranchEqual)
+    .add_executor(ExecutorName::Jal)
+    .add_executor(ExecutorName::LoadStore)
+    .add_executor(ExecutorName::FieldArithmetic)
     .add_executor(ExecutorName::ArithmeticLogicUnit256)
     .add_executor(ExecutorName::Shift256);
     gen_vm_program_test_proof_input(program, vec![], vm_config)
@@ -134,16 +138,14 @@ fn main() {
             enable_cycle_tracker: true,
             ..Default::default()
         };
+        #[allow(unused_variables)]
         let vdata = info_span!("Inner Verifier", group = "inner_verifier").in_scope(|| {
             let (program, witness_stream) =
                 build_verification_program(vdata, compiler_options.clone());
             let inner_verifier_stf = gen_vm_program_test_proof_input(
                 program,
                 witness_stream,
-                VmConfig {
-                    num_public_values: 4,
-                    ..Default::default()
-                },
+                VmConfig::aggregation(4, 7),
             );
             inner_verifier_stf
                 .run_test(&BabyBearPoseidon2Engine::new(
@@ -160,10 +162,7 @@ fn main() {
             let outer_verifier_sft = gen_vm_program_test_proof_input(
                 program,
                 witness_stream,
-                VmConfig {
-                    num_public_values: 4,
-                    ..Default::default()
-                },
+                VmConfig::aggregation(4, 7),
             );
             afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
                 outer_verifier_sft,

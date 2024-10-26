@@ -79,7 +79,7 @@ impl<SC: StarkGenericConfig> ProofInput<SC> {
 #[derive(Derivative)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct CommittedTraceData<SC: StarkGenericConfig> {
-    pub raw_data: RowMajorMatrix<Val<SC>>,
+    pub raw_data: Arc<RowMajorMatrix<Val<SC>>>,
     pub prover_data: ProverTraceData<SC>,
 }
 

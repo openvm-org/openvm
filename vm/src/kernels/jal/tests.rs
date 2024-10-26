@@ -4,6 +4,10 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -24,9 +28,7 @@ use crate::{
         adapters::jal_native_adapter::JalNativeAdapterChip,
         jal::{JalCoreChip, KernelJalChip},
     },
-    system::{program::Instruction, PC_BITS},
 };
-
 type F = BabyBear;
 
 fn set_and_execute(
@@ -52,7 +54,7 @@ fn set_and_execute(
     let final_pc = tester.execution.last_to_pc().as_canonical_u32();
 
     let next_pc = initial_pc + imm;
-    let rd_data = initial_pc + 1;
+    let rd_data = initial_pc + DEFAULT_PC_STEP;
 
     assert_eq!(next_pc, final_pc);
     assert_eq!(rd_data, tester.read::<1>(d, a)[0].as_canonical_u32());

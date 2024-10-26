@@ -51,6 +51,8 @@ pub struct ExprBuilder {
 
     // The equations to compute the newly introduced variables. For trace gen only.
     pub computes: Vec<SymbolicExpr>,
+
+    pub output_indices: Vec<usize>,
 }
 
 impl ExprBuilder {
@@ -74,6 +76,7 @@ impl ExprBuilder {
             carry_limbs: vec![],
             constraints: vec![],
             computes: vec![],
+            output_indices: vec![],
         }
     }
 

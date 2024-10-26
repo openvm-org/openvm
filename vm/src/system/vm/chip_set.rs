@@ -8,7 +8,6 @@ use std::{
 };
 
 use afs_primitives::{
-    bigint::utils::secp256k1_coord_prime,
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::XorLookupChip,
@@ -16,7 +15,7 @@ use afs_primitives::{
 use afs_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    prover::types::{AirProofInput, ProofInput},
+    prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
@@ -27,14 +26,14 @@ use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use poseidon2_air::poseidon2::Poseidon2Config;
+use program::DEFAULT_PC_STEP;
 use strum::EnumCount;
 
 use super::Streams;
 use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
-    common::nop::NopChip,
+    common::phantom::PhantomChip,
     intrinsics::{
-        ecc::sw::{SwEcAddNeCoreChip, SwEcDoubleCoreChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -50,10 +49,6 @@ use crate::{
         },
         branch_eq::KernelBranchEqChip,
         castf::{CastFChip, CastFCoreChip},
-        core::{
-            CoreChip, BYTE_XOR_BUS, RANGE_CHECKER_BUS, RANGE_TUPLE_CHECKER_BUS,
-            READ_INSTRUCTION_BUS,
-        },
         ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
@@ -68,37 +63,35 @@ use crate::{
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
-            Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip, Rv32MultAdapterChip,
-            Rv32RdWriteAdapterChip, Rv32VecHeapAdapterChip,
+            Rv32HintStoreAdapterChip, Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip,
+            Rv32MultAdapterChip, Rv32RdWriteAdapterChip, Rv32VecHeapAdapterChip,
         },
-        base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
-        branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
-        branch_lt::{BranchLessThanCoreChip, Rv32BranchLessThanChip},
-        load_sign_extend::{LoadSignExtendCoreChip, Rv32LoadSignExtendChip},
-        loadstore::{LoadStoreCoreChip, Rv32LoadStoreChip},
-        new_divrem::{DivRemCoreChip, Rv32DivRemChip},
-        new_lt::{LessThanCoreChip, Rv32LessThanChip},
-        new_mul::{MultiplicationCoreChip, Rv32MultiplicationChip},
-        new_mulh::{MulHCoreChip, Rv32MulHChip},
-        new_shift::{Rv32ShiftChip, ShiftCoreChip},
-        rv32_auipc::{Rv32AuipcChip, Rv32AuipcCoreChip},
-        rv32_jal_lui::{Rv32JalLuiChip, Rv32JalLuiCoreChip},
-        rv32_jalr::{Rv32JalrChip, Rv32JalrCoreChip},
+        *,
     },
     system::{
+        connector::VmConnectorChip,
         memory::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
             MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
         },
         program::{ProgramBus, ProgramChip},
-        vm::{
-            config::{PersistenceType, VmConfig},
-            connector::VmConnectorChip,
-        },
+        vm::config::{PersistenceType, VmConfig},
     },
 };
 
+pub const EXECUTION_BUS: usize = 0;
+pub const MEMORY_BUS: usize = 1;
+pub const RANGE_CHECKER_BUS: usize = 4;
+pub const POSEIDON2_DIRECT_BUS: usize = 6;
+pub const READ_INSTRUCTION_BUS: usize = 8;
+pub const BYTE_XOR_BUS: usize = 10;
+//pub const BYTE_XOR_BUS: XorBus = XorBus(8);
+pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
+pub const MEMORY_MERKLE_BUS: usize = 12;
+
 pub const PROGRAM_AIR_ID: usize = 0;
+/// ProgramAir is the first AIR so its cached trace should be the first main trace.
+pub const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
 pub const CONNECTOR_AIR_ID: usize = 1;
 /// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
 /// using persistent memory.
@@ -149,7 +142,10 @@ impl<F: PrimeField32> VmChipSet<F> {
             .collect()
     }
 
-    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(self) -> ProofInput<SC>
+    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
+        self,
+        cached_program: Option<CommittedTraceData<SC>>,
+    ) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
@@ -161,7 +157,7 @@ impl<F: PrimeField32> VmChipSet<F> {
         let mut pi_builder = ChipSetProofInputBuilder::new();
         // System: Program Chip
         debug_assert_eq!(pi_builder.curr_air_id, PROGRAM_AIR_ID);
-        pi_builder.add_air_proof_input(self.program_chip.into());
+        pi_builder.add_air_proof_input(self.program_chip.generate_air_proof_input(cached_program));
         // System: Connector Chip
         debug_assert_eq!(pi_builder.curr_air_id, CONNECTOR_AIR_ID);
         pi_builder.add_air_proof_input(self.connector_chip.generate_air_proof_input());
@@ -205,10 +201,10 @@ impl VmConfig {
         &self,
         streams: Arc<Mutex<Streams<F>>>,
     ) -> VmChipSet<F> {
-        let execution_bus = ExecutionBus(0);
+        let execution_bus = ExecutionBus(EXECUTION_BUS);
         let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
-        let memory_bus = MemoryBus(1);
-        let merkle_bus = MemoryMerkleBus(12);
+        let memory_bus = MemoryBus(MEMORY_BUS);
+        let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
@@ -248,8 +244,6 @@ impl VmConfig {
         );
         let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
-        // CoreChip is always required even if it's not explicitly specified.
-        required_executors.insert(ExecutorName::Core);
         // PublicValuesChip is required when num_public_values > 0.
         let public_values_chip = if self.num_public_values > 0 {
             // Raw public values are not supported when continuation is enabled.
@@ -288,19 +282,8 @@ impl VmConfig {
                 }
             }
             match executor {
-                ExecutorName::Nop => {
-                    let nop_chip = Rc::new(RefCell::new(NopChip::new(
-                        execution_bus,
-                        program_bus,
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, nop_chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Nop(nop_chip));
-                }
-                ExecutorName::Core => {
-                    let core_chip = Rc::new(RefCell::new(CoreChip::new(
+                ExecutorName::Phantom => {
+                    let phantom_chip = Rc::new(RefCell::new(PhantomChip::new(
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
@@ -308,9 +291,9 @@ impl VmConfig {
                         offset,
                     )));
                     for opcode in range {
-                        executors.insert(opcode, core_chip.clone().into());
+                        executors.insert(opcode, phantom_chip.clone().into());
                     }
-                    chips.push(AxVmChip::Core(core_chip));
+                    chips.push(AxVmChip::Phantom(phantom_chip));
                 }
                 ExecutorName::LoadStore => {
                     let chip = Rc::new(RefCell::new(KernelLoadStoreChip::<F, 1>::new(
@@ -335,7 +318,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchEqualCoreChip::new(offset, 1usize),
+                        BranchEqualCoreChip::new(offset, DEFAULT_PC_STEP),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -502,7 +485,11 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        DivRemCoreChip::new(range_tuple_checker.clone(), offset),
+                        DivRemCoreChip::new(
+                            byte_xor_chip.clone(),
+                            range_tuple_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -547,7 +534,7 @@ impl VmConfig {
                             range_checker.clone(),
                             offset,
                         ),
-                        LoadStoreCoreChip::new(streams.clone(), offset),
+                        LoadStoreCoreChip::new(offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -572,6 +559,22 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::LoadSignExtendRv32(chip));
                 }
+                ExecutorName::HintStoreRv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32HintStoreChip::new(
+                        Rv32HintStoreAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            range_checker.clone(),
+                        ),
+                        Rv32HintStoreCoreChip::new(streams.clone(), byte_xor_chip.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::HintStoreRv32(chip));
+                }
                 ExecutorName::BranchEqualRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BranchEqualChip::new(
                         Rv32BranchAdapterChip::new(
@@ -579,7 +582,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchEqualCoreChip::new(offset, 4usize),
+                        BranchEqualCoreChip::new(offset, DEFAULT_PC_STEP),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -673,14 +676,9 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        SwEcAddNeCoreChip::new(
-                            secp256k1_coord_prime(),
-                            32,
-                            8,
-                            memory_controller.borrow().range_checker.clone(),
-                            offset,
-                        ),
                         memory_controller.clone(),
+                        8,
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -694,14 +692,9 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        SwEcDoubleCoreChip::new(
-                            secp256k1_coord_prime(),
-                            32,
-                            8,
-                            memory_controller.borrow().range_checker.clone(),
-                            offset,
-                        ),
                         memory_controller.clone(),
+                        8,
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -975,15 +968,11 @@ fn shift_range(r: Range<usize>, x: usize) -> Range<usize> {
 
 fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
     let (start, len, offset) = match executor {
-        ExecutorName::Nop => (
-            NopOpcode::default_offset(),
-            NopOpcode::COUNT,
-            NopOpcode::default_offset(),
-        ),
-        ExecutorName::Core => (
-            CoreOpcode::default_offset(),
-            CoreOpcode::COUNT,
-            CoreOpcode::default_offset(),
+        // Terminate is not handled by executor, it is done by system (VmConnectorChip)
+        ExecutorName::Phantom => (
+            CommonOpcode::PHANTOM.with_default_offset(),
+            1,
+            CommonOpcode::default_offset(),
         ),
         ExecutorName::LoadStore => (
             NativeLoadStoreOpcode::default_offset(),
@@ -1031,14 +1020,21 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             AluOpcode::default_offset(),
         ),
         ExecutorName::LoadStoreRv32 => (
+            // LOADW through STOREB
             Rv32LoadStoreOpcode::default_offset(),
-            7,
+            Rv32LoadStoreOpcode::STOREB as usize + 1,
             Rv32LoadStoreOpcode::default_offset(),
         ),
         ExecutorName::LoadSignExtendRv32 => (
-            Rv32LoadStoreOpcode::default_offset() + 7,
+            // [LOADB, LOADH]
+            Rv32LoadStoreOpcode::LOADB.with_default_offset(),
             2,
             Rv32LoadStoreOpcode::default_offset(),
+        ),
+        ExecutorName::HintStoreRv32 => (
+            Rv32HintStoreOpcode::default_offset(),
+            Rv32HintStoreOpcode::COUNT,
+            Rv32HintStoreOpcode::default_offset(),
         ),
         ExecutorName::JalLuiRv32 => (
             Rv32JalLuiOpcode::default_offset(),

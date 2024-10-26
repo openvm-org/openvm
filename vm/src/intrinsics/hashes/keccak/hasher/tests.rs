@@ -2,17 +2,11 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use afs_primitives::xor::XorLookupChip;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::{
-    config::{
-        baby_bear_poseidon2::{default_perm, engine_from_perm, BabyBearPoseidon2Engine},
-        FriParameters,
-    },
-    utils::create_seeded_rng,
-};
+use ax_sdk::{config::baby_bear_blake3::BabyBearBlake3Config, utils::create_seeded_rng};
+use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_keccak_air::NUM_ROUNDS;
-use p3_util::log2_strict_usize;
 use rand::Rng;
 use tiny_keccak::Hasher;
 
@@ -23,20 +17,14 @@ use crate::{
         testing::{VmChipTestBuilder, VmChipTester},
     },
     intrinsics::hashes::keccak::hasher::columns::KeccakVmCols,
-    kernels::core::BYTE_XOR_BUS,
-    system::program::Instruction,
+    system::vm::chip_set::BYTE_XOR_BUS,
 };
-
-fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
-    let max_log_degree = log2_strict_usize(max_trace_height);
-    let perm = default_perm();
-    let fri_params = FriParameters::standard_fast();
-    engine_from_perm(perm, max_log_degree, fri_params)
-}
 
 // io is vector of (input, prank_output) where prank_output is Some if the trace
 // will be replaced
-fn build_keccak256_test(io: Vec<(Vec<u8>, Option<[u8; 32]>)>) -> VmChipTester {
+fn build_keccak256_test(
+    io: Vec<(Vec<u8>, Option<[u8; 32]>)>,
+) -> VmChipTester<BabyBearBlake3Config> {
     let mut tester = VmChipTestBuilder::default();
     let xor_chip = Arc::new(XorLookupChip::<8>::new(BYTE_XOR_BUS));
     let mut chip = KeccakVmChip::new(
@@ -128,7 +116,7 @@ fn negative_test_keccak256() {
     let tester = build_keccak256_test(vec![(input, Some(out))]);
     disable_debug_builder();
     assert_eq!(
-        tester.test(get_engine).err(),
+        tester.simple_test().err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
 }

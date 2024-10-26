@@ -5,6 +5,7 @@ use afs_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::ProofInput,
 };
+use axvm_instructions::program::Program;
 use metrics::VmMetrics;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
@@ -14,14 +15,13 @@ use crate::{
     intrinsics::hashes::poseidon2::CHUNK,
     system::{
         memory::Equipartition,
-        program::{ExecutionError, Program},
+        program::{trace::CommittedProgram, ExecutionError},
         vm::config::{PersistenceType, VmConfig},
     },
 };
 
 pub mod chip_set;
 pub mod config;
-pub mod connector;
 pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
@@ -107,7 +107,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 pc,
                 segment.chip_set.connector_chip.boundary_states[1]
                     .unwrap()
-                    .pc as u32
+                    .pc
             );
 
             let config = mem::take(&mut segment.config);
@@ -132,6 +132,8 @@ impl<F: PrimeField32> VirtualMachine<F> {
     }
 
     pub fn execute(mut self, program: Program<F>) -> Result<(), ExecutionError> {
+        #[cfg(test)]
+        ax_sdk::config::setup_tracing_with_log_level(tracing::Level::WARN);
         self.execute_segments(program).map(|_| ())
     }
 
@@ -147,7 +149,25 @@ impl<F: PrimeField32> VirtualMachine<F> {
         Ok(VirtualMachineResult {
             per_segment: segments
                 .into_iter()
-                .map(ExecutionSegment::generate_proof_input)
+                .map(|seg| seg.generate_proof_input(None))
+                .collect(),
+        })
+    }
+    pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
+        mut self,
+        committed_program: Arc<CommittedProgram<SC>>,
+    ) -> Result<VirtualMachineResult<SC>, ExecutionError>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let segments = self.execute_segments(committed_program.program.clone())?;
+
+        Ok(VirtualMachineResult {
+            per_segment: segments
+                .into_iter()
+                .map(|seg| {
+                    seg.generate_proof_input(Some(committed_program.committed_trace_data.clone()))
+                })
                 .collect(),
         })
     }
@@ -191,14 +211,14 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        program: Program<F>,
+        commited_program: Arc<CommittedProgram<SC>>,
         input: Vec<Vec<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segment = self.execute_impl(program, input.into())?;
-        Ok(segment.generate_proof_input())
+        let segment = self.execute_impl(commited_program.program.clone(), input.into())?;
+        Ok(segment.generate_proof_input(Some(commited_program.committed_trace_data.clone())))
     }
 
     fn execute_impl(

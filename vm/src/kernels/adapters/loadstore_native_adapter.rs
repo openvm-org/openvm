@@ -7,6 +7,7 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::utils;
 use afs_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -25,11 +26,11 @@ use crate::{
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{Instruction, ProgramBus},
+        program::ProgramBus,
     },
 };
 
-pub struct NativeLoadStoreProcessedInstruction<T> {
+pub struct NativeLoadStoreInstruction<T> {
     pub is_valid: T,
     // Absolute opcode number
     pub opcode: T,
@@ -48,7 +49,7 @@ impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     // TODO[yi]: Fix when vectorizing
     type Reads = ([T; 2], T);
     type Writes = [T; NUM_CELLS];
-    type ProcessedInstruction = NativeLoadStoreProcessedInstruction<T>;
+    type ProcessedInstruction = NativeLoadStoreInstruction<T>;
 }
 
 #[derive(Clone, Debug)]
@@ -243,7 +244,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
                 [cols.a, cols.b, cols.c, cols.d, cols.e, cols.f, cols.g],
                 cols.from_state,
                 timestamp_delta.clone(),
-                (1, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, is_valid.clone());
     }
@@ -355,7 +356,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             memory.write::<NUM_CELLS>(read_record.write_as, read_record.write_ptr, output.writes);
         Ok((
             ExecutionState {
-                pc: output.to_pc.unwrap_or(from_state.pc + 1),
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord {

@@ -2,17 +2,15 @@ use std::borrow::{Borrow, BorrowMut};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_instructions::NativeJalOpcode;
+use axvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, NativeJalOpcode, UsizeOpcode,
+};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use crate::{
-    arch::{
-        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
-    },
-    rv32im::adapters::JumpUiProcessedInstruction,
-    system::program::Instruction,
+use crate::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]
@@ -41,7 +39,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 1]; 0]>,
     I::Writes: From<[[AB::Expr; 1]; 1]>,
-    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -54,8 +52,8 @@ where
         AdapterAirContext {
             to_pc: Some(from_pc.into() + cols.imm.into()),
             reads: [].into(),
-            writes: [[from_pc.into() + AB::Expr::from_canonical_usize(1)]].into(),
-            instruction: JumpUiProcessedInstruction {
+            writes: [[from_pc.into() + AB::Expr::from_canonical_u32(DEFAULT_PC_STEP)]].into(),
+            instruction: ImmInstruction {
                 is_valid: cols.is_valid.into(),
                 opcode: AB::Expr::from_canonical_usize(NativeJalOpcode::JAL as usize + self.offset),
                 immediate: cols.imm.into(),
@@ -105,7 +103,7 @@ where
 
         let output = AdapterRuntimeContext {
             to_pc: Some((F::from_canonical_u32(from_pc) + *b).as_canonical_u32()),
-            writes: [[F::from_canonical_u32(from_pc) + F::one()]].into(),
+            writes: [[F::from_canonical_u32(from_pc + DEFAULT_PC_STEP)]].into(),
         };
 
         Ok((output, JalRecord { imm: *b }))

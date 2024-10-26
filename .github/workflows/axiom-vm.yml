@@ -1,0 +1,39 @@
+name: Axiom VM Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "stark-backend/**"
+      - "circuits/primitives/**"
+      - "vm/**"
+      - "axiom-vm/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  AXIOM_FAST_TEST: "1"
+
+jobs:
+  tests:
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=64cpu-linux-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Run axiom-vm crate tests
+        working-directory: axiom-vm
+        run: |
+          cargo nextest run --features parallel

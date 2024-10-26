@@ -127,6 +127,7 @@ impl VecAutoHintable for Vec<AdjacentOpenedValues<InnerChallenge>> {}
 impl VecAutoHintable for Vec<Vec<AdjacentOpenedValues<InnerChallenge>>> {}
 
 impl VecAutoHintable for AirProofData<BabyBearPoseidon2Config> {}
+impl VecAutoHintable for Proof<BabyBearPoseidon2Config> {}
 
 impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
     type HintVariable = Array<C, I::HintVariable>;

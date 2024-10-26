@@ -8,6 +8,13 @@ pub fn create_seeded_rng() -> StdRng {
     StdRng::from_seed(seed)
 }
 
+pub fn create_seeded_rng_with_seed(seed: u64) -> StdRng {
+    let seed_be = seed.to_be_bytes();
+    let mut seed = [0u8; 32];
+    seed[24..32].copy_from_slice(&seed_be);
+    StdRng::from_seed(seed)
+}
+
 // Returns row major matrix
 pub fn generate_random_matrix<F: AbstractField>(
     mut rng: impl Rng,

@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::field_expression::{ExprBuilder, FieldVariable};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
+#[derive(Clone)]
 pub struct Fp2 {
     pub c0: FieldVariable,
     pub c1: FieldVariable,
@@ -15,22 +16,28 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
-    pub fn save(&mut self) {
-        self.c0.save();
-        self.c1.save();
+    pub fn save(&mut self) -> [usize; 2] {
+        let c0_idx = self.c0.save();
+        let c1_idx = self.c1.save();
+        [c0_idx, c1_idx]
+    }
+
+    pub fn save_output(&mut self) {
+        self.c0.save_output();
+        self.c1.save_output();
     }
 
     pub fn add(&mut self, other: &mut Fp2) -> Fp2 {
         Fp2 {
-            c0: self.c0.add(&mut other.c0),
-            c1: self.c1.add(&mut other.c1),
+            c0: &mut self.c0 + &mut other.c0,
+            c1: &mut self.c1 + &mut other.c1,
         }
     }
 
     pub fn sub(&mut self, other: &mut Fp2) -> Fp2 {
         Fp2 {
-            c0: self.c0.sub(&mut other.c0),
-            c1: self.c1.sub(&mut other.c1),
+            c0: &mut self.c0 - &mut other.c0,
+            c1: &mut self.c1 - &mut other.c1,
         }
     }
 
@@ -77,9 +84,15 @@ impl Fp2 {
 
     pub fn scalar_mul(&mut self, fp: &mut FieldVariable) -> Fp2 {
         Fp2 {
-            c0: self.c0.mul(fp),
-            c1: self.c1.mul(fp),
+            c0: &mut self.c0 * fp,
+            c1: &mut self.c1 * fp,
         }
+    }
+
+    pub fn int_mul(&mut self, c: [isize; 2]) -> Fp2 {
+        let c0 = self.c0.int_mul(c[0]) - self.c1.int_mul(c[1]);
+        let c1 = self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]);
+        Fp2 { c0, c1 }
     }
 }
 
@@ -90,10 +103,7 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
     };
-    use halo2curves_axiom::{
-        bn256::{Fq, Fq2, G1},
-        group::Group,
-    };
+    use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use num_bigint_dig::BigUint;
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;
@@ -105,26 +115,17 @@ mod tests {
         *,
     };
 
-    fn fq_to_biguint(fq: &Fq) -> BigUint {
-        let bytes = fq.to_bytes();
-        BigUint::from_bytes_le(&bytes)
-    }
-
-    fn generate_random_fp2() -> Fq2 {
+    fn generate_random_fq2() -> Fq2 {
         let mut rng = create_seeded_rng();
-        let point_x = G1::random(&mut rng);
-        Fq2 {
-            c0: point_x.x,
-            c1: point_x.y,
-        }
+        Fq2::random(&mut rng)
     }
 
     fn two_fp2_input(x: &Fq2, y: &Fq2) -> Vec<BigUint> {
         vec![
-            fq_to_biguint(&x.c0),
-            fq_to_biguint(&x.c1),
-            fq_to_biguint(&y.c0),
-            fq_to_biguint(&y.c1),
+            bn254_fq_to_biguint(&x.c0),
+            bn254_fq_to_biguint(&x.c1),
+            bn254_fq_to_biguint(&y.c0),
+            bn254_fq_to_biguint(&y.c1),
         ]
     }
 
@@ -151,8 +152,8 @@ mod tests {
         };
         let width = BaseAir::<BabyBear>::width(&air);
 
-        let x_fp2 = generate_random_fp2();
-        let y_fp2 = generate_random_fp2();
+        let x_fp2 = generate_random_fq2();
+        let y_fp2 = generate_random_fq2();
         let r_fp2 = fq2_fn(&x_fp2, &y_fp2);
         let inputs = two_fp2_input(&x_fp2, &y_fp2);
 
@@ -164,8 +165,8 @@ mod tests {
         assert_eq!(vars.len(), 2);
         let r_c0 = evaluate_biguint(&vars[0], LIMB_BITS);
         let r_c1 = evaluate_biguint(&vars[1], LIMB_BITS);
-        let expected_c0 = fq_to_biguint(&r_fp2.c0);
-        let expected_c1 = fq_to_biguint(&r_fp2.c1);
+        let expected_c0 = bn254_fq_to_biguint(&r_fp2.c0);
+        let expected_c1 = bn254_fq_to_biguint(&r_fp2.c1);
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 
@@ -216,17 +217,17 @@ mod tests {
         };
         let width = BaseAir::<BabyBear>::width(&air);
 
-        let x_fp2 = generate_random_fp2();
-        let y_fp2 = generate_random_fp2();
-        let z_fp2 = generate_random_fp2();
+        let x_fp2 = generate_random_fq2();
+        let y_fp2 = generate_random_fq2();
+        let z_fp2 = generate_random_fq2();
         let r_fp2 = z_fp2.invert().unwrap() * x_fp2 * y_fp2;
         let inputs = vec![
-            fq_to_biguint(&x_fp2.c0),
-            fq_to_biguint(&x_fp2.c1),
-            fq_to_biguint(&y_fp2.c0),
-            fq_to_biguint(&y_fp2.c1),
-            fq_to_biguint(&z_fp2.c0),
-            fq_to_biguint(&z_fp2.c1),
+            bn254_fq_to_biguint(&x_fp2.c0),
+            bn254_fq_to_biguint(&x_fp2.c1),
+            bn254_fq_to_biguint(&y_fp2.c0),
+            bn254_fq_to_biguint(&y_fp2.c1),
+            bn254_fq_to_biguint(&z_fp2.c0),
+            bn254_fq_to_biguint(&z_fp2.c1),
         ];
         let mut row = vec![BabyBear::zero(); width];
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
@@ -236,8 +237,8 @@ mod tests {
         assert_eq!(vars.len(), 2);
         let r_c0 = evaluate_biguint(&vars[0], LIMB_BITS);
         let r_c1 = evaluate_biguint(&vars[1], LIMB_BITS);
-        let expected_c0 = fq_to_biguint(&r_fp2.c0);
-        let expected_c1 = fq_to_biguint(&r_fp2.c1);
+        let expected_c0 = bn254_fq_to_biguint(&r_fp2.c0);
+        let expected_c1 = bn254_fq_to_biguint(&r_fp2.c1);
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 

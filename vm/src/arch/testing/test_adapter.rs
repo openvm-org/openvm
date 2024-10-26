@@ -6,6 +6,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -14,10 +15,7 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, ExecutionBridge,
         ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
     },
-    system::{
-        memory::{MemoryAuxColsFactory, MemoryController},
-        program::Instruction,
-    },
+    system::memory::{MemoryAuxColsFactory, MemoryController},
 };
 
 // Replaces A: VmAdapterChip while testing VmCoreChip functionality, as it has no

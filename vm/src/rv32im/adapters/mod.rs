@@ -1,19 +1,20 @@
-mod rv32_alu;
-mod rv32_branch;
-mod rv32_jalr;
-mod rv32_loadstore;
-mod rv32_mul;
-mod rv32_rdwrite;
-mod rv32_vec_heap;
+mod alu;
+mod branch;
+mod hintstore;
+mod jalr;
+mod loadstore;
+mod mul;
+mod rdwrite;
+mod vec_heap;
 
-use afs_derive::AlignedBorrow;
-pub use rv32_alu::*;
-pub use rv32_branch::*;
-pub use rv32_jalr::*;
-pub use rv32_loadstore::*;
-pub use rv32_mul::*;
-pub use rv32_rdwrite::*;
-pub use rv32_vec_heap::*;
+pub use alu::*;
+pub use branch::*;
+pub use hintstore::*;
+pub use jalr::*;
+pub use loadstore::*;
+pub use mul::*;
+pub use rdwrite::*;
+pub use vec_heap::*;
 
 /// 32-bit register stored as 4 bytes (4 limbs of 8-bits)
 pub const RV32_REGISTER_NUM_LIMBS: usize = 4;
@@ -50,14 +51,4 @@ pub fn read_rv32_register<F: PrimeField32>(
     let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
     let val = compose(record.data);
     (record, val)
-}
-
-// This ProcessInstruction is used by rv32_jalr and rv32_rdwrite
-#[repr(C)]
-#[derive(AlignedBorrow)]
-pub struct JumpUiProcessedInstruction<T> {
-    pub is_valid: T,
-    /// Absolute opcode number
-    pub opcode: T,
-    pub immediate: T,
 }

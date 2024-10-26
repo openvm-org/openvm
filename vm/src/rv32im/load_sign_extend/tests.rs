@@ -4,6 +4,7 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
 use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};
+use axvm_instructions::instruction::Instruction;
 use num_traits::WrappingSub;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -25,7 +26,6 @@ use crate::{
         adapters::{compose, Rv32LoadStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         load_sign_extend::LoadSignExtendCoreCols,
     },
-    system::program::Instruction,
 };
 
 const IMM_BITS: usize = 16;
@@ -74,18 +74,12 @@ fn set_and_execute(
     let ptr_val = imm_ext.wrapping_add(compose(rs1));
     tester.write(1, b, rs1);
 
-    let is_load = [LOADH, LOADB].contains(&opcode);
     let some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
     let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
-    if is_load {
-        tester.write(1, a, some_prev_data);
-        tester.write(2, ptr_val as usize, read_data);
-    } else {
-        tester.write(2, ptr_val as usize, some_prev_data);
-        tester.write(1, a, read_data);
-    }
+    tester.write(1, a, some_prev_data);
+    tester.write(2, ptr_val as usize, read_data);
 
     tester.execute(
         chip,
@@ -100,11 +94,7 @@ fn set_and_execute(
         read_data,
         some_prev_data,
     );
-    if is_load {
-        assert_eq!(write_data, tester.read::<4>(1, a));
-    } else if !is_load && opcode != HINT_STOREW {
-        assert_eq!(write_data, tester.read::<4>(2, ptr_val as usize));
-    }
+    assert_eq!(write_data, tester.read::<4>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -126,9 +116,9 @@ fn rand_loadstore_test() {
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner =
+    let core =
         LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::default_offset());
-    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.memory_controller());
 
     let num_tests: usize = 1;
     for _ in 0..num_tests {
@@ -166,12 +156,12 @@ fn run_negative_loadstore_test(
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner = LoadSignExtendCoreChip::new(
+    let core = LoadSignExtendCoreChip::new(
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.memory_controller());
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
 
@@ -204,12 +194,7 @@ fn run_negative_loadstore_test(
     drop(range_checker_chip);
     disable_debug_builder();
     let tester = tester.build().load_air_proof_input(chip_input).finalize();
-    let msg = format!(
-        "Expected verification to fail with {:?}, but it didn't",
-        &expected_error
-    );
-    let result = tester.simple_test();
-    assert_eq!(result.err(), Some(expected_error), "{}", msg);
+    tester.simple_test_with_expected_error(expected_error);
 }
 
 #[test]
@@ -255,9 +240,9 @@ fn execute_roundtrip_sanity_test() {
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::default_offset(),
     );
-    let inner =
+    let core =
         LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::default_offset());
-    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.memory_controller());
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {
