@@ -4,8 +4,7 @@
 /// 2. Verify the proof of 1. in the outer config.
 /// 3. Verify the proof of 2. using a Halo2 static verifier. (Outer Recursion)
 /// 4. Wrapper Halo2 circuit to reduce the size of 3.
-use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Felt};
-use afs_recursion::testing_utils::inner::build_verification_program;
+use afs_compiler::{asm::AsmBuilder, ir::Felt};
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
@@ -71,15 +70,19 @@ fn main() {
         let fib_program_stark = fibonacci_program_test_proof_input(0, 1, 32);
         let engine =
             BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+        #[allow(unused_variables)]
         let vdata = fib_program_stark.run_test(&engine).unwrap();
         span.exit();
 
-        let compiler_options = CompilerOptions {
-            enable_cycle_tracker: true,
-            ..Default::default()
-        };
         #[cfg(feature = "static-verifier")]
         info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
+            use afs_compiler::conversion::CompilerOptions;
+            use afs_recursion::testing_utils::inner::build_verification_program;
+
+            let compiler_options = CompilerOptions {
+                enable_cycle_tracker: true,
+                ..Default::default()
+            };
             let (program, witness_stream) = build_verification_program(vdata, compiler_options);
             let inner_verifier_sft =
                 gen_vm_program_test_proof_input(program, witness_stream, VmConfig::aggregation(7));

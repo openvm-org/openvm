@@ -138,11 +138,15 @@ fn main() {
             enable_cycle_tracker: true,
             ..Default::default()
         };
+        #[allow(unused_variables)]
         let vdata = info_span!("Inner Verifier", group = "inner_verifier").in_scope(|| {
             let (program, witness_stream) =
                 build_verification_program(vdata, compiler_options.clone());
-            let inner_verifier_stf =
-                gen_vm_program_test_proof_input(program, witness_stream, VmConfig::aggregation(7));
+            let inner_verifier_stf = gen_vm_program_test_proof_input(
+                program,
+                witness_stream,
+                VmConfig::aggregation(4, 7),
+            );
             inner_verifier_stf
                 .run_test(&BabyBearPoseidon2Engine::new(
                     // log_blowup = 3 because of poseidon2 chip.
