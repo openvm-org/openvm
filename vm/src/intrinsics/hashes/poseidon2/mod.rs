@@ -1,5 +1,6 @@
 use std::array;
 
+use axvm_instructions::instruction::Instruction;
 use columns::*;
 use p3_field::PrimeField32;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
@@ -19,7 +20,7 @@ use crate::{
             tree::HasherChip,
             MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{ExecutionError, Instruction, ProgramBus},
+        program::{ExecutionError, ProgramBus},
     },
 };
 

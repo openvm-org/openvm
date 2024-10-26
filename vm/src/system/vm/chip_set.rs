@@ -69,16 +69,16 @@ use crate::{
         base_alu::{BaseAluCoreChip, Rv32BaseAluChip},
         branch_eq::{BranchEqualCoreChip, Rv32BranchEqualChip},
         branch_lt::{BranchLessThanCoreChip, Rv32BranchLessThanChip},
+        divrem::{DivRemCoreChip, Rv32DivRemChip},
+        less_than::{LessThanCoreChip, Rv32LessThanChip},
         load_sign_extend::{LoadSignExtendCoreChip, Rv32LoadSignExtendChip},
         loadstore::{LoadStoreCoreChip, Rv32LoadStoreChip},
-        new_divrem::{DivRemCoreChip, Rv32DivRemChip},
-        new_lt::{LessThanCoreChip, Rv32LessThanChip},
-        new_mul::{MultiplicationCoreChip, Rv32MultiplicationChip},
-        new_mulh::{MulHCoreChip, Rv32MulHChip},
-        new_shift::{Rv32ShiftChip, ShiftCoreChip},
+        mul::{MultiplicationCoreChip, Rv32MultiplicationChip},
+        mulh::{MulHCoreChip, Rv32MulHChip},
         rv32_auipc::{Rv32AuipcChip, Rv32AuipcCoreChip},
         rv32_jal_lui::{Rv32JalLuiChip, Rv32JalLuiCoreChip},
         rv32_jalr::{Rv32JalrChip, Rv32JalrCoreChip},
+        shift::{Rv32ShiftChip, ShiftCoreChip},
     },
     system::{
         connector::VmConnectorChip,
@@ -102,6 +102,8 @@ pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
 pub const MEMORY_MERKLE_BUS: usize = 12;
 
 pub const PROGRAM_AIR_ID: usize = 0;
+/// ProgramAir is the first AIR so its cached trace should be the first main trace.
+pub const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
 pub const CONNECTOR_AIR_ID: usize = 1;
 /// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
 /// using persistent memory.

@@ -12,6 +12,7 @@ use ax_sdk::{
     },
     engine::StarkEngine,
 };
+use axvm_instructions::instruction::Instruction;
 use itertools::izip;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
@@ -27,14 +28,13 @@ use crate::{
     arch::ExecutionState,
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
-        program::{Instruction, ProgramBus},
+        program::ProgramBus,
         vm::{
             chip_set::{EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS},
             config::MemoryConfig,
         },
     },
 };
-
 pub mod execution;
 pub mod memory;
 pub mod program;
@@ -304,6 +304,15 @@ impl VmChipTester {
 
     pub fn simple_test(&self) -> Result<VerificationData<SC>, VerificationError> {
         self.test(baby_bear_poseidon2::default_engine)
+    }
+
+    pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {
+        let msg = format!(
+            "Expected verification to fail with {:?}, but it didn't",
+            &expected_error
+        );
+        let result = self.simple_test();
+        assert_eq!(result.err(), Some(expected_error), "{}", msg);
     }
 
     fn max_trace_height(&self) -> usize {

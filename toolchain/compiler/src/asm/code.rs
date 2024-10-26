@@ -2,7 +2,7 @@ use alloc::{collections::BTreeMap, format};
 use core::{fmt, fmt::Display};
 
 use p3_field::{ExtensionField, PrimeField32};
-use stark_vm::system::program::DebugInfo;
+use stark_vm::arch::instructions::instruction::DebugInfo;
 
 use super::AsmInstruction;
 

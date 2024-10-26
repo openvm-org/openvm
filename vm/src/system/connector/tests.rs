@@ -14,13 +14,15 @@ use ax_sdk::{
     },
     engine::StarkFriEngine,
 };
-use axvm_instructions::{TerminateOpcode::TERMINATE, UsizeOpcode};
+use axvm_instructions::{
+    instruction::Instruction, program::Program, TerminateOpcode::TERMINATE, UsizeOpcode,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
 use super::VmConnectorPvs;
 use crate::system::{
-    program::{Instruction, Program},
+    program::trace::CommittedProgram,
     vm::{chip_set::CONNECTOR_AIR_ID, config::VmConfig, SingleSegmentVM},
 };
 
@@ -82,7 +84,7 @@ fn test_impl(
         )];
 
         let program = Program::from_instructions(&instructions);
-        let committed_program = Arc::new(program.commit(engine.config.pcs()));
+        let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
         let vm = SingleSegmentVM::new(vm_config);
         let mut proof_input = vm.execute_and_generate(committed_program, vec![]).unwrap();
         let connector_air_input = proof_input

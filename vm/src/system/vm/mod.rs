@@ -5,6 +5,7 @@ use afs_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::ProofInput,
 };
+use axvm_instructions::program::Program;
 use metrics::VmMetrics;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
@@ -14,7 +15,7 @@ use crate::{
     intrinsics::hashes::poseidon2::CHUNK,
     system::{
         memory::Equipartition,
-        program::{trace::CommittedProgram, ExecutionError, Program},
+        program::{trace::CommittedProgram, ExecutionError},
         vm::config::{PersistenceType, VmConfig},
     },
 };
@@ -147,6 +148,24 @@ impl<F: PrimeField32> VirtualMachine<F> {
             per_segment: segments
                 .into_iter()
                 .map(|seg| seg.generate_proof_input(None))
+                .collect(),
+        })
+    }
+    pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
+        mut self,
+        committed_program: Arc<CommittedProgram<SC>>,
+    ) -> Result<VirtualMachineResult<SC>, ExecutionError>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let segments = self.execute_segments(committed_program.program.clone())?;
+
+        Ok(VirtualMachineResult {
+            per_segment: segments
+                .into_iter()
+                .map(|seg| {
+                    seg.generate_proof_input(Some(committed_program.committed_trace_data.clone()))
+                })
                 .collect(),
         })
     }

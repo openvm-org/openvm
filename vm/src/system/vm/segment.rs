@@ -6,6 +6,7 @@ use afs_stark_backend::{
     prover::types::{CommittedTraceData, ProofInput},
     ChipUsageGetter,
 };
+use axvm_instructions::{instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
 use itertools::zip_eq;
 use p3_field::PrimeField32;
@@ -17,7 +18,7 @@ use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     system::{
         memory::{Equipartition, CHUNK},
-        program::{DebugInfo, ExecutionError, Program},
+        program::ExecutionError,
         vm::{chip_set::VmChipSet, config::PersistenceType},
     },
 };

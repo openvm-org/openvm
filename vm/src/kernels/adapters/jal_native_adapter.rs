@@ -6,6 +6,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -21,10 +22,9 @@ use crate::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
         },
-        program::{Instruction, ProgramBus},
+        program::ProgramBus,
     },
 };
-
 #[derive(Clone, Debug)]
 pub struct JalNativeAdapterChip<F: Field> {
     pub air: JalNativeAdapterAir,

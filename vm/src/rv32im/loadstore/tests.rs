@@ -4,6 +4,7 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
 use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};
+use axvm_instructions::instruction::Instruction;
 use num_traits::WrappingSub;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -26,7 +27,7 @@ use crate::{
         adapters::{compose, Rv32LoadStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         loadstore::LoadStoreCoreCols,
     },
-    system::{program::Instruction, vm::Streams},
+    system::vm::Streams,
 };
 
 const IMM_BITS: usize = 16;
@@ -220,12 +221,7 @@ fn run_negative_loadstore_test(
     drop(range_checker_chip);
     disable_debug_builder();
     let tester = tester.build().load_air_proof_input(chip_input).finalize();
-    let msg = format!(
-        "Expected verification to fail with {:?}, but it didn't",
-        &expected_error
-    );
-    let result = tester.simple_test();
-    assert_eq!(result.err(), Some(expected_error), "{}", msg);
+    tester.simple_test_with_expected_error(expected_error);
 }
 
 #[test]

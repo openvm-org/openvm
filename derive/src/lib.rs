@@ -458,7 +458,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics crate::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
-                        instruction: crate::system::program::Instruction<F>,
+                        instruction: axvm_instructions::instruction::Instruction<F>,
                         from_state: crate::arch::ExecutionState<u32>,
                     ) -> crate::arch::Result<crate::arch::ExecutionState<u32>> {
                         self.0.execute(instruction, from_state)

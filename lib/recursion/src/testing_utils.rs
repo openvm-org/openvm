@@ -12,9 +12,9 @@ use inner::build_verification_program;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use stark_vm::system::{
-    program::{util::execute_and_prove_program, Program},
-    vm::config::VmConfig,
+use stark_vm::{
+    arch::instructions::program::Program,
+    system::{program::util::execute_and_prove_program, vm::config::VmConfig},
 };
 
 use crate::hints::InnerVal;

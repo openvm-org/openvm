@@ -8,7 +8,7 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
 use ax_sdk::utils::create_seeded_rng;
-use axvm_instructions::DivRemOpcode;
+use axvm_instructions::{instruction::Instruction, DivRemOpcode};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
@@ -26,15 +26,13 @@ use crate::{
     },
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-        new_divrem::{
+        divrem::{
             run_mul_carries, run_sltu_diff_idx, DivRemCoreChip, DivRemCoreCols,
             DivRemCoreSpecialCase, Rv32DivRemChip,
         },
     },
-    system::{
-        program::Instruction,
-        vm::chip_set::{BYTE_XOR_BUS, RANGE_TUPLE_CHECKER_BUS},
-    },
+    system::vm::chip_set::{BYTE_XOR_BUS, RANGE_TUPLE_CHECKER_BUS},
+    utils::generate_long_number,
 };
 
 type F = BabyBear;
@@ -45,12 +43,6 @@ type F = BabyBear;
 /// Randomly generate computations and execute, ensuring that the generated trace
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
-
-fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    rng: &mut StdRng,
-) -> [u32; NUM_LIMBS] {
-    array::from_fn(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-}
 
 fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: [u32; NUM_LIMBS],
@@ -70,9 +62,9 @@ fn run_rv32_divrem_rand_write_execute<E: InstructionExecutor<F>>(
     c: [u32; RV32_REGISTER_NUM_LIMBS],
     rng: &mut StdRng,
 ) {
-    let rs1 = gen_pointer(rng, 32);
-    let rs2 = gen_pointer(rng, 32);
-    let rd = gen_pointer(rng, 32);
+    let rs1 = gen_pointer(rng, 4);
+    let rs2 = gen_pointer(rng, 4);
+    let rd = gen_pointer(rng, 4);
 
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
@@ -334,17 +326,11 @@ fn run_rv32_divrem_negative_test(
         .load(xor_lookup_chip)
         .load(range_tuple_chip)
         .finalize();
-    let expected_error = if interaction_error {
+    tester.simple_test_with_expected_error(if interaction_error {
         VerificationError::NonZeroCumulativeSum
     } else {
         VerificationError::OodEvaluationMismatch
-    };
-    let msg = format!(
-        "Expected verification to fail with {:?}, but it didn't",
-        &expected_error
-    );
-    let result = tester.simple_test();
-    assert_eq!(result.err(), Some(expected_error), "{}", msg);
+    });
 }
 
 #[test]

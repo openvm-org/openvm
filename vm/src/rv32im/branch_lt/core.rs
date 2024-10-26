@@ -10,6 +10,7 @@ use afs_primitives::{
     xor::{XorBus, XorLookupChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
@@ -21,7 +22,6 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::JumpUiProcessedInstruction,
-    system::program::Instruction,
 };
 
 #[repr(C)]
@@ -46,6 +46,9 @@ pub struct BranchLessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
     pub a_msb_f: T,
     pub b_msb_f: T,
     pub xor_res: T,
+
+    // 1 if a < b, 0 otherwise.
+    pub cmp_lt: T,
 
     // 1 at the most significant index i such that a[i] != b[i], otherwise 0. If such
     // an i exists, diff_val = b[i] - a[i].
@@ -104,6 +107,10 @@ where
         let lt = cols.opcode_blt_flag + cols.opcode_bltu_flag;
         let ge = cols.opcode_bge_flag + cols.opcode_bgeu_flag;
         let signed = cols.opcode_blt_flag + cols.opcode_bge_flag;
+        builder.assert_eq(
+            cols.cmp_lt,
+            cols.cmp_result * lt.clone() + not(cols.cmp_result) * ge.clone(),
+        );
 
         let a = &cols.a;
         let b = &cols.b;
@@ -118,11 +125,11 @@ where
             .assert_zero(b_diff.clone() * (AB::Expr::from_canonical_u32(1 << LIMB_BITS) - b_diff));
 
         for i in (0..NUM_LIMBS).rev() {
-            let diff = if i == NUM_LIMBS - 1 {
+            let diff = (if i == NUM_LIMBS - 1 {
                 cols.b_msb_f - cols.a_msb_f
             } else {
                 b[i] - a[i]
-            };
+            }) * (AB::Expr::from_canonical_u8(2) * cols.cmp_lt - AB::Expr::one());
             prefix_sum += marker[i].into();
             builder.assert_bool(marker[i]);
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
@@ -131,8 +138,8 @@ where
 
         builder.assert_bool(prefix_sum.clone());
         builder
-            .when(not::<AB::Expr>(prefix_sum))
-            .assert_zero(cols.cmp_result * lt.clone() + not(cols.cmp_result) * ge.clone());
+            .when(not::<AB::Expr>(prefix_sum.clone()))
+            .assert_zero(cols.cmp_lt);
 
         self.bus
             .send(
@@ -141,18 +148,13 @@ where
                 cols.xor_res,
             )
             .eval(builder, is_valid.clone());
-
-        // If a[i] >= b[i], then b[i] - a[i] - 1 is in [-2^LIMB_BITS, 0). Thus b[i] - a[i] - 1 +
-        // 2^LIMB_BITS is in [0, 2^LIMB_BITS).
-        let ge_offset = AB::Expr::from_canonical_u32(1 << LIMB_BITS)
-            * (ge.clone() * cols.cmp_result + lt.clone() * not(cols.cmp_result));
         self.bus
             .send(
-                cols.diff_val - AB::Expr::one() + ge_offset.clone(),
-                cols.diff_val - AB::Expr::one() + ge_offset,
+                cols.diff_val - AB::Expr::one(),
+                cols.diff_val - AB::Expr::one(),
                 AB::F::zero(),
             )
-            .eval(builder, is_valid.clone());
+            .eval(builder, prefix_sum);
 
         let expected_opcode = flags
             .iter()
@@ -187,6 +189,7 @@ pub struct BranchLessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub cmp_result: T,
+    pub cmp_lt: T,
     pub imm: T,
     pub a_msb_f: T,
     pub b_msb_f: T,
@@ -242,10 +245,11 @@ where
             blt_opcode,
             BranchLessThanOpcode::BLT | BranchLessThanOpcode::BGE
         );
-        let lt_opcode = matches!(
+        let ge_opcode = matches!(
             blt_opcode,
-            BranchLessThanOpcode::BLT | BranchLessThanOpcode::BLTU
+            BranchLessThanOpcode::BGE | BranchLessThanOpcode::BGEU
         );
+        let cmp_lt = cmp_result ^ ge_opcode;
 
         // xor_res is the result of (b_msb_f + 128) ^ (c_msb_f + 128) if signed,
         // b_msb_f ^ c_msb_f if not
@@ -273,20 +277,24 @@ where
         };
         let xor_res = self.xor_lookup_chip.request(a_msb_xor, b_msb_xor);
 
-        let diff_val = if diff_idx == (NUM_LIMBS - 1) {
-            b_msb_f - a_msb_f
+        let diff_val = if diff_idx == NUM_LIMBS {
+            0
+        } else if diff_idx == (NUM_LIMBS - 1) {
+            if cmp_lt {
+                b_msb_f - a_msb_f
+            } else {
+                a_msb_f - b_msb_f
+            }
+            .as_canonical_u32()
+        } else if cmp_lt {
+            b[diff_idx] - a[diff_idx]
         } else {
-            F::from_canonical_u32(b[diff_idx]) - F::from_canonical_u32(a[diff_idx])
+            a[diff_idx] - b[diff_idx]
         };
 
-        // TODO: update XorLookupChip to either be BitwiseOperation or range check
-        let ge_offset = if lt_opcode ^ cmp_result {
-            F::from_canonical_u32((1 << LIMB_BITS) - 1)
-        } else {
-            -F::one()
-        };
-        let request_val = (diff_val + ge_offset).as_canonical_u32();
-        self.xor_lookup_chip.request(request_val, request_val);
+        if diff_idx != NUM_LIMBS {
+            self.xor_lookup_chip.request(diff_val - 1, diff_val - 1);
+        }
 
         let output = AdapterRuntimeContext {
             to_pc: cmp_result.then_some((F::from_canonical_u32(from_pc) + imm).as_canonical_u32()),
@@ -297,11 +305,12 @@ where
             a: data[0],
             b: data[1],
             cmp_result: F::from_bool(cmp_result),
+            cmp_lt: F::from_bool(cmp_lt),
             imm,
             a_msb_f,
             b_msb_f,
             xor_res: F::from_canonical_u32(xor_res),
-            diff_val,
+            diff_val: F::from_canonical_u32(diff_val),
             diff_idx,
         };
 
@@ -321,6 +330,7 @@ where
         row_slice.a = record.a;
         row_slice.b = record.b;
         row_slice.cmp_result = record.cmp_result;
+        row_slice.cmp_lt = record.cmp_lt;
         row_slice.imm = record.imm;
         row_slice.a_msb_f = record.a_msb_f;
         row_slice.b_msb_f = record.b_msb_f;
@@ -355,5 +365,5 @@ pub(super) fn run_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
             return ((x[i] < y[i]) ^ x_sign ^ y_sign ^ ge_op, i, x_sign, y_sign);
         }
     }
-    (ge_op, 0, x_sign, y_sign)
+    (ge_op, NUM_LIMBS, x_sign, y_sign)
 }

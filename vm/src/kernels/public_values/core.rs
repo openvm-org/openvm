@@ -1,7 +1,9 @@
 use std::sync::Mutex;
 
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_instructions::{PublishOpcode, PublishOpcode::PUBLISH, UsizeOpcode};
+use axvm_instructions::{
+    instruction::Instruction, PublishOpcode, PublishOpcode::PUBLISH, UsizeOpcode,
+};
 use p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -11,9 +13,7 @@ use crate::{
         Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     kernels::public_values::columns::PublicValuesCoreColsView,
-    system::program::Instruction,
 };
-
 pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
 pub(crate) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
 

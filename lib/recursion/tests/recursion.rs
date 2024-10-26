@@ -8,9 +8,9 @@ use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::system::{
-    program::Program,
-    vm::{config::VmConfig, VirtualMachine},
+use stark_vm::{
+    arch::instructions::program::Program,
+    system::vm::{config::VmConfig, VirtualMachine},
 };
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {

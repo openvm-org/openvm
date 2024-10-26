@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use afs_primitives::xor::XorLookupChip;
 use air::ArithmeticLogicCoreAir;
+use axvm_instructions::instruction::Instruction;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
     },
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
-        program::{ExecutionError, Instruction, ProgramBus},
+        program::{ExecutionError, ProgramBus},
     },
 };
 

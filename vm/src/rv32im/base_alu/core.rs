@@ -5,19 +5,20 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::xor::{XorBus, XorLookupChip};
+use afs_primitives::{
+    utils::not,
+    xor::{XorBus, XorLookupChip},
+};
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
-use crate::{
-    arch::{
-        instructions::{AluOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
-    },
-    system::program::Instruction,
+use crate::arch::{
+    instructions::{AluOpcode, UsizeOpcode},
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]
@@ -124,8 +125,8 @@ where
         // correctness for XOR, OR, and AND. XorLookup expects interaction [x, y, x ^ y].
         let bitwise = cols.opcode_xor_flag + cols.opcode_or_flag + cols.opcode_and_flag;
         for i in 0..NUM_LIMBS {
-            let x = (AB::Expr::one() - bitwise.clone()) * a[i] + bitwise.clone() * b[i];
-            let y = (AB::Expr::one() - bitwise.clone()) * a[i] + bitwise.clone() * c[i];
+            let x = not::<AB::Expr>(bitwise.clone()) * a[i] + bitwise.clone() * b[i];
+            let y = not::<AB::Expr>(bitwise.clone()) * a[i] + bitwise.clone() * c[i];
             let x_xor_y = cols.opcode_xor_flag * a[i]
                 + cols.opcode_or_flag * ((AB::Expr::from_canonical_u32(2) * a[i]) - b[i] - c[i])
                 + cols.opcode_and_flag * (b[i] + c[i] - (AB::Expr::from_canonical_u32(2) * a[i]));
@@ -204,7 +205,6 @@ where
         let c = data[1].map(|y| y.as_canonical_u32());
         let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
-        // Core doesn't modify PC directly, so we let Adapter handle the increment
         let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
             to_pc: None,
             writes: [a.map(F::from_canonical_u32)].into(),

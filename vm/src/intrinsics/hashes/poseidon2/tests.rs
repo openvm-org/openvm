@@ -6,6 +6,7 @@ use ax_sdk::{
     },
     utils::create_seeded_rng,
 };
+use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_util::log2_strict_usize;
@@ -22,9 +23,7 @@ use crate::{
         testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
     },
     intrinsics::hashes::poseidon2::Poseidon2VmIoCols,
-    system::program::Instruction,
 };
-
 fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();

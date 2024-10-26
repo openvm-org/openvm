@@ -5,6 +5,7 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::{instruction::Instruction, program::PC_BITS};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -25,7 +26,7 @@ use crate::{
         adapters::{Rv32RdWriteAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         rv32_auipc::run_auipc,
     },
-    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS, PC_BITS},
+    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 const IMM_BITS: usize = 24;
@@ -157,12 +158,7 @@ fn run_negative_auipc_test(
         .load_air_proof_input(chip_input)
         .load(xor_lookup_chip)
         .finalize();
-    let msg = format!(
-        "Expected verification to fail with {:?}, but it didn't",
-        &expected_error
-    );
-    let result = tester.simple_test();
-    assert_eq!(result.err(), Some(expected_error), "{}", msg);
+    tester.simple_test_with_expected_error(expected_error);
 }
 
 #[test]

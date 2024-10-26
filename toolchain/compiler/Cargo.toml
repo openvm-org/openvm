@@ -13,6 +13,7 @@ p3-bn254-fr = { workspace = true }
 zkhash = { workspace = true }
 
 afs-derive = { workspace = true }
+axvm-instructions = { workspace = true }
 afs-primitives = { workspace = true }
 ax-sdk = { workspace = true }
 stark-vm = { workspace = true }

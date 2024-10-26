@@ -5,7 +5,7 @@ use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
-use axvm_instructions::CastfOpcode;
+use axvm_instructions::{instruction::Instruction, CastfOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
@@ -17,9 +17,7 @@ use crate::{
         adapters::convert_adapter::{ConvertAdapterChip, ConvertAdapterCols},
         castf::{CastF, CastFCoreCols, FINAL_LIMB_BITS, LIMB_BITS},
     },
-    system::program::Instruction,
 };
-
 type F = BabyBear;
 
 fn generate_uint_number(rng: &mut StdRng) -> u32 {

@@ -7,6 +7,7 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::utils;
 use afs_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -25,7 +26,7 @@ use crate::{
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{Instruction, ProgramBus},
+        program::ProgramBus,
     },
 };
 

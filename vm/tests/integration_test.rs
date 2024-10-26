@@ -13,7 +13,7 @@ use ax_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     utils::create_seeded_rng,
 };
-use axvm_instructions::PublishOpcode::PUBLISH;
+use axvm_instructions::{instruction::Instruction, program::Program, PublishOpcode::PUBLISH};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
@@ -31,7 +31,7 @@ use stark_vm::{
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{merkle::MemoryMerklePvs, Equipartition},
-        program::{Instruction, Program},
+        program::trace::CommittedProgram,
         vm::{
             chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID},
             config::{MemoryConfig, PersistenceType, VmConfig},
@@ -196,7 +196,7 @@ fn test_vm_public_values() {
         ];
 
         let program = Program::from_instructions(&instructions);
-        let committed_program = Arc::new(program.commit(engine.config.pcs()));
+        let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
         let vm = SingleSegmentVM::new(vm_config);
         let pvs = vm.execute(program.clone(), vec![]).unwrap();
         assert_eq!(

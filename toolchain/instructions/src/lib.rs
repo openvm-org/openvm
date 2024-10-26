@@ -5,6 +5,8 @@ use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 pub mod config;
 mod curves;
+pub mod instruction;
+pub mod program;
 /// Module with traits and constants for RISC-V instruction definitions for custom axVM instructions.
 pub mod riscv;
 pub mod utils;

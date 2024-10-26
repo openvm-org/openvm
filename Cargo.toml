@@ -15,7 +15,7 @@ members = [
     "toolchain/riscv/zkvm/lib",
     "toolchain/riscv/zkvm/platform",
     "toolchain/riscv/transpiler",
-    "vm",
+    "vm", "axiom-vm",
 ]
 resolver = "2"
 
@@ -73,6 +73,7 @@ afs-primitives = { path = "circuits/primitives", default-features = false }
 ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
 ax-ecc-lib = { path = "lib/ecc", default-features = false }
 afs-derive = { path = "derive", default-features = false }
+afs-recursion = { path = "lib/recursion", default-features = false }
 ax-sdk = { path = "sdk", default-features = false }
 afs-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
 poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }

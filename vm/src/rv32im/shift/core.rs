@@ -6,22 +6,20 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::{
-    utils,
+    utils::not,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::{XorBus, XorLookupChip},
 };
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
-use crate::{
-    arch::{
-        instructions::{ShiftOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
-    },
-    system::program::Instruction,
+use crate::arch::{
+    instructions::{ShiftOpcode, UsizeOpcode},
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]
@@ -129,7 +127,7 @@ where
 
         builder.assert_bool(cols.b_sign);
         builder
-            .when(utils::not(cols.opcode_sra_flag))
+            .when(not(cols.opcode_sra_flag))
             .assert_zero(cols.b_sign);
 
         // Check that a[i] = b[i] <</>> c[i] both on the bit and limb shift level if c <
@@ -185,12 +183,10 @@ where
         }
 
         for a_val in a {
-            builder
-                .when(AB::Expr::one() - marker_sum.clone())
-                .assert_eq(
-                    *a_val,
-                    cols.b_sign * AB::F::from_canonical_usize((1 << LIMB_BITS) - 1),
-                );
+            builder.when(not::<AB::Expr>(marker_sum.clone())).assert_eq(
+                *a_val,
+                cols.b_sign * AB::F::from_canonical_usize((1 << LIMB_BITS) - 1),
+            );
         }
 
         // Check that bit_shift < LIMB_BITS
