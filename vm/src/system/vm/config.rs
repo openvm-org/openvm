@@ -162,10 +162,10 @@ impl VmConfig {
             .add_executor(ExecutorName::DivRemRv32)
     }
 
-    pub fn aggregation(poseidon2_max_constraint_degree: usize) -> Self {
+    pub fn aggregation(num_public_values: usize, poseidon2_max_constraint_degree: usize) -> Self {
         VmConfig {
             poseidon2_max_constraint_degree,
-            num_public_values: 4,
+            num_public_values,
             ..VmConfig::default()
         }
         .add_executor(ExecutorName::Phantom)

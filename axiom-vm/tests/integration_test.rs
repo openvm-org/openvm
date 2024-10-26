@@ -12,11 +12,14 @@ use ax_sdk::{
 };
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
 use p3_baby_bear::BabyBear;
-use stark_vm::system::{
-    program::trace::CommittedProgram,
-    vm::{
-        config::{MemoryConfig, PersistenceType, VmConfig},
-        SingleSegmentVM, VirtualMachine,
+use stark_vm::{
+    arch::ExecutorName,
+    system::{
+        program::trace::CommittedProgram,
+        vm::{
+            config::{MemoryConfig, PersistenceType, VmConfig},
+            SingleSegmentVM, VirtualMachine,
+        },
     },
 };
 
@@ -35,7 +38,11 @@ fn test_1() {
                 ..Default::default()
             },
             ..Default::default()
-        },
+        }
+        .add_executor(ExecutorName::BranchEqual)
+        .add_executor(ExecutorName::Jal)
+        .add_executor(ExecutorName::LoadStore)
+        .add_executor(ExecutorName::FieldArithmetic),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             compile_prints: true,

@@ -155,7 +155,7 @@ fn test_vm_1() {
 fn test_vm_1_optional_air() {
     // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program only
     // uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
-    let vm_config = VmConfig::aggregation(3);
+    let vm_config = VmConfig::aggregation(4, 3);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let pk = vm_config.generate_pk(engine.keygen_builder());

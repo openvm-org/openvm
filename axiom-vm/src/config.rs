@@ -58,14 +58,3 @@ impl AxiomVmProvingKey {
         }
     }
 }
-
-pub(crate) fn aggregation_vm_config(
-    num_public_values: usize,
-    poseidon2_max_constraint_degree: usize,
-) -> VmConfig {
-    VmConfig {
-        poseidon2_max_constraint_degree,
-        num_public_values,
-        ..VmConfig::default()
-    }
-}

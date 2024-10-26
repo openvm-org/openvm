@@ -149,7 +149,7 @@ fn test_optional_air() {
     let verifier = engine.verifier();
 
     let m_advice = new_from_inner_multi_vk(&pk.get_vk());
-    let vm_config = VmConfig::aggregation(7);
+    let vm_config = VmConfig::aggregation(4, 7);
     let program = VerifierProgram::build(m_advice, &fri_params);
 
     // Case 1: All AIRs are present.

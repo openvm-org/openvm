@@ -80,7 +80,7 @@ pub mod inner {
         recursive_stark_test(
             vparams,
             CompilerOptions::default(),
-            VmConfig::aggregation(7),
+            VmConfig::aggregation(4, 7),
             &BabyBearPoseidon2Engine::new(fri_params),
         )
         .unwrap();

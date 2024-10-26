@@ -30,7 +30,7 @@ use stark_vm::{
     },
 };
 
-use crate::config::{aggregation_vm_config, AxiomVmConfig};
+use crate::config::AxiomVmConfig;
 
 type C = InnerConfig;
 type F = InnerVal;
@@ -200,7 +200,7 @@ impl LeafVmVerifierConfig {
 
 impl AxiomVmConfig {
     pub fn leaf_verifier_vm_config(&self) -> VmConfig {
-        aggregation_vm_config(
+        VmConfig::aggregation(
             LeafVmVerifierPvs::<u8, DIGEST_SIZE>::width(),
             self.poseidon2_max_constraint_degree,
         )
