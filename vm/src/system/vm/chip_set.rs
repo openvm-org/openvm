@@ -1033,19 +1033,21 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             AluOpcode::default_offset(),
         ),
         ExecutorName::LoadStoreRv32 => (
+            // LOADW through STOREB
             Rv32LoadStoreOpcode::default_offset(),
-            6,
+            Rv32LoadStoreOpcode::STOREB as usize + 1,
             Rv32LoadStoreOpcode::default_offset(),
         ),
         ExecutorName::LoadSignExtendRv32 => (
-            Rv32LoadStoreOpcode::default_offset() + 7,
+            // [LOADB, LOADH]
+            Rv32LoadStoreOpcode::LOADB.with_default_offset(),
             2,
             Rv32LoadStoreOpcode::default_offset(),
         ),
         ExecutorName::HintStoreRv32 => (
-            Rv32HintStoreOpcode::default_offset() + 6,
-            1,
-            Rv32LoadStoreOpcode::default_offset(),
+            Rv32HintStoreOpcode::default_offset(),
+            Rv32HintStoreOpcode::COUNT,
+            Rv32HintStoreOpcode::default_offset(),
         ),
         ExecutorName::JalLuiRv32 => (
             Rv32JalLuiOpcode::default_offset(),
