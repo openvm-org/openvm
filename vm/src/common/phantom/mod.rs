@@ -1,4 +1,8 @@
-use std::{borrow::Borrow, cell::RefCell, iter, sync::Arc};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    sync::Arc,
+};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{
@@ -15,6 +19,7 @@ use axvm_instructions::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_maybe_rayon::prelude::*;
 use parking_lot::Mutex;
 
 use crate::{
@@ -29,6 +34,10 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
+/// PhantomAir still needs columns for each nonzero operand in a phantom instruction.
+/// We currently allow `a,b,c` where the lower 16 bits of `c` are used as the [PhantomInstruction] discriminant.
+const NUM_PHANTOM_OPERANDS: usize = 3;
+
 #[derive(Clone, Debug)]
 pub struct PhantomAir {
     pub execution_bridge: ExecutionBridge,
@@ -36,9 +45,10 @@ pub struct PhantomAir {
     pub phantom_opcode: usize,
 }
 
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Copy, Clone)]
 pub struct PhantomCols<T> {
     pub pc: T,
+    pub operands: [T; NUM_PHANTOM_OPERANDS],
     pub timestamp: T,
     pub is_valid: T,
 }
@@ -57,6 +67,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
         let local = main.row_slice(0);
         let &PhantomCols {
             pc,
+            operands,
             timestamp,
             is_valid,
         } = (*local).borrow();
@@ -64,7 +75,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
         self.execution_bridge
             .execute_and_increment_or_set_pc(
                 AB::Expr::from_canonical_usize(self.phantom_opcode),
-                iter::empty::<AB::Expr>(),
+                operands,
                 ExecutionState::<AB::Expr>::new(pc, timestamp),
                 AB::Expr::one(),
                 PcIncOrSet::Inc(AB::Expr::from_canonical_u32(DEFAULT_PC_STEP)),
@@ -107,17 +118,20 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let Instruction {
-            opcode, a, b, c, d, ..
+            opcode, a, b, c, ..
         } = instruction;
         assert_eq!(opcode, self.air.phantom_opcode);
 
-        let phantom = PhantomInstruction::from_repr(c.as_canonical_u32() as usize).ok_or(
-            ExecutionError::InvalidPhantomInstruction(from_state.pc, c.as_canonical_u32() as usize),
+        let c_u32 = c.as_canonical_u32();
+        let discriminant = c_u32 as u16;
+        let phantom = PhantomInstruction::from_repr(discriminant).ok_or(
+            ExecutionError::InvalidPhantomInstruction(from_state.pc, discriminant),
         )?;
         match phantom {
             PhantomInstruction::Nop => {}
             PhantomInstruction::PrintF => {
-                let value = RefCell::borrow(&self.memory).unsafe_read_cell(d, a);
+                let addr_space = F::from_canonical_u32(c_u32 >> 16);
+                let value = RefCell::borrow(&self.memory).unsafe_read_cell(addr_space, a);
                 println!("{}", value);
             }
             PhantomInstruction::HintInput => {
@@ -136,8 +150,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                 drop(streams);
             }
             PhantomInstruction::HintBits => {
+                let addr_space = F::from_canonical_u32(c_u32 >> 16);
                 let mut streams = self.streams.lock();
-                let val = RefCell::borrow(&self.memory).unsafe_read_cell(d, a);
+                let val = RefCell::borrow(&self.memory).unsafe_read_cell(addr_space, a);
                 let mut val = val.as_canonical_u32();
 
                 let len = b.as_canonical_u32();
@@ -151,8 +166,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                 drop(streams);
             }
             PhantomInstruction::HintBytes => {
+                let addr_space = F::from_canonical_u32(c_u32 >> 16);
                 let mut streams = self.streams.lock();
-                let val = RefCell::borrow(&self.memory).unsafe_read_cell(d, a);
+                let val = RefCell::borrow(&self.memory).unsafe_read_cell(addr_space, a);
                 let mut val = val.as_canonical_u32();
 
                 let len = b.as_canonical_u32();
@@ -170,10 +186,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
 
         self.rows.push(PhantomCols {
             pc: F::from_canonical_u32(from_state.pc),
+            operands: [a, b, c],
             timestamp: F::from_canonical_u32(from_state.timestamp),
             is_valid: F::one(),
         });
-        self.memory.borrow_mut().increment_timestamp();
+        RefCell::borrow_mut(&self.memory).increment_timestamp();
         Ok(ExecutionState::new(
             from_state.pc + DEFAULT_PC_STEP,
             from_state.timestamp + 1,
@@ -209,18 +226,17 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let curr_height = self.rows.len();
         let correct_height = self.rows.len().next_power_of_two();
         let width = PhantomCols::<Val<SC>>::width();
+        let mut rows = vec![Val::<SC>::zero(); width * correct_height];
+        rows.par_chunks_mut(width)
+            .zip(&self.rows)
+            .for_each(|(row, row_record)| {
+                let row: &mut PhantomCols<_> = row.borrow_mut();
+                *row = *row_record;
+            });
+        let trace = RowMajorMatrix::new(rows, width);
 
-        let trace = RowMajorMatrix::new(
-            self.rows
-                .iter()
-                .flat_map(|row| vec![row.pc, row.timestamp, row.is_valid])
-                .chain(iter::repeat(Val::<SC>::zero()).take((correct_height - curr_height) * width))
-                .collect::<Vec<_>>(),
-            width,
-        );
         AirProofInput::simple(self.air(), trace, vec![])
     }
 }

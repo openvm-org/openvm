@@ -119,20 +119,6 @@ fn inst_large<F: PrimeField64>(
     }
 }
 
-fn dbg<F: PrimeField64>(phantom: PhantomInstruction, debug: String) -> Instruction<F> {
-    Instruction {
-        opcode: CommonOpcode::PHANTOM.with_default_offset(),
-        a: F::zero(),
-        b: F::zero(),
-        c: F::from_canonical_usize(phantom as usize),
-        d: F::zero(),
-        e: F::zero(),
-        f: F::zero(),
-        g: F::zero(),
-        debug,
-    }
-}
-
 #[derive(Clone, Copy)]
 enum AS {
     Immediate,
@@ -362,61 +348,33 @@ pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
 
 fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
-    options: &CompilerOptions,
+    _options: &CompilerOptions,
 ) -> Vec<Instruction<F>> {
     let word_size_i32 = 1;
 
     match instruction {
-        AsmInstruction::PrintV(src) => vec![inst(
-            options.opcode_with_offset(CommonOpcode::PHANTOM),
+        AsmInstruction::PrintV(src) => vec![Instruction::phantom(
+            PhantomInstruction::PrintF,
             i32_f(src),
             F::zero(),
-            F::from_canonical_usize(PhantomInstruction::PrintF as usize),
-            AS::Memory,
-            AS::Immediate,
+            0,
         )],
-        AsmInstruction::PrintF(src) => vec![inst(
-            options.opcode_with_offset(CommonOpcode::PHANTOM),
+        AsmInstruction::PrintF(src) => vec![Instruction::phantom(
+            PhantomInstruction::PrintF,
             i32_f(src),
             F::zero(),
-            F::from_canonical_usize(PhantomInstruction::PrintF as usize),
-            AS::Memory,
-            AS::Immediate,
+            0,
         )],
-        AsmInstruction::PrintE(src) => vec![
-            inst(
-                options.opcode_with_offset(CommonOpcode::PHANTOM),
-                i32_f(src),
-                F::zero(),
-                F::from_canonical_usize(PhantomInstruction::PrintF as usize),
-                AS::Memory,
-                AS::Immediate,
-            ),
-            inst(
-                options.opcode_with_offset(CommonOpcode::PHANTOM),
-                i32_f(src + word_size_i32),
-                F::zero(),
-                F::from_canonical_usize(PhantomInstruction::PrintF as usize),
-                AS::Memory,
-                AS::Immediate,
-            ),
-            inst(
-                options.opcode_with_offset(CommonOpcode::PHANTOM),
-                i32_f(src + 2 * word_size_i32),
-                F::zero(),
-                F::from_canonical_usize(PhantomInstruction::PrintF as usize),
-                AS::Memory,
-                AS::Immediate,
-            ),
-            inst(
-                options.opcode_with_offset(CommonOpcode::PHANTOM),
-                i32_f(src + 3 * word_size_i32),
-                F::zero(),
-                F::from_canonical_usize(PhantomInstruction::PrintF as usize),
-                AS::Memory,
-                AS::Immediate,
-            ),
-        ],
+        AsmInstruction::PrintE(src) => (0..EF::D as i32)
+            .map(|i| {
+                Instruction::phantom(
+                    PhantomInstruction::PrintF,
+                    i32_f(src + i * word_size_i32),
+                    F::zero(),
+                    0,
+                )
+            })
+            .collect(),
         _ => panic!(
             "Illegal argument to convert_print_instruction: {:?}",
             instruction
@@ -598,15 +556,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             ))
             .collect(),
         AsmInstruction::Trap => vec![
-            // pc <- -1 (causes trace generation to fail)
-            inst(
-                options.opcode_with_offset(CommonOpcode::PHANTOM),
-                F::zero(),
-                F::zero(),
-                F::from_canonical_usize(PhantomInstruction::DebugPanic as usize),
-                AS::Immediate,
-                AS::Immediate,
-            ),
+            Instruction::phantom(PhantomInstruction::DebugPanic, F::zero(), F::zero(), 0),
         ],
         AsmInstruction::Halt => vec![
             // terminate
@@ -619,30 +569,15 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
         ],
-        AsmInstruction::HintInputVec() => vec![inst(
-            options.opcode_with_offset(CommonOpcode::PHANTOM),
-            F::zero(),
-            F::zero(),
-            F::from_canonical_usize(PhantomInstruction::HintInput as usize),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::HintBits(src, len) => vec![inst(
-            options.opcode_with_offset(CommonOpcode::PHANTOM),
-            i32_f(src),
-            F::from_canonical_u32(len),
-            F::from_canonical_usize(PhantomInstruction::HintBits as usize),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::HintBytes(src, len) => vec![inst(
-            options.opcode_with_offset(CommonOpcode::PHANTOM),
-            i32_f(src),
-            F::from_canonical_u32(len),
-            F::from_canonical_usize(PhantomInstruction::HintBytes as usize),
-            AS::Memory,
-            AS::Memory,
-        )],
+        AsmInstruction::HintInputVec() => vec![
+            Instruction::phantom(PhantomInstruction::HintInput, F::zero(), F::zero(), 0)
+        ],
+        AsmInstruction::HintBits(src, len) => vec![
+            Instruction::phantom(PhantomInstruction::HintBits, i32_f(src), F::from_canonical_u32(len), AS::Memory as u16)
+        ],
+        AsmInstruction::HintBytes(src, len) => vec![
+            Instruction::phantom(PhantomInstruction::HintBytes, i32_f(src), F::from_canonical_u32(len), AS::Memory as u16)
+        ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
             F::zero(),
@@ -891,14 +826,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::CycleTrackerStart(name) => {
             if options.enable_cycle_tracker {
-                vec![dbg(PhantomInstruction::CtStart, name)]
+                vec![Instruction::debug(PhantomInstruction::CtStart, &name)]
             } else {
                 vec![]
             }
         }
         AsmInstruction::CycleTrackerEnd(name) => {
             if options.enable_cycle_tracker {
-                vec![dbg(PhantomInstruction::CtEnd, name)]
+                vec![Instruction::debug(PhantomInstruction::CtEnd, &name)]
             } else {
                 vec![]
             }

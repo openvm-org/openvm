@@ -9,7 +9,7 @@ use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
 use stark_vm::{
-    arch::instructions::program::Program,
+    arch::{instructions::program::Program, ExecutorName},
     system::vm::{config::VmConfig, VirtualMachine},
 };
 
@@ -52,7 +52,11 @@ where
     let vm_config = VmConfig {
         num_public_values: 3,
         ..Default::default()
-    };
+    }
+    .add_executor(ExecutorName::FieldArithmetic)
+    .add_executor(ExecutorName::BranchEqual)
+    .add_executor(ExecutorName::LoadStore)
+    .add_executor(ExecutorName::Jal);
 
     let vm = VirtualMachine::new(vm_config);
 

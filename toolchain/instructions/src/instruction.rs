@@ -76,17 +76,22 @@ impl<F: Field> Instruction<F> {
         }
     }
 
+    pub fn phantom(kind: PhantomInstruction, a: F, b: F, c_upper: u16) -> Self {
+        Self {
+            opcode: CommonOpcode::PHANTOM.with_default_offset(),
+            a,
+            b,
+            c: F::from_canonical_u32((kind as u32) | ((c_upper as u32) << 16)),
+            ..Default::default()
+        }
+    }
+
     pub fn debug(phantom: PhantomInstruction, debug: &str) -> Self {
         Self {
             opcode: CommonOpcode::PHANTOM.with_default_offset(),
-            a: F::zero(),
-            b: F::zero(),
             c: F::from_canonical_usize(phantom as usize),
-            d: F::zero(),
-            e: F::zero(),
-            f: F::zero(),
-            g: F::zero(),
             debug: String::from(debug),
+            ..Default::default()
         }
     }
 }

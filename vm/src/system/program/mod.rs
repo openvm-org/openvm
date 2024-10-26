@@ -31,7 +31,7 @@ pub enum ExecutionError {
     /// pc, step, pc_base, program_len
     PcOutOfBounds(u32, u32, u32, usize),
     /// pc, phantom_repr
-    InvalidPhantomInstruction(u32, usize),
+    InvalidPhantomInstruction(u32, u16),
     DisabledOperation(u32, usize),
     HintOutOfBounds(u32),
     EndOfInputStream(u32),

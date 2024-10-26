@@ -58,6 +58,7 @@ where
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig::default()
+        .add_executor(ExecutorName::Phantom)
         .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::BranchEqual)
@@ -152,9 +153,9 @@ fn test_vm_1() {
 
 #[test]
 fn test_vm_1_optional_air() {
-    // Default VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program only
+    // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program only
     // uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
-    let vm_config = VmConfig::default();
+    let vm_config = VmConfig::aggregation(3);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let pk = vm_config.generate_pk(engine.keygen_builder());
@@ -707,8 +708,8 @@ fn test_vm_hint() {
             0,
             0,
             PhantomInstruction::HintInput as isize,
-            1,
-            2,
+            0,
+            0,
         ),
         Instruction::from_isize(SHINTW.with_default_offset(), 32, 0, 0, 1, 2),
         Instruction::from_isize(LOADW.with_default_offset(), 38, 0, 32, 1, 2),
