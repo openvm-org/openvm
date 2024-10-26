@@ -131,6 +131,8 @@ impl<F: PrimeField32> VirtualMachine<F> {
     }
 
     pub fn execute(mut self, program: Program<F>) -> Result<(), ExecutionError> {
+        #[cfg(test)]
+        ax_sdk::config::setup_tracing_with_log_level(tracing::Level::WARN);
         self.execute_segments(program).map(|_| ())
     }
 

@@ -20,6 +20,7 @@ use crate::{
             MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
         },
         program::{ExecutionError, Instruction, ProgramBus},
+        DEFAULT_PC_STEP,
     },
 };
 
@@ -315,7 +316,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         });
 
         Ok(ExecutionState {
-            pc: from_state.pc + 1,
+            pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: memory_controller.timestamp(),
         })
     }

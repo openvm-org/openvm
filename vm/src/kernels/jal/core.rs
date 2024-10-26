@@ -12,7 +12,7 @@ use crate::{
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     rv32im::adapters::JumpUiProcessedInstruction,
-    system::program::Instruction,
+    system::{program::Instruction, DEFAULT_PC_STEP},
 };
 
 #[repr(C)]
@@ -54,7 +54,7 @@ where
         AdapterAirContext {
             to_pc: Some(from_pc.into() + cols.imm.into()),
             reads: [].into(),
-            writes: [[from_pc.into() + AB::Expr::from_canonical_usize(1)]].into(),
+            writes: [[from_pc.into() + AB::Expr::from_canonical_u32(DEFAULT_PC_STEP)]].into(),
             instruction: JumpUiProcessedInstruction {
                 is_valid: cols.is_valid.into(),
                 opcode: AB::Expr::from_canonical_usize(NativeJalOpcode::JAL as usize + self.offset),
@@ -105,7 +105,7 @@ where
 
         let output = AdapterRuntimeContext {
             to_pc: Some((F::from_canonical_u32(from_pc) + *b).as_canonical_u32()),
-            writes: [[F::from_canonical_u32(from_pc) + F::one()]].into(),
+            writes: [[F::from_canonical_u32(from_pc + DEFAULT_PC_STEP)]].into(),
         };
 
         Ok((output, JalRecord { imm: *b }))

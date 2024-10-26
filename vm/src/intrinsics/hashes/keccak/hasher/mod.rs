@@ -24,6 +24,7 @@ use crate::{
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::{ExecutionError, Instruction, ProgramBus},
+        DEFAULT_PC_STEP,
     },
 };
 
@@ -229,7 +230,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         memory.increase_timestamp_to(to_timestamp);
 
         Ok(ExecutionState {
-            pc: from_state.pc + 1,
+            pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: to_timestamp,
         })
     }

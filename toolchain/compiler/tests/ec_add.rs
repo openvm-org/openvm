@@ -101,6 +101,7 @@ fn test_secp256k1_add(point_1: Point, point_2: Point, point_3: Point) {
         word_size: 64,
         ..Default::default()
     });
+
     execute_program_with_config(
         VmConfig::default()
             .add_executor(ExecutorName::BranchEqual)

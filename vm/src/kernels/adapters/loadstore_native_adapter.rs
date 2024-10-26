@@ -26,6 +26,7 @@ use crate::{
             MemoryReadRecord, MemoryWriteRecord,
         },
         program::{Instruction, ProgramBus},
+        DEFAULT_PC_STEP,
     },
 };
 
@@ -243,7 +244,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
                 [cols.a, cols.b, cols.c, cols.d, cols.e, cols.f, cols.g],
                 cols.from_state,
                 timestamp_delta.clone(),
-                (1, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, is_valid.clone());
     }
@@ -355,7 +356,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             memory.write::<NUM_CELLS>(read_record.write_as, read_record.write_ptr, output.writes);
         Ok((
             ExecutionState {
-                pc: output.to_pc.unwrap_or(from_state.pc + 1),
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord {

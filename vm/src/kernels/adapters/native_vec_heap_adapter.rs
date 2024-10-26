@@ -24,6 +24,7 @@ use crate::{
             MemoryReadRecord, MemoryWriteRecord,
         },
         program::{Instruction, ProgramBus},
+        DEFAULT_PC_STEP,
     },
 };
 
@@ -254,7 +255,7 @@ impl<
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                (4, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }
@@ -342,7 +343,7 @@ impl<
 
         Ok((
             ExecutionState {
-                pc: from_state.pc + 1,
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state, writes },

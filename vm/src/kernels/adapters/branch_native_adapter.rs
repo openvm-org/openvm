@@ -22,6 +22,7 @@ use crate::{
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
         },
         program::{Instruction, ProgramBus},
+        DEFAULT_PC_STEP,
     },
 };
 
@@ -123,7 +124,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BranchNativeAdapterAir {
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
@@ -171,7 +172,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for BranchNativeAdapterChip<F> {
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         Ok((
             ExecutionState {
-                pc: output.to_pc.unwrap_or(from_state.pc + 1),
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             from_state,

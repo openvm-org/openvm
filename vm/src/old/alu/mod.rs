@@ -12,6 +12,7 @@ use crate::{
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::{ExecutionError, Instruction, ProgramBus},
+        DEFAULT_PC_STEP,
     },
 };
 
@@ -191,7 +192,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
             });
 
         Ok(ExecutionState {
-            pc: from_state.pc + 1,
+            pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: memory_controller.timestamp(),
         })
     }

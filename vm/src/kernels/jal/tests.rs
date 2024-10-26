@@ -24,7 +24,7 @@ use crate::{
         adapters::jal_native_adapter::JalNativeAdapterChip,
         jal::{JalCoreChip, KernelJalChip},
     },
-    system::{program::Instruction, PC_BITS},
+    system::{program::Instruction, DEFAULT_PC_STEP, PC_BITS},
 };
 
 type F = BabyBear;
@@ -52,7 +52,7 @@ fn set_and_execute(
     let final_pc = tester.execution.last_to_pc().as_canonical_u32();
 
     let next_pc = initial_pc + imm;
-    let rd_data = initial_pc + 1;
+    let rd_data = initial_pc + DEFAULT_PC_STEP;
 
     assert_eq!(next_pc, final_pc);
     assert_eq!(rd_data, tester.read::<1>(d, a)[0].as_canonical_u32());

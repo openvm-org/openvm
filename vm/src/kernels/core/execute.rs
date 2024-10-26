@@ -13,7 +13,10 @@ use crate::{
         ExecutionState, InstructionExecutor,
     },
     kernels::core::columns::{CoreAuxCols, CoreCols, CoreIoCols},
-    system::program::{ExecutionError, Instruction},
+    system::{
+        program::{ExecutionError, Instruction},
+        DEFAULT_PC_STEP,
+    },
 };
 
 impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
@@ -114,7 +117,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for CoreChip<F> {
 
         self.memory_controller.borrow_mut().increment_timestamp();
         Ok(ExecutionState::new(
-            pc + 1,
+            pc + DEFAULT_PC_STEP,
             self.memory_controller.borrow().timestamp(),
         ))
     }

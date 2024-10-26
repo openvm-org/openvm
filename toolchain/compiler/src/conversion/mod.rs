@@ -7,6 +7,7 @@ use stark_vm::{
     system::{
         program::{DebugInfo, Instruction, Program},
         vm::config::Modulus,
+        DEFAULT_PC_STEP,
     },
 };
 use strum::EnumCount;
@@ -425,6 +426,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     }
 }
 
+/// Warning: for extension field branch instructions, the `pc, labels` **must** be using `DEFAULT_PC_STEP`.
 fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
     debug_info: Option<DebugInfo>,
@@ -546,7 +548,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
-                labels(label) - (pc + F::from_canonical_usize(i)),
+                labels(label) - (pc + F::from_canonical_usize(i * DEFAULT_PC_STEP as usize)),
                 AS::Memory,
                 AS::Memory,
             ))
@@ -558,7 +560,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
-                labels(label) - (pc + F::from_canonical_usize(i)),
+                labels(label) - (pc + F::from_canonical_usize(i * DEFAULT_PC_STEP as usize)),
                 AS::Memory,
                 AS::Immediate,
             ))
@@ -572,9 +574,9 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
                 if i == 0 {
-                    labels(label) - (pc + F::from_canonical_usize(EF::D - 1))
+                    labels(label) - (pc + F::from_canonical_usize((EF::D - 1) * DEFAULT_PC_STEP as usize))
                 } else {
-                    F::from_canonical_usize(i + 1)
+                    F::from_canonical_usize((i + 1) * DEFAULT_PC_STEP as usize)
                 },
                 AS::Memory,
                 AS::Memory,
@@ -589,9 +591,9 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
                 if i == 0 {
-                    labels(label) - (pc + F::from_canonical_usize(EF::D - 1))
+                    labels(label) - (pc + F::from_canonical_usize((EF::D - 1) * DEFAULT_PC_STEP as usize))
                 } else {
-                    F::from_canonical_usize(i + 1)
+                    F::from_canonical_usize((i + 1) * DEFAULT_PC_STEP as usize)
                 },
                 AS::Memory,
                 AS::Immediate,
@@ -935,19 +937,20 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
     let init_debug_info = None;
 
     let mut block_start = vec![];
-    let mut pc = 1;
+    let mut pc_idx = 1;
     for block in program.blocks.iter() {
-        block_start.push(pc);
+        block_start.push(pc_idx * DEFAULT_PC_STEP);
 
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
+            // This is used to just to get the number of instructions in the block
             let instructions = convert_instruction::<F, EF>(
                 instruction.clone(),
                 debug_info.clone(),
-                F::from_canonical_usize(pc),
+                F::from_canonical_u32(pc_idx * DEFAULT_PC_STEP),
                 |label| label,
                 &options,
             );
-            pc += instructions.len();
+            pc_idx += instructions.len() as u32;
         }
     }
 
@@ -956,27 +959,29 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
     for block in program.blocks.iter() {
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
             let cur_size = instructions_and_debug_infos.len() as u32;
+            let cur_pc = cur_size * DEFAULT_PC_STEP;
 
             let labels =
-                |label: F| F::from_canonical_usize(block_start[label.as_canonical_u64() as usize]);
+                |label: F| F::from_canonical_u32(block_start[label.as_canonical_u64() as usize]);
             let result = convert_instruction(
                 instruction.clone(),
                 debug_info.clone(),
-                F::from_canonical_u32(cur_size),
+                F::from_canonical_u32(cur_pc),
                 labels,
                 &options,
             );
 
-            for (index, (instruction, debug_info)) in result.instructions_and_debug_infos.iter() {
-                instructions_and_debug_infos
-                    .insert(cur_size + index, (instruction.clone(), debug_info.clone()));
+            for (local_pc, (instruction, debug_info)) in result.instructions_and_debug_infos {
+                let existing = instructions_and_debug_infos
+                    .insert(cur_pc + local_pc, (instruction.clone(), debug_info.clone()));
+                assert!(existing.is_none(), "pc should not already exist");
             }
         }
     }
 
     Program {
         instructions_and_debug_infos,
-        step: 1,
+        step: DEFAULT_PC_STEP,
         pc_start: 0,
         pc_base: 0,
     }
