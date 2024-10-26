@@ -30,6 +30,8 @@ pub enum ExecutionError {
     PcNotFound(u32, u32, u32, usize),
     /// pc, step, pc_base, program_len
     PcOutOfBounds(u32, u32, u32, usize),
+    /// pc, phantom_repr
+    InvalidPhantomInstruction(u32, usize),
     DisabledOperation(u32, usize),
     HintOutOfBounds(u32),
     EndOfInputStream(u32),
@@ -50,6 +52,11 @@ impl Display for ExecutionError {
                 f,
                 "pc = {} out of bounds for program of length {}, with pc_base = {} and step = {}",
                 pc, program_len, pc_base, step
+            ),
+            ExecutionError::InvalidPhantomInstruction(pc, phantom_repr) => write!(
+                f,
+                "at pc = {}, invalid phantom instruction {:?}",
+                pc, phantom_repr
             ),
             ExecutionError::DisabledOperation(pc, op) => {
                 write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)

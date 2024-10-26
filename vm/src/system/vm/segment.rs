@@ -124,7 +124,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 BTreeMap::new()
             };
 
-            if opcode == TerminateOpcode::TERMINATE.with_default_offset() {
+            if opcode == CommonOpcode::TERMINATE.with_default_offset() {
                 did_terminate = true;
                 self.chip_set.connector_chip.end(
                     ExecutionState::new(pc, timestamp),
@@ -139,24 +139,32 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 break;
             }
 
-            // runtime only instruction handling
-            // FIXME: assumes CoreOpcode has offset 0:
-            if opcode == CoreOpcode::FAIL as usize {
-                if let Some(mut backtrace) = prev_backtrace {
-                    backtrace.resolve();
-                    eprintln!("eDSL program failure; backtrace:\n{:?}", backtrace);
-                } else {
-                    eprintln!("eDSL program failure; no backtrace");
+            // Some phantom instruction handling is more convenient to do here than in PhantomChip. FIXME[jpw]
+            if opcode == CommonOpcode::PHANTOM as usize {
+                let c = instruction.c.as_canonical_u32() as usize;
+                let phantom = PhantomInstruction::from_repr(c)
+                    .ok_or(ExecutionError::InvalidPhantomInstruction(pc, c))?;
+                tracing::trace!("pc: {pc:#x} | phantom: {phantom:?}");
+                match phantom {
+                    PhantomInstruction::DebugPanic => {
+                        if let Some(mut backtrace) = prev_backtrace {
+                            backtrace.resolve();
+                            eprintln!("axvm program failure; backtrace:\n{:?}", backtrace);
+                        } else {
+                            eprintln!("axvm program failure; no backtrace");
+                        }
+                        return Err(ExecutionError::Fail(pc));
+                    }
+                    PhantomInstruction::CtStart => {
+                        self.update_chip_metrics();
+                        self.cycle_tracker.start(instruction.debug.clone())
+                    }
+                    PhantomInstruction::CtEnd => {
+                        self.update_chip_metrics();
+                        self.cycle_tracker.end(instruction.debug.clone())
+                    }
+                    _ => {}
                 }
-                return Err(ExecutionError::Fail(pc));
-            }
-            if opcode == CoreOpcode::CT_START as usize {
-                self.update_chip_metrics();
-                self.cycle_tracker.start(instruction.debug.clone())
-            }
-            if opcode == CoreOpcode::CT_END as usize {
-                self.update_chip_metrics();
-                self.cycle_tracker.end(instruction.debug.clone())
             }
             prev_backtrace = trace;
 

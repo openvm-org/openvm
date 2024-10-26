@@ -32,7 +32,7 @@ use strum::EnumCount;
 use super::Streams;
 use crate::{
     arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
-    common::nop::NopChip,
+    common::phantom::PhantomChip,
     intrinsics::{
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
@@ -49,7 +49,6 @@ use crate::{
         },
         branch_eq::KernelBranchEqChip,
         castf::{CastFChip, CastFCoreChip},
-        core::CoreChip,
         ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
@@ -257,8 +256,6 @@ impl VmConfig {
         );
         let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
-        // CoreChip is always required even if it's not explicitly specified.
-        required_executors.insert(ExecutorName::Core);
         // PublicValuesChip is required when num_public_values > 0.
         let public_values_chip = if self.num_public_values > 0 {
             // Raw public values are not supported when continuation is enabled.
@@ -297,20 +294,8 @@ impl VmConfig {
                 }
             }
             match executor {
-                ExecutorName::Nop => {
-                    let nop_chip = Rc::new(RefCell::new(NopChip::new(
-                        execution_bus,
-                        program_bus,
-                        memory_controller.clone(),
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, nop_chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Nop(nop_chip));
-                }
-                ExecutorName::Core => {
-                    let core_chip = Rc::new(RefCell::new(CoreChip::new(
+                ExecutorName::Phantom => {
+                    let phantom_chip = Rc::new(RefCell::new(PhantomChip::new(
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
@@ -318,9 +303,9 @@ impl VmConfig {
                         offset,
                     )));
                     for opcode in range {
-                        executors.insert(opcode, core_chip.clone().into());
+                        executors.insert(opcode, phantom_chip.clone().into());
                     }
-                    chips.push(AxVmChip::Core(core_chip));
+                    chips.push(AxVmChip::Phantom(phantom_chip));
                 }
                 ExecutorName::LoadStore => {
                     let chip = Rc::new(RefCell::new(KernelLoadStoreChip::<F, 1>::new(
@@ -979,15 +964,11 @@ fn shift_range(r: Range<usize>, x: usize) -> Range<usize> {
 
 fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
     let (start, len, offset) = match executor {
-        ExecutorName::Nop => (
-            NopOpcode::default_offset(),
-            NopOpcode::COUNT,
-            NopOpcode::default_offset(),
-        ),
-        ExecutorName::Core => (
-            CoreOpcode::default_offset(),
-            CoreOpcode::COUNT,
-            CoreOpcode::default_offset(),
+        // Terminate is not handled by executor, it is done by system (VmConnectorChip)
+        ExecutorName::Phantom => (
+            CommonOpcode::PHANTOM.with_default_offset(),
+            1,
+            CommonOpcode::default_offset(),
         ),
         ExecutorName::LoadStore => (
             NativeLoadStoreOpcode::default_offset(),

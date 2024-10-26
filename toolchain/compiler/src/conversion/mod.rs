@@ -119,12 +119,12 @@ fn inst_large<F: PrimeField64>(
     }
 }
 
-fn dbg<F: PrimeField64>(opcode: usize, debug: String) -> Instruction<F> {
+fn dbg<F: PrimeField64>(phantom: PhantomInstruction, debug: String) -> Instruction<F> {
     Instruction {
-        opcode,
+        opcode: CommonOpcode::PHANTOM.with_default_offset(),
         a: F::zero(),
         b: F::zero(),
-        c: F::zero(),
+        c: F::from_canonical_usize(phantom as usize),
         d: F::zero(),
         e: F::zero(),
         f: F::zero(),
@@ -368,51 +368,51 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
 
     match instruction {
         AsmInstruction::PrintV(src) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::PRINTF),
+            options.opcode_with_offset(CommonOpcode::PHANTOM),
             i32_f(src),
             F::zero(),
-            F::zero(),
+            F::from_canonical_usize(PhantomInstruction::PrintF as usize),
             AS::Memory,
             AS::Immediate,
         )],
         AsmInstruction::PrintF(src) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::PRINTF),
+            options.opcode_with_offset(CommonOpcode::PHANTOM),
             i32_f(src),
             F::zero(),
-            F::zero(),
+            F::from_canonical_usize(PhantomInstruction::PrintF as usize),
             AS::Memory,
             AS::Immediate,
         )],
         AsmInstruction::PrintE(src) => vec![
             inst(
-                options.opcode_with_offset(CoreOpcode::PRINTF),
+                options.opcode_with_offset(CommonOpcode::PHANTOM),
                 i32_f(src),
                 F::zero(),
-                F::zero(),
+                F::from_canonical_usize(PhantomInstruction::PrintF as usize),
                 AS::Memory,
                 AS::Immediate,
             ),
             inst(
-                options.opcode_with_offset(CoreOpcode::PRINTF),
+                options.opcode_with_offset(CommonOpcode::PHANTOM),
                 i32_f(src + word_size_i32),
                 F::zero(),
-                F::zero(),
+                F::from_canonical_usize(PhantomInstruction::PrintF as usize),
                 AS::Memory,
                 AS::Immediate,
             ),
             inst(
-                options.opcode_with_offset(CoreOpcode::PRINTF),
+                options.opcode_with_offset(CommonOpcode::PHANTOM),
                 i32_f(src + 2 * word_size_i32),
                 F::zero(),
-                F::zero(),
+                F::from_canonical_usize(PhantomInstruction::PrintF as usize),
                 AS::Memory,
                 AS::Immediate,
             ),
             inst(
-                options.opcode_with_offset(CoreOpcode::PRINTF),
+                options.opcode_with_offset(CommonOpcode::PHANTOM),
                 i32_f(src + 3 * word_size_i32),
                 F::zero(),
-                F::zero(),
+                F::from_canonical_usize(PhantomInstruction::PrintF as usize),
                 AS::Memory,
                 AS::Immediate,
             ),
@@ -600,10 +600,10 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Trap => vec![
             // pc <- -1 (causes trace generation to fail)
             inst(
-                options.opcode_with_offset(CoreOpcode::FAIL),
+                options.opcode_with_offset(CommonOpcode::PHANTOM),
                 F::zero(),
                 F::zero(),
-                F::zero(),
+                F::from_canonical_usize(PhantomInstruction::DebugPanic as usize),
                 AS::Immediate,
                 AS::Immediate,
             ),
@@ -611,7 +611,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Halt => vec![
             // terminate
             inst(
-                options.opcode_with_offset(TerminateOpcode::TERMINATE),
+                options.opcode_with_offset(CommonOpcode::TERMINATE),
                 F::zero(),
                 F::zero(),
                 F::zero(),
@@ -620,26 +620,26 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             ),
         ],
         AsmInstruction::HintInputVec() => vec![inst(
-            options.opcode_with_offset(CoreOpcode::HINT_INPUT),
+            options.opcode_with_offset(CommonOpcode::PHANTOM),
             F::zero(),
             F::zero(),
-            F::zero(),
+            F::from_canonical_usize(PhantomInstruction::HintInput as usize),
             AS::Memory,
             AS::Memory,
         )],
         AsmInstruction::HintBits(src, len) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::HINT_BITS),
+            options.opcode_with_offset(CommonOpcode::PHANTOM),
             i32_f(src),
-            F::zero(),
             F::from_canonical_u32(len),
+            F::from_canonical_usize(PhantomInstruction::HintBits as usize),
             AS::Memory,
             AS::Memory,
         )],
         AsmInstruction::HintBytes(src, len) => vec![inst(
-            options.opcode_with_offset(CoreOpcode::HINT_BYTES),
+            options.opcode_with_offset(CommonOpcode::PHANTOM),
             i32_f(src),
-            F::zero(),
             F::from_canonical_u32(len),
+            F::from_canonical_usize(PhantomInstruction::HintBytes as usize),
             AS::Memory,
             AS::Memory,
         )],
@@ -891,14 +891,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::CycleTrackerStart(name) => {
             if options.enable_cycle_tracker {
-                vec![dbg(options.opcode_with_offset(CoreOpcode::CT_START), name)]
+                vec![dbg(PhantomInstruction::CtStart, name)]
             } else {
                 vec![]
             }
         }
         AsmInstruction::CycleTrackerEnd(name) => {
             if options.enable_cycle_tracker {
-                vec![dbg(options.opcode_with_offset(CoreOpcode::CT_END), name)]
+                vec![dbg(PhantomInstruction::CtEnd, name)]
             } else {
                 vec![]
             }

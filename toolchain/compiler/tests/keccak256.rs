@@ -52,7 +52,7 @@ fn run_e2e_keccak_test(inputs: Vec<Vec<u8>>, expected_outputs: Vec<[u8; 32]>) {
     execute_and_prove_program(
         program,
         vec![],
-        VmConfig::default_with_no_executors()
+        VmConfig::default()
             .add_executor(ExecutorName::LoadStore)
             .add_executor(ExecutorName::BranchEqual)
             .add_executor(ExecutorName::Jal)

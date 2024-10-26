@@ -13,7 +13,7 @@ use strum_macros::IntoStaticStr;
 
 use crate::{
     arch::ExecutionState,
-    common::nop::NopChip,
+    common::phantom::PhantomChip,
     intrinsics::{
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{ModularAddSubChip, ModularMulDivChip},
@@ -21,7 +21,6 @@ use crate::{
     kernels::{
         branch_eq::KernelBranchEqChip,
         castf::CastFChip,
-        core::CoreChip,
         ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
@@ -79,8 +78,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum AxVmInstructionExecutor<F: PrimeField32> {
-    Nop(Rc<RefCell<NopChip<F>>>),
-    Core(Rc<RefCell<CoreChip<F>>>),
+    Phantom(Rc<RefCell<PhantomChip<F>>>),
     LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
     BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
     Jal(Rc<RefCell<KernelJalChip<F>>>),
@@ -122,8 +120,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
 /// each chip. Change of the order may cause break changes of VKs.
 #[derive(Clone, IntoStaticStr, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
-    Nop(Rc<RefCell<NopChip<F>>>),
-    Core(Rc<RefCell<CoreChip<F>>>),
+    Phantom(Rc<RefCell<PhantomChip<F>>>),
     LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
     BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
     Jal(Rc<RefCell<KernelJalChip<F>>>),

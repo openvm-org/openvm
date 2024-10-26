@@ -121,41 +121,18 @@ impl VmConfig {
 
 impl Default for VmConfig {
     fn default() -> Self {
-        Self::default_with_no_executors()
-            .add_executor(ExecutorName::Core)
-            .add_executor(ExecutorName::LoadStore)
-            .add_executor(ExecutorName::BranchEqual)
-            .add_executor(ExecutorName::Jal)
-            .add_executor(ExecutorName::FieldArithmetic)
-            .add_executor(ExecutorName::FieldExtension)
-            .add_executor(ExecutorName::Poseidon2)
+        Self::from_parameters(
+            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
+            Default::default(),
+            0,
+            DEFAULT_MAX_SEGMENT_LEN,
+            false,
+            vec![],
+        )
     }
 }
 
 impl VmConfig {
-    pub fn default_with_no_executors() -> Self {
-        Self::from_parameters(
-            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
-            Default::default(),
-            0,
-            DEFAULT_MAX_SEGMENT_LEN,
-            false,
-            vec![],
-        )
-    }
-
-    pub fn core() -> Self {
-        Self::from_parameters(
-            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
-            Default::default(),
-            0,
-            DEFAULT_MAX_SEGMENT_LEN,
-            false,
-            vec![],
-        )
-        .add_executor(ExecutorName::Core)
-    }
-
     pub fn rv32i() -> Self {
         VmConfig {
             poseidon2_max_constraint_degree: 3,
@@ -165,7 +142,7 @@ impl VmConfig {
             },
             ..Default::default()
         }
-        .add_executor(ExecutorName::Nop)
+        .add_executor(ExecutorName::Phantom)
         .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
         .add_executor(ExecutorName::LessThanRv32)
         .add_executor(ExecutorName::ShiftRv32)
@@ -191,6 +168,13 @@ impl VmConfig {
             num_public_values: 4,
             ..VmConfig::default()
         }
+        .add_executor(ExecutorName::Phantom)
+        .add_executor(ExecutorName::LoadStore)
+        .add_executor(ExecutorName::BranchEqual)
+        .add_executor(ExecutorName::Jal)
+        .add_executor(ExecutorName::FieldArithmetic)
+        .add_executor(ExecutorName::FieldExtension)
+        .add_executor(ExecutorName::Poseidon2)
     }
 
     pub fn read_config_file(file: &str) -> Result<Self, String> {

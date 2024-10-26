@@ -15,8 +15,8 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     arch::instructions::{
-        BranchEqualOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
-        NativeJalOpcode::*, NativeLoadStoreOpcode::*, TerminateOpcode::*, UsizeOpcode,
+        BranchEqualOpcode::*, CommonOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
+        NativeJalOpcode::*, NativeLoadStoreOpcode::*, UsizeOpcode,
     },
     system::{program::ProgramChip, vm::chip_set::READ_INSTRUCTION_BUS},
 };

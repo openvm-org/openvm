@@ -15,7 +15,7 @@ use ax_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::Program, TerminateOpcode::TERMINATE, UsizeOpcode,
+    instruction::Instruction, program::Program, CommonOpcode::TERMINATE, UsizeOpcode,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -68,7 +68,7 @@ fn test_impl(
     exit_code: u32,
     f: impl FnOnce(&mut AirProofInput<BabyBearPoseidon2Config>),
 ) {
-    let vm_config = VmConfig::core();
+    let vm_config = VmConfig::default();
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let pk = vm_config.generate_pk(engine.keygen_builder());

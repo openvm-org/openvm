@@ -8,7 +8,7 @@ use afs_stark_backend::{
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     },
 };
-use axvm_instructions::{program::Program, TerminateOpcode, UsizeOpcode};
+use axvm_instructions::{program::Program, CommonOpcode, UsizeOpcode};
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
@@ -113,7 +113,7 @@ fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatri
 
 pub(super) fn padding_instruction<F: Field>() -> Instruction<F> {
     Instruction::from_usize(
-        TerminateOpcode::TERMINATE.with_default_offset(),
+        CommonOpcode::TERMINATE.with_default_offset(),
         [0, 0, EXIT_CODE_FAIL],
     )
 }

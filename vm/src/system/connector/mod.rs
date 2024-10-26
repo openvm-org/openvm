@@ -18,7 +18,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
-    arch::{instructions::TerminateOpcode::TERMINATE, ExecutionBus, ExecutionState},
+    arch::{instructions::CommonOpcode::TERMINATE, ExecutionBus, ExecutionState},
     system::program::ProgramBus,
 };
 

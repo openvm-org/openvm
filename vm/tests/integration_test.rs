@@ -16,6 +16,7 @@ use ax_sdk::{
 use axvm_instructions::{
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
+    CommonOpcode, PhantomInstruction,
     PublishOpcode::PUBLISH,
 };
 use p3_baby_bear::BabyBear;
@@ -24,9 +25,9 @@ use rand::Rng;
 use stark_vm::{
     arch::{
         instructions::{
-            BranchEqualOpcode::*, CoreOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
-            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
-            NativeLoadStoreOpcode::*, Poseidon2Opcode::*, TerminateOpcode::*, UsizeOpcode,
+            BranchEqualOpcode::*, CommonOpcode::*, FieldArithmeticOpcode::*,
+            FieldExtensionOpcode::*, Keccak256Opcode::*, NativeBranchEqualOpcode,
+            NativeJalOpcode::*, NativeLoadStoreOpcode::*, Poseidon2Opcode::*, UsizeOpcode,
         },
         ExecutorName,
     },
@@ -56,7 +57,7 @@ where
 }
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
-    VmConfig::core()
+    VmConfig::default()
         .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::BranchEqual)
@@ -86,7 +87,7 @@ fn air_test_with_compress_poseidon2(
             persistence_type: memory_persistence,
             ..Default::default()
         },
-        ..VmConfig::core()
+        ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
     .add_executor(ExecutorName::Poseidon2);
@@ -194,8 +195,10 @@ fn test_vm_1_optional_air() {
 
 #[test]
 fn test_vm_public_values() {
-    let mut vm_config = VmConfig::core();
-    vm_config.num_public_values = 3;
+    let vm_config = VmConfig {
+        num_public_values: 3,
+        ..Default::default()
+    };
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let pk = vm_config.generate_pk(engine.keygen_builder());
@@ -233,7 +236,14 @@ fn test_vm_initial_memory() {
             1,
             0,
         ),
-        Instruction::<BabyBear>::from_isize(FAIL.with_default_offset(), 0, 0, 0, 0, 0),
+        Instruction::<BabyBear>::from_isize(
+            PHANTOM.with_default_offset(),
+            0,
+            0,
+            PhantomInstruction::DebugPanic as isize,
+            0,
+            0,
+        ),
         Instruction::<BabyBear>::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ]);
 
@@ -249,7 +259,7 @@ fn test_vm_initial_memory() {
             persistence_type: PersistenceType::Persistent,
             ..Default::default()
         },
-        ..VmConfig::core()
+        ..VmConfig::default()
     }
     .add_executor(ExecutorName::BranchEqual)
     .add_executor(ExecutorName::Jal);
@@ -263,7 +273,7 @@ fn test_vm_1_persistent() {
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
         memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
-        ..VmConfig::default_with_no_executors()
+        ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
     .add_executor(ExecutorName::FieldArithmetic)
@@ -374,7 +384,7 @@ fn test_vm_continuations() {
             persistence_type: PersistenceType::Persistent,
             ..Default::default()
         },
-        ..VmConfig::core()
+        ..VmConfig::default()
     }
     .add_executor(ExecutorName::FieldArithmetic)
     .add_executor(ExecutorName::BranchEqual)
@@ -522,7 +532,7 @@ fn test_vm_without_field_arithmetic() {
 
     air_test(
         VirtualMachine::new(
-            VmConfig::core()
+            VmConfig::default()
                 .add_executor(ExecutorName::LoadStore)
                 .add_executor(ExecutorName::BranchEqual)
                 .add_executor(ExecutorName::Jal),
@@ -575,15 +585,15 @@ fn test_vm_fibonacci_old() {
 fn test_vm_fibonacci_old_cycle_tracker() {
     // NOTE: Instructions commented until cycle tracker instructions are not counted as additional assembly Instructions
     let instructions = vec![
-        Instruction::debug(CT_START.with_default_offset(), "full program"),
-        Instruction::debug(CT_START.with_default_offset(), "store"),
+        Instruction::debug(PhantomInstruction::CtStart, "full program"),
+        Instruction::debug(PhantomInstruction::CtStart, "store"),
         Instruction::from_isize(STOREW.with_default_offset(), 9, 0, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 2, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 3, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 0, 0, 0, 0, 2),
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 1, 0, 2),
-        Instruction::debug(CT_END.with_default_offset(), "store"),
-        Instruction::debug(CT_START.with_default_offset(), "total loop"),
+        Instruction::debug(PhantomInstruction::CtEnd, "store"),
+        Instruction::debug(PhantomInstruction::CtStart, "total loop"),
         Instruction::from_isize(
             NativeBranchEqualOpcode(BEQ).with_default_offset(),
             2,
@@ -593,12 +603,12 @@ fn test_vm_fibonacci_old_cycle_tracker() {
             1,
         ), // Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
         Instruction::large_from_isize(ADD.with_default_offset(), 2, 2, 3, 1, 1, 1, 0),
-        Instruction::debug(CT_START.with_default_offset(), "inner loop"),
+        Instruction::debug(PhantomInstruction::CtStart, "inner loop"),
         Instruction::from_isize(LOADW.with_default_offset(), 4, -2, 2, 1, 2),
         Instruction::from_isize(LOADW.with_default_offset(), 5, -1, 2, 1, 2),
         Instruction::large_from_isize(ADD.with_default_offset(), 6, 4, 5, 1, 1, 1, 0),
         Instruction::from_isize(STOREW.with_default_offset(), 6, 0, 2, 1, 2),
-        Instruction::debug(CT_END.with_default_offset(), "inner loop"),
+        Instruction::debug(PhantomInstruction::CtEnd, "inner loop"),
         Instruction::from_isize(
             JAL.with_default_offset(),
             7,
@@ -607,8 +617,8 @@ fn test_vm_fibonacci_old_cycle_tracker() {
             1,
             0,
         ),
-        Instruction::debug(CT_END.with_default_offset(), "total loop"),
-        Instruction::debug(CT_END.with_default_offset(), "full program"),
+        Instruction::debug(PhantomInstruction::CtEnd, "total loop"),
+        Instruction::debug(PhantomInstruction::CtEnd, "full program"),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 
@@ -642,7 +652,7 @@ fn test_vm_field_extension_arithmetic() {
     let program = Program::from_instructions(&instructions);
 
     let vm = VirtualMachine::new(
-        VmConfig::core()
+        VmConfig::default()
             .add_executor(ExecutorName::LoadStore)
             .add_executor(ExecutorName::FieldArithmetic)
             .add_executor(ExecutorName::FieldExtension),
@@ -675,7 +685,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
         VmConfig {
             poseidon2_max_constraint_degree: 3,
             memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
-            ..VmConfig::core()
+            ..VmConfig::default()
         }
         .add_executor(ExecutorName::LoadStore)
         .add_executor(ExecutorName::FieldArithmetic)
@@ -692,7 +702,14 @@ fn test_vm_hint() {
         Instruction::large_from_isize(ADD.with_default_offset(), 20, 16, 16777220, 1, 1, 0, 0),
         Instruction::large_from_isize(ADD.with_default_offset(), 32, 20, 0, 1, 1, 0, 0),
         Instruction::large_from_isize(ADD.with_default_offset(), 20, 20, 1, 1, 1, 0, 0),
-        Instruction::from_isize(HINT_INPUT.with_default_offset(), 0, 0, 0, 1, 2),
+        Instruction::from_isize(
+            CommonOpcode::PHANTOM.with_default_offset(),
+            0,
+            0,
+            PhantomInstruction::HintInput as isize,
+            1,
+            2,
+        ),
         Instruction::from_isize(SHINTW.with_default_offset(), 32, 0, 0, 1, 2),
         Instruction::from_isize(LOADW.with_default_offset(), 38, 0, 32, 1, 2),
         Instruction::large_from_isize(ADD.with_default_offset(), 44, 20, 0, 1, 1, 0, 0),
@@ -837,10 +854,10 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         0,
     )); // skip fail
     instructions.push(Instruction::from_isize(
-        FAIL.with_default_offset(),
+        PHANTOM.with_default_offset(),
         0,
         0,
-        0,
+        PhantomInstruction::DebugPanic as isize,
         0,
         0,
     ));
@@ -942,7 +959,7 @@ fn test_vm_keccak() {
 
     air_test(
         VirtualMachine::new(
-            VmConfig::core()
+            VmConfig::default()
                 .add_executor(ExecutorName::LoadStore)
                 .add_executor(ExecutorName::Keccak256)
                 .add_executor(ExecutorName::BranchEqual)
@@ -973,7 +990,7 @@ fn test_vm_keccak_non_full_round() {
 
     air_test(
         VirtualMachine::new(
-            VmConfig::core()
+            VmConfig::default()
                 .add_executor(ExecutorName::LoadStore)
                 .add_executor(ExecutorName::Keccak256)
                 .add_executor(ExecutorName::BranchEqual)

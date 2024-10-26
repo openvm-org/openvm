@@ -6,12 +6,14 @@ use strum_macros::{EnumCount, EnumIter, FromRepr};
 pub mod config;
 mod curves;
 pub mod instruction;
+mod phantom;
 pub mod program;
 /// Module with traits and constants for RISC-V instruction definitions for custom axVM instructions.
 pub mod riscv;
 pub mod utils;
 
 pub use curves::*;
+pub use phantom::*;
 
 pub trait UsizeOpcode {
     fn default_offset() -> usize;
@@ -35,21 +37,9 @@ pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
 #[opcode_offset = 0]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum CoreOpcode {
-    FAIL,
-    PRINTF,
-
-    // TODO: move these to a separate class, PhantomOpcode or something
-    /// Phantom instruction to prepare the next input vector for hinting.
-    HINT_INPUT,
-    /// Phantom instruction to prepare the little-endian bit decomposition of a variable for hinting.
-    HINT_BITS,
-    /// Phantom instruction to prepare the little-endian byte decomposition of a variable for hinting.
-    HINT_BYTES,
-    /// Phantom instruction to start tracing
-    CT_START,
-    /// Phantom instruction to end tracing
-    CT_END,
+pub enum CommonOpcode {
+    TERMINATE,
+    PHANTOM,
 }
 
 #[derive(
@@ -65,26 +55,6 @@ pub enum NativeLoadStoreOpcode {
     STOREW2,
     /// Instruction to write the next hint word into memory.
     SHINTW,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x20] // these offsets gone mad tbh
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum TerminateOpcode {
-    TERMINATE,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x21]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum NopOpcode {
-    NOP,
 }
 
 pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
