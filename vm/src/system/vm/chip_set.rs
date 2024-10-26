@@ -88,6 +88,7 @@ use crate::{
         },
         program::{ProgramBus, ProgramChip},
         vm::config::{PersistenceType, VmConfig},
+        DEFAULT_PC_STEP,
     },
 };
 
@@ -344,7 +345,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchEqualCoreChip::new(offset, 1usize),
+                        BranchEqualCoreChip::new(offset, DEFAULT_PC_STEP),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -592,7 +593,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchEqualCoreChip::new(offset, 4usize),
+                        BranchEqualCoreChip::new(offset, DEFAULT_PC_STEP),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
