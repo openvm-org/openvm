@@ -15,9 +15,6 @@ pub enum PhantomInstruction {
     HintInput,
     /// Prepare the little-endian bit decomposition of a variable for hinting.
     HintBits,
-    /// Prepare the little-endian byte decomposition of a variable for hinting.
-    // THIS IS NOT DOING RANGE CHECKS AND SHOULD BE DELETED
-    HintBytes,
     /// Start tracing
     CtStart,
     /// End tracing

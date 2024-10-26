@@ -165,22 +165,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                 }
                 drop(streams);
             }
-            PhantomInstruction::HintBytes => {
-                let addr_space = F::from_canonical_u32(c_u32 >> 16);
-                let mut streams = self.streams.lock();
-                let val = RefCell::borrow(&self.memory).unsafe_read_cell(addr_space, a);
-                let mut val = val.as_canonical_u32();
-
-                let len = b.as_canonical_u32();
-                streams.hint_stream.clear();
-                for _ in 0..len {
-                    streams
-                        .hint_stream
-                        .push_back(F::from_canonical_u32(val & 0xff));
-                    val >>= 8;
-                }
-                drop(streams);
-            }
             _ => {}
         };
 
