@@ -6,11 +6,13 @@ edition.workspace = true
 
 [dependencies]
 halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", branch = "test/visibility" }
+snark-verifier-sdk = { workspace = true }
 itertools.workspace = true
 rand_core = "0.6.4"
 num = "0.4.3"
 rand.workspace = true
 lazy_static.workspace = true
+ax-ecc-lib = { path = "../ecc" }
 
 [dev-dependencies]
 rng = "0.1.0"

@@ -31,6 +31,12 @@ pub fn msm_axvm(g: Vec<Secp256k1Affine>, scalars: Vec<Fq>) -> Secp256k1Affine {
     acc
 }
 
+pub fn msm_axvm_C<C: CurveAffine>(g: Vec<C>, scalars: Vec<C::Scalar>) -> C {
+    let mut acc = C::identity();
+    msm_serial::<C>(&scalars, &g, &mut acc);
+    acc
+}
+
 pub fn multi_scalar_multiply(g: Vec<Secp256k1Affine>, scalars: Vec<Fq>) -> Secp256k1Affine {
     let n = g.len();
     let lambda = 256;

@@ -478,6 +478,7 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
+ "ax-ecc-lib",
  "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git?branch=test/visibility)",
  "itertools 0.13.0",
  "lazy_static",
@@ -485,6 +486,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rng",
+ "snark-verifier-sdk",
  "subtle",
 ]
 
