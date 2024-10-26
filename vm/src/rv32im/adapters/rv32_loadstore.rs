@@ -41,7 +41,7 @@ use crate::{
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store, and if it is a hint.
-pub struct LoadStoreProcessedInstruction<T> {
+pub struct LoadStoreInstruction<T> {
     pub is_valid: T,
     // Absolute opcode number
     pub opcode: T,
@@ -59,7 +59,7 @@ pub struct LoadStoreProcessedInstruction<T> {
 /// Getting the intermediate pointer is completely internal to the adapter and shouldn't be a part of the AdapterInterface
 type Rv32LoadStoreAdapterRuntimeInterface<T> = BasicAdapterInterface<
     T,
-    LoadStoreProcessedInstruction<T>,
+    LoadStoreInstruction<T>,
     2,
     1,
     RV32_REGISTER_NUM_LIMBS,
@@ -71,7 +71,7 @@ pub struct Rv32LoadStoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<
 impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapterAirInterface<AB> {
     type Reads = [[AB::Var; RV32_REGISTER_NUM_LIMBS]; 2];
     type Writes = [[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1];
-    type ProcessedInstruction = LoadStoreProcessedInstruction<AB::Expr>;
+    type ProcessedInstruction = LoadStoreInstruction<AB::Expr>;
 }
 
 /// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
