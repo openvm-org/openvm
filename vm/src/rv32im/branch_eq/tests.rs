@@ -22,13 +22,10 @@ use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        BasicAdapterInterface, ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
-        VmCoreChip,
+        BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
+        VmChipWrapper, VmCoreChip,
     },
-    rv32im::adapters::{
-        JumpUiProcessedInstruction, Rv32BranchAdapterChip, RV32_REGISTER_NUM_LIMBS,
-        RV_B_TYPE_IMM_BITS,
-    },
+    rv32im::adapters::{Rv32BranchAdapterChip, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
 };
 
 type F = BabyBear;
@@ -276,7 +273,7 @@ fn execute_pc_increment_sanity_test() {
 
     let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
+        BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
@@ -284,7 +281,7 @@ fn execute_pc_increment_sanity_test() {
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
     let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
+        BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());

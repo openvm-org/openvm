@@ -10,11 +10,12 @@ use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LIMBS};
+use super::RV32_REGISTER_NUM_LIMBS;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
@@ -87,14 +88,8 @@ impl<F: Field> BaseAir<F> for Rv32BranchAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
-    type Interface = BasicAdapterInterface<
-        AB::Expr,
-        JumpUiProcessedInstruction<AB::Expr>,
-        2,
-        0,
-        RV32_REGISTER_NUM_LIMBS,
-        0,
-    >;
+    type Interface =
+        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>;
 
     fn eval(
         &self,
@@ -155,8 +150,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
     type ReadRecord = Rv32BranchReadRecord<F>;
     type WriteRecord = Rv32BranchWriteRecord;
     type Air = Rv32BranchAdapterAir;
-    type Interface =
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>;
+    type Interface = BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>;
 
     fn preprocess(
         &mut self,

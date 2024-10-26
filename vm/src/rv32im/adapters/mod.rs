@@ -6,7 +6,6 @@ mod rv32_mul;
 mod rv32_rdwrite;
 mod rv32_vec_heap;
 
-use afs_derive::AlignedBorrow;
 pub use rv32_alu::*;
 pub use rv32_branch::*;
 pub use rv32_jalr::*;
@@ -29,10 +28,7 @@ pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
 use p3_field::PrimeField32;
 
-use crate::{
-    arch::DynArray,
-    system::memory::{MemoryController, MemoryReadRecord},
-};
+use crate::system::memory::{MemoryController, MemoryReadRecord};
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.
@@ -53,35 +49,4 @@ pub fn read_rv32_register<F: PrimeField32>(
     let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
     let val = compose(record.data);
     (record, val)
-}
-
-// This ProcessInstruction is used by rv32_jalr and rv32_rdwrite
-#[repr(C)]
-#[derive(AlignedBorrow)]
-pub struct JumpUiProcessedInstruction<T> {
-    pub is_valid: T,
-    /// Absolute opcode number
-    pub opcode: T,
-    pub immediate: T,
-}
-
-impl<T> From<DynArray<T>> for JumpUiProcessedInstruction<T> {
-    fn from(m: DynArray<T>) -> Self {
-        let mut m = m.0.into_iter();
-        JumpUiProcessedInstruction {
-            is_valid: m.next().unwrap(),
-            opcode: m.next().unwrap(),
-            immediate: m.next().unwrap(),
-        }
-    }
-}
-
-impl<T> From<JumpUiProcessedInstruction<T>> for DynArray<T> {
-    fn from(instruction: JumpUiProcessedInstruction<T>) -> Self {
-        DynArray::from(vec![
-            instruction.is_valid,
-            instruction.opcode,
-            instruction.immediate,
-        ])
-    }
 }

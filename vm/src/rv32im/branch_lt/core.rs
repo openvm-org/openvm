@@ -15,13 +15,10 @@ use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
-use crate::{
-    arch::{
-        instructions::{BranchLessThanOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip,
-    },
-    rv32im::adapters::JumpUiProcessedInstruction,
+use crate::arch::{
+    instructions::{BranchLessThanOpcode, UsizeOpcode},
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]
@@ -81,7 +78,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
     I::Writes: Default,
-    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -173,7 +170,7 @@ where
             to_pc: Some(to_pc),
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
             writes: Default::default(),
-            instruction: JumpUiProcessedInstruction {
+            instruction: ImmInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 immediate: cols.imm.into(),

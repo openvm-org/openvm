@@ -14,9 +14,9 @@ use super::native_adapter::NativeWriteRecord;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
-    rv32im::adapters::JumpUiProcessedInstruction,
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols},
@@ -71,8 +71,7 @@ impl<F: Field> BaseAir<F> for JalNativeAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalNativeAdapterAir {
-    type Interface =
-        BasicAdapterInterface<AB::Expr, JumpUiProcessedInstruction<AB::Expr>, 0, 1, 1, 1>;
+    type Interface = BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 1, 1>;
 
     fn eval(
         &self,
@@ -123,7 +122,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for JalNativeAdapterChip<F> {
     type ReadRecord = ();
     type WriteRecord = NativeWriteRecord<F, 1>;
     type Air = JalNativeAdapterAir;
-    type Interface = BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 1, 1>;
+    type Interface = BasicAdapterInterface<F, ImmInstruction<F>, 0, 1, 1, 1>;
 
     fn preprocess(
         &mut self,
