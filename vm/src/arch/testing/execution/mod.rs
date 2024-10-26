@@ -47,31 +47,6 @@ impl<F: PrimeField32> ExecutionTester<F> {
     pub fn last_to_pc(&self) -> F {
         self.records.last().unwrap().final_state.pc
     }
-
-    // for use by CoreChip, needs to be modified to setup memorytester (or just merge them before writing CoreChip)
-    /*fn test_execution_with_expected_changes<F: PrimeField64, E: InstructionExecutor<F>>(
-        &mut self,
-        executor: &mut E,
-        instruction: Instruction<F>,
-        expected_pc_change: usize,
-        expected_timestamp_change: usize,
-    ) {
-        let initial_state = ExecutionState {
-            pc: self.next_elem_size_usize::<F>(),
-            timestamp: self.next_elem_size_usize::<F>(),
-        };
-        let final_state = ExecutionState {
-            pc: initial_state.pc + expected_pc_change,
-            timestamp: initial_state.timestamp + expected_timestamp_change,
-        };
-        assert_eq!(executor.execute(&instruction, initial_state), final_state);
-        self.executions.push(Execution {
-            initial_state,
-            final_state,
-            instruction: InstructionCols::from_instruction(&instruction)
-                .map(|elem| elem.as_canonical_u64() as usize),
-        });
-    }*/
 }
 
 impl<SC: StarkGenericConfig> Chip<SC> for ExecutionTester<Val<SC>>

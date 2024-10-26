@@ -31,21 +31,6 @@ use crate::{
     },
 };
 
-/// The HintStoreAdapter handles memory writes and getting the intermediate memory pointer.
-/// This chip handles the HintStoreW instruction, so it doesn't constrain the data read from memory.
-
-/// Here 1 write represents the data that needs to be written to memory
-/// Getting the intermediate pointer is completely internal to the adapter
-/// and shouldn't be a part of the AdapterInterface
-type Rv32HintStoreAdapterInterface<T> = BasicAdapterInterface<
-    T,
-    MinimalInstruction<T>,
-    0,
-    1,
-    RV32_REGISTER_NUM_LIMBS,
-    RV32_REGISTER_NUM_LIMBS,
->;
-
 /// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
 /// It writes to the memory at the intermediate pointer.
 #[derive(Debug, Clone)]
@@ -123,7 +108,20 @@ impl<F: Field> BaseAir<F> for Rv32HintStoreAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
-    type Interface = Rv32HintStoreAdapterInterface<AB::Expr>;
+    /// The HintStoreAdapter handles memory writes and getting the intermediate memory pointer.
+    /// This chip handles the HintStoreW instruction, so it doesn't constrain the data read from memory.
+
+    /// Here 1 write represents the data that needs to be written to memory
+    /// Getting the intermediate pointer is completely internal to the adapter
+    /// and shouldn't be a part of the AdapterInterface
+    type Interface = BasicAdapterInterface<
+        AB::Expr,
+        MinimalInstruction<AB::Expr>,
+        0,
+        1,
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_REGISTER_NUM_LIMBS,
+    >;
 
     fn eval(
         &self,
@@ -224,7 +222,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
     type ReadRecord = Rv32HintStoreReadRecord<F>;
     type WriteRecord = Rv32HintStoreWriteRecord<F>;
     type Air = Rv32HintStoreAdapterAir;
-    type Interface = Rv32HintStoreAdapterInterface<F>;
+    type Interface = BasicAdapterInterface<
+        F,
+        MinimalInstruction<F>,
+        0,
+        1,
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_REGISTER_NUM_LIMBS,
+    >;
 
     #[allow(clippy::type_complexity)]
     fn preprocess(

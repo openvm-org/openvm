@@ -11,11 +11,12 @@ use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{JumpUiProcessedInstruction, RV32_REGISTER_NUM_LIMBS};
+use super::RV32_REGISTER_NUM_LIMBS;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
@@ -88,7 +89,7 @@ impl<F: Field> BaseAir<F> for Rv32JalrAdapterAir {
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
-        JumpUiProcessedInstruction<AB::Expr>,
+        ImmInstruction<AB::Expr>,
         1,
         1,
         RV32_REGISTER_NUM_LIMBS,
@@ -172,7 +173,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
     type Air = Rv32JalrAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
-        JumpUiProcessedInstruction<F>,
+        ImmInstruction<F>,
         1,
         1,
         RV32_REGISTER_NUM_LIMBS,

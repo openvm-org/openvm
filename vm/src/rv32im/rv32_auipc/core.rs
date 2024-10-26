@@ -17,10 +17,10 @@ use crate::{
             Rv32AuipcOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip,
     },
-    rv32im::adapters::{JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
 };
 
 const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
@@ -60,7 +60,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 0]; 0]>,
     I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1]>,
-    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -123,7 +123,7 @@ where
             to_pc: None,
             reads: [].into(),
             writes: [rd_data.map(|x| x.into())].into(),
-            instruction: JumpUiProcessedInstruction {
+            instruction: ImmInstruction {
                 is_valid: is_valid.into(),
                 opcode: expected_opcode.into(),
                 immediate: imm,

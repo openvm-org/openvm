@@ -19,8 +19,9 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
         VmCoreChip,
     },
-    rv32im::adapters::LoadStoreProcessedInstruction,
+    rv32im::adapters::LoadStoreInstruction,
 };
+
 /// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
 /// This chip uses read_data and prev_data to get the write_data
 #[repr(C)]
@@ -64,7 +65,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Var; NUM_CELLS]; 2]>,
     I::Writes: From<[[AB::Expr; NUM_CELLS]; 1]>,
-    I::ProcessedInstruction: From<LoadStoreProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<LoadStoreInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -125,7 +126,7 @@ where
             to_pc: None,
             reads: [prev_data, read_data].into(),
             writes: [write_data].into(),
-            instruction: LoadStoreProcessedInstruction {
+            instruction: LoadStoreInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 is_load,

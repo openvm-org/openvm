@@ -1,6 +1,5 @@
 use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
-use afs_derive::AlignedBorrow;
 use afs_primitives::utils::next_power_of_two_or_zero;
 use afs_stark_backend::{
     air_builders::{
@@ -17,8 +16,9 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
-use super::{ExecutionState, InstructionExecutor, Result};
+use super::{ExecutionState, InstructionExecutor, MinimalInstruction, Result};
 use crate::system::memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef};
+
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
     /// The memory read data that should be exposed for downstream use
@@ -26,8 +26,9 @@ pub trait VmAdapterInterface<T> {
     /// The memory write data that are expected to be provided by the integrator
     type Writes;
     /// The parts of the instruction that should be exposed to the integrator.
-    /// May include the `to_pc`.
-    /// Typically this should not include address spaces.
+    /// This will typically include `is_valid`, which indicates whether the trace row
+    /// is being used and `opcode` to indicate which opcode is being executed if the
+    /// VmChip supports multiple opcodes.
     type ProcessedInstruction;
 }
 
@@ -46,8 +47,8 @@ pub trait VmAdapterChip<F> {
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
     /// This is called at the start of instruction execution.
     ///
-    /// The implementor may choose to store data in this struct, for example in an [Option], which will later be taken
-    /// when `postprocess` is called.
+    /// The implementor may choose to store data in the `Self::ReadRecord` struct, for example in
+    /// an [Option], which will later be sent to the `postprocess` method.
     #[allow(clippy::type_complexity)]
     fn preprocess(
         &mut self,
@@ -58,8 +59,8 @@ pub trait VmAdapterChip<F> {
         Self::ReadRecord,
     )>;
 
-    /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)` of the full
-    /// adapter record for this instruction. This **must** be called after `preprocess`.
+    /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)`
+    /// of the full adapter record for this instruction. This is guaranteed to be called after `preprocess`.
     fn postprocess(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -69,8 +70,10 @@ pub trait VmAdapterChip<F> {
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)>;
 
-    /// Should mutate `row_slice` to populate with values corresponding to `record`.
+    /// Populates `row_slice` with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
+    /// This function will be called for each row in the trace which is being used, and all other
+    /// rows in the trace will be filled with zeroes.   
     fn generate_trace_row(
         &self,
         row_slice: &mut [F],
@@ -117,8 +120,10 @@ pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
 
     fn get_opcode_name(&self, opcode: usize) -> String;
 
-    /// Should mutate `row_slice` to populate with values corresponding to `record`.
+    /// Populates `row_slice` with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
+    /// This function will be called for each row in the trace which is being used, and all other
+    /// rows in the trace will be filled with zeroes.
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record);
 
     /// Returns a list of public values to publish.
@@ -363,14 +368,6 @@ where
             .eval(builder, local_core, self.adapter.get_from_pc(local_adapter));
         self.adapter.eval(builder, local_adapter, ctx);
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBorrow)]
-pub struct MinimalInstruction<T> {
-    pub is_valid: T,
-    /// Absolute opcode number
-    pub opcode: T,
 }
 
 /// The most common adapter interface.
@@ -779,22 +776,6 @@ mod conversions {
             );
             let mut it = v.0.into_iter();
             from_fn(|_| from_fn(|_| from_fn(|_| it.next().unwrap())))
-        }
-    }
-
-    impl<T> From<MinimalInstruction<T>> for DynArray<T> {
-        fn from(m: MinimalInstruction<T>) -> Self {
-            Self(vec![m.is_valid, m.opcode])
-        }
-    }
-
-    impl<T> From<DynArray<T>> for MinimalInstruction<T> {
-        fn from(m: DynArray<T>) -> Self {
-            let mut m = m.0.into_iter();
-            MinimalInstruction {
-                is_valid: m.next().unwrap(),
-                opcode: m.next().unwrap(),
-            }
         }
     }
 

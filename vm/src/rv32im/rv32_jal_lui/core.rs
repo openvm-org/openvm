@@ -17,12 +17,10 @@ use crate::{
             Rv32JalLuiOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip,
     },
-    rv32im::adapters::{
-        JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
-    },
+    rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS},
 };
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -55,7 +53,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 0]; 0]>,
     I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1]>,
-    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -122,7 +120,7 @@ where
             to_pc: Some(to_pc),
             reads: [].into(),
             writes: [rd.map(|x| x.into())].into(),
-            instruction: JumpUiProcessedInstruction {
+            instruction: ImmInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 immediate: imm.into(),
