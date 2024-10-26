@@ -24,7 +24,7 @@ use crate::{
     },
     rv32im::{
         adapters::{Rv32RdWriteAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-        rv32_auipc::run_auipc,
+        auipc::run_auipc,
     },
     system::vm::chip_set::BYTE_XOR_BUS,
 };

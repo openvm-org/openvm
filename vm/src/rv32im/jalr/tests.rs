@@ -25,7 +25,7 @@ use crate::{
     },
     rv32im::{
         adapters::{compose, Rv32JalrAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-        rv32_jalr::{run_jalr, Rv32JalrCoreCols},
+        jalr::{run_jalr, Rv32JalrCoreCols},
     },
     system::vm::chip_set::BYTE_XOR_BUS,
 };

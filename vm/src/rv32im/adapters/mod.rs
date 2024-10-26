@@ -1,20 +1,20 @@
-mod rv32_alu;
-mod rv32_branch;
-mod rv32_hintstore;
-mod rv32_jalr;
-mod rv32_loadstore;
-mod rv32_mul;
-mod rv32_rdwrite;
-mod rv32_vec_heap;
+mod alu;
+mod branch;
+mod hintstore;
+mod jalr;
+mod loadstore;
+mod mul;
+mod rdwrite;
+mod vec_heap;
 
-pub use rv32_alu::*;
-pub use rv32_branch::*;
-pub use rv32_hintstore::*;
-pub use rv32_jalr::*;
-pub use rv32_loadstore::*;
-pub use rv32_mul::*;
-pub use rv32_rdwrite::*;
-pub use rv32_vec_heap::*;
+pub use alu::*;
+pub use branch::*;
+pub use hintstore::*;
+pub use jalr::*;
+pub use loadstore::*;
+pub use mul::*;
+pub use rdwrite::*;
+pub use vec_heap::*;
 
 /// 32-bit register stored as 4 bytes (4 limbs of 8-bits)
 pub const RV32_REGISTER_NUM_LIMBS: usize = 4;

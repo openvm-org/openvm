@@ -24,7 +24,7 @@ use crate::{
             Rv32CondRdWriteAdapterChip, Rv32CondRdWriteAdapterCols, RV32_CELL_BITS,
             RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
         },
-        rv32_jal_lui::Rv32JalLuiCoreCols,
+        jal_lui::Rv32JalLuiCoreCols,
     },
     system::vm::chip_set::BYTE_XOR_BUS,
 };
