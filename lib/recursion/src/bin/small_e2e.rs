@@ -67,7 +67,7 @@ where
 {
     let fib_program = bench_program();
 
-    let vm_config = VmConfig::default_with_no_executors()
+    let vm_config = VmConfig::default()
         .add_executor(ExecutorName::BranchEqual)
         .add_executor(ExecutorName::Jal)
         .add_executor(ExecutorName::LoadStore)
