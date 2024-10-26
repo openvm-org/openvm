@@ -6,6 +6,7 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::utils::not;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
@@ -17,7 +18,6 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::JumpUiProcessedInstruction,
-    system::program::Instruction,
 };
 
 #[repr(C)]
@@ -39,7 +39,7 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
 #[derive(Copy, Clone, Debug)]
 pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
     offset: usize,
-    pc_step: usize,
+    pc_step: u32,
 }
 
 impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualCoreAir<NUM_LIMBS> {
@@ -108,7 +108,7 @@ where
 
         let to_pc = from_pc
             + cols.cmp_result * cols.imm
-            + not(cols.cmp_result) * AB::Expr::from_canonical_usize(self.pc_step);
+            + not(cols.cmp_result) * AB::Expr::from_canonical_u32(self.pc_step);
 
         AdapterAirContext {
             to_pc: Some(to_pc),
@@ -141,7 +141,7 @@ pub struct BranchEqualCoreChip<const NUM_LIMBS: usize> {
 }
 
 impl<const NUM_LIMBS: usize> BranchEqualCoreChip<NUM_LIMBS> {
-    pub fn new(offset: usize, pc_step: usize) -> Self {
+    pub fn new(offset: usize, pc_step: u32) -> Self {
         Self {
             air: BranchEqualCoreAir { offset, pc_step },
         }

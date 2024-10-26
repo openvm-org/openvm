@@ -1,26 +1,23 @@
-use axvm_instructions::NopOpcode;
+use axvm_instructions::{instruction::Instruction, CommonOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 
-use super::NopChip;
-use crate::{
-    arch::{instructions::UsizeOpcode, testing::VmChipTestBuilder, ExecutionState},
-    system::program::Instruction,
-};
-
+use super::PhantomChip;
+use crate::arch::{instructions::UsizeOpcode, testing::VmChipTestBuilder, ExecutionState};
 type F = BabyBear;
 
 #[test]
 fn test_nops_and_terminate() {
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = NopChip::<F>::new(
+    let mut chip = PhantomChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
-        NopOpcode::default_offset(),
+        Default::default(),
+        CommonOpcode::default_offset(),
     );
 
-    let nop = Instruction::from_isize(NopOpcode::NOP.with_default_offset(), 0, 0, 0, 0, 0);
+    let nop = Instruction::from_isize(CommonOpcode::PHANTOM.with_default_offset(), 0, 0, 0, 0, 0);
     let mut state: ExecutionState<F> = ExecutionState::new(F::zero(), F::one());
     let num_nops = 5;
     for _ in 0..num_nops {

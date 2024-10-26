@@ -8,12 +8,13 @@ use afs_stark_backend::{
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     },
 };
+use axvm_instructions::{program::Program, CommonOpcode, UsizeOpcode};
 use itertools::Itertools;
-use p3_field::PrimeField64;
+use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 
-use super::{Program, ProgramChip, ProgramExecutionCols};
+use super::{Instruction, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};
 
 /// A program with a committed cached trace.
 pub struct CommittedProgram<SC: StarkGenericConfig> {
@@ -21,18 +22,18 @@ pub struct CommittedProgram<SC: StarkGenericConfig> {
     pub program: Program<Val<SC>>,
 }
 
-impl<F: PrimeField64> Program<F> {
-    pub fn commit<SC: StarkGenericConfig>(&self, pcs: &SC::Pcs) -> CommittedProgram<SC>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        let cached_trace = generate_cached_trace(self);
+impl<SC: StarkGenericConfig> CommittedProgram<SC>
+where
+    Val<SC>: PrimeField64,
+{
+    pub fn commit(program: &Program<Val<SC>>, pcs: &SC::Pcs) -> CommittedProgram<SC> {
+        let cached_trace = generate_cached_trace(program);
         CommittedProgram {
             committed_trace_data: CommittedTraceData {
                 raw_data: Arc::new(cached_trace.clone()),
                 prover_data: TraceCommitter::new(pcs).commit(vec![cached_trace]),
             },
-            program: self.clone(),
+            program: program.clone(),
         }
     }
 }
@@ -74,16 +75,25 @@ impl<F: PrimeField64> ProgramChip<F> {
 
 fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatrix<F> {
     let width = ProgramExecutionCols::<F>::width();
-    let instructions = program
+    let mut instructions = program
         .instructions_and_debug_infos
         .iter()
         .sorted_by_key(|(pc, _)| *pc)
-        .map(|(pc, (instruction, _))| (pc, instruction))
+        .map(|(&pc, (instruction, _))| (pc, instruction))
         .collect::<Vec<_>>();
+
+    let padding = padding_instruction();
+    while !instructions.len().is_power_of_two() {
+        instructions.push((
+            program.pc_base + instructions.len() as u32 * program.step,
+            &padding,
+        ));
+    }
+
     let mut rows = vec![F::zero(); instructions.len() * width];
     rows.par_chunks_mut(width)
         .zip(instructions)
-        .for_each(|(row, (&pc, instruction))| {
+        .for_each(|(row, (pc, instruction))| {
             let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
             *row = ProgramExecutionCols {
                 pc: F::from_canonical_u32(pc),
@@ -99,4 +109,11 @@ fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatri
         });
 
     RowMajorMatrix::new(rows, width)
+}
+
+pub(super) fn padding_instruction<F: Field>() -> Instruction<F> {
+    Instruction::from_usize(
+        CommonOpcode::TERMINATE.with_default_offset(),
+        [0, 0, EXIT_CODE_FAIL],
+    )
 }

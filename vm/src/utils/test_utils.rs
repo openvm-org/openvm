@@ -1,5 +1,6 @@
 use std::array;
 
+use axvm_instructions::instruction::Instruction;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
 use p3_baby_bear::BabyBear;
@@ -9,7 +10,6 @@ use rand::{rngs::StdRng, Rng};
 use crate::{
     arch::testing::VmChipTestBuilder,
     rv32im::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS},
-    system::program::Instruction,
 };
 
 pub fn i32_to_f<F: PrimeField32>(val: i32) -> F {

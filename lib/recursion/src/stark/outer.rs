@@ -22,7 +22,7 @@ pub fn build_circuit_verify_operations(
     let pcs = TwoAdicFriPcsVariable {
         config: const_fri_config(&mut builder, fri_params),
     };
-    StarkVerifier::verify::<MultiField32ChallengerVariable<_>>(&mut builder, &pcs, advice, &input);
+    StarkVerifier::verify::<MultiField32ChallengerVariable<_>>(&mut builder, &pcs, &advice, &input);
 
     builder.cycle_tracker_end("VerifierProgram");
     builder.operations

@@ -1,15 +1,11 @@
-use std::fmt::{self, Display};
-
+use axvm_instructions::program::Program;
 use p3_baby_bear::BabyBear;
 #[cfg(feature = "sdk")]
 pub use sdk::*;
 
 use crate::{
     arch::ExecutorName,
-    system::{
-        program::{Instruction, Program},
-        vm::{config::VmConfig, VirtualMachine},
-    },
+    system::vm::{config::VmConfig, VirtualMachine},
 };
 
 pub fn execute_program_with_config(
@@ -28,6 +24,13 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
             max_segment_len: (1 << 25) - 100,
             ..Default::default()
         }
+        .add_executor(ExecutorName::Phantom)
+        .add_executor(ExecutorName::LoadStore)
+        .add_executor(ExecutorName::BranchEqual)
+        .add_executor(ExecutorName::Jal)
+        .add_executor(ExecutorName::FieldArithmetic)
+        .add_executor(ExecutorName::FieldExtension)
+        .add_executor(ExecutorName::Poseidon2)
         .add_executor(ExecutorName::ArithmeticLogicUnit256)
         .add_canonical_modulus()
         .add_executor(ExecutorName::Secp256k1AddUnequal)
@@ -35,50 +38,6 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
     )
     .with_input_stream(input_stream);
     vm.execute(program).unwrap();
-}
-
-impl<F: Copy + Display> Display for Program<F> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for instruction in self.instructions().iter() {
-            let Instruction {
-                opcode,
-                a,
-                b,
-                c,
-                d,
-                e,
-                f,
-                g,
-                debug,
-            } = instruction;
-            write!(
-                formatter,
-                "{:?} {} {} {} {} {} {} {} {}",
-                opcode, a, b, c, d, e, f, g, debug,
-            )?;
-        }
-        Ok(())
-    }
-}
-
-pub fn display_program_with_pc<F: Copy + Display>(program: &Program<F>) {
-    for (pc, instruction) in program.instructions().iter().enumerate() {
-        let Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            f,
-            g,
-            debug,
-        } = instruction;
-        println!(
-            "{} | {:?} {} {} {} {} {} {} {} {}",
-            pc, opcode, a, b, c, d, e, f, g, debug
-        );
-    }
 }
 
 #[cfg(feature = "sdk")]
@@ -90,12 +49,10 @@ mod sdk {
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
+    use axvm_instructions::program::Program;
     use p3_field::PrimeField32;
 
-    use crate::{
-        sdk::gen_vm_program_test_proof_input,
-        system::{program::Program, vm::config::VmConfig},
-    };
+    use crate::{sdk::gen_vm_program_test_proof_input, system::vm::config::VmConfig};
 
     type ExecuteAndProveResult<SC> =
         Result<(VerificationDataWithFriParams<SC>, Vec<Vec<Val<SC>>>), VerificationError>;

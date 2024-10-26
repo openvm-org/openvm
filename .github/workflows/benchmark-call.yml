@@ -28,7 +28,7 @@ on:
         type: string
         required: false
         description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
-        default: 64cpu-linux-arm64	
+        default: 64cpu-linux-arm64
 
 env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
@@ -40,7 +40,8 @@ env:
 jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
-    runs-on: [runs-on,"runner=${{ inputs.instance_type }}",image=arm64-rust-dev-32gb]
+    runs-on:
+      [runs-on, "runner=${{ inputs.instance_type }}", image=arm64-rust-dev-32gb]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -141,7 +142,7 @@ jobs:
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
             for file in .bench_metrics/flamegraphs/*.svg; do
               filename=$(basename "$file")
-              flamegraph_url=https://axiom-public-data-staging-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
+              flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
               echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
             done
           fi
@@ -198,7 +199,7 @@ jobs:
           if [[ -f $METRIC_PATH ]]; then
             s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${{ inputs.benchmark_name }}.json"
           fi
-    
+
       - uses: actions/checkout@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
@@ -217,4 +218,3 @@ jobs:
           git add benchmarks/${{ inputs.benchmark_name }}.md
           git commit --allow-empty -m "Update benchmark result for ${{ inputs.benchmark_name }}"
           git push
-

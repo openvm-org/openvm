@@ -3,6 +3,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use afs_primitives::xor::XorLookupChip;
 use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};
+use axvm_instructions::instruction::Instruction;
 use num_traits::WrappingSub;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -28,10 +29,7 @@ use crate::{
         adapters::{compose, Rv32HintStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         rv32_hintstore::Rv32HintStoreCoreCols,
     },
-    system::{
-        program::Instruction,
-        vm::{chip_set::BYTE_XOR_BUS, Streams},
-    },
+    system::vm::{chip_set::BYTE_XOR_BUS, Streams},
     utils::{u32_into_limbs, u32_sign_extend},
 };
 

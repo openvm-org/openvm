@@ -1,9 +1,12 @@
 use afs_compiler::{asm::AsmBuilder, prelude::*};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::system::{
-    program::util::execute_program,
-    vm::{config::VmConfig, SingleSegmentVM},
+use stark_vm::{
+    arch::ExecutorName,
+    system::{
+        program::util::execute_program,
+        vm::{config::VmConfig, SingleSegmentVM},
+    },
 };
 
 type F = BabyBear;
@@ -30,10 +33,16 @@ fn test_compiler_public_values() {
     }
 
     let program = builder.compile_isa();
-    let vm = SingleSegmentVM::new(VmConfig {
-        num_public_values: 2,
-        ..Default::default()
-    });
+    let vm = SingleSegmentVM::new(
+        VmConfig {
+            num_public_values: 2,
+            ..Default::default()
+        }
+        .add_executor(ExecutorName::LoadStore)
+        .add_executor(ExecutorName::Jal)
+        .add_executor(ExecutorName::FieldArithmetic)
+        .add_executor(ExecutorName::BranchEqual),
+    );
     let pvs = vm.execute(program, vec![]).unwrap();
     assert_eq!(
         pvs.into_iter().flatten().collect::<Vec<_>>(),

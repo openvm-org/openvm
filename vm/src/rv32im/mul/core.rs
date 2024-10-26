@@ -7,16 +7,14 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use crate::{
-    arch::{
-        instructions::{MulOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
-    },
-    system::program::Instruction,
+use crate::arch::{
+    instructions::{MulOpcode, UsizeOpcode},
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]

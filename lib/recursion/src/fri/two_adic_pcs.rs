@@ -316,7 +316,7 @@ pub mod tests {
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
-    use stark_vm::system::program::Program;
+    use stark_vm::arch::instructions::program::Program;
 
     use crate::{
         challenger::{duplex::DuplexChallengerVariable, CanObserveDigest, FeltChallenger},

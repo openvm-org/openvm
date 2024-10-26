@@ -6,6 +6,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -21,10 +22,9 @@ use crate::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
         },
-        program::{Instruction, ProgramBus},
+        program::ProgramBus,
     },
 };
-
 #[derive(Clone, Debug)]
 pub struct JalNativeAdapterChip<F: Field> {
     pub air: JalNativeAdapterAir,
@@ -108,7 +108,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalNativeAdapterAir {
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
@@ -149,7 +149,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for JalNativeAdapterChip<F> {
 
         Ok((
             ExecutionState {
-                pc: output.to_pc.unwrap_or(from_state.pc + 1),
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord {

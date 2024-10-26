@@ -6,7 +6,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_instructions::NativeLoadStoreOpcode;
+use axvm_instructions::{instruction::Instruction, NativeLoadStoreOpcode};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 use parking_lot::Mutex;
@@ -18,12 +18,8 @@ use crate::{
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     kernels::adapters::loadstore_native_adapter::NativeLoadStoreProcessedInstruction,
-    system::{
-        program::{ExecutionError, Instruction},
-        vm::Streams,
-    },
+    system::{program::ExecutionError, vm::Streams},
 };
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct KernelLoadStoreCoreCols<T, const NUM_CELLS: usize> {

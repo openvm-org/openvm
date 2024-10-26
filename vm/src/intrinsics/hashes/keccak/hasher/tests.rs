@@ -9,6 +9,7 @@ use ax_sdk::{
     },
     utils::create_seeded_rng,
 };
+use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_keccak_air::NUM_ROUNDS;
@@ -23,7 +24,7 @@ use crate::{
         testing::{VmChipTestBuilder, VmChipTester},
     },
     intrinsics::hashes::keccak::hasher::columns::KeccakVmCols,
-    system::{program::Instruction, vm::chip_set::BYTE_XOR_BUS},
+    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {

@@ -10,6 +10,7 @@ Cargo.lock
 .DS_Store
 **/root
 **/leaf
+!axiom-vm/src/verifier/leaf
 **/internal
 
 .cache/

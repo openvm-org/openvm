@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
-use axvm_instructions::{riscv::RvIntrinsic, EccOpcode, Rv32ModularArithmeticOpcode};
+use axvm_instructions::{
+    instruction::Instruction, riscv::RvIntrinsic, EccOpcode, Rv32ModularArithmeticOpcode,
+};
 use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
@@ -13,7 +15,6 @@ use stark_vm::{
         Rv32LoadStoreOpcode, ShiftOpcode, UsizeOpcode,
     },
     rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
-    system::program::Instruction,
 };
 use strum::EnumCount;
 

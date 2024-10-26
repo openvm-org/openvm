@@ -11,17 +11,14 @@ use afs_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
+use axvm_instructions::instruction::Instruction;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result};
-use crate::system::{
-    memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef},
-    program::Instruction,
-};
-
+use crate::system::memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef};
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
     /// The memory read data that should be exposed for downstream use

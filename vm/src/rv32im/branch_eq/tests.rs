@@ -4,6 +4,7 @@ use afs_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
 use ax_sdk::utils::create_seeded_rng;
+use axvm_instructions::{instruction::Instruction, program::PC_BITS};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -28,7 +29,6 @@ use crate::{
         JumpUiProcessedInstruction, Rv32BranchAdapterChip, RV32_REGISTER_NUM_LIMBS,
         RV_B_TYPE_IMM_BITS,
     },
-    system::{program::Instruction, PC_BITS},
 };
 
 type F = BabyBear;

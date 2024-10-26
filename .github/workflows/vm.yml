@@ -2,13 +2,14 @@ name: VM STARK and Compiler Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
     paths:
       - "stark-backend/**"
       - "circuits/primitives/**"
       - "vm/**"
+      - "axiom-vm/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -34,5 +35,10 @@ jobs:
 
       - name: Run vm crate tests
         working-directory: vm
+        run: |
+          cargo nextest run --cargo-profile=fast --features parallel
+
+      - name: Run axiom-vm crate tests
+        working-directory: axiom-vm
         run: |
           cargo nextest run --cargo-profile=fast --features parallel

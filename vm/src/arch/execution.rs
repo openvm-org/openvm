@@ -2,9 +2,10 @@ use std::{array::from_fn, mem::size_of};
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_field::{AbstractField, Field};
 
-use crate::system::program::{ExecutionError, Instruction, ProgramBus};
+use crate::system::program::{ExecutionError, ProgramBus};
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
 
@@ -195,7 +196,7 @@ impl ExecutionBridge {
         timestamp_change: impl Into<AB::Expr>,
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
-            pc: from_state.pc.clone().into() + AB::Expr::one(),
+            pc: from_state.pc.clone().into() + AB::Expr::from_canonical_u32(DEFAULT_PC_STEP),
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)

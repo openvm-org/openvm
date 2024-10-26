@@ -7,6 +7,7 @@ use std::{
 use afs_derive::AlignedBorrow;
 use afs_primitives::xor::{XorBus, XorLookupChip};
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -20,7 +21,6 @@ use crate::{
         VmCoreChip,
     },
     rv32im::adapters::{JumpUiProcessedInstruction, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    system::program::Instruction,
 };
 
 const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;

@@ -6,21 +6,19 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use crate::{
-    arch::{
-        instructions::{
-            FieldExtensionOpcode,
-            FieldExtensionOpcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
-            UsizeOpcode,
-        },
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
+use crate::arch::{
+    instructions::{
+        FieldExtensionOpcode,
+        FieldExtensionOpcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
+        UsizeOpcode,
     },
-    system::program::Instruction,
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 pub const BETA: usize = 11;
