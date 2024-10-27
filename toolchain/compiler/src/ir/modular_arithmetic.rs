@@ -1,4 +1,4 @@
-use afs_primitives::bigint::utils::big_uint_to_num_limbs;
+use ax_circuit_primitives::bigint::utils::big_uint_to_num_limbs;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_field::{AbstractField, PrimeField64};

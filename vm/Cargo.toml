@@ -15,7 +15,7 @@ p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 
 poseidon2-air = { workspace = true }
-afs-primitives = { workspace = true }
+ax-circuit-primitives = { workspace = true }
 ax-stark-backend = { workspace = true }
 afs-derive = { workspace = true }
 ax-sdk = { workspace = true, optional = true }

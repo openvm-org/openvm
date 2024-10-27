@@ -14,7 +14,7 @@ p3-poseidon2 = { workspace = true }
 p3-util = { workspace = true }
 zkhash = { workspace = true }
 
-afs-primitives = { workspace = true }
+ax-circuit-primitives = { workspace = true }
 ax-stark-backend = { workspace = true }
 ax-sdk = { workspace = true }
 

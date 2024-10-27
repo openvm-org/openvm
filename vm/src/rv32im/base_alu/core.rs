@@ -5,7 +5,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::{
+use ax_circuit_primitives::{
     utils::not,
     xor::{XorBus, XorLookupChip},
 };

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 
-use afs_primitives::{
+use ax_circuit_primitives::{
     bigint::{
         check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
         check_carry_to_zero::get_carry_max_abs_and_bits,

@@ -4,7 +4,12 @@ use afs_compiler::ir::{
     unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
     DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
 };
-use afs_primitives::bigint::utils::big_uint_to_num_limbs;
+use ax_circuit_primitives::bigint::utils::big_uint_to_num_limbs;
+use ax_ecc_lib::types::{
+    ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
+    ECPointVariable,
+};
+use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use ax_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
@@ -12,11 +17,6 @@ use ax_stark_backend::{
         types::{AirProofData, Commitments, Proof},
     },
 };
-use ax_ecc_lib::types::{
-    ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
-    ECPointVariable,
-};
-use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};

@@ -1,6 +1,6 @@
 use std::{array, borrow::Borrow};
 
-use afs_primitives::{utils, xor::XorBus};
+use ax_circuit_primitives::{utils, xor::XorBus};
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

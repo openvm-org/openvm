@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_derive::{Chip, ChipUsageGetter};
-use afs_primitives::{
+use ax_circuit_primitives::{
     range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip, xor::XorLookupChip,
 };
 use axvm_instructions::instruction::Instruction;

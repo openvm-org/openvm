@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
-use afs_primitives::utils::next_power_of_two_or_zero;
+use ax_circuit_primitives::utils::next_power_of_two_or_zero;
 use ax_stark_backend::{
     air_builders::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
@@ -73,7 +73,7 @@ pub trait VmAdapterChip<F> {
     /// Populates `row_slice` with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
     /// This function will be called for each row in the trace which is being used, and all other
-    /// rows in the trace will be filled with zeroes.   
+    /// rows in the trace will be filled with zeroes.
     fn generate_trace_row(
         &self,
         row_slice: &mut [F],

@@ -1,12 +1,12 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::{
+use ax_circuit_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
-use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldExprCols, FieldVariable};
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::{instruction::Instruction, Rv32ModularArithmeticOpcode};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;

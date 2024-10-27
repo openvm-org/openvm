@@ -6,7 +6,7 @@ use afs_compiler::{
     conversion::CompilerOptions,
     ir::{Array, Builder, Config, Var, LIMB_BITS, NUM_LIMBS},
 };
-use afs_primitives::bigint::utils::{big_uint_to_num_limbs, secp256k1_coord_prime};
+use ax_circuit_primitives::bigint::utils::{big_uint_to_num_limbs, secp256k1_coord_prime};
 use itertools::Itertools;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use num_traits::{abs, signum, FromPrimitive};

@@ -1,4 +1,4 @@
-use afs_primitives::bigint::utils::{
+use ax_circuit_primitives::bigint::utils::{
     big_uint_mod_inverse, secp256k1_coord_prime, secp256k1_scalar_prime,
 };
 use ax_sdk::utils::create_seeded_rng;

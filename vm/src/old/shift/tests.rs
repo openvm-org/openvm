@@ -1,6 +1,6 @@
 use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
-use afs_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::xor::XorLookupChip;
 use ax_sdk::utils::create_seeded_rng;
 use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use axvm_instructions::instruction::Instruction;

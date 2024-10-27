@@ -34,7 +34,7 @@ version = "0.1.0"
 dependencies = [
  "afs-compiler",
  "afs-derive",
- "afs-primitives",
+ "ax-circuit-primitives",
  "ax-sdk",
  "axvm-instructions",
  "backtrace",
@@ -75,46 +75,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "afs-primitives"
-version = "0.1.0"
-dependencies = [
- "afs-derive",
- "ax-sdk",
- "ax-stark-backend",
- "derive-new",
- "itertools 0.13.0",
- "lazy_static",
- "num-bigint-dig",
- "num-integer",
- "num-traits",
- "p3-air",
- "p3-baby-bear",
- "p3-challenger",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "parking_lot",
- "rand 0.8.5",
- "test-case",
- "tracing",
-]
-
-[[package]]
 name = "afs-recursion"
 version = "0.1.0"
 dependencies = [
  "afs-compiler",
  "afs-derive",
- "afs-primitives",
+ "ax-circuit-primitives",
  "ax-ecc-lib",
  "ax-sdk",
  "ax-stark-backend",
@@ -435,6 +401,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
+name = "ax-circuit-primitives"
+version = "0.1.0"
+dependencies = [
+ "afs-derive",
+ "ax-sdk",
+ "ax-stark-backend",
+ "derive-new",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint-dig",
+ "num-integer",
+ "num-traits",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-challenger",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-goldilocks",
+ "p3-keccak",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "parking_lot",
+ "rand 0.8.5",
+ "test-case",
+ "tracing",
+]
+
+[[package]]
 name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
@@ -453,7 +453,7 @@ name = "ax-ecc-lib"
 version = "0.1.0"
 dependencies = [
  "afs-compiler",
- "afs-primitives",
+ "ax-circuit-primitives",
  "ax-sdk",
  "ax-stark-backend",
  "elliptic-curve",
@@ -492,7 +492,7 @@ dependencies = [
 name = "ax-ecc-primitives"
 version = "0.1.0"
 dependencies = [
- "afs-primitives",
+ "ax-circuit-primitives",
  "ax-sdk",
  "ax-stark-backend",
  "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git)",
@@ -2817,8 +2817,8 @@ dependencies = [
 name = "poseidon2-air"
 version = "0.1.0"
 dependencies = [
- "afs-primitives",
  "ark-ff 0.4.2",
+ "ax-circuit-primitives",
  "ax-sdk",
  "ax-stark-backend",
  "itertools 0.13.0",
@@ -3644,8 +3644,8 @@ name = "stark-vm"
 version = "0.1.0"
 dependencies = [
  "afs-derive",
- "afs-primitives",
  "ark-ff 0.4.2",
+ "ax-circuit-primitives",
  "ax-ecc-primitives",
  "ax-sdk",
  "ax-stark-backend",

@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-use afs_primitives::{
+use ax_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::XorLookupChip,

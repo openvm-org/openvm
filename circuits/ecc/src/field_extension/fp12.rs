@@ -220,7 +220,7 @@ impl Fp12 {
 
 #[cfg(test)]
 mod tests {
-    use afs_primitives::TraceSubRowGenerator;
+    use ax_circuit_primitives::TraceSubRowGenerator;
     use ax_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,

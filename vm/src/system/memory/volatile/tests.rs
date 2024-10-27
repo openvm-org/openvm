@@ -1,6 +1,6 @@
 use std::{collections::HashSet, iter, sync::Arc};
 
-use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,

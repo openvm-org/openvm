@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::utils::next_power_of_two_or_zero;
+use ax_circuit_primitives::utils::next_power_of_two_or_zero;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     prover::types::AirProofInput,

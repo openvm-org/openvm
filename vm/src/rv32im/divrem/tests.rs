@@ -1,6 +1,6 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::{
+use ax_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     xor::XorLookupChip,
 };

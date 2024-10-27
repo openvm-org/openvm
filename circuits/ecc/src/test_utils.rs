@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, str::FromStr, sync::Arc};
 
-use afs_primitives::{
+use ax_circuit_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };

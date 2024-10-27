@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, cmp::max};
 
-use afs_primitives::{utils::next_power_of_two_or_zero, TraceSubRowGenerator};
+use ax_circuit_primitives::{utils::next_power_of_two_or_zero, TraceSubRowGenerator};
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;

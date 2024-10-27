@@ -1,5 +1,5 @@
 [package]
-name = "afs-primitives"
+name = "ax-circuit-primitives"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

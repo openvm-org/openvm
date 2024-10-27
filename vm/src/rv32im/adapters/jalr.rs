@@ -5,7 +5,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::utils::not;
+use ax_circuit_primitives::utils::not;
 use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};

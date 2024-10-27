@@ -2,7 +2,7 @@ use afs_compiler::{
     ir::{Array, BigUintVar, Builder, Config, MemIndex, MemVariable, Ptr, RVar, Var, Variable},
     prelude::DslVariable,
 };
-use afs_primitives::bigint::utils::big_uint_to_num_limbs;
+use ax_circuit_primitives::bigint::utils::big_uint_to_num_limbs;
 use k256::{
     ecdsa::{Signature, VerifyingKey},
     sha2::digest::generic_array::GenericArray,

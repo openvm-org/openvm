@@ -8,16 +8,16 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    utils::create_seeded_rng,
+};
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
-};
-use ax_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    utils::create_seeded_rng,
 };
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};

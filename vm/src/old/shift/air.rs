@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, iter::zip};
 
-use afs_primitives::{utils, var_range::VariableRangeCheckerBus, xor::XorBus};
+use ax_circuit_primitives::{utils, var_range::VariableRangeCheckerBus, xor::XorBus};
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

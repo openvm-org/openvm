@@ -5,7 +5,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::{
+use ax_circuit_primitives::{
     bigint::utils::big_uint_to_num_limbs,
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     utils::{not, select},

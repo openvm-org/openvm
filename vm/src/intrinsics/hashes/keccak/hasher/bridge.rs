@@ -1,6 +1,6 @@
 use std::array::from_fn;
 
-use afs_primitives::utils::{not, select};
+use ax_circuit_primitives::utils::{not, select};
 use ax_stark_backend::interaction::InteractionBuilder;
 use itertools::{izip, Itertools};
 use p3_air::AirBuilder;

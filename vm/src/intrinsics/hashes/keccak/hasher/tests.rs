@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::xor::XorLookupChip;
 use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_sdk::{config::baby_bear_blake3::BabyBearBlake3Config, utils::create_seeded_rng};
 use axvm_instructions::instruction::Instruction;

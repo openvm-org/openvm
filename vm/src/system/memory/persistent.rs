@@ -5,7 +5,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_primitives::utils::next_power_of_two_or_zero;
+use ax_circuit_primitives::utils::next_power_of_two_or_zero;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

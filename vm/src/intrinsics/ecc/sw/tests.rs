@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use afs_primitives::bigint::utils::secp256k1_coord_prime;
+use ax_circuit_primitives::bigint::utils::secp256k1_coord_prime;
 use axvm_instructions::UsizeOpcode;
 use num_bigint_dig::BigUint;
 use num_traits::FromPrimitive;

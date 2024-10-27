@@ -10,7 +10,7 @@ ax-sdk = { workspace = true }
 afs-derive = { workspace = true }
 stark-vm = { workspace = true, features = ["sdk"] }
 ax-ecc-lib = { workspace = true }
-afs-primitives = { workspace = true }
+ax-circuit-primitives = { workspace = true }
 
 p3-air = { workspace = true }
 p3-field = { workspace = true }
@@ -45,7 +45,7 @@ metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 
 [dev-dependencies]
-afs-primitives.workspace = true
+ax-circuit-primitives.workspace = true
 
 [[bin]]
 name = "verify_fibair"

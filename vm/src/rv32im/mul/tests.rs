@@ -1,10 +1,10 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
+use ax_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
+use ax_sdk::utils::create_seeded_rng;
 use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
 use axvm_instructions::{instruction::Instruction, MulOpcode};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
