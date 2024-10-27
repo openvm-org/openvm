@@ -5,7 +5,7 @@ use p3_air::BaseAir;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::system::{memory::tree::HasherChip, vm::chip_set::POSEIDON2_DIRECT_BUS};
+use crate::{arch::POSEIDON2_DIRECT_BUS, system::memory::tree::HasherChip};
 
 pub fn test_hash_sum<const CHUNK: usize, F: Field>(
     left: [F; CHUNK],

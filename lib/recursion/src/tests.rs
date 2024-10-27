@@ -19,7 +19,7 @@ use ax_sdk::{
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
-use stark_vm::{sdk::gen_vm_program_test_proof_input, system::vm::config::VmConfig};
+use stark_vm::{arch::VmConfig, sdk::gen_vm_program_test_proof_input};
 
 use crate::{
     hints::Hintable, stark::VerifierProgram, testing_utils::inner::run_recursive_test,

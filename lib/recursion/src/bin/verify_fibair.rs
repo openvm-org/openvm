@@ -14,7 +14,7 @@ use ax_sdk::{
     dummy_airs::fib_air::chip::FibonacciChip,
     engine::StarkFriEngine,
 };
-use stark_vm::system::vm::config::VmConfig;
+use stark_vm::arch::VmConfig;
 
 fn main() {
     run_with_metric_collection("OUTPUT_PATH", || {

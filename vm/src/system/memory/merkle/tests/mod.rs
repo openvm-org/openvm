@@ -15,8 +15,9 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use crate::system::{
-    memory::{
+use crate::{
+    arch::MEMORY_MERKLE_BUS,
+    system::memory::{
         merkle::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
             MemoryMerkleBus, MemoryMerkleChip,
@@ -24,7 +25,6 @@ use crate::system::{
         tree::MemoryNode,
         Equipartition,
     },
-    vm::chip_set::MEMORY_MERKLE_BUS,
 };
 
 mod util;

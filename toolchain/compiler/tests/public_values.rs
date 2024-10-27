@@ -2,11 +2,8 @@ use afs_compiler::{asm::AsmBuilder, prelude::*};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
-    arch::ExecutorName,
-    system::{
-        program::util::execute_program,
-        vm::{config::VmConfig, SingleSegmentVM},
-    },
+    arch::{ExecutorName, SingleSegmentVM, VmConfig},
+    system::program::util::execute_program,
 };
 
 type F = BabyBear;

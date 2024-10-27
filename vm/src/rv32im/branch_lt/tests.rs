@@ -24,7 +24,7 @@ use crate::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
         BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
-        VmChipWrapper, VmCoreChip,
+        VmChipWrapper, VmCoreChip, BYTE_XOR_BUS,
     },
     rv32im::{
         adapters::{
@@ -32,7 +32,6 @@ use crate::{
         },
         branch_lt::BranchLessThanCoreCols,
     },
-    system::vm::chip_set::BYTE_XOR_BUS,
     utils::{generate_long_number, i32_to_f},
 };
 

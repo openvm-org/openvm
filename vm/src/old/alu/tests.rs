@@ -16,9 +16,9 @@ use crate::{
     arch::{
         instructions::U256Opcode,
         testing::{memory::gen_pointer, VmChipTestBuilder},
+        BYTE_XOR_BUS,
     },
     old::alu::run_alu,
-    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 type F = BabyBear;

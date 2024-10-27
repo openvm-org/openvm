@@ -31,7 +31,9 @@ use strum::EnumCount;
 
 use super::Streams;
 use crate::{
-    arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName},
+    arch::{
+        AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName, PersistenceType, VmConfig,
+    },
     common::phantom::PhantomChip,
     intrinsics::{
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -75,7 +77,6 @@ use crate::{
             MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
         },
         program::{ProgramBus, ProgramChip},
-        vm::config::{PersistenceType, VmConfig},
     },
 };
 

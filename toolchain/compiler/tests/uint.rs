@@ -8,11 +8,8 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{Rng, RngCore};
 use stark_vm::{
-    arch::ExecutorName,
-    system::{
-        program::util::{execute_program, execute_program_with_config},
-        vm::config::VmConfig,
-    },
+    arch::{ExecutorName, VmConfig},
+    system::program::util::{execute_program, execute_program_with_config},
 };
 #[test]
 fn test_compiler_256_add_sub() {

@@ -7,7 +7,7 @@ use axvm_instructions::{
 };
 use p3_field::PrimeField64;
 
-use crate::system::{program::trace::padding_instruction, vm::chip_set::READ_INSTRUCTION_BUS};
+use crate::{arch::READ_INSTRUCTION_BUS, system::program::trace::padding_instruction};
 
 #[cfg(test)]
 pub mod tests;

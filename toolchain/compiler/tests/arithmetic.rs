@@ -6,9 +6,9 @@ use afs_compiler::{
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
-use stark_vm::system::{
-    program::{util::execute_program, ExecutionError::Fail},
-    vm::{config::VmConfig, VirtualMachine},
+use stark_vm::{
+    arch::{VirtualMachine, VmConfig},
+    system::program::{util::execute_program, ExecutionError::Fail},
 };
 
 const WORD_SIZE: usize = 1;

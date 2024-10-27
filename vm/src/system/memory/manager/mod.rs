@@ -34,8 +34,9 @@ use super::{
     offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
     volatile::VolatileBoundaryChip,
 };
-use crate::system::{
-    memory::{
+use crate::{
+    arch::{MemoryConfig, RANGE_CHECKER_BUS},
+    system::memory::{
         adapter::AccessAdapterAir,
         manager::memory::{AccessAdapterRecord, Memory},
         offline_checker::{
@@ -43,7 +44,6 @@ use crate::system::{
             MemoryWriteAuxCols, AUX_LEN,
         },
     },
-    vm::{chip_set::RANGE_CHECKER_BUS, config::MemoryConfig},
 };
 
 pub mod dimensions;
@@ -759,12 +759,9 @@ mod tests {
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::MemoryController;
-    use crate::system::{
-        memory::offline_checker::MemoryBus,
-        vm::{
-            chip_set::{MEMORY_BUS, RANGE_CHECKER_BUS},
-            config::MemoryConfig,
-        },
+    use crate::{
+        arch::{MemoryConfig, MEMORY_BUS, RANGE_CHECKER_BUS},
+        system::memory::offline_checker::MemoryBus,
     };
 
     #[test]

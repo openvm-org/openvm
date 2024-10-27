@@ -21,9 +21,9 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
 use super::VmConnectorPvs;
-use crate::system::{
-    program::trace::CommittedProgram,
-    vm::{chip_set::CONNECTOR_AIR_ID, config::VmConfig, SingleSegmentVM},
+use crate::{
+    arch::{SingleSegmentVM, VmConfig, CONNECTOR_AIR_ID},
+    system::program::trace::CommittedProgram,
 };
 
 type F = BabyBear;

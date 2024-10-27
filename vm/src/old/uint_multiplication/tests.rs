@@ -10,12 +10,10 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng};
 
 use super::{columns::UintMultiplicationCols, run_uint_multiplication, UintMultiplicationChip};
-use crate::{
-    arch::{
-        instructions::U256Opcode,
-        testing::{memory::gen_pointer, VmChipTestBuilder},
-    },
-    system::vm::chip_set::RANGE_TUPLE_CHECKER_BUS,
+use crate::arch::{
+    instructions::U256Opcode,
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    RANGE_TUPLE_CHECKER_BUS,
 };
 
 type F = BabyBear;

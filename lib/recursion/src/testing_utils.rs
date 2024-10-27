@@ -13,8 +13,8 @@ use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use stark_vm::{
-    arch::instructions::program::Program,
-    system::{program::util::execute_and_prove_program, vm::config::VmConfig},
+    arch::{instructions::program::Program, VmConfig},
+    system::program::util::execute_and_prove_program,
 };
 
 use crate::hints::InnerVal;
@@ -30,7 +30,7 @@ pub mod inner {
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
-    use stark_vm::system::vm::config::VmConfig;
+    use stark_vm::arch::VmConfig;
 
     use super::*;
     use crate::{hints::Hintable, stark::VerifierProgram, types::new_from_inner_multi_vk};

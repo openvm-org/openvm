@@ -20,13 +20,12 @@ use crate::{
     arch::{
         instructions::ShiftOpcode,
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BYTE_XOR_BUS,
     },
     rv32im::{
         adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         shift::ShiftCoreCols,
     },
-    system::vm::chip_set::BYTE_XOR_BUS,
     utils::generate_long_number,
 };
 

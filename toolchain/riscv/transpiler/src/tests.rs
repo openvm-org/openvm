@@ -6,8 +6,8 @@ use axvm_platform::memory::MEM_SIZE;
 use color_eyre::eyre::Result;
 use p3_baby_bear::BabyBear;
 use stark_vm::{
+    arch::{VirtualMachine, VmConfig},
     sdk::air_test,
-    system::vm::{config::VmConfig, VirtualMachine},
 };
 use test_case::test_case;
 

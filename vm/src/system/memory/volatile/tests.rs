@@ -12,12 +12,12 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 use test_log::test;
 
-use crate::system::{
-    memory::{
+use crate::{
+    arch::RANGE_CHECKER_BUS,
+    system::memory::{
         offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
         TimestampedValues,
     },
-    vm::chip_set::RANGE_CHECKER_BUS,
 };
 
 type Val = BabyBear;

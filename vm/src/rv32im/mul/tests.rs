@@ -20,12 +20,12 @@ use crate::{
     arch::{
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
         ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
+        RANGE_TUPLE_CHECKER_BUS,
     },
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         mul::{MultiplicationCoreChip, MultiplicationCoreCols, Rv32MultiplicationChip},
     },
-    system::vm::chip_set::RANGE_TUPLE_CHECKER_BUS,
     utils::generate_long_number,
 };
 

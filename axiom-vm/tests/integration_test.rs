@@ -13,14 +13,10 @@ use ax_sdk::{
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
 use p3_baby_bear::BabyBear;
 use stark_vm::{
-    arch::ExecutorName,
-    system::{
-        program::trace::CommittedProgram,
-        vm::{
-            config::{MemoryConfig, PersistenceType, VmConfig},
-            SingleSegmentVM, VirtualMachine,
-        },
+    arch::{
+        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine, VmConfig,
     },
+    system::program::trace::CommittedProgram,
 };
 
 type C = InnerConfig;

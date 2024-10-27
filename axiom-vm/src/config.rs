@@ -9,7 +9,7 @@ use ax_sdk::{
     },
     engine::{StarkEngine, StarkFriEngine},
 };
-use stark_vm::system::{program::trace::CommittedProgram, vm::config::VmConfig};
+use stark_vm::{arch::VmConfig, system::program::trace::CommittedProgram};
 
 use crate::verifier::leaf::LeafVmVerifierConfig;
 

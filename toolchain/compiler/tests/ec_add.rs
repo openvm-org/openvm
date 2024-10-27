@@ -13,8 +13,8 @@ use num_traits::{abs, signum, FromPrimitive};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
-    arch::ExecutorName,
-    system::{program::util::execute_program_with_config, vm::config::VmConfig},
+    arch::{ExecutorName, VmConfig},
+    system::program::util::execute_program_with_config,
 };
 
 struct Fraction {

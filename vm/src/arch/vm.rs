@@ -8,23 +8,15 @@ use afs_stark_backend::{
 use axvm_instructions::program::Program;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
-pub use segment::ExecutionSegment;
 
 use crate::{
+    arch::{ExecutionSegment, PersistenceType, VmConfig},
     intrinsics::hashes::poseidon2::CHUNK,
-    metrics::VmMetrics,
     system::{
         memory::Equipartition,
         program::{trace::CommittedProgram, ExecutionError},
-        vm::config::{PersistenceType, VmConfig},
     },
 };
-
-pub mod chip_set;
-pub mod config;
-
-#[macro_use]
-pub mod segment;
 
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {

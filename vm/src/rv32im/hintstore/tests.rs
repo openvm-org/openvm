@@ -23,13 +23,12 @@ use crate::{
             UsizeOpcode,
         },
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        VmAdapterChip,
+        Streams, VmAdapterChip, BYTE_XOR_BUS,
     },
     rv32im::{
         adapters::{compose, Rv32HintStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         hintstore::Rv32HintStoreCoreCols,
     },
-    system::vm::{chip_set::BYTE_XOR_BUS, Streams},
     utils::{u32_into_limbs, u32_sign_extend},
 };
 

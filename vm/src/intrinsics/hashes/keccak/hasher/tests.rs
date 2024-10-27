@@ -15,9 +15,9 @@ use crate::{
     arch::{
         instructions::Keccak256Opcode,
         testing::{VmChipTestBuilder, VmChipTester},
+        BYTE_XOR_BUS,
     },
     intrinsics::hashes::keccak::hasher::columns::KeccakVmCols,
-    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 // io is vector of (input, prank_output) where prank_output is Some if the trace
