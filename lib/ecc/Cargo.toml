@@ -6,9 +6,9 @@ edition.workspace = true
 description = "axVM elliptic curve cryptography library."
 
 [dependencies]
-ax-stark-backend = { path = "../../stark-backend" }
-axvm-native-compiler = { path = "../../toolchain/compiler" }
-ax-circuit-primitives = { path = "../../circuits/primitives" }
+ax-stark-backend = { workspace = true }
+axvm-native-compiler = { workspace = true }
+ax-circuit-primitives = { workspace = true }
 ax-sdk = { workspace = true }
 axvm-circuit = { workspace = true }
 p3-air = { workspace = true }

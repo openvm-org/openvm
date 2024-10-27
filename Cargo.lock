@@ -372,46 +372,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ax-ecc-lib"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-primitives",
- "ax-sdk",
- "ax-stark-backend",
- "axvm-circuit",
- "axvm-native-compiler",
- "elliptic-curve",
- "ff 0.13.0",
- "hex-literal",
- "itertools 0.13.0",
- "k256",
- "num-bigint-dig",
- "num-traits",
- "p3-air",
- "p3-baby-bear",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-matrix",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "sha3",
- "snark-verifier-sdk",
- "test-log",
- "tracing",
- "zkhash",
-]
-
-[[package]]
 name = "ax-ecc-primitives"
 version = "0.1.0"
 dependencies = [
@@ -621,6 +581,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-ecc"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-primitives",
+ "ax-sdk",
+ "ax-stark-backend",
+ "axvm-circuit",
+ "axvm-native-compiler",
+ "elliptic-curve",
+ "ff 0.13.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "k256",
+ "num-bigint-dig",
+ "num-traits",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-matrix",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha3",
+ "snark-verifier-sdk",
+ "test-log",
+ "tracing",
+ "zkhash",
+]
+
+[[package]]
 name = "axvm-instructions"
 version = "0.1.0"
 dependencies = [
@@ -701,10 +701,10 @@ version = "0.1.0"
 dependencies = [
  "afs-derive",
  "ax-circuit-primitives",
- "ax-ecc-lib",
  "ax-sdk",
  "ax-stark-backend",
  "axvm-circuit",
+ "axvm-ecc",
  "axvm-native-compiler",
  "cfg-if",
  "ff 0.13.0",
