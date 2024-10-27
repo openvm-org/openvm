@@ -1,6 +1,13 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_stark_backend::{
+    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    engine::VerificationData,
+    prover::types::AirProofInput,
+    verifier::VerificationError,
+    Chip,
+};
 use ax_stark_sdk::{
     config::{
         baby_bear_blake3::{self, BabyBearBlake3Config},
@@ -8,13 +15,6 @@ use ax_stark_sdk::{
         setup_tracing_with_log_level,
     },
     engine::StarkEngine,
-};
-use ax_stark_backend::{
-    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
-    engine::VerificationData,
-    prover::types::AirProofInput,
-    verifier::VerificationError,
-    Chip,
 };
 use axvm_instructions::instruction::Instruction;
 use itertools::izip;

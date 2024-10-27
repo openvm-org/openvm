@@ -1,10 +1,10 @@
 use std::{iter, sync::Arc};
 
+use ax_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
-use ax_stark_backend::{prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;

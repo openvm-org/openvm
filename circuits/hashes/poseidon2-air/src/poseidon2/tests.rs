@@ -1,4 +1,5 @@
 use ark_ff::PrimeField as _;
+use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_stark_sdk::{
     any_rap_arc_vec,
     config::{
@@ -9,7 +10,6 @@ use ax_stark_sdk::{
     engine::StarkEngine,
     utils::create_seeded_rng,
 };
-use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use p3_baby_bear::{
     BabyBear, DiffusionMatrixBabyBear, POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
 };

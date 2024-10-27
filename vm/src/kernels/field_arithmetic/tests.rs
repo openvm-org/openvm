@@ -1,11 +1,11 @@
 use std::borrow::BorrowMut;
 
+use ax_stark_backend::{
+    prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError, Chip,
+};
 use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
-};
-use ax_stark_backend::{
-    prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError, Chip,
 };
 use axvm_instructions::{instruction::Instruction, UsizeOpcode};
 use p3_baby_bear::BabyBear;

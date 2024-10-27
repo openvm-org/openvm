@@ -5,11 +5,11 @@ use ax_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
+use ax_stark_backend::interaction::InteractionBuilder;
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
-use ax_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::BigUint;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
