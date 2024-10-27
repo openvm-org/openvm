@@ -22,7 +22,8 @@ use super::core::run_divrem;
 use crate::{
     arch::{
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BYTE_XOR_BUS,
+        RANGE_TUPLE_CHECKER_BUS,
     },
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -31,7 +32,6 @@ use crate::{
             DivRemCoreSpecialCase, Rv32DivRemChip,
         },
     },
-    system::vm::chip_set::{BYTE_XOR_BUS, RANGE_TUPLE_CHECKER_BUS},
     utils::generate_long_number,
 };
 

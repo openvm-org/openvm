@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub mod cycle_tracker;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct VmMetrics {
     pub chip_heights: BTreeMap<String, usize>,

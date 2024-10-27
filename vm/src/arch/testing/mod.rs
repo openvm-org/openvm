@@ -29,14 +29,13 @@ use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
 use crate::{
-    arch::ExecutionState,
+    arch::{
+        ExecutionState, MemoryConfig, EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS,
+        READ_INSTRUCTION_BUS,
+    },
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
         program::ProgramBus,
-        vm::{
-            chip_set::{EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS},
-            config::MemoryConfig,
-        },
     },
 };
 pub mod execution;
@@ -50,8 +49,8 @@ pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
 use crate::{
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
-    system::{memory::MemoryControllerRef, vm::config::PersistenceType},
+    arch::PersistenceType, intrinsics::hashes::poseidon2::Poseidon2Chip,
+    system::memory::MemoryControllerRef,
 };
 
 #[derive(Clone, Debug)]

@@ -18,11 +18,11 @@ use crate::{
             Rv32HintStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, Streams,
+        VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    system::{program::ExecutionError, vm::Streams},
+    system::program::ExecutionError,
 };
 
 /// HintStore Core Chip handles the range checking of the data to be written to memory

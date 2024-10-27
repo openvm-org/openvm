@@ -12,14 +12,14 @@ use itertools::zip_eq;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
-use super::{cycle_tracker::CycleTracker, Streams, VmConfig, VmMetrics};
+use super::{PersistenceType, Streams, VmChipSet, VmConfig};
 use crate::{
     arch::{instructions::*, AxVmChip, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
+    metrics::{cycle_tracker::CycleTracker, VmMetrics},
     system::{
         memory::{Equipartition, CHUNK},
         program::ExecutionError,
-        vm::{chip_set::VmChipSet, config::PersistenceType},
     },
 };
 

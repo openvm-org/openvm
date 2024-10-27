@@ -23,11 +23,12 @@ use p3_maybe_rayon::prelude::*;
 use parking_lot::Mutex;
 
 use crate::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, PcIncOrSet},
+    arch::{
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, PcIncOrSet, Streams,
+    },
     system::{
         memory::MemoryControllerRef,
         program::{ExecutionError, ProgramBus},
-        vm::Streams,
     },
 };
 

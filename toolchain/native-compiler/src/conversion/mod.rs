@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use axvm_circuit::{
-    arch::instructions::{program::Program, *},
-    system::vm::config::Modulus,
+use axvm_circuit::arch::{
+    instructions::{program::Program, *},
+    Modulus,
 };
 use axvm_instructions::instruction::{DebugInfo, Instruction};
 use num_bigint_dig::BigUint;

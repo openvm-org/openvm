@@ -17,7 +17,7 @@ use crate::{
     arch::{
         instructions::Rv32JalLuiOpcode::{self, *},
         testing::VmChipTestBuilder,
-        VmAdapterChip,
+        VmAdapterChip, BYTE_XOR_BUS,
     },
     rv32im::{
         adapters::{
@@ -26,7 +26,6 @@ use crate::{
         },
         jal_lui::Rv32JalLuiCoreCols,
     },
-    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 const IMM_BITS: usize = 20;

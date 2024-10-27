@@ -1,9 +1,6 @@
 use axvm_circuit::{
-    arch::ExecutorName,
-    system::{
-        program::util::execute_program,
-        vm::{config::VmConfig, SingleSegmentVM},
-    },
+    arch::{ExecutorName, SingleSegmentVM, VmConfig},
+    system::program::util::execute_program,
 };
 use axvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use p3_baby_bear::BabyBear;

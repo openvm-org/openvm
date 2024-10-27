@@ -2,11 +2,8 @@ use std::iter;
 
 use ax_sdk::utils::create_seeded_rng;
 use axvm_circuit::{
-    arch::ExecutorName,
-    system::{
-        program::util::{execute_program, execute_program_with_config},
-        vm::config::VmConfig,
-    },
+    arch::{ExecutorName, VmConfig},
+    system::program::util::{execute_program, execute_program_with_config},
 };
 use axvm_native_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var};
 use num_bigint_dig::BigUint;
@@ -14,6 +11,7 @@ use num_traits::Zero;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{Rng, RngCore};
+
 #[test]
 fn test_compiler_256_add_sub() {
     let num_digits = 8;

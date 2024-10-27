@@ -20,7 +20,8 @@ use axvm_circuit::{
             FieldExtensionOpcode::*, Keccak256Opcode::*, NativeBranchEqualOpcode,
             NativeJalOpcode::*, NativeLoadStoreOpcode::*, Poseidon2Opcode::*, UsizeOpcode,
         },
-        ExecutorName,
+        ExecutorName, ExitCode, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine,
+        VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
     },
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     sdk::air_test,
@@ -28,11 +29,6 @@ use axvm_circuit::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{merkle::MemoryMerklePvs, Equipartition},
         program::trace::CommittedProgram,
-        vm::{
-            chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID},
-            config::{MemoryConfig, PersistenceType, VmConfig},
-            ExitCode, SingleSegmentVM, VirtualMachine,
-        },
     },
 };
 use axvm_instructions::{

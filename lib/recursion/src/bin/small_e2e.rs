@@ -1,3 +1,10 @@
+/// A E2E benchmark to aggregate a small program with common VM chips.
+/// Proofs:
+/// 1. Prove a program with some common operations.
+/// 2. Verify the proof of 1. in the inner config.
+/// 2. Verify the proof of 2. in the outer config.
+/// 3. Verify the proof of 3. using a Halo2 static verifier.
+/// 4. Wrapper Halo2 circuit to reduce the size of 4.
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
@@ -7,17 +14,9 @@ use ax_sdk::{
     engine::{ProofInputForTest, StarkFriEngine},
 };
 use axvm_circuit::{
-    arch::{instructions::program::Program, ExecutorName},
+    arch::{instructions::program::Program, ExecutorName, VmConfig},
     sdk::gen_vm_program_test_proof_input,
-    system::vm::config::VmConfig,
 };
-/// A E2E benchmark to aggregate a small program with common VM chips.
-/// Proofs:
-/// 1. Prove a program with some common operations.
-/// 2. Verify the proof of 1. in the inner config.
-/// 2. Verify the proof of 2. in the outer config.
-/// 3. Verify the proof of 3. using a Halo2 static verifier.
-/// 4. Wrapper Halo2 circuit to reduce the size of 4.
 use axvm_native_compiler::{
     asm::AsmBuilder,
     conversion::CompilerOptions,

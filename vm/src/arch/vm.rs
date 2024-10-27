@@ -6,27 +6,17 @@ use ax_stark_backend::{
     prover::types::ProofInput,
 };
 use axvm_instructions::program::Program;
-use metrics::VmMetrics;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
-pub use segment::ExecutionSegment;
 
 use crate::{
+    arch::{ExecutionSegment, PersistenceType, VmConfig},
     intrinsics::hashes::poseidon2::CHUNK,
     system::{
         memory::Equipartition,
         program::{trace::CommittedProgram, ExecutionError},
-        vm::config::{PersistenceType, VmConfig},
     },
 };
-
-pub mod chip_set;
-pub mod config;
-pub mod cycle_tracker;
-/// Instrumentation metrics for performance analysis and debugging
-pub mod metrics;
-#[macro_use]
-pub mod segment;
 
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {

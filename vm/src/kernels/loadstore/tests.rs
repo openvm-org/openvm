@@ -15,12 +15,12 @@ use crate::{
             UsizeOpcode,
         },
         testing::VmChipTestBuilder,
+        Streams,
     },
     kernels::{
         adapters::loadstore_native_adapter::NativeLoadStoreAdapterChip,
         loadstore::KernelLoadStoreCoreChip,
     },
-    system::vm::Streams,
 };
 
 type F = BabyBear;

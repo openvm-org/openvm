@@ -10,14 +10,10 @@ use ax_sdk::{
 };
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
 use axvm_circuit::{
-    arch::ExecutorName,
-    system::{
-        program::trace::CommittedProgram,
-        vm::{
-            config::{MemoryConfig, PersistenceType, VmConfig},
-            SingleSegmentVM, VirtualMachine,
-        },
+    arch::{
+        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine, VmConfig,
     },
+    system::program::trace::CommittedProgram,
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_recursion::{hints::Hintable, types::InnerConfig};

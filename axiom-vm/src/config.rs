@@ -8,7 +8,7 @@ use ax_sdk::{
     },
     engine::{StarkEngine, StarkFriEngine},
 };
-use axvm_circuit::system::{program::trace::CommittedProgram, vm::config::VmConfig};
+use axvm_circuit::{arch::VmConfig, system::program::trace::CommittedProgram};
 use axvm_native_compiler::conversion::CompilerOptions;
 
 use crate::verifier::leaf::LeafVmVerifierConfig;

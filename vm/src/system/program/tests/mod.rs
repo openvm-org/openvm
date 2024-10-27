@@ -14,12 +14,16 @@ use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
-    arch::instructions::{
-        BranchEqualOpcode::*, CommonOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
-        NativeJalOpcode::*, NativeLoadStoreOpcode::*, UsizeOpcode,
+    arch::{
+        instructions::{
+            BranchEqualOpcode::*, CommonOpcode::*, FieldArithmeticOpcode::*,
+            NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*, UsizeOpcode,
+        },
+        READ_INSTRUCTION_BUS,
     },
-    system::{program::ProgramChip, vm::chip_set::READ_INSTRUCTION_BUS},
+    system::program::ProgramChip,
 };
+
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let instructions = program.instructions();
     let mut chip = ProgramChip::new_with_program(program);

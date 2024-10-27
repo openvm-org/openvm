@@ -3,8 +3,8 @@ use std::borrow::Cow;
 
 use ax_circuit_primitives::bigint::utils::{big_uint_to_num_limbs, secp256k1_coord_prime};
 use axvm_circuit::{
-    arch::ExecutorName,
-    system::{program::util::execute_program_with_config, vm::config::VmConfig},
+    arch::{ExecutorName, VmConfig},
+    system::program::util::execute_program_with_config,
 };
 use axvm_native_compiler::{
     asm::AsmBuilder,

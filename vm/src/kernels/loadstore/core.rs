@@ -14,11 +14,11 @@ use strum::IntoEnumIterator;
 
 use crate::{
     arch::{
-        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, Result,
+        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, Result, Streams,
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     kernels::adapters::loadstore_native_adapter::NativeLoadStoreInstruction,
-    system::{program::ExecutionError, vm::Streams},
+    system::program::ExecutionError,
 };
 #[repr(C)]
 #[derive(AlignedBorrow)]

@@ -16,9 +16,8 @@ use ax_sdk::{
     engine::{ProofInputForTest, StarkFriEngine},
 };
 use axvm_circuit::{
-    arch::{instructions::program::Program, ExecutorName},
+    arch::{instructions::program::Program, ExecutorName, VmConfig},
     sdk::gen_vm_program_test_proof_input,
-    system::vm::config::VmConfig,
 };
 use axvm_native_compiler::{
     asm::AsmBuilder,

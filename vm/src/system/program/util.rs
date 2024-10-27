@@ -3,10 +3,7 @@ use p3_baby_bear::BabyBear;
 #[cfg(feature = "sdk")]
 pub use sdk::*;
 
-use crate::{
-    arch::ExecutorName,
-    system::vm::{config::VmConfig, VirtualMachine},
-};
+use crate::arch::{ExecutorName, VirtualMachine, VmConfig};
 
 pub fn execute_program_with_config(
     config: VmConfig,
@@ -52,7 +49,7 @@ mod sdk {
     use axvm_instructions::program::Program;
     use p3_field::PrimeField32;
 
-    use crate::{sdk::gen_vm_program_test_proof_input, system::vm::config::VmConfig};
+    use crate::{arch::VmConfig, sdk::gen_vm_program_test_proof_input};
 
     type ExecuteAndProveResult<SC> =
         Result<(VerificationDataWithFriParams<SC>, Vec<Vec<Val<SC>>>), VerificationError>;

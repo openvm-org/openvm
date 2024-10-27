@@ -2,10 +2,7 @@ use ax_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
     engine::ProofInputForTest,
 };
-use axvm_circuit::{
-    arch::{instructions::program::Program, ExecutorName},
-    system::vm::{config::VmConfig, VirtualMachine},
-};
+use axvm_circuit::arch::{instructions::program::Program, ExecutorName, VirtualMachine, VmConfig};
 use axvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use axvm_recursion::testing_utils::inner::run_recursive_test;
 use p3_baby_bear::BabyBear;

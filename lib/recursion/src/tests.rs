@@ -16,7 +16,7 @@ use ax_sdk::{
     utils::to_field_vec,
 };
 use ax_stark_backend::{prover::types::AirProofInput, utils::disable_debug_builder, Chip};
-use axvm_circuit::{sdk::gen_vm_program_test_proof_input, system::vm::config::VmConfig};
+use axvm_circuit::{arch::VmConfig, sdk::gen_vm_program_test_proof_input};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};

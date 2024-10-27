@@ -1,3 +1,9 @@
+/// A E2E benchmark to aggregate a program with minimal number of VM chips.
+/// Proofs:
+/// 1. Prove a program to compute fibonacci numbers.
+/// 2. Verify the proof of 1. in the outer config.
+/// 3. Verify the proof of 2. using a Halo2 static verifier. (Outer Recursion)
+/// 4. Wrapper Halo2 circuit to reduce the size of 3.
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
@@ -7,16 +13,9 @@ use ax_sdk::{
     engine::{ProofInputForTest, StarkFriEngine},
 };
 use axvm_circuit::{
-    arch::{instructions::program::Program, ExecutorName},
+    arch::{instructions::program::Program, ExecutorName, VmConfig},
     sdk::gen_vm_program_test_proof_input,
-    system::vm::config::VmConfig,
 };
-/// A E2E benchmark to aggregate a program with minimal number of VM chips.
-/// Proofs:
-/// 1. Prove a program to compute fibonacci numbers.
-/// 2. Verify the proof of 1. in the outer config.
-/// 3. Verify the proof of 2. using a Halo2 static verifier. (Outer Recursion)
-/// 4. Wrapper Halo2 circuit to reduce the size of 3.
 use axvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;

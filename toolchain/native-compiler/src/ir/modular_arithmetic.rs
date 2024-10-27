@@ -1,7 +1,7 @@
 use ax_circuit_primitives::bigint::utils::big_uint_to_num_limbs;
 use axvm_circuit::{
+    arch::Modulus,
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
-    system::vm::config::Modulus,
 };
 use num_bigint_dig::BigUint;
 use num_traits::Zero;

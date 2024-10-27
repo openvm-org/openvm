@@ -2,8 +2,8 @@ use std::{fs::read, path::PathBuf};
 
 use ax_sdk::config::setup_tracing;
 use axvm_circuit::{
+    arch::{VirtualMachine, VmConfig},
     sdk::air_test,
-    system::vm::{config::VmConfig, VirtualMachine},
 };
 use axvm_instructions::program::Program;
 use axvm_platform::memory::MEM_SIZE;

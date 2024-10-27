@@ -8,15 +8,11 @@ use ax_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
 use axvm_circuit::{
-    arch::instructions::program::Program,
-    system::{
-        connector::VmConnectorPvs,
-        memory::merkle::MemoryMerklePvs,
-        vm::{
-            chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_CACHED_TRACE_INDEX},
-            config::VmConfig,
-        },
+    arch::{
+        instructions::program::Program, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+        PROGRAM_CACHED_TRACE_INDEX,
     },
+    system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs},
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_recursion::{

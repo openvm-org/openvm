@@ -5,9 +5,9 @@ use ax_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_circuit::{
-    arch::ExecutorName,
+    arch::{ExecutorName, VmConfig},
     intrinsics::hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
-    system::{program::util::execute_and_prove_program, vm::config::VmConfig},
+    system::program::util::execute_and_prove_program,
 };
 use axvm_native_compiler::{
     asm::AsmBuilder,

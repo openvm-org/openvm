@@ -21,13 +21,12 @@ use crate::{
             UsizeOpcode,
         },
         testing::VmChipTestBuilder,
-        VmAdapterChip,
+        VmAdapterChip, BYTE_XOR_BUS,
     },
     rv32im::{
         adapters::{compose, Rv32JalrAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         jalr::{run_jalr, Rv32JalrCoreCols},
     },
-    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 const IMM_BITS: usize = 16;

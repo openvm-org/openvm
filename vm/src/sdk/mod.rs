@@ -10,7 +10,7 @@ use axvm_instructions::program::Program;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 
-use crate::system::vm::{config::VmConfig, VirtualMachine};
+use crate::arch::{VirtualMachine, VmConfig};
 
 pub fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
     setup_tracing();

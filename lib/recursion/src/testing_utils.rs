@@ -8,8 +8,8 @@ use ax_stark_backend::{
     verifier::VerificationError,
 };
 use axvm_circuit::{
-    arch::instructions::program::Program,
-    system::{program::util::execute_and_prove_program, vm::config::VmConfig},
+    arch::{instructions::program::Program, VmConfig},
+    system::program::util::execute_and_prove_program,
 };
 use axvm_native_compiler::conversion::CompilerOptions;
 use inner::build_verification_program;
@@ -29,7 +29,7 @@ pub mod inner {
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
-    use axvm_circuit::system::vm::config::VmConfig;
+    use axvm_circuit::arch::VmConfig;
     use axvm_native_compiler::conversion::CompilerOptions;
 
     use super::*;

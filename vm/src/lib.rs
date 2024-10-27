@@ -6,6 +6,8 @@ pub mod common;
 pub mod intrinsics;
 /// Chips to support axVM kernel instructions.
 pub mod kernels;
+/// Instrumentation metrics for performance analysis and debugging
+pub mod metrics;
 /// Chips to support RV32IM instructions.
 pub mod rv32im;
 /// System chips that are always required by the architecture.

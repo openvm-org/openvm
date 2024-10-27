@@ -1,6 +1,6 @@
-use axvm_circuit::system::{
-    program::{util::execute_program, ExecutionError::Fail},
-    vm::{config::VmConfig, VirtualMachine},
+use axvm_circuit::{
+    arch::{VirtualMachine, VmConfig},
+    system::program::{util::execute_program, ExecutionError::Fail},
 };
 use axvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
