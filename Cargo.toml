@@ -11,7 +11,7 @@ members = [
     "stark-backend",
     "toolchain/instructions",
     "toolchain/instructions/derive",
-    "toolchain/compiler",
+    "toolchain/native-compiler",
     "toolchain/riscv/zkvm/lib",
     "toolchain/riscv/zkvm/platform",
     "toolchain/riscv/transpiler",
@@ -68,16 +68,16 @@ axvm-instructions = { path = "toolchain/instructions", default-features = false 
 axvm-instructions-derive = { path = "toolchain/instructions/derive", default-features = false }
 axvm-platform = { path = "toolchain/riscv/zkvm/platform", default-features = false }
 axvm-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
-axvm-native-compiler = { path = "toolchain/compiler", default-features = false }
 ax-ecc-lib = { path = "lib/ecc", default-features = false }
-afs-derive = { path = "derive", default-features = false }
 axvm-recursion = { path = "lib/recursion", default-features = false }
+axvm-native-compiler = { path = "toolchain/native-compiler", default-features = false }
 axvm-circuit = { path = "vm", default-features = false }
 ax-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
 ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
 ax-circuit-primitives = { path = "circuits/primitives", default-features = false }
 ax-stark-backend = { path = "stark-backend", default-features = false }
 ax-sdk = { path = "sdk", default-features = false }
+afs-derive = { path = "derive", default-features = false }
 
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }

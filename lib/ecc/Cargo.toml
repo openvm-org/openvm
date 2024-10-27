@@ -1,8 +1,9 @@
 [package]
-name = "ax-ecc-lib"
-version = "0.1.0"
-edition = "2021"
-description = "Elliptic curve cryptography library written in Axiom's eDSL."
+name = "axvm-ecc-lib"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "axVM elliptic curve cryptography library."
 
 [dependencies]
 ax-stark-backend = { path = "../../stark-backend" }
