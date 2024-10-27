@@ -4,9 +4,9 @@ use afs_compiler::{
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
 };
 use afs_derive::DslVariable;
+use axvm_circuit::system::program::util::execute_program;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::system::program::util::execute_program;
 
 #[derive(DslVariable, Clone, Debug)]
 pub struct Point<C: Config> {

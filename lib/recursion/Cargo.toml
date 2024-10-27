@@ -8,7 +8,7 @@ ax-stark-backend = { workspace = true }
 afs-compiler = { workspace = true, features = ["sdk"] }
 ax-sdk = { workspace = true }
 afs-derive = { workspace = true }
-stark-vm = { workspace = true, features = ["sdk"] }
+axvm-circuit = { workspace = true, features = ["sdk"] }
 ax-ecc-lib = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 
@@ -67,6 +67,6 @@ static-verifier = [
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]
-bench-metrics = ["dep:metrics", "stark-vm/bench-metrics"]
+bench-metrics = ["dep:metrics", "axvm-circuit/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]

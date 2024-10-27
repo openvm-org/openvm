@@ -8,8 +8,8 @@ description = "Elliptic curve cryptography library written in Axiom's eDSL."
 ax-stark-backend = { path = "../../stark-backend" }
 afs-compiler = { path = "../../toolchain/compiler" }
 ax-circuit-primitives = { path = "../../circuits/primitives" }
-ax-sdk = { path = "../../sdk" }
-stark-vm = { path = "../../vm" }
+ax-sdk = { workspace = true }
+axvm-circuit = { workspace = true }
 p3-air = { workspace = true }
 p3-field = { workspace = true }
 p3-commit = { workspace = true }

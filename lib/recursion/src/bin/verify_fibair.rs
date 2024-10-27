@@ -4,7 +4,6 @@
 /// 2. Verify the proof of 1. by execution VM program in STARK VM.
 use afs_compiler::conversion::CompilerOptions;
 use afs_recursion::testing_utils::recursive_stark_test;
-use ax_stark_backend::Chip;
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
@@ -14,7 +13,8 @@ use ax_sdk::{
     dummy_airs::fib_air::chip::FibonacciChip,
     engine::StarkFriEngine,
 };
-use stark_vm::system::vm::config::VmConfig;
+use ax_stark_backend::Chip;
+use axvm_circuit::system::vm::config::VmConfig;
 
 fn main() {
     run_with_metric_collection("OUTPUT_PATH", || {

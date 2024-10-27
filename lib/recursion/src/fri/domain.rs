@@ -170,11 +170,11 @@ pub(crate) mod tests {
         baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
         FriParameters,
     };
+    use axvm_circuit::system::program::util::execute_program;
     use p3_commit::{Pcs, PolynomialSpace};
     use p3_field::PrimeField;
     use p3_uni_stark::{Domain, StarkGenericConfig, Val};
     use rand::{thread_rng, Rng};
-    use stark_vm::system::program::util::execute_program;
 
     use super::*;
     use crate::utils::const_fri_config;

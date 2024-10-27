@@ -2,6 +2,7 @@ use std::{ops::Mul, str::FromStr};
 
 use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions};
 use ax_sdk::utils::create_seeded_rng;
+use axvm_circuit::system::program::util::execute_program;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
@@ -13,7 +14,6 @@ use snark_verifier_sdk::snark_verifier::{
     },
     util::arithmetic::CurveAffine,
 };
-use stark_vm::system::program::util::execute_program;
 
 use crate::{
     ec_fixed_scalar_multiply::{fixed_scalar_multiply_secp256k1, CachedPoints},

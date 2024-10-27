@@ -1,9 +1,9 @@
 [package]
-name = "stark-vm"
+name = "axvm-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Virtual Machine STARK"
+description = "axVM circuits"
 
 [dependencies]
 p3-air = { workspace = true }
@@ -59,7 +59,7 @@ ax-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
-stark-vm = { workspace = true, features = ["sdk"] }
+axvm-circuit = { workspace = true, features = ["sdk"] }
 
 [features]
 default = ["parallel", "mimalloc"]

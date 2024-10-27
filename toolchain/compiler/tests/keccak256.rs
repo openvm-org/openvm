@@ -9,14 +9,14 @@ use ax_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
 };
-use hex::FromHex;
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::{
+use axvm_circuit::{
     arch::ExecutorName,
     intrinsics::hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
     system::{program::util::execute_and_prove_program, vm::config::VmConfig},
 };
+use hex::FromHex;
+use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

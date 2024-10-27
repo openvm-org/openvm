@@ -565,8 +565,8 @@ mod test {
         prelude::*,
     };
     use afs_derive::{DslVariable, Hintable};
+    use axvm_circuit::system::program::util::execute_program;
     use p3_field::AbstractField;
-    use stark_vm::system::program::util::execute_program;
 
     use crate::{
         hints::{Hintable, InnerChallenge, InnerVal},

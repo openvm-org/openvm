@@ -1,13 +1,13 @@
 use afs_compiler::{asm::AsmBuilder, prelude::*};
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::{
+use axvm_circuit::{
     arch::ExecutorName,
     system::{
         program::util::execute_program,
         vm::{config::VmConfig, SingleSegmentVM},
     },
 };
+use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

@@ -18,7 +18,7 @@ use ax_sdk::{
     },
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
-use stark_vm::{
+use axvm_circuit::{
     arch::instructions::program::Program,
     system::{
         connector::VmConnectorPvs,

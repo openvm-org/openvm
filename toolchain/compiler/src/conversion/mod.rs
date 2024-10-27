@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
+use axvm_circuit::{
+    arch::instructions::{program::Program, *},
+    system::vm::config::Modulus,
+};
 use axvm_instructions::instruction::{DebugInfo, Instruction};
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use program::DEFAULT_PC_STEP;
-use stark_vm::{
-    arch::instructions::{program::Program, *},
-    system::vm::config::Modulus,
-};
 use strum::EnumCount;
 
 use crate::asm::{AsmInstruction, AssemblyCode};

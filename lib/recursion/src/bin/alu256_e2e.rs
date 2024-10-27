@@ -21,16 +21,16 @@ use ax_sdk::{
     },
     engine::{ProofInputForTest, StarkFriEngine},
 };
+use axvm_circuit::{
+    arch::{instructions::program::Program, ExecutorName},
+    sdk::gen_vm_program_test_proof_input,
+    system::vm::config::VmConfig,
+};
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::{
-    arch::{instructions::program::Program, ExecutorName},
-    sdk::gen_vm_program_test_proof_input,
-    system::vm::config::VmConfig,
-};
 use tracing::info_span;
 
 const NUM_DIGITS: usize = 8;

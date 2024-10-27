@@ -11,8 +11,7 @@ use ax_sdk::{
     engine::{StarkEngine, StarkFriEngine},
 };
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
-use p3_baby_bear::BabyBear;
-use stark_vm::{
+use axvm_circuit::{
     arch::ExecutorName,
     system::{
         program::trace::CommittedProgram,
@@ -22,6 +21,7 @@ use stark_vm::{
         },
     },
 };
+use p3_baby_bear::BabyBear;
 
 type C = InnerConfig;
 type F = BabyBear;

@@ -1,21 +1,21 @@
 use afs_compiler::conversion::CompilerOptions;
+use ax_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
+};
 use ax_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::VerificationData,
     verifier::VerificationError,
 };
-use ax_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
+use axvm_circuit::{
+    arch::instructions::program::Program,
+    system::{program::util::execute_and_prove_program, vm::config::VmConfig},
 };
 use inner::build_verification_program;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use stark_vm::{
-    arch::instructions::program::Program,
-    system::{program::util::execute_and_prove_program, vm::config::VmConfig},
-};
 
 use crate::hints::InnerVal;
 
@@ -30,7 +30,7 @@ pub mod inner {
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
-    use stark_vm::system::vm::config::VmConfig;
+    use axvm_circuit::system::vm::config::VmConfig;
 
     use super::*;
     use crate::{hints::Hintable, stark::VerifierProgram, types::new_from_inner_multi_vk};

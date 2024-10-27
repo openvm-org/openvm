@@ -267,10 +267,10 @@ mod tests {
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
     };
+    use axvm_circuit::system::program::util::execute_program;
     use p3_challenger::{CanObserve, CanSample};
     use p3_field::AbstractField;
     use p3_uni_stark::{StarkGenericConfig, Val};
-    use stark_vm::system::program::util::execute_program;
 
     use super::DuplexChallengerVariable;
 

@@ -309,6 +309,7 @@ pub mod tests {
         ir::{Array, RVar, DIGEST_SIZE},
     };
     use ax_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+    use axvm_circuit::arch::instructions::program::Program;
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, FieldChallenger};
@@ -316,7 +317,6 @@ pub mod tests {
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
-    use stark_vm::arch::instructions::program::Program;
 
     use crate::{
         challenger::{duplex::DuplexChallengerVariable, CanObserveDigest, FeltChallenger},
@@ -420,6 +420,6 @@ pub mod tests {
     #[test]
     fn test_two_adic_fri_pcs_single_batch() {
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 10);
-        stark_vm::system::program::util::execute_program(program, witness);
+        axvm_circuit::system::program::util::execute_program(program, witness);
     }
 }

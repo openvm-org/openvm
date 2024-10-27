@@ -13,15 +13,15 @@ use ax_sdk::{
     },
     engine::{ProofInputForTest, StarkFriEngine},
 };
-use p3_baby_bear::BabyBear;
-use p3_commit::PolynomialSpace;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
-use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::{
+use axvm_circuit::{
     arch::{instructions::program::Program, ExecutorName},
     sdk::gen_vm_program_test_proof_input,
     system::vm::config::VmConfig,
 };
+use p3_baby_bear::BabyBear;
+use p3_commit::PolynomialSpace;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
+use p3_uni_stark::{Domain, StarkGenericConfig};
 use tracing::info_span;
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {

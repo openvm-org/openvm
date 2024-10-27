@@ -3,13 +3,13 @@ use afs_compiler::{
     conversion::{convert_program, CompilerOptions},
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
 };
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
-use rand::{thread_rng, Rng};
-use stark_vm::system::{
+use axvm_circuit::system::{
     program::{util::execute_program, ExecutionError::Fail},
     vm::{config::VmConfig, VirtualMachine},
 };
+use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
+use rand::{thread_rng, Rng};
 
 const WORD_SIZE: usize = 1;
 

@@ -2,10 +2,10 @@ use afs_compiler::{
     asm::AsmBuilder,
     ir::{Ext, Felt},
 };
+use axvm_circuit::system::program::util::execute_program;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
 use rand::{thread_rng, Rng};
-use stark_vm::system::program::util::execute_program;
 #[test]
 fn test_ext2felt() {
     const D: usize = 4;

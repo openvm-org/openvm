@@ -1,6 +1,7 @@
 use core::fmt::Debug;
 use std::{collections::HashMap, sync::Arc};
 
+use axvm_circuit::system::vm::cycle_tracker::CycleTracker;
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
@@ -14,7 +15,6 @@ use snark_verifier_sdk::snark_verifier::{
     },
     util::arithmetic::PrimeField as _,
 };
-use stark_vm::system::vm::cycle_tracker::CycleTracker;
 
 use super::stats::Halo2Stats;
 use crate::{

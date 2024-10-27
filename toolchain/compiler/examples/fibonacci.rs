@@ -2,9 +2,9 @@ use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
+use axvm_circuit::system::program::util::execute_program;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::system::program::util::execute_program;
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {

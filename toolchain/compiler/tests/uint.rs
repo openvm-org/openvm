@@ -7,7 +7,7 @@ use num_traits::Zero;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{Rng, RngCore};
-use stark_vm::{
+use axvm_circuit::{
     arch::ExecutorName,
     system::{
         program::util::{execute_program, execute_program_with_config},

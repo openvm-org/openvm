@@ -5,6 +5,7 @@ use afs_compiler::{
     ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
     prelude::RVar,
 };
+use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use ax_stark_backend::{
     air_builders::{
         symbolic::symbolic_expression::SymbolicExpression,
@@ -12,13 +13,12 @@ use ax_stark_backend::{
     },
     prover::{opener::AdjacentOpenedValues, types::Proof},
 };
-use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use axvm_circuit::arch::instructions::program::Program;
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
-use stark_vm::arch::instructions::program::Program;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},

@@ -1,9 +1,5 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use ax_stark_backend::{
-    config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
-    prover::types::Proof,
-};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -13,16 +9,11 @@ use ax_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     utils::create_seeded_rng,
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    program::{Program, DEFAULT_PC_STEP},
-    CommonOpcode, PhantomInstruction,
-    PublishOpcode::PUBLISH,
+use ax_stark_backend::{
+    config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
+    prover::types::Proof,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
-use rand::Rng;
-use stark_vm::{
+use axvm_circuit::{
     arch::{
         instructions::{
             BranchEqualOpcode::*, CommonOpcode::*, FieldArithmeticOpcode::*,
@@ -44,6 +35,15 @@ use stark_vm::{
         },
     },
 };
+use axvm_instructions::{
+    instruction::Instruction,
+    program::{Program, DEFAULT_PC_STEP},
+    CommonOpcode, PhantomInstruction,
+    PublishOpcode::PUBLISH,
+};
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, PrimeField32};
+use rand::Rng;
 use test_log::test;
 
 const LIMB_BITS: usize = 29;

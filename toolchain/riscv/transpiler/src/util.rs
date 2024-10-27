@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
+use axvm_circuit::{rv32im::adapters::RV32_REGISTER_NUM_LIMBS, system::memory::Equipartition};
 use axvm_instructions::{
     instruction::Instruction, utils::isize_to_field, CommonOpcode, UsizeOpcode,
 };
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
-use stark_vm::{rv32im::adapters::RV32_REGISTER_NUM_LIMBS, system::memory::Equipartition};
 
 fn i12_to_u24(imm: i32) -> u32 {
     (imm as u32) & 0xffffff

@@ -16,7 +16,7 @@ afs-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-sdk = { workspace = true }
-stark-vm = { workspace = true }
+axvm-circuit = { workspace = true }
 # disable jemalloc to be compatible with afs-starkbackend
 snark-verifier-sdk = { workspace = true, optional = true }
 
@@ -46,6 +46,6 @@ afs-compiler = { path = ".", features = ["sdk"] }
 [features]
 default = ["parallel"]
 halo2-compiler = ["dep:snark-verifier-sdk"]
-parallel = ["stark-vm/parallel"]
-sdk = ["stark-vm/sdk"]
-bench-metrics = ["sdk", "dep:metrics", "stark-vm/bench-metrics"]
+parallel = ["axvm-circuit/parallel"]
+sdk = ["axvm-circuit/sdk"]
+bench-metrics = ["sdk", "dep:metrics", "axvm-circuit/bench-metrics"]
