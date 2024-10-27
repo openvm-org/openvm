@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness};
+use axvm_native_compiler::ir::{Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness};
 use ax_stark_backend::prover::{
     opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
     types::{AirProofData, Commitments, Proof},

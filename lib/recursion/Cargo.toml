@@ -6,7 +6,7 @@ edition.workspace = true
 
 [dependencies]
 ax-stark-backend = { workspace = true }
-afs-compiler = { workspace = true, features = ["sdk"] }
+axvm-native-compiler = { workspace = true, features = ["sdk"] }
 ax-sdk = { workspace = true }
 afs-derive = { workspace = true }
 axvm-circuit = { workspace = true, features = ["sdk"] }
@@ -64,7 +64,7 @@ name = "small_e2e"
 default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
 static-verifier = [
-    "afs-compiler/halo2-compiler",
+    "axvm-native-compiler/halo2-compiler",
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]

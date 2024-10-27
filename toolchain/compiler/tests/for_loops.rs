@@ -1,4 +1,4 @@
-use afs_compiler::{
+use axvm_native_compiler::{
     asm::{AsmBuilder, AsmConfig},
     ir::{Array, RVar, SymbolicVar, Var},
 };

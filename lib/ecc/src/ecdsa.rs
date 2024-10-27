@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Builder, Config, Var};
+use axvm_native_compiler::ir::{Builder, Config, Var};
 use p3_field::{AbstractField, PrimeField64};
 use snark_verifier_sdk::snark_verifier::halo2_base::halo2_proofs::halo2curves::secp256k1::Secp256k1Affine;
 

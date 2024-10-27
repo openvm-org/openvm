@@ -1,8 +1,8 @@
 use std::{ops::Mul, str::FromStr};
 
-use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions};
 use ax_sdk::utils::create_seeded_rng;
 use axvm_circuit::system::program::util::execute_program;
+use axvm_native_compiler::{asm::AsmBuilder, conversion::CompilerOptions};
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;

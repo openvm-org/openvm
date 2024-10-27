@@ -7,7 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-afs-compiler = { workspace = true, features = ["sdk"] }
+axvm-native-compiler = { workspace = true, features = ["sdk"] }
 afs-derive = { workspace = true }
 axvm-recursion = { workspace = true }
 ax-sdk = { workspace = true }

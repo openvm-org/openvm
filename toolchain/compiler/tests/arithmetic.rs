@@ -1,4 +1,4 @@
-use afs_compiler::{
+use axvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
     conversion::{convert_program, CompilerOptions},
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},

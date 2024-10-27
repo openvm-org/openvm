@@ -1,4 +1,3 @@
-use afs_compiler::conversion::CompilerOptions;
 use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
@@ -12,6 +11,7 @@ use axvm_circuit::{
     arch::instructions::program::Program,
     system::{program::util::execute_and_prove_program, vm::config::VmConfig},
 };
+use axvm_native_compiler::conversion::CompilerOptions;
 use inner::build_verification_program;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
@@ -22,7 +22,6 @@ use crate::hints::InnerVal;
 type InnerSC = BabyBearPoseidon2Config;
 
 pub mod inner {
-    use afs_compiler::conversion::CompilerOptions;
     use ax_sdk::{
         config::{
             baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -31,6 +30,7 @@ pub mod inner {
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
     use axvm_circuit::system::vm::config::VmConfig;
+    use axvm_native_compiler::conversion::CompilerOptions;
 
     use super::*;
     use crate::{hints::Hintable, stark::VerifierProgram, types::new_from_inner_multi_vk};

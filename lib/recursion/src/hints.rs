@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 
-use afs_compiler::ir::{
+use axvm_native_compiler::ir::{
     unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
     DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
 };
@@ -559,7 +559,7 @@ impl Hintable<InnerConfig> for ECDSAInput {
 
 #[cfg(test)]
 mod test {
-    use afs_compiler::{
+    use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
         prelude::*,

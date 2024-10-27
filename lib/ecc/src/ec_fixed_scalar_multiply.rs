@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var, NUM_LIMBS};
+use axvm_native_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var, NUM_LIMBS};
 use ff::PrimeField;
 use num_bigint_dig::BigUint;
 use p3_field::{AbstractField, PrimeField64};

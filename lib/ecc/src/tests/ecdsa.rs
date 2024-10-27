@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions};
 use axvm_circuit::system::program::util::execute_program;
+use axvm_native_compiler::{asm::AsmBuilder, conversion::CompilerOptions};
 use k256::{
     ecdsa::{hazmat::DigestPrimitive, signature::Signer, Signature, SigningKey, VerifyingKey},
     sha2::digest::FixedOutput,

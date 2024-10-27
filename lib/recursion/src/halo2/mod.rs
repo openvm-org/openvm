@@ -7,7 +7,7 @@ mod tests;
 
 use std::{fmt::Debug, fs::File};
 
-use afs_compiler::{
+use axvm_native_compiler::{
     constraints::{halo2::compiler::Halo2State, ConstraintCompiler},
     ir::{Config, DslIr, TracedVec, Witness},
 };

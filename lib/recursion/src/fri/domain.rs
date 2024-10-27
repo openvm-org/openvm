@@ -1,4 +1,4 @@
-use afs_compiler::prelude::*;
+use axvm_native_compiler::prelude::*;
 use p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset};
 use p3_field::{AbstractField, TwoAdicField};
 
@@ -165,12 +165,12 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use afs_compiler::asm::AsmBuilder;
     use ax_sdk::config::{
         baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
         FriParameters,
     };
     use axvm_circuit::system::program::util::execute_program;
+    use axvm_native_compiler::asm::AsmBuilder;
     use p3_commit::{Pcs, PolynomialSpace};
     use p3_field::PrimeField;
     use p3_uni_stark::{Domain, StarkGenericConfig, Val};

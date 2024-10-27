@@ -1,10 +1,10 @@
-use afs_compiler::{
+use afs_derive::DslVariable;
+use axvm_circuit::system::program::util::execute_program;
+use axvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Array, Config, Ext, Felt, RVar, Usize, Var},
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
 };
-use afs_derive::DslVariable;
-use axvm_circuit::system::program::util::execute_program;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 

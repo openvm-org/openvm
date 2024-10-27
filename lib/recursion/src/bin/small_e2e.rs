@@ -5,7 +5,7 @@
 /// 2. Verify the proof of 2. in the outer config.
 /// 3. Verify the proof of 3. using a Halo2 static verifier.
 /// 4. Wrapper Halo2 circuit to reduce the size of 4.
-use afs_compiler::{
+use axvm_native_compiler::{
     asm::AsmBuilder,
     conversion::CompilerOptions,
     ir::{Ext, Felt, RVar, Var},

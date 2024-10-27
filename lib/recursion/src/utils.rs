@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
+use axvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
 use ax_sdk::config::FriParameters;
 use p3_commit::TwoAdicMultiplicativeCoset;
 use p3_field::{AbstractField, TwoAdicField};

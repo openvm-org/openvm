@@ -7,11 +7,6 @@
 /// 4. Wrapper Halo2 circuit to reduce the size of 4.
 use std::iter;
 
-use afs_compiler::{
-    asm::AsmBuilder,
-    conversion::CompilerOptions,
-    ir::{RVar, Var},
-};
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
@@ -24,6 +19,11 @@ use axvm_circuit::{
     arch::{instructions::program::Program, ExecutorName},
     sdk::gen_vm_program_test_proof_input,
     system::vm::config::VmConfig,
+};
+use axvm_native_compiler::{
+    asm::AsmBuilder,
+    conversion::CompilerOptions,
+    ir::{RVar, Var},
 };
 use axvm_recursion::testing_utils::inner::build_verification_program;
 use num_bigint_dig::BigUint;

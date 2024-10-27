@@ -1,12 +1,12 @@
-use afs_compiler::{
-    asm::AsmConfig,
-    ir::{Config, DIGEST_SIZE},
-};
 use ax_stark_backend::{
     air_builders::symbolic::symbolic_expression::SymbolicExpression,
     config::Com,
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
     prover::types::Proof,
+};
+use axvm_native_compiler::{
+    asm::AsmConfig,
+    ir::{Config, DIGEST_SIZE},
 };
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;

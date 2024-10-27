@@ -1,10 +1,10 @@
-use afs_compiler::{
+use ax_sdk::config::baby_bear_poseidon2::default_perm;
+use axvm_circuit::system::program::util::execute_program;
+use axvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Array, Var, PERMUTATION_WIDTH},
     prelude::RVar,
 };
-use ax_sdk::config::baby_bear_poseidon2::default_perm;
-use axvm_circuit::system::program::util::execute_program;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_symmetric::Permutation;

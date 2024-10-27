@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Builder, Witness};
+use axvm_native_compiler::ir::{Builder, Witness};
 use p3_bn254_fr::Bn254Fr;
 
 use super::types::{BatchOpeningVariable, TwoAdicPcsProofVariable};

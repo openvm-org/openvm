@@ -1,8 +1,3 @@
-/// Benchmark of aggregation VM performance.
-/// Proofs:
-/// 1. Prove Fibonacci AIR.
-/// 2. Verify the proof of 1. by execution VM program in STARK VM.
-use afs_compiler::conversion::CompilerOptions;
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
@@ -14,6 +9,11 @@ use ax_sdk::{
 };
 use ax_stark_backend::Chip;
 use axvm_circuit::system::vm::config::VmConfig;
+/// Benchmark of aggregation VM performance.
+/// Proofs:
+/// 1. Prove Fibonacci AIR.
+/// 2. Verify the proof of 1. by execution VM program in STARK VM.
+use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::recursive_stark_test;
 
 fn main() {

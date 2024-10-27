@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use afs_compiler::{
+use axvm_native_compiler::{
     conversion::CompilerOptions,
     ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
     prelude::RVar,

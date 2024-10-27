@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var, NUM_LIMBS};
+use axvm_native_compiler::ir::{Array, BigUintVar, Builder, Config, RVar, Var, NUM_LIMBS};
 use p3_field::{AbstractField, PrimeField64};
 
 use crate::types::ECPointVariable;

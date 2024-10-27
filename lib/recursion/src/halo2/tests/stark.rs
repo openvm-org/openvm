@@ -1,4 +1,3 @@
-use afs_compiler::ir::Witness;
 use ax_sdk::{
     config::{
         baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
@@ -6,6 +5,7 @@ use ax_sdk::{
     },
     engine::{ProofInputForTest, StarkFriEngine},
 };
+use axvm_native_compiler::ir::Witness;
 use tracing::Level;
 
 use crate::{

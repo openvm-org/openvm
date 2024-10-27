@@ -1,6 +1,5 @@
 use std::{array, borrow::BorrowMut};
 
-use afs_compiler::{conversion::CompilerOptions, prelude::*};
 use afs_derive::AlignedBorrow;
 use ax_sdk::{
     ax_stark_backend::{
@@ -19,6 +18,7 @@ use axvm_circuit::{
         },
     },
 };
+use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_recursion::{
     challenger::duplex::DuplexChallengerVariable,
     digest::DigestVariable,

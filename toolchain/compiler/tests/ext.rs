@@ -1,8 +1,8 @@
-use afs_compiler::{
+use axvm_circuit::system::program::util::execute_program;
+use axvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Ext, Felt},
 };
-use axvm_circuit::system::program::util::execute_program;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
 use rand::{thread_rng, Rng};

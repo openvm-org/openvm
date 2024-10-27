@@ -1,4 +1,4 @@
-use afs_compiler::prelude::*;
+use axvm_native_compiler::prelude::*;
 use p3_commit::TwoAdicMultiplicativeCoset;
 use p3_field::{AbstractField, TwoAdicField};
 use p3_symmetric::Hash;
@@ -304,12 +304,12 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
-    use afs_compiler::{
+    use ax_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+    use axvm_circuit::arch::instructions::program::Program;
+    use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Array, RVar, DIGEST_SIZE},
     };
-    use ax_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
-    use axvm_circuit::arch::instructions::program::Program;
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, FieldChallenger};

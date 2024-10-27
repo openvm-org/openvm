@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use afs_compiler::conversion::CompilerOptions;
 use ax_sdk::{
     ax_stark_backend::{config::StarkGenericConfig, keygen::types::MultiStarkProvingKey},
     config::{
@@ -10,6 +9,7 @@ use ax_sdk::{
     engine::{StarkEngine, StarkFriEngine},
 };
 use axvm_circuit::system::{program::trace::CommittedProgram, vm::config::VmConfig};
+use axvm_native_compiler::conversion::CompilerOptions;
 
 use crate::verifier::leaf::LeafVmVerifierConfig;
 

@@ -1,6 +1,6 @@
-use afs_compiler::ir::{DslIr, TracedVec, Witness};
-use ax_stark_backend::prover::types::Proof;
 use ax_sdk::config::{baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters};
+use ax_stark_backend::prover::types::Proof;
+use axvm_native_compiler::ir::{DslIr, TracedVec, Witness};
 use itertools::Itertools;
 use snark_verifier_sdk::{
     evm::{gen_evm_proof_shplonk, gen_evm_verifier_shplonk},

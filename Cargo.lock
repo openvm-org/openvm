@@ -29,42 +29,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 
 [[package]]
-name = "afs-compiler"
-version = "0.1.0"
-dependencies = [
- "afs-compiler",
- "afs-derive",
- "ax-circuit-primitives",
- "ax-sdk",
- "axvm-circuit",
- "axvm-instructions",
- "backtrace",
- "cfg-if",
- "hex",
- "itertools 0.13.0",
- "metrics",
- "num-bigint 0.4.6",
- "num-bigint-dig",
- "num-integer",
- "num-traits",
- "p3-baby-bear",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-dft",
- "p3-field",
- "p3-merkle-tree",
- "p3-symmetric",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "snark-verifier-sdk",
- "strum",
- "strum_macros",
- "tracing",
- "zkhash",
-]
-
-[[package]]
 name = "afs-derive"
 version = "0.1.0"
 dependencies = [
@@ -411,11 +375,11 @@ dependencies = [
 name = "ax-ecc-lib"
 version = "0.1.0"
 dependencies = [
- "afs-compiler",
  "ax-circuit-primitives",
  "ax-sdk",
  "ax-stark-backend",
  "axvm-circuit",
+ "axvm-native-compiler",
  "elliptic-curve",
  "ff 0.13.0",
  "hex-literal",
@@ -578,10 +542,10 @@ dependencies = [
 name = "axiom-vm"
 version = "0.1.0"
 dependencies = [
- "afs-compiler",
  "afs-derive",
  "ax-sdk",
  "axvm-circuit",
+ "axvm-native-compiler",
  "axvm-recursion",
  "p3-baby-bear",
  "serde",
@@ -684,6 +648,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-native-compiler"
+version = "0.1.0"
+dependencies = [
+ "afs-derive",
+ "ax-circuit-primitives",
+ "ax-sdk",
+ "axvm-circuit",
+ "axvm-instructions",
+ "axvm-native-compiler",
+ "backtrace",
+ "cfg-if",
+ "hex",
+ "itertools 0.13.0",
+ "metrics",
+ "num-bigint 0.4.6",
+ "num-bigint-dig",
+ "num-integer",
+ "num-traits",
+ "p3-baby-bear",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-dft",
+ "p3-field",
+ "p3-merkle-tree",
+ "p3-symmetric",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "snark-verifier-sdk",
+ "strum",
+ "strum_macros",
+ "tracing",
+ "zkhash",
+]
+
+[[package]]
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
@@ -699,13 +699,13 @@ dependencies = [
 name = "axvm-recursion"
 version = "0.1.0"
 dependencies = [
- "afs-compiler",
  "afs-derive",
  "ax-circuit-primitives",
  "ax-ecc-lib",
  "ax-sdk",
  "ax-stark-backend",
  "axvm-circuit",
+ "axvm-native-compiler",
  "cfg-if",
  "ff 0.13.0",
  "itertools 0.13.0",

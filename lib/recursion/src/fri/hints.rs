@@ -1,4 +1,4 @@
-use afs_compiler::{
+use axvm_native_compiler::{
     asm::AsmConfig,
     ir::{Builder, Config, DIGEST_SIZE},
 };

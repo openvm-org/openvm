@@ -1,6 +1,6 @@
-use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var};
 use ax_sdk::utils::create_seeded_rng;
 use axvm_circuit::system::program::util::execute_program;
+use axvm_native_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, One, Zero};
 use p3_baby_bear::BabyBear;

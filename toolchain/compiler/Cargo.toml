@@ -1,6 +1,6 @@
 # Forked from sp1-recursion-compiler under MIT license.
 [package]
-name = "afs-compiler"
+name = "axvm-native-compiler"
 version = "0.1.0"
 edition = "2021"
 
@@ -41,7 +41,7 @@ p3-symmetric = { workspace = true }
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
 rand = "0.8.5"
-afs-compiler = { path = ".", features = ["sdk"] }
+axvm-native-compiler = { path = ".", features = ["sdk"] }
 
 [features]
 default = ["parallel"]

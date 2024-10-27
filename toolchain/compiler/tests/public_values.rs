@@ -1,4 +1,4 @@
-use afs_compiler::{asm::AsmBuilder, prelude::*};
+use axvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use axvm_circuit::{
     arch::ExecutorName,
     system::{

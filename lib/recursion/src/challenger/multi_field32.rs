@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
+use axvm_native_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
 use p3_field::{AbstractField, Field};
 
 use crate::{

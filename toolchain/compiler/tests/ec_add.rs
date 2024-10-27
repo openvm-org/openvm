@@ -1,15 +1,15 @@
 #![allow(dead_code)]
 use std::borrow::Cow;
 
-use afs_compiler::{
-    asm::AsmBuilder,
-    conversion::CompilerOptions,
-    ir::{Array, Builder, Config, Var, LIMB_BITS, NUM_LIMBS},
-};
 use ax_circuit_primitives::bigint::utils::{big_uint_to_num_limbs, secp256k1_coord_prime};
 use axvm_circuit::{
     arch::ExecutorName,
     system::{program::util::execute_program_with_config, vm::config::VmConfig},
+};
+use axvm_native_compiler::{
+    asm::AsmBuilder,
+    conversion::CompilerOptions,
+    ir::{Array, Builder, Config, Var, LIMB_BITS, NUM_LIMBS},
 };
 use itertools::Itertools;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
