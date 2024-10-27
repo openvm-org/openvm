@@ -113,7 +113,7 @@ We will use the following notation:
 - `i32(c)` where `c` is a field element will mean `c.as_canonical_u32()` if `c.as_canonical_u32() < F::modulus() / 2` or `-c.as_canonical_u32()` otherwise.
 - `decompose(c)` where `c` is a field element means `c.as_canonical_u32().to_le_bytes()`.
 
-## Common
+## System
 
 | Name      | Operands  | Description                                                                                                        |
 | --------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -298,7 +298,7 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
 ### Prime Field Arithmetic
 
-The VM can be configured to support intrinsic instruction for arithmetic over prime fields. The VM configuration will specify a list of supported prime moduli. For each prime `P` there will be associated configuration parameters `P::NUM_LIMBS` and `P::BLOCK_SIZE` (defined below). For each prime modulus `P`, the 4 instructions below are supported.
+The VM can be configured to support intrinsic instructions for arithmetic over prime fields. The VM configuration will specify a list of supported prime moduli. For each prime `P` there will be associated configuration parameters `P::NUM_LIMBS` and `P::BLOCK_SIZE` (defined below). For each prime modulus `P`, the instructions below are supported.
 
 The instructions perform operations on unsigned big integers representing elements in the prime field. The big integer values are read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by reading register values in address space `1`.
 
@@ -307,12 +307,41 @@ An element in the prime field is represented as a big integer with `P::NUM_LIMBS
 For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
 Each instruction performs block accesses with block size `4` in address space `1` and block size `P::BLOCK_SIZE` in address space `2`, where `P::NUM_LIMBS` is divisible by `P::BLOCK_SIZE`. Recall that `P::BLOCK_SIZE` must be a power of 2.
 
-| Name             | Operands    | Description                                                                                                                              |
-| ---------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| ADDMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 + [r32{0}(c):32]_2 (mod P)`                                                                         |
-| SUBMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 - [r32{0}(c):32]_2 (mod P)`                                                                         |
-| MULMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 * [r32{0}(c):32]_2 (mod P)`                                                                         |
-| DIVMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 / [r32{0}(c):32]_2 (mod P)`. Undefined behavior if `[r32{0}(c):32]_2` is congruent to 0 modulo `P`. |
+| Name             | Operands    | Description                                                                                                                                                                          |
+| ---------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ADDMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a): P::NUM_LIMBS]_2 = [r32{0}(b): P::NUM_LIMBS]_2 + [r32{0}(c): P::NUM_LIMBS]_2 (mod P)`                                                                                    |
+| SUBMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a): P::NUM_LIMBS]_2 = [r32{0}(b): P::NUM_LIMBS]_2 - [r32{0}(c): P::NUM_LIMBS]_2 (mod P)`                                                                                    |
+| MULMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a): P::NUM_LIMBS]_2 = [r32{0}(b): P::NUM_LIMBS]_2 * [r32{0}(c): P::NUM_LIMBS]_2 (mod P)`                                                                                    |
+| DIVMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a): P::NUM_LIMBS]_2 = [r32{0}(b): P::NUM_LIMBS]_2 / [r32{0}(c): P::NUM_LIMBS]_2 (mod P)`. Undefined behavior if `[r32{0}(c): P::NUM_LIMBS]_2` is congruent to 0 modulo `P`. |
+
+### Prime Field Branching
+
+The configuration of `P` is the same as above. For each instruction, the input elements `[r32{0}(b): P::NUM_LIMBS]_2, [r32{0}(c):P::NUM_LIMBS]_2` are assumed to be unsigned big integers in little-endian format with each limb having `LIMB_BITS` bits.
+
+| Name              | Operands    | Description                                                                                                                                                                                                                                                                                         |
+| ----------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ISEQMOD_RV32\<P\> | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): P::NUM_LIMBS]_2 == [r32{0}(c): P::NUM_LIMBS]_2 (mod P) ? 1 : 0`. Enforces that `[r32{0}(b): P::NUM_LIMBS]_2, [r32{0}(c): P::NUM_LIMBS]_2` are less than `P` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
+
+### Short Weierstrass Elliptic Curve Arithmetic
+
+The VM can be configured to support intrinsic instructions for elliptic curves `C` in short Weierstrass form given by equation `C: y^2 = x^3 + C::B` where `C::B` is a constant of the coordinate field. We note that the definitions of the curve arithmetic operations do not depend on `C::B`. The VM configuration will specify a list of supported curves. For each short Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (defined below). For each curve `C`, the instructions below are supported.
+
+An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each with `LIMB_BITS = 8` bits. When the coordinate field of `C` is prime, the format of `x,y` is guaranteed to be the same as the format used in the [prime field arithmetic instructions](#prime-field-arithmetic). A curve point will be represented as `2 * C::COORD_SIZE` contiguous cells in memory.
+
+We use the following notation below:
+
+```
+r32_ec_point(a) -> EcPoint {
+    let x = [r32{0}(a): C::COORD_SIZE]_2;
+    let y = [r32{0}(a) + C::COORD_SIZE: C::COORD_SIZE]_2;
+    return EcPoint(x, y);
+}
+```
+
+| Name           | Operands    | Description                                                                                                                                                                                                                                                                          |
+| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SW_ADD_NE\<C\> | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field. |
+| SW_DOUBLE\<C\> | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                           |
 
 ## Native Kernel
 
@@ -381,99 +410,16 @@ A note on CASTF below: support for casting arbitrary field elements can also be 
 | --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **CASTF** | `a, b, _`                                     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
 
-### U256 Arithmetic and Logical Operations
-
-We name these opcodes `ADD`, etc, below for brevity but in the code they must distinguish between `ADD` for `u32`
-and `ADD` for `u256`.
-
-Let `Word256 = [u8; 32]`. Although we work over a 31-bit field, and we can in theory represent `u256` as larger limbs (
-e.g. 16bits), we choose to operate on bytes because
-(1): a lot of data we work with are naturally in bytes and
-(2): to be consistent with modular arithmetic below.
-Explicitly, the conversion between the limb representation and the actual unsigned integer is given by
-
-```
-compose(w: Word256) -> u256 {
-    return sum_{i=0}^31 w[i] * 2^{8i}
-}
-```
-
-(in other words, little-endian).
-
-and let `decompose: u256 -> [F; 32]` be the inverse operation.
-
-To save some notation, we will let `u256[a]_d := compose([a:32]_d)` below.
-The address spaces `d, e` are not allowed to be zero in any instructions below unless otherwise specified.
-
-#### Arithmetic Operations
-
-| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                          |
-| -------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **ADD**  | `a, b, c`                                     | Set `[a:32]_d <- decompose(u256[b]_d + u256[c]_e)` where addition is mod `2^256`.                    |
-| **SUB**  | `a, b, c`                                     | Set `[a:32]_d <- decompose(u256[b]_d - u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
-| **MUL**  | `a, b, c`                                     | Set `[a:32]_d <- decompose(u256[b]_d * u256[c]_e)` where multiplication is mod `2^256`.              |
-
-<!--
-We don't need this yet:
-| **DIV** | `a, b, c` | Set `[a:16]_d <- decompose(u256[b]_d // u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
--->
-
-#### Comparison Operations
-
-| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                          |
-| -------- | --------------------------------------------- | -------------------------------------------------------------------- |
-| **LT**   | `a, b, c`                                     | Set `[a]_d <- u256[b]_d < u256[c]_e ? decompose(1) : decompose(0)`.  |
-| **EQ**   | `a, b, c`                                     | Set `[a]_d <- u256[b]_d == u256[c]_e ? decompose(1) : decompose(0)`. |
-
-### Modular arithmetic
-
-For some technical reasons we cannot have limb bits greater than 12 (it will overflow the field element in intermediate
-computations), so the big uints are represented as `BigUint = [u8; 32]`.
-
-We will have similar notation as `u256` and let `bigu[a]_d: BigUint` denote the array of limbs `bigu[a:32]_d`. The
-conversion between limbs and the big uint is the same as for `u256` above.
-The modulus we will use for now are the coordinate field and scalar field of `secp256k1`.
-
-| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                     |
-| -------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **ADD**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e + bigu[[c]_d]_e)` where addition is in the given (coordinate/scalar) field.       |
-| **SUB**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e - bigu[[c]_d]_e)` where subtraction is in the given (coordinate/scalar) field.    |
-| **MUL**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e * bigu[[c]_d]_e)` where multiplication is in the given (coordinate/scalar) field. |
-| **DIV**  | `a, b, c`                                     | Set `bigu[[a]_d]_e <- decompose(bigu[[b]_d]_e / bigu[[c]_d]_e)` where division is in the given (coordinate/scalar) field.       |
-
-### Elliptic curve operations
-
-An elliptic curve point `EcPoint(x, y)` is a pair of big uint in a prime field (secp256k1). `x` and `y` will be
-represented as `BigUint` with 32 8-bit limbs, and thus an `EcPoint` needs 64 elements in total.
-Let `EcArray = [u8; 64]`.
-
-```
-compose_ec(w: EcArray) -> EcPoint {
-    let x = compose(w[..32]);
-    let y = compose(w[32..]);
-    return EcPoint(x, y);
-}
-```
-
-where `compose` is the one in modular arithmetic above. And let `decompose_ec(p: EcPoint) -> EcArray ` be the inverse
-of `compose_ec`.
-
-| Mnemonic                | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                   |
-| ----------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **SECP256K1_EC_ADD_NE** | `a, b, c`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e + EcArray[[c]_d]_e)` where `+` is group operation on secp256k1. Assume the x coordinate of two inputs are distinct, the result is undefined otherwise. |
-| **SECP256K1_EC_DOUBLE** | `a, b, _`                                     | Set `EcArray[[a]_d]_e <- decompose_ec(EcArray[[b]_d]_e + EcArray[[b]_d]_e)` where `+` is group operation on secp256k1. This double the input point.                                                           |
-
 ### Hash function precompiles
 
 We have special opcodes to enable different precompiled hash functions.
 
 Only subsets of these opcodes will be turned on depending on the VM use case.
 
-| Mnemonic                                                                                                                                                                                                                           | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a, b, c`                                     | Applies the Poseidon2 compression function to the inputs `[[b]_d:CHUNK]_e` and `[[c]_d:CHUNK]_e`, writing the result to `[[a]_d:CHUNK]_e`.<br/><br/>The address space `d` is **not** allowed to be `0`.                                                                                                                                                                                                                                                                                                                               |
-| **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a, b, 0`                                     | Applies the Poseidon2 permutation function to `[[b]_d:WIDTH]_e` and writes the result to `[[a]_d:WIDTH]_e`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. The address space `d` is **not** allowed to be `0`. This is nearly the same as `COMPRESS_POSEIDON2` except that the whole input state is contiguous in memory, and the full output state is written to memory.                                                                                                                  |
-| **KECCAK256**                                                                                                                                                                                                                      | `a, b, c, d, e, f`                            | Let `input` be the **variable length** byte array of length `len <- [c]_f` loaded from memory via `input[i] <- [[b]_d + i]_e` for `i = 0..len`. Let `output = keccak256(input)` as `[u8; 32]`. This opcode sets `[[a]_d + i]_e <- output[i]` for `i = 0..32`. This opcode assumes that the input memory cells are **bytes** and currently **does** range check them. **Safety:** The output is currently **not** range checked to be bytes. <!--ATTENTION: THIS MAY CHANGE IN FUTURE--> The output is written to memory as **bytes**. |
+| Mnemonic                                                                                                                                                                                                                           | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a, b, c`                                     | Applies the Poseidon2 compression function to the inputs `[[b]_d:CHUNK]_e` and `[[c]_d:CHUNK]_e`, writing the result to `[[a]_d:CHUNK]_e`.<br/><br/>The address space `d` is **not** allowed to be `0`.                                                                                                                                                                                                              |
+| **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a, b, 0`                                     | Applies the Poseidon2 permutation function to `[[b]_d:WIDTH]_e` and writes the result to `[[a]_d:WIDTH]_e`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. The address space `d` is **not** allowed to be `0`. This is nearly the same as `COMPRESS_POSEIDON2` except that the whole input state is contiguous in memory, and the full output state is written to memory. |
 
 For Poseidon2, the `PID` is just some identifier to provide domain separation between different Poseidon2 constants. For
 now we can set:
@@ -486,9 +432,9 @@ and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above. For t
 is read in two batches of size `CHUNK`, and, similarly, the output is written in either one or two batches of
 size `CHUNK`, depending on the output size of the corresponding opcode.
 
-### Excluded
+## Phantom Sub-Instructions
 
-These instructions are never enabled. Any program that actually executes them cannot be verified.
+TODO
 
 | Mnemonic   | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode  |
 | ---------- | --------------------------------------------- | ------------------------- |
