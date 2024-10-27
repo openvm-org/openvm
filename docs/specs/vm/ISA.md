@@ -3,13 +3,13 @@
 This design is adapted from [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with changes to the
 instruction format suggested by Max Gillet to enable easier compatibility with other existing ISAs.
 
-## Architecture
+# Architecture
 
-### Instruction format
+## Instruction format
 
 Instructions are encoded as a global opcode (field element) followed by `NUM_OPERANDS = 7` operands (field elements): $\text{opcode}, \text{a}, \text{b}, \text{c}, \text{d}, \text{e}, \text{f}, \text{g}$. An instruction does not need to use all operands, and trailing unused operands should be set to zero.
 
-### Program ROM
+## Program ROM
 
 Our VM operates under the Harvard architecture, where program code is stored separately from main
 memory. Code is addressed by any field element in range `[0, 2^PC_BITS)` where `PC_BITS = 30`. The program counter `pc` stores the location (a field
@@ -17,7 +17,7 @@ element) of the instruction that is being executed.
 
 The program code is committed as a cached trace. The validity of the program code and its cached trace must be checked outside of ZK. A valid program code must have all instructions stored at locations in range `[0, 2^PC_BITS)`. While the instructions can be stored at any locations, we will by default follow RISC-V in storing instructions at multiples of `DEFAULT_PC_STEP = 4`.
 
-### Memory
+## Memory
 
 Memory is comprised of addressable cells, each cell containing a single field element.
 Instructions of the VM may access (read or write) memory
@@ -38,13 +38,13 @@ implemented. At present there are two types of blocks we have in mind
 While not relevant to the ISA itself, the ZK circuit implementation does usually represent a block `[F; N]` as `N`
 contiguous field elements in the same row of the trace matrix.
 
-### Immediate Values
+## Immediate Values
 
 Immediate values are treated as single field elements. Our VM cannot represent operand values that are greater than the
 prime $p$ and cannot distinguish between $0$ and $p$ (or any two integers whose difference is a multiple of $p$).
 Therefore, any immediate values greater than or equal to $p$ need to be expanded into smaller values.
 
-### Registers
+## Registers
 
 Our zkVM treats general purpose registers simply as pointers to a separate address space, which is also comprised of
 addressable cells. Registers are represented using the [LIMB] format, currently with `LIMB_BITS = 8`.
@@ -52,15 +52,21 @@ addressable cells. Registers are represented using the [LIMB] format, currently 
 There is a single special purpose register `pc` for the program counter of type `F`. Namely, the program counter cannot
 be $\ge p$. (We may extend `pc` to multiple field elements to increase the program address space size in the future.)
 
-### Notation
+## Notation
 
 The following notation is used throughout this document:
 
-**Operand values**: `a, b, c, d, e, f, g` denote the value encoded in the corresponding operand of the current instruction.
+### Operand values
 
-**Program counter**: `pc` denotes the value of the current program counter.
+`a, b, c, d, e, f, g` denote the value encoded in the corresponding operand of the current instruction.
 
-**Addressing**: we support different address spaces of memory.
+### Program counter
+
+`pc` denotes the value of the current program counter.
+
+### Addressing
+
+We support different address spaces of memory.
 
 - We use `[a]_d` to denote the single-cell value at pointer location `a` in address space `d`. This is a single
   field element.
@@ -86,7 +92,7 @@ The pointers can have values in `[0, 2^pointer_max_bits)`. We currently require 
 > A memory cell in any address space is always a field element, but the VM _may_ later impose additional bit size
 > constraints on certain address spaces (e.g., everything in address space `2` must be a byte).
 
-## Instruction list
+# Instruction list
 
 All instruction types are divided into classes, mostly based on purpose and nature of the operation (e.g., ALU instructions, U256 instructions, Modular arithmetic instructions, etc).
 Instructions within each class are usually handled by the same chip, but this is not always the case (for example, if
@@ -107,14 +113,14 @@ We will use the following notation:
 - `i32(c)` where `c` is a field element will mean `c.as_canonical_u32()` if `c.as_canonical_u32() < F::modulus() / 2` or `-c.as_canonical_u32()` otherwise.
 - `decompose(c)` where `c` is a field element means `c.as_canonical_u32().to_le_bytes()`.
 
-### Common
+## Common
 
 | Name      | Operands  | Description                                                                                                        |
 | --------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
 | TERMINATE | `_, _, c` | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                   |
 | PHANTOM   | `_, _, c` | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run. |
 
-### RV32IM Support
+## RV32IM Support
 
 While the architecture allows creation of VMs without RISC-V support, we define a set of instructions that are meant to be transpiled from RISC-V instructions such that the resulting VM is able to run RISC-V ELF binaries. We use \_RV32 to specify that the operand parsing is specifically targeting 32-bit RISC-V registers.
 
@@ -125,7 +131,7 @@ All instructions below assume that all memory cells in address spaces `1` and `2
 1. `[0:4]_1` starts with all zeros.
 2. No instruction in the program writes to `[0:4]_1`.
 
-#### ALU
+### ALU
 
 In all ALU instructions, the operand `d` is fixed to be `1`. The operand `e` must be either `0` or `1`. When `e = 0`, the `c` operand is expected to be of the form `F::from_canonical_u32(c_i16 as i24 as u24 as u32)` where `c_i16` is type `i16`. In other words we take signed 16-bits in two's complement, sign extend to 24-bits, consider the 24-bits as unsigned integer, and convert to field element. In the instructions below, `[c:4]_0` should be interpreted as `c_i16 as i32` sign extended to 32-bits.
 
@@ -139,29 +145,30 @@ In all ALU instructions, the operand `d` is fixed to be `1`. The operand `e` mus
 | SLL_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 << [c:4]_e`                                                                           |
 | SRL_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 >> [c:4]_e`                                                                           |
 | SRA_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 >> [c:4]_e` MSB extends                                                               |
-| SLT_RV32  | `a,b,c,1,e` | `[a:4]_1 = i32([b:4]_1) < i32([c:4]_e) ? sign_extend(1) : sign_extend(0)`                                |
-| SLTU_RV32 | `a,b,c,1,e` | `[a:4]_1 = u32([b:4]_1) < u32([c:4]_e) ? sign_extend(1) : sign_extend(0)`                                |
+| SLT_RV32  | `a,b,c,1,e` | `[a:4]_1 = i32([b:4]_1) < i32([c:4]_e) ? 1 : 0`                                                          |
+| SLTU_RV32 | `a,b,c,1,e` | `[a:4]_1 = u32([b:4]_1) < u32([c:4]_e) ? 1 : 0`                                                          |
 
-#### Load/Store
+### Load/Store
 
-For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1` and `e = 2`.
-We will use shorthand `rv{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as `i32`. This means we interpret `c` as the 2's complement encoding of a 16-bit integer, sign extend it to 32-bits, and then perform signed 32-bit addition with the value of the register `[b:4]_1`.
+For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
+The address space `e` can be any [valid address space](#addressing).
+We will use shorthand `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as `i32`. This means we interpret `c` as the 2's complement encoding of a 16-bit integer, sign extend it to 32-bits, and then perform signed 32-bit addition with the value of the register `[b:4]_1`.
 Memory access to `ptr: i32` is only valid if `0 <= ptr < 2^addr_max_bits`, in which case it is an access to `F::from_canonical_u32(ptr as u32)`.
 
 All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32, STOREB_RV32.
 
-| Name        | Operands    | Description                                                                                                                   |
-| ----------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| LOADB_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv{c}(b):1]_2)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
-| LOADH_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([rv{c}(b):2]_2)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
-| LOADW_RV32  | `a,b,c,1,2` | `[a:4]_1 = [rv{c}(b):4]_2`                                                                                                    |
-| LOADBU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([rv{c}(b):1]_2)` Must zero-extend the number read from memory.                                         |
-| LOADHU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([rv{c}(b):2]_2)` Must zero-extend the number read from memory.                                         |
-| STOREB_RV32 | `a,b,c,1,2` | `[rv{c}(b):1]_2 <- [b:1]_1`                                                                                                   |
-| STOREH_RV32 | `a,b,c,1,2` | `[rv{c}(b):2]_2 <- [b:2]_1`                                                                                                   |
-| STOREW_RV32 | `a,b,c,1,2` | `[rv{c}(b):4]_2 <- [b:4]_1`                                                                                                   |
+| Name        | Operands    | Description                                                                                                                    |
+| ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| LOADB_RV32  | `a,b,c,1,e` | `[a:4]_1 = sign_extend([r32{c}(b):1]_e)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
+| LOADH_RV32  | `a,b,c,1,e` | `[a:4]_1 = sign_extend([r32{c}(b):2]_e)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
+| LOADW_RV32  | `a,b,c,1,e` | `[a:4]_1 = [r32{c}(b):4]_e`                                                                                                    |
+| LOADBU_RV32 | `a,b,c,1,e` | `[a:4]_1 = zero_extend([r32{c}(b):1]_e)` Must zero-extend the number read from memory.                                         |
+| LOADHU_RV32 | `a,b,c,1,e` | `[a:4]_1 = zero_extend([r32{c}(b):2]_e)` Must zero-extend the number read from memory.                                         |
+| STOREB_RV32 | `a,b,c,1,e` | `[r32{c}(b):1]_e <- [b:1]_1`                                                                                                   |
+| STOREH_RV32 | `a,b,c,1,e` | `[r32{c}(b):2]_e <- [b:2]_1`                                                                                                   |
+| STOREW_RV32 | `a,b,c,1,e` | `[r32{c}(b):4]_e <- [b:4]_1`                                                                                                   |
 
-#### Branch/Jump/Upper Immediate
+### Branch/Jump/Upper Immediate
 
 For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 1`.
 
@@ -188,50 +195,106 @@ For AUIPC_RV32, the addition is treated as unchecked `u32` addition since that i
 
 Note that AUIPC_RV32 does not have any condition for the register write.
 
-#### Multiplication Extension
+### Multiplication Extension
 
-This section needs more details.
+For multiplication extension instructions, we fix `d = 1`.
+MUL_RV32 performs an 32-bit×32-bit multiplication and places the lower 32 bits in the
+destination cells. MULH_RV32, MULHU_RV32, and MULHSU_RV32 perform the same multiplication but return
+the upper 32 bits of the full 2×32-bit product, for signed×signed, unsigned×unsigned, and
+signed×unsigned multiplication respectively.
 
-| Name        | Operands  | Description                                                                                                                   |
-| ----------- | --------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| MUL_RV32    | `a,b,c,d` | `[a:4]_d = ([b:4]_d * [c:4]_d)[0:3]`                                                                                          |
-| MULH_RV32   | `a,b,c,d` | `[a:4]_d = (sign_extend([b:4]_d) * sign_extend([c:4]_d))[4:7]`. We sign extend `b` and `c` into 8-limb (i.e. 64-bit) integers |
-| MULHSU_RV32 | `a,b,c,d` | `[a:4]_d = (sign_extend([b:4]_d) * zero_extend([c:4]_d))[4:7]`                                                                |
-| MULHU_RV32  | `a,b,c,d` | `[a:4]_d = (zero_extend([b:4]_d) * zero_extend([c:4]_d))[4:7]`                                                                |
-| DIV_RV32    | `a,b,c,d` | `[a:4]_d = [b:4]_d / [c:4]_d` Practically, we constrain that `b = a * c + r` for some `0 <= r < c`.                           |
-| DIVU_RV32   | `a,b,c,d` | `[a:4]_d = [b:4]_d / [c:4]_d` Constrain that `b = a * c + r` for some `0 <= r < c`.                                           |
-| REM_RV32    | `a,b,c,d` | `[a:4]_d = [b:4]_d % [c:4]_d` Constrain that `b = q * c + a` and `0 <= a < c`.                                                |
-| REMU_RV32   | `a,b,c,d` | `[a:4]_d = [b:4]_d % [c:4]_d` Constrain that `b = q * c + a` and `0 <= a < c`.                                                |
+DIV_RV32 and DIVU_RV32 perform signed and unsigned integer division of 32-bits by 32-bits. REM_RV32
+and REMU_RV32 provide the remainder of the corresponding division operation. Integer division is defined by `dividend = q * divisor + r` where `0 <= |r| < |divisor|` and either `sign(r) = sign(divisor)` or `r = 0`.
 
-#### System Calls
+Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
+| Name        | Operands  | Description                                                                                                                                                                                                |
+| ----------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MUL_RV32    | `a,b,c,1` | `[a:4]_1 = ([b:4]_1 * [c:4]_1)[0:3]`                                                                                                                                                                       |
+| MULH_RV32   | `a,b,c,1` | `[a:4]_1 = (sign_extend([b:4]_1) * sign_extend([c:4]_1))[4:7]`. We sign extend `b` and `c` into 8-limb (i.e. 64-bit) integers                                                                              |
+| MULHSU_RV32 | `a,b,c,1` | `[a:4]_1 = (sign_extend([b:4]_1) * zero_extend([c:4]_1))[4:7]`. We sign extend                                                                                                                             |
+| MULHU_RV32  | `a,b,c,1` | `[a:4]_1 = (zero_extend([b:4]_1) * zero_extend([c:4]_1))[4:7]`                                                                                                                                             |
+| DIV_RV32    | `a,b,c,1` | `[a:4]_1 = [b:4]_1 / [c:4]_1` integer division. Division by zero: if `i32([c:4]_1) = 0`, set `i32([a:4]_1) = -1`. Overflow: if `i32([b:4]_1) = -2^31` and `i32([c:4]_1) = -1`, set `i32([a:4]_1) = -2^31`. |
+| DIVU_RV32   | `a,b,c,1` | `[a:4]_1 = [b:4]_1 / [c:4]_1` integer division. Division by zero: if `u32([c:4]_1) = 0`, set `u32([a:4]_1) = 2^32 - 1`.                                                                                    |
+| REM_RV32    | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `i32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`. Overflow: if `i32([b:4]_1) = -2^31` and `i32([c:4]_1) = -1`, set `[a:4]_1 = 0`.         |
+| REMU_RV32   | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `u32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`.                                                                                         |
+
+### System Calls
+
+There are currently no system calls. System calls are used when the ISA and system are customized separately.
+Since axVM controls both the ISA and the underlying virtual machine, we use custom opcodes directly whenever possible.
+
+<!--
 Currently we have no need for `ECALLBREAK`, but we include it for future use.
 
 | Name       | Operands | Description                                                                                                                                                                                              |
 | ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ECALLBREAK | `_,_,c`  | This instruction has no operands except immediate `c = 0x0` or `0x1`. `c = 0x0` is ECALL. Custom functionality determined by reading register values. `c = 0x1` is EBREAK. Transfer control to debugger. |
+-->
 
-### RV32 Intrinsics
+## RV32 Intrinsics
 
-RV32 intrinsics are custom axVM opcodes that are meant to be transpiled from custom RISC-V instructions.
-The instruction definitions are custom, but they are still meant to be compatible with the RV32 architecture --
-in particular the instructions read values from RV32 registers.
+RV32 intrinsics are custom axVM opcodes that are designed to be compatible with the RV32 architecture.
+We continue to use \_RV32 to specify that the operand parsing is specifically targeting 32-bit RISC-V registers.
 
-We use the same notation for `rv{c}(b)` as in `LOADW_RV32` and `STOREW_RV32`.
+All instructions below assume that all memory cells in address spaces `1` and `2` are field elements that are in range `[0, 2^LIMB_BITS)` where `LIMB_BITS = 8`. The instructions must all ensure that any writes will uphold this constraint.
 
-| Name           | Operands    | Description                                                                       |
-| -------------- | ----------- | --------------------------------------------------------------------------------- |
-| HINTSTORE_RV32 | `_,b,c,_,2` | `[rv{c}(b):4]_2 = next 4 bytes from hint stream`. Only valid if bytes are stored. |
+We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as in [`LOADW_RV32` and `STOREW_RV32`](#loadstore).
 
-#### Hashes
+### User IO
 
-| Name           | Operands    | Description                                                     |
-| -------------- | ----------- | --------------------------------------------------------------- |
-| KECCAK256_RV32 | `a,b,c,1,e` | `[rv{0}(a):32]_e = keccak256([rv{0}(b)..rv{0}(b)+rv{0}(c)]_e)`. |
+| Name           | Operands    | Description                                                                                              |
+| -------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| HINTSTORE_RV32 | `_,b,c,1,2` | `[r32{c}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes. |
+| PUBLISH_RV32   | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`.                 |
 
-#### U256 ALU
+### Hashes
 
-#### U256 Multiplication
+| Name           | Operands    | Description                                                                                                       |
+| -------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`. |
+
+### 256-bit Integer Instructions
+
+The 256-bit ALU intrinsic instructions perform operations on 256-bit signed/unsigned integers where integer values are read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by reading register values in address space `1`. Note that these instructions are not the same as instructions on 256-bit registers.
+
+For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
+Each instruction performs block accesses with block size `4` in address space `1` and block size `32` in address space `2`.
+
+#### 256-bit ALU
+
+| Name         | Operands    | Description                                                                                                                          |
+| ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| ADD256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 + [r32{0}(c):32]_2`. Overflow is ignored and the lower 256-bits are written to the destination. |
+| SUB256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 - [r32{0}(c):32]_2`. Overflow is ignored and the lower 256-bits are written to the destination. |
+| XOR256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 ^ [r32{0}(c):32]_2`                                                                             |
+| OR256_RV32   | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 \| [r32{0}(c):32]_2`                                                                            |
+| AND256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 & [r32{0}(c):32]_2`                                                                             |
+| SLL256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 << [r32{0}(c):32]_2`                                                                            |
+| SRL256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 >> [r32{0}(c):32]_2`                                                                            |
+| SRA256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 >> [r32{0}(c):32]_2` MSB extends                                                                |
+| SLT256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = i256([r32{0}(b):32]_2) < i256([r32{0}(c):32]_2) ? 1 : 0`                                                         |
+| SLTU256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = u256([r32{0}(b):32]_2) < u256([r32{0}(c):32]_2) ? 1 : 0`                                                         |
+
+#### 256-bit Branch
+
+| Name         | Operands    | Description                                                  |
+| ------------ | ----------- | ------------------------------------------------------------ |
+| BEQ256_RV32  | `a,b,c,1,2` | `if([r32{0}(a):32]_2 == [r32{0}(b):32]_2) pc += c`           |
+| BNE256_RV32  | `a,b,c,1,2` | `if([r32{0}(a):32]_2 != [r32{0}(b):32]_2) pc += c`           |
+| BLT256_RV32  | `a,b,c,1,2` | `if(i32([r32{0}(a):32]_2) < i32([r32{0}(b):32]_2)) pc += c`  |
+| BGE256_RV32  | `a,b,c,1,2` | `if(i32([r32{0}(a):32]_2) >= i32([r32{0}(b):32]_2)) pc += c` |
+| BLTU256_RV32 | `a,b,c,1,2` | `if(u32([r32{0}(a):32]_2) < u32([r32{0}(b):32]_2)) pc += c`  |
+| BGEU256_RV32 | `a,b,c,1,2` | `if(u32([r32{0}(a):32]_2) >= u32([r32{0}(b):32]_2)) pc += c` |
+
+#### 256-bit Multiplication
+
+Multiplication performs 256-bit×256-bit multiplication and writes the lower 256-bits to memory.
+Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
+
+| Name        | Operands    | Description                                                       |
+| ----------- | ----------- | ----------------------------------------------------------------- |
+| MUL256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = ([r32{0}(b):32]_2 * [r32{0}(c):32]_2)[0:255]` |
 
 ### Native Kernel Instructions
 

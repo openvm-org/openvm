@@ -1,5 +1,7 @@
 //! This crate is intended for use on host machine. This includes usage within procedural macros.
 
+#![allow(non_camel_case_types)]
+
 use axvm_instructions_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
@@ -36,7 +38,6 @@ pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
 )]
 #[opcode_offset = 0]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum CommonOpcode {
     TERMINATE,
     PHANTOM,
@@ -47,7 +48,6 @@ pub enum CommonOpcode {
 )]
 #[opcode_offset = 0x010]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum NativeLoadStoreOpcode {
     LOADW,
     STOREW,
@@ -78,7 +78,6 @@ impl UsizeOpcode for NativeBranchEqualOpcode {
 )]
 #[opcode_offset = 0x040]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum NativeJalOpcode {
     JAL,
 }
@@ -88,7 +87,6 @@ pub enum NativeJalOpcode {
 )]
 #[opcode_offset = 0x080]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum PublishOpcode {
     PUBLISH,
 }
@@ -98,7 +96,6 @@ pub enum PublishOpcode {
 )]
 #[opcode_offset = 0x100]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum FieldArithmeticOpcode {
     ADD,
     SUB,
@@ -111,7 +108,6 @@ pub enum FieldArithmeticOpcode {
 )]
 #[opcode_offset = 0x110]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum FieldExtensionOpcode {
     FE4ADD,
     FE4SUB,
@@ -124,7 +120,6 @@ pub enum FieldExtensionOpcode {
 )]
 #[opcode_offset = 0x120]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum Poseidon2Opcode {
     PERM_POS2,
     COMP_POS2,
@@ -134,7 +129,6 @@ pub enum Poseidon2Opcode {
 )]
 #[opcode_offset = 0x130]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum Keccak256Opcode {
     KECCAK256,
 }
@@ -144,7 +138,6 @@ pub enum Keccak256Opcode {
 )]
 #[opcode_offset = 0x140]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum ModularArithmeticOpcode {
     ADD,
     SUB,
@@ -157,7 +150,6 @@ pub enum ModularArithmeticOpcode {
 )]
 #[opcode_offset = 0x150]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum U256Opcode {
     // maybe later we will make it uint and specify the parameters in the config
     ADD,
@@ -280,7 +272,6 @@ pub enum BranchEqualOpcode {
 )]
 #[opcode_offset = 0x335]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum BranchLessThanOpcode {
     BLT,
     BLTU,
