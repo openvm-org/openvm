@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
-use axvm_circuit::{arch::cycle_tracker::CycleTracker, metrics::cycle_tracker::CycleTracker};
+use axvm_circuit::metrics::cycle_tracker::CycleTracker;
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
