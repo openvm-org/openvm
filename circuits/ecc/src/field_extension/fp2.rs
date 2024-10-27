@@ -48,31 +48,55 @@ impl Fp2 {
     }
 
     pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
-        let (z0, z1) = {
-            let mut builder = self.c0.builder.borrow_mut();
-            let z0 = builder.new_var();
-            let z1 = builder.new_var();
+        println!("div fp2!!!!\n\n");
+        let mut builder = self.c0.builder.borrow_mut();
+        let z0 = builder.new_var();
+        let z1 = builder.new_var();
+        let prime = builder.prime.clone();
+        let limb_bits = builder.limb_bits;
+        let num_limbs = builder.num_limbs;
+        drop(builder);
 
-            // Constraint 1: x0 = y0*z0 - y1*z1
-            let rhs = &other.c0.expr * &z0 - &other.c1.expr * &z1;
-            let constraint1 = &self.c0.expr - &rhs;
-            builder.add_constraint(constraint1);
-            // Constraint 2: x1 = y1*z0 + y0*z1
-            let rhs = &other.c1.expr * &z0 + &other.c0.expr * &z1;
-            let constraint2 = &self.c1.expr - &rhs;
-            builder.add_constraint(constraint2);
+        // Constraint 1: x0 = y0*z0 - y1*z1
+        let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
+        let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.c0.range_checker_bits {
+            // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
+            self.save();
+        }
+        let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
+        let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.c0.range_checker_bits {
+            other.save();
+        }
 
-            // Compute z0
-            let compute_denom = &other.c0.expr * &other.c0.expr + &other.c1.expr * &other.c1.expr;
-            let compute_z0_nom = &self.c0.expr * &other.c0.expr + &self.c1.expr * &other.c1.expr;
-            let compute_z0 = &compute_z0_nom / &compute_denom;
-            builder.add_compute(compute_z0);
-            // Compute z1
-            let compute_z1_nom = &self.c1.expr * &other.c0.expr - &self.c0.expr * &other.c1.expr;
-            let compute_z1 = &compute_z1_nom / &compute_denom;
-            builder.add_compute(compute_z1);
-            (z0, z1)
-        };
+        // Constraint 2: x1 = y1*z0 + y0*z1
+        let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
+        let carry_bits = constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.c0.range_checker_bits {
+            // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
+            self.save();
+        }
+        let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
+        let carry_bits = constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.c0.range_checker_bits {
+            other.save();
+        }
+
+        // Compute z0
+        let compute_denom = &other.c0.expr * &other.c0.expr + &other.c1.expr * &other.c1.expr;
+        let compute_z0_nom = &self.c0.expr * &other.c0.expr + &self.c1.expr * &other.c1.expr;
+        let compute_z0 = &compute_z0_nom / &compute_denom;
+        // Compute z1
+        let compute_z1_nom = &self.c1.expr * &other.c0.expr - &self.c0.expr * &other.c1.expr;
+        let compute_z1 = &compute_z1_nom / &compute_denom;
+
+        let mut builder = self.c0.builder.borrow_mut();
+        builder.add_constraint(constraint1);
+        builder.add_constraint(constraint2);
+        builder.add_compute(compute_z0);
+        builder.add_compute(compute_z1);
+        drop(builder);
 
         let z0_var = FieldVariable::from_var(self.c0.builder.clone(), z0);
         let z1_var = FieldVariable::from_var(self.c0.builder.clone(), z1);
@@ -89,6 +113,7 @@ impl Fp2 {
         }
     }
 
+    // c is like a Fp2, but with both c0 and c1 being very small numbers.
     pub fn int_mul(&mut self, c: [isize; 2]) -> Fp2 {
         let c0 = self.c0.int_mul(c[0]) - self.c1.int_mul(c[1]);
         let c1 = self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]);
