@@ -1,10 +1,10 @@
 use std::{iter, sync::Arc};
 
-use ax_stark_backend::rap::AnyRap;
 use ax_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
+use ax_stark_backend::rap::AnyRap;
 use list::ListChip;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;

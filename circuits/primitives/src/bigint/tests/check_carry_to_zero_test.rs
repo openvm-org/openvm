@@ -1,12 +1,12 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use ax_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-};
 use ax_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
+};
+use ax_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use num_bigint_dig::BigUint;
 use num_traits::FromPrimitive;

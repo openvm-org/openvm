@@ -1,10 +1,5 @@
 use std::marker::PhantomData;
 
-use axvm_native_compiler::{
-    conversion::CompilerOptions,
-    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
-    prelude::RVar,
-};
 use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use ax_stark_backend::{
     air_builders::{
@@ -14,6 +9,11 @@ use ax_stark_backend::{
     prover::{opener::AdjacentOpenedValues, types::Proof},
 };
 use axvm_circuit::arch::instructions::program::Program;
+use axvm_native_compiler::{
+    conversion::CompilerOptions,
+    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
+    prelude::RVar,
+};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;

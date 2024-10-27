@@ -1,8 +1,8 @@
+use axvm_circuit::system::program::util::execute_program;
 use axvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
-use axvm_circuit::system::program::util::execute_program;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 

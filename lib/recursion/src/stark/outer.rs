@@ -1,6 +1,6 @@
-use axvm_native_compiler::ir::{Builder, DslIr, TracedVec};
-use ax_stark_backend::prover::types::Proof;
 use ax_sdk::config::{baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters};
+use ax_stark_backend::prover::types::Proof;
+use axvm_native_compiler::ir::{Builder, DslIr, TracedVec};
 
 use crate::{
     challenger::multi_field32::MultiField32ChallengerVariable, config::outer::OuterConfig,

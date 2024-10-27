@@ -1,9 +1,9 @@
 use std::borrow::BorrowMut;
 
+use ax_sdk::utils::create_seeded_rng;
 use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
 use axvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},

@@ -1,4 +1,3 @@
-use axvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use axvm_circuit::{
     arch::ExecutorName,
     system::{
@@ -6,6 +5,7 @@ use axvm_circuit::{
         vm::{config::VmConfig, SingleSegmentVM},
     },
 };
+use axvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 

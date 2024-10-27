@@ -1,11 +1,13 @@
 use core::borrow::Borrow;
 
-use axvm_native_compiler::ir::{Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness};
+use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use ax_stark_backend::prover::{
     opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
     types::{AirProofData, Commitments, Proof},
 };
-use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
+use axvm_native_compiler::ir::{
+    Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
+};
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_symmetric::Hash;

@@ -1,11 +1,11 @@
+use axvm_circuit::system::{
+    program::{util::execute_program, ExecutionError::Fail},
+    vm::{config::VmConfig, VirtualMachine},
+};
 use axvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
     conversion::{convert_program, CompilerOptions},
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
-};
-use axvm_circuit::system::{
-    program::{util::execute_program, ExecutionError::Fail},
-    vm::{config::VmConfig, VirtualMachine},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};

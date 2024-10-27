@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use ax_sdk::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
 use ax_stark_backend::{
     prover::{
         types::{AirProofInput, AirProofRawInput, ProofInput},
@@ -7,7 +8,6 @@ use ax_stark_backend::{
     },
     verifier::VerificationError,
 };
-use ax_sdk::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

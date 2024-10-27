@@ -1,8 +1,8 @@
-use ax_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use ax_sdk::{
     any_rap_arc_vec,
     dummy_airs::interaction::{dummy_interaction_air::DummyInteractionAir, verify_interactions},
 };
+use ax_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

@@ -1,10 +1,10 @@
 use std::{iter, sync::Arc};
 
-use ax_stark_backend::prover::types::AirProofInput;
 use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
 };
+use ax_stark_backend::prover::types::AirProofInput;
 use axvm_instructions::{
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
