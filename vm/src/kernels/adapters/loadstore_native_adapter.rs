@@ -4,7 +4,7 @@ use std::{
     marker::PhantomData,
 };
 
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::utils;
 use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};

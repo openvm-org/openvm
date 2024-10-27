@@ -16,7 +16,7 @@ p3-symmetric = { workspace = true }
 p3-util = { workspace = true }
 
 ax-stark-backend = { workspace = true }
-afs-derive = { workspace = true }
+ax-circuit-derive = { workspace = true }
 
 parking_lot.workspace = true
 rand.workspace = true

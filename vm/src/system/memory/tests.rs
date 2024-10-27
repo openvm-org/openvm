@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_sdk::{

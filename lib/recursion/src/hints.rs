@@ -559,13 +559,13 @@ impl Hintable<InnerConfig> for ECDSAInput {
 
 #[cfg(test)]
 mod test {
-    use afs_derive::{DslVariable, Hintable};
     use axvm_circuit::system::program::util::execute_program;
     use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
         prelude::*,
     };
+    use axvm_native_compiler_derive::{DslVariable, Hintable};
     use p3_field::AbstractField;
 
     use crate::{

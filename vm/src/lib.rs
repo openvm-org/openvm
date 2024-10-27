@@ -1,3 +1,6 @@
+pub use ax_circuit_derive as circuit_derive;
+pub use axvm_circuit_derive as derive;
+
 /// Traits and constructs for the axVM architecture.
 pub mod arch;
 /// Common chips that are not specific to a particular context.

@@ -8,7 +8,6 @@ repository.workspace = true
 
 [dependencies]
 axvm-native-compiler = { workspace = true, features = ["sdk"] }
-afs-derive = { workspace = true }
 axvm-recursion = { workspace = true }
 ax-sdk = { workspace = true }
 p3-baby-bear = { workspace = true }

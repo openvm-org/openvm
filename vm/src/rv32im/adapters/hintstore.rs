@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::instruction::Instruction;

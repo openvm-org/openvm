@@ -3,7 +3,7 @@
 
 use std::{array, borrow::Borrow, iter};
 
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::is_less_than::LessThanAuxCols;
 use p3_field::{AbstractField, PrimeField32};
 

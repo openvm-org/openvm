@@ -28,7 +28,7 @@ itertools.workspace = true
 tracing.workspace = true
 
 ax-stark-backend = { workspace = true }
-afs-derive = { workspace = true }
+ax-circuit-derive = { workspace = true }
 
 serde = { workspace = true, default-features = false, features = [
     "derive",

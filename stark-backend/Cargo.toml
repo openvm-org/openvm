@@ -33,7 +33,7 @@ tikv-jemallocator = { version = "0.6", optional = true }
 mimalloc = { version = "0.1.43", optional = true }
 
 [dev-dependencies]
-afs-derive = { workspace = true }
+ax-circuit-derive = { workspace = true }
 ax-sdk = { workspace = true }
 
 p3-dft = { workspace = true }

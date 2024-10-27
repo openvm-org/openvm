@@ -10,7 +10,7 @@ pub mod conversion;
 pub mod ir;
 
 pub mod prelude {
-    pub use afs_derive::DslVariable;
+    pub use axvm_native_compiler_derive::{DslVariable, Hintable};
 
     pub use crate::{asm::AsmCompiler, ir::*};
 }

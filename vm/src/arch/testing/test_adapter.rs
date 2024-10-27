@@ -4,7 +4,7 @@ use std::{
     fmt::Debug,
 };
 
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;

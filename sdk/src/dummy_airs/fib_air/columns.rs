@@ -1,4 +1,4 @@
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 
 pub const NUM_FIBONACCI_COLS: usize = 2;
 

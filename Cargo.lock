@@ -29,16 +29,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 
 [[package]]
-name = "afs-derive"
-version = "0.1.0"
-dependencies = [
- "itertools 0.13.0",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -324,10 +314,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
+name = "ax-circuit-derive"
+version = "0.1.0"
+dependencies = [
+ "itertools 0.13.0",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "ax-circuit-primitives"
 version = "0.1.0"
 dependencies = [
- "afs-derive",
+ "ax-circuit-derive",
  "ax-sdk",
  "ax-stark-backend",
  "derive-new",
@@ -422,7 +422,7 @@ dependencies = [
 name = "ax-sdk"
 version = "0.1.0"
 dependencies = [
- "afs-derive",
+ "ax-circuit-derive",
  "ax-stark-backend",
  "derive_more",
  "ff 0.13.0",
@@ -462,7 +462,7 @@ dependencies = [
 name = "ax-stark-backend"
 version = "0.1.0"
 dependencies = [
- "afs-derive",
+ "ax-circuit-derive",
  "ax-sdk",
  "cfg-if",
  "csv",
@@ -502,7 +502,6 @@ dependencies = [
 name = "axiom-vm"
 version = "0.1.0"
 dependencies = [
- "afs-derive",
  "ax-sdk",
  "axvm-circuit",
  "axvm-native-compiler",
@@ -530,14 +529,15 @@ dependencies = [
 name = "axvm-circuit"
 version = "0.1.0"
 dependencies = [
- "afs-derive",
  "ark-ff 0.4.2",
+ "ax-circuit-derive",
  "ax-circuit-primitives",
  "ax-ecc-primitives",
  "ax-poseidon2-air",
  "ax-sdk",
  "ax-stark-backend",
  "axvm-circuit",
+ "axvm-circuit-derive",
  "axvm-instructions",
  "backtrace",
  "cfg-if",
@@ -578,6 +578,15 @@ dependencies = [
  "toml",
  "tracing",
  "zkhash",
+]
+
+[[package]]
+name = "axvm-circuit-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -651,12 +660,12 @@ dependencies = [
 name = "axvm-native-compiler"
 version = "0.1.0"
 dependencies = [
- "afs-derive",
  "ax-circuit-primitives",
  "ax-sdk",
  "axvm-circuit",
  "axvm-instructions",
  "axvm-native-compiler",
+ "axvm-native-compiler-derive",
  "backtrace",
  "cfg-if",
  "hex",
@@ -684,6 +693,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-native-compiler-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
@@ -699,13 +717,13 @@ dependencies = [
 name = "axvm-recursion"
 version = "0.1.0"
 dependencies = [
- "afs-derive",
  "ax-circuit-primitives",
  "ax-sdk",
  "ax-stark-backend",
  "axvm-circuit",
  "axvm-ecc",
  "axvm-native-compiler",
+ "axvm-native-compiler-derive",
  "cfg-if",
  "ff 0.13.0",
  "itertools 0.13.0",

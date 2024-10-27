@@ -1,6 +1,6 @@
 use core::mem::size_of;
 
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use p3_air::AirBuilder;
 use p3_keccak_air::KeccakCols as KeccakPermCols;
 

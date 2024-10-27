@@ -4,7 +4,7 @@ use std::{
     iter,
 };
 
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::utils::next_power_of_two_or_zero;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
