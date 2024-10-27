@@ -254,7 +254,7 @@ We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(
 | -------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
 | KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`. |
 
-### 256-bit Integer Instructions
+### 256-bit Integer
 
 The 256-bit ALU intrinsic instructions perform operations on 256-bit signed/unsigned integers where integer values are read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by reading register values in address space `1`. Note that these instructions are not the same as instructions on 256-bit registers.
 
@@ -343,83 +343,75 @@ r32_ec_point(a) -> EcPoint {
 | SW_ADD_NE\<C\> | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field. |
 | SW_DOUBLE\<C\> | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                           |
 
+### Optimal Ate Pairing
+
+TODO
+
 ## Native Kernel
 
-| Name                | Operands             | Description                                                                                                                        |
-| ------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **L** / **LOAD**    | `a, offset, c`       | Set `[a]_d <- [[c]_d + offset]_e`. Loads a cell from one address space to another.                                                 |
-| **S** / **STORE**   | `a, offset, c`       | Set `[[c]_d + offset]_e <- [a]_d`.                                                                                                 |
-| **L2** / **LOAD2**  | `a, offset, c, size` | Set `[a]_d <- [[c]_d + [f]_d * g + offset]_e`. Loads cell a from one address space to another using a variable multiple of `size`. |
-| **S2** / **STORE2** | `a, offset, c, size` | Set `[[c]_d + [f]_d * g + offset]_e <- [a]_d`.                                                                                     |
-| **JAL**             | `a, offset, c`       | Jump to address and link: set `[a]_d <- (pc + INST_WIDTH)` and `pc <- pc + offset`.                                                |
-| **BEQ**             | `a, b, offset`       | If `[a]_d == [b]_e`, then set `pc <- pc + offset`                                                                                  |
-| **BNE**             | `a, b, offset`       | If `[a]_d != [b]_e`, then set `pc <- pc + offset`                                                                                  |
-| **TERMINATE**       | `_, _, _`            | Terminates execution.                                                                                                              |
-| **SHINTW**          | `a, b, _`            | Pops the next word off of the `hint_stream` into `[[c]_d + b]_e`.                                                                  |
-| **PUBLISH**         | `a, b, _`            | Constrains the public value at index `[a]_d` to equal `[b]_e`.                                                                     |
+### Base
 
-#### Notes about hints
+In the instructions below, `d,e` may be any valid **non-zero** address space. Base kernel instructions enable memory movement between address spaces.
 
-The `hint_stream` is a stream of values that is processed by calling `SHINTW`. Each call pops the next hint off the
-stream and writes it to the given cell in memory. The `hint_stream` is populated via phantom instructions such
-as `HINT_INPUT` (resets `hint_stream` to be the next program input), `HINT_BITS` (resets `hint_stream` to be the bit
-decomposition of a given variable, with a length known at compile time), and `HINT_BYTES` (byte analog of `HINT_BITS`).
+In some instructions below, `W` is a generic parameter for the block size.
 
-:::info
-Core instructions were chosen so a subset of RISC-V instructions can be directly transpiled to the core instructions,
-where x0-31 registers are mapped to address space `1` and each register is represented as `4` memory cells, with each
-cell a byte.
-:::
+| Name       | Operands        | Description                                                                                                                                                                                                                                                                                 |
+| ---------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LOAD\<W\>  | `a,b,c,d,e`     | Set `[a:W]_d = [[c]_d + b:W]_e`.                                                                                                                                                                                                                                                            |
+| STORE\<W\> | `a,b,c,d,e`     | Set `[[c]_d + b:W]_e = [a:W]_d`.                                                                                                                                                                                                                                                            |
+| LOAD2      | `a,b,c,d,e,f,g` | Set `[a]_d = [[c]_d + [f]_d * g + b]_e`.                                                                                                                                                                                                                                                    |
+| STORE2     | `a,b,c,d,e,f,g` | Set `[[c]_d + [f]_d * g + b]_e = [a]_d`.                                                                                                                                                                                                                                                    |
+| JAL        | `a,b,c,d`       | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`.                                                                                                                                                                                                           |
+| BEQ\<W\>   | `a,b,c,d,e`     | If `[a:W]_d == [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
+| BNE\<W\>   | `a,b,c,d,e`     | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
+| SHINTW     | `_,b,c,d,e`     | Set `[[c]_d + b]_e = next element from hint stream`.                                                                                                                                                                                                                                        |
+| PUBLISH    | `a,b,_,d,e`     | Constrains the public value at index `[a]_d` to equal `[b]_e`. Both `d,e` cannot be zero.                                                                                                                                                                                                   |
+| CASTF      | `a,b,_,d,e`     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
 
-### Field arithmetic
+<!--
+A note on CASTF: support for casting arbitrary field elements can also be supported by doing a big int less than between the block and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
+-->
 
-This instruction set does native field operations. Some operations may be infeasible if the address space imposes
-additional bit size constraints.
+### Native Field Arithmetic
 
-| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                            |
-| -------- | --------------------------------------------- | ---------------------------------------------------------------------- |
-| **ADD**  | `a, b, c`                                     | Set `[a]_d <- [b]_e + [c]_f`.                                          |
-| **SUB**  | `a, b, c`                                     | Set `[a]_d <- [b]_e - [c]_f`.                                          |
-| **MUL**  | `a, b, c`                                     | Set `[a]_d <- [b]_e * [c]_f`.                                          |
-| **DIV**  | `a, b, c`                                     | Set `[a]_d <- [b]_e / [c]_f`. Division by zero causes a runtime error. |
+This instruction set does native field operations. Below, `d,e` may be any valid address space, and `d` is not
+allowed to be zero while `e` may be zero. When `e` is zero, `[c]_0` should be interpreted as `c`.
 
-### Extension field arithmetic
+| Name | Operands    | Description                                               |
+| ---- | ----------- | --------------------------------------------------------- |
+| ADDF | `a,b,c,d,e` | Set `[a]_d = [b]_d + [c]_e`.                              |
+| SUBF | `a,b,c,d,e` | Set `[a]_d = [b]_d - [c]_e`.                              |
+| MULF | `a,b,c,d,e` | Set `[a]_d = [b]_d * [c]_e`.                              |
+| DIVF | `a,b,c,d,e` | Set `[a]_d = [b]_d / [c]_e`. Division by zero is invalid. |
 
-We add several special instruction set extensions for opcodes to perform degree `D` extension field arithmetic. **Such
-an instruction set extension should only be enabled when field arithmetic instruction set is enabled.**
+### Native Extension Field Arithmetic
 
 #### BabyBear Quartic Extension Field
 
-This is only enabled when `F = BabyBear`. The quartic extension field is defined by the irreducible polynomial $x^4 -
-11$ (this choice matches Plonky3, but we note that Risc0 uses the polynomial $x^4 + 11$ instead).
-All elements in the field extension can be represented as a vector `[a_0, a_1, a_2, a_3]` which represents the
+This is only enabled when the native field is `BabyBear`. The quartic extension field is defined by the irreducible polynomial $x^4 - 11$ (this choice matches Plonky3, but we note that Risc0 uses the polynomial $x^4 + 11$ instead).
+All elements in the field extension can be represented as a vector `[a_0,a_1,a_2,a_3]` which represents the
 polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ over `BabyBear`.
 
-| Mnemonic    | <div style="width:170px">Operands (asm)</div> | Description                                                                                                |
-| ----------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **FE4ADD**  | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d + [c:4]_e` with extension field addition.                                          |
-| **FE4SUB**  | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d - [c:4]_e` with extension field subtraction.                                       |
-| **BBE4MUL** | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d * [c:4]_e` with extension field multiplication.                                    |
-| **BBE4DIV** | `a, b, c`                                     | Set `[a:4]_d <- [b:4]_d / [c:4]_e` with extension field division. Division by zero causes a runtime error. |
+Below, `d,e` may be any valid address space, and `d,e` are both not allowed to be zero. The instructions do block access with block size `4`.
 
-<!--
-A note on CASTF below: support for casting arbitrary field elements can also be supported by doing a big int less than between the block and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
--->
-
-| Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                                                                 |
-| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **CASTF** | `a, b, _`                                     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
+| Name    | Operands  | Description                                                                                   |
+| ------- | --------- | --------------------------------------------------------------------------------------------- |
+| FE4ADD  | `a, b, c` | Set `[a:4]_d = [b:4]_d + [c:4]_e` with vector addition.                                       |
+| FE4SUB  | `a, b, c` | Set `[a:4]_d = [b:4]_d - [c:4]_e` with vector subtraction.                                    |
+| BBE4MUL | `a, b, c` | Set `[a:4]_d = [b:4]_d * [c:4]_e` with extension field multiplication.                        |
+| BBE4DIV | `a, b, c` | Set `[a:4]_d = [b:4]_d / [c:4]_e` with extension field division. Division by zero is invalid. |
 
 ### Hash function precompiles
 
 We have special opcodes to enable different precompiled hash functions.
-
 Only subsets of these opcodes will be turned on depending on the VM use case.
 
-| Mnemonic                                                                                                                                                                                                                           | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                                                                                                                                                                                                                                                                             |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a, b, c`                                     | Applies the Poseidon2 compression function to the inputs `[[b]_d:CHUNK]_e` and `[[c]_d:CHUNK]_e`, writing the result to `[[a]_d:CHUNK]_e`.<br/><br/>The address space `d` is **not** allowed to be `0`.                                                                                                                                                                                                              |
-| **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a, b, 0`                                     | Applies the Poseidon2 permutation function to `[[b]_d:WIDTH]_e` and writes the result to `[[a]_d:WIDTH]_e`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. The address space `d` is **not** allowed to be `0`. This is nearly the same as `COMPRESS_POSEIDON2` except that the whole input state is contiguous in memory, and the full output state is written to memory. |
+Below, `d,e` may be any valid address space, and `d,e` are both not allowed to be zero. The instructions do block access with block size `1` in address space `d` and block size `CHUNK` in address space `e`.
+
+| Name                                                                                                                                                                                                                               | Operands    | Description                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e` | Applies the Poseidon2 compression function to the inputs `[[b]_d:CHUNK]_e` and `[[c]_d:CHUNK]_e`, writing the result to `[[a]_d:CHUNK]_e`.                                                                                                                                                                                                                       |
+| **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a,b,_,d,e` | Applies the Poseidon2 permutation function to `[[b]_d:WIDTH]_e` and writes the result to `[[a]_d:WIDTH]_e`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. This is nearly the same as `COMPRESS_POSEIDON2` except that the whole input state is contiguous in memory, and the full output state is written to memory. |
 
 For Poseidon2, the `PID` is just some identifier to provide domain separation between different Poseidon2 constants. For
 now we can set:
@@ -449,10 +441,9 @@ The **PRINTF** instruction is used for debugging purposes, and will print the re
 generation. However, though **PRINTF** will not cause trace generation to fail, the resulting trace cannot be verified,
 just as with **FAIL**.
 
-### More coming soon
+#### Notes about hints
 
-Other instruction set extensions (for example to support RISC-V) coming soon.
-
-We will closely follow RISC-V assembly, making modifications as necessary. The most important difference between our
-zkVM assembly and RV32IM is that instead of registers `x0-31`, we only have a special-purpose register `pc` and the
-address space `1[]` for general purpose registers.
+The `hint_stream` is a stream of values that is processed by calling `SHINTW`. Each call pops the next hint off the
+stream and writes it to the given cell in memory. The `hint_stream` is populated via phantom instructions such
+as `HINT_INPUT` (resets `hint_stream` to be the next program input), `HINT_BITS` (resets `hint_stream` to be the bit
+decomposition of a given variable, with a length known at compile time), and `HINT_BYTES` (byte analog of `HINT_BITS`).
