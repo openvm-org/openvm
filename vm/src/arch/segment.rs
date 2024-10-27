@@ -124,7 +124,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 BTreeMap::new()
             };
 
-            if opcode == CommonOpcode::TERMINATE.with_default_offset() {
+            if opcode == SystemOpcode::TERMINATE.with_default_offset() {
                 did_terminate = true;
                 self.chip_set.connector_chip.end(
                     ExecutionState::new(pc, timestamp),
@@ -140,7 +140,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
 
             // Some phantom instruction handling is more convenient to do here than in PhantomChip. FIXME[jpw]
-            if opcode == CommonOpcode::PHANTOM as usize {
+            if opcode == SystemOpcode::PHANTOM as usize {
                 // Note: the discriminant is the lower 16 bits of the c operand.
                 let discriminant = instruction.c.as_canonical_u32() as u16;
                 let phantom = PhantomInstruction::from_repr(discriminant)

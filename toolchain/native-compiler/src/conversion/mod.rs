@@ -561,7 +561,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::Halt => vec![
             // terminate
             inst(
-                options.opcode_with_offset(CommonOpcode::TERMINATE),
+                options.opcode_with_offset(SystemOpcode::TERMINATE),
                 F::zero(),
                 F::zero(),
                 F::zero(),

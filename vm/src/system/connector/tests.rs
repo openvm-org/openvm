@@ -15,7 +15,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::Program, CommonOpcode::TERMINATE, UsizeOpcode,
+    instruction::Instruction, program::Program, SystemOpcode::TERMINATE, UsizeOpcode,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

@@ -971,9 +971,9 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
     let (start, len, offset) = match executor {
         // Terminate is not handled by executor, it is done by system (VmConnectorChip)
         ExecutorName::Phantom => (
-            CommonOpcode::PHANTOM.with_default_offset(),
+            SystemOpcode::PHANTOM.with_default_offset(),
             1,
-            CommonOpcode::default_offset(),
+            SystemOpcode::default_offset(),
         ),
         ExecutorName::LoadStore => (
             NativeLoadStoreOpcode::default_offset(),
@@ -1016,9 +1016,9 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Keccak256Opcode::default_offset(),
         ),
         ExecutorName::ArithmeticLogicUnitRv32 => (
-            AluOpcode::default_offset(),
-            AluOpcode::COUNT,
-            AluOpcode::default_offset(),
+            BaseAluOpcode::default_offset(),
+            BaseAluOpcode::COUNT,
+            BaseAluOpcode::default_offset(),
         ),
         ExecutorName::LoadStoreRv32 => (
             // LOADW through STOREB

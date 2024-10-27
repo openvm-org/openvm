@@ -1,4 +1,4 @@
-use axvm_instructions::{instruction::Instruction, CommonOpcode};
+use axvm_instructions::{instruction::Instruction, SystemOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 
@@ -14,10 +14,10 @@ fn test_nops_and_terminate() {
         tester.program_bus(),
         tester.memory_controller(),
         Default::default(),
-        CommonOpcode::default_offset(),
+        SystemOpcode::default_offset(),
     );
 
-    let nop = Instruction::from_isize(CommonOpcode::PHANTOM.with_default_offset(), 0, 0, 0, 0, 0);
+    let nop = Instruction::from_isize(SystemOpcode::PHANTOM.with_default_offset(), 0, 0, 0, 0, 0);
     let mut state: ExecutionState<F> = ExecutionState::new(F::zero(), F::one());
     let num_nops = 5;
     for _ in 0..num_nops {

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use axvm_circuit::{
     arch::instructions::{
-        AluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
+        BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
         MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
         Rv32LoadStoreOpcode, ShiftOpcode, UsizeOpcode,
     },
@@ -28,39 +28,39 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     type InstructionResult = Instruction<F>;
 
     fn process_add(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::ADD.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::ADD.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_addi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(AluOpcode::ADD.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::ADD.with_default_offset(), &dec_insn)
     }
 
     fn process_sub(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::SUB.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::SUB.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_xor(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::XOR.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::XOR.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_xori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(AluOpcode::XOR.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::XOR.with_default_offset(), &dec_insn)
     }
 
     fn process_or(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::OR.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::OR.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_ori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(AluOpcode::OR.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::OR.with_default_offset(), &dec_insn)
     }
 
     fn process_and(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::AND.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::AND.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_andi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(AluOpcode::AND.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::AND.with_default_offset(), &dec_insn)
     }
 
     fn process_sll(&mut self, dec_insn: RType) -> Self::InstructionResult {

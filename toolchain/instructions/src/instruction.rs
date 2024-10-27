@@ -1,7 +1,7 @@
 use backtrace::Backtrace;
 use p3_field::Field;
 
-use crate::{utils::isize_to_field, CommonOpcode, PhantomInstruction, UsizeOpcode};
+use crate::{utils::isize_to_field, PhantomInstruction, SystemOpcode, UsizeOpcode};
 
 /// Number of operands of an instruction.
 pub const NUM_OPERANDS: usize = 7;
@@ -78,7 +78,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn phantom(kind: PhantomInstruction, a: F, b: F, c_upper: u16) -> Self {
         Self {
-            opcode: CommonOpcode::PHANTOM.with_default_offset(),
+            opcode: SystemOpcode::PHANTOM.with_default_offset(),
             a,
             b,
             c: F::from_canonical_u32((kind as u32) | ((c_upper as u32) << 16)),
@@ -88,7 +88,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn debug(phantom: PhantomInstruction, debug: &str) -> Self {
         Self {
-            opcode: CommonOpcode::PHANTOM.with_default_offset(),
+            opcode: SystemOpcode::PHANTOM.with_default_offset(),
             c: F::from_canonical_usize(phantom as usize),
             debug: String::from(debug),
             ..Default::default()

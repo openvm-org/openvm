@@ -16,7 +16,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
 use crate::arch::{
-    instructions::{AluOpcode, UsizeOpcode},
+    instructions::{BaseAluOpcode, UsizeOpcode},
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
@@ -133,7 +133,7 @@ where
             self.bus.send(x, y, x_xor_y).eval(builder, is_valid.clone());
         }
 
-        let expected_opcode = flags.iter().zip(AluOpcode::iter()).fold(
+        let expected_opcode = flags.iter().zip(BaseAluOpcode::iter()).fold(
             AB::Expr::zero(),
             |acc, (flag, local_opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
@@ -155,7 +155,7 @@ where
 
 #[derive(Clone, Debug)]
 pub struct BaseAluCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub opcode: AluOpcode,
+    pub opcode: BaseAluOpcode,
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
@@ -198,7 +198,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = AluOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode_index = BaseAluOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
@@ -210,7 +210,7 @@ where
             writes: [a.map(F::from_canonical_u32)].into(),
         };
 
-        if local_opcode_index == AluOpcode::ADD || local_opcode_index == AluOpcode::SUB {
+        if local_opcode_index == BaseAluOpcode::ADD || local_opcode_index == BaseAluOpcode::SUB {
             for a_val in a {
                 self.xor_lookup_chip.request(a_val, a_val);
             }
@@ -231,7 +231,7 @@ where
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", AluOpcode::from_usize(opcode - self.air.offset))
+        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.air.offset))
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
@@ -239,11 +239,11 @@ where
         row_slice.a = record.a;
         row_slice.b = record.b;
         row_slice.c = record.c;
-        row_slice.opcode_add_flag = F::from_bool(record.opcode == AluOpcode::ADD);
-        row_slice.opcode_sub_flag = F::from_bool(record.opcode == AluOpcode::SUB);
-        row_slice.opcode_xor_flag = F::from_bool(record.opcode == AluOpcode::XOR);
-        row_slice.opcode_or_flag = F::from_bool(record.opcode == AluOpcode::OR);
-        row_slice.opcode_and_flag = F::from_bool(record.opcode == AluOpcode::AND);
+        row_slice.opcode_add_flag = F::from_bool(record.opcode == BaseAluOpcode::ADD);
+        row_slice.opcode_sub_flag = F::from_bool(record.opcode == BaseAluOpcode::SUB);
+        row_slice.opcode_xor_flag = F::from_bool(record.opcode == BaseAluOpcode::XOR);
+        row_slice.opcode_or_flag = F::from_bool(record.opcode == BaseAluOpcode::OR);
+        row_slice.opcode_and_flag = F::from_bool(record.opcode == BaseAluOpcode::AND);
     }
 
     fn air(&self) -> &Self::Air {
@@ -252,16 +252,16 @@ where
 }
 
 pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    opcode: AluOpcode,
+    opcode: BaseAluOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {
     match opcode {
-        AluOpcode::ADD => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::SUB => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::XOR => run_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::OR => run_or::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::AND => run_and::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::ADD => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::SUB => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::XOR => run_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::OR => run_or::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::AND => run_and::<NUM_LIMBS, LIMB_BITS>(x, y),
     }
 }
 

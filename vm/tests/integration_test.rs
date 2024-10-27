@@ -16,9 +16,9 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         instructions::{
-            BranchEqualOpcode::*, CommonOpcode::*, FieldArithmeticOpcode::*,
-            FieldExtensionOpcode::*, Keccak256Opcode::*, NativeBranchEqualOpcode,
-            NativeJalOpcode::*, NativeLoadStoreOpcode::*, Poseidon2Opcode::*, UsizeOpcode,
+            BranchEqualOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
+            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
+            NativeLoadStoreOpcode::*, Poseidon2Opcode::*, SystemOpcode::*, UsizeOpcode,
         },
         ExecutorName, ExitCode, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine,
         VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
@@ -34,8 +34,9 @@ use axvm_circuit::{
 use axvm_instructions::{
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
-    CommonOpcode, PhantomInstruction,
+    PhantomInstruction,
     PublishOpcode::PUBLISH,
+    SystemOpcode,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -700,7 +701,7 @@ fn test_vm_hint() {
         Instruction::large_from_isize(ADD.with_default_offset(), 32, 20, 0, 1, 1, 0, 0),
         Instruction::large_from_isize(ADD.with_default_offset(), 20, 20, 1, 1, 1, 0, 0),
         Instruction::from_isize(
-            CommonOpcode::PHANTOM.with_default_offset(),
+            SystemOpcode::PHANTOM.with_default_offset(),
             0,
             0,
             PhantomInstruction::HintInput as isize,
