@@ -1,6 +1,6 @@
 use std::{panic::catch_unwind, sync::Arc};
 
-use afs_stark_backend::{prover::types::AirProofInput, utils::disable_debug_builder, Chip};
+use ax_stark_backend::{prover::types::AirProofInput, utils::disable_debug_builder, Chip};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -132,7 +132,7 @@ fn test_unordered() {
 
 #[test]
 fn test_optional_air() {
-    use afs_stark_backend::{engine::StarkEngine, prover::types::ProofInput, Chip};
+    use ax_stark_backend::{engine::StarkEngine, prover::types::ProofInput, Chip};
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
     let engine = BabyBearPoseidon2Engine::new(fri_params);
     let fib_chip = FibonacciChip::new(0, 1, 8);

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-pub use afs_stark_backend::engine::StarkEngine;
-use afs_stark_backend::{
+pub use ax_stark_backend::engine::StarkEngine;
+use ax_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::VerificationData,
     prover::types::AirProofInput,

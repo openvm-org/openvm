@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 #[derive(Debug, Clone, Copy)]

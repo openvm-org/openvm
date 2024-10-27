@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
     prover::types::Proof,
 };

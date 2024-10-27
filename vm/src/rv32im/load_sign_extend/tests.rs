@@ -1,6 +1,6 @@
 use std::{array, borrow::BorrowMut};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
 use ax_sdk::{config::setup_tracing, utils::create_seeded_rng};

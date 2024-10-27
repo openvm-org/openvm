@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     prover::types::AirProofInput,
     rap::{AnyRap, PartitionedBaseAir},

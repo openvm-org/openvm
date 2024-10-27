@@ -3,7 +3,7 @@ use std::sync::Arc;
 use afs_compiler::{conversion::CompilerOptions, prelude::*};
 use afs_recursion::{hints::Hintable, types::InnerConfig};
 use ax_sdk::{
-    afs_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField},
+    ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField},
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
         fri_params::standard_fri_params_with_100_bits_conjectured_security,

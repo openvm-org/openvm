@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError, Chip,
 };
 use ax_sdk::{

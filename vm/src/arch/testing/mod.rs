@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
     engine::VerificationData,
     prover::types::AirProofInput,

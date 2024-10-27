@@ -3,16 +3,16 @@ use std::{
     sync::Arc,
 };
 
-use afs_stark_backend::{
-    config::StarkGenericConfig, engine::StarkEngine, prover::types::AirProofInput,
-    utils::disable_debug_builder,
-};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::StarkFriEngine,
+};
+use ax_stark_backend::{
+    config::StarkGenericConfig, engine::StarkEngine, prover::types::AirProofInput,
+    utils::disable_debug_builder,
 };
 use axvm_instructions::{
     instruction::Instruction, program::Program, CommonOpcode::TERMINATE, UsizeOpcode,

@@ -5,7 +5,7 @@ use afs_primitives::{
     var_range::VariableRangeCheckerBus,
     SubAir,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 

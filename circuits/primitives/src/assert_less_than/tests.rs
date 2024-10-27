@@ -4,7 +4,7 @@ use std::{
 };
 
 use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,

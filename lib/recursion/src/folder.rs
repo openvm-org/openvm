@@ -1,5 +1,5 @@
 use afs_compiler::ir::{Config, Ext, Felt, SymbolicExt};
-use afs_stark_backend::air_builders::verifier::GenericVerifierConstraintFolder;
+use ax_stark_backend::air_builders::verifier::GenericVerifierConstraintFolder;
 
 type Var<C> = Ext<<C as Config>::F, <C as Config>::EF>;
 type Expr<C> = SymbolicExt<<C as Config>::F, <C as Config>::EF>;

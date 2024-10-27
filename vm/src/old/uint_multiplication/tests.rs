@@ -1,7 +1,7 @@
 use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
 use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
+use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_sdk::utils::create_seeded_rng;
 use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;

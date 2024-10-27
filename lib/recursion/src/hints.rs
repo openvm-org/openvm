@@ -5,7 +5,7 @@ use afs_compiler::ir::{
     DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
 };
 use afs_primitives::bigint::utils::big_uint_to_num_limbs;
-use afs_stark_backend::{
+use ax_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},

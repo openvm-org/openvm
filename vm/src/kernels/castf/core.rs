@@ -5,7 +5,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::{instruction::Instruction, CastfOpcode};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};

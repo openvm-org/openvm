@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
 use afs_primitives::utils::next_power_of_two_or_zero;
-use afs_stark_backend::{
+use ax_stark_backend::{
     air_builders::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
     },

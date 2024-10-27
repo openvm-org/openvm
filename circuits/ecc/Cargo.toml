@@ -11,7 +11,7 @@ p3-matrix = { workspace = true }
 p3-util = { workspace = true }
 p3-baby-bear = { workspace = true }
 
-afs-stark-backend = { workspace = true }
+ax-stark-backend = { workspace = true }
 afs-primitives = { workspace = true }
 ax-sdk = { workspace = true }
 
@@ -29,4 +29,4 @@ lazy_static.workspace = true
 
 [features]
 default = []
-parallel = ["afs-stark-backend/parallel"]
+parallel = ["ax-stark-backend/parallel"]

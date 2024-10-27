@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     prover::types::AirProofInput,
     rap::AnyRap,

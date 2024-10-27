@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-afs-stark-backend = { workspace = true }
+ax-stark-backend = { workspace = true }
 afs-compiler = { workspace = true, features = ["sdk"] }
 ax-sdk = { workspace = true }
 afs-derive = { workspace = true }
@@ -61,12 +61,12 @@ name = "small_e2e"
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["afs-stark-backend/parallel"]
+parallel = ["ax-stark-backend/parallel"]
 static-verifier = [
     "afs-compiler/halo2-compiler",
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]
 bench-metrics = ["dep:metrics", "stark-vm/bench-metrics"]
-mimalloc = ["afs-stark-backend/mimalloc"]
-jemalloc = ["afs-stark-backend/jemalloc"]
+mimalloc = ["ax-stark-backend/mimalloc"]
+jemalloc = ["ax-stark-backend/jemalloc"]

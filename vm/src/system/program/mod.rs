@@ -1,6 +1,6 @@
 use std::{error::Error, fmt::Display};
 
-use afs_stark_backend::ChipUsageGetter;
+use ax_stark_backend::ChipUsageGetter;
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::Program,

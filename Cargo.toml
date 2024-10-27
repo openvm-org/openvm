@@ -15,7 +15,8 @@ members = [
     "toolchain/riscv/zkvm/lib",
     "toolchain/riscv/zkvm/platform",
     "toolchain/riscv/transpiler",
-    "vm", "axiom-vm",
+    "vm",
+    "axiom-vm",
 ]
 resolver = "2"
 
@@ -66,7 +67,7 @@ axvm = { path = "toolchain/riscv/zkvm/lib", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }
 axvm-instructions-derive = { path = "toolchain/instructions/derive", default-features = false }
 axvm-platform = { path = "toolchain/riscv/zkvm/platform", default-features = false }
-afs-stark-backend = { path = "stark-backend", default-features = false }
+ax-stark-backend = { path = "stark-backend", default-features = false }
 afs-compiler = { path = "toolchain/compiler", default-features = false }
 stark-vm = { path = "vm", default-features = false }
 afs-primitives = { path = "circuits/primitives", default-features = false }

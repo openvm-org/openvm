@@ -16,7 +16,7 @@ p3-util = { workspace = true }
 
 poseidon2-air = { workspace = true }
 afs-primitives = { workspace = true }
-afs-stark-backend = { workspace = true }
+ax-stark-backend = { workspace = true }
 afs-derive = { workspace = true }
 ax-sdk = { workspace = true, optional = true }
 ax-ecc-primitives = { workspace = true }
@@ -63,14 +63,14 @@ stark-vm = { workspace = true, features = ["sdk"] }
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["afs-stark-backend/parallel"]
+parallel = ["ax-stark-backend/parallel"]
 sdk = ["dep:ax-sdk"]
 bench-metrics = [
     "sdk",
     "dep:metrics",
     "dep:inferno",
-    "afs-stark-backend/bench-metrics",
+    "ax-stark-backend/bench-metrics",
 ]
-mimalloc = ["afs-stark-backend/mimalloc"]
-jemalloc = ["afs-stark-backend/jemalloc"]
-jemalloc-prof = ["afs-stark-backend/jemalloc-prof"]
+mimalloc = ["ax-stark-backend/mimalloc"]
+jemalloc = ["ax-stark-backend/jemalloc"]
+jemalloc-prof = ["ax-stark-backend/jemalloc-prof"]

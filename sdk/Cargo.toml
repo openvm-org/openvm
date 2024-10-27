@@ -27,7 +27,7 @@ zkhash = { workspace = true }
 itertools.workspace = true
 tracing.workspace = true
 
-afs-stark-backend = { workspace = true }
+ax-stark-backend = { workspace = true }
 afs-derive = { workspace = true }
 
 serde = { workspace = true, default-features = false, features = [
@@ -47,4 +47,4 @@ metrics-util = "0.17.0"
 
 [features]
 default = ["parallel"]
-parallel = ["afs-stark-backend/parallel"]
+parallel = ["ax-stark-backend/parallel"]

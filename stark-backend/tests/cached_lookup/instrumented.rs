@@ -1,8 +1,5 @@
 use std::fs::{self, File};
 
-use afs_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, prover::types::Proof, verifier::VerificationError,
-};
 use ax_sdk::{
     config::{
         baby_bear_poseidon2::{self, engine_from_perm},
@@ -10,6 +7,9 @@ use ax_sdk::{
     },
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkEngineWithHashInstrumentation,
+};
+use ax_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey, prover::types::Proof, verifier::VerificationError,
 };
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_ceil_usize;

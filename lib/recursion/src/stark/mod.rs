@@ -5,7 +5,7 @@ use afs_compiler::{
     ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
     prelude::RVar,
 };
-use afs_stark_backend::{
+use ax_stark_backend::{
     air_builders::{
         symbolic::symbolic_expression::SymbolicExpression,
         verifier::GenericVerifierConstraintFolder,
@@ -95,7 +95,7 @@ impl<C: Config> StarkVerifier<C>
 where
     C::F: TwoAdicField,
 {
-    /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify].
+    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify].
     pub fn verify<CH: ChallengerVariable<C>>(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
@@ -107,7 +107,7 @@ where
         Self::verify_raps(builder, pcs, m_advice, &mut challenger, proof);
     }
 
-    /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
+    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
     pub fn verify_raps(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
@@ -676,7 +676,7 @@ where
         builder.cycle_tracker_end("stage-e-verify-constraints");
     }
 
-    /// Reference: [afs_stark_backend::verifier::constraints::verify_single_rap_constraints]
+    /// Reference: [ax_stark_backend::verifier::constraints::verify_single_rap_constraints]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
     pub fn verify_single_rap_constraints(

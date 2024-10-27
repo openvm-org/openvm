@@ -13,7 +13,7 @@ use afs_recursion::{
     vars::StarkProofVariable,
 };
 use ax_sdk::{
-    afs_stark_backend::{
+    ax_stark_backend::{
         keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, prover::types::Proof,
     },
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},

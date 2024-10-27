@@ -1,5 +1,5 @@
 use afs_compiler::ir::{DslIr, TracedVec, Witness};
-use afs_stark_backend::prover::types::Proof;
+use ax_stark_backend::prover::types::Proof;
 use ax_sdk::config::{baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters};
 use itertools::Itertools;
 use snark_verifier_sdk::{

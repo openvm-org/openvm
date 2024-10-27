@@ -40,7 +40,7 @@ pub fn to_field_vec<F: AbstractField>(v: Vec<u32>) -> Vec<F> {
 macro_rules! any_rap_arc_vec {
     [$($e:expr),*] => {
         {
-            let chips: Vec<std::sync::Arc<dyn afs_stark_backend::rap::AnyRap<_>>> = vec![$(std::sync::Arc::new($e)),*];
+            let chips: Vec<std::sync::Arc<dyn ax_stark_backend::rap::AnyRap<_>>> = vec![$(std::sync::Arc::new($e)),*];
             chips
         }
     };

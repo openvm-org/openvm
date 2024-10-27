@@ -1,5 +1,5 @@
 use afs_compiler::conversion::CompilerOptions;
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::VerificationData,
     verifier::VerificationError,

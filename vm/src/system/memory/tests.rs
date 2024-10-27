@@ -9,7 +9,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

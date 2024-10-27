@@ -4,7 +4,7 @@
 /// 2. Verify the proof of 1. by execution VM program in STARK VM.
 use afs_compiler::conversion::CompilerOptions;
 use afs_recursion::testing_utils::recursive_stark_test;
-use afs_stark_backend::Chip;
+use ax_stark_backend::Chip;
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{

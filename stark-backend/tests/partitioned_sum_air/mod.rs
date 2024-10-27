@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     prover::{
         types::{AirProofInput, AirProofRawInput, ProofInput},
         USE_DEBUG_BUILDER,

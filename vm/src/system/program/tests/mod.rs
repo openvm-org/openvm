@@ -1,6 +1,6 @@
 use std::{iter, sync::Arc};
 
-use afs_stark_backend::prover::types::AirProofInput;
+use ax_stark_backend::prover::types::AirProofInput;
 use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,

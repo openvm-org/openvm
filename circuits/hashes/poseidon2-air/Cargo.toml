@@ -15,7 +15,7 @@ p3-util = { workspace = true }
 zkhash = { workspace = true }
 
 afs-primitives = { workspace = true }
-afs-stark-backend = { workspace = true }
+ax-stark-backend = { workspace = true }
 ax-sdk = { workspace = true }
 
 rand.workspace = true
@@ -33,4 +33,4 @@ ark-ff = { version = "^0.4.0", default-features = false }
 
 [features]
 default = ["parallel"]
-parallel = ["afs-stark-backend/parallel"]
+parallel = ["ax-stark-backend/parallel"]

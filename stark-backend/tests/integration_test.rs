@@ -1,7 +1,6 @@
 #![feature(trait_upcasting)]
 #![allow(incomplete_features)]
 
-use afs_stark_backend::{utils::disable_debug_builder, Chip};
 /// Test utils
 use ax_sdk::{
     any_rap_arc_vec, config,
@@ -13,6 +12,7 @@ use ax_sdk::{
     engine::StarkFriEngine,
     utils,
 };
+use ax_stark_backend::{utils::disable_debug_builder, Chip};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_uni_stark::StarkGenericConfig;
@@ -134,7 +134,7 @@ fn test_double_fib_starks() {
 
 #[test]
 fn test_optional_air() {
-    use afs_stark_backend::{engine::StarkEngine, prover::types::ProofInput};
+    use ax_stark_backend::{engine::StarkEngine, prover::types::ProofInput};
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let fib_chip = FibonacciChip::new(0, 1, 8);

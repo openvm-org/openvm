@@ -12,7 +12,7 @@ use afs_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     xor::XorLookupChip,
 };
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},

@@ -4,7 +4,7 @@ use std::{
     time::Instant,
 };
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkVerifyingKey,
     prover::types::{Proof, ProofInput},

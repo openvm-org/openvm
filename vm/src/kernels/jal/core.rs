@@ -1,7 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use afs_derive::AlignedBorrow;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, NativeJalOpcode, UsizeOpcode,
 };

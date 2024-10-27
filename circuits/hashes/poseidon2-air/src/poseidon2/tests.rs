@@ -1,4 +1,4 @@
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ark_ff::PrimeField as _;
 use ax_sdk::{
     any_rap_arc_vec,

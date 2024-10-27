@@ -1,7 +1,7 @@
 use std::array::from_fn;
 
 use afs_primitives::utils::{not, select};
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use itertools::{izip, Itertools};
 use p3_air::AirBuilder;
 use p3_field::AbstractField;

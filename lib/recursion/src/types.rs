@@ -2,7 +2,7 @@ use afs_compiler::{
     asm::AsmConfig,
     ir::{Config, DIGEST_SIZE},
 };
-use afs_stark_backend::{
+use ax_stark_backend::{
     air_builders::symbolic::symbolic_expression::SymbolicExpression,
     config::Com,
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},

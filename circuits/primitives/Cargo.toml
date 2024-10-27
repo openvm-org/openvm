@@ -15,7 +15,7 @@ p3-maybe-rayon = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-util = { workspace = true }
 
-afs-stark-backend = { workspace = true }
+ax-stark-backend = { workspace = true }
 afs-derive = { workspace = true }
 
 parking_lot.workspace = true
@@ -44,5 +44,5 @@ ax-sdk = { workspace = true }
 
 [features]
 default = ["parallel"]
-test-traits = ["p3-baby-bear"]            # traits for testing
-parallel = ["afs-stark-backend/parallel"]
+test-traits = ["p3-baby-bear"]           # traits for testing
+parallel = ["ax-stark-backend/parallel"]

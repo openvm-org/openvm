@@ -11,7 +11,7 @@ use afs_primitives::{
     utils::select,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};

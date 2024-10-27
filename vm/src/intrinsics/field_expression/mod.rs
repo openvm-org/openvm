@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_primitives::{var_range::VariableRangeCheckerChip, SubAir, TraceSubRowGenerator};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{FieldExpr, FieldExprCols};
 use axvm_instructions::instruction::Instruction;
 use itertools::Itertools;

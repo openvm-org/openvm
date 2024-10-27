@@ -79,8 +79,8 @@ name = "afs-primitives"
 version = "0.1.0"
 dependencies = [
  "afs-derive",
- "afs-stark-backend",
  "ax-sdk",
+ "ax-stark-backend",
  "derive-new",
  "itertools 0.13.0",
  "lazy_static",
@@ -115,9 +115,9 @@ dependencies = [
  "afs-compiler",
  "afs-derive",
  "afs-primitives",
- "afs-stark-backend",
  "ax-ecc-lib",
  "ax-sdk",
+ "ax-stark-backend",
  "cfg-if",
  "ff 0.13.0",
  "itertools 0.13.0",
@@ -147,46 +147,6 @@ dependencies = [
  "stark-vm",
  "tracing",
  "zkhash",
-]
-
-[[package]]
-name = "afs-stark-backend"
-version = "0.1.0"
-dependencies = [
- "afs-derive",
- "ax-sdk",
- "cfg-if",
- "csv",
- "derivative",
- "eyre 0.6.12",
- "itertools 0.13.0",
- "metrics",
- "mimalloc",
- "p3-air",
- "p3-baby-bear",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-mds",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand 0.8.5",
- "rayon",
- "serde",
- "serde_json",
- "tikv-jemallocator",
- "tracing",
- "tracing-forest",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -494,8 +454,8 @@ version = "0.1.0"
 dependencies = [
  "afs-compiler",
  "afs-primitives",
- "afs-stark-backend",
  "ax-sdk",
+ "ax-stark-backend",
  "elliptic-curve",
  "ff 0.13.0",
  "hex-literal",
@@ -533,8 +493,8 @@ name = "ax-ecc-primitives"
 version = "0.1.0"
 dependencies = [
  "afs-primitives",
- "afs-stark-backend",
  "ax-sdk",
+ "ax-stark-backend",
  "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git)",
  "hex-literal",
  "lazy_static",
@@ -555,7 +515,7 @@ name = "ax-sdk"
 version = "0.1.0"
 dependencies = [
  "afs-derive",
- "afs-stark-backend",
+ "ax-stark-backend",
  "derive_more",
  "ff 0.13.0",
  "itertools 0.13.0",
@@ -588,6 +548,46 @@ dependencies = [
  "tracing-forest",
  "tracing-subscriber",
  "zkhash",
+]
+
+[[package]]
+name = "ax-stark-backend"
+version = "0.1.0"
+dependencies = [
+ "afs-derive",
+ "ax-sdk",
+ "cfg-if",
+ "csv",
+ "derivative",
+ "eyre 0.6.12",
+ "itertools 0.13.0",
+ "metrics",
+ "mimalloc",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-goldilocks",
+ "p3-keccak",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-mds",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand 0.8.5",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tikv-jemallocator",
+ "tracing",
+ "tracing-forest",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2818,9 +2818,9 @@ name = "poseidon2-air"
 version = "0.1.0"
 dependencies = [
  "afs-primitives",
- "afs-stark-backend",
  "ark-ff 0.4.2",
  "ax-sdk",
+ "ax-stark-backend",
  "itertools 0.13.0",
  "lazy_static",
  "p3-air",
@@ -3645,10 +3645,10 @@ version = "0.1.0"
 dependencies = [
  "afs-derive",
  "afs-primitives",
- "afs-stark-backend",
  "ark-ff 0.4.2",
  "ax-ecc-primitives",
  "ax-sdk",
+ "ax-stark-backend",
  "axvm-instructions",
  "backtrace",
  "cfg-if",

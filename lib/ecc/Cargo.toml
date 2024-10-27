@@ -5,7 +5,7 @@ edition = "2021"
 description = "Elliptic curve cryptography library written in Axiom's eDSL."
 
 [dependencies]
-afs-stark-backend = { path = "../../stark-backend" }
+ax-stark-backend = { path = "../../stark-backend" }
 afs-compiler = { path = "../../toolchain/compiler" }
 afs-primitives = { path = "../../circuits/primitives" }
 ax-sdk = { path = "../../sdk" }
@@ -46,4 +46,4 @@ test-log.workspace = true
 
 [features]
 default = []
-parallel = ["afs-stark-backend/parallel"]
+parallel = ["ax-stark-backend/parallel"]

@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
+use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,

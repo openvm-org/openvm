@@ -4,7 +4,7 @@ use afs_primitives::{
     is_less_than::{IsLessThanIo, IsLtSubAir},
     SubAir,
 };
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };

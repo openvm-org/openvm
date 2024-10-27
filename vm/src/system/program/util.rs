@@ -43,7 +43,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
 #[cfg(feature = "sdk")]
 mod sdk {
     use ax_sdk::{
-        afs_stark_backend::{
+        ax_stark_backend::{
             config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
             verifier::VerificationError,
         },

@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
     prover::{

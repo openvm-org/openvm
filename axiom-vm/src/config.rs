@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_compiler::conversion::CompilerOptions;
 use ax_sdk::{
-    afs_stark_backend::{config::StarkGenericConfig, keygen::types::MultiStarkProvingKey},
+    ax_stark_backend::{config::StarkGenericConfig, keygen::types::MultiStarkProvingKey},
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         FriParameters,

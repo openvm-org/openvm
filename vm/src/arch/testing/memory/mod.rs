@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, sync::Arc};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionType,
     prover::types::AirProofInput,

@@ -1,4 +1,4 @@
-pub use afs_stark_backend;
+pub use ax_stark_backend;
 
 pub mod bench;
 pub mod config;

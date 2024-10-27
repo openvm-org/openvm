@@ -1,6 +1,6 @@
 // use afs_compiler::util::execute_program;
 // use afs_recursion::testing_utils::inner::build_verification_program;
-// use afs_stark_backend::{
+// use ax_stark_backend::{
 //     air_builders::PartitionedAirBuilder,
 //     engine::VerificationData,
 //     prover::trace::TraceCommitmentBuilder,

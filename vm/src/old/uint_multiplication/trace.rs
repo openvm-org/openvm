@@ -1,6 +1,6 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},

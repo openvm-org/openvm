@@ -6,7 +6,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::utils::next_power_of_two_or_zero;
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };

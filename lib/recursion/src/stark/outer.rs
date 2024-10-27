@@ -1,5 +1,5 @@
 use afs_compiler::ir::{Builder, DslIr, TracedVec};
-use afs_stark_backend::prover::types::Proof;
+use ax_stark_backend::prover::types::Proof;
 use ax_sdk::config::{baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters};
 
 use crate::{
