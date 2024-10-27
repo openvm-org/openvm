@@ -7,7 +7,7 @@
 /// 4. Wrapper Halo2 circuit to reduce the size of 4.
 use std::iter;
 
-use ax_sdk::{
+use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,

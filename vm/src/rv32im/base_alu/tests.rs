@@ -1,7 +1,7 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use ax_circuit_primitives::xor::XorLookupChip;
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };

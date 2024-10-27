@@ -20,7 +20,7 @@ ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 ax-ecc-primitives = { workspace = true }
 axvm-circuit-derive = { workspace = true }
-ax-sdk = { workspace = true, optional = true }
+ax-stark-sdk = { workspace = true, optional = true }
 axvm-instructions = { workspace = true }
 
 parking_lot.workspace = true
@@ -56,7 +56,7 @@ p3-symmetric = { workspace = true }
 zkhash = { workspace = true }
 rand_xoshiro = "0.6.0"
 ark-ff = { version = "^0.4.0", default-features = false }
-ax-sdk = { workspace = true }
+ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
@@ -65,7 +65,7 @@ axvm-circuit = { workspace = true, features = ["sdk"] }
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
-sdk = ["dep:ax-sdk"]
+sdk = ["dep:ax-stark-sdk"]
 bench-metrics = [
     "sdk",
     "dep:metrics",

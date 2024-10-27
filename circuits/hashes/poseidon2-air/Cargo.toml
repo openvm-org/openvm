@@ -16,7 +16,7 @@ zkhash = { workspace = true }
 
 ax-circuit-primitives = { workspace = true }
 ax-stark-backend = { workspace = true }
-ax-sdk = { workspace = true }
+ax-stark-sdk = { workspace = true }
 
 rand.workspace = true
 lazy_static.workspace = true

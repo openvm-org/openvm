@@ -259,7 +259,7 @@ impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
-    use ax_sdk::{
+    use ax_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
     };

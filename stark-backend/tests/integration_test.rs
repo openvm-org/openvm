@@ -1,8 +1,9 @@
 #![feature(trait_upcasting)]
 #![allow(incomplete_features)]
 
+use ax_stark_backend::{utils::disable_debug_builder, Chip};
 /// Test utils
-use ax_sdk::{
+use ax_stark_sdk::{
     any_rap_arc_vec, config,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     dummy_airs::{
@@ -12,7 +13,6 @@ use ax_sdk::{
     engine::StarkFriEngine,
     utils,
 };
-use ax_stark_backend::{utils::disable_debug_builder, Chip};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_uni_stark::StarkGenericConfig;
@@ -25,7 +25,7 @@ mod partitioned_sum_air;
 
 #[test]
 fn test_single_fib_stark() {
-    use ax_sdk::dummy_airs::fib_air::{air::FibonacciAir, trace::generate_trace_rows};
+    use ax_stark_sdk::dummy_airs::fib_air::{air::FibonacciAir, trace::generate_trace_rows};
 
     let log_trace_degree = 3;
 
@@ -97,7 +97,7 @@ fn test_single_fib_selector_stark() {
 
 #[test]
 fn test_double_fib_starks() {
-    use ax_sdk::dummy_airs::{fib_air, fib_air::air::FibonacciAir};
+    use ax_stark_sdk::dummy_airs::{fib_air, fib_air::air::FibonacciAir};
     use fib_selector_air::air::FibonacciSelectorAir;
 
     let log_n1 = 3;

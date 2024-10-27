@@ -13,7 +13,7 @@ p3-baby-bear = { workspace = true }
 
 ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
-ax-sdk = { workspace = true }
+ax-stark-sdk = { workspace = true }
 
 rand.workspace = true
 num-bigint-dig.workspace = true

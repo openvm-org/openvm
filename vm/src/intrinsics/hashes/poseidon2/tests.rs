@@ -1,5 +1,5 @@
 use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
-use ax_sdk::{
+use ax_stark_sdk::{
     config::{
         baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,

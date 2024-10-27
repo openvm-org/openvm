@@ -7,7 +7,7 @@
 //     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 //     verifier::VerificationError,
 // };
-// use ax_sdk::{
+// use ax_stark_sdk::{
 //     config::baby_bear_poseidon2::default_engine,
 //     engine::{StarkEngine, VerificationDataWithFriParams},
 //     utils::generate_random_matrix,

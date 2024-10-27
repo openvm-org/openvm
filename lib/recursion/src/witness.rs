@@ -1,10 +1,10 @@
 use core::borrow::Borrow;
 
-use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use ax_stark_backend::prover::{
     opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
     types::{AirProofData, Commitments, Proof},
 };
+use ax_stark_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use axvm_native_compiler::ir::{
     Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
 };

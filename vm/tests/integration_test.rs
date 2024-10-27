@@ -1,6 +1,10 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use ax_sdk::{
+use ax_stark_backend::{
+    config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
+    prover::types::Proof,
+};
+use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
         fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
@@ -8,10 +12,6 @@ use ax_sdk::{
     },
     engine::{StarkEngine, StarkFriEngine},
     utils::create_seeded_rng,
-};
-use ax_stark_backend::{
-    config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
-    prover::types::Proof,
 };
 use axvm_circuit::{
     arch::{

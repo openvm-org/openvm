@@ -1,6 +1,6 @@
 use std::iter;
 
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_circuit::{
     arch::{ExecutorName, VmConfig},
     system::program::util::{execute_program, execute_program_with_config},

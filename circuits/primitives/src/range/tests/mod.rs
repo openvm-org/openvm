@@ -1,6 +1,6 @@
 use std::{iter, sync::Arc};
 
-use ax_sdk::{
+use ax_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };

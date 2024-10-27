@@ -328,8 +328,8 @@ name = "ax-circuit-primitives"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-derive",
- "ax-sdk",
  "ax-stark-backend",
+ "ax-stark-sdk",
  "derive-new",
  "itertools 0.13.0",
  "lazy_static",
@@ -376,8 +376,8 @@ name = "ax-ecc-primitives"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
- "ax-sdk",
  "ax-stark-backend",
+ "ax-stark-sdk",
  "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git)",
  "hex-literal",
  "lazy_static",
@@ -399,8 +399,8 @@ version = "0.1.0"
 dependencies = [
  "ark-ff 0.4.2",
  "ax-circuit-primitives",
- "ax-sdk",
  "ax-stark-backend",
+ "ax-stark-sdk",
  "itertools 0.13.0",
  "lazy_static",
  "p3-air",
@@ -419,7 +419,47 @@ dependencies = [
 ]
 
 [[package]]
-name = "ax-sdk"
+name = "ax-stark-backend"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-stark-sdk",
+ "cfg-if",
+ "csv",
+ "derivative",
+ "eyre 0.6.12",
+ "itertools 0.13.0",
+ "metrics",
+ "mimalloc",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-goldilocks",
+ "p3-keccak",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-mds",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand 0.8.5",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tikv-jemallocator",
+ "tracing",
+ "tracing-forest",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "ax-stark-sdk"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-derive",
@@ -459,50 +499,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "ax-stark-backend"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-sdk",
- "cfg-if",
- "csv",
- "derivative",
- "eyre 0.6.12",
- "itertools 0.13.0",
- "metrics",
- "mimalloc",
- "p3-air",
- "p3-baby-bear",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-mds",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand 0.8.5",
- "rayon",
- "serde",
- "serde_json",
- "tikv-jemallocator",
- "tracing",
- "tracing-forest",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "axiom-vm"
 version = "0.1.0"
 dependencies = [
- "ax-sdk",
+ "ax-stark-sdk",
  "axvm-circuit",
  "axvm-native-compiler",
  "axvm-recursion",
@@ -534,8 +534,8 @@ dependencies = [
  "ax-circuit-primitives",
  "ax-ecc-primitives",
  "ax-poseidon2-air",
- "ax-sdk",
  "ax-stark-backend",
+ "ax-stark-sdk",
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-instructions",
@@ -594,8 +594,8 @@ name = "axvm-ecc"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
- "ax-sdk",
  "ax-stark-backend",
+ "ax-stark-sdk",
  "axvm-circuit",
  "axvm-native-compiler",
  "elliptic-curve",
@@ -661,7 +661,7 @@ name = "axvm-native-compiler"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
- "ax-sdk",
+ "ax-stark-sdk",
  "axvm-circuit",
  "axvm-instructions",
  "axvm-native-compiler",
@@ -718,8 +718,8 @@ name = "axvm-recursion"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
- "ax-sdk",
  "ax-stark-backend",
+ "ax-stark-sdk",
  "axvm-circuit",
  "axvm-ecc",
  "axvm-native-compiler",
@@ -758,7 +758,7 @@ dependencies = [
 name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-sdk",
+ "ax-stark-sdk",
  "axvm-circuit",
  "axvm-instructions",
  "axvm-platform",

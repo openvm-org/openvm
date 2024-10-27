@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use ax_sdk::{
+use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };

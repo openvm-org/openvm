@@ -1,5 +1,5 @@
-use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use ax_stark_backend::keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey};
+use ax_stark_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use axvm_native_compiler::ir::Config;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254};

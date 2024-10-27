@@ -5,7 +5,7 @@
 /// 2. Verify the proof of 2. in the outer config.
 /// 3. Verify the proof of 3. using a Halo2 static verifier.
 /// 4. Wrapper Halo2 circuit to reduce the size of 4.
-use ax_sdk::{
+use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,

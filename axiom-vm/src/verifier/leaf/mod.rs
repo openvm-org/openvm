@@ -1,6 +1,6 @@
 use std::{array, borrow::BorrowMut};
 
-use ax_sdk::{
+use ax_stark_sdk::{
     ax_stark_backend::{
         keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, prover::types::Proof,
     },

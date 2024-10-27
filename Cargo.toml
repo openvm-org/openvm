@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "stark-backend",
-    "sdk",
+    "stark-sdk",
     "circuits/ecc",
     "circuits/hashes/poseidon2-air",
     "circuits/primitives",
@@ -82,7 +82,7 @@ ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
 ax-circuit-primitives = { path = "circuits/primitives", default-features = false }
 ax-circuit-derive = { path = "circuits/derive", default-features = false }
 ax-stark-backend = { path = "stark-backend", default-features = false }
-ax-sdk = { path = "sdk", default-features = false }
+ax-stark-sdk = { path = "stark-sdk", default-features = false }
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }

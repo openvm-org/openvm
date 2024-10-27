@@ -1,4 +1,4 @@
-use ax_sdk::dummy_airs::fib_air::columns::NUM_FIBONACCI_COLS;
+use ax_stark_sdk::dummy_airs::fib_air::columns::NUM_FIBONACCI_COLS;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 

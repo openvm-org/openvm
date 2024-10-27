@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_sdk::{
+use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::to_field_vec,
 };

@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use ax_stark_backend::{
     air_builders::{
         symbolic::symbolic_expression::SymbolicExpression,
@@ -8,6 +7,7 @@ use ax_stark_backend::{
     },
     prover::{opener::AdjacentOpenedValues, types::Proof},
 };
+use ax_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use axvm_circuit::arch::instructions::program::Program;
 use axvm_native_compiler::{
     conversion::CompilerOptions,

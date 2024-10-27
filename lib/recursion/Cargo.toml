@@ -8,7 +8,7 @@ edition.workspace = true
 ax-stark-backend = { workspace = true }
 axvm-native-compiler = { workspace = true, features = ["sdk"] }
 axvm-native-compiler-derive = { workspace = true }
-ax-sdk = { workspace = true }
+ax-stark-sdk = { workspace = true }
 axvm-circuit = { workspace = true, features = ["sdk"] }
 axvm-ecc = { workspace = true }
 ax-circuit-primitives = { workspace = true }

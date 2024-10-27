@@ -1,6 +1,6 @@
 use std::iter::zip;
 
-use ax_sdk::{
+use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
 };

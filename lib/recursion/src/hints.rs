@@ -1,7 +1,6 @@
 use std::cmp::Reverse;
 
 use ax_circuit_primitives::bigint::utils::big_uint_to_num_limbs;
-use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use ax_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
@@ -9,6 +8,7 @@ use ax_stark_backend::{
         types::{AirProofData, Commitments, Proof},
     },
 };
+use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use axvm_ecc::types::{
     ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
     ECPointVariable,

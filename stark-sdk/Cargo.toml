@@ -1,8 +1,9 @@
 [package]
-name = "ax-sdk"
+name = "ax-stark-sdk"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+description = "SDK for production and testing usage of STARKs."
 
 [dependencies]
 p3-air = { workspace = true }

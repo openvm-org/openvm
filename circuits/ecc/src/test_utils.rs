@@ -4,7 +4,7 @@ use ax_circuit_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use ax_sdk::utils::{create_seeded_rng, create_seeded_rng_with_seed};
+use ax_stark_sdk::utils::{create_seeded_rng, create_seeded_rng_with_seed};
 use halo2curves_axiom::{bls12_381, bn256};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};

@@ -1,10 +1,10 @@
-use ax_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
-    engine::{ProofInputForTest, StarkFriEngine},
-};
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
+};
+use ax_stark_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
+    engine::{ProofInputForTest, StarkFriEngine},
 };
 use axvm_instructions::program::Program;
 use p3_baby_bear::BabyBear;

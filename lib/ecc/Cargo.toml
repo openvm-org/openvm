@@ -9,7 +9,7 @@ description = "axVM elliptic curve cryptography library."
 ax-stark-backend = { workspace = true }
 axvm-native-compiler = { workspace = true }
 ax-circuit-primitives = { workspace = true }
-ax-sdk = { workspace = true }
+ax-stark-sdk = { workspace = true }
 axvm-circuit = { workspace = true }
 p3-air = { workspace = true }
 p3-field = { workspace = true }

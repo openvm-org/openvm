@@ -1,6 +1,6 @@
 use std::{fs::read, path::PathBuf};
 
-use ax_sdk::config::setup_tracing;
+use ax_stark_sdk::config::setup_tracing;
 use axvm_circuit::{
     arch::{VirtualMachine, VmConfig},
     sdk::air_test,

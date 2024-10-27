@@ -1,4 +1,4 @@
-use ax_sdk::{
+use ax_stark_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
     engine::ProofInputForTest,
 };

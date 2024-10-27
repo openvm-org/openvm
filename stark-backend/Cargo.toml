@@ -34,7 +34,7 @@ mimalloc = { version = "0.1.43", optional = true }
 
 [dev-dependencies]
 ax-circuit-derive = { workspace = true }
-ax-sdk = { workspace = true }
+ax-stark-sdk = { workspace = true }
 
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }

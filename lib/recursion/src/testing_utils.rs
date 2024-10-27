@@ -1,11 +1,11 @@
-use ax_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
-};
 use ax_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::VerificationData,
     verifier::VerificationError,
+};
+use ax_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
 };
 use axvm_circuit::{
     arch::{instructions::program::Program, VmConfig},
@@ -22,7 +22,7 @@ use crate::hints::InnerVal;
 type InnerSC = BabyBearPoseidon2Config;
 
 pub mod inner {
-    use ax_sdk::{
+    use ax_stark_sdk::{
         config::{
             baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
             FriParameters,

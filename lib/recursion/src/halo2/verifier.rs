@@ -1,5 +1,7 @@
-use ax_sdk::config::{baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters};
 use ax_stark_backend::prover::types::Proof;
+use ax_stark_sdk::config::{
+    baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters,
+};
 use axvm_native_compiler::ir::{DslIr, TracedVec, Witness};
 use itertools::Itertools;
 use snark_verifier_sdk::{

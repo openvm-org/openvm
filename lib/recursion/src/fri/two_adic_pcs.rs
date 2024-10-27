@@ -304,7 +304,7 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
-    use ax_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+    use ax_stark_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use axvm_circuit::arch::instructions::program::Program;
     use axvm_native_compiler::{
         asm::AsmBuilder,

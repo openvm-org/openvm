@@ -165,7 +165,7 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use ax_sdk::config::{
+    use ax_stark_sdk::config::{
         baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
         FriParameters,
     };

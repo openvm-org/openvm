@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_sdk::{
+use ax_stark_sdk::{
     ax_stark_backend::{config::StarkGenericConfig, keygen::types::MultiStarkProvingKey},
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
