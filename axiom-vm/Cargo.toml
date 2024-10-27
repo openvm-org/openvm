@@ -9,7 +9,7 @@ repository.workspace = true
 [dependencies]
 afs-compiler = { workspace = true, features = ["sdk"] }
 afs-derive = { workspace = true }
-afs-recursion = { workspace = true }
+axvm-recursion = { workspace = true }
 ax-sdk = { workspace = true }
 p3-baby-bear = { workspace = true }
 axvm-circuit = { workspace = true, features = ["sdk"] }

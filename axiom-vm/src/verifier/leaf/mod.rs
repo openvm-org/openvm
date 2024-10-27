@@ -2,16 +2,6 @@ use std::{array, borrow::BorrowMut};
 
 use afs_compiler::{conversion::CompilerOptions, prelude::*};
 use afs_derive::AlignedBorrow;
-use afs_recursion::{
-    challenger::duplex::DuplexChallengerVariable,
-    digest::DigestVariable,
-    fri::TwoAdicFriPcsVariable,
-    hints::{Hintable, InnerVal},
-    stark::StarkVerifier,
-    types::{new_from_inner_multi_vk, InnerConfig},
-    utils::const_fri_config,
-    vars::StarkProofVariable,
-};
 use ax_sdk::{
     ax_stark_backend::{
         keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, prover::types::Proof,
@@ -28,6 +18,16 @@ use axvm_circuit::{
             config::VmConfig,
         },
     },
+};
+use axvm_recursion::{
+    challenger::duplex::DuplexChallengerVariable,
+    digest::DigestVariable,
+    fri::TwoAdicFriPcsVariable,
+    hints::{Hintable, InnerVal},
+    stark::StarkVerifier,
+    types::{new_from_inner_multi_vk, InnerConfig},
+    utils::const_fri_config,
+    vars::StarkProofVariable,
 };
 
 use crate::config::AxiomVmConfig;

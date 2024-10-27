@@ -14,7 +14,7 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 
-poseidon2-air = { workspace = true }
+ax-poseidon2-air = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-stark-backend = { workspace = true }
 afs-derive = { workspace = true }

@@ -75,47 +75,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "afs-recursion"
-version = "0.1.0"
-dependencies = [
- "afs-compiler",
- "afs-derive",
- "ax-circuit-primitives",
- "ax-ecc-lib",
- "ax-sdk",
- "ax-stark-backend",
- "axvm-circuit",
- "cfg-if",
- "ff 0.13.0",
- "itertools 0.13.0",
- "lazy_static",
- "metrics",
- "num-bigint-dig",
- "once_cell",
- "p3-air",
- "p3-baby-bear",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "snark-verifier-sdk",
- "tracing",
- "zkhash",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -511,6 +470,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "ax-poseidon2-air"
+version = "0.1.0"
+dependencies = [
+ "ark-ff 0.4.2",
+ "ax-circuit-primitives",
+ "ax-sdk",
+ "ax-stark-backend",
+ "itertools 0.13.0",
+ "lazy_static",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-challenger",
+ "p3-field",
+ "p3-matrix",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand 0.8.5",
+ "rand_xoshiro",
+ "test-case",
+ "zkhash",
+]
+
+[[package]]
 name = "ax-sdk"
 version = "0.1.0"
 dependencies = [
@@ -596,9 +580,9 @@ version = "0.1.0"
 dependencies = [
  "afs-compiler",
  "afs-derive",
- "afs-recursion",
  "ax-sdk",
  "axvm-circuit",
+ "axvm-recursion",
  "p3-baby-bear",
  "serde",
  "serde_json",
@@ -626,6 +610,7 @@ dependencies = [
  "ark-ff 0.4.2",
  "ax-circuit-primitives",
  "ax-ecc-primitives",
+ "ax-poseidon2-air",
  "ax-sdk",
  "ax-stark-backend",
  "axvm-circuit",
@@ -658,7 +643,6 @@ dependencies = [
  "p3-symmetric",
  "p3-util",
  "parking_lot",
- "poseidon2-air",
  "rand 0.8.5",
  "rand_xoshiro",
  "serde",
@@ -709,6 +693,47 @@ dependencies = [
  "getrandom",
  "libm",
  "stability",
+]
+
+[[package]]
+name = "axvm-recursion"
+version = "0.1.0"
+dependencies = [
+ "afs-compiler",
+ "afs-derive",
+ "ax-circuit-primitives",
+ "ax-ecc-lib",
+ "ax-sdk",
+ "ax-stark-backend",
+ "axvm-circuit",
+ "cfg-if",
+ "ff 0.13.0",
+ "itertools 0.13.0",
+ "lazy_static",
+ "metrics",
+ "num-bigint-dig",
+ "once_cell",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "snark-verifier-sdk",
+ "tracing",
+ "zkhash",
 ]
 
 [[package]]
@@ -2865,31 +2890,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_xorshift",
  "thiserror",
-]
-
-[[package]]
-name = "poseidon2-air"
-version = "0.1.0"
-dependencies = [
- "ark-ff 0.4.2",
- "ax-circuit-primitives",
- "ax-sdk",
- "ax-stark-backend",
- "itertools 0.13.0",
- "lazy_static",
- "p3-air",
- "p3-baby-bear",
- "p3-challenger",
- "p3-field",
- "p3-matrix",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand 0.8.5",
- "rand_xoshiro",
- "test-case",
- "zkhash",
 ]
 
 [[package]]

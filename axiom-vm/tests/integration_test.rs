@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use afs_compiler::{conversion::CompilerOptions, prelude::*};
-use afs_recursion::{hints::Hintable, types::InnerConfig};
 use ax_sdk::{
     ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField},
     config::{
@@ -21,6 +20,7 @@ use axvm_circuit::{
         },
     },
 };
+use axvm_recursion::{hints::Hintable, types::InnerConfig};
 use p3_baby_bear::BabyBear;
 
 type C = InnerConfig;

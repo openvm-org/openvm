@@ -1,7 +1,7 @@
 use std::array;
 
+use ax_poseidon2_air::poseidon2::columns::Poseidon2Cols;
 use p3_field::Field;
-use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 
 use super::air::Poseidon2VmAir;
 use crate::{

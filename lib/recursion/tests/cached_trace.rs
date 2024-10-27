@@ -1,5 +1,5 @@
 // use afs_compiler::util::execute_program;
-// use afs_recursion::testing_utils::inner::build_verification_program;
+// use axvm_recursion::testing_utils::inner::build_verification_program;
 // use ax_stark_backend::{
 //     air_builders::PartitionedAirBuilder,
 //     engine::VerificationData,

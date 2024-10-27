@@ -1,5 +1,5 @@
 [package]
-name = "poseidon2-air"
+name = "ax-poseidon2-air"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

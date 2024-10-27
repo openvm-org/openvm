@@ -10,7 +10,6 @@ use afs_compiler::{
     conversion::CompilerOptions,
     ir::{Ext, Felt, RVar, Var},
 };
-use afs_recursion::testing_utils::inner::build_verification_program;
 use ax_sdk::{
     bench::run_with_metric_collection,
     config::{
@@ -24,6 +23,7 @@ use axvm_circuit::{
     sdk::gen_vm_program_test_proof_input,
     system::vm::config::VmConfig,
 };
+use axvm_recursion::testing_utils::inner::build_verification_program;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -119,7 +119,7 @@ fn main() {
                 witness_stream,
                 VmConfig::aggregation(4, 7),
             );
-            afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
+            axvm_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
                 outer_verifier_sft,
                 // log_blowup = 3 because of poseidon2 chip.
                 Some(standard_fri_params_with_100_bits_conjectured_security(3)),

@@ -77,7 +77,7 @@ fn main() {
         #[cfg(feature = "static-verifier")]
         info_span!("Recursive Verify e2e", group = "recursive_verify_e2e").in_scope(|| {
             use afs_compiler::conversion::CompilerOptions;
-            use afs_recursion::testing_utils::inner::build_verification_program;
+            use axvm_recursion::testing_utils::inner::build_verification_program;
 
             let compiler_options = CompilerOptions {
                 enable_cycle_tracker: true,
@@ -89,7 +89,7 @@ fn main() {
                 witness_stream,
                 VmConfig::aggregation(4, 7),
             );
-            afs_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
+            axvm_recursion::halo2::testing_utils::run_evm_verifier_e2e_test(
                 inner_verifier_sft,
                 // log_blowup = 3 because of poseidon2 chip.
                 Some(standard_fri_params_with_100_bits_conjectured_security(3)),

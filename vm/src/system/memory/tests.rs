@@ -9,6 +9,7 @@ use std::{
 
 use afs_derive::AlignedBorrow;
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
@@ -24,7 +25,6 @@ use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::{
     prelude::{SliceRandom, StdRng},
     Rng,

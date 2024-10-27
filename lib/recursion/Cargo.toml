@@ -1,7 +1,8 @@
 [package]
-name = "afs-recursion"
-version = "0.1.0"
-edition = "2021"
+name = "axvm-recursion"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
 ax-stark-backend = { workspace = true }
