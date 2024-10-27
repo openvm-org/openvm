@@ -57,6 +57,16 @@ impl Fp2 {
         let num_limbs = builder.num_limbs;
         drop(builder);
 
+        // Compute should not be affected by whether auto save is triggered.
+        // So we must do compute first.
+        // Compute z0
+        let compute_denom = &other.c0.expr * &other.c0.expr + &other.c1.expr * &other.c1.expr;
+        let compute_z0_nom = &self.c0.expr * &other.c0.expr + &self.c1.expr * &other.c1.expr;
+        let compute_z0 = &compute_z0_nom / &compute_denom;
+        // Compute z1
+        let compute_z1_nom = &self.c1.expr * &other.c0.expr - &self.c0.expr * &other.c1.expr;
+        let compute_z1 = &compute_z1_nom / &compute_denom;
+
         // Constraint 1: x0 = y0*z0 - y1*z1
         let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
         let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
@@ -69,6 +79,7 @@ impl Fp2 {
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
+        let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
 
         // Constraint 2: x1 = y1*z0 + y0*z1
         let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
@@ -82,14 +93,7 @@ impl Fp2 {
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
-
-        // Compute z0
-        let compute_denom = &other.c0.expr * &other.c0.expr + &other.c1.expr * &other.c1.expr;
-        let compute_z0_nom = &self.c0.expr * &other.c0.expr + &self.c1.expr * &other.c1.expr;
-        let compute_z0 = &compute_z0_nom / &compute_denom;
-        // Compute z1
-        let compute_z1_nom = &self.c1.expr * &other.c0.expr - &self.c0.expr * &other.c1.expr;
-        let compute_z1 = &compute_z1_nom / &compute_denom;
+        let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
 
         let mut builder = self.c0.builder.borrow_mut();
         builder.add_constraint(constraint1);

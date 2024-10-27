@@ -258,7 +258,9 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             vars_overflow[i] = to_overflow_int(&vars_bigint[i], self.num_limbs, self.limb_bits);
         }
         // We need to have all variables computed first because, e.g. constraints[2] might need variables[3].
+        println!("num constraints: {}", self.constraints.len());
         for i in 0..self.constraints.len() {
+            println!("gen trace i: {}, {}", i, self.constraints[i]);
             // expr = q * p
             let expr_bigint =
                 self.constraints[i].evaluate_bigint(&input_bigint, &vars_bigint, &flags);

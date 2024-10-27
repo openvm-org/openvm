@@ -45,10 +45,9 @@ impl FieldVariable {
             return var_id;
         }
         let mut builder = self.builder.borrow_mut();
-        builder.num_variables += 1;
 
         // Introduce a new variable to replace self.expr.
-        let new_var = SymbolicExpr::Var(builder.num_variables - 1);
+        let new_var = builder.new_var();
         // self.expr - new_var = 0
         let new_constraint =
             SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(new_var.clone()));
