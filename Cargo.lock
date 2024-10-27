@@ -651,8 +651,11 @@ dependencies = [
 name = "axvm-instructions-derive"
 version = "0.1.0"
 dependencies = [
+ "axvm-instructions",
  "proc-macro2",
  "quote",
+ "strum",
+ "strum_macros",
  "syn 1.0.109",
 ]
 
