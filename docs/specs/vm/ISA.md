@@ -296,6 +296,24 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | ----------- | ----------- | ----------------------------------------------------------------- |
 | MUL256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = ([r32{0}(b):32]_2 * [r32{0}(c):32]_2)[0:255]` |
 
+### Prime Field Arithmetic
+
+The VM can be configured to support intrinsic instruction for arithmetic over prime fields. The VM configuration will specify a list of supported prime moduli. For each prime `P` there will be associated configuration parameters `P::NUM_LIMBS` and `P::BLOCK_SIZE` (defined below). For each prime modulus `P`, the 4 instructions below are supported.
+
+The instructions perform operations on unsigned big integers representing elements in the prime field. The big integer values are read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by reading register values in address space `1`.
+
+An element in the prime field is represented as a big integer with `P::NUM_LIMBS` limbs with each limb having `LIMB_BITS = 8` bits. For each instruction, the input elements `[r32{0}(b): P::NUM_LIMBS]_2, [r32{0}(c):P::NUM_LIMBS]_2` are assumed to be unsigned big integers in little-endian format with each limb having `LIMB_BITS` bits. However, the big integers are **not** required to be less than `P`. Under these conditions, the output element `[r32{0}(a): P::NUM_LIMBS]_2` written to memory will be an unsigned big integer of the same format that is congruent modulo `P` to the respective operation applied to the two inputs.
+
+For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
+Each instruction performs block accesses with block size `4` in address space `1` and block size `P::BLOCK_SIZE` in address space `2`, where `P::NUM_LIMBS` is divisible by `P::BLOCK_SIZE`. Recall that `P::BLOCK_SIZE` must be a power of 2.
+
+| Name             | Operands    | Description                                                                                                                              |
+| ---------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| ADDMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 + [r32{0}(c):32]_2 (mod P)`                                                                         |
+| SUBMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 - [r32{0}(c):32]_2 (mod P)`                                                                         |
+| MULMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 * [r32{0}(c):32]_2 (mod P)`                                                                         |
+| DIVMOD_RV32\<P\> | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 / [r32{0}(c):32]_2 (mod P)`. Undefined behavior if `[r32{0}(c):32]_2` is congruent to 0 modulo `P`. |
+
 ## Native Kernel
 
 | Name                | Operands             | Description                                                                                                                        |
