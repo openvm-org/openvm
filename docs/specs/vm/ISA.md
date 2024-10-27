@@ -296,20 +296,20 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | ----------- | ----------- | ----------------------------------------------------------------- |
 | MUL256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = ([r32{0}(b):32]_2 * [r32{0}(c):32]_2)[0:255]` |
 
-### Native Kernel Instructions
+## Native Kernel
 
-| Mnemonic            | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                           |
-| ------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **L** / **LOAD**    | `a, offset, c`                                | Set `[a]_d <- [[c]_d + offset]_e`. Loads a cell from one address space to another.                                                 |
-| **S** / **STORE**   | `a, offset, c`                                | Set `[[c]_d + offset]_e <- [a]_d`.                                                                                                 |
-| **L2** / **LOAD2**  | `a, offset, c, size`                          | Set `[a]_d <- [[c]_d + [f]_d * g + offset]_e`. Loads cell a from one address space to another using a variable multiple of `size`. |
-| **S2** / **STORE2** | `a, offset, c, size`                          | Set `[[c]_d + [f]_d * g + offset]_e <- [a]_d`.                                                                                     |
-| **JAL**             | `a, offset, c`                                | Jump to address and link: set `[a]_d <- (pc + INST_WIDTH)` and `pc <- pc + offset`.                                                |
-| **BEQ**             | `a, b, offset`                                | If `[a]_d == [b]_e`, then set `pc <- pc + offset`                                                                                  |
-| **BNE**             | `a, b, offset`                                | If `[a]_d != [b]_e`, then set `pc <- pc + offset`                                                                                  |
-| **TERMINATE**       | `_, _, _`                                     | Terminates execution.                                                                                                              |
-| **SHINTW**          | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `[[c]_d + b]_e`.                                                                  |
-| **PUBLISH**         | `a, b, _`                                     | Constrains the public value at index `[a]_d` to equal `[b]_e`.                                                                     |
+| Name                | Operands             | Description                                                                                                                        |
+| ------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **L** / **LOAD**    | `a, offset, c`       | Set `[a]_d <- [[c]_d + offset]_e`. Loads a cell from one address space to another.                                                 |
+| **S** / **STORE**   | `a, offset, c`       | Set `[[c]_d + offset]_e <- [a]_d`.                                                                                                 |
+| **L2** / **LOAD2**  | `a, offset, c, size` | Set `[a]_d <- [[c]_d + [f]_d * g + offset]_e`. Loads cell a from one address space to another using a variable multiple of `size`. |
+| **S2** / **STORE2** | `a, offset, c, size` | Set `[[c]_d + [f]_d * g + offset]_e <- [a]_d`.                                                                                     |
+| **JAL**             | `a, offset, c`       | Jump to address and link: set `[a]_d <- (pc + INST_WIDTH)` and `pc <- pc + offset`.                                                |
+| **BEQ**             | `a, b, offset`       | If `[a]_d == [b]_e`, then set `pc <- pc + offset`                                                                                  |
+| **BNE**             | `a, b, offset`       | If `[a]_d != [b]_e`, then set `pc <- pc + offset`                                                                                  |
+| **TERMINATE**       | `_, _, _`            | Terminates execution.                                                                                                              |
+| **SHINTW**          | `a, b, _`            | Pops the next word off of the `hint_stream` into `[[c]_d + b]_e`.                                                                  |
+| **PUBLISH**         | `a, b, _`            | Constrains the public value at index `[a]_d` to equal `[b]_e`.                                                                     |
 
 #### Notes about hints
 
