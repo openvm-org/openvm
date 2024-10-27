@@ -1,5 +1,5 @@
 [package]
-name = "axvm-ecc-lib"
+name = "axvm-ecc"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

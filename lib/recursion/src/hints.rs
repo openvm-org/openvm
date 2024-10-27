@@ -1,14 +1,6 @@
 use std::cmp::Reverse;
 
-use axvm_native_compiler::ir::{
-    unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
-    DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
-};
 use ax_circuit_primitives::bigint::utils::big_uint_to_num_limbs;
-use ax_ecc_lib::types::{
-    ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
-    ECPointVariable,
-};
 use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use ax_stark_backend::{
     keygen::types::TraceWidth,
@@ -16,6 +8,14 @@ use ax_stark_backend::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
         types::{AirProofData, Commitments, Proof},
     },
+};
+use axvm_ecc::types::{
+    ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
+    ECPointVariable,
+};
+use axvm_native_compiler::ir::{
+    unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
+    DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
 };
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
@@ -559,13 +559,13 @@ impl Hintable<InnerConfig> for ECDSAInput {
 
 #[cfg(test)]
 mod test {
+    use afs_derive::{DslVariable, Hintable};
+    use axvm_circuit::system::program::util::execute_program;
     use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
         prelude::*,
     };
-    use afs_derive::{DslVariable, Hintable};
-    use axvm_circuit::system::program::util::execute_program;
     use p3_field::AbstractField;
 
     use crate::{

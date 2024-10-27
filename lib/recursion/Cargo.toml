@@ -10,7 +10,7 @@ axvm-native-compiler = { workspace = true, features = ["sdk"] }
 ax-sdk = { workspace = true }
 afs-derive = { workspace = true }
 axvm-circuit = { workspace = true, features = ["sdk"] }
-ax-ecc-lib = { workspace = true }
+axvm-ecc = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 
 p3-air = { workspace = true }
