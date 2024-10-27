@@ -50,8 +50,8 @@ impl Fp2 {
     pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
         println!("div fp2!!!!\n\n");
         let mut builder = self.c0.builder.borrow_mut();
-        let z0 = builder.new_var();
-        let z1 = builder.new_var();
+        let (z0_idx, z0) = builder.new_var();
+        let (z1_idx, z1) = builder.new_var();
         let prime = builder.prime.clone();
         let limb_bits = builder.limb_bits;
         let num_limbs = builder.num_limbs;
@@ -96,10 +96,10 @@ impl Fp2 {
         let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
 
         let mut builder = self.c0.builder.borrow_mut();
-        builder.add_constraint(constraint1);
-        builder.add_constraint(constraint2);
-        builder.add_compute(compute_z0);
-        builder.add_compute(compute_z1);
+        builder.set_compute(z0_idx, compute_z0);
+        builder.set_compute(z1_idx, compute_z1);
+        builder.set_constraint(z0_idx, constraint1);
+        builder.set_constraint(z1_idx, constraint2);
         drop(builder);
 
         let z0_var = FieldVariable::from_var(self.c0.builder.clone(), z0);

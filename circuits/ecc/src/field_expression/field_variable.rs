@@ -47,18 +47,13 @@ impl FieldVariable {
         let mut builder = self.builder.borrow_mut();
 
         // Introduce a new variable to replace self.expr.
-        let new_var = builder.new_var();
+        let (new_var_idx, new_var) = builder.new_var();
         // self.expr - new_var = 0
         let new_constraint =
             SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(new_var.clone()));
         // limbs information.
-        let (q_limbs, carry_limbs) =
-            self.expr
-                .constraint_limbs(&builder.prime, builder.limb_bits, builder.num_limbs);
-        builder.constraints.push(new_constraint);
-        builder.q_limbs.push(q_limbs);
-        builder.carry_limbs.push(carry_limbs);
-        builder.computes.push(self.expr.clone());
+        builder.set_constraint(new_var_idx, new_constraint);
+        builder.set_compute(new_var_idx, self.expr.clone());
 
         self.expr = new_var;
         self.limb_max_abs = (1 << builder.limb_bits) - 1;
@@ -245,7 +240,7 @@ impl FieldVariable {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
         let mut builder = self.builder.borrow_mut();
         // Introduce a new variable to replace self.expr / other.expr.
-        let new_var = builder.new_var();
+        let (new_var_idx, new_var) = builder.new_var();
         let prime = builder.prime.clone();
         let limb_bits = builder.limb_bits;
         let num_limbs = builder.num_limbs;
@@ -277,10 +272,10 @@ impl FieldVariable {
         }
 
         let mut builder = self.builder.borrow_mut();
-        builder.add_constraint(new_constraint);
+        builder.set_constraint(new_var_idx, new_constraint);
         // Only compute can have division.
         let compute = SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));
-        builder.computes.push(compute);
+        builder.set_compute(new_var_idx, compute);
         drop(builder);
 
         FieldVariable::from_var(self.builder.clone(), new_var)

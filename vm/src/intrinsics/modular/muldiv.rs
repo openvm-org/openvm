@@ -53,20 +53,20 @@ impl ModularMulDivCoreAir {
         let builder = Rc::new(RefCell::new(builder));
         let x = ExprBuilder::new_input(builder.clone());
         let y = ExprBuilder::new_input(builder.clone());
-        let z = builder.borrow_mut().new_var();
+        let (z_idx, z) = builder.borrow_mut().new_var();
         let z = FieldVariable::from_var(builder.clone(), z);
         let is_mul_flag = builder.borrow_mut().new_flag();
         // constraint is x * y = z, or z * y = x
         let lvar = FieldVariable::select(is_mul_flag, &x, &z);
         let rvar = FieldVariable::select(is_mul_flag, &z, &x);
         let constraint = lvar * y.clone() - rvar;
-        builder.borrow_mut().add_constraint(constraint.expr);
+        builder.borrow_mut().set_constraint(z_idx, constraint.expr);
         let compute = SymbolicExpr::Select(
             is_mul_flag,
             Box::new(x.expr.clone() * y.expr.clone()),
             Box::new(x.expr.clone() / y.expr.clone()),
         );
-        builder.borrow_mut().add_compute(compute);
+        builder.borrow_mut().set_compute(z_idx, compute);
 
         let builder = builder.borrow().clone();
 
