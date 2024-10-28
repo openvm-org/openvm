@@ -1,5 +1,5 @@
 use ax_stark_backend::{
-    interaction::InteractionBuilder,
+    interaction::{InteractionBuilder, InteractionType},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -22,7 +22,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for DummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for DummyAir {}
 impl<F: Field> BaseAir<F> for DummyAir {
     fn width(&self) -> usize {
-        3
+        4
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
@@ -35,7 +35,13 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for DummyAir {
         let main = builder.main();
         let local = main.row_slice(0);
         self.bus
-            .send_xor(local[0], local[1], local[2])
+            .push(
+                local[0],
+                local[1],
+                local[2],
+                local[3],
+                InteractionType::Send,
+            )
             .eval(builder, AB::F::one());
     }
 }

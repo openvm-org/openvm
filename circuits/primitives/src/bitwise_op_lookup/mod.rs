@@ -92,10 +92,10 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
         let local: &BitwiseOperationLookupCols<AB::Var> = (*local).borrow();
 
         self.bus
-            .receive(prep_local.x, prep_local.y, AB::F::neg_one())
+            .receive(prep_local.x, prep_local.y, AB::F::neg_one(), AB::F::zero())
             .eval(builder, local.mult_range);
         self.bus
-            .receive(prep_local.x, prep_local.y, prep_local.z_xor)
+            .receive(prep_local.x, prep_local.y, prep_local.z_xor, AB::F::one())
             .eval(builder, local.mult_xor);
     }
 }

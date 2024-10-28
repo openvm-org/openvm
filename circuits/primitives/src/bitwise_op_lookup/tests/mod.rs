@@ -85,11 +85,11 @@ fn test_bitwise_operation_lookup() {
                                 lookup.request_xor(x, y);
                             }
                         };
-                        [x, y, z].into_iter()
+                        [x, y, z, op as u32].into_iter()
                     })
                     .map(AbstractField::from_canonical_u32)
                     .collect(),
-                3,
+                4,
             )
         })
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
@@ -119,11 +119,11 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
                             lookup.request_xor(x, y);
                         }
                     };
-                    [x, y, z].into_iter()
+                    [x, y, z, op as u32].into_iter()
                 })
                 .map(AbstractField::from_canonical_u32)
                 .collect(),
-            3,
+            4,
         ),
         lookup.generate_trace(),
     ];
