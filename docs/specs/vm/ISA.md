@@ -50,9 +50,13 @@ addressable cells. Registers are represented using the [LIMB] format with `LIMB_
 
 ## Hints
 
-The `input_stream` is a non-interactive queue of vectors of field elements which is provided at the start of
+The `input_stream` is a private non-interactive queue of vectors of field elements which is provided at the start of
 runtime execution. The `hint_stream` is a queue of values that can be written to memory by calling the `HINTSTOREW_RV32` and `HINTSTORE` instructions. The `hint_stream` is populated via [phantom sub-instructions](#phantom-sub-instructions) such
 as `HINT_INPUT` and `HINT_BITS`.
+
+## Public Outputs
+
+By default, all inputs to the program are private (see [Hints](#hints)). At the end of program execution, a public list of user-specified field elements is output. The length of the list is a VM configuration parameter, and the list is initialized with zero elements. The VM has two configuration modes: continuations enabled and continuations disabled. When continuations are enabled, users can store values into the public output list via the `REVEAL_RV32` instruction. When continuations are disabled, users can store values into the public output list via the `PUBLISH` instruction.
 
 ## Notation
 
@@ -245,10 +249,10 @@ We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(
 
 ### User IO
 
-| Name            | Operands    | Description                                                                                              |
-| --------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
-| HINTSTOREW_RV32 | `_,b,c,1,2` | `[r32{c}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes. |
-| REVEAL_RV32     | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`.                 |
+| Name            | Operands    | Description                                                                                                                         |
+| --------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| HINTSTOREW_RV32 | `_,b,c,1,2` | `[r32{c}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                            |
+| REVEAL_RV32     | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled. |
 
 ### Hashes
 
@@ -370,7 +374,7 @@ In some instructions below, `W` is a generic parameter for the block size.
 | BEQ\<W\>       | `a,b,c,d,e`     | If `[a:W]_d == [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
 | BNE\<W\>       | `a,b,c,d,e`     | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
 | HINTSTORE\<W\> | `_,b,c,d,e`     | Set `[[c]_d + b:W]_e = next W elements from hint stream`.                                                                                                                                                                                                                                   |
-| PUBLISH        | `a,b,_,d,e`     | Constrains the public value at index `[a]_d` to equal `[b]_e`. Both `d,e` cannot be zero.                                                                                                                                                                                                   |
+| PUBLISH        | `a,b,_,d,e`     | Set the user public output at index `[a]_d` to equal `[b]_e`. Both `d,e` cannot be zero. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                           |
 | CASTF          | `a,b,_,d,e`     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
 
 <!--
