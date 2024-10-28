@@ -539,6 +539,7 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-circuit-derive",
+ "axvm-ecc-curves",
  "axvm-instructions",
  "backtrace",
  "cfg-if",
@@ -628,6 +629,15 @@ dependencies = [
  "test-log",
  "tracing",
  "zkhash",
+]
+
+[[package]]
+name = "axvm-ecc-curves"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "num-bigint-dig",
+ "num-traits",
 ]
 
 [[package]]

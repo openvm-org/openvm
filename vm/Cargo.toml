@@ -19,6 +19,7 @@ ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 ax-ecc-primitives = { workspace = true }
+axvm-ecc-curves = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 ax-stark-sdk = { workspace = true, optional = true }
 axvm-instructions = { workspace = true }

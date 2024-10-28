@@ -1,5 +1,6 @@
 use ax_ecc_primitives::test_utils::{bls12381_fq12_random, bn254_fq12_random};
-use axvm_instructions::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Curve, Fp12Opcode, UsizeOpcode};
+use axvm_ecc_curves::{BLS12381, BN254};
+use axvm_instructions::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode, UsizeOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
@@ -19,8 +20,8 @@ fn test_fp12_multiply_bn254() {
     const LIMB_BITS: usize = 8;
 
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = Bn254Fp12Opcode::modulus();
-    let xi = Bn254Fp12Opcode::xi();
+    let modulus = BN254.MODULUS.clone();
+    let xi = BN254.XI;
     let expr = fp12_multiply_expr(
         modulus,
         NUM_LIMBS,
@@ -80,8 +81,8 @@ fn test_fp12_multiply_bls12381() {
     const LIMB_BITS: usize = 8;
 
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = Bls12381Fp12Opcode::modulus();
-    let xi = Bls12381Fp12Opcode::xi();
+    let modulus = BLS12381.MODULUS.clone();
+    let xi = BLS12381.XI;
     let expr = fp12_multiply_expr(
         modulus,
         NUM_LIMBS,
