@@ -19,25 +19,24 @@ use crate::{
     system::memory::MemoryControllerRef,
 };
 
-// LANE_SIZE: how many cells do we read at a time, must be a power of 2.
-// NUM_LANES: how many lanes do we need to represent one field element.
-// TWO_NUM_LANES: how many lanes do we need to represent one of the input/output, which is a EcPoint of 2 field elements.
-// For example, for bls12_381, LANE_SIZE = 16, NUM_LANES = 3, and TWO_NUM_LANES = 6.
-// For secp256k1, LANE_SIZE = 32, NUM_LANES = 1, and TWO_NUM_LANES = 2.
+/// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
+/// BLOCKS: how many blocks do we need to represent one input or output
+/// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per input EcPoint, BLOCKS = 6.
+/// For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
-pub struct EcAddNeChip<F: PrimeField32, const TWO_NUM_LANES: usize, const LANE_SIZE: usize>(
+pub struct EcAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     VmChipWrapper<
         F,
-        Rv32VecHeapAdapterChip<F, 2, TWO_NUM_LANES, TWO_NUM_LANES, LANE_SIZE, LANE_SIZE>,
+        Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
     >,
 );
 
-impl<F: PrimeField32, const TWO_NUM_LANES: usize, const LANE_SIZE: usize>
-    EcAddNeChip<F, TWO_NUM_LANES, LANE_SIZE>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
+    EcAddNeChip<F, BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 2, TWO_NUM_LANES, TWO_NUM_LANES, LANE_SIZE, LANE_SIZE>,
+        adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         memory_controller: MemoryControllerRef<F>,
         modulus: BigUint,
         num_limbs: usize,
@@ -62,19 +61,19 @@ impl<F: PrimeField32, const TWO_NUM_LANES: usize, const LANE_SIZE: usize>
 }
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
-pub struct EcDoubleChip<F: PrimeField32, const TWO_NUM_LANES: usize, const LANE_SIZE: usize>(
+pub struct EcDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     VmChipWrapper<
         F,
-        Rv32VecHeapAdapterChip<F, 1, TWO_NUM_LANES, TWO_NUM_LANES, LANE_SIZE, LANE_SIZE>,
+        Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
     >,
 );
 
-impl<F: PrimeField32, const TWO_NUM_LANES: usize, const LANE_SIZE: usize>
-    EcDoubleChip<F, TWO_NUM_LANES, LANE_SIZE>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
+    EcDoubleChip<F, BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 1, TWO_NUM_LANES, TWO_NUM_LANES, LANE_SIZE, LANE_SIZE>,
+        adapter: Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         memory_controller: MemoryControllerRef<F>,
         modulus: BigUint,
         num_limbs: usize,

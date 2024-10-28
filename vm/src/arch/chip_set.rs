@@ -720,7 +720,7 @@ impl VmConfig {
                 panic!("Attempting to override an executor for opcode {global_opcode_idx}");
             }
             match executor {
-                ExecutorName::EcAddNeRv32_1x32 => {
+                ExecutorName::EcAddNeRv32_2x32 => {
                     let chip = Rc::new(RefCell::new(EcAddNeChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
                             execution_bus,
@@ -734,9 +734,9 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::EcAddNeRv32_1x32(chip));
+                    chips.push(AxVmChip::EcAddNeRv32_2x32(chip));
                 }
-                ExecutorName::EcDoubleRv32_1x32 => {
+                ExecutorName::EcDoubleRv32_2x32 => {
                     let chip = Rc::new(RefCell::new(EcDoubleChip::new(
                         Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
                             execution_bus,
@@ -750,9 +750,9 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::EcDoubleRv32_1x32(chip));
+                    chips.push(AxVmChip::EcDoubleRv32_2x32(chip));
                 }
-                ExecutorName::EcAddNeRv32_3x16 => {
+                ExecutorName::EcAddNeRv32_6x16 => {
                     let chip = Rc::new(RefCell::new(EcAddNeChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
                             execution_bus,
@@ -766,9 +766,9 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::EcAddNeRv32_3x16(chip));
+                    chips.push(AxVmChip::EcAddNeRv32_6x16(chip));
                 }
-                ExecutorName::EcDoubleRv32_3x16 => {
+                ExecutorName::EcDoubleRv32_6x16 => {
                     let chip = Rc::new(RefCell::new(EcDoubleChip::new(
                         Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
                             execution_bus,
@@ -782,7 +782,7 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::EcDoubleRv32_3x16(chip));
+                    chips.push(AxVmChip::EcDoubleRv32_6x16(chip));
                 }
                 _ => unreachable!("Unsupported executor"),
             }
@@ -951,6 +951,7 @@ impl VmConfig {
     }
 }
 
+// Returns (local_opcode_idx, global offset, executor name, modulus)
 fn gen_ec_executor_tuple(
     supported_ec_curves: &[EcCurve],
 ) -> Vec<(usize, usize, ExecutorName, BigUint)> {
@@ -965,13 +966,13 @@ fn gen_ec_executor_tuple(
                     (
                         EccOpcode::EC_ADD_NE as usize,
                         class_offset,
-                        ExecutorName::EcAddNeRv32_1x32,
+                        ExecutorName::EcAddNeRv32_2x32,
                         curve.prime(),
                     ),
                     (
                         EccOpcode::EC_DOUBLE as usize,
                         class_offset,
-                        ExecutorName::EcDoubleRv32_1x32,
+                        ExecutorName::EcDoubleRv32_2x32,
                         curve.prime(),
                     ),
                 ]
@@ -980,13 +981,13 @@ fn gen_ec_executor_tuple(
                     (
                         EccOpcode::EC_ADD_NE as usize,
                         class_offset,
-                        ExecutorName::EcAddNeRv32_3x16,
+                        ExecutorName::EcAddNeRv32_6x16,
                         curve.prime(),
                     ),
                     (
                         EccOpcode::EC_DOUBLE as usize,
                         class_offset,
-                        ExecutorName::EcDoubleRv32_3x16,
+                        ExecutorName::EcDoubleRv32_6x16,
                         curve.prime(),
                     ),
                 ]

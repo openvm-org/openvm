@@ -1,0 +1,6 @@
+[package]
+name = "axvm-ecc"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "axVM elliptic curve cryptography library."
