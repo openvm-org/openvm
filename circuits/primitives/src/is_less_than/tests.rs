@@ -59,7 +59,6 @@ impl<AB: InteractionBuilder> Air<AB> for IsLtTestAir {
     }
 }
 
-#[derive(Clone)]
 pub struct IsLessThanChip {
     pub air: IsLtTestAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,

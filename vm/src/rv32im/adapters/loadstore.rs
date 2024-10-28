@@ -23,8 +23,8 @@ use crate::{
             Rv32LoadStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     rv32im::adapters::RV32_CELL_BITS,
     system::{
@@ -41,11 +41,22 @@ use crate::{
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store
+/// LoadStore Adapter handles 4 byte aligned lw, sw instructions,
+///                           2 byte aligned lh, lhu, sh instructions and
+///                           1 byte aligned lb, lbu, sb instructions
+/// This adapter always batch reads/writes 4 bytes,
+/// thus it needs to shift left the memory pointer by some amount in case of not 4 byte aligned intermediate pointers
 pub struct LoadStoreInstruction<T> {
     pub is_valid: T,
     // Absolute opcode number
     pub opcode: T,
     pub is_load: T,
+
+    /// Keeping two seperate shift amounts is needed for getting the read_ptr/write_ptr with degree 2
+    /// load_shift_amount will be the shift amount if load and 0 if store
+    pub load_shift_amount: T,
+    /// store_shift_amount will be 0 if load and the shift amount if store
+    pub store_shift_amount: T,
 }
 
 /// The LoadStoreAdapter seperates Runtime and Air AdapterInterfaces.
@@ -55,16 +66,14 @@ pub struct LoadStoreInstruction<T> {
 /// This method ensures that there are no modifications to the global interfaces.
 
 /// Here 2 reads represent read_data and prev_data,
+/// The second element of the tuple in Reads is the shift amount needed to be passed to the core chip
 /// Getting the intermediate pointer is completely internal to the adapter and shouldn't be a part of the AdapterInterface
-type Rv32LoadStoreAdapterRuntimeInterface<T> = BasicAdapterInterface<
-    T,
-    LoadStoreInstruction<T>,
-    2,
-    1,
-    RV32_REGISTER_NUM_LIMBS,
-    RV32_REGISTER_NUM_LIMBS,
->;
-
+pub struct Rv32LoadStoreAdapterRuntimeInterface<T>(PhantomData<T>);
+impl<T> VmAdapterInterface<T> for Rv32LoadStoreAdapterRuntimeInterface<T> {
+    type Reads = ([[T; RV32_REGISTER_NUM_LIMBS]; 2], T);
+    type Writes = [[T; RV32_REGISTER_NUM_LIMBS]; 1];
+    type ProcessedInstruction = ();
+}
 pub struct Rv32LoadStoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
 impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapterAirInterface<AB> {
@@ -74,9 +83,9 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
 }
 
 /// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
-/// In case of Loads, reads from the intermediate pointer and writes to rd.
-/// In case of Stores, reads from rs2 and writes to the intermediate pointer.
-#[derive(Debug, Clone)]
+/// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
+/// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
+#[derive(Debug)]
 pub struct Rv32LoadStoreAdapterChip<F: Field> {
     pub air: Rv32LoadStoreAdapterAir,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
@@ -182,6 +191,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         let is_load = ctx.instruction.is_load;
         let is_valid = ctx.instruction.is_valid;
+        let load_shift_amount = ctx.instruction.load_shift_amount;
+        let store_shift_amount = ctx.instruction.store_shift_amount;
+        let shift_amount = load_shift_amount.clone() + store_shift_amount.clone();
 
         // read rs1
         self.memory_bridge
@@ -214,7 +226,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         // preventing mem_ptr overflow
         self.range_bus
-            .range_check(local_cols.mem_ptr_limbs[0], RV32_CELL_BITS * 2)
+            .range_check(
+                // (limb[0] - shift_amount) / 4 < 2^14 => limb[0] - shift_amount < 2^16
+                (local_cols.mem_ptr_limbs[0] - shift_amount)
+                    * AB::F::from_canonical_u32(4).inverse(),
+                RV32_CELL_BITS * 2 - 2,
+            )
             .eval(builder, is_valid.clone());
         self.range_bus
             .range_check(
@@ -230,7 +247,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let read_as = select::<AB::Expr>(is_load.clone(), AB::Expr::two(), AB::Expr::one());
 
         // read_ptr is mem_ptr for loads and rd_rs2_ptr for stores
-        let read_ptr = select::<AB::Expr>(is_load.clone(), mem_ptr.clone(), local_cols.rd_rs2_ptr);
+        // Note: shift_amount is expected to have degree 2, thus we can't put it in the select clause
+        //       since the resulting read_ptr/write_ptr's degree will be 3 which is too high.
+        //       Instead, the solution without using additional columns is to get two different shift amounts from core chip
+        let read_ptr = select::<AB::Expr>(is_load.clone(), mem_ptr.clone(), local_cols.rd_rs2_ptr)
+            - load_shift_amount;
 
         self.memory_bridge
             .read(
@@ -247,7 +268,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let write_as = select::<AB::Expr>(is_load.clone(), AB::Expr::one(), AB::Expr::two());
 
         // write_ptr is rd_rs2_ptr for loads and mem_ptr for stores
-        let write_ptr = select::<AB::Expr>(is_load.clone(), local_cols.rd_rs2_ptr, mem_ptr.clone());
+        let write_ptr = select::<AB::Expr>(is_load.clone(), local_cols.rd_rs2_ptr, mem_ptr.clone())
+            - store_shift_amount;
 
         self.memory_bridge
             .write(
@@ -312,7 +334,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 2);
-        assert!(self.range_checker_chip.range_max_bits() >= 16);
+        assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
@@ -323,15 +345,20 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
+        let shift_amount = ptr_val % 4;
         assert!(ptr_val < (1 << self.air.pointer_max_bits));
+
         let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
-        self.range_checker_chip
-            .add_count(mem_ptr_limbs[0], RV32_CELL_BITS * 2);
+        self.range_checker_chip.add_count(
+            (mem_ptr_limbs[0] - shift_amount) / 4,
+            RV32_CELL_BITS * 2 - 2,
+        );
         self.range_checker_chip.add_count(
             mem_ptr_limbs[1],
             self.air.pointer_max_bits - RV32_CELL_BITS * 2,
         );
 
+        let ptr_val = ptr_val - shift_amount;
         let read_record = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                 memory.read::<RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_u32(ptr_val))
@@ -350,7 +377,10 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         };
 
         Ok((
-            [prev_data, read_record.data],
+            (
+                [prev_data, read_record.data],
+                F::from_canonical_u32(shift_amount),
+            ),
             Self::ReadRecord {
                 rs1_record,
                 rs1_ptr: b,
@@ -376,16 +406,16 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
 
-        let rs1_data = read_record.rs1_record.data;
         let write_record = match local_opcode {
             STOREW | STOREH | STOREB => {
-                let rs1_val = compose(rs1_data);
-                let imm = read_record.imm.as_canonical_u32();
-                let imm_sign = read_record.imm_sign as u32;
-                let imm_extended = imm + imm_sign * 0xffff0000;
-                let ptr = rs1_val.wrapping_add(imm_extended);
-
-                memory.write(e, F::from_canonical_u32(ptr), output.writes[0])
+                let ptr = read_record.mem_ptr_limbs[0]
+                    + read_record.mem_ptr_limbs[1]
+                        * F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
+                memory.write(
+                    e,
+                    F::from_canonical_u32(ptr.as_canonical_u32() & 0xfffffffc),
+                    output.writes[0],
+                )
             }
             LOADW | LOADB | LOADH | LOADBU | LOADHU => memory.write(d, a, output.writes[0]),
         };

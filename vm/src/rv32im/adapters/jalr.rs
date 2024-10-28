@@ -29,7 +29,7 @@ use crate::{
 };
 
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rv32JalrAdapterChip<F: Field> {
     pub air: Rv32JalrAdapterAir,
     _marker: PhantomData<F>,

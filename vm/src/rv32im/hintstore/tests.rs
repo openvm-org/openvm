@@ -1,6 +1,8 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_stark_sdk::{config::setup_tracing, utils::create_seeded_rng};
 use axvm_instructions::instruction::Instruction;
@@ -23,7 +25,7 @@ use crate::{
             UsizeOpcode,
         },
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        Streams, VmAdapterChip, BYTE_XOR_BUS,
+        Streams, VmAdapterChip, BITWISE_OP_LOOKUP_BUS,
     },
     rv32im::{
         adapters::{compose, Rv32HintStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -94,8 +96,13 @@ fn rand_hintstore_test() {
     setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
+
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let adapter = Rv32HintStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -105,7 +112,7 @@ fn rand_hintstore_test() {
 
     let core = Rv32HintStoreCoreChip::new(
         Arc::new(Mutex::new(Streams::default())),
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         Rv32HintStoreOpcode::default_offset(),
     );
     let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
@@ -116,7 +123,7 @@ fn rand_hintstore_test() {
     }
 
     drop(range_checker_chip);
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -136,8 +143,13 @@ fn run_negative_hintstore_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
+
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let adapter = Rv32HintStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -146,7 +158,7 @@ fn run_negative_hintstore_test(
     );
     let core = Rv32HintStoreCoreChip::new(
         Arc::new(Mutex::new(Streams::default())),
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         Rv32HintStoreOpcode::default_offset(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
@@ -169,7 +181,7 @@ fn run_negative_hintstore_test(
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(expected_error);
 }
@@ -191,8 +203,13 @@ fn negative_hintstore_tests() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
+
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let adapter = Rv32HintStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -201,7 +218,7 @@ fn execute_roundtrip_sanity_test() {
     );
     let core = Rv32HintStoreCoreChip::new(
         Arc::new(Mutex::new(Streams::default())),
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         Rv32HintStoreOpcode::default_offset(),
     );
     let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());

@@ -111,7 +111,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
     touched_labels: HashSet<(F, usize)>,

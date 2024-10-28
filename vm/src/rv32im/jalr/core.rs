@@ -6,8 +6,8 @@ use std::{
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    xor::{XorBus, XorLookupChip},
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::{instruction::Instruction, program::PC_BITS};
@@ -37,8 +37,6 @@ pub struct Rv32JalrCoreCols<T> {
     // the least significant limb can be derived using from_pc and the other limbs
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS - 1],
     pub is_valid: T,
-    // Used to range check that rd_data elements are bytes with XorBus
-    pub xor_res: T,
 
     pub to_pc_least_sig_bit: T,
     /// These are the limbs of `to_pc * 2`.
@@ -50,7 +48,6 @@ pub struct Rv32JalrCoreRecord<F> {
     pub imm: F,
     pub rs1_data: [F; RV32_REGISTER_NUM_LIMBS],
     pub rd_data: [F; RV32_REGISTER_NUM_LIMBS - 1],
-    pub xor_res: F,
     pub to_pc_least_sig_bit: F,
     pub to_pc_limbs: [F; 2],
     pub imm_sign: F,
@@ -58,8 +55,7 @@ pub struct Rv32JalrCoreRecord<F> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32JalrCoreAir {
-    // XorBus is used to range check that rd_data elements are bytes
-    pub xor_bus: XorBus,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
 }
@@ -92,7 +88,6 @@ where
             rs1_data: rs1,
             rd_data: rd,
             is_valid,
-            xor_res,
             imm_sign,
             to_pc_least_sig_bit,
             to_pc_limbs,
@@ -121,9 +116,8 @@ where
 
         // Constrain rd_data
         // Assumes only from_pc in [0,2^PC_BITS) is allowed by program bus
-        // Xor bus is being used to range check two bytes simultaneously. The xor result itself is not used.
-        self.xor_bus
-            .send(rd_data[0].clone(), rd_data[1].clone(), xor_res)
+        self.bitwise_lookup_bus
+            .send_range(rd_data[0].clone(), rd_data[1].clone())
             .eval(builder, is_valid);
         self.range_bus
             .range_check(rd_data[2].clone(), RV32_CELL_BITS)
@@ -175,27 +169,27 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rv32JalrCoreChip {
     pub air: Rv32JalrCoreAir,
-    pub xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
 impl Rv32JalrCoreChip {
     pub fn new(
-        xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
         range_checker_chip: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
         assert!(range_checker_chip.bus().range_max_bits >= 15);
         Self {
             air: Rv32JalrCoreAir {
-                xor_bus: xor_lookup_chip.bus(),
+                bitwise_lookup_bus: bitwise_lookup_chip.bus(),
                 range_bus: range_checker_chip.bus(),
                 offset,
             },
-            xor_lookup_chip,
+            bitwise_lookup_chip,
             range_checker_chip,
         }
     }
@@ -229,7 +223,8 @@ where
 
         let (to_pc, rd_data) = run_jalr(local_opcode_index, from_pc, imm_extended, rs1_val);
 
-        let xor_res = F::from_canonical_u32(self.xor_lookup_chip.request(rd_data[0], rd_data[1]));
+        self.bitwise_lookup_chip
+            .request_range(rd_data[0], rd_data[1]);
         self.range_checker_chip
             .add_count(rd_data[2], RV32_CELL_BITS);
         self.range_checker_chip
@@ -257,7 +252,6 @@ where
                 imm: c,
                 rd_data: array::from_fn(|i| rd_data[i + 1]),
                 rs1_data: rs1,
-                xor_res,
                 to_pc_least_sig_bit: F::from_canonical_u32(to_pc_least_sig_bit),
                 to_pc_limbs,
                 imm_sign: F::from_canonical_u32(imm_sign),
@@ -274,7 +268,6 @@ where
         core_cols.imm = record.imm;
         core_cols.rd_data = record.rd_data;
         core_cols.rs1_data = record.rs1_data;
-        core_cols.xor_res = record.xor_res;
         core_cols.to_pc_least_sig_bit = record.to_pc_least_sig_bit;
         core_cols.to_pc_limbs = record.to_pc_limbs;
         core_cols.imm_sign = record.imm_sign;

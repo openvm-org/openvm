@@ -1,9 +1,11 @@
 use std::{
-    cmp::max,
+    cmp::{max, min},
     ops::{Add, Div, Mul, Sub},
 };
 
-use ax_circuit_primitives::bigint::{utils::big_uint_mod_inverse, OverflowInt};
+use ax_circuit_primitives::bigint::{
+    check_carry_to_zero::get_carry_max_abs_and_bits, utils::big_uint_mod_inverse, OverflowInt,
+};
 use num_bigint_dig::{BigInt, BigUint};
 use num_traits::{FromPrimitive, One, Zero};
 use p3_air::AirBuilder;
@@ -54,11 +56,27 @@ impl Add for SymbolicExpr {
     }
 }
 
+impl Add<&SymbolicExpr> for SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn add(self, rhs: &SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Add(Box::new(self), Box::new(rhs.clone()))
+    }
+}
+
 impl Add for &SymbolicExpr {
     type Output = SymbolicExpr;
 
     fn add(self, rhs: &SymbolicExpr) -> Self::Output {
         SymbolicExpr::Add(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl Add<SymbolicExpr> for &SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn add(self, rhs: SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Add(Box::new(self.clone()), Box::new(rhs))
     }
 }
 
@@ -70,11 +88,27 @@ impl Sub for SymbolicExpr {
     }
 }
 
+impl Sub<&SymbolicExpr> for SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn sub(self, rhs: &SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Sub(Box::new(self), Box::new(rhs.clone()))
+    }
+}
+
 impl Sub for &SymbolicExpr {
     type Output = SymbolicExpr;
 
     fn sub(self, rhs: &SymbolicExpr) -> Self::Output {
         SymbolicExpr::Sub(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl Sub<SymbolicExpr> for &SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn sub(self, rhs: SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Sub(Box::new(self.clone()), Box::new(rhs))
     }
 }
 
@@ -86,11 +120,27 @@ impl Mul for SymbolicExpr {
     }
 }
 
+impl Mul<&SymbolicExpr> for SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn mul(self, rhs: &SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Mul(Box::new(self), Box::new(rhs.clone()))
+    }
+}
+
 impl Mul for &SymbolicExpr {
     type Output = SymbolicExpr;
 
     fn mul(self, rhs: &SymbolicExpr) -> Self::Output {
         SymbolicExpr::Mul(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl Mul<SymbolicExpr> for &SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn mul(self, rhs: SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Mul(Box::new(self.clone()), Box::new(rhs))
     }
 }
 
@@ -102,6 +152,14 @@ impl Div for SymbolicExpr {
     }
 }
 
+impl Div<&SymbolicExpr> for SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn div(self, rhs: &SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Div(Box::new(self), Box::new(rhs.clone()))
+    }
+}
+
 impl Div for &SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -110,8 +168,17 @@ impl Div for &SymbolicExpr {
     }
 }
 
+impl Div<SymbolicExpr> for &SymbolicExpr {
+    type Output = SymbolicExpr;
+
+    fn div(self, rhs: SymbolicExpr) -> Self::Output {
+        SymbolicExpr::Div(Box::new(self.clone()), Box::new(rhs))
+    }
+}
+
 impl SymbolicExpr {
     // Maximum absolute positive and negative value of the expression.
+    // Needed in constraint_limbs to estimate the number of limbs of q.
     fn max_abs(&self, prime: &BigUint) -> (BigUint, BigUint) {
         match self {
             SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => {
@@ -151,6 +218,55 @@ impl SymbolicExpr {
                 (max(lhs_max_pos, rhs_max_pos), max(lhs_max_neg, rhs_max_neg))
             }
         }
+    }
+
+    // Self should be a constraint expr.
+    // This is already tracked in FieldVariable.
+    // However in some cases (checking auto save in div), we need to know it from expr only.
+    pub fn constraint_limb_max_abs(&self, limb_bits: usize, num_limbs: usize) -> usize {
+        let canonical_limb_max_abs = (1 << limb_bits) - 1;
+        match self {
+            SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => canonical_limb_max_abs,
+            SymbolicExpr::Add(lhs, rhs) | SymbolicExpr::Sub(lhs, rhs) => {
+                lhs.constraint_limb_max_abs(limb_bits, num_limbs)
+                    + rhs.constraint_limb_max_abs(limb_bits, num_limbs)
+            }
+            SymbolicExpr::Mul(lhs, rhs) => {
+                let left_num_limbs = lhs.expr_limbs(num_limbs);
+                let right_num_limbs = rhs.expr_limbs(num_limbs);
+                lhs.constraint_limb_max_abs(limb_bits, num_limbs)
+                    * rhs.constraint_limb_max_abs(limb_bits, num_limbs)
+                    * min(left_num_limbs, right_num_limbs)
+            }
+            SymbolicExpr::IntMul(lhs, i) => {
+                lhs.constraint_limb_max_abs(limb_bits, num_limbs) * i.unsigned_abs()
+            }
+            SymbolicExpr::Select(_, lhs, rhs) => max(
+                lhs.constraint_limb_max_abs(limb_bits, num_limbs),
+                rhs.constraint_limb_max_abs(limb_bits, num_limbs),
+            ),
+            SymbolicExpr::Div(_, _) => {
+                unreachable!("should not have division when calling limb_max_abs")
+            }
+        }
+    }
+
+    // Self should be a constraint expr.
+    // This returns the carry bits of self.expr - q * p.
+    pub fn constraint_carry_bits_with_pq(
+        &self,
+        prime: &BigUint,
+        limb_bits: usize,
+        num_limbs: usize,
+    ) -> usize {
+        let without_pq = self.constraint_limb_max_abs(limb_bits, num_limbs);
+        let (q_limbs, _) = self.constraint_limbs(prime, limb_bits, num_limbs);
+        let canonical_limb_max_abs = (1 << limb_bits) - 1;
+        let limb_max_abs =
+            without_pq + canonical_limb_max_abs * canonical_limb_max_abs * min(q_limbs, num_limbs);
+        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
+        let (_, carry_bits) = get_carry_max_abs_and_bits(max_overflow_bits, limb_bits);
+        carry_bits
     }
 
     // Number of limbs to represent the expression.

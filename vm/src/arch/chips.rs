@@ -2,7 +2,8 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::{
-    range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip, xor::XorLookupChip,
+    bitwise_op_lookup::BitwiseOperationLookupChip, range_tuple::RangeTupleCheckerChip,
+    var_range::VariableRangeCheckerChip,
 };
 use axvm_instructions::instruction::Instruction;
 use enum_dispatch::enum_dispatch;
@@ -66,7 +67,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(Clone, EnumDiscriminants)]
+#[derive(EnumDiscriminants)]
 #[strum_discriminants(derive(Serialize, Deserialize, Ord, PartialOrd))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
@@ -112,7 +113,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(Clone, IntoStaticStr, ChipUsageGetter, Chip)]
+#[derive(IntoStaticStr, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
     Phantom(Rc<RefCell<PhantomChip<F>>>),
     LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
@@ -124,7 +125,7 @@ pub enum AxVmChip<F: PrimeField32> {
     RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
-    ByteXor(Arc<XorLookupChip<8>>),
+    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),

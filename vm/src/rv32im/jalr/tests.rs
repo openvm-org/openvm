@@ -1,6 +1,8 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
@@ -21,7 +23,7 @@ use crate::{
             UsizeOpcode,
         },
         testing::VmChipTestBuilder,
-        VmAdapterChip, BYTE_XOR_BUS,
+        VmAdapterChip, BITWISE_OP_LOOKUP_BUS,
     },
     rv32im::{
         adapters::{compose, Rv32JalrAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -91,7 +93,10 @@ fn set_and_execute(
 #[test]
 fn rand_jalr_test() {
     let mut rng = create_seeded_rng();
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
@@ -101,7 +106,7 @@ fn rand_jalr_test() {
         tester.memory_controller(),
     );
     let inner = Rv32JalrCoreChip::new(
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         range_checker_chip.clone(),
         Rv32JalrOpcode::default_offset(),
     );
@@ -113,7 +118,7 @@ fn rand_jalr_test() {
     }
 
     drop(range_checker_chip);
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -139,7 +144,10 @@ fn run_negative_jalr_test(
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
@@ -150,7 +158,7 @@ fn run_negative_jalr_test(
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let inner = Rv32JalrCoreChip::new(
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         range_checker_chip.clone(),
         Rv32JalrOpcode::default_offset(),
     );
@@ -204,7 +212,7 @@ fn run_negative_jalr_test(
     let tester = tester
         .build()
         .load_air_proof_input(chip_input)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(expected_error);
 }
@@ -277,7 +285,10 @@ fn overflow_negative_tests() {
 #[test]
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
@@ -287,7 +298,7 @@ fn execute_roundtrip_sanity_test() {
         tester.memory_controller(),
     );
     let inner = Rv32JalrCoreChip::new(
-        xor_lookup_chip,
+        bitwise_chip,
         range_checker_chip,
         Rv32JalrOpcode::default_offset(),
     );

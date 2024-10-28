@@ -18,7 +18,7 @@ use crate::{
 
 mod air;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ProgramTester<F: Field> {
     pub bus: ProgramBus,
     pub records: Vec<ProgramExecutionCols<F>>,

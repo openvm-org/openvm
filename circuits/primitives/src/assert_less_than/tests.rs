@@ -59,7 +59,6 @@ impl<AB: InteractionBuilder, const AUX_LEN: usize> Air<AB> for AssertLtTestAir<A
     }
 }
 
-#[derive(Clone)]
 pub struct AssertLessThanChip<const AUX_LEN: usize> {
     pub air: AssertLtTestAir<AUX_LEN>,
     pub range_checker: Arc<VariableRangeCheckerChip>,

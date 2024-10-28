@@ -38,7 +38,7 @@ pub struct VectorWriteRecord<F: Field, const WRITE_SIZE: usize> {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ConvertAdapterChip<F: Field, const READ_SIZE: usize, const WRITE_SIZE: usize> {
     pub air: ConvertAdapterAir<READ_SIZE, WRITE_SIZE>,
     _marker: PhantomData<F>,

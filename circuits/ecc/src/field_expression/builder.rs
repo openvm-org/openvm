@@ -105,21 +105,29 @@ impl ExprBuilder {
     // Below functions are used when adding variables and constraints manually, need to be careful.
     // Number of variables, constraints and computes should be consistent,
     // so there should be same number of calls to the new_var, add_constraint and add_compute.
-    pub fn new_var(&mut self) -> SymbolicExpr {
+    pub fn new_var(&mut self) -> (usize, SymbolicExpr) {
         self.num_variables += 1;
-        SymbolicExpr::Var(self.num_variables - 1)
+        // Allocate space for the new variable, to make sure they are corresponding to the same variable index.
+        self.constraints.push(SymbolicExpr::Input(0));
+        self.computes.push(SymbolicExpr::Input(0));
+        self.q_limbs.push(0);
+        self.carry_limbs.push(0);
+        (
+            self.num_variables - 1,
+            SymbolicExpr::Var(self.num_variables - 1),
+        )
     }
 
-    pub fn add_constraint(&mut self, constraint: SymbolicExpr) {
+    pub fn set_constraint(&mut self, index: usize, constraint: SymbolicExpr) {
         let (q_limbs, carry_limbs) =
             constraint.constraint_limbs(&self.prime, self.limb_bits, self.num_limbs);
-        self.constraints.push(constraint);
-        self.q_limbs.push(q_limbs);
-        self.carry_limbs.push(carry_limbs);
+        self.constraints[index] = constraint;
+        self.q_limbs[index] = q_limbs;
+        self.carry_limbs[index] = carry_limbs;
     }
 
-    pub fn add_compute(&mut self, compute: SymbolicExpr) {
-        self.computes.push(compute);
+    pub fn set_compute(&mut self, index: usize, compute: SymbolicExpr) {
+        self.computes[index] = compute;
     }
 }
 

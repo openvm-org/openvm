@@ -120,7 +120,6 @@ where
 }
 
 /// Number of limbs and limb size are determined purely at runtime
-#[derive(Clone)]
 pub struct ModularAddSubCoreChip {
     pub air: ModularAddSubCoreAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,

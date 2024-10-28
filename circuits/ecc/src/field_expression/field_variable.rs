@@ -45,21 +45,15 @@ impl FieldVariable {
             return var_id;
         }
         let mut builder = self.builder.borrow_mut();
-        builder.num_variables += 1;
 
         // Introduce a new variable to replace self.expr.
-        let new_var = SymbolicExpr::Var(builder.num_variables - 1);
+        let (new_var_idx, new_var) = builder.new_var();
         // self.expr - new_var = 0
         let new_constraint =
             SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(new_var.clone()));
         // limbs information.
-        let (q_limbs, carry_limbs) =
-            self.expr
-                .constraint_limbs(&builder.prime, builder.limb_bits, builder.num_limbs);
-        builder.constraints.push(new_constraint);
-        builder.q_limbs.push(q_limbs);
-        builder.carry_limbs.push(carry_limbs);
-        builder.computes.push(self.expr.clone());
+        builder.set_constraint(new_var_idx, new_constraint);
+        builder.set_compute(new_var_idx, self.expr.clone());
 
         self.expr = new_var;
         self.limb_max_abs = (1 << builder.limb_bits) - 1;
@@ -89,7 +83,11 @@ impl FieldVariable {
         q_limbs
     }
 
-    fn save_if_overflow(a: &mut FieldVariable, expr: SymbolicExpr, limb_max_abs: usize) {
+    fn save_if_overflow(
+        a: &mut FieldVariable, // will save this variable if overflow
+        expr: SymbolicExpr, // the "compute" expression of the result variable. Note that we need to check if constraint overflows
+        limb_max_abs: usize, // The max abs of limbs of compute expression.
+    ) {
         if let SymbolicExpr::Var(_) = a.expr {
             return;
         }
@@ -238,27 +236,51 @@ impl FieldVariable {
     }
 
     // expr cannot have division, so auto-save a new variable.
-    pub fn div(&self, other: &FieldVariable) -> FieldVariable {
+    pub fn div(&mut self, other: &mut FieldVariable) -> FieldVariable {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
-        let new_var = {
-            let mut builder = self.builder.borrow_mut();
-            // Introduce a new variable to replace self.expr / other.expr.
-            let new_var = builder.new_var();
-            // other.expr * new_var = self.expr
-            let new_constraint = SymbolicExpr::Sub(
-                Box::new(SymbolicExpr::Mul(
-                    Box::new(other.expr.clone()),
-                    Box::new(new_var.clone()),
-                )),
-                Box::new(self.expr.clone()),
-            );
-            builder.add_constraint(new_constraint);
-            // Only compute can have division.
-            let compute =
-                SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));
-            builder.computes.push(compute);
-            new_var
-        };
+        let builder = self.builder.borrow();
+        let prime = builder.prime.clone();
+        let limb_bits = builder.limb_bits;
+        let num_limbs = builder.num_limbs;
+        drop(builder);
+
+        // This is a dummy variable, will be replaced later so the index within it doesn't matter.
+        // We use this to check if we need to save self/other first.
+        let fake_var = SymbolicExpr::Var(0);
+
+        // Constraint: other.expr * new_var - self.expr = 0 (mod p)
+        let new_constraint = SymbolicExpr::Sub(
+            Box::new(SymbolicExpr::Mul(
+                Box::new(other.expr.clone()),
+                Box::new(fake_var.clone()),
+            )),
+            Box::new(self.expr.clone()),
+        );
+        let carry_bits = new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.range_checker_bits {
+            // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
+            self.save();
+        }
+        // Do it again to check if other needs to be saved.
+        let new_constraint = SymbolicExpr::Sub(
+            Box::new(SymbolicExpr::Mul(
+                Box::new(other.expr.clone()),
+                Box::new(fake_var.clone()),
+            )),
+            Box::new(self.expr.clone()),
+        );
+        let carry_bits = new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.range_checker_bits {
+            other.save();
+        }
+
+        let mut builder = self.builder.borrow_mut();
+        let (new_var_idx, new_var) = builder.new_var();
+        builder.set_constraint(new_var_idx, new_constraint);
+        // Only compute can have division.
+        let compute = SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));
+        builder.set_compute(new_var_idx, compute);
+        drop(builder);
 
         FieldVariable::from_var(self.builder.clone(), new_var)
     }
@@ -356,34 +378,19 @@ impl Mul<&mut FieldVariable> for &mut FieldVariable {
     }
 }
 
-impl Div for FieldVariable {
+impl Div<FieldVariable> for FieldVariable {
     type Output = FieldVariable;
 
-    fn div(self, rhs: FieldVariable) -> Self::Output {
-        self.div(&rhs)
+    fn div(mut self, mut rhs: FieldVariable) -> Self::Output {
+        let x = &mut self;
+        x.div(&mut rhs)
     }
 }
 
-impl Div<FieldVariable> for &FieldVariable {
+impl Div<&mut FieldVariable> for &mut FieldVariable {
     type Output = FieldVariable;
 
-    fn div(self, rhs: FieldVariable) -> Self::Output {
-        self.div(&rhs)
-    }
-}
-
-impl Div<&FieldVariable> for FieldVariable {
-    type Output = FieldVariable;
-
-    fn div(self, rhs: &FieldVariable) -> Self::Output {
-        FieldVariable::div(&self, rhs)
-    }
-}
-
-impl Div<&FieldVariable> for &FieldVariable {
-    type Output = FieldVariable;
-
-    fn div(self, rhs: &FieldVariable) -> Self::Output {
+    fn div(self, rhs: &mut FieldVariable) -> Self::Output {
         FieldVariable::div(self, rhs)
     }
 }

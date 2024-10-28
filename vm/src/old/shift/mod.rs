@@ -1,7 +1,9 @@
 use std::{array, sync::Arc};
 
 use air::ShiftCoreAir;
-use ax_circuit_primitives::{var_range::VariableRangeCheckerChip, xor::XorLookupChip};
+use ax_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupChip, var_range::VariableRangeCheckerChip,
+};
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_field::PrimeField32;
 
@@ -40,12 +42,12 @@ pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub x_sign: T,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ShiftChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ShiftRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_controller: MemoryControllerRef<T>,
-    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 
     offset: usize,
@@ -58,7 +60,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<T>,
-        xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
         offset: usize,
     ) -> Self {
         // (1 << (2 * LIMB_BITS)) fits within a u32
@@ -83,13 +85,13 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 range_bus: range_checker_chip.bus(),
-                xor_bus: xor_lookup_chip.bus(),
+                bitwise_lookup_bus: bitwise_lookup_chip.bus(),
                 offset,
             },
             data: vec![],
             memory_controller,
             range_checker_chip,
-            xor_lookup_chip,
+            bitwise_lookup_chip,
             offset,
         }
     }
@@ -141,8 +143,8 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         let mut x_sign = 0;
         if local_opcode_index == U256Opcode::SRA as usize {
             x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
-            self.xor_lookup_chip
-                .request(x[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
+            self.bitwise_lookup_chip
+                .request_xor(x[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
         }
 
         self.range_checker_chip

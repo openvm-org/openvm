@@ -6,9 +6,9 @@ use std::{
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     utils::not,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    xor::{XorBus, XorLookupChip},
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
@@ -51,7 +51,7 @@ pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub xor_bus: XorBus,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
     offset: usize,
 }
@@ -197,20 +197,23 @@ where
         // Check x_sign & x[NUM_LIMBS - 1] == x_sign using XOR
         let mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
         let b_sign_shifted = cols.b_sign * mask;
-        self.xor_bus
-            .send(
+        self.bitwise_lookup_bus
+            .send_xor(
                 b[NUM_LIMBS - 1],
                 mask,
                 b[NUM_LIMBS - 1] + mask - (AB::Expr::from_canonical_u32(2) * b_sign_shifted),
             )
             .eval(builder, cols.opcode_sra_flag);
 
-        for (a_val, carry) in a.iter().zip(cols.bit_shift_carry.iter()) {
-            self.range_bus
-                .range_check(*a_val, LIMB_BITS)
+        for i in 0..(NUM_LIMBS / 2) {
+            self.bitwise_lookup_bus
+                .send_range(a[i * 2], a[i * 2 + 1])
                 .eval(builder, is_valid.clone());
+        }
+
+        for carry in cols.bit_shift_carry {
             self.range_bus
-                .send(*carry, cols.bit_shift)
+                .send(carry, cols.bit_shift)
                 .eval(builder, is_valid.clone());
         }
 
@@ -250,23 +253,24 @@ pub struct ShiftCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 #[derive(Debug)]
 pub struct ShiftCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
         range_checker_chip: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
+        assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
         Self {
             air: ShiftCoreAir {
-                xor_bus: xor_lookup_chip.bus(),
+                bitwise_lookup_bus: bitwise_lookup_chip.bus(),
                 range_bus: range_checker_chip.bus(),
                 offset,
             },
-            xor_lookup_chip,
+            bitwise_lookup_chip,
             range_checker_chip,
         }
     }
@@ -304,15 +308,19 @@ where
         let mut b_sign = 0;
         if shift_opcode == ShiftOpcode::SRA {
             b_sign = b[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
-            self.xor_lookup_chip
-                .request(b[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
+            self.bitwise_lookup_chip
+                .request_xor(b[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
+        }
+
+        for i in 0..(NUM_LIMBS / 2) {
+            self.bitwise_lookup_chip
+                .request_range(a[i * 2], a[i * 2 + 1]);
         }
 
         self.range_checker_chip
             .add_count(bit_shift as u32, LIMB_BITS.ilog2() as usize);
-        for (a_val, carry_val) in a.iter().zip(bit_shift_carry.iter()) {
-            self.range_checker_chip.add_count(*a_val, LIMB_BITS);
-            self.range_checker_chip.add_count(*carry_val, bit_shift);
+        for carry_val in bit_shift_carry {
+            self.range_checker_chip.add_count(carry_val, bit_shift);
         }
 
         let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u32)]);

@@ -331,8 +331,8 @@ impl<F: PrimeField32> Memory<F> {
 
                 let mut left_data = vec![F::default(); len];
                 let mut right_data = vec![F::default(); len];
-                left_data.clone_from_slice(&parent_data[..len]);
-                right_data.clone_from_slice(&parent_data[len..]);
+                left_data.copy_from_slice(&parent_data[..len]);
+                right_data.copy_from_slice(&parent_data[len..]);
 
                 let (data, sibling_data) = if block_id & 1 == 0 {
                     (left_data, right_data)

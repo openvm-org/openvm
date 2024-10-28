@@ -61,6 +61,7 @@ test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
 axvm-circuit = { workspace = true, features = ["sdk"] }
+axvm-ecc-constants = { workspace = true }
 
 [features]
 default = ["parallel", "mimalloc"]
