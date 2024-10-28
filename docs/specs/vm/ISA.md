@@ -54,7 +54,7 @@ Therefore, any immediate values greater than or equal to $p$ need to be expanded
 ## Registers
 
 Our zkVM treats general purpose registers simply as pointers to a separate address space, which is also comprised of
-addressable cells. Registers are represented using the [LIMB] format, currently with `LIMB_BITS = 8`.
+addressable cells. Registers are represented using the [LIMB] format with `LIMB_BITS = 8`.
 
 There is a single special purpose register `pc` for the program counter of type `F`. Namely, the program counter cannot
 be $\ge p$. (We may extend `pc` to multiple field elements to increase the program address space size in the future.)
