@@ -241,19 +241,32 @@ mod tests {
         Fq12::random(&mut rng)
     }
 
-    fn run_fp12_test_mul(
+    fn run_fp12_test(
         x: Fq12,
         y: Fq12,
-        xi: [isize; 2],
-        fp12_fn: impl Fn(&mut Fp12, &mut Fp12, [isize; 2]) -> Fp12,
+        xi: Option<[isize; 2]>,
+        fp12_fn_addsub: Option<impl Fn(&mut Fp12, &mut Fp12) -> Fp12>,
+        fp12_fn_mul: Option<impl Fn(&mut Fp12, &mut Fp12, [isize; 2]) -> Fp12>,
         fq12_fn: impl Fn(&Fq12, &Fq12) -> Fq12,
     ) {
+        if fp12_fn_addsub.is_none() && fp12_fn_mul.is_none() {
+            panic!("Either fp12_fn_addsub or fp12_fn_mul must be provided");
+        }
+        if fp12_fn_addsub.is_some() && fp12_fn_mul.is_some() {
+            panic!("Only one of fp12_fn_addsub or fp12_fn_mul must be provided");
+        }
+
         let prime = bn254_prime();
         let (subair, range_checker, builder) = setup(&prime);
 
         let mut x_fp12 = Fp12::new(builder.clone());
         let mut y_fp12 = Fp12::new(builder.clone());
-        let mut r = fp12_fn(&mut x_fp12, &mut y_fp12, xi);
+        let mut r = if let Some(fp12_fn_addsub) = fp12_fn_addsub {
+            fp12_fn_addsub(&mut x_fp12, &mut y_fp12)
+        } else {
+            let fp12_fn_mul = fp12_fn_mul.unwrap();
+            fp12_fn_mul(&mut x_fp12, &mut y_fp12, xi.unwrap())
+        };
         let indices = r.save();
 
         let builder = builder.borrow().clone();
@@ -321,25 +334,46 @@ mod tests {
         .expect("Verification failed");
     }
 
-    // #[test]
-    // fn test_fp12_add() {
-    //     let x = generate_random_fq12();
-    //     let y = generate_random_fq12();
-    //     run_fp12_test_add(x, y, Fp12::add, |x, y| x + y, true);
-    // }
+    #[test]
+    fn test_fp12_add() {
+        let x = generate_random_fq12();
+        let y = generate_random_fq12();
+        run_fp12_test(
+            x,
+            y,
+            None,
+            Some(Fp12::add),
+            None::<fn(&mut Fp12, &mut Fp12, [isize; 2]) -> Fp12>,
+            |x, y| x + y,
+        );
+    }
 
-    // #[test]
-    // fn test_fp12_sub() {
-    //     let x = generate_random_fq12();
-    //     let y = generate_random_fq12();
-    //     run_fp12_test_add(x, y, Fp12::sub, |x, y| x - y, true);
-    // }
+    #[test]
+    fn test_fp12_sub() {
+        let x = generate_random_fq12();
+        let y = generate_random_fq12();
+        run_fp12_test(
+            x,
+            y,
+            None,
+            Some(Fp12::sub),
+            None::<fn(&mut Fp12, &mut Fp12, [isize; 2]) -> Fp12>,
+            |x, y| x - y,
+        );
+    }
 
     #[test]
     fn test_fp12_mul() {
         let x = generate_random_fq12();
         let y = generate_random_fq12();
         let xi = [9, 1];
-        run_fp12_test_mul(x, y, xi, Fp12::mul, |x, y| x * y);
+        run_fp12_test(
+            x,
+            y,
+            Some(xi),
+            None::<fn(&mut Fp12, &mut Fp12) -> Fp12>,
+            Some(Fp12::mul),
+            |x, y| x * y,
+        );
     }
 }

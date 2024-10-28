@@ -11,12 +11,11 @@ use num_bigint_dig::BigUint;
 
 use crate::intrinsics::ecc::FIELD_ELEMENT_BITS;
 
-pub fn fp12_multiply_expr(
+pub fn fp12_sub_expr(
     modulus: BigUint,
     num_limbs: usize,
     limb_bits: usize,
     range_bus: VariableRangeCheckerBus,
-    xi: [isize; 2],
 ) -> FieldExpr {
     assert!(modulus.bits() <= num_limbs * limb_bits);
     let subair = CheckCarryModToZeroSubAir::new(
@@ -31,7 +30,7 @@ pub fn fp12_multiply_expr(
 
     let mut x = Fp12::new(builder.clone());
     let mut y = Fp12::new(builder.clone());
-    let mut res = x.mul(&mut y, xi);
+    let mut res = x.sub(&mut y);
     res.save_output();
 
     let builder = builder.borrow().clone();
