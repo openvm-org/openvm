@@ -55,6 +55,12 @@ Therefore, any immediate values greater than or equal to $p$ need to be expanded
 Our zkVM treats general purpose registers simply as pointers to a separate address space, which is also comprised of
 addressable cells. Registers are represented using the [LIMB] format with `LIMB_BITS = 8`.
 
+## Hints
+
+The `input_stream` is a non-interactive queue of vectors of field elements which is provided at the start of
+runtime execution. The `hint_stream` is a queue of values that can be written to memory by calling the `HINTSTOREW_RV32` and `HINTSTORE` instructions. The `hint_stream` is populated via [phantom sub-instructions](#phantom-sub-instructions) such
+as `HINT_INPUT` and `HINT_BITS`.
+
 ## Notation
 
 The following notation is used throughout this document:
@@ -361,18 +367,18 @@ In the instructions below, `d,e` may be any valid **non-zero** address space. Ba
 
 In some instructions below, `W` is a generic parameter for the block size.
 
-| Name       | Operands        | Description                                                                                                                                                                                                                                                                                 |
-| ---------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LOAD\<W\>  | `a,b,c,d,e`     | Set `[a:W]_d = [[c]_d + b:W]_e`.                                                                                                                                                                                                                                                            |
-| STORE\<W\> | `a,b,c,d,e`     | Set `[[c]_d + b:W]_e = [a:W]_d`.                                                                                                                                                                                                                                                            |
-| LOAD2      | `a,b,c,d,e,f,g` | Set `[a]_d = [[c]_d + [f]_d * g + b]_e`.                                                                                                                                                                                                                                                    |
-| STORE2     | `a,b,c,d,e,f,g` | Set `[[c]_d + [f]_d * g + b]_e = [a]_d`.                                                                                                                                                                                                                                                    |
-| JAL        | `a,b,c,d`       | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`.                                                                                                                                                                                                           |
-| BEQ\<W\>   | `a,b,c,d,e`     | If `[a:W]_d == [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
-| BNE\<W\>   | `a,b,c,d,e`     | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
-| SHINTW     | `_,b,c,d,e`     | Set `[[c]_d + b]_e = next element from hint stream`.                                                                                                                                                                                                                                        |
-| PUBLISH    | `a,b,_,d,e`     | Constrains the public value at index `[a]_d` to equal `[b]_e`. Both `d,e` cannot be zero.                                                                                                                                                                                                   |
-| CASTF      | `a,b,_,d,e`     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
+| Name           | Operands        | Description                                                                                                                                                                                                                                                                                 |
+| -------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LOAD\<W\>      | `a,b,c,d,e`     | Set `[a:W]_d = [[c]_d + b:W]_e`.                                                                                                                                                                                                                                                            |
+| STORE\<W\>     | `a,b,c,d,e`     | Set `[[c]_d + b:W]_e = [a:W]_d`.                                                                                                                                                                                                                                                            |
+| LOAD2          | `a,b,c,d,e,f,g` | Set `[a]_d = [[c]_d + [f]_d * g + b]_e`.                                                                                                                                                                                                                                                    |
+| STORE2         | `a,b,c,d,e,f,g` | Set `[[c]_d + [f]_d * g + b]_e = [a]_d`.                                                                                                                                                                                                                                                    |
+| JAL            | `a,b,c,d`       | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`.                                                                                                                                                                                                           |
+| BEQ\<W\>       | `a,b,c,d,e`     | If `[a:W]_d == [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
+| BNE\<W\>       | `a,b,c,d,e`     | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
+| HINTSTORE\<W\> | `_,b,c,d,e`     | Set `[[c]_d + b:W]_e = next W elements from hint stream`.                                                                                                                                                                                                                                   |
+| PUBLISH        | `a,b,_,d,e`     | Constrains the public value at index `[a]_d` to equal `[b]_e`. Both `d,e` cannot be zero.                                                                                                                                                                                                   |
+| CASTF          | `a,b,_,d,e`     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
 
 <!--
 A note on CASTF: support for casting arbitrary field elements can also be supported by doing a big int less than between the block and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
@@ -446,13 +452,6 @@ More specifically, the low 16-bits `c.as_canonical_u32() & 0xffff` are used as t
 | CT_END                   | 6            | `_`           | Closes the current span.                                                                                                                                              |
 | HINT_FINAL_EXP_BN254     | 7            | todo          | todo                                                                                                                                                                  |
 | HINT_FINAL_EXP_BLS12_381 | 8            | todo          | todo                                                                                                                                                                  |
-
-### Notes about hints
-
-The `input_stream` is a non-interactive queue of vectors of field elements which is provided at the start of
-runtime execution. The `hint_stream` is a queue of values that can be written to memory by calling `SHINTW` (which is not a phantom sub-instruction). The `hint_stream` is populated via phantom sub-instructions such
-as `HINT_INPUT` (resets `hint_stream` to be the next vector popped from `input_stream`),
-`HINT_BITS` (resets `hint_stream` to be the bit decomposition of a given variable, with a length known at compile time).
 
 # RISC-V Custom Instructions
 
