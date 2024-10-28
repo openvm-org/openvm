@@ -158,8 +158,6 @@ unsafe extern "C" fn __start() -> ! {
     #[cfg(feature = "heap-embedded-alloc")]
     axvm_platform::heap::embedded::init();
 
-    // env::init();
-
     {
         extern "C" {
             fn main();
