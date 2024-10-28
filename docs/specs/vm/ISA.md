@@ -131,7 +131,7 @@ All instructions below assume that all memory cells in address spaces `1` and `2
 
 `x0` handling: Unlike in RISC-V, the instructions will **not** discard writes to `[0:4]_1` (corresponding to register `x0`). A valid transpilation of a RISC-V program can be inspected to have the properties:
 
-1. `[0:4]_1` starts with all zeros.
+1. `[0:4]_1` has all zeroes in initial memory.
 2. No instruction in the program writes to `[0:4]_1`.
 
 ### ALU
