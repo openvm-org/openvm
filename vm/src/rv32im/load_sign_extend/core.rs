@@ -134,6 +134,8 @@ where
                 is_valid,
                 opcode: expected_opcode,
                 is_load: AB::Expr::one(),
+                load_shift_amount: AB::Expr::zero(),
+                store_shift_amount: AB::Expr::zero(),
             }
             .into(),
         }
@@ -161,7 +163,7 @@ impl<const NUM_CELLS: usize, const LIMB_BITS: usize> LoadSignExtendCoreChip<NUM_
 impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize, const LIMB_BITS: usize>
     VmCoreChip<F, I> for LoadSignExtendCoreChip<NUM_CELLS, LIMB_BITS>
 where
-    I::Reads: Into<[[F; NUM_CELLS]; 2]>,
+    I::Reads: Into<([[F; NUM_CELLS]; 2], F)>,
     I::Writes: From<[[F; NUM_CELLS]; 1]>,
 {
     type Record = LoadSignExtendCoreRecord<F, NUM_CELLS>;
@@ -177,7 +179,7 @@ where
         let local_opcode_index =
             Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
 
-        let data: [[F; NUM_CELLS]; 2] = reads.into();
+        let (data, _shift_amount) = reads.into();
         let write_data: [F; NUM_CELLS] = run_write_data_sign_extend::<_, NUM_CELLS, LIMB_BITS>(
             local_opcode_index,
             data[1],
