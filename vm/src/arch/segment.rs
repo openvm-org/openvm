@@ -68,18 +68,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         chip_set.program_chip.set_program(program);
 
         if let Some(initial_memory) = initial_memory {
-            if config.memory_config.persistence_type == PersistenceType::Volatile {
-                assert_eq!(
-                    initial_memory.len(),
-                    0,
-                    "Volatile memory doesn't support initial memory"
-                );
-            } else {
-                chip_set
-                    .memory_controller
-                    .borrow_mut()
-                    .set_initial_memory(initial_memory);
-            }
+            chip_set
+                .memory_controller
+                .borrow_mut()
+                .set_initial_memory(initial_memory);
         }
 
         Self {

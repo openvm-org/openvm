@@ -13,7 +13,7 @@ pub const DEFAULT_PC_STEP: u32 = 4;
 const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
 
 #[derive(Clone, Debug, Default)]
-pub struct Program<F: Field> {
+pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.

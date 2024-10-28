@@ -165,7 +165,9 @@ impl<F: PrimeField32> MemoryController<F> {
         }
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
-                panic!("Cannot set initial memory for volatile memory");
+                if !memory.is_empty() {
+                    panic!("Cannot set initial memory for volatile memory");
+                }
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
                 *initial_memory = memory;
