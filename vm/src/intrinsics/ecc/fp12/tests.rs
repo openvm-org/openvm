@@ -23,6 +23,7 @@ const BLS12381_LIMB_BITS: usize = 8;
 
 type F = BabyBear;
 
+#[allow(clippy::too_many_arguments)]
 fn test_fp12_fn<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     mut tester: VmChipTestBuilder<F>,
     expr: FieldExpr,
@@ -128,7 +129,7 @@ fn test_fp12_sub_bn254() {
 }
 
 #[test]
-fn test_fp12_multiply_bn254() {
+fn test_fp12_mul_bn254() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = Bn254Fp12Opcode::modulus();
     let xi = Bn254Fp12Opcode::xi();
@@ -210,7 +211,7 @@ fn test_fp12_sub_bls12381() {
 // NOTE[yj]: This test requires RUST_MIN_STACK=8388608 to run without overflowing the stack, so it is ignored by the test runner for now
 #[test]
 #[ignore]
-fn test_fp12_multiply_bls12381() {
+fn test_fp12_mul_bls12381() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let modulus = Bls12381Fp12Opcode::modulus();
     let xi = Bls12381Fp12Opcode::xi();
