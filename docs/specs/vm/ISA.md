@@ -377,10 +377,6 @@ In some instructions below, `W` is a generic parameter for the block size.
 | PUBLISH        | `a,b,_,d,e`     | Set the user public output at index `[a]_d` to equal `[b]_e`. Both `d,e` cannot be zero. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                           |
 | CASTF          | `a,b,_,d,e`     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
 
-<!--
-A note on CASTF: support for casting arbitrary field elements can also be supported by doing a big int less than between the block and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
--->
-
 ### Native Field Arithmetic
 
 This instruction set does native field operations. Below, `d,e` may be any valid address space, and `d` is not
