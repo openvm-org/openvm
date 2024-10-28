@@ -24,9 +24,9 @@ ax-stark-sdk = { workspace = true, optional = true }
 axvm-instructions = { workspace = true }
 
 parking_lot.workspace = true
-enum-utils = "0.1.1"
-strum = { workspace = true }
-tiny-keccak = { version = "2.0.2", features = ["keccak"] }
+enum-utils.workspace = true
+strum.workspace = true
+tiny-keccak.workspace = true
 num-bigint-dig.workspace = true
 num-traits.workspace = true
 enum_dispatch.workspace = true
