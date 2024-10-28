@@ -408,6 +408,16 @@ pub enum Fp12Opcode {
     MUL,
 }
 
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x710]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum PairingOpcode {
+    MILLER_DOUBLE,
+}
+
 // =================================================================================================
 // For internal dev use only
 // =================================================================================================

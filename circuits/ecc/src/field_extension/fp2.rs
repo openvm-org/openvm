@@ -47,6 +47,12 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
+    pub fn square(&mut self) -> Fp2 {
+        let c0 = self.c0.square() - self.c1.square();
+        let c1 = (&mut self.c0 * &mut self.c1).int_mul(2);
+        Fp2 { c0, c1 }
+    }
+
     pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
         let builder = self.c0.builder.borrow();
         let prime = builder.prime.clone();
