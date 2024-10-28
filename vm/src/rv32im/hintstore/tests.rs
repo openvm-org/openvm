@@ -70,7 +70,13 @@ fn set_and_execute(
     let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
     for data in read_data {
-        chip.core.streams.lock().hint_stream.push_back(data);
+        chip.core
+            .streams
+            .get()
+            .unwrap()
+            .lock()
+            .hint_stream
+            .push_back(data);
     }
 
     tester.execute(
@@ -110,11 +116,9 @@ fn rand_hintstore_test() {
         range_checker_chip.clone(),
     );
 
-    let core = Rv32HintStoreCoreChip::new(
-        Arc::new(Mutex::new(Streams::default())),
-        bitwise_chip.clone(),
-        Rv32HintStoreOpcode::default_offset(),
-    );
+    let mut core =
+        Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
+    core.set_streams(Arc::new(Mutex::new(Streams::default())));
     let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
 
     let num_tests: usize = 100;
@@ -156,11 +160,9 @@ fn run_negative_hintstore_test(
         tester.memory_controller(),
         range_checker_chip.clone(),
     );
-    let core = Rv32HintStoreCoreChip::new(
-        Arc::new(Mutex::new(Streams::default())),
-        bitwise_chip.clone(),
-        Rv32HintStoreOpcode::default_offset(),
-    );
+    let mut core =
+        Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
+    core.set_streams(Arc::new(Mutex::new(Streams::default())));
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
 
@@ -216,11 +218,9 @@ fn execute_roundtrip_sanity_test() {
         tester.memory_controller(),
         range_checker_chip.clone(),
     );
-    let core = Rv32HintStoreCoreChip::new(
-        Arc::new(Mutex::new(Streams::default())),
-        bitwise_chip.clone(),
-        Rv32HintStoreOpcode::default_offset(),
-    );
+    let mut core =
+        Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
+    core.set_streams(Arc::new(Mutex::new(Streams::default())));
     let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
 
     let num_tests: usize = 100;

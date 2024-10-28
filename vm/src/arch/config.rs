@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
@@ -7,11 +5,9 @@ use ax_stark_backend::{
 use derive_new::new;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
-use super::Streams;
 use crate::{
     arch::ExecutorName,
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
@@ -112,7 +108,7 @@ impl VmConfig {
     where
         Val<SC>: PrimeField32,
     {
-        let chip_set = self.create_chip_set::<Val<SC>>(Arc::new(Mutex::new(Streams::default())));
+        let chip_set = self.create_chip_set::<Val<SC>>();
         for air in chip_set.airs() {
             keygen_builder.add_air(air);
         }

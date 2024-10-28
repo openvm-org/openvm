@@ -20,7 +20,7 @@ use ax_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::*;
+use axvm_instructions::{program::Program, *};
 use itertools::zip_eq;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
@@ -116,6 +116,21 @@ pub struct VmChipSet<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> VmChipSet<F> {
+    pub(crate) fn set_program(&mut self, program: Program<F>) {
+        self.program_chip.set_program(program);
+    }
+    pub(crate) fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        for chip in self.chips.iter_mut() {
+            match chip {
+                AxVmChip::LoadStore(chip) => chip.borrow_mut().core.set_streams(streams.clone()),
+                AxVmChip::HintStoreRv32(chip) => {
+                    chip.borrow_mut().core.set_streams(streams.clone())
+                }
+                AxVmChip::Phantom(chip) => chip.borrow_mut().set_streams(streams.clone()),
+                _ => {}
+            }
+        }
+    }
     pub(crate) fn current_trace_cells(&self) -> BTreeMap<String, usize> {
         iter::once(get_name_and_cells(&self.program_chip))
             .chain([get_name_and_cells(&self.connector_chip)])
@@ -199,10 +214,7 @@ impl<F: PrimeField32> VmChipSet<F> {
 }
 
 impl VmConfig {
-    pub fn create_chip_set<F: PrimeField32>(
-        &self,
-        streams: Arc<Mutex<Streams<F>>>,
-    ) -> VmChipSet<F> {
+    pub fn create_chip_set<F: PrimeField32>(&self) -> VmChipSet<F> {
         let execution_bus = ExecutionBus(EXECUTION_BUS);
         let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
         let memory_bus = MemoryBus(MEMORY_BUS);
@@ -290,7 +302,6 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        streams.clone(),
                         offset,
                     )));
                     for opcode in range {
@@ -306,7 +317,7 @@ impl VmConfig {
                             memory_controller.clone(),
                             offset,
                         ),
-                        KernelLoadStoreCoreChip::new(streams.clone(), offset),
+                        KernelLoadStoreCoreChip::new(offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -574,11 +585,7 @@ impl VmConfig {
                             memory_controller.clone(),
                             range_checker.clone(),
                         ),
-                        Rv32HintStoreCoreChip::new(
-                            streams.clone(),
-                            bitwise_lookup_chip.clone(),
-                            offset,
-                        ),
+                        Rv32HintStoreCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {

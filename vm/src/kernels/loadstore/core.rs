@@ -1,7 +1,7 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use ax_circuit_derive::AlignedBorrow;
@@ -115,15 +115,18 @@ where
 #[derive(Debug)]
 pub struct KernelLoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
     pub air: KernelLoadStoreCoreAir<NUM_CELLS>,
-    pub streams: Arc<Mutex<Streams<F>>>,
+    pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
 }
 
 impl<F: Field, const NUM_CELLS: usize> KernelLoadStoreCoreChip<F, NUM_CELLS> {
-    pub fn new(streams: Arc<Mutex<Streams<F>>>, offset: usize) -> Self {
+    pub fn new(offset: usize) -> Self {
         Self {
             air: KernelLoadStoreCoreAir::<NUM_CELLS> { offset },
-            streams,
+            streams: OnceLock::new(),
         }
+    }
+    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        self.streams.set(streams).unwrap();
     }
 }
 
@@ -147,7 +150,7 @@ where
         let (pointer_reads, data_read) = reads.into();
 
         let data_write = if local_opcode == NativeLoadStoreOpcode::SHINTW {
-            let mut streams = self.streams.lock();
+            let mut streams = self.streams.get().unwrap().lock();
             if streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds(from_pc));
             }

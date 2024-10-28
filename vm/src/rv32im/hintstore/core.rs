@@ -1,7 +1,7 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use ax_circuit_derive::AlignedBorrow;
@@ -97,13 +97,12 @@ where
 #[derive(Debug)]
 pub struct Rv32HintStoreCoreChip<F: Field> {
     pub air: Rv32HintStoreCoreAir,
-    pub streams: Arc<Mutex<Streams<F>>>,
+    pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
 }
 
 impl<F: PrimeField32> Rv32HintStoreCoreChip<F> {
     pub fn new(
-        streams: Arc<Mutex<Streams<F>>>,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
         offset: usize,
     ) -> Self {
@@ -112,9 +111,12 @@ impl<F: PrimeField32> Rv32HintStoreCoreChip<F> {
                 bus: bitwise_lookup_chip.bus(),
                 offset,
             },
-            streams,
+            streams: OnceLock::new(),
             bitwise_lookup_chip,
         }
+    }
+    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        self.streams.set(streams).unwrap();
     }
 }
 
@@ -133,7 +135,7 @@ where
         from_pc: u32,
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let mut streams = self.streams.lock();
+        let mut streams = self.streams.get().unwrap().lock();
         if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS {
             return Err(ExecutionError::HintOutOfBounds(from_pc));
         }

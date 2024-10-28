@@ -64,8 +64,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         streams: Arc<Mutex<Streams<F>>>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
     ) -> Self {
-        let mut chip_set = config.create_chip_set(streams.clone());
-        chip_set.program_chip.set_program(program);
+        let mut chip_set = config.create_chip_set();
+        chip_set.set_streams(streams);
+        chip_set.set_program(program);
 
         if let Some(initial_memory) = initial_memory {
             chip_set

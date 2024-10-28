@@ -53,10 +53,8 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, KernelLoadStoreChip<F, 1>) {
         tester.memory_controller(),
         NativeLoadStoreOpcode::default_offset(),
     );
-    let inner = KernelLoadStoreCoreChip::new(
-        Arc::new(Mutex::new(Streams::default())),
-        NativeLoadStoreOpcode::default_offset(),
-    );
+    let mut inner = KernelLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset());
+    inner.set_streams(Arc::new(Mutex::new(Streams::default())));
     let chip = KernelLoadStoreChip::<F, 1>::new(adapter, inner, tester.memory_controller());
     (rng, tester, chip)
 }
@@ -163,6 +161,8 @@ fn set_values(
         for _ in 0..data.e.as_canonical_u32() {
             chip.core
                 .streams
+                .get()
+                .unwrap()
                 .lock()
                 .hint_stream
                 .push_back(data.data_val);
