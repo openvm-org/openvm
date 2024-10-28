@@ -13,7 +13,6 @@ use strum_macros::IntoStaticStr;
 
 use crate::{
     arch::ExecutionState,
-    common::phantom::PhantomChip,
     intrinsics::{
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{ModularAddSubChip, ModularMulDivChip},
@@ -33,7 +32,7 @@ use crate::{
         alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
     },
     rv32im::*,
-    system::program::ExecutionError,
+    system::{phantom::PhantomChip, program::ExecutionError},
 };
 
 #[enum_dispatch]

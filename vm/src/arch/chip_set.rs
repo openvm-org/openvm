@@ -34,7 +34,6 @@ use crate::{
     arch::{
         AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName, PersistenceType, VmConfig,
     },
-    common::phantom::PhantomChip,
     intrinsics::{
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
@@ -76,6 +75,7 @@ use crate::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
             MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
         },
+        phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
     },
 };
