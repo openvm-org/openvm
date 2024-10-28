@@ -117,7 +117,7 @@ We will use the following notation:
 - `i32(x)` where `x: [F; 4]` consists of 4 bytes will mean the casting from little-endian bytes in 2's complement to signed 32-bit integer.
 - `sign_extend` means sign extension of bits in 2's complement.
 - `i32(c)` where `c` is a field element will mean `c.as_canonical_u32()` if `c.as_canonical_u32() < F::modulus() / 2` or
-  `c.as_canonical_u32() - F::modulus()` otherwise.
+  `c.as_canonical_u32() - F::modulus() as i32` otherwise.
 - `decompose(c)` where `c` is a field element means `c.as_canonical_u32().to_le_bytes()`.
 
 ## System
