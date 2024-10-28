@@ -28,7 +28,7 @@ pub mod memory;
 pub mod heap;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;
-// #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
+#[cfg(feature = "rust-runtime")]
 pub mod rust_rt;
 
 /// Size of a zkVM machine word in bytes.

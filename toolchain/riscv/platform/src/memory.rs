@@ -72,7 +72,7 @@ pub fn is_guest_memory(addr: u32) -> bool {
 /// # Safety
 ///
 /// This function should be safe to call, but clippy complains if it is not marked as `unsafe`.
-#[cfg(feature = "export-syscalls")]
+#[cfg(feature = "rust-runtime")]
 #[no_mangle]
 pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u8 {
     #[cfg(target_os = "zkvm")]
