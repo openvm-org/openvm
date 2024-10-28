@@ -15,4 +15,4 @@ lazy_static.workspace = true
 [dev-dependencies]
 rng = "0.1.0"
 subtle = "2.6.1"
-axvm-ecc-curves = { workspace = true }
+axvm-ecc-constants = { workspace = true }

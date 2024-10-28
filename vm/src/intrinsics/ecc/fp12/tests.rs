@@ -1,5 +1,5 @@
 use ax_ecc_primitives::test_utils::{bls12381_fq12_random, bn254_fq12_random};
-use axvm_ecc_curves::{BLS12381, BN254};
+use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode, UsizeOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

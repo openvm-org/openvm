@@ -225,7 +225,7 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
     };
-    use axvm_ecc_curves::BN254;
+    use axvm_ecc_constants::BN254;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;

@@ -1,5 +1,5 @@
 [package]
-name = "axvm-ecc-curves"
+name = "axvm-ecc-constants"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

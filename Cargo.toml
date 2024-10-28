@@ -15,7 +15,7 @@ members = [
     "toolchain/riscv/platform",
     "toolchain/riscv/axvm",
     "lib/ecc",
-    "lib/ecc-curves",
+    "lib/ecc-constants",
     "lib/ecc-execution",
     "lib/recursion",
     "axiom-vm",
@@ -73,7 +73,7 @@ axvm-instructions-derive = { path = "toolchain/instructions/derive", default-fea
 axvm-platform = { path = "toolchain/riscv/platform", default-features = false }
 axvm-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
 axvm-ecc = { path = "lib/ecc", default-features = false }
-axvm-ecc-curves = { path = "lib/ecc-curves", default-features = false }
+axvm-ecc-constants = { path = "lib/ecc-constants", default-features = false }
 axvm-recursion = { path = "lib/recursion", default-features = false }
 axvm-native-compiler = { path = "toolchain/native-compiler", default-features = false }
 axvm-native-compiler-derive = { path = "toolchain/native-compiler/derive", default-features = false }
