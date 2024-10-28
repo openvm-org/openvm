@@ -167,7 +167,7 @@ unsafe extern "C" fn __start() -> ! {
         main()
     }
 
-    env::finalize();
+    env::exit::<0>();
     unreachable!();
 }
 
