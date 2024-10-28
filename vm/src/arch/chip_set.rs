@@ -29,12 +29,13 @@ use parking_lot::Mutex;
 use program::DEFAULT_PC_STEP;
 use strum::EnumCount;
 
-use super::Streams;
+use super::{EcCurve, Streams};
 use crate::{
     arch::{
         AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName, PersistenceType, VmConfig,
     },
     intrinsics::{
+        ecc::sw::{EcAddNeChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -50,7 +51,6 @@ use crate::{
         },
         branch_eq::KernelBranchEqChip,
         castf::{CastFChip, CastFCoreChip},
-        ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
         jal::{JalCoreChip, KernelJalChip},
@@ -690,39 +690,6 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::CastF(chip));
                 }
-                // TODO: make these customizable opcode classes
-                ExecutorName::Secp256k1AddUnequal => {
-                    let chip = Rc::new(RefCell::new(KernelEcAddNeChip::new(
-                        NativeVecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        memory_controller.clone(),
-                        8,
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Secp256k1AddUnequal(chip));
-                }
-                ExecutorName::Secp256k1Double => {
-                    let chip = Rc::new(RefCell::new(KernelEcDoubleChip::new(
-                        NativeVecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        memory_controller.clone(),
-                        8,
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Secp256k1Double(chip));
-                }
                 _ => {
                     unreachable!("Unsupported executor")
                 }
@@ -745,6 +712,48 @@ impl VmConfig {
             chips.push(AxVmChip::Poseidon2(poseidon_chip));
         }
 
+        for (local_opcode_idx, class_offset, executor, modulus) in
+            gen_ec_executor_tuple(&self.supported_ec_curves)
+        {
+            let global_opcode_idx = local_opcode_idx + class_offset;
+            if executors.contains_key(&local_opcode_idx) {
+                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
+            }
+            match executor {
+                ExecutorName::EcAddNe => {
+                    let chip = Rc::new(RefCell::new(EcAddNeChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EcAddNe(chip));
+                }
+                ExecutorName::EcDouble => {
+                    let chip = Rc::new(RefCell::new(EcDoubleChip::new(
+                        Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EcDouble(chip));
+                }
+                _ => unreachable!("Unsupported executor"),
+            }
+        }
+
         for (local_range, executor, class_offset, modulus) in
             gen_modular_executor_tuple(self.supported_modulus.clone())
         {
@@ -754,7 +763,6 @@ impl VmConfig {
                     panic!("Attempting to override an executor for opcode {global_opcode_idx}");
                 }
             }
-            assert!(modulus.bits() <= 32 * 8);
             match executor {
                 ExecutorName::ModularAddSub => {
                     let new_chip = Rc::new(RefCell::new(KernelModularAddSubChip::new(
@@ -907,6 +915,33 @@ impl VmConfig {
             range_checker_chip: range_checker,
         }
     }
+}
+
+fn gen_ec_executor_tuple(
+    supported_ec_curves: &[EcCurve],
+) -> Vec<(usize, usize, ExecutorName, BigUint)> {
+    supported_ec_curves
+        .iter()
+        .enumerate()
+        .flat_map(|(i, curve)| {
+            let class_offset = EccOpcode::default_offset() + i * EccOpcode::COUNT;
+            // todo: check 32 or 48 limbs depends on the curve
+            vec![
+                (
+                    EccOpcode::EC_ADD_NE as usize,
+                    class_offset,
+                    ExecutorName::EcAddNe,
+                    curve.prime(),
+                ),
+                (
+                    EccOpcode::EC_DOUBLE as usize,
+                    class_offset,
+                    ExecutorName::EcDouble,
+                    curve.prime(),
+                ),
+            ]
+        })
+        .collect()
 }
 
 fn gen_modular_executor_tuple(

@@ -44,6 +44,8 @@ pub struct VmConfig {
     pub executors: Vec<ExecutorName>,
     /// List of all supported modulus
     pub supported_modulus: Vec<BigUint>,
+    /// List of all supported EC curves
+    pub supported_ec_curves: Vec<EcCurve>,
 
     pub poseidon2_max_constraint_degree: usize,
     pub memory_config: MemoryConfig,
@@ -62,18 +64,19 @@ impl VmConfig {
         max_segment_len: usize,
         collect_metrics: bool,
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
-        enabled_modulus: Vec<BigUint>,
+        supported_modulus: Vec<BigUint>,
+        supported_ec_curves: Vec<EcCurve>,
     ) -> Self {
-        let config = VmConfig {
+        VmConfig {
             executors: Vec::new(),
             poseidon2_max_constraint_degree,
             memory_config,
             num_public_values,
             max_segment_len,
             collect_metrics,
-            supported_modulus: Vec::new(),
-        };
-        config.add_modular_support(enabled_modulus)
+            supported_modulus,
+            supported_ec_curves,
+        }
     }
 
     pub fn add_executor(mut self, executor: ExecutorName) -> Self {
@@ -83,8 +86,6 @@ impl VmConfig {
         self
     }
 
-    // I think adding "opcode class" support is better than adding "executor".
-    // The api should be saying: I want to be able to do this set of operations, and doesn't care about what executor is doing it.
     pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
         let mut res = self;
         res.supported_modulus.extend(enabled_modulus);
@@ -124,6 +125,7 @@ impl Default for VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
+            vec![],
             vec![],
         )
     }
@@ -202,5 +204,20 @@ impl Modulus {
 
     pub fn all() -> Vec<Self> {
         Modulus::iter().collect()
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum EcCurve {
+    Secp256k1,
+    // Bn254,
+    // Bls12_381,
+}
+
+impl EcCurve {
+    pub fn prime(&self) -> BigUint {
+        match self {
+            EcCurve::Secp256k1 => SECP256K1_COORD_PRIME.clone(),
+        }
     }
 }
