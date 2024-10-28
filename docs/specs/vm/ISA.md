@@ -94,7 +94,7 @@ Address space `0` is not a real address space: it is reserved for denoting immed
 The number of address spaces supported is a configurable constant of the VM. The address spaces in `[as_offset, as_offset + 2^addr_space_max_bits)` are supported. By default `as_offset = 1` to preclude address space `0`.
 
 The size (= number of pointers) of each address space is also a configurable constant of the VM.
-The pointers can have values in `[0, 2^pointer_max_bits)`. We currently require `addr_space_max_bits, pointer_max_bits <= F::bits() - 2` due to a sorting argument.
+The pointers can have values in `[0, 2^pointer_max_bits)`. We require `addr_space_max_bits, pointer_max_bits <= F::bits() - 2` due to a sorting argument.
 
 > A memory cell in any address space is always a field element, but the VM _may_ later impose additional bit size
 > constraints on certain address spaces (e.g., everything in address space `2` must be a byte).
