@@ -83,7 +83,7 @@ impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreCoreAir<NUM_CE
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Var; NUM_CELLS]; 2]>,
+    I::Reads: From<([AB::Var; NUM_CELLS], [AB::Expr; NUM_CELLS])>,
     I::Writes: From<[[AB::Expr; NUM_CELLS]; 1]>,
     I::ProcessedInstruction: From<LoadStoreInstruction<AB::Expr>>,
 {
@@ -223,7 +223,7 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            reads: [prev_data, read_data].into(),
+            reads: (prev_data, read_data.map(|x| x.into())).into(),
             writes: [write_data.map(|x| x.into())].into(),
             instruction: LoadStoreInstruction {
                 is_valid: is_valid.into(),

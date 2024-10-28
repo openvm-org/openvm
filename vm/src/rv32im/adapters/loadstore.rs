@@ -76,8 +76,12 @@ impl<T> VmAdapterInterface<T> for Rv32LoadStoreAdapterRuntimeInterface<T> {
 }
 pub struct Rv32LoadStoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
+/// Using AB::Var for prev_data and AB::Expr for read_data
 impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapterAirInterface<AB> {
-    type Reads = [[AB::Var; RV32_REGISTER_NUM_LIMBS]; 2];
+    type Reads = (
+        [AB::Var; RV32_REGISTER_NUM_LIMBS],
+        [AB::Expr; RV32_REGISTER_NUM_LIMBS],
+    );
     type Writes = [[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1];
     type ProcessedInstruction = LoadStoreInstruction<AB::Expr>;
 }
@@ -256,13 +260,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(read_as, read_ptr),
-                ctx.reads[1],
+                ctx.reads.1,
                 timestamp_pp(),
                 &local_cols.read_data_aux,
             )
             .eval(builder, is_valid.clone());
 
-        let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads[0]);
+        let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads.0);
 
         // write_as is 1 for loads and 2 for stores
         let write_as = select::<AB::Expr>(is_load.clone(), AB::Expr::one(), AB::Expr::two());

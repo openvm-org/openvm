@@ -5,7 +5,10 @@ use std::{
 };
 
 use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_circuit_primitives::{
+    utils::select,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+};
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
@@ -26,16 +29,21 @@ use crate::{
 /// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
 /// This chip uses read_data to construct write_data
 /// prev_data columns are not used in constraints defined in the CoreAir, but are used in constraints by the Adapter
+/// shifted_read_data is the read_data shifted by (shift_amount & 2), this reduces the number of opcode flags needed
+/// using this shifted data we can generate the write_data as if the shift_amount was 0 for loadh and 0 or 1 for loadb
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
-    pub opcode_loadb_flag: T,
+    /// This chip treats loadb with 0 shift and loadb with 1 shift as different instructions
+    pub opcode_loadb_flag0: T,
+    pub opcode_loadb_flag1: T,
     pub opcode_loadh_flag: T,
 
+    pub shift_most_sig_bit: T,
     // The bit that is extended to the remaining bits
-    pub most_sig_bit: T,
+    pub data_most_sig_bit: T,
 
-    pub read_data: [T; NUM_CELLS],
+    pub shifted_read_data: [T; NUM_CELLS],
     pub prev_data: [T; NUM_CELLS],
 }
 
@@ -43,8 +51,9 @@ pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
 pub struct LoadSignExtendCoreRecord<F, const NUM_CELLS: usize> {
     pub opcode: Rv32LoadStoreOpcode,
     pub most_sig_bit: bool,
-    pub read_data: [F; NUM_CELLS],
+    pub shifted_read_data: [F; NUM_CELLS],
     pub prev_data: [F; NUM_CELLS],
+    pub shift_amount: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +80,7 @@ impl<AB, I, const NUM_CELLS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Var; NUM_CELLS]; 2]>,
+    I::Reads: From<([AB::Var; NUM_CELLS], [AB::Expr; NUM_CELLS])>,
     I::Writes: From<[[AB::Expr; NUM_CELLS]; 1]>,
     I::ProcessedInstruction: From<LoadStoreInstruction<AB::Expr>>,
 {
@@ -83,58 +92,79 @@ where
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LoadSignExtendCoreCols<AB::Var, NUM_CELLS> = (*local_core).borrow();
         let LoadSignExtendCoreCols::<AB::Var, NUM_CELLS> {
-            read_data,
+            shifted_read_data,
             prev_data,
-            opcode_loadb_flag,
-            opcode_loadh_flag,
-            most_sig_bit,
+            opcode_loadb_flag0: is_loadb0,
+            opcode_loadb_flag1: is_loadb1,
+            opcode_loadh_flag: is_loadh,
+            data_most_sig_bit,
+            shift_most_sig_bit,
         } = *cols;
 
-        builder.assert_bool(opcode_loadb_flag);
-        builder.assert_bool(opcode_loadh_flag);
-        let is_valid = opcode_loadb_flag + opcode_loadh_flag;
-        builder.assert_bool(is_valid.clone());
-        builder.assert_bool(most_sig_bit);
+        let flags = [is_loadb0, is_loadb1, is_loadh];
 
-        let expected_opcode = opcode_loadb_flag * AB::F::from_canonical_u8(LOADB as u8)
-            + opcode_loadh_flag * AB::F::from_canonical_u8(LOADH as u8)
+        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+            builder.assert_bool(flag);
+            acc + flag
+        });
+
+        builder.assert_bool(is_valid.clone());
+        builder.assert_bool(data_most_sig_bit);
+        builder.assert_bool(shift_most_sig_bit);
+
+        let expected_opcode = (is_loadb0 + is_loadb1) * AB::F::from_canonical_u8(LOADB as u8)
+            + is_loadh * AB::F::from_canonical_u8(LOADH as u8)
             + AB::Expr::from_canonical_usize(self.offset);
 
-        let limb_mask = most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1);
+        let limb_mask = data_most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1);
 
         // there are three parts to write_data:
-        // 1st limb is always read_data
-        // 2nd to (NUM_CELLS/2)th limbs are read_data if loadh and sign extended if loadb
-        // (NUM_CELLS/2 + 1)th to last limbs are always sign extended limbs
+        //      1st limb is always shifted_read_data
+        //      2nd to (NUM_CELLS/2)th limbs are read_data if loadh and sign extended if loadb
+        //      (NUM_CELLS/2 + 1)th to last limbs are always sign extended limbs
         let write_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
             if i == 0 {
-                read_data[i].into()
+                (is_loadh + is_loadb0) * shifted_read_data[i].into()
+                    + is_loadb1 * shifted_read_data[i + 1].into()
             } else if i < NUM_CELLS / 2 {
-                read_data[i] * opcode_loadh_flag + opcode_loadb_flag * limb_mask.clone()
+                shifted_read_data[i] * is_loadh + (is_loadb0 + is_loadb1) * limb_mask.clone()
             } else {
                 limb_mask.clone()
             }
         });
 
         // Constrain that most_sig_bit is correct
-        let most_sig_limb =
-            read_data[0] * opcode_loadb_flag + read_data[NUM_CELLS / 2 - 1] * opcode_loadh_flag;
+        let most_sig_limb = shifted_read_data[0] * is_loadb0
+            + shifted_read_data[1] * is_loadb1
+            + shifted_read_data[NUM_CELLS / 2 - 1] * is_loadh;
+
         self.range_bus
             .range_check(
-                most_sig_limb - most_sig_bit * AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)),
+                most_sig_limb
+                    - data_most_sig_bit * AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)),
                 LIMB_BITS - 1,
             )
             .eval(builder, is_valid.clone());
 
+        // Unshift the shifted_read_data to get the original read_data
+        let read_data = array::from_fn(|i| {
+            select(
+                shift_most_sig_bit,
+                shifted_read_data[(i + NUM_CELLS - 2) % NUM_CELLS],
+                shifted_read_data[i],
+            )
+        });
+        let load_shift_amount = shift_most_sig_bit * AB::Expr::two() + is_loadb1;
+
         AdapterAirContext {
             to_pc: None,
-            reads: [prev_data, read_data].into(),
+            reads: (prev_data, read_data).into(),
             writes: [write_data].into(),
             instruction: LoadStoreInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 is_load: AB::Expr::one(),
-                load_shift_amount: AB::Expr::zero(),
+                load_shift_amount,
                 store_shift_amount: AB::Expr::zero(),
             }
             .into(),
@@ -179,17 +209,19 @@ where
         let local_opcode_index =
             Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
 
-        let (data, _shift_amount) = reads.into();
+        let (data, shift_amount) = reads.into();
+        let shift_amount = shift_amount.as_canonical_u32();
         let write_data: [F; NUM_CELLS] = run_write_data_sign_extend::<_, NUM_CELLS, LIMB_BITS>(
             local_opcode_index,
             data[1],
             data[0],
+            shift_amount,
         );
         let output = AdapterRuntimeContext::without_pc([write_data]);
 
         let most_sig_limb = match local_opcode_index {
-            LOADB => data[1][0],
-            LOADH => data[1][NUM_CELLS / 2 - 1],
+            LOADB => write_data[0],
+            LOADH => write_data[NUM_CELLS / 2 - 1],
             _ => unreachable!(),
         }
         .as_canonical_u32();
@@ -197,13 +229,19 @@ where
         let most_sig_bit = most_sig_limb & (1 << (LIMB_BITS - 1));
         self.range_checker_chip
             .add_count(most_sig_limb - most_sig_bit, LIMB_BITS - 1);
+
+        let read_shift = shift_amount & 2;
+
         Ok((
             output,
             LoadSignExtendCoreRecord {
                 opcode: local_opcode_index,
                 most_sig_bit: most_sig_bit != 0,
                 prev_data: data[0],
-                read_data: data[1],
+                shifted_read_data: array::from_fn(|i| {
+                    data[1][(i + read_shift as usize) % NUM_CELLS]
+                }),
+                shift_amount,
             },
         ))
     }
@@ -218,11 +256,14 @@ where
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let core_cols: &mut LoadSignExtendCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
         let opcode = record.opcode;
-        core_cols.opcode_loadb_flag = F::from_bool(opcode == LOADB);
+        let shift = record.shift_amount;
+        core_cols.opcode_loadb_flag0 = F::from_bool(opcode == LOADB && (shift & 1) == 0);
+        core_cols.opcode_loadb_flag1 = F::from_bool(opcode == LOADB && (shift & 1) == 1);
         core_cols.opcode_loadh_flag = F::from_bool(opcode == LOADH);
-        core_cols.most_sig_bit = F::from_bool(record.most_sig_bit);
+        core_cols.shift_most_sig_bit = F::from_canonical_u32((shift & 2) >> 1);
+        core_cols.data_most_sig_bit = F::from_bool(record.most_sig_bit);
         core_cols.prev_data = record.prev_data;
-        core_cols.read_data = record.read_data;
+        core_cols.shifted_read_data = record.shifted_read_data;
     }
 
     fn air(&self) -> &Self::Air {
@@ -238,22 +279,27 @@ pub(super) fn run_write_data_sign_extend<
     opcode: Rv32LoadStoreOpcode,
     read_data: [F; NUM_CELLS],
     _prev_data: [F; NUM_CELLS],
+    shift: u32,
 ) -> [F; NUM_CELLS] {
+    let shift = shift as usize;
     let mut write_data = read_data;
-    match opcode {
-        LOADH => {
-            let ext = read_data[NUM_CELLS / 2 - 1].as_canonical_u32();
+    match (opcode, shift) {
+        (LOADH, 0) | (LOADH, 2) => {
+            let ext = read_data[NUM_CELLS / 2 - 1 + shift].as_canonical_u32();
             let ext = (ext >> (LIMB_BITS - 1)) * ((1 << LIMB_BITS) - 1);
             for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
                 *cell = F::from_canonical_u32(ext);
             }
+            write_data[0..NUM_CELLS / 2]
+                .copy_from_slice(&read_data[shift..(NUM_CELLS / 2 + shift)]);
         }
-        LOADB => {
-            let ext = read_data[0].as_canonical_u32();
+        (LOADB, 0) | (LOADB, 1) | (LOADB, 2) | (LOADB, 3) => {
+            let ext = read_data[shift].as_canonical_u32();
             let ext = (ext >> (LIMB_BITS - 1)) * ((1 << LIMB_BITS) - 1);
             for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
                 *cell = F::from_canonical_u32(ext);
             }
+            write_data[0] = read_data[shift];
         }
         _ => unreachable!(),
     };
