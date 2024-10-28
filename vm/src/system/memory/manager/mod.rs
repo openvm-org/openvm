@@ -217,7 +217,7 @@ impl<F: PrimeField32> MemoryController<F> {
             interface_chip: MemoryInterface::Volatile {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
-                    mem_config.addr_space_max_bits,
+                    mem_config.as_height,
                     mem_config.pointer_max_bits,
                     range_checker.clone(),
                 ),
@@ -237,7 +237,7 @@ impl<F: PrimeField32> MemoryController<F> {
         initial_memory: Equipartition<F, CHUNK>,
     ) -> Self {
         let memory_dims = MemoryDimensions {
-            as_height: mem_config.addr_space_max_bits,
+            as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
             as_offset: 1,
         };

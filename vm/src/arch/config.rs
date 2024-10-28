@@ -28,7 +28,8 @@ pub enum PersistenceType {
 
 #[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
 pub struct MemoryConfig {
-    pub addr_space_max_bits: usize,
+    /// The maximum height of the address space. This means the trie has `as_height` layers for searching the address space. The allowed address spaces are those in the range `[as_offset, as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address space `0` in memory.
+    pub as_height: usize,
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
     pub decomp: usize,
