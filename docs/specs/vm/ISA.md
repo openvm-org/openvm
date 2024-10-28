@@ -19,8 +19,10 @@ Instructions are encoded as a global opcode (field element) followed by `NUM_OPE
 ## Program ROM
 
 Our VM operates under the Harvard architecture, where program code is stored separately from main
-memory. Code is addressed by any field element in range `[0, 2^PC_BITS)` where `PC_BITS = 30`. The program counter `pc` stores the location (a field
-element) of the instruction that is being executed.
+memory. Code is addressed by any field element in range `[0, 2^PC_BITS)` where `PC_BITS = 30`.
+
+There is a single special purpose register `pc` for the program counter of type `F` which stores the location of the instruction being executed.
+(We may extend `pc` to multiple field elements to increase the program address space size in the future.)
 
 The program code is committed as a cached trace. The validity of the program code and its cached trace must be checked outside of ZK. A valid program code must have all instructions stored at locations in range `[0, 2^PC_BITS)`. While the instructions can be stored at any locations, we will by default follow RISC-V in storing instructions at multiples of `DEFAULT_PC_STEP = 4`.
 
@@ -55,9 +57,6 @@ Therefore, any immediate values greater than or equal to $p$ need to be expanded
 
 Our zkVM treats general purpose registers simply as pointers to a separate address space, which is also comprised of
 addressable cells. Registers are represented using the [LIMB] format with `LIMB_BITS = 8`.
-
-There is a single special purpose register `pc` for the program counter of type `F`. Namely, the program counter cannot
-be $\ge p$. (We may extend `pc` to multiple field elements to increase the program address space size in the future.)
 
 ## Notation
 
@@ -463,7 +462,7 @@ We follow Chapter 21 of the [RISC-V spec v2.2](https://riscv.org/wp-content/uplo
 
 Almost all intrinsics will be R-type or I-type.
 
-R-type format: `[funct7] [rs2] [rs1] [funct3] [rd] [opcode]`.  
+R-type format: `[funct7] [rs2] [rs1] [funct3] [rd] [opcode]`.
 I-type format: `[imm[11:0]] [rs1] [funct3] [rd] [opcode]`.
 
 We will use funct3 as the top level distinguisher between opcode classes, and then funct7 (if R-type) or imm (if I-type) for more specific specification. In the tables below, the funct7 column will specify the value of imm[11:0] when the instruction is I-type.
