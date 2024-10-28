@@ -361,6 +361,7 @@ dependencies = [
 name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
+ "axvm-ecc-constants",
  "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git?branch=test/visibility)",
  "itertools 0.13.0",
  "lazy_static",
@@ -378,6 +379,7 @@ dependencies = [
  "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-ecc-constants",
  "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git)",
  "hex-literal",
  "lazy_static",
@@ -539,6 +541,7 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-circuit-derive",
+ "axvm-ecc-constants",
  "axvm-instructions",
  "backtrace",
  "cfg-if",
@@ -628,6 +631,15 @@ dependencies = [
  "test-log",
  "tracing",
  "zkhash",
+]
+
+[[package]]
+name = "axvm-ecc-constants"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "num-bigint-dig",
+ "num-traits",
 ]
 
 [[package]]

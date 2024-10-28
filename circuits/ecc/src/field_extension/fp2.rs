@@ -103,6 +103,7 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
     };
+    use axvm_ecc_constants::BN254;
     use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use num_bigint_dig::BigUint;
     use p3_air::BaseAir;
@@ -134,7 +135,7 @@ mod tests {
         fq2_fn: impl Fn(&Fq2, &Fq2) -> Fq2,
         save_result: bool,
     ) {
-        let prime = bn254_prime();
+        let prime = BN254.MODULUS.clone();
         let (subair, range_checker, builder) = setup(&prime);
 
         let mut x_fp2 = Fp2::new(builder.clone());
@@ -199,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_fp2_div2() {
-        let prime = bn254_prime();
+        let prime = BN254.MODULUS.clone();
         let (subair, range_checker, builder) = setup(&prime);
 
         let mut x_fp2 = Fp2::new(builder.clone());
