@@ -9,9 +9,6 @@
 
 # axVM Architecture
 
-This design is adapted from [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with changes to the
-instruction format suggested by Max Gillet to enable easier compatibility with other existing ISAs.
-
 ## Instruction format
 
 Instructions are encoded as a global opcode (field element) followed by `NUM_OPERANDS = 7` operands (field elements): `opcode, a, b, c, d, e, f, g`. An instruction does not need to use all operands, and trailing unused operands should be set to zero.
@@ -354,6 +351,9 @@ r32_ec_point(a) -> EcPoint {
 TODO
 
 ## Native Kernel
+
+The native kernel instructions were adapted from [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with changes to the
+instruction format suggested by Max Gillet to enable easier compatibility with other existing ISAs.
 
 ### Base
 
