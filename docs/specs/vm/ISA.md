@@ -103,7 +103,7 @@ one of the operations requires much more trace columns than all others).
 Internally, certain non-intersecting ranges of opcodes (which are internally just a `usize`) are distributed among the
 enabled operation classes, so that there is no collision between the classes.
 
-Operands marked with `_` means they are not used and should be set to zero. Trailing unused operands should also be set to zero.
+Operands marked with `_` are not used and should be set to zero. Trailing unused operands should also be set to zero.
 Unless otherwise specified, instructions will by default set `to_pc = from_pc + DEFAULT_PC_STEP`.
 
 The architecture is independent of RISC-V, but for transpilation purposes we specify additional information such as the RISC-V Opcode (7-bit), `funct3` (3-bit), and `funct7` (7-bit) or `imm` fields depending on the RISC-V instruction type.
