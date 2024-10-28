@@ -25,6 +25,7 @@ use core::arch::asm;
 
 extern crate alloc;
 
+#[inline(always)]
 pub fn terminate<const EXIT_CODE: u8>() {
     #[cfg(target_os = "zkvm")]
     unsafe {

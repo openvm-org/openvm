@@ -76,6 +76,7 @@ use axvm_platform;
 /// Terminate execution of the zkVM.
 ///
 /// Use an exit code of 0 to indicate success, and non-zero to indicate an error.
+#[inline(always)]
 pub fn exit<const EXIT_CODE: u8>() -> ! {
     axvm_platform::rust_rt::terminate::<EXIT_CODE>();
     unreachable!();
