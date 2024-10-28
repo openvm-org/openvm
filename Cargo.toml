@@ -14,7 +14,6 @@ members = [
     "toolchain/riscv/transpiler",
     "toolchain/riscv/platform",
     "toolchain/riscv/axvm",
-    "lib/ecc",
     "lib/ecc-constants",
     "lib/ecc-execution",
     "lib/recursion",
@@ -72,7 +71,6 @@ axvm-instructions = { path = "toolchain/instructions", default-features = false 
 axvm-instructions-derive = { path = "toolchain/instructions/derive", default-features = false }
 axvm-platform = { path = "toolchain/riscv/platform", default-features = false }
 axvm-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
-axvm-ecc = { path = "lib/ecc", default-features = false }
 axvm-ecc-constants = { path = "lib/ecc-constants", default-features = false }
 axvm-recursion = { path = "lib/recursion", default-features = false }
 axvm-native-compiler = { path = "toolchain/native-compiler", default-features = false }
