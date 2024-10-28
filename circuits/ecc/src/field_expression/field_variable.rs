@@ -238,18 +238,21 @@ impl FieldVariable {
     // expr cannot have division, so auto-save a new variable.
     pub fn div(&mut self, other: &mut FieldVariable) -> FieldVariable {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
-        let mut builder = self.builder.borrow_mut();
-        // Introduce a new variable to replace self.expr / other.expr.
-        let (new_var_idx, new_var) = builder.new_var();
+        let builder = self.builder.borrow();
         let prime = builder.prime.clone();
         let limb_bits = builder.limb_bits;
         let num_limbs = builder.num_limbs;
         drop(builder);
+
+        // This is a dummy variable, will be replaced later so the index within it doesn't matter.
+        // We use this to check if we need to save self/other first.
+        let fake_var = SymbolicExpr::Var(0);
+
         // Constraint: other.expr * new_var - self.expr = 0 (mod p)
         let new_constraint = SymbolicExpr::Sub(
             Box::new(SymbolicExpr::Mul(
                 Box::new(other.expr.clone()),
-                Box::new(new_var.clone()),
+                Box::new(fake_var.clone()),
             )),
             Box::new(self.expr.clone()),
         );
@@ -262,7 +265,7 @@ impl FieldVariable {
         let new_constraint = SymbolicExpr::Sub(
             Box::new(SymbolicExpr::Mul(
                 Box::new(other.expr.clone()),
-                Box::new(new_var.clone()),
+                Box::new(fake_var.clone()),
             )),
             Box::new(self.expr.clone()),
         );
@@ -272,6 +275,7 @@ impl FieldVariable {
         }
 
         let mut builder = self.builder.borrow_mut();
+        let (new_var_idx, new_var) = builder.new_var();
         builder.set_constraint(new_var_idx, new_constraint);
         // Only compute can have division.
         let compute = SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));

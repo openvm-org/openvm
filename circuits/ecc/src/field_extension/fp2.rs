@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::field_expression::{ExprBuilder, FieldVariable};
+use crate::field_expression::{ExprBuilder, FieldVariable, SymbolicExpr};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
 #[derive(Clone)]
@@ -48,14 +48,16 @@ impl Fp2 {
     }
 
     pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
-        println!("div fp2!!!!\n\n");
         let mut builder = self.c0.builder.borrow_mut();
-        let (z0_idx, z0) = builder.new_var();
-        let (z1_idx, z1) = builder.new_var();
         let prime = builder.prime.clone();
         let limb_bits = builder.limb_bits;
         let num_limbs = builder.num_limbs;
         drop(builder);
+
+        // These are dummy variables, will be replaced later so the index within it doesn't matter.
+        // We use these to check if we need to save self/other first.
+        let fake_z0 = SymbolicExpr::Var(0);
+        let fake_z1 = SymbolicExpr::Var(1);
 
         // Compute should not be affected by whether auto save is triggered.
         // So we must do compute first.
@@ -68,34 +70,36 @@ impl Fp2 {
         let compute_z1 = &compute_z1_nom / &compute_denom;
 
         // Constraint 1: x0 = y0*z0 - y1*z1
-        let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
+        let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
         let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
         if carry_bits > self.c0.range_checker_bits {
             // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
             self.save();
         }
-        let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
+        let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
         let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
-        let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
+        let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
 
         // Constraint 2: x1 = y1*z0 + y0*z1
-        let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
+        let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
         let carry_bits = constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
         if carry_bits > self.c0.range_checker_bits {
             // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
             self.save();
         }
-        let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
+        let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
         let carry_bits = constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
-        let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
+        let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
 
         let mut builder = self.c0.builder.borrow_mut();
+        let (z0_idx, z0) = builder.new_var();
+        let (z1_idx, z1) = builder.new_var();
         builder.set_compute(z0_idx, compute_z0);
         builder.set_compute(z1_idx, compute_z1);
         builder.set_constraint(z0_idx, constraint1);
