@@ -172,7 +172,6 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub instruction: I::ProcessedInstruction,
 }
 
-#[derive(Clone)]
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
     pub adapter: A,
     pub core: C,
@@ -374,7 +373,6 @@ where
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
 ///
-#[derive(Clone)]
 pub struct BasicAdapterInterface<
     T,
     PI,
@@ -399,7 +397,6 @@ impl<
     type ProcessedInstruction = PI;
 }
 
-#[derive(Clone)]
 pub struct VecHeapAdapterInterface<
     T,
     const R: usize,

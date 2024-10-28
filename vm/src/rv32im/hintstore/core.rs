@@ -98,7 +98,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rv32HintStoreCoreChip<F: Field> {
     pub air: Rv32HintStoreCoreAir,
     pub streams: Arc<Mutex<Streams<F>>>,

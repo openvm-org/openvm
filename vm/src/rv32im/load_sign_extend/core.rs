@@ -142,7 +142,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct LoadSignExtendCoreChip<const NUM_CELLS: usize, const LIMB_BITS: usize> {
     pub air: LoadSignExtendCoreAir<NUM_CELLS, LIMB_BITS>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,

@@ -52,7 +52,7 @@ impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     type ProcessedInstruction = NativeLoadStoreInstruction<T>;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct NativeLoadStoreAdapterChip<F: Field, const NUM_CELLS: usize> {
     pub air: NativeLoadStoreAdapterAir<NUM_CELLS>,
     offset: usize,

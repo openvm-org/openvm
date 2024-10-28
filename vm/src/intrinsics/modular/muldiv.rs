@@ -132,7 +132,6 @@ where
     }
 }
 
-#[derive(Clone)]
 pub struct ModularMulDivCoreChip {
     pub air: ModularMulDivCoreAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,

@@ -5,7 +5,7 @@ use crate::system::memory::{
     Equipartition, CHUNK,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum MemoryInterface<F> {
     Volatile {
         boundary_chip: VolatileBoundaryChip<F>,

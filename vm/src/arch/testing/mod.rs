@@ -53,7 +53,7 @@ use crate::{
     system::memory::MemoryControllerRef,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
     pub execution: ExecutionTester<F>,

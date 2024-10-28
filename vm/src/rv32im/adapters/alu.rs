@@ -31,7 +31,7 @@ use crate::{
 /// Reads instructions of the form OP a, b, c, d, e where [a:4]_d = [b:4]_d op [c:4]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Rv32BaseAluAdapterChip<F: Field> {
     pub air: Rv32BaseAluAdapterAir,
     _marker: PhantomData<F>,

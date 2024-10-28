@@ -112,7 +112,7 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct KernelLoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
     pub air: KernelLoadStoreCoreAir<NUM_CELLS>,
     pub streams: Arc<Mutex<Streams<F>>>,

@@ -237,7 +237,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct LoadStoreCoreChip<const NUM_CELLS: usize> {
     pub air: LoadStoreCoreAir<NUM_CELLS>,
 }

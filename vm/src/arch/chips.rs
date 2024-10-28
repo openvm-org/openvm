@@ -66,7 +66,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(Clone, EnumDiscriminants)]
+#[derive(EnumDiscriminants)]
 #[strum_discriminants(derive(Serialize, Deserialize, Ord, PartialOrd))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
@@ -112,7 +112,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(Clone, IntoStaticStr, ChipUsageGetter, Chip)]
+#[derive(IntoStaticStr, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
     Phantom(Rc<RefCell<PhantomChip<F>>>),
     LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),

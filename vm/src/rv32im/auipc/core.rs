@@ -142,7 +142,7 @@ pub struct Rv32AuipcCoreRecord<F> {
     pub pc_imm_byte_check: [F; RV32_REGISTER_NUM_LIMBS - 2],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rv32AuipcCoreChip {
     pub air: Rv32AuipcCoreAir,
     pub xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>,

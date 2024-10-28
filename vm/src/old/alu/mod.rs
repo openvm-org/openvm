@@ -59,7 +59,7 @@ pub struct ArithmeticLogicRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usi
     pub cmp_buffer: Vec<T>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ArithmeticLogicChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ArithmeticLogicRecord<T, NUM_LIMBS, LIMB_BITS>>,

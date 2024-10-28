@@ -85,7 +85,7 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
 /// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
 /// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rv32LoadStoreAdapterChip<F: Field> {
     pub air: Rv32LoadStoreAdapterAir,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,

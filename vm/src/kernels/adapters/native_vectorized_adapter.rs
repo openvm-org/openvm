@@ -27,7 +27,7 @@ use crate::{
 };
 
 #[allow(dead_code)]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct NativeVectorizedAdapterChip<F: Field, const N: usize> {
     pub air: NativeVectorizedAdapterAir<N>,
     _marker: PhantomData<F>,

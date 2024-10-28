@@ -40,7 +40,7 @@ pub struct ShiftRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub x_sign: T,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ShiftChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ShiftRecord<T, NUM_LIMBS, LIMB_BITS>>,

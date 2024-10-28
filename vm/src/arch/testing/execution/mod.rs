@@ -14,7 +14,7 @@ use crate::arch::{ExecutionBus, ExecutionState};
 
 pub mod air;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ExecutionTester<F: Field> {
     pub bus: ExecutionBus,
     pub records: Vec<DummyExecutionInteractionCols<F>>,

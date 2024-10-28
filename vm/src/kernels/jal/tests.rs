@@ -60,12 +60,7 @@ fn set_and_execute(
     assert_eq!(rd_data, tester.read::<1>(d, a)[0].as_canonical_u32());
 }
 
-fn setup() -> (
-    StdRng,
-    VmChipTestBuilder<F>,
-    KernelJalChip<F>,
-    JalNativeAdapterChip<F>,
-) {
+fn setup() -> (StdRng, VmChipTestBuilder<F>, KernelJalChip<F>) {
     let rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
 
@@ -75,13 +70,13 @@ fn setup() -> (
         tester.memory_controller(),
     );
     let inner = JalCoreChip::new(NativeJalOpcode::default_offset());
-    let chip = KernelJalChip::<F>::new(adapter.clone(), inner, tester.memory_controller());
-    (rng, tester, chip, adapter)
+    let chip = KernelJalChip::<F>::new(adapter, inner, tester.memory_controller());
+    (rng, tester, chip)
 }
 
 #[test]
 fn rand_jal_test() {
-    let (mut rng, mut tester, mut chip, _) = setup();
+    let (mut rng, mut tester, mut chip) = setup();
     let num_tests: usize = 100;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, None, None);
@@ -93,13 +88,13 @@ fn rand_jal_test() {
 
 #[test]
 fn negative_jal_test() {
-    let (mut rng, mut tester, mut chip, adapter) = setup();
+    let (mut rng, mut tester, mut chip) = setup();
+    let adapter_width = BaseAir::<F>::width(chip.adapter.air());
     set_and_execute(&mut tester, &mut chip, &mut rng, None, None);
 
     let jal_trace_width = chip.trace_width();
     let mut chip_input = chip.generate_air_proof_input();
     let jal_trace = chip_input.raw.common_main.as_mut().unwrap();
-    let adapter_width = BaseAir::<F>::width(adapter.air());
     {
         let mut trace_row = jal_trace.row_slice(0).to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);

@@ -29,14 +29,14 @@ use crate::{
 };
 
 /// This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rv32RdWriteAdapterChip<F: Field> {
     pub air: Rv32RdWriteAdapterAir,
     _marker: PhantomData<F>,
 }
 
 /// This adapter doesn't read anything, and **maybe** writes to [a:4]_d, where d == 1
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rv32CondRdWriteAdapterChip<F: Field> {
     /// Do not use the inner air directly, use `air` instead.
     inner: Rv32RdWriteAdapterChip<F>,

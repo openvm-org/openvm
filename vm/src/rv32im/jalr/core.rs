@@ -175,7 +175,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rv32JalrCoreChip {
     pub air: Rv32JalrCoreAir,
     pub xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>,

@@ -138,7 +138,7 @@ pub struct Rv32JalLuiCoreRecord<F: Field> {
     pub is_lui: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rv32JalLuiCoreChip {
     pub air: Rv32JalLuiCoreAir,
     pub xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>,
