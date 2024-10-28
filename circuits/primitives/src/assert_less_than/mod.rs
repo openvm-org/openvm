@@ -1,5 +1,5 @@
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
 use derive_new::new;
 use p3_air::AirBuilder;
 use p3_field::{AbstractField, Field};

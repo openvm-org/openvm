@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Builder, Config, DslIr, Felt, Var};
+use axvm_native_compiler::ir::{Builder, Config, DslIr, Felt, Var};
 use itertools::Itertools;
 use p3_field::{AbstractField, Field};
 

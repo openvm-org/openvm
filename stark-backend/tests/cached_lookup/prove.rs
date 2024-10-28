@@ -4,14 +4,14 @@ use std::{
     time::Instant,
 };
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkVerifyingKey,
     prover::types::{Proof, ProofInput},
     utils::disable_debug_builder,
     Chip,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,

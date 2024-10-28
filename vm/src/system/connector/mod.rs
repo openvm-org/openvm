@@ -4,8 +4,8 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     prover::types::AirProofInput,
@@ -18,7 +18,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
-    arch::{instructions::CommonOpcode::TERMINATE, ExecutionBus, ExecutionState},
+    arch::{instructions::SystemOpcode::TERMINATE, ExecutionBus, ExecutionState},
     system::program::ProgramBus,
 };
 

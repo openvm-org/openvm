@@ -1,24 +1,24 @@
 use std::marker::PhantomData;
 
-use afs_compiler::{
-    conversion::CompilerOptions,
-    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
-    prelude::RVar,
-};
-use afs_stark_backend::{
+use ax_stark_backend::{
     air_builders::{
         symbolic::symbolic_expression::SymbolicExpression,
         verifier::GenericVerifierConstraintFolder,
     },
     prover::{opener::AdjacentOpenedValues, types::Proof},
 };
-use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use ax_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use axvm_circuit::arch::instructions::program::Program;
+use axvm_native_compiler::{
+    conversion::CompilerOptions,
+    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
+    prelude::RVar,
+};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
-use stark_vm::arch::instructions::program::Program;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
@@ -95,7 +95,7 @@ impl<C: Config> StarkVerifier<C>
 where
     C::F: TwoAdicField,
 {
-    /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify].
+    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify].
     pub fn verify<CH: ChallengerVariable<C>>(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
@@ -107,7 +107,7 @@ where
         Self::verify_raps(builder, pcs, m_advice, &mut challenger, proof);
     }
 
-    /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
+    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
     pub fn verify_raps(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
@@ -676,7 +676,7 @@ where
         builder.cycle_tracker_end("stage-e-verify-constraints");
     }
 
-    /// Reference: [afs_stark_backend::verifier::constraints::verify_single_rap_constraints]
+    /// Reference: [ax_stark_backend::verifier::constraints::verify_single_rap_constraints]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
     pub fn verify_single_rap_constraints(

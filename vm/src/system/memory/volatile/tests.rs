@@ -1,7 +1,7 @@
 use std::{collections::HashSet, iter, sync::Arc};
 
-use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use ax_sdk::{
+use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
@@ -12,12 +12,12 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 use test_log::test;
 
-use crate::system::{
-    memory::{
+use crate::{
+    arch::RANGE_CHECKER_BUS,
+    system::memory::{
         offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
         TimestampedValues,
     },
-    vm::chip_set::RANGE_CHECKER_BUS,
 };
 
 type Val = BabyBear;

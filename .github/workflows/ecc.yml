@@ -9,7 +9,7 @@ on:
       - "stark-backend/**"
       - "circuits/primitives/**"
       - "vm/**"
-      - "toolchain/compiler/**"
+      - "toolchain/native-compiler/**"
       - "circuits/ecc/**"
       - "lib/ecc/**"
       - "lib/ecc-execution/**"

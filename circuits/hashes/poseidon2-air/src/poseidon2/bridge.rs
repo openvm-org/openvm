@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use p3_field::Field;
 
 use super::columns::Poseidon2IoCols;

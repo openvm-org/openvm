@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_field::AbstractField;

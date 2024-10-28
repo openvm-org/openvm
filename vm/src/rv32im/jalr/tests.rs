@@ -1,10 +1,10 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::xor::XorLookupChip;
-use afs_stark_backend::{
+use ax_circuit_primitives::xor::XorLookupChip;
+use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::{instruction::Instruction, program::PC_BITS};
 use num_traits::WrappingSub;
 use p3_air::BaseAir;
@@ -21,13 +21,12 @@ use crate::{
             UsizeOpcode,
         },
         testing::VmChipTestBuilder,
-        VmAdapterChip,
+        VmAdapterChip, BYTE_XOR_BUS,
     },
     rv32im::{
         adapters::{compose, Rv32JalrAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         jalr::{run_jalr, Rv32JalrCoreCols},
     },
-    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 const IMM_BITS: usize = 16;

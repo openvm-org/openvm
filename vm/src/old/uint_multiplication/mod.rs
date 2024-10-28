@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_primitives::range_tuple::RangeTupleCheckerChip;
+use ax_circuit_primitives::range_tuple::RangeTupleCheckerChip;
 use p3_field::PrimeField32;
 
 use crate::{

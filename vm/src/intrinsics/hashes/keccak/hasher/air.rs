@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
-use afs_primitives::{utils::not, xor::XorBus};
-use afs_stark_backend::{
+use ax_circuit_primitives::{utils::not, xor::XorBus};
+use ax_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

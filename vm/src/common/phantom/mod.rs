@@ -4,8 +4,8 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     prover::types::AirProofInput,
@@ -13,7 +13,7 @@ use afs_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, CommonOpcode, PhantomInstruction,
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomInstruction, SystemOpcode,
     UsizeOpcode,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -23,11 +23,12 @@ use p3_maybe_rayon::prelude::*;
 use parking_lot::Mutex;
 
 use crate::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, PcIncOrSet},
+    arch::{
+        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, PcIncOrSet, Streams,
+    },
     system::{
         memory::MemoryControllerRef,
         program::{ExecutionError, ProgramBus},
-        vm::Streams,
     },
 };
 
@@ -102,7 +103,7 @@ impl<F: Field> PhantomChip<F> {
         Self {
             air: PhantomAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                phantom_opcode: offset + CommonOpcode::PHANTOM.as_usize(),
+                phantom_opcode: offset + SystemOpcode::PHANTOM.as_usize(),
             },
             rows: vec![],
             memory: memory_controller,
@@ -182,7 +183,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
     }
 
     fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", CommonOpcode::PHANTOM)
+        format!("{:?}", SystemOpcode::PHANTOM)
     }
 }
 

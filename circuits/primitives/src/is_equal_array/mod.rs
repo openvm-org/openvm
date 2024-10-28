@@ -1,4 +1,4 @@
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use itertools::izip;
 use p3_air::AirBuilder;
 use p3_field::Field;

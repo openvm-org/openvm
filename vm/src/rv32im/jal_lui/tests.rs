@@ -1,10 +1,10 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::xor::XorLookupChip;
-use afs_stark_backend::{
+use ax_circuit_primitives::xor::XorLookupChip;
+use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -17,7 +17,7 @@ use crate::{
     arch::{
         instructions::Rv32JalLuiOpcode::{self, *},
         testing::VmChipTestBuilder,
-        VmAdapterChip,
+        VmAdapterChip, BYTE_XOR_BUS,
     },
     rv32im::{
         adapters::{
@@ -26,7 +26,6 @@ use crate::{
         },
         jal_lui::Rv32JalLuiCoreCols,
     },
-    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 const IMM_BITS: usize = 20;

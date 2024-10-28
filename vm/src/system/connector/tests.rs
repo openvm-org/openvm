@@ -3,11 +3,11 @@ use std::{
     sync::Arc,
 };
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, prover::types::AirProofInput,
     utils::disable_debug_builder,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -15,15 +15,15 @@ use ax_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::Program, CommonOpcode::TERMINATE, UsizeOpcode,
+    instruction::Instruction, program::Program, SystemOpcode::TERMINATE, UsizeOpcode,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
 use super::VmConnectorPvs;
-use crate::system::{
-    program::trace::CommittedProgram,
-    vm::{chip_set::CONNECTOR_AIR_ID, config::VmConfig, SingleSegmentVM},
+use crate::{
+    arch::{SingleSegmentVM, VmConfig, CONNECTOR_AIR_ID},
+    system::program::trace::CommittedProgram,
 };
 
 type F = BabyBear;

@@ -7,15 +7,16 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_poseidon2_air::poseidon2::Poseidon2Config;
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
@@ -24,7 +25,6 @@ use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::{
     prelude::{SliceRandom, StdRng},
     Rng,
@@ -32,7 +32,10 @@ use rand::{
 
 use super::{Equipartition, MemoryAuxColsFactory, MemoryController, MemoryReadRecord};
 use crate::{
-    arch::{testing::memory::gen_pointer, ExecutionBus},
+    arch::{
+        testing::memory::gen_pointer, ExecutionBus, MemoryConfig, PersistenceType, EXECUTION_BUS,
+        MEMORY_BUS, MEMORY_MERKLE_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+    },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     system::{
         memory::{
@@ -41,13 +44,6 @@ use crate::{
             MemoryAddress, MemoryWriteRecord,
         },
         program::ProgramBus,
-        vm::{
-            chip_set::{
-                EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS, RANGE_CHECKER_BUS,
-                READ_INSTRUCTION_BUS,
-            },
-            config::{MemoryConfig, PersistenceType},
-        },
     },
 };
 

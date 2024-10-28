@@ -1,8 +1,8 @@
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::{ProofInputForTest, StarkFriEngine},
 };
@@ -10,7 +10,7 @@ use axvm_instructions::program::Program;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 
-use crate::system::vm::{config::VmConfig, VirtualMachine};
+use crate::arch::{VirtualMachine, VmConfig};
 
 pub fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
     setup_tracing();

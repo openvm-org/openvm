@@ -8,15 +8,15 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_less_than::IsLtSubAir,
     is_zero::IsZeroSubAir,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     TraceSubRowGenerator,
 };
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::AirProofInput,
@@ -34,8 +34,9 @@ use super::{
     offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
     volatile::VolatileBoundaryChip,
 };
-use crate::system::{
-    memory::{
+use crate::{
+    arch::{MemoryConfig, RANGE_CHECKER_BUS},
+    system::memory::{
         adapter::AccessAdapterAir,
         manager::memory::{AccessAdapterRecord, Memory},
         offline_checker::{
@@ -43,7 +44,6 @@ use crate::system::{
             MemoryWriteAuxCols, AUX_LEN,
         },
     },
-    vm::{chip_set::RANGE_CHECKER_BUS, config::MemoryConfig},
 };
 
 pub mod dimensions;
@@ -753,18 +753,15 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
 mod tests {
     use std::sync::Arc;
 
-    use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+    use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::MemoryController;
-    use crate::system::{
-        memory::offline_checker::MemoryBus,
-        vm::{
-            chip_set::{MEMORY_BUS, RANGE_CHECKER_BUS},
-            config::MemoryConfig,
-        },
+    use crate::{
+        arch::{MemoryConfig, MEMORY_BUS, RANGE_CHECKER_BUS},
+        system::memory::offline_checker::MemoryBus,
     };
 
     #[test]

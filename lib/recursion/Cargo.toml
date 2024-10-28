@@ -1,16 +1,17 @@
 [package]
-name = "afs-recursion"
-version = "0.1.0"
-edition = "2021"
+name = "axvm-recursion"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
-afs-stark-backend = { workspace = true }
-afs-compiler = { workspace = true, features = ["sdk"] }
-ax-sdk = { workspace = true }
-afs-derive = { workspace = true }
-stark-vm = { workspace = true, features = ["sdk"] }
-ax-ecc-lib = { workspace = true }
-afs-primitives = { workspace = true }
+ax-stark-backend = { workspace = true }
+axvm-native-compiler = { workspace = true, features = ["sdk"] }
+axvm-native-compiler-derive = { workspace = true }
+ax-stark-sdk = { workspace = true }
+axvm-circuit = { workspace = true, features = ["sdk"] }
+axvm-ecc = { workspace = true }
+ax-circuit-primitives = { workspace = true }
 
 p3-air = { workspace = true }
 p3-field = { workspace = true }
@@ -45,7 +46,7 @@ metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 
 [dev-dependencies]
-afs-primitives.workspace = true
+ax-circuit-primitives.workspace = true
 
 [[bin]]
 name = "verify_fibair"
@@ -61,12 +62,12 @@ name = "small_e2e"
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["afs-stark-backend/parallel"]
+parallel = ["ax-stark-backend/parallel"]
 static-verifier = [
-    "afs-compiler/halo2-compiler",
+    "axvm-native-compiler/halo2-compiler",
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]
-bench-metrics = ["dep:metrics", "stark-vm/bench-metrics"]
-mimalloc = ["afs-stark-backend/mimalloc"]
-jemalloc = ["afs-stark-backend/jemalloc"]
+bench-metrics = ["dep:metrics", "axvm-circuit/bench-metrics"]
+mimalloc = ["ax-stark-backend/mimalloc"]
+jemalloc = ["ax-stark-backend/jemalloc"]

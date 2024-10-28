@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use afs_compiler::{conversion::CompilerOptions, prelude::*};
-use afs_recursion::{hints::Hintable, types::InnerConfig};
-use ax_sdk::{
-    afs_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField},
+use ax_stark_sdk::{
+    ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField},
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -11,17 +9,15 @@ use ax_sdk::{
     engine::{StarkEngine, StarkFriEngine},
 };
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
-use p3_baby_bear::BabyBear;
-use stark_vm::{
-    arch::ExecutorName,
-    system::{
-        program::trace::CommittedProgram,
-        vm::{
-            config::{MemoryConfig, PersistenceType, VmConfig},
-            SingleSegmentVM, VirtualMachine,
-        },
+use axvm_circuit::{
+    arch::{
+        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine, VmConfig,
     },
+    system::program::trace::CommittedProgram,
 };
+use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
+use axvm_recursion::{hints::Hintable, types::InnerConfig};
+use p3_baby_bear::BabyBear;
 
 type C = InnerConfig;
 type F = BabyBear;

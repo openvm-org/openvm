@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Array, Builder, Config, Ext, FromConstant, RVar};
+use axvm_native_compiler::ir::{Array, Builder, Config, Ext, FromConstant, RVar};
 use p3_commit::{LagrangeSelectors, PolynomialSpace};
 
 use crate::{

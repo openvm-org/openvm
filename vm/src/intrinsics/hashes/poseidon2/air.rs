@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::{
+use ax_poseidon2_air::poseidon2::Poseidon2Air;
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -9,7 +10,6 @@ use itertools::izip;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
-use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{

@@ -6,8 +6,8 @@
 use core::mem::{size_of, transmute};
 use std::{borrow::Borrow, sync::atomic::AtomicU32};
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };

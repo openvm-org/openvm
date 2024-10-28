@@ -10,7 +10,7 @@ repository.workspace = true
 p3-field.workspace = true
 axvm-platform.workspace = true
 axvm-instructions.workspace = true
-stark-vm.workspace = true          # TODO: remove this dependency
+axvm-circuit.workspace = true      # TODO: remove this dependency
 strum.workspace = true
 
 color-eyre = { git = "https://github.com/eyre-rs/eyre.git", rev = "7706273" }
@@ -20,8 +20,8 @@ rrs-lib = "0.1.0"
 [dev-dependencies]
 p3-baby-bear.workspace = true
 test-case.workspace = true
-stark-vm = { workspace = true, features = ["sdk"] }
-ax-sdk.workspace = true
+axvm-circuit = { workspace = true, features = ["sdk"] }
+ax-stark-sdk.workspace = true
 
 [features]
-parallel = ["stark-vm/parallel"]
+parallel = ["axvm-circuit/parallel"]

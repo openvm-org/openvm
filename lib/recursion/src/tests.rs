@@ -1,7 +1,7 @@
 use std::{panic::catch_unwind, sync::Arc};
 
-use afs_stark_backend::{prover::types::AirProofInput, utils::disable_debug_builder, Chip};
-use ax_sdk::{
+use ax_stark_backend::{prover::types::AirProofInput, utils::disable_debug_builder, Chip};
+use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -16,10 +16,10 @@ use ax_sdk::{
     engine::{ProofInputForTest, StarkFriEngine},
     utils::to_field_vec,
 };
+use axvm_circuit::{arch::VmConfig, sdk::gen_vm_program_test_proof_input};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
-use stark_vm::{sdk::gen_vm_program_test_proof_input, system::vm::config::VmConfig};
 
 use crate::{
     hints::Hintable, stark::VerifierProgram, testing_utils::inner::run_recursive_test,
@@ -132,7 +132,7 @@ fn test_unordered() {
 
 #[test]
 fn test_optional_air() {
-    use afs_stark_backend::{engine::StarkEngine, prover::types::ProofInput, Chip};
+    use ax_stark_backend::{engine::StarkEngine, prover::types::ProofInput, Chip};
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
     let engine = BabyBearPoseidon2Engine::new(fri_params);
     let fib_chip = FibonacciChip::new(0, 1, 8);

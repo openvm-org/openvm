@@ -1,13 +1,13 @@
 use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, sync::Arc};
 
-use afs_stark_backend::{
+use air::{DummyMemoryInteractionCols, MemoryDummyAir};
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionType,
     prover::types::AirProofInput,
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use air::{DummyMemoryInteractionCols, MemoryDummyAir};
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::{seq::SliceRandom, Rng};

@@ -1,22 +1,22 @@
 use std::cmp::Reverse;
 
-use afs_compiler::ir::{
-    unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
-    DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
-};
-use afs_primitives::bigint::utils::big_uint_to_num_limbs;
-use afs_stark_backend::{
+use ax_circuit_primitives::bigint::utils::big_uint_to_num_limbs;
+use ax_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
         types::{AirProofData, Commitments, Proof},
     },
 };
-use ax_ecc_lib::types::{
+use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use axvm_ecc::types::{
     ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
     ECPointVariable,
 };
-use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use axvm_native_compiler::ir::{
+    unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
+    DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
+};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
@@ -559,14 +559,14 @@ impl Hintable<InnerConfig> for ECDSAInput {
 
 #[cfg(test)]
 mod test {
-    use afs_compiler::{
+    use axvm_circuit::system::program::util::execute_program;
+    use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
         prelude::*,
     };
-    use afs_derive::{DslVariable, Hintable};
+    use axvm_native_compiler_derive::{DslVariable, Hintable};
     use p3_field::AbstractField;
-    use stark_vm::system::program::util::execute_program;
 
     use crate::{
         hints::{Hintable, InnerChallenge, InnerVal},

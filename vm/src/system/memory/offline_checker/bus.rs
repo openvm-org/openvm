@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
+use ax_stark_backend::interaction::{InteractionBuilder, InteractionType};
 use p3_field::AbstractField;
 
 use crate::system::memory::MemoryAddress;

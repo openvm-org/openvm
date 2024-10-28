@@ -1,12 +1,12 @@
 use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
-use afs_stark_backend::{
+use air::ProgramDummyAir;
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     prover::types::AirProofInput,
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use air::ProgramDummyAir;
 use axvm_instructions::instruction::Instruction;
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;

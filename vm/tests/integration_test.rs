@@ -1,10 +1,10 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
     prover::types::Proof,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
         fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
@@ -13,23 +13,15 @@ use ax_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     utils::create_seeded_rng,
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    program::{Program, DEFAULT_PC_STEP},
-    CommonOpcode, PhantomInstruction,
-    PublishOpcode::PUBLISH,
-};
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
-use rand::Rng;
-use stark_vm::{
+use axvm_circuit::{
     arch::{
         instructions::{
-            BranchEqualOpcode::*, CommonOpcode::*, FieldArithmeticOpcode::*,
-            FieldExtensionOpcode::*, Keccak256Opcode::*, NativeBranchEqualOpcode,
-            NativeJalOpcode::*, NativeLoadStoreOpcode::*, Poseidon2Opcode::*, UsizeOpcode,
+            BranchEqualOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
+            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
+            NativeLoadStoreOpcode::*, Poseidon2Opcode::*, SystemOpcode::*, UsizeOpcode,
         },
-        ExecutorName,
+        ExecutorName, ExitCode, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine,
+        VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
     },
     intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
     sdk::air_test,
@@ -37,13 +29,18 @@ use stark_vm::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{merkle::MemoryMerklePvs, Equipartition},
         program::trace::CommittedProgram,
-        vm::{
-            chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID},
-            config::{MemoryConfig, PersistenceType, VmConfig},
-            ExitCode, SingleSegmentVM, VirtualMachine,
-        },
     },
 };
+use axvm_instructions::{
+    instruction::Instruction,
+    program::{Program, DEFAULT_PC_STEP},
+    PhantomInstruction,
+    PublishOpcode::PUBLISH,
+    SystemOpcode,
+};
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, PrimeField32};
+use rand::Rng;
 use test_log::test;
 
 const LIMB_BITS: usize = 29;
@@ -704,7 +701,7 @@ fn test_vm_hint() {
         Instruction::large_from_isize(ADD.with_default_offset(), 32, 20, 0, 1, 1, 0, 0),
         Instruction::large_from_isize(ADD.with_default_offset(), 20, 20, 1, 1, 1, 0, 0),
         Instruction::from_isize(
-            CommonOpcode::PHANTOM.with_default_offset(),
+            SystemOpcode::PHANTOM.with_default_offset(),
             0,
             0,
             PhantomInstruction::HintInput as isize,

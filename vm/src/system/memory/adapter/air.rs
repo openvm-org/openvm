@@ -1,10 +1,10 @@
 use std::{borrow::Borrow, mem::size_of};
 
-use afs_primitives::{
+use ax_circuit_primitives::{
     is_less_than::{IsLessThanIo, IsLtSubAir},
     SubAir,
 };
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };

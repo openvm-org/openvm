@@ -1,10 +1,10 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::xor::XorLookupChip;
-use afs_stark_backend::{
+use ax_circuit_primitives::xor::XorLookupChip;
+use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -20,13 +20,12 @@ use crate::{
     arch::{
         instructions::LessThanOpcode,
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BYTE_XOR_BUS,
     },
     rv32im::{
         adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         less_than::LessThanCoreCols,
     },
-    system::vm::chip_set::BYTE_XOR_BUS,
     utils::{generate_long_number, generate_rv32_is_type_immediate, i32_to_f},
 };
 

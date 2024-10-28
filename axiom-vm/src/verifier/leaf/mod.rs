@@ -1,8 +1,21 @@
 use std::{array, borrow::BorrowMut};
 
-use afs_compiler::{conversion::CompilerOptions, prelude::*};
-use afs_derive::AlignedBorrow;
-use afs_recursion::{
+use ax_stark_sdk::{
+    ax_stark_backend::{
+        keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, prover::types::Proof,
+    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
+};
+use axvm_circuit::{
+    arch::{
+        instructions::program::Program, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+        PROGRAM_CACHED_TRACE_INDEX,
+    },
+    circuit_derive::AlignedBorrow,
+    system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs},
+};
+use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
+use axvm_recursion::{
     challenger::duplex::DuplexChallengerVariable,
     digest::DigestVariable,
     fri::TwoAdicFriPcsVariable,
@@ -11,23 +24,6 @@ use afs_recursion::{
     types::{new_from_inner_multi_vk, InnerConfig},
     utils::const_fri_config,
     vars::StarkProofVariable,
-};
-use ax_sdk::{
-    afs_stark_backend::{
-        keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, prover::types::Proof,
-    },
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
-};
-use stark_vm::{
-    arch::instructions::program::Program,
-    system::{
-        connector::VmConnectorPvs,
-        memory::merkle::MemoryMerklePvs,
-        vm::{
-            chip_set::{CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_CACHED_TRACE_INDEX},
-            config::VmConfig,
-        },
-    },
 };
 
 use crate::config::AxiomVmConfig;

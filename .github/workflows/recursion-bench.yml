@@ -9,7 +9,7 @@ on:
       - "stark-backend/**"
       - "circuits/primitives/**"
       - "vm/**"
-      - "toolchain/compiler/**"
+      - "toolchain/native-compiler/**"
       - "lib/recursion/**"
       - ".github/workflows/benchmark-call.yml"
   label:

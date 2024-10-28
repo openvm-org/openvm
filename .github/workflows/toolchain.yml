@@ -31,6 +31,11 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
+      - name: Run axvm-instructions tests
+        working-directory: toolchain/instructions
+        run: |
+          cargo nextest run
+
       - name: Build a test fibonacci ELF
         working-directory: toolchain/riscv/examples/fibonacci/program
         run: |

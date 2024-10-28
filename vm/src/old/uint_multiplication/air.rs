@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
-use afs_primitives::range_tuple::RangeTupleCheckerBus;
-use afs_stark_backend::{
+use ax_circuit_primitives::range_tuple::RangeTupleCheckerBus;
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };

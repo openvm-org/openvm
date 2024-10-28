@@ -1,4 +1,4 @@
-use afs_compiler::{
+use axvm_native_compiler::{
     ir::{
         Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
         DIGEST_SIZE,

@@ -1,9 +1,9 @@
 [package]
-name = "stark-vm"
+name = "axvm-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Virtual Machine STARK"
+description = "axVM circuits"
 
 [dependencies]
 p3-air = { workspace = true }
@@ -14,12 +14,13 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 
-poseidon2-air = { workspace = true }
-afs-primitives = { workspace = true }
-afs-stark-backend = { workspace = true }
-afs-derive = { workspace = true }
-ax-sdk = { workspace = true, optional = true }
+ax-poseidon2-air = { workspace = true }
+ax-stark-backend = { workspace = true }
+ax-circuit-primitives = { workspace = true }
+ax-circuit-derive = { workspace = true }
 ax-ecc-primitives = { workspace = true }
+axvm-circuit-derive = { workspace = true }
+ax-stark-sdk = { workspace = true, optional = true }
 axvm-instructions = { workspace = true }
 
 parking_lot.workspace = true
@@ -55,22 +56,22 @@ p3-symmetric = { workspace = true }
 zkhash = { workspace = true }
 rand_xoshiro = "0.6.0"
 ark-ff = { version = "^0.4.0", default-features = false }
-ax-sdk = { workspace = true }
+ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
-stark-vm = { workspace = true, features = ["sdk"] }
+axvm-circuit = { workspace = true, features = ["sdk"] }
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["afs-stark-backend/parallel"]
-sdk = ["dep:ax-sdk"]
+parallel = ["ax-stark-backend/parallel"]
+sdk = ["dep:ax-stark-sdk"]
 bench-metrics = [
     "sdk",
     "dep:metrics",
     "dep:inferno",
-    "afs-stark-backend/bench-metrics",
+    "ax-stark-backend/bench-metrics",
 ]
-mimalloc = ["afs-stark-backend/mimalloc"]
-jemalloc = ["afs-stark-backend/jemalloc"]
-jemalloc-prof = ["afs-stark-backend/jemalloc-prof"]
+mimalloc = ["ax-stark-backend/mimalloc"]
+jemalloc = ["ax-stark-backend/jemalloc"]
+jemalloc-prof = ["ax-stark-backend/jemalloc-prof"]

@@ -4,9 +4,9 @@ use std::{
     iter,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::utils::next_power_of_two_or_zero;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::utils::next_power_of_two_or_zero;
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -14,13 +14,13 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use crate::system::{
-    memory::{
+use crate::{
+    arch::POSEIDON2_DIRECT_BUS,
+    system::memory::{
         dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
         offline_checker::MemoryBus, tree::HasherChip, Equipartition, MemoryAddress,
         TimestampedEquipartition,
     },
-    vm::chip_set::POSEIDON2_DIRECT_BUS,
 };
 
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last

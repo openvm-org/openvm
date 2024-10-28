@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -15,12 +15,12 @@ use crate::{
             UsizeOpcode,
         },
         testing::VmChipTestBuilder,
+        Streams,
     },
     kernels::{
         adapters::loadstore_native_adapter::NativeLoadStoreAdapterChip,
         loadstore::KernelLoadStoreCoreChip,
     },
-    system::vm::Streams,
 };
 
 type F = BabyBear;

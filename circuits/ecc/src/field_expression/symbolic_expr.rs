@@ -3,7 +3,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use afs_primitives::bigint::{utils::big_uint_mod_inverse, OverflowInt};
+use ax_circuit_primitives::bigint::{utils::big_uint_mod_inverse, OverflowInt};
 use num_bigint_dig::{BigInt, BigUint};
 use num_traits::{FromPrimitive, One, Zero};
 use p3_air::AirBuilder;

@@ -7,8 +7,8 @@ use std::{
     },
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
     config::StarkGenericConfig,
     interaction::InteractionBuilder,
     p3_uni_stark::Val,

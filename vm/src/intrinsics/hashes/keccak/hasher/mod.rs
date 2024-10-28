@@ -1,6 +1,6 @@
 use std::{array::from_fn, cmp::min, sync::Arc};
 
-use afs_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::xor::XorLookupChip;
 use p3_field::PrimeField32;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;

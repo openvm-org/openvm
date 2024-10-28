@@ -1,12 +1,12 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::{
+use ax_circuit_primitives::{
     bigint::{check_carry_mod_to_zero::CheckCarryModToZeroSubAir, utils::*},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
-use ax_sdk::{
+use ax_stark_backend::interaction::InteractionBuilder;
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };

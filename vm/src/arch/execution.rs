@@ -1,5 +1,5 @@
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::program::DEFAULT_PC_STEP;
 use p3_field::AbstractField;
 

@@ -1,5 +1,6 @@
-use afs_derive::{Chip, ChipUsageGetter, InstructionExecutor};
-use afs_primitives::bigint::utils::secp256k1_coord_prime;
+use ax_circuit_derive::{Chip, ChipUsageGetter};
+use ax_circuit_primitives::bigint::utils::secp256k1_coord_prime;
+use axvm_circuit_derive::InstructionExecutor;
 use p3_field::PrimeField32;
 
 use super::adapters::native_vec_heap_adapter::NativeVecHeapAdapterChip;

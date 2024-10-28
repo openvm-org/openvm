@@ -4,9 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::xor::{XorBus, XorLookupChip};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::xor::{XorBus, XorLookupChip};
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -18,11 +18,11 @@ use crate::{
             Rv32HintStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, Streams,
+        VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    system::{program::ExecutionError, vm::Streams},
+    system::program::ExecutionError,
 };
 
 /// HintStore Core Chip handles the range checking of the data to be written to memory

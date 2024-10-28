@@ -1,14 +1,14 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{
+use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_stark_backend::{
     config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
     engine::VerificationData,
     prover::types::AirProofInput,
     verifier::VerificationError,
     Chip,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::{
         baby_bear_blake3::{self, BabyBearBlake3Config},
         baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
@@ -29,14 +29,13 @@ use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
 use crate::{
-    arch::ExecutionState,
+    arch::{
+        ExecutionState, MemoryConfig, EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS,
+        READ_INSTRUCTION_BUS,
+    },
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
         program::ProgramBus,
-        vm::{
-            chip_set::{EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS},
-            config::MemoryConfig,
-        },
     },
 };
 pub mod execution;
@@ -50,8 +49,8 @@ pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
 use crate::{
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
-    system::{memory::MemoryControllerRef, vm::config::PersistenceType},
+    arch::PersistenceType, intrinsics::hashes::poseidon2::Poseidon2Chip,
+    system::memory::MemoryControllerRef,
 };
 
 #[derive(Clone, Debug)]

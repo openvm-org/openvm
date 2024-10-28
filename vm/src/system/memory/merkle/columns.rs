@@ -1,4 +1,4 @@
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 
 #[derive(Debug, AlignedBorrow)]
 #[repr(C)]

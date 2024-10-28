@@ -29,167 +29,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 
 [[package]]
-name = "afs-compiler"
-version = "0.1.0"
-dependencies = [
- "afs-compiler",
- "afs-derive",
- "afs-primitives",
- "ax-sdk",
- "axvm-instructions",
- "backtrace",
- "cfg-if",
- "hex",
- "itertools 0.13.0",
- "metrics",
- "num-bigint 0.4.6",
- "num-bigint-dig",
- "num-integer",
- "num-traits",
- "p3-baby-bear",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-dft",
- "p3-field",
- "p3-merkle-tree",
- "p3-symmetric",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "snark-verifier-sdk",
- "stark-vm",
- "strum",
- "strum_macros",
- "tracing",
- "zkhash",
-]
-
-[[package]]
-name = "afs-derive"
-version = "0.1.0"
-dependencies = [
- "itertools 0.13.0",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "afs-primitives"
-version = "0.1.0"
-dependencies = [
- "afs-derive",
- "afs-stark-backend",
- "ax-sdk",
- "derive-new",
- "itertools 0.13.0",
- "lazy_static",
- "num-bigint-dig",
- "num-integer",
- "num-traits",
- "p3-air",
- "p3-baby-bear",
- "p3-challenger",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "parking_lot",
- "rand 0.8.5",
- "test-case",
- "tracing",
-]
-
-[[package]]
-name = "afs-recursion"
-version = "0.1.0"
-dependencies = [
- "afs-compiler",
- "afs-derive",
- "afs-primitives",
- "afs-stark-backend",
- "ax-ecc-lib",
- "ax-sdk",
- "cfg-if",
- "ff 0.13.0",
- "itertools 0.13.0",
- "lazy_static",
- "metrics",
- "num-bigint-dig",
- "once_cell",
- "p3-air",
- "p3-baby-bear",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "snark-verifier-sdk",
- "stark-vm",
- "tracing",
- "zkhash",
-]
-
-[[package]]
-name = "afs-stark-backend"
-version = "0.1.0"
-dependencies = [
- "afs-derive",
- "ax-sdk",
- "cfg-if",
- "csv",
- "derivative",
- "eyre 0.6.12",
- "itertools 0.13.0",
- "metrics",
- "mimalloc",
- "p3-air",
- "p3-baby-bear",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-mds",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand 0.8.5",
- "rayon",
- "serde",
- "serde_json",
- "tikv-jemallocator",
- "tracing",
- "tracing-forest",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -475,6 +314,50 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
+name = "ax-circuit-derive"
+version = "0.1.0"
+dependencies = [
+ "itertools 0.13.0",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "ax-circuit-primitives"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint-dig",
+ "num-integer",
+ "num-traits",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-challenger",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-goldilocks",
+ "p3-keccak",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "parking_lot",
+ "rand 0.8.5",
+ "test-case",
+ "tracing",
+]
+
+[[package]]
 name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
@@ -489,52 +372,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "ax-ecc-lib"
-version = "0.1.0"
-dependencies = [
- "afs-compiler",
- "afs-primitives",
- "afs-stark-backend",
- "ax-sdk",
- "elliptic-curve",
- "ff 0.13.0",
- "hex-literal",
- "itertools 0.13.0",
- "k256",
- "num-bigint-dig",
- "num-traits",
- "p3-air",
- "p3-baby-bear",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-matrix",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "sha3",
- "snark-verifier-sdk",
- "stark-vm",
- "test-log",
- "tracing",
- "zkhash",
-]
-
-[[package]]
 name = "ax-ecc-primitives"
 version = "0.1.0"
 dependencies = [
- "afs-primitives",
- "afs-stark-backend",
- "ax-sdk",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
  "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git)",
  "hex-literal",
  "lazy_static",
@@ -551,11 +394,76 @@ dependencies = [
 ]
 
 [[package]]
-name = "ax-sdk"
+name = "ax-poseidon2-air"
 version = "0.1.0"
 dependencies = [
- "afs-derive",
- "afs-stark-backend",
+ "ark-ff 0.4.2",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "itertools 0.13.0",
+ "lazy_static",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-challenger",
+ "p3-field",
+ "p3-matrix",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand 0.8.5",
+ "rand_xoshiro",
+ "test-case",
+ "zkhash",
+]
+
+[[package]]
+name = "ax-stark-backend"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-stark-sdk",
+ "cfg-if",
+ "csv",
+ "derivative",
+ "eyre 0.6.12",
+ "itertools 0.13.0",
+ "metrics",
+ "mimalloc",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-goldilocks",
+ "p3-keccak",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-mds",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand 0.8.5",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tikv-jemallocator",
+ "tracing",
+ "tracing-forest",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "ax-stark-sdk"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-stark-backend",
  "derive_more",
  "ff 0.13.0",
  "itertools 0.13.0",
@@ -594,14 +502,13 @@ dependencies = [
 name = "axiom-vm"
 version = "0.1.0"
 dependencies = [
- "afs-compiler",
- "afs-derive",
- "afs-recursion",
- "ax-sdk",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-native-compiler",
+ "axvm-recursion",
  "p3-baby-bear",
  "serde",
  "serde_json",
- "stark-vm",
 ]
 
 [[package]]
@@ -616,6 +523,110 @@ dependencies = [
  "getrandom",
  "hex",
  "serde",
+]
+
+[[package]]
+name = "axvm-circuit"
+version = "0.1.0"
+dependencies = [
+ "ark-ff 0.4.2",
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-ecc-primitives",
+ "ax-poseidon2-air",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "backtrace",
+ "cfg-if",
+ "derive-new",
+ "enum-utils",
+ "enum_dispatch",
+ "hex-literal",
+ "inferno",
+ "itertools 0.13.0",
+ "lazy_static",
+ "metrics",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-challenger",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-goldilocks",
+ "p3-keccak",
+ "p3-keccak-air",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-merkle-tree",
+ "p3-symmetric",
+ "p3-util",
+ "parking_lot",
+ "rand 0.8.5",
+ "rand_xoshiro",
+ "serde",
+ "strum",
+ "strum_macros",
+ "test-case",
+ "test-log",
+ "tiny-keccak",
+ "toml",
+ "tracing",
+ "zkhash",
+]
+
+[[package]]
+name = "axvm-circuit-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "axvm-ecc"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-native-compiler",
+ "elliptic-curve",
+ "ff 0.13.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "k256",
+ "num-bigint-dig",
+ "num-traits",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-matrix",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha3",
+ "snark-verifier-sdk",
+ "test-log",
+ "tracing",
+ "zkhash",
 ]
 
 [[package]]
@@ -640,6 +651,54 @@ dependencies = [
 name = "axvm-instructions-derive"
 version = "0.1.0"
 dependencies = [
+ "axvm-instructions",
+ "proc-macro2",
+ "quote",
+ "strum",
+ "strum_macros",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "axvm-native-compiler"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-primitives",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-instructions",
+ "axvm-native-compiler",
+ "axvm-native-compiler-derive",
+ "backtrace",
+ "cfg-if",
+ "hex",
+ "itertools 0.13.0",
+ "metrics",
+ "num-bigint 0.4.6",
+ "num-bigint-dig",
+ "num-integer",
+ "num-traits",
+ "p3-baby-bear",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-dft",
+ "p3-field",
+ "p3-merkle-tree",
+ "p3-symmetric",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "snark-verifier-sdk",
+ "strum",
+ "strum_macros",
+ "tracing",
+ "zkhash",
+]
+
+[[package]]
+name = "axvm-native-compiler-derive"
+version = "0.1.0"
+dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -658,10 +717,52 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-recursion"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-ecc",
+ "axvm-native-compiler",
+ "axvm-native-compiler-derive",
+ "cfg-if",
+ "ff 0.13.0",
+ "itertools 0.13.0",
+ "lazy_static",
+ "metrics",
+ "num-bigint-dig",
+ "once_cell",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "snark-verifier-sdk",
+ "tracing",
+ "zkhash",
+]
+
+[[package]]
 name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-sdk",
+ "ax-stark-sdk",
+ "axvm-circuit",
  "axvm-instructions",
  "axvm-platform",
  "color-eyre",
@@ -669,7 +770,6 @@ dependencies = [
  "p3-baby-bear",
  "p3-field",
  "rrs-lib",
- "stark-vm",
  "strum",
  "test-case",
 ]
@@ -2814,31 +2914,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "poseidon2-air"
-version = "0.1.0"
-dependencies = [
- "afs-primitives",
- "afs-stark-backend",
- "ark-ff 0.4.2",
- "ax-sdk",
- "itertools 0.13.0",
- "lazy_static",
- "p3-air",
- "p3-baby-bear",
- "p3-challenger",
- "p3-field",
- "p3-matrix",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand 0.8.5",
- "rand_xoshiro",
- "test-case",
- "zkhash",
-]
-
-[[package]]
 name = "ppv-lite86"
 version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3637,60 +3712,6 @@ checksum = "d904e7009df136af5297832a3ace3370cd14ff1546a232f4f185036c2736fcac"
 dependencies = [
  "quote",
  "syn 2.0.85",
-]
-
-[[package]]
-name = "stark-vm"
-version = "0.1.0"
-dependencies = [
- "afs-derive",
- "afs-primitives",
- "afs-stark-backend",
- "ark-ff 0.4.2",
- "ax-ecc-primitives",
- "ax-sdk",
- "axvm-instructions",
- "backtrace",
- "cfg-if",
- "derive-new",
- "enum-utils",
- "enum_dispatch",
- "hex-literal",
- "inferno",
- "itertools 0.13.0",
- "lazy_static",
- "metrics",
- "num-bigint-dig",
- "num-traits",
- "once_cell",
- "p3-air",
- "p3-baby-bear",
- "p3-challenger",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
- "p3-keccak-air",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-merkle-tree",
- "p3-symmetric",
- "p3-util",
- "parking_lot",
- "poseidon2-air",
- "rand 0.8.5",
- "rand_xoshiro",
- "serde",
- "stark-vm",
- "strum",
- "strum_macros",
- "test-case",
- "test-log",
- "tiny-keccak",
- "toml",
- "tracing",
- "zkhash",
 ]
 
 [[package]]

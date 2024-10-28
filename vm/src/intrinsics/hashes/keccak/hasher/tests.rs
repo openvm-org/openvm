@@ -1,8 +1,8 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::xor::XorLookupChip;
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::{config::baby_bear_blake3::BabyBearBlake3Config, utils::create_seeded_rng};
+use ax_circuit_primitives::xor::XorLookupChip;
+use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use ax_stark_sdk::{config::baby_bear_blake3::BabyBearBlake3Config, utils::create_seeded_rng};
 use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -15,9 +15,9 @@ use crate::{
     arch::{
         instructions::Keccak256Opcode,
         testing::{VmChipTestBuilder, VmChipTester},
+        BYTE_XOR_BUS,
     },
     intrinsics::hashes::keccak::hasher::columns::KeccakVmCols,
-    system::vm::chip_set::BYTE_XOR_BUS,
 };
 
 // io is vector of (input, prank_output) where prank_output is Some if the trace

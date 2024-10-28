@@ -4,8 +4,8 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
 };
 
-use afs_stark_backend::interaction::InteractionType;
-use ax_sdk::{
+use ax_stark_backend::interaction::InteractionType;
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
@@ -15,8 +15,9 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use crate::system::{
-    memory::{
+use crate::{
+    arch::MEMORY_MERKLE_BUS,
+    system::memory::{
         merkle::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
             MemoryMerkleBus, MemoryMerkleChip,
@@ -24,7 +25,6 @@ use crate::system::{
         tree::MemoryNode,
         Equipartition,
     },
-    vm::chip_set::MEMORY_MERKLE_BUS,
 };
 
 mod util;
