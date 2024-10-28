@@ -71,19 +71,7 @@
 
 extern crate alloc;
 
-// mod read;
-// mod write;
-
-use alloc::alloc::{alloc, Layout};
-
 use axvm_platform;
-use bytemuck::Pod;
-use serde::{de::DeserializeOwned, Serialize};
-
-// pub use self::{
-//     read::{FdReader, Read},
-//     write::{FdWriter, Write},
-// };
 
 /// A random 16 byte value initialized to random data, provided by the host, on
 /// guest start and upon resuming from a pause. Setting this value ensures that
@@ -101,74 +89,10 @@ pub(crate) fn init() {
     // }
 }
 
-/// Finalize execution
-pub(crate) fn finalize() {}
-
 /// Terminate execution of the zkVM.
 ///
 /// Use an exit code of 0 to indicate success, and non-zero to indicate an error.
-pub fn exit<const exit_code: u8>() -> ! {
-    axvm_platform::rust_rt::terminate::<exit_code>();
+pub fn exit<const EXIT_CODE: u8>() -> ! {
+    axvm_platform::rust_rt::terminate::<EXIT_CODE>();
     unreachable!();
 }
-
-/*
-/// Serialize the given data and commit it to the journal.
-///
-/// Data in the journal is included in the receipt and is available to the
-/// verifier. It is considered "public" data.
-///
-/// # Example
-///
-/// ```no_run
-/// use risc0_zkvm::guest::env;
-/// use std::collections::BTreeMap;
-///
-/// let data: BTreeMap<u64, bool> = BTreeMap::from([
-///   (1, true),
-///   (2, false),
-/// ]);
-///
-/// env::commit(&data);
-/// ```
-///
-/// More examples can be found in RISC Zero's [example page].
-///
-/// Additional explanation on I/O in the zkVM can be found in RISC Zero's [I/O documentation].
-///
-/// [example page]: https://dev.risczero.com/api/zkvm/examples
-/// [I/O documentation]: https://dev.risczero.com/api/zkvm/tutorials/io
-pub fn commit<T: Serialize>(data: &T) {
-    journal().write(data)
-}
-
-/// Commit the given slice to the journal.
-///
-/// Data in the journal is included in the receipt and is available to the
-/// verifier. It is considered "public" data.
-///
-/// This function reads a slice of [plain old data][bytemuck::Pod], not
-/// incurring in deserialization overhead. Recommended for performance
-/// optimizations. For more context on this, see RISC Zero's [instructions on
-/// guest optimization].
-///
-/// # Example
-///
-/// ```no_run
-/// use risc0_zkvm::guest::env;
-///
-/// let slice = [1u8, 2, 3, 4];
-/// env::commit_slice(&slice);
-/// ```
-///
-/// More examples can be found in RISC Zero's [example page].
-///
-/// Additional explanation on I/O in the zkVM can be found in RISC Zero's [I/O documentation].
-///
-/// [example page]: https://dev.risczero.com/api/zkvm/examples
-/// [I/O documentation]: https://dev.risczero.com/api/zkvm/tutorials/io
-/// [instructions on guest optimization]: https://dev.risczero.com/api/zkvm/optimization#when-reading-data-as-raw-bytes-use-envread_slice
-pub fn commit_slice<T: Pod>(slice: &[T]) {
-    journal().write_slice(slice);
-}
-*/

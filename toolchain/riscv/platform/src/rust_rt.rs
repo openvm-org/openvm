@@ -20,16 +20,15 @@
 //! * It includes a panic handler.
 //! * It includes an allocator.
 
+#[cfg(target_os = "zkvm")]
 use core::{arch::asm, panic::PanicInfo};
-
-use crate::syscall::sys_panic;
 
 extern crate alloc;
 
-pub fn terminate<const ec: u8>() {
+pub fn terminate<const EXIT_CODE: u8>() {
     #[cfg(target_os = "zkvm")]
     unsafe {
-        asm!(".insn i 0x0b, 0, x0, x0, {ec}", ec = const ec)
+        asm!(".insn i 0x0b, 0, x0, x0, {ec}", ec = const EXIT_CODE)
     };
     #[cfg(not(target_os = "zkvm"))]
     {
