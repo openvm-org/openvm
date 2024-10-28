@@ -159,7 +159,7 @@ fn run_negative_loadstore_test(
     read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     prev_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     write_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    opcodes: Option<[u32; 4]>,
+    flags: Option<[u32; 4]>,
     is_load: Option<bool>,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
@@ -195,8 +195,8 @@ fn run_negative_loadstore_test(
         if let Some(write_data) = write_data {
             core_cols.write_data = write_data.map(F::from_canonical_u32);
         }
-        if let Some(opcodes) = opcodes {
-            core_cols.flags = opcodes.map(F::from_canonical_u32);
+        if let Some(flags) = flags {
+            core_cols.flags = flags.map(F::from_canonical_u32);
         }
         if let Some(is_load) = is_load {
             core_cols.is_load = F::from_bool(is_load);

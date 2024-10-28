@@ -18,6 +18,26 @@ use crate::{
     rv32im::adapters::LoadStoreInstruction,
 };
 
+#[derive(Debug, Clone, Copy)]
+enum InstructionOpcode {
+    LoadW0,
+    LoadHu0,
+    LoadHu2,
+    LoadBu0,
+    LoadBu1,
+    LoadBu2,
+    LoadBu3,
+    StoreW0,
+    StoreH0,
+    StoreH2,
+    StoreB0,
+    StoreB1,
+    StoreB2,
+    StoreB3,
+}
+
+use InstructionOpcode::*;
+
 /// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
 /// This chip uses read_data and prev_data to constrain the write_data
 /// It also handles the shifting in case of not 4 byte aligned instructions
@@ -95,43 +115,32 @@ where
         // when sum is 0, is_valid must be 0
         builder.when(get_expr_12(&sum)).assert_zero(is_valid);
 
-        // We will use the following mapping for interpreting the opcodes
+        // TODO: generalize this into an opcode encoder
+        // We will use the InstructionOpcode enum to encode the opcodes
         // the appended digit to each opcode is the shift amount
-        /*
-           0: loadw0
-           1: loadhu0
-           2: loadhu2
-           3: loadbu0
-           4: loadbu1
-           5: loadbu2
-           6: loadbu3
-           7: storew0
-           8: storeh0
-           9: storeh2
-           10: storeb0
-           11: storeb1
-           12: storeb2
-           13: storeb3
-        */
         let inv_2 = AB::F::from_canonical_u32(2).inverse();
-        let mut opcodes = vec![];
+        let mut opcode_flags = vec![];
         for flag in flags {
-            opcodes.push(flag * (flag - AB::F::one()) * inv_2);
+            opcode_flags.push(flag * (flag - AB::F::one()) * inv_2);
         }
         for flag in flags {
-            opcodes.push(flag * (sum.clone() - AB::F::two()) * AB::F::neg_one());
+            opcode_flags.push(flag * (sum.clone() - AB::F::two()) * AB::F::neg_one());
         }
         (0..4).for_each(|i| {
-            ((i + 1)..4).for_each(|j| opcodes.push(flags[i] * flags[j]));
+            ((i + 1)..4).for_each(|j| opcode_flags.push(flags[i] * flags[j]));
         });
 
-        let opcode_when = |idxs: &[usize]| -> AB::Expr {
-            idxs.iter()
-                .fold(AB::Expr::zero(), |acc, &idx| acc + opcodes[idx].clone())
+        let opcode_when = |idxs: &[InstructionOpcode]| -> AB::Expr {
+            idxs.iter().fold(AB::Expr::zero(), |acc, &idx| {
+                acc + opcode_flags[idx as usize].clone()
+            })
         };
 
         // constrain that is_load matches the opcode
-        builder.assert_eq(is_load, opcode_when(&[0, 1, 2, 3, 4, 5, 6]));
+        builder.assert_eq(
+            is_load,
+            opcode_when(&[LoadW0, LoadHu0, LoadHu2, LoadBu0, LoadBu1, LoadBu2, LoadBu3]),
+        );
 
         // there are three parts to write_data:
         // 1st limb is always read_data
@@ -146,44 +155,44 @@ where
         for (i, cell) in write_data.iter().enumerate() {
             // handling loads, expected_load_val = 0 if a store operation is happening
             let expected_load_val = if i == 0 {
-                opcode_when(&[0, 1, 3]) * read_data[0]
-                    + opcode_when(&[4]) * read_data[1]
-                    + opcode_when(&[2, 5]) * read_data[2]
-                    + opcode_when(&[6]) * read_data[3]
+                opcode_when(&[LoadW0, LoadHu0, LoadBu0]) * read_data[0]
+                    + opcode_when(&[LoadBu1]) * read_data[1]
+                    + opcode_when(&[LoadHu2, LoadBu2]) * read_data[2]
+                    + opcode_when(&[LoadBu3]) * read_data[3]
             } else if i < NUM_CELLS / 2 {
-                opcode_when(&[0, 1]) * read_data[i] + opcode_when(&[2]) * read_data[i + 2]
-                // + opcode_when(&[3, 4, 5, 6]) * AB::Expr::zero()
+                opcode_when(&[LoadW0, LoadHu0]) * read_data[i]
+                    + opcode_when(&[LoadHu2]) * read_data[i + 2]
             } else {
-                opcode_when(&[0]) * read_data[i] // + opcode_when(&[1, 2, 3, 4, 5, 6]) * AB::Expr::zero()
+                opcode_when(&[LoadW0]) * read_data[i]
             };
 
             // handling stores, expected_store_val = 0 if a load operation is happening
             let expected_store_val = if i == 0 {
-                opcode_when(&[7, 8, 10]) * read_data[i]
-                    + opcode_when(&[9, 11, 12, 13]) * prev_data[i]
+                opcode_when(&[StoreW0, StoreH0, StoreB0]) * read_data[i]
+                    + opcode_when(&[StoreH2, StoreB1, StoreB2, StoreB3]) * prev_data[i]
             } else if i == 1 {
-                opcode_when(&[11]) * read_data[i - 1]
-                    + opcode_when(&[7, 8]) * read_data[i]
-                    + opcode_when(&[9, 10, 12, 13]) * prev_data[i]
+                opcode_when(&[StoreB1]) * read_data[i - 1]
+                    + opcode_when(&[StoreW0, StoreH0]) * read_data[i]
+                    + opcode_when(&[StoreH2, StoreB0, StoreB2, StoreB3]) * prev_data[i]
             } else if i == 2 {
-                opcode_when(&[9, 12]) * read_data[i - 2]
-                    + opcode_when(&[7]) * read_data[i]
-                    + opcode_when(&[8, 10, 11, 13]) * prev_data[i]
+                opcode_when(&[StoreH2, StoreB2]) * read_data[i - 2]
+                    + opcode_when(&[StoreW0]) * read_data[i]
+                    + opcode_when(&[StoreH0, StoreB0, StoreB1, StoreB3]) * prev_data[i]
             } else if i == 3 {
-                opcode_when(&[13]) * read_data[i - 3]
-                    + opcode_when(&[9]) * read_data[i - 2]
-                    + opcode_when(&[7]) * read_data[i]
-                    + opcode_when(&[8, 10, 11, 12]) * prev_data[i]
+                opcode_when(&[StoreB3]) * read_data[i - 3]
+                    + opcode_when(&[StoreH2]) * read_data[i - 2]
+                    + opcode_when(&[StoreW0]) * read_data[i]
+                    + opcode_when(&[StoreH0, StoreB0, StoreB1, StoreB2]) * prev_data[i]
             } else {
-                opcode_when(&[7]) * read_data[i]
-                    + opcode_when(&[10, 11, 12, 13]) * prev_data[i]
-                    + opcode_when(&[8])
+                opcode_when(&[StoreW0]) * read_data[i]
+                    + opcode_when(&[StoreB0, StoreB1, StoreB2, StoreB3]) * prev_data[i]
+                    + opcode_when(&[StoreH0])
                         * if i < NUM_CELLS / 2 {
                             read_data[i]
                         } else {
                             prev_data[i]
                         }
-                    + opcode_when(&[9])
+                    + opcode_when(&[StoreH2])
                         * if i + 2 < NUM_CELLS / 2 {
                             read_data[i - 2]
                         } else {
@@ -194,21 +203,23 @@ where
             builder.assert_eq(*cell, expected_val);
         }
 
-        let expected_opcode = opcode_when(&[0]) * AB::Expr::from_canonical_u8(LOADW as u8)
-            + opcode_when(&[1, 2]) * AB::Expr::from_canonical_u8(LOADHU as u8)
-            + opcode_when(&[3, 4, 5, 6]) * AB::Expr::from_canonical_u8(LOADBU as u8)
-            + opcode_when(&[7]) * AB::Expr::from_canonical_u8(STOREW as u8)
-            + opcode_when(&[8, 9]) * AB::Expr::from_canonical_u8(STOREH as u8)
-            + opcode_when(&[10, 11, 12, 13]) * AB::Expr::from_canonical_u8(STOREB as u8)
+        let expected_opcode = opcode_when(&[LoadW0]) * AB::Expr::from_canonical_u8(LOADW as u8)
+            + opcode_when(&[LoadHu0, LoadHu2]) * AB::Expr::from_canonical_u8(LOADHU as u8)
+            + opcode_when(&[LoadBu0, LoadBu1, LoadBu2, LoadBu3])
+                * AB::Expr::from_canonical_u8(LOADBU as u8)
+            + opcode_when(&[StoreW0]) * AB::Expr::from_canonical_u8(STOREW as u8)
+            + opcode_when(&[StoreH0, StoreH2]) * AB::Expr::from_canonical_u8(STOREH as u8)
+            + opcode_when(&[StoreB0, StoreB1, StoreB2, StoreB3])
+                * AB::Expr::from_canonical_u8(STOREB as u8)
             + AB::Expr::from_canonical_usize(self.offset);
 
-        let load_shift_amount = opcode_when(&[4]) * AB::Expr::one()
-            + opcode_when(&[2, 5]) * AB::Expr::two()
-            + opcode_when(&[6]) * AB::Expr::from_canonical_u32(3);
+        let load_shift_amount = opcode_when(&[LoadBu1]) * AB::Expr::one()
+            + opcode_when(&[LoadHu2, LoadBu2]) * AB::Expr::two()
+            + opcode_when(&[LoadBu3]) * AB::Expr::from_canonical_u32(3);
 
-        let store_shift_amount = opcode_when(&[11]) * AB::Expr::one()
-            + opcode_when(&[9, 12]) * AB::Expr::two()
-            + opcode_when(&[13]) * AB::Expr::from_canonical_u32(3);
+        let store_shift_amount = opcode_when(&[StoreB1]) * AB::Expr::one()
+            + opcode_when(&[StoreH2, StoreB2]) * AB::Expr::two()
+            + opcode_when(&[StoreB3]) * AB::Expr::from_canonical_u32(3);
 
         AdapterAirContext {
             to_pc: None,
