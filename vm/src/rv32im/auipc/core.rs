@@ -100,13 +100,13 @@ where
         }
 
         // Range checking to 8 bits
-        for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
+        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
             self.bus
                 .send_range(rd_data[i * 2], rd_data[i * 2 + 1])
                 .eval(builder, is_valid);
         }
         let limbs = [imm_limbs, pc_limbs].concat();
-        for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
+        for i in 0..(RV32_REGISTER_NUM_LIMBS - 2) {
             self.bus
                 .send_range(limbs[i * 2], limbs[i * 2 + 1])
                 .eval(builder, is_valid);
@@ -179,10 +179,13 @@ where
         let imm_limbs = array::from_fn(|i| (imm >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
         let pc_limbs = array::from_fn(|i| (from_pc >> ((i + 1) * RV32_CELL_BITS)) & RV32_LIMB_MAX);
 
-        let limbs: Vec<u32> = [imm_limbs, pc_limbs].concat();
         for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
             self.bitwise_lookup_chip
                 .request_range(rd_data[i * 2], rd_data[i * 2 + 1]);
+        }
+
+        let limbs: Vec<u32> = [imm_limbs, pc_limbs].concat();
+        for i in 0..(RV32_REGISTER_NUM_LIMBS - 2) {
             self.bitwise_lookup_chip
                 .request_range(limbs[i * 2], limbs[i * 2 + 1]);
         }
