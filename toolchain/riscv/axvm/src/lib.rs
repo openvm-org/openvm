@@ -168,7 +168,6 @@ unsafe extern "C" fn __start() -> ! {
     }
 
     env::exit::<0>();
-    unreachable!();
 }
 
 #[cfg(target_os = "zkvm")]

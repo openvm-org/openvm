@@ -73,22 +73,6 @@ extern crate alloc;
 
 use axvm_platform;
 
-/// A random 16 byte value initialized to random data, provided by the host, on
-/// guest start and upon resuming from a pause. Setting this value ensures that
-/// the total memory image has at least 128 bits of entropy, preventing
-/// information leakage through the post-state digest.
-static mut MEMORY_IMAGE_ENTROPY: [u32; 4] = [0u32; 4];
-
-/// Initialize globals before program main
-pub(crate) fn init() {
-    // unsafe {
-    //     syscall::sys_rand(
-    //         MEMORY_IMAGE_ENTROPY.as_mut_ptr(),
-    //         MEMORY_IMAGE_ENTROPY.len(),
-    //     )
-    // }
-}
-
 /// Terminate execution of the zkVM.
 ///
 /// Use an exit code of 0 to indicate success, and non-zero to indicate an error.

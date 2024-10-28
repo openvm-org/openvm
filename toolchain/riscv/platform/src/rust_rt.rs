@@ -21,7 +21,7 @@
 //! * It includes an allocator.
 
 #[cfg(target_os = "zkvm")]
-use core::{arch::asm, panic::PanicInfo};
+use core::arch::asm;
 
 extern crate alloc;
 
@@ -39,8 +39,6 @@ pub fn terminate<const EXIT_CODE: u8>() {
 
 #[cfg(feature = "entrypoint")]
 mod entrypoint {
-    use crate::syscall::sys_halt;
-
     #[no_mangle]
     unsafe extern "C" fn __start() -> ! {
         // This definition of __start differs from risc0_zkvm::guest in that it does not initialize the

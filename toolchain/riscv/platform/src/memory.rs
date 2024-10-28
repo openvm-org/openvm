@@ -68,3 +68,53 @@ const fn mb(mb: usize) -> usize {
 pub fn is_guest_memory(addr: u32) -> bool {
     GUEST_MIN_MEM <= (addr as usize) && (addr as usize) < GUEST_MAX_MEM
 }
+
+/// # Safety
+///
+/// This function should be safe to call, but clippy complains if it is not marked as `unsafe`.
+#[cfg(feature = "export-syscalls")]
+#[no_mangle]
+pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u8 {
+    #[cfg(target_os = "zkvm")]
+    extern "C" {
+        // This symbol is defined by the loader and marks the end
+        // of all elf sections, so this is where we start our
+        // heap.
+        //
+        // This is generated automatically by the linker; see
+        // https://lld.llvm.org/ELF/linker_script.html#sections-command
+        static _end: u8;
+    }
+
+    // Pointer to next heap address to use, or 0 if the heap has not yet been
+    // initialized.
+    static mut HEAP_POS: usize = 0;
+
+    // SAFETY: Single threaded, so nothing else can touch this while we're working.
+    let mut heap_pos = unsafe { HEAP_POS };
+
+    #[cfg(target_os = "zkvm")]
+    if heap_pos == 0 {
+        heap_pos = unsafe { (&_end) as *const u8 as usize };
+    }
+
+    // Honor requested alignment if larger than word size.
+    // Note: align is typically a power of two.
+    let align = usize::max(align, WORD_SIZE);
+
+    let offset = heap_pos & (align - 1);
+    if offset != 0 {
+        heap_pos += align - offset;
+    }
+
+    let ptr = heap_pos as *mut u8;
+    heap_pos += bytes;
+
+    // Check to make sure heap doesn't collide with SYSTEM memory.
+    if crate::memory::SYSTEM.start() < heap_pos {
+        super::rust_rt::terminate::<1>();
+    }
+
+    unsafe { HEAP_POS = heap_pos };
+    ptr
+}
