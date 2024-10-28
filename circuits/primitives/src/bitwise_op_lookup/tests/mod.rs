@@ -7,7 +7,7 @@ use ax_stark_sdk::{
 };
 use dummy::DummyAir;
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use rand::Rng;
@@ -18,8 +18,6 @@ mod dummy;
 
 const NUM_BITS: usize = 4;
 const LIST_LEN: usize = 1 << 8;
-
-type F = BabyBear;
 
 #[derive(Clone, Copy)]
 enum BitwiseOperation {
@@ -43,7 +41,7 @@ fn generate_rng_values(
                     let x = rng.gen_range(0..(1 << NUM_BITS));
                     let y = rng.gen_range(0..(1 << NUM_BITS));
                     let z = match op {
-                        BitwiseOperation::Range => F::neg_one().as_canonical_u32(),
+                        BitwiseOperation::Range => 0,
                         BitwiseOperation::Xor => x ^ y,
                     };
                     (x, y, z, op)
@@ -140,21 +138,19 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
 
 #[test]
 fn negative_test_bitwise_operation_lookup_range_wrong_z() {
-    run_negative_test((2, 1, 0, BitwiseOperation::Range));
+    run_negative_test((2, 1, 1, BitwiseOperation::Range));
 }
 
 #[test]
 #[should_panic]
 fn negative_test_bitwise_operation_lookup_range_x_out_of_range() {
-    let neg_one = F::neg_one().as_canonical_u32();
-    run_negative_test((16, 1, neg_one, BitwiseOperation::Range));
+    run_negative_test((16, 1, 0, BitwiseOperation::Range));
 }
 
 #[test]
 #[should_panic]
 fn negative_test_bitwise_operation_lookup_range_y_out_of_range() {
-    let neg_one = F::neg_one().as_canonical_u32();
-    run_negative_test((1, 16, neg_one, BitwiseOperation::Range));
+    run_negative_test((1, 16, 0, BitwiseOperation::Range));
 }
 
 #[test]
