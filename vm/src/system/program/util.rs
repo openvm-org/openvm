@@ -29,9 +29,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
         .add_executor(ExecutorName::FieldExtension)
         .add_executor(ExecutorName::Poseidon2)
         .add_executor(ExecutorName::ArithmeticLogicUnit256)
-        .add_canonical_modulus()
-        .add_executor(ExecutorName::Secp256k1AddUnequal)
-        .add_executor(ExecutorName::Secp256k1Double),
+        .add_canonical_modulus(),
     );
     vm.execute(program, input_stream).unwrap();
 }

@@ -1216,15 +1216,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CastfOpcode::COUNT,
             CastfOpcode::default_offset(),
         ),
-        // TODO: these should be configurable and remove from default executors
-        ExecutorName::Secp256k1AddUnequal => {
-            (EccOpcode::default_offset(), 1, EccOpcode::default_offset())
-        }
-        ExecutorName::Secp256k1Double => (
-            EccOpcode::default_offset() + 1,
-            1,
-            EccOpcode::default_offset(),
-        ),
         _ => panic!("Not a default executor"),
     };
     (start..(start + len), offset)

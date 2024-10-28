@@ -22,7 +22,6 @@ use crate::{
     kernels::{
         branch_eq::KernelBranchEqChip,
         castf::CastFChip,
-        ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
         jal::KernelJalChip,
@@ -113,8 +112,6 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
     ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
-    Secp256k1AddUnequal(Rc<RefCell<KernelEcAddNeChip<F, 32>>>),
-    Secp256k1Double(Rc<RefCell<KernelEcDoubleChip<F, 32>>>),
 }
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
@@ -162,6 +159,4 @@ pub enum AxVmChip<F: PrimeField32> {
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
     ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
-    Secp256k1AddUnequal(Rc<RefCell<KernelEcAddNeChip<F, 32>>>),
-    Secp256k1Double(Rc<RefCell<KernelEcDoubleChip<F, 32>>>),
 }
