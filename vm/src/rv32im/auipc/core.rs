@@ -5,7 +5,9 @@ use std::{
 };
 
 use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::xor::{XorBus, XorLookupChip};
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
@@ -32,17 +34,11 @@ pub struct Rv32AuipcCoreCols<T> {
     pub imm_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
     pub pc_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
-
-    // Used to constrain rd_data to 8-bits with XorBus
-    pub rd_byte_check: [T; RV32_REGISTER_NUM_LIMBS / 2],
-
-    // Used to constrain pc_limbs and imm_limbs to 8-bits with XorBus
-    pub pc_imm_byte_check: [T; RV32_REGISTER_NUM_LIMBS - 2],
 }
 
 #[derive(Debug, Clone)]
 pub struct Rv32AuipcCoreAir {
-    pub bus: XorBus,
+    pub bus: BitwiseOperationLookupBus,
     pub offset: usize,
 }
 
@@ -75,8 +71,6 @@ where
             imm_limbs,
             pc_limbs,
             rd_data,
-            rd_byte_check,
-            pc_imm_byte_check,
         } = *cols;
         builder.assert_bool(is_valid);
         let intermed_val = pc_limbs
@@ -108,13 +102,13 @@ where
         // Range checking to 8 bits
         for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
             self.bus
-                .send(rd_data[i * 2], rd_data[i * 2 + 1], rd_byte_check[i])
+                .send_range(rd_data[i * 2], rd_data[i * 2 + 1])
                 .eval(builder, is_valid);
         }
         let limbs = [imm_limbs, pc_limbs].concat();
-        for i in 0..RV32_REGISTER_NUM_LIMBS - 2 {
+        for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
             self.bus
-                .send(limbs[i * 2], limbs[i * 2 + 1], pc_imm_byte_check[i])
+                .send_range(limbs[i * 2], limbs[i * 2 + 1])
                 .eval(builder, is_valid);
         }
 
@@ -138,24 +132,25 @@ pub struct Rv32AuipcCoreRecord<F> {
     pub imm_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],
     pub pc_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],
     pub rd_data: [F; RV32_REGISTER_NUM_LIMBS],
-    pub rd_byte_check: [F; RV32_REGISTER_NUM_LIMBS / 2],
-    pub pc_imm_byte_check: [F; RV32_REGISTER_NUM_LIMBS - 2],
 }
 
 #[derive(Debug, Clone)]
 pub struct Rv32AuipcCoreChip {
     pub air: Rv32AuipcCoreAir,
-    pub xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
 }
 
 impl Rv32AuipcCoreChip {
-    pub fn new(xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>, offset: usize) -> Self {
+    pub fn new(
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        offset: usize,
+    ) -> Self {
         Self {
             air: Rv32AuipcCoreAir {
-                bus: xor_lookup_chip.bus(),
+                bus: bitwise_lookup_chip.bus(),
                 offset,
             },
-            xor_lookup_chip,
+            bitwise_lookup_chip,
         }
     }
 }
@@ -184,14 +179,13 @@ where
         let imm_limbs = array::from_fn(|i| (imm >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
         let pc_limbs = array::from_fn(|i| (from_pc >> ((i + 1) * RV32_CELL_BITS)) & RV32_LIMB_MAX);
 
-        let rd_byte_check = array::from_fn(|i| {
-            self.xor_lookup_chip
-                .request(rd_data[i * 2], rd_data[i * 2 + 1])
-        });
-
         let limbs: Vec<u32> = [imm_limbs, pc_limbs].concat();
-        let pc_imm_byte_check =
-            array::from_fn(|i| self.xor_lookup_chip.request(limbs[i * 2], limbs[i * 2 + 1]));
+        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+            self.bitwise_lookup_chip
+                .request_range(rd_data[i * 2], rd_data[i * 2 + 1]);
+            self.bitwise_lookup_chip
+                .request_range(limbs[i * 2], limbs[i * 2 + 1]);
+        }
 
         Ok((
             output,
@@ -199,8 +193,6 @@ where
                 imm_limbs: imm_limbs.map(F::from_canonical_u32),
                 pc_limbs: pc_limbs.map(F::from_canonical_u32),
                 rd_data: rd_data.map(F::from_canonical_u32),
-                rd_byte_check: rd_byte_check.map(F::from_canonical_u32),
-                pc_imm_byte_check: pc_imm_byte_check.map(F::from_canonical_u32),
             },
         ))
     }
@@ -217,8 +209,6 @@ where
         core_cols.imm_limbs = record.imm_limbs;
         core_cols.pc_limbs = record.pc_limbs;
         core_cols.rd_data = record.rd_data;
-        core_cols.rd_byte_check = record.rd_byte_check;
-        core_cols.pc_imm_byte_check = record.pc_imm_byte_check;
         core_cols.is_valid = F::one();
     }
 

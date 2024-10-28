@@ -1,6 +1,6 @@
 use std::{array, borrow::Borrow};
 
-use ax_circuit_primitives::{utils, xor::XorBus};
+use ax_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils};
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -20,7 +20,7 @@ use crate::{
 pub struct ArithmeticLogicCoreAir<const ARG_SIZE: usize, const LIMB_BITS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
-    pub bus: XorBus,
+    pub bus: BitwiseOperationLookupBus,
 
     pub(super) offset: usize,
 }

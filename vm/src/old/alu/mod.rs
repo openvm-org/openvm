@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use air::ArithmeticLogicCoreAir;
-use ax_circuit_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_field::PrimeField32;
 
@@ -64,7 +64,7 @@ pub struct ArithmeticLogicChip<T: PrimeField32, const NUM_LIMBS: usize, const LI
     pub air: ArithmeticLogicCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<ArithmeticLogicRecord<T, NUM_LIMBS, LIMB_BITS>>,
     memory_controller: MemoryControllerRef<T>,
-    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
 
     offset: usize,
 }
@@ -76,7 +76,7 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<T>,
-        xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
         offset: usize,
     ) -> Self {
         let memory_bridge = memory_controller.borrow().memory_bridge();
@@ -84,12 +84,12 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             air: ArithmeticLogicCoreAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
-                bus: xor_lookup_chip.bus(),
+                bus: bitwise_lookup_chip.bus(),
                 offset,
             },
             data: vec![],
             memory_controller,
-            xor_lookup_chip,
+            bitwise_lookup_chip,
             offset,
         }
     }
@@ -153,19 +153,19 @@ impl<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> Instructio
         if local_opcode_index == U256Opcode::SLT {
             x_sign = x[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
             y_sign = y[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
-            self.xor_lookup_chip
-                .request(x[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
-            self.xor_lookup_chip
-                .request(y[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
+            self.bitwise_lookup_chip
+                .request_xor(x[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
+            self.bitwise_lookup_chip
+                .request_xor(y[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
         }
 
         if ALU_BITWISE_INSTRUCTIONS.contains(&local_opcode_index) {
             for i in 0..NUM_LIMBS {
-                self.xor_lookup_chip.request(x[i], y[i]);
+                self.bitwise_lookup_chip.request_xor(x[i], y[i]);
             }
         } else if local_opcode_index != U256Opcode::EQ {
             for z_val in &z {
-                self.xor_lookup_chip.request(*z_val, *z_val);
+                self.bitwise_lookup_chip.request_xor(*z_val, *z_val);
             }
         }
 

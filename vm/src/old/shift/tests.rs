@@ -1,6 +1,8 @@
 use std::{array, borrow::BorrowMut, iter, sync::Arc};
 
-use ax_circuit_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
 use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::instruction::Instruction;
@@ -15,7 +17,7 @@ use crate::{
     arch::{
         instructions::U256Opcode,
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        BYTE_XOR_BUS,
+        BITWISE_OP_LOOKUP_BUS,
     },
     old::shift::columns::ShiftCols,
 };
@@ -105,13 +107,14 @@ fn run_shift_negative_test(
     bit_shift_carry: Vec<u32>,
     expected_error: VerificationError,
 ) {
-    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = VmChipTestBuilder::default();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         0,
     );
 
@@ -156,7 +159,7 @@ fn run_shift_negative_test(
     disable_debug_builder();
     let mut tester = tester.build();
     tester.air_proof_inputs.push(air_proof_input);
-    let tester = tester.load(xor_lookup_chip).finalize();
+    let tester = tester.load(bitwise_chip).finalize();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
         &expected_error
@@ -170,13 +173,14 @@ fn shift_sll_rand_test() {
     let num_ops: usize = 10;
     let mut rng = create_seeded_rng();
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = VmChipTestBuilder::default();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         0,
     );
 
@@ -186,7 +190,7 @@ fn shift_sll_rand_test() {
         run_shift_rand_write_execute(&mut tester, &mut chip, U256Opcode::SLL, x, y, &mut rng);
     }
 
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -349,13 +353,14 @@ fn shift_srl_rand_test() {
     let num_ops: usize = 10;
     let mut rng = create_seeded_rng();
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = VmChipTestBuilder::default();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         0,
     );
 
@@ -365,7 +370,7 @@ fn shift_srl_rand_test() {
         run_shift_rand_write_execute(&mut tester, &mut chip, U256Opcode::SRL, x, y, &mut rng);
     }
 
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -474,13 +479,14 @@ fn shift_sra_rand_test() {
     let num_ops: usize = 10;
     let mut rng = create_seeded_rng();
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = VmChipTestBuilder::default();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         0,
     );
 
@@ -490,7 +496,7 @@ fn shift_sra_rand_test() {
         run_shift_rand_write_execute(&mut tester, &mut chip, U256Opcode::SRA, x, y, &mut rng);
     }
 
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -569,13 +575,14 @@ fn shift_sra_wrong_sign_negative_test() {
 #[test]
 fn shift_overflow_test() {
     let mut rng = create_seeded_rng();
-    let xor_lookup_chip = Arc::new(XorLookupChip::<LIMB_BITS>::new(BYTE_XOR_BUS));
-    let mut tester = VmChipTestBuilder::default();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = ShiftChip::<F, NUM_LIMBS, LIMB_BITS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
-        xor_lookup_chip.clone(),
+        bitwise_chip.clone(),
         0,
     );
 
@@ -608,7 +615,7 @@ fn shift_overflow_test() {
         &mut rng,
     );
 
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 

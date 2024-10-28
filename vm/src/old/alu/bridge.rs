@@ -113,7 +113,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCoreAir<NUM_
         let x_sign_shifted = aux.x_sign * mask;
         let y_sign_shifted = aux.y_sign * mask;
         self.bus
-            .send(
+            .send_xor(
                 io.x.data[NUM_LIMBS - 1],
                 mask,
                 io.x.data[NUM_LIMBS - 1] + mask
@@ -121,7 +121,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCoreAir<NUM_
             )
             .eval(builder, aux.opcode_slt_flag);
         self.bus
-            .send(
+            .send_xor(
                 io.y.data[NUM_LIMBS - 1],
                 mask,
                 io.y.data[NUM_LIMBS - 1] + mask
@@ -142,7 +142,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ArithmeticLogicCoreAir<NUM_
                         - io.x.data[i]
                         - io.y.data[i]);
             self.bus
-                .send(x, y, xor_res)
+                .send_xor(x, y, xor_res)
                 .eval(builder, range_check.clone() + bitwise.clone());
         }
     }

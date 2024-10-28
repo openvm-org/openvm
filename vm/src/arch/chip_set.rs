@@ -8,9 +8,9 @@ use std::{
 };
 
 use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    xor::XorLookupChip,
 };
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
@@ -85,6 +85,7 @@ pub const MEMORY_BUS: usize = 1;
 pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const READ_INSTRUCTION_BUS: usize = 8;
+pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
 pub const BYTE_XOR_BUS: usize = 10;
 //pub const BYTE_XOR_BUS: XorBus = XorBus(8);
 pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
@@ -208,7 +209,8 @@ impl VmConfig {
         let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
+        let bitwise_lookup_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+        let bitwise_lookup_chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_lookup_bus));
 
         let memory_controller = match self.memory_config.persistence_type {
             PersistenceType::Volatile => {
@@ -379,7 +381,7 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        byte_xor_chip.clone(),
+                        bitwise_lookup_chip.clone(),
                         offset,
                     )));
                     for opcode in range {
@@ -394,7 +396,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BaseAluCoreChip::new(byte_xor_chip.clone(), offset),
+                        BaseAluCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -409,7 +411,7 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        byte_xor_chip.clone(),
+                        bitwise_lookup_chip.clone(),
                         offset,
                     )));
                     for opcode in range {
@@ -424,7 +426,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        LessThanCoreChip::new(byte_xor_chip.clone(), offset),
+                        LessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -455,7 +457,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         MulHCoreChip::new(
-                            byte_xor_chip.clone(),
+                            bitwise_lookup_chip.clone(),
                             range_tuple_checker.clone(),
                             offset,
                         ),
@@ -487,7 +489,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         DivRemCoreChip::new(
-                            byte_xor_chip.clone(),
+                            bitwise_lookup_chip.clone(),
                             range_tuple_checker.clone(),
                             offset,
                         ),
@@ -505,7 +507,11 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        ShiftCoreChip::new(byte_xor_chip.clone(), range_checker.clone(), offset),
+                        ShiftCoreChip::new(
+                            bitwise_lookup_chip.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -518,7 +524,7 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        byte_xor_chip.clone(),
+                        bitwise_lookup_chip.clone(),
                         offset,
                     )));
                     for opcode in range {
@@ -568,7 +574,11 @@ impl VmConfig {
                             memory_controller.clone(),
                             range_checker.clone(),
                         ),
-                        Rv32HintStoreCoreChip::new(streams.clone(), byte_xor_chip.clone(), offset),
+                        Rv32HintStoreCoreChip::new(
+                            streams.clone(),
+                            bitwise_lookup_chip.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -598,7 +608,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchLessThanCoreChip::new(byte_xor_chip.clone(), offset),
+                        BranchLessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -613,7 +623,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        Rv32JalLuiCoreChip::new(byte_xor_chip.clone(), offset),
+                        Rv32JalLuiCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -628,7 +638,11 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        Rv32JalrCoreChip::new(byte_xor_chip.clone(), range_checker.clone(), offset),
+                        Rv32JalrCoreChip::new(
+                            bitwise_lookup_chip.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -643,7 +657,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        Rv32AuipcCoreChip::new(byte_xor_chip.clone(), offset),
+                        Rv32AuipcCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -867,8 +881,8 @@ impl VmConfig {
             }
         }
 
-        if Arc::strong_count(&byte_xor_chip) > 1 {
-            chips.push(AxVmChip::ByteXor(byte_xor_chip));
+        if Arc::strong_count(&bitwise_lookup_chip) > 1 {
+            chips.push(AxVmChip::BitwiseOperationLookup(bitwise_lookup_chip));
         }
         if Arc::strong_count(&range_tuple_checker) > 1 {
             chips.push(AxVmChip::RangeTupleChecker(range_tuple_checker));

@@ -12,14 +12,25 @@ impl BitwiseOperationLookupBus {
     }
 
     #[must_use]
-    pub fn send<T>(
+    pub fn send_range<T>(
+        &self,
+        x: impl Into<T>,
+        y: impl Into<T>,
+    ) -> BitwiseOperationLookupBusInteraction<T>
+    where
+        T: AbstractField,
+    {
+        self.push(x, y, T::neg_one(), InteractionType::Send)
+    }
+
+    #[must_use]
+    pub fn send_xor<T>(
         &self,
         x: impl Into<T>,
         y: impl Into<T>,
         z: impl Into<T>,
-        op: impl Into<T>,
     ) -> BitwiseOperationLookupBusInteraction<T> {
-        self.push(x, y, z, op, InteractionType::Send)
+        self.push(x, y, z, InteractionType::Send)
     }
 
     #[must_use]
@@ -28,9 +39,8 @@ impl BitwiseOperationLookupBus {
         x: impl Into<T>,
         y: impl Into<T>,
         z: impl Into<T>,
-        op: impl Into<T>,
     ) -> BitwiseOperationLookupBusInteraction<T> {
-        self.push(x, y, z, op, InteractionType::Receive)
+        self.push(x, y, z, InteractionType::Receive)
     }
 
     pub fn push<T>(
@@ -38,14 +48,12 @@ impl BitwiseOperationLookupBus {
         x: impl Into<T>,
         y: impl Into<T>,
         z: impl Into<T>,
-        op: impl Into<T>,
         interaction_type: InteractionType,
     ) -> BitwiseOperationLookupBusInteraction<T> {
         BitwiseOperationLookupBusInteraction {
             x: x.into(),
             y: y.into(),
             z: z.into(),
-            op: op.into(),
             bus_index: self.index,
             interaction_type,
         }
@@ -57,7 +65,6 @@ pub struct BitwiseOperationLookupBusInteraction<T> {
     pub x: T,
     pub y: T,
     pub z: T,
-    pub op: T,
     pub bus_index: usize,
     pub interaction_type: InteractionType,
 }
@@ -69,7 +76,7 @@ impl<T: AbstractField> BitwiseOperationLookupBusInteraction<T> {
     {
         builder.push_interaction(
             self.bus_index,
-            [self.x, self.y, self.z, self.op],
+            [self.x, self.y, self.z],
             count,
             self.interaction_type,
         );

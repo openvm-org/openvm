@@ -2,7 +2,8 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::{
-    range_tuple::RangeTupleCheckerChip, var_range::VariableRangeCheckerChip, xor::XorLookupChip,
+    bitwise_op_lookup::BitwiseOperationLookupChip, range_tuple::RangeTupleCheckerChip,
+    var_range::VariableRangeCheckerChip,
 };
 use axvm_instructions::instruction::Instruction;
 use enum_dispatch::enum_dispatch;
@@ -124,7 +125,7 @@ pub enum AxVmChip<F: PrimeField32> {
     RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
-    ByteXor(Arc<XorLookupChip<8>>),
+    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),

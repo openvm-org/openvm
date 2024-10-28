@@ -1,6 +1,8 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_stark_sdk::{config::baby_bear_blake3::BabyBearBlake3Config, utils::create_seeded_rng};
 use axvm_instructions::instruction::Instruction;
@@ -15,7 +17,7 @@ use crate::{
     arch::{
         instructions::Keccak256Opcode,
         testing::{VmChipTestBuilder, VmChipTester},
-        BYTE_XOR_BUS,
+        BITWISE_OP_LOOKUP_BUS,
     },
     intrinsics::hashes::keccak::hasher::columns::KeccakVmCols,
 };
@@ -25,13 +27,15 @@ use crate::{
 fn build_keccak256_test(
     io: Vec<(Vec<u8>, Option<[u8; 32]>)>,
 ) -> VmChipTester<BabyBearBlake3Config> {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<8>::new(bitwise_bus));
+
     let mut tester = VmChipTestBuilder::default();
-    let xor_chip = Arc::new(XorLookupChip::<8>::new(BYTE_XOR_BUS));
     let mut chip = KeccakVmChip::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
-        xor_chip.clone(),
+        bitwise_chip.clone(),
         0,
     );
 
@@ -73,7 +77,7 @@ fn build_keccak256_test(
         // shift dst to not deal with timestamps for pranking
         dst += 16;
     }
-    let mut tester = tester.build().load(chip).load(xor_chip).finalize();
+    let mut tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     let keccak_trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
     let mut row = 0;

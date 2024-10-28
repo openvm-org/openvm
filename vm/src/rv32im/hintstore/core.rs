@@ -5,7 +5,9 @@ use std::{
 };
 
 use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::xor::{XorBus, XorLookupChip};
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
@@ -31,18 +33,16 @@ use crate::{
 pub struct Rv32HintStoreCoreCols<T> {
     pub is_valid: T,
     pub data: [T; RV32_REGISTER_NUM_LIMBS],
-    pub xor_range_check: [T; RV32_REGISTER_NUM_LIMBS / 2],
 }
 
 #[derive(Debug, Clone)]
 pub struct Rv32HintStoreCoreRecord<F> {
     pub data: [F; RV32_REGISTER_NUM_LIMBS],
-    pub xor_range_check: [F; RV32_REGISTER_NUM_LIMBS / 2],
 }
 
 #[derive(Debug, Clone)]
 pub struct Rv32HintStoreCoreAir {
-    pub range_bus: XorBus,
+    pub bus: BitwiseOperationLookupBus,
     pub offset: usize,
 }
 
@@ -76,12 +76,8 @@ where
             + AB::Expr::from_canonical_usize(self.offset);
 
         for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
-            self.range_bus
-                .send(
-                    cols.data[i * 2],
-                    cols.data[i * 2 + 1],
-                    cols.xor_range_check[i],
-                )
+            self.bus
+                .send_range(cols.data[i * 2], cols.data[i * 2 + 1])
                 .eval(builder, cols.is_valid);
         }
 
@@ -102,22 +98,22 @@ where
 pub struct Rv32HintStoreCoreChip<F: Field> {
     pub air: Rv32HintStoreCoreAir,
     pub streams: Arc<Mutex<Streams<F>>>,
-    pub xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
 }
 
 impl<F: PrimeField32> Rv32HintStoreCoreChip<F> {
     pub fn new(
         streams: Arc<Mutex<Streams<F>>>,
-        xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
         offset: usize,
     ) -> Self {
         Self {
             air: Rv32HintStoreCoreAir {
-                range_bus: xor_lookup_chip.bus(),
+                bus: bitwise_lookup_chip.bus(),
                 offset,
             },
             streams,
-            xor_lookup_chip,
+            bitwise_lookup_chip,
         }
     }
 }
@@ -146,19 +142,13 @@ where
         let write_data = data;
 
         let output = AdapterRuntimeContext::without_pc([write_data]);
-        let xor_range_check = array::from_fn(|i| {
-            F::from_canonical_u32(self.xor_lookup_chip.request(
+        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+            self.bitwise_lookup_chip.request_range(
                 write_data[2 * i].as_canonical_u32(),
                 write_data[2 * i + 1].as_canonical_u32(),
-            ))
-        });
-        Ok((
-            output,
-            Rv32HintStoreCoreRecord {
-                data: write_data,
-                xor_range_check,
-            },
-        ))
+            );
+        }
+        Ok((output, Rv32HintStoreCoreRecord { data: write_data }))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -172,7 +162,6 @@ where
         let core_cols: &mut Rv32HintStoreCoreCols<F> = row_slice.borrow_mut();
         core_cols.is_valid = F::one();
         core_cols.data = record.data;
-        core_cols.xor_range_check = record.xor_range_check;
     }
 
     fn air(&self) -> &Self::Air {

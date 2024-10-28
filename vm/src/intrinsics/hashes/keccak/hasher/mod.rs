@@ -1,6 +1,6 @@
 use std::{array::from_fn, cmp::min, sync::Arc};
 
-use ax_circuit_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use p3_field::PrimeField32;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
@@ -63,7 +63,7 @@ pub struct KeccakVmChip<F: PrimeField32> {
     /// IO and memory data necessary for each opcode call
     pub records: Vec<KeccakRecord<F>>,
     pub memory_controller: MemoryControllerRef<F>,
-    pub byte_xor_chip: Arc<XorLookupChip<8>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
 
     offset: usize,
 }
@@ -95,7 +95,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
-        byte_xor_chip: Arc<XorLookupChip<8>>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
         offset: usize,
     ) -> Self {
         let memory_bridge = memory_controller.borrow().memory_bridge();
@@ -103,11 +103,11 @@ impl<F: PrimeField32> KeccakVmChip<F> {
             air: KeccakVmAir::new(
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
-                byte_xor_chip.bus(),
+                bitwise_lookup_chip.bus(),
                 offset,
             ),
             memory_controller,
-            byte_xor_chip,
+            bitwise_lookup_chip,
             records: Vec::new(),
             offset,
         }

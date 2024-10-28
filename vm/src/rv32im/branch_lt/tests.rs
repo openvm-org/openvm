@@ -1,6 +1,8 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
@@ -24,7 +26,7 @@ use crate::{
         instructions::{BranchLessThanOpcode, UsizeOpcode},
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
         BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
-        VmChipWrapper, VmCoreChip, BYTE_XOR_BUS,
+        VmChipWrapper, VmCoreChip, BITWISE_OP_LOOKUP_BUS,
     },
     rv32im::{
         adapters::{
@@ -85,7 +87,11 @@ fn run_rv32_branch_lt_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     const ABS_MAX_BRANCH: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32BranchLessThanChip::<F>::new(
         Rv32BranchAdapterChip::new(
@@ -93,7 +99,7 @@ fn run_rv32_branch_lt_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_controller(),
         ),
-        BranchLessThanCoreChip::new(xor_lookup_chip.clone(), 0),
+        BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -128,7 +134,7 @@ fn run_rv32_branch_lt_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         &mut rng,
     );
 
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -184,7 +190,11 @@ fn run_rv32_blt_negative_test(
     interaction_error: bool,
 ) {
     let imm = 16u32;
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = Rv32BranchLessThanTestChip::<F>::new(
         TestAdapterChip::new(
@@ -192,7 +202,7 @@ fn run_rv32_blt_negative_test(
             vec![if cmp_result { Some(imm) } else { None }],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        BranchLessThanCoreChip::new(xor_lookup_chip.clone(), 0),
+        BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -206,7 +216,7 @@ fn run_rv32_blt_negative_test(
     let ge_opcode = opcode == BranchLessThanOpcode::BGE || opcode == BranchLessThanOpcode::BGEU;
     let (_, _, a_sign, b_sign) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &a, &b);
 
-    let xor_res = if prank_vals != BranchLessThanPrankValues::default() {
+    if prank_vals != BranchLessThanPrankValues::default() {
         debug_assert!(prank_vals.diff_val.is_some());
         let a_msb = prank_vals.a_msb.unwrap_or(
             a[RV32_REGISTER_NUM_LIMBS - 1] as i32 - if a_sign { 1 << RV32_CELL_BITS } else { 0 },
@@ -214,25 +224,25 @@ fn run_rv32_blt_negative_test(
         let b_msb = prank_vals.b_msb.unwrap_or(
             b[RV32_REGISTER_NUM_LIMBS - 1] as i32 - if b_sign { 1 << RV32_CELL_BITS } else { 0 },
         );
-        let xor_offset = match opcode {
+        let signed_offset = match opcode {
             BranchLessThanOpcode::BLT | BranchLessThanOpcode::BGE => 1 << (RV32_CELL_BITS - 1),
             _ => 0,
         };
+
+        bitwise_chip.clear();
+        bitwise_chip.request_range(
+            (a_msb + signed_offset) as u8 as u32,
+            (b_msb + signed_offset) as u8 as u32,
+        );
+
         let diff_val = prank_vals
             .diff_val
             .unwrap()
             .clamp(0, (1 << RV32_CELL_BITS) - 1);
-        xor_lookup_chip.clear();
         if diff_val > 0 {
-            xor_lookup_chip.request(diff_val - 1, diff_val - 1);
+            bitwise_chip.request_range(diff_val - 1, 0);
         }
-        Some(xor_lookup_chip.request(
-            (a_msb + xor_offset) as u8 as u32,
-            (b_msb + xor_offset) as u8 as u32,
-        ))
-    } else {
-        None
-    };
+    }
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
@@ -244,9 +254,6 @@ fn run_rv32_blt_negative_test(
         }
         if let Some(b_msb) = prank_vals.b_msb {
             cols.b_msb_f = i32_to_f(b_msb);
-        }
-        if let Some(xor_res) = xor_res {
-            cols.xor_res = F::from_canonical_u32(xor_res);
         }
         if let Some(diff_marker) = prank_vals.diff_marker {
             cols.diff_marker = diff_marker.map(F::from_canonical_u32);
@@ -264,7 +271,7 @@ fn run_rv32_blt_negative_test(
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {
         VerificationError::NonZeroCumulativeSum
@@ -485,9 +492,12 @@ fn rv32_blt_unsigned_wrong_b_msb_sign_negative_test() {
 
 #[test]
 fn execute_pc_increment_sanity_test() {
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let core =
-        BranchLessThanCoreChip::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(xor_lookup_chip, 0);
+        BranchLessThanCoreChip::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(bitwise_chip, 0);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchLessThanOpcode::BLT.as_usize(),

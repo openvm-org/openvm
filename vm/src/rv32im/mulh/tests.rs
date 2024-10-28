@@ -1,8 +1,8 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-    xor::XorLookupChip,
 };
 use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
@@ -23,7 +23,7 @@ use crate::{
     arch::{
         instructions::MulHOpcode,
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BYTE_XOR_BUS,
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
         RANGE_TUPLE_CHECKER_BUS,
     },
     rv32im::{
@@ -75,11 +75,15 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
     const MAX_NUM_LIMBS: u32 = 32;
     let mut rng = create_seeded_rng();
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let range_tuple_bus = RangeTupleCheckerBus::new(
         RANGE_TUPLE_CHECKER_BUS,
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
+
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
     let mut tester = VmChipTestBuilder::default();
@@ -89,7 +93,7 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_controller(),
         ),
-        MulHCoreChip::new(xor_lookup_chip.clone(), range_tuple_checker.clone(), 0),
+        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -102,7 +106,7 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
     let tester = tester
         .build()
         .load(chip)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .load(range_tuple_checker)
         .finalize();
     tester.simple_test().expect("Verification failed");
@@ -146,12 +150,16 @@ fn run_rv32_mulh_negative_test(
     interaction_error: bool,
 ) {
     const MAX_NUM_LIMBS: u32 = 32;
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let range_tuple_bus = RangeTupleCheckerBus::new(
         RANGE_TUPLE_CHECKER_BUS,
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
+
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let range_tuple_chip = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32MulHTestChip::<F>::new(
@@ -160,7 +168,7 @@ fn run_rv32_mulh_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        MulHCoreChip::new(xor_lookup_chip.clone(), range_tuple_chip.clone(), 0),
+        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -194,7 +202,7 @@ fn run_rv32_mulh_negative_test(
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .load(range_tuple_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {

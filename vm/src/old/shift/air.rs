@@ -1,6 +1,8 @@
 use std::{borrow::Borrow, iter::zip};
 
-use ax_circuit_primitives::{utils, var_range::VariableRangeCheckerBus, xor::XorBus};
+use ax_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus, utils, var_range::VariableRangeCheckerBus,
+};
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -19,7 +21,7 @@ use crate::{
 pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
-    pub xor_bus: XorBus,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
 
     pub(super) offset: usize,

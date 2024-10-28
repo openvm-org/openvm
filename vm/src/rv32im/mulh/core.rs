@@ -6,8 +6,8 @@ use std::{
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-    xor::{XorBus, XorLookupChip},
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
@@ -39,7 +39,7 @@ pub struct MulHCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct MulHCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub xor_bus: XorBus,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_tuple_bus: RangeTupleCheckerBus<2>,
     offset: usize,
 }
@@ -131,8 +131,9 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        // Check that b_ext and c_ext are correct using XOR
-        let mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
+        // Check that b_ext and c_ext are correct using bitwise lookup. We check
+        // both b and c when the opcode is MULH, and only b when MULHSU.
+        let sign_mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
         let ext_inv = AB::F::from_canonical_u32((1 << LIMB_BITS) - 1).inverse();
         let b_sign = cols.b_ext * ext_inv;
         let c_sign = cols.c_ext * ext_inv;
@@ -146,20 +147,12 @@ where
             .when(cols.opcode_mulhu_flag + cols.opcode_mulhsu_flag)
             .assert_zero(c_sign.clone());
 
-        self.xor_bus
-            .send(
-                b[NUM_LIMBS - 1],
-                mask,
-                b[NUM_LIMBS - 1] + mask - b_sign * mask * AB::Expr::from_canonical_u32(2),
+        self.bitwise_lookup_bus
+            .send_range(
+                AB::Expr::from_canonical_u32(2) * (b[NUM_LIMBS - 1] - b_sign * sign_mask),
+                (cols.opcode_mulh_flag + AB::Expr::one()) * (c[NUM_LIMBS - 1] - c_sign * sign_mask),
             )
             .eval(builder, cols.opcode_mulh_flag + cols.opcode_mulhsu_flag);
-        self.xor_bus
-            .send(
-                c[NUM_LIMBS - 1],
-                mask,
-                c[NUM_LIMBS - 1] + mask - c_sign * mask * AB::Expr::from_canonical_u32(2),
-            )
-            .eval(builder, cols.opcode_mulh_flag);
 
         let expected_opcode = flags.iter().zip(MulHOpcode::iter()).fold(
             AB::Expr::zero(),
@@ -184,19 +177,19 @@ where
 #[derive(Debug)]
 pub struct MulHCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: MulHCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
         range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
         offset: usize,
     ) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < 2 * NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1
-        // bytes (with LIMB_BITS bits). XorLookup is used to sign check bytes.
+        // bytes (with LIMB_BITS bits). BitwiseOperationLookup is used to sign check bytes.
         debug_assert!(
             range_tuple_chip.sizes()[0] == 1 << LIMB_BITS,
             "First element of RangeTupleChecker must have size {}",
@@ -210,11 +203,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIM
 
         Self {
             air: MulHCoreAir {
-                xor_bus: xor_lookup_chip.bus(),
+                bitwise_lookup_bus: bitwise_lookup_chip.bus(),
                 range_tuple_bus: *range_tuple_chip.bus(),
                 offset,
             },
-            xor_lookup_chip,
+            bitwise_lookup_chip,
             range_tuple_chip,
         }
     }
@@ -262,12 +255,12 @@ where
         }
 
         if mulh_opcode != MulHOpcode::MULHU {
-            self.xor_lookup_chip
-                .request(b[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
-        }
-        if mulh_opcode == MulHOpcode::MULH {
-            self.xor_lookup_chip
-                .request(c[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
+            let b_sign_mask = if b_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
+            let c_sign_mask = if c_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
+            self.bitwise_lookup_chip.request_range(
+                (b[NUM_LIMBS - 1] - b_sign_mask) << 1,
+                (c[NUM_LIMBS - 1] - c_sign_mask) << ((mulh_opcode == MulHOpcode::MULH) as u32),
+            );
         }
 
         let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u32)]);

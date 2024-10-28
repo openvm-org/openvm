@@ -22,7 +22,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for DummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for DummyAir {}
 impl<F: Field> BaseAir<F> for DummyAir {
     fn width(&self) -> usize {
-        4
+        3
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
@@ -33,10 +33,9 @@ impl<F: Field> BaseAir<F> for DummyAir {
 impl<AB: InteractionBuilder + AirBuilder> Air<AB> for DummyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        // local = [x, y, z, op]
         let local = main.row_slice(0);
         self.bus
-            .send(local[0], local[1], local[2], local[3])
+            .send_xor(local[0], local[1], local[2])
             .eval(builder, AB::F::one());
     }
 }

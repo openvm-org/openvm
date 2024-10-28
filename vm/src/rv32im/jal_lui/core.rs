@@ -5,7 +5,9 @@ use std::{
 };
 
 use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::xor::{XorBus, XorLookupChip};
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::{instruction::Instruction, program::PC_BITS};
 use p3_air::{AirBuilder, BaseAir};
@@ -29,13 +31,11 @@ pub struct Rv32JalLuiCoreCols<T> {
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
     pub is_jal: T,
     pub is_lui: T,
-    pub xor_res: T,
 }
 
 #[derive(Debug, Clone)]
 pub struct Rv32JalLuiCoreAir {
-    // XorBus is used to range check that rd_data elements are bytes
-    pub bus: XorBus,
+    pub bus: BitwiseOperationLookupBus,
     offset: usize,
 }
 
@@ -67,7 +67,6 @@ where
             rd_data: rd,
             is_jal,
             is_lui,
-            xor_res,
         } = *cols;
 
         builder.assert_bool(is_lui);
@@ -76,12 +75,11 @@ where
         builder.assert_bool(is_valid.clone());
         builder.when(is_lui).assert_zero(rd[0]);
 
-        self.bus
-            .send(rd[1], rd[2], xor_res)
-            .eval(builder, is_valid.clone());
-        self.bus
-            .send(rd[0], rd[3] * is_lui, rd[0] + rd[3] * is_lui)
-            .eval(builder, is_valid.clone());
+        for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
+            self.bus
+                .send_range(rd[i * 2], rd[i * 2 + 1])
+                .eval(builder, is_valid.clone());
+        }
 
         // In case of JAL constrain that last limb has at most [last_limb_bits] bits
 
@@ -89,7 +87,7 @@ where
         let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1 << x));
         let additional_bits = AB::F::from_canonical_u32(additional_bits);
         self.bus
-            .send(rd[3], additional_bits, rd[3] + additional_bits)
+            .send_xor(rd[3], additional_bits, rd[3] + additional_bits)
             .eval(builder, is_jal);
 
         let intermed_val = rd
@@ -141,17 +139,20 @@ pub struct Rv32JalLuiCoreRecord<F: Field> {
 #[derive(Debug, Clone)]
 pub struct Rv32JalLuiCoreChip {
     pub air: Rv32JalLuiCoreAir,
-    pub xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
 }
 
 impl Rv32JalLuiCoreChip {
-    pub fn new(xor_lookup_chip: Arc<XorLookupChip<RV32_CELL_BITS>>, offset: usize) -> Self {
+    pub fn new(
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        offset: usize,
+    ) -> Self {
         Self {
             air: Rv32JalLuiCoreAir {
-                bus: xor_lookup_chip.bus(),
+                bus: bitwise_lookup_chip.bus(),
                 offset,
             },
-            xor_lookup_chip,
+            bitwise_lookup_chip,
         }
     }
 }
@@ -184,14 +185,16 @@ where
         };
         let (to_pc, rd_data) = run_jal_lui(local_opcode_index, from_pc, signed_imm);
 
-        self.xor_lookup_chip.request(rd_data[1], rd_data[2]);
+        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+            self.bitwise_lookup_chip
+                .request_range(rd_data[i * 2], rd_data[i * 2 + 1]);
+        }
+
         if local_opcode_index == JAL {
-            self.xor_lookup_chip.request(rd_data[0], 0);
             let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
             let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1 << x));
-            self.xor_lookup_chip.request(rd_data[3], additional_bits);
-        } else if local_opcode_index == LUI {
-            self.xor_lookup_chip.request(0, rd_data[3]);
+            self.bitwise_lookup_chip
+                .request_xor(rd_data[3], additional_bits);
         }
 
         let rd_data = rd_data.map(F::from_canonical_u32);
@@ -225,9 +228,6 @@ where
         core_cols.imm = record.imm;
         core_cols.is_jal = F::from_bool(record.is_jal);
         core_cols.is_lui = F::from_bool(record.is_lui);
-        let x = core_cols.rd_data[1].as_canonical_u32();
-        let y = core_cols.rd_data[2].as_canonical_u32();
-        core_cols.xor_res = F::from_canonical_u32(x ^ y);
     }
 
     fn air(&self) -> &Self::Air {
