@@ -48,7 +48,7 @@ impl Fp2 {
     }
 
     pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
-        let mut builder = self.c0.builder.borrow_mut();
+        let builder = self.c0.builder.borrow();
         let prime = builder.prime.clone();
         let limb_bits = builder.limb_bits;
         let num_limbs = builder.num_limbs;
