@@ -19,26 +19,34 @@ use crate::{
     system::memory::MemoryControllerRef,
 };
 
+// LANE_SIZE: how many cells do we read at a time, must be a power of 2.
+// NUM_LANES: how many lanes do we need to represent one field element.
+// TWO_NUM_LANES: how many lanes do we need to represent one of the input/output, which is a EcPoint of 2 field elements.
+// For example, for bls12_381, LANE_SIZE = 16, NUM_LANES = 3, and TWO_NUM_LANES = 6.
+// For secp256k1, LANE_SIZE = 32, NUM_LANES = 1, and TWO_NUM_LANES = 2.
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
-pub struct EcAddNeChip<F: PrimeField32, const NUM_LIMBS: usize>(
+pub struct EcAddNeChip<F: PrimeField32, const TWO_NUM_LANES: usize, const LANE_SIZE: usize>(
     VmChipWrapper<
         F,
-        Rv32VecHeapAdapterChip<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>,
+        Rv32VecHeapAdapterChip<F, 2, TWO_NUM_LANES, TWO_NUM_LANES, LANE_SIZE, LANE_SIZE>,
         FieldExpressionCoreChip,
     >,
 );
 
-impl<F: PrimeField32, const NUM_LIMBS: usize> EcAddNeChip<F, NUM_LIMBS> {
+impl<F: PrimeField32, const TWO_NUM_LANES: usize, const LANE_SIZE: usize>
+    EcAddNeChip<F, TWO_NUM_LANES, LANE_SIZE>
+{
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>,
+        adapter: Rv32VecHeapAdapterChip<F, 2, TWO_NUM_LANES, TWO_NUM_LANES, LANE_SIZE, LANE_SIZE>,
         memory_controller: MemoryControllerRef<F>,
         modulus: BigUint,
+        num_limbs: usize,
         limb_bits: usize,
         offset: usize,
     ) -> Self {
         let expr = ec_add_ne_expr(
             modulus,
-            NUM_LIMBS,
+            num_limbs,
             limb_bits,
             memory_controller.borrow().range_checker.bus(),
         );
@@ -54,25 +62,28 @@ impl<F: PrimeField32, const NUM_LIMBS: usize> EcAddNeChip<F, NUM_LIMBS> {
 }
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
-pub struct EcDoubleChip<F: PrimeField32, const NUM_LIMBS: usize>(
+pub struct EcDoubleChip<F: PrimeField32, const TWO_NUM_LANES: usize, const LANE_SIZE: usize>(
     VmChipWrapper<
         F,
-        Rv32VecHeapAdapterChip<F, 1, 2, 2, NUM_LIMBS, NUM_LIMBS>,
+        Rv32VecHeapAdapterChip<F, 1, TWO_NUM_LANES, TWO_NUM_LANES, LANE_SIZE, LANE_SIZE>,
         FieldExpressionCoreChip,
     >,
 );
 
-impl<F: PrimeField32, const NUM_LIMBS: usize> EcDoubleChip<F, NUM_LIMBS> {
+impl<F: PrimeField32, const TWO_NUM_LANES: usize, const LANE_SIZE: usize>
+    EcDoubleChip<F, TWO_NUM_LANES, LANE_SIZE>
+{
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 1, 2, 2, NUM_LIMBS, NUM_LIMBS>,
+        adapter: Rv32VecHeapAdapterChip<F, 1, TWO_NUM_LANES, TWO_NUM_LANES, LANE_SIZE, LANE_SIZE>,
         memory_controller: MemoryControllerRef<F>,
         modulus: BigUint,
+        num_limbs: usize,
         limb_bits: usize,
         offset: usize,
     ) -> Self {
         let expr = ec_double_expr(
             modulus,
-            NUM_LIMBS,
+            num_limbs,
             limb_bits,
             memory_controller.borrow().range_checker.bus(),
         );

@@ -720,7 +720,7 @@ impl VmConfig {
                 panic!("Attempting to override an executor for opcode {global_opcode_idx}");
             }
             match executor {
-                ExecutorName::EcAddNe => {
+                ExecutorName::EcAddNeRv32_1x32 => {
                     let chip = Rc::new(RefCell::new(EcAddNeChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
                             execution_bus,
@@ -729,13 +729,14 @@ impl VmConfig {
                         ),
                         memory_controller.clone(),
                         modulus,
+                        32,
                         8,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::EcAddNe(chip));
+                    chips.push(AxVmChip::EcAddNeRv32_1x32(chip));
                 }
-                ExecutorName::EcDouble => {
+                ExecutorName::EcDoubleRv32_1x32 => {
                     let chip = Rc::new(RefCell::new(EcDoubleChip::new(
                         Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
                             execution_bus,
@@ -744,11 +745,44 @@ impl VmConfig {
                         ),
                         memory_controller.clone(),
                         modulus,
+                        32,
                         8,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::EcDouble(chip));
+                    chips.push(AxVmChip::EcDoubleRv32_1x32(chip));
+                }
+                ExecutorName::EcAddNeRv32_3x16 => {
+                    let chip = Rc::new(RefCell::new(EcAddNeChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        48,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EcAddNeRv32_3x16(chip));
+                }
+                ExecutorName::EcDoubleRv32_3x16 => {
+                    let chip = Rc::new(RefCell::new(EcDoubleChip::new(
+                        Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        48,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EcDoubleRv32_3x16(chip));
                 }
                 _ => unreachable!("Unsupported executor"),
             }
@@ -925,21 +959,40 @@ fn gen_ec_executor_tuple(
         .enumerate()
         .flat_map(|(i, curve)| {
             let class_offset = EccOpcode::default_offset() + i * EccOpcode::COUNT;
-            // todo: check 32 or 48 limbs depends on the curve
-            vec![
-                (
-                    EccOpcode::EC_ADD_NE as usize,
-                    class_offset,
-                    ExecutorName::EcAddNe,
-                    curve.prime(),
-                ),
-                (
-                    EccOpcode::EC_DOUBLE as usize,
-                    class_offset,
-                    ExecutorName::EcDouble,
-                    curve.prime(),
-                ),
-            ]
+            let bytes = curve.prime().bits().div_ceil(8);
+            if bytes <= 32 {
+                vec![
+                    (
+                        EccOpcode::EC_ADD_NE as usize,
+                        class_offset,
+                        ExecutorName::EcAddNeRv32_1x32,
+                        curve.prime(),
+                    ),
+                    (
+                        EccOpcode::EC_DOUBLE as usize,
+                        class_offset,
+                        ExecutorName::EcDoubleRv32_1x32,
+                        curve.prime(),
+                    ),
+                ]
+            } else if bytes <= 48 {
+                vec![
+                    (
+                        EccOpcode::EC_ADD_NE as usize,
+                        class_offset,
+                        ExecutorName::EcAddNeRv32_3x16,
+                        curve.prime(),
+                    ),
+                    (
+                        EccOpcode::EC_DOUBLE as usize,
+                        class_offset,
+                        ExecutorName::EcDoubleRv32_3x16,
+                        curve.prime(),
+                    ),
+                ]
+            } else {
+                panic!("curve {:?} is not supported", curve);
+            }
         })
         .collect()
 }

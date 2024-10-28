@@ -2,6 +2,7 @@ use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
 };
+use axvm_ecc_constants::{BLS12381, BN254};
 use derive_new::new;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
@@ -210,14 +211,16 @@ impl Modulus {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum EcCurve {
     Secp256k1,
-    // Bn254,
-    // Bls12_381,
+    Bn254,
+    Bls12_381,
 }
 
 impl EcCurve {
     pub fn prime(&self) -> BigUint {
         match self {
             EcCurve::Secp256k1 => SECP256K1_COORD_PRIME.clone(),
+            EcCurve::Bn254 => BN254.MODULUS.clone(),
+            EcCurve::Bls12_381 => BLS12381.MODULUS.clone(),
         }
     }
 }

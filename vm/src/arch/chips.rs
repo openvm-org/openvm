@@ -105,8 +105,10 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     ModularAddSubRv32_3x16(Rc<RefCell<ModularAddSubChip<F, 3, 16>>>),
     ModularMulDivRv32_3x16(Rc<RefCell<ModularMulDivChip<F, 3, 16>>>),
     // TODO: need to support bls
-    EcAddNe(Rc<RefCell<EcAddNeChip<F, 32>>>),
-    EcDouble(Rc<RefCell<EcDoubleChip<F, 32>>>),
+    EcAddNeRv32_1x32(Rc<RefCell<EcAddNeChip<F, 2, 32>>>),
+    EcDoubleRv32_1x32(Rc<RefCell<EcDoubleChip<F, 2, 32>>>),
+    EcAddNeRv32_3x16(Rc<RefCell<EcAddNeChip<F, 6, 16>>>),
+    EcDoubleRv32_3x16(Rc<RefCell<EcDoubleChip<F, 6, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
@@ -152,8 +154,10 @@ pub enum AxVmChip<F: PrimeField32> {
     ModularMulDivRv32_1x32(Rc<RefCell<ModularMulDivChip<F, 1, 32>>>),
     ModularAddSubRv32_3x16(Rc<RefCell<ModularAddSubChip<F, 3, 16>>>),
     ModularMulDivRv32_3x16(Rc<RefCell<ModularMulDivChip<F, 3, 16>>>),
-    EcAddNe(Rc<RefCell<EcAddNeChip<F, 32>>>),
-    EcDouble(Rc<RefCell<EcDoubleChip<F, 32>>>),
+    EcAddNeRv32_1x32(Rc<RefCell<EcAddNeChip<F, 2, 32>>>),
+    EcDoubleRv32_1x32(Rc<RefCell<EcDoubleChip<F, 2, 32>>>),
+    EcAddNeRv32_3x16(Rc<RefCell<EcAddNeChip<F, 6, 16>>>),
+    EcDoubleRv32_3x16(Rc<RefCell<EcDoubleChip<F, 6, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
