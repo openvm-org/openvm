@@ -5,15 +5,14 @@ use ax_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::ProofInput,
 };
-use axvm_instructions::program::Program;
+use axvm_instructions::exe::AxVmExe;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
 use crate::{
     arch::{ExecutionSegment, PersistenceType, VmConfig},
-    intrinsics::hashes::poseidon2::CHUNK,
     system::{
-        memory::Equipartition,
+        memory::memory_image_to_equipartition,
         program::{trace::CommittedProgram, ExecutionError},
     },
 };
@@ -24,13 +23,19 @@ pub struct Streams<F> {
     pub hint_stream: VecDeque<F>,
 }
 
+impl<F> Streams<F> {
+    pub fn new(input_stream: impl Into<VecDeque<Vec<F>>>) -> Self {
+        Self {
+            input_stream: input_stream.into(),
+            hint_stream: VecDeque::default(),
+        }
+    }
+}
+
 /// Parent struct that holds all execution segments, program, config.
 pub struct VirtualMachine<F: PrimeField32> {
     pub config: VmConfig,
-    /// Streams are shared between `ExecutionSegment`s and within each segment shared
-    /// with any chip(s) that handle hint opcodes
-    streams: Arc<Mutex<Streams<F>>>,
-    initial_memory: Option<Equipartition<F, CHUNK>>,
+    _marker: PhantomData<F>,
 }
 
 #[repr(i32)]
@@ -51,33 +56,25 @@ impl<F: PrimeField32> VirtualMachine<F> {
     pub fn new(config: VmConfig) -> Self {
         Self {
             config,
-            streams: Arc::new(Mutex::new(Streams::default())),
-            initial_memory: None,
+            _marker: Default::default(),
         }
-    }
-
-    pub fn with_input_stream(self, input_stream: Vec<Vec<F>>) -> Self {
-        self.streams.lock().input_stream = VecDeque::from(input_stream);
-        self
-    }
-
-    pub fn with_initial_memory(mut self, memory: Equipartition<F, CHUNK>) -> Self {
-        self.initial_memory = Some(memory);
-        self
     }
 
     fn execute_segments(
         &mut self,
-        program: Program<F>,
+        exe: impl Into<AxVmExe<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<Vec<ExecutionSegment<F>>, ExecutionError> {
+        let exe = exe.into();
+        let streams = Arc::new(Mutex::new(Streams::new(input)));
         let mut segments = vec![];
         let mut segment = ExecutionSegment::new(
             self.config.clone(),
-            program.clone(),
-            self.streams.clone(),
-            self.initial_memory.take(),
+            exe.program.clone(),
+            streams.clone(),
+            Some(memory_image_to_equipartition(exe.init_memory)),
         );
-        let mut pc = program.pc_start;
+        let mut pc = exe.pc_start;
 
         loop {
             let state = segment.execute_from_pc(pc)?;
@@ -109,8 +106,8 @@ impl<F: PrimeField32> VirtualMachine<F> {
 
             segment = ExecutionSegment::new(
                 config,
-                program.clone(),
-                self.streams.clone(),
+                exe.program.clone(),
+                streams.clone(),
                 Some(final_memory),
             );
             segment.cycle_tracker = cycle_tracker;
@@ -121,20 +118,25 @@ impl<F: PrimeField32> VirtualMachine<F> {
         Ok(segments)
     }
 
-    pub fn execute(mut self, program: Program<F>) -> Result<(), ExecutionError> {
+    pub fn execute(
+        mut self,
+        exe: impl Into<AxVmExe<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
+    ) -> Result<(), ExecutionError> {
         #[cfg(test)]
         ax_stark_sdk::config::setup_tracing_with_log_level(tracing::Level::WARN);
-        self.execute_segments(program).map(|_| ())
+        self.execute_segments(exe, input).map(|_| ())
     }
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         mut self,
-        program: Program<F>,
+        exe: impl Into<AxVmExe<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<VirtualMachineResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segments = self.execute_segments(program)?;
+        let segments = self.execute_segments(exe, input)?;
 
         Ok(VirtualMachineResult {
             per_segment: segments
@@ -146,11 +148,12 @@ impl<F: PrimeField32> VirtualMachine<F> {
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
         mut self,
         committed_program: Arc<CommittedProgram<SC>>,
+        input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<VirtualMachineResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segments = self.execute_segments(committed_program.program.clone())?;
+        let segments = self.execute_segments(committed_program.program.clone(), input)?;
 
         Ok(VirtualMachineResult {
             per_segment: segments
@@ -185,10 +188,10 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
     /// Executes a program and returns the public values. None means the public value is not set.
     pub fn execute(
         &self,
-        program: Program<F>,
+        exe: impl Into<AxVmExe<F>>,
         input: Vec<Vec<F>>,
     ) -> Result<Vec<Option<F>>, ExecutionError> {
-        let segment = self.execute_impl(program, input.into())?;
+        let segment = self.execute_impl(exe.into(), input.into())?;
         let pvs = if let Some(pv_chip) = segment.chip_set.public_values_chip {
             let borrowed_pv_chip = pv_chip.borrow();
             borrowed_pv_chip.core.get_custom_public_values()
@@ -207,19 +210,19 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segment = self.execute_impl(commited_program.program.clone(), input.into())?;
+        let segment = self.execute_impl(commited_program.program.clone().into(), input.into())?;
         Ok(segment.generate_proof_input(Some(commited_program.committed_trace_data.clone())))
     }
 
     fn execute_impl(
         &self,
-        program: Program<F>,
+        exe: AxVmExe<F>,
         input: VecDeque<Vec<F>>,
     ) -> Result<ExecutionSegment<F>, ExecutionError> {
-        let pc_start = program.pc_start;
+        let pc_start = exe.pc_start;
         let mut segment = ExecutionSegment::new(
             self.config.clone(),
-            program,
+            exe.program.clone(),
             Arc::new(Mutex::new(Streams {
                 input_stream: input,
                 hint_stream: VecDeque::new(),

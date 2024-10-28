@@ -10,7 +10,7 @@ use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::{ProofInputForTest, StarkFriEngine},
 };
-use axvm_instructions::program::Program;
+use axvm_instructions::{exe::AxVmExe, program::Program};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 
@@ -22,13 +22,14 @@ use crate::{
     },
 };
 
-pub fn air_test(vm: VirtualMachine<BabyBear>, program: Program<BabyBear>) {
-    air_test_with_min_segments(vm, program, 1);
+pub fn air_test(vm: VirtualMachine<BabyBear>, exe: impl Into<AxVmExe<BabyBear>>) {
+    air_test_with_min_segments(vm, exe, vec![], 1);
 }
 
 pub fn air_test_with_min_segments(
     vm: VirtualMachine<BabyBear>,
-    program: Program<BabyBear>,
+    exe: impl Into<AxVmExe<BabyBear>>,
+    input: Vec<Vec<BabyBear>>,
     min_segments: usize,
 ) {
     setup_tracing();
@@ -38,7 +39,7 @@ pub fn air_test_with_min_segments(
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let pk = vm.config.generate_pk(engine.keygen_builder());
 
-    let result = vm.execute_and_generate(program).unwrap();
+    let result = vm.execute_and_generate(exe, input).unwrap();
 
     let proofs: Vec<Proof<_>> = result
         .per_segment
@@ -139,8 +140,8 @@ where
             let mut config = config;
             config.collect_metrics = true;
             {
-                let vm = VirtualMachine::new(config.clone()).with_input_stream(input_stream.clone());
-                vm.execute(program.clone()).unwrap();
+                let vm = VirtualMachine::<Val<SC>>::new(config.clone());
+                vm.execute(program.clone(), input_stream.clone()).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time
             config.collect_metrics = false;
@@ -148,9 +149,9 @@ where
         }
     }
 
-    let vm = VirtualMachine::new(config).with_input_stream(input_stream);
+    let vm = VirtualMachine::<Val<SC>>::new(config);
 
-    let mut result = vm.execute_and_generate(program).unwrap();
+    let mut result = vm.execute_and_generate(program, input_stream).unwrap();
     assert_eq!(
         result.per_segment.len(),
         1,

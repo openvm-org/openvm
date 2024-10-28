@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use ax_stark_backend::{engine::StarkEngine, p3_uni_stark::StarkGenericConfig};
 use ax_stark_sdk::{
@@ -16,12 +16,10 @@ use axvm_circuit::{
     },
     intrinsics::hashes::keccak::hasher::utils::keccak256,
     sdk::{air_test, air_test_with_min_segments},
-    system::{
-        memory::{Equipartition, CHUNK},
-        program::trace::CommittedProgram,
-    },
+    system::{memory::CHUNK, program::trace::CommittedProgram},
 };
 use axvm_instructions::{
+    exe::AxVmExe,
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
     BranchEqualOpcode::*,
@@ -91,7 +89,7 @@ fn air_test_with_compress_poseidon2(
     let pk = vm_config.generate_pk(engine.keygen_builder());
 
     let vm = VirtualMachine::new(vm_config);
-    let result = vm.execute_and_generate(program).unwrap();
+    let result = vm.execute_and_generate(program, vec![]).unwrap();
 
     for proof_input in result.per_segment {
         engine
@@ -175,7 +173,7 @@ fn test_vm_1_optional_air() {
         let program = Program::from_instructions(&instructions);
         let vm = VirtualMachine::new(vm_config);
         let mut result = vm
-            .execute_and_generate(program)
+            .execute_and_generate(program, vec![])
             .expect("Failed to execute VM");
         assert_eq!(result.per_segment.len(), 1);
         let proof_input = result.per_segment.pop().unwrap();
@@ -226,7 +224,7 @@ fn test_vm_initial_memory() {
     let program = Program::from_instructions(&[
         Instruction::<BabyBear>::from_isize(
             NativeBranchEqualOpcode(BEQ).with_default_offset(),
-            0,
+            7,
             101,
             2 * DEFAULT_PC_STEP as isize,
             1,
@@ -243,11 +241,12 @@ fn test_vm_initial_memory() {
         Instruction::<BabyBear>::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ]);
 
-    let mut initial_memory = Equipartition::<BabyBear, CHUNK>::new();
-    initial_memory.insert(
-        (BabyBear::one(), 0),
-        [101, 0, 0, 0, 0, 0, 0, 0].map(BabyBear::from_canonical_u32),
-    );
+    let init_memory: BTreeMap<_, _> = [(
+        (BabyBear::one(), BabyBear::from_canonical_u32(7)),
+        BabyBear::from_canonical_u32(101),
+    )]
+    .into_iter()
+    .collect();
 
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
@@ -259,8 +258,13 @@ fn test_vm_initial_memory() {
     }
     .add_executor(ExecutorName::BranchEqual)
     .add_executor(ExecutorName::Jal);
-    let vm = VirtualMachine::new(config).with_initial_memory(initial_memory);
-    air_test(vm, program);
+    let exe = AxVmExe {
+        program,
+        pc_start: 0,
+        init_memory,
+    };
+    let vm = VirtualMachine::new(config);
+    air_test(vm, exe);
 }
 
 #[test]
@@ -294,7 +298,7 @@ fn test_vm_1_persistent() {
     let program = Program::from_instructions(&instructions);
 
     let vm = VirtualMachine::new(config);
-    let result = vm.execute_and_generate(program).unwrap();
+    let result = vm.execute_and_generate(program, vec![]).unwrap();
 
     let proof_input = result.per_segment.into_iter().next().unwrap();
 
@@ -399,7 +403,7 @@ fn test_vm_continuations() {
     */
 
     let vm = VirtualMachine::new(config);
-    air_test_with_min_segments(vm, program, 3);
+    air_test_with_min_segments(vm, program, vec![], 3);
 }
 
 #[test]
@@ -669,9 +673,9 @@ fn test_vm_hint() {
     type F = BabyBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::two()]];
-    let vm = VirtualMachine::new(vm_config_with_field_arithmetic()).with_input_stream(input_stream);
+    let vm = VirtualMachine::new(vm_config_with_field_arithmetic());
 
-    air_test(vm, program);
+    air_test_with_min_segments(vm, program, input_stream, 1);
 }
 
 #[test]

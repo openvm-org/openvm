@@ -66,7 +66,7 @@ fn test_1() {
 
     let app_vm = VirtualMachine::new(axiom_vm_pk.app_vm_config.clone());
     let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(committed_program)
+        .execute_and_generate_with_cached_program(committed_program, vec![])
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 1);
     let app_vm_seg_proofs: Vec<_> = app_vm_result

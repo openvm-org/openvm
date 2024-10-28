@@ -5,7 +5,6 @@ use axvm_circuit::{
     arch::{VirtualMachine, VmConfig},
     sdk::{air_test, air_test_with_min_segments},
 };
-use axvm_instructions::program::Program;
 use axvm_platform::memory::MEM_SIZE;
 use color_eyre::eyre::Result;
 use p3_baby_bear::BabyBear;
@@ -15,14 +14,13 @@ use crate::{elf::Elf, rrs::transpile, AxVmExe};
 
 type F = BabyBear;
 
-fn setup_vm_from_elf(elf_path: &str, config: VmConfig) -> Result<(VirtualMachine<F>, Program<F>)> {
+fn setup_vm_from_elf(elf_path: &str, config: VmConfig) -> Result<(VirtualMachine<F>, AxVmExe<F>)> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     dbg!(&elf.instructions);
-    let exe = AxVmExe::<F>::from_elf(elf);
-    let vm = VirtualMachine::new(config).with_initial_memory(exe.memory_image);
-    Ok((vm, exe.program))
+    let vm = VirtualMachine::new(config);
+    Ok((vm, elf.into()))
 }
 
 #[test]
@@ -56,16 +54,16 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     setup_tracing();
     let config = VmConfig::rv32im();
-    let (vm, program) = setup_vm_from_elf(elf_path, config)?;
-    vm.execute(program)?;
+    let (vm, exe) = setup_vm_from_elf(elf_path, config)?;
+    vm.execute(exe, vec![])?;
     Ok(())
 }
 
 #[test_case("data/rv32im-fibonacci-program-elf-release")]
 fn test_rv32i_prove(elf_path: &str) -> Result<()> {
     let config = VmConfig::rv32i();
-    let (vm, program) = setup_vm_from_elf(elf_path, config)?;
-    air_test(vm, program);
+    let (vm, exe) = setup_vm_from_elf(elf_path, config)?;
+    air_test(vm, exe);
     Ok(())
 }
 
@@ -75,8 +73,8 @@ fn test_rv32i_continuations(elf_path: &str) -> Result<()> {
         max_segment_len: (1 << 18) - 1,
         ..VmConfig::rv32i()
     };
-    let (vm, program) = setup_vm_from_elf(elf_path, config)?;
-    air_test_with_min_segments(vm, program, 3);
+    let (vm, exe) = setup_vm_from_elf(elf_path, config)?;
+    air_test_with_min_segments(vm, exe, vec![], 3);
     Ok(())
 }
 
@@ -84,8 +82,8 @@ fn test_rv32i_continuations(elf_path: &str) -> Result<()> {
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     setup_tracing();
     let config = VmConfig::rv32im().add_canonical_modulus();
-    let (vm, program) = setup_vm_from_elf(elf_path, config)?;
-    vm.execute(program)?;
+    let (vm, exe) = setup_vm_from_elf(elf_path, config)?;
+    vm.execute(exe, vec![])?;
     Ok(())
 }
 
@@ -93,7 +91,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
 fn test_terminate_runtime() -> Result<()> {
     setup_tracing();
     let config = VmConfig::rv32i();
-    let (vm, program) = setup_vm_from_elf("data/rv32im-terminate-from-as", config)?;
-    air_test(vm, program);
+    let (vm, exe) = setup_vm_from_elf("data/rv32im-terminate-from-as", config)?;
+    air_test(vm, exe);
     Ok(())
 }
