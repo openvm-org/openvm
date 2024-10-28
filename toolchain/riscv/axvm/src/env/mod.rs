@@ -71,23 +71,19 @@
 
 extern crate alloc;
 
-mod read;
-mod write;
+// mod read;
+// mod write;
 
 use alloc::alloc::{alloc, Layout};
 
-use axvm_platform::{
-    align_up, fileno,
-    syscall::{self, sys_cycle_count, sys_halt, sys_log, sys_pause, syscall_2, SyscallName},
-    WORD_SIZE,
-};
+use axvm_platform;
 use bytemuck::Pod;
 use serde::{de::DeserializeOwned, Serialize};
 
-pub use self::{
-    read::{FdReader, Read},
-    write::{FdWriter, Write},
-};
+// pub use self::{
+//     read::{FdReader, Read},
+//     write::{FdWriter, Write},
+// };
 
 /// A random 16 byte value initialized to random data, provided by the host, on
 /// guest start and upon resuming from a pause. Setting this value ensures that
@@ -97,192 +93,23 @@ static mut MEMORY_IMAGE_ENTROPY: [u32; 4] = [0u32; 4];
 
 /// Initialize globals before program main
 pub(crate) fn init() {
-    unsafe {
-        syscall::sys_rand(
-            MEMORY_IMAGE_ENTROPY.as_mut_ptr(),
-            MEMORY_IMAGE_ENTROPY.len(),
-        )
-    }
+    // unsafe {
+    //     syscall::sys_rand(
+    //         MEMORY_IMAGE_ENTROPY.as_mut_ptr(),
+    //         MEMORY_IMAGE_ENTROPY.len(),
+    //     )
+    // }
 }
 
 /// Finalize execution
-pub(crate) fn finalize(halt: bool, user_exit: u8) {
-    unsafe {
-        // Artifact of risc0 vendoring
-        let output_words = [0u32; 8];
-
-        if halt {
-            sys_halt(user_exit, &output_words)
-        } else {
-            sys_pause(user_exit, &output_words)
-        }
-    }
-}
+pub(crate) fn finalize() {}
 
 /// Terminate execution of the zkVM.
 ///
 /// Use an exit code of 0 to indicate success, and non-zero to indicate an error.
-pub fn exit(exit_code: u8) -> ! {
-    finalize(true, exit_code);
+pub fn exit<const exit_code: u8>() -> ! {
+    axvm_platform::rust_rt::terminate::<exit_code>();
     unreachable!();
-}
-
-/// Pause the execution of the zkVM.
-///
-/// Execution may be continued at a later time.
-/// Use an exit code of 0 to indicate success, and non-zero to indicate an error.
-pub fn pause(exit_code: u8) {
-    finalize(false, exit_code);
-    init();
-}
-
-/// Exchange data with the host.
-pub fn syscall(syscall: SyscallName, to_host: &[u8], from_host: &mut [u32]) -> syscall::Return {
-    unsafe {
-        syscall_2(
-            syscall,
-            from_host.as_mut_ptr(),
-            from_host.len(),
-            to_host.as_ptr() as u32,
-            to_host.len() as u32,
-        )
-    }
-}
-
-/// Exchanges slices of plain old data with the host.
-///
-/// This makes two calls to the given syscall; the first gets the length of the
-/// buffer to allocate for the return data, and the second actually
-/// receives the return data.
-///
-/// On the host side, implement SliceIo to provide a handler for this call.
-///
-/// NOTE: This method never frees up the buffer memory storing the host's response.
-pub fn send_recv_slice<T: Pod, U: Pod>(syscall_name: SyscallName, to_host: &[T]) -> &'static [U] {
-    let syscall::Return(nbytes, _) = syscall(syscall_name, bytemuck::cast_slice(to_host), &mut []);
-    let nwords = align_up(nbytes as usize, WORD_SIZE) / WORD_SIZE;
-    let from_host_buf = unsafe {
-        let layout = Layout::from_size_align(nwords * WORD_SIZE, WORD_SIZE).unwrap();
-        core::slice::from_raw_parts_mut(alloc(layout) as *mut u32, nwords)
-    };
-    syscall(syscall_name, &[], from_host_buf);
-    &bytemuck::cast_slice(from_host_buf)[..nbytes as usize / core::mem::size_of::<U>()]
-}
-
-/// Read private data from the STDIN of the zkVM and deserializes it.
-///
-/// This function operates on every [`DeserializeOwned`] type, so you can
-/// specify complex types as data to be read and it'll be deserialized
-/// automatically.
-///
-/// # Example
-///
-/// ```no_run
-/// use risc0_zkvm::guest::env;
-/// use std::collections::BTreeMap;
-///
-/// let input: Option<BTreeMap<u64, bool>> = env::read();
-/// ```
-///
-/// More examples can be found in RISC Zero's [example page].
-///
-/// Additional explanation on I/O in the zkVM can be found in RISC Zero's [I/O documentation].
-///
-/// [example page]: https://dev.risczero.com/api/zkvm/examples
-/// [I/O documentation]: https://dev.risczero.com/api/zkvm/tutorials/io
-pub fn read<T: DeserializeOwned>() -> T {
-    stdin().read()
-}
-
-/// Read a slice from the STDIN of the zkVM.
-///
-/// This function reads a slice of [plain old data][bytemuck::Pod], not
-/// incurring in deserialization overhead. Recommended for performance
-/// optimizations. For more context on this, see RISC Zero's [instructions on
-/// guest optimization].
-///
-/// # Example
-///
-/// ```no_run
-/// use risc0_zkvm::guest::env;
-///
-/// let len: usize = env::read();
-/// let mut slice = vec![0u8; len];
-/// env::read_slice(&mut slice);
-///
-/// assert_eq!(slice.len(), len);
-/// ```
-///
-/// More examples can be found in RISC Zero's [example page].
-///
-/// Additional explanation on I/O in the zkVM can be found in RISC Zero's [I/O documentation].
-///
-/// [example page]: https://dev.risczero.com/api/zkvm/examples
-/// [I/O documentation]: https://dev.risczero.com/api/zkvm/tutorials/io
-/// [instructions on guest optimization]: https://dev.risczero.com/api/zkvm/optimization#when-reading-data-as-raw-bytes-use-envread_slice
-pub fn read_slice<T: Pod>(slice: &mut [T]) {
-    stdin().read_slice(slice)
-}
-
-/// Serialize the given data and write it to the STDOUT of the zkVM.
-///
-/// This is available to the host as the private output on the prover.
-/// Some implementations, such as [risc0-r0vm] will also write the data to
-/// the host's stdout file descriptor. It is not included in the receipt.
-///
-/// # Example
-///
-/// ```no_run
-/// use risc0_zkvm::guest::env;
-/// use std::collections::BTreeMap;
-///
-/// let output: BTreeMap<u64, bool> = BTreeMap::from([
-///    (1, true),
-///    (2, false),
-/// ]);
-///
-/// env::write(&output);
-/// ```
-///
-/// More examples can be found in RISC Zero's [example page].
-///
-/// Additional explanation on I/O in the zkVM can be found in RISC Zero's [I/O documentation].
-///
-/// [example page]: https://dev.risczero.com/api/zkvm/examples
-/// [I/O documentation]: https://dev.risczero.com/api/zkvm/tutorials/io
-pub fn write<T: Serialize>(data: &T) {
-    stdout().write(data)
-}
-
-/// Write the given slice to the STDOUT of the zkVM.
-///
-/// This is available to the host as the private output on the prover.
-/// Some implementations, such as [risc0-r0vm] will also write the data to
-/// the host's stdout file descriptor. It is not included in the receipt.
-///
-/// This function reads a slice of [plain old data][bytemuck::Pod], not
-/// incurring in deserialization overhead. Recommended for performance
-/// optimizations. For more context on this, see RISC Zero's [instructions on
-/// guest optimization].
-///
-/// # Example
-///
-/// ```no_run
-/// use risc0_zkvm::guest::env;
-///
-/// let slice = [1u8, 2, 3, 4];
-/// env::write_slice(&slice);
-/// ```
-///
-/// More examples can be found in RISC Zero's [example page].
-///
-/// Additional explanation on I/O in the zkVM can be found in RISC Zero's [I/O documentation].
-///
-/// [example page]: https://dev.risczero.com/api/zkvm/examples
-/// [I/O documentation]: https://dev.risczero.com/api/zkvm/tutorials/io
-/// [instructions on guest optimization]: https://dev.risczero.com/api/zkvm/optimization#when-reading-data-as-raw-bytes-use-envread_slice
-pub fn write_slice<T: Pod>(slice: &[T]) {
-    stdout().write_slice(slice);
 }
 
 /*
@@ -345,34 +172,3 @@ pub fn commit_slice<T: Pod>(slice: &[T]) {
     journal().write_slice(slice);
 }
 */
-
-/// Return the number of processor cycles that have occurred since the guest
-/// began.
-///
-/// WARNING: The cycle count is provided by the host and is not checked by the zkVM circuit.
-pub fn cycle_count() -> u64 {
-    sys_cycle_count()
-}
-
-/// Print a message to the debug console.
-pub fn log(msg: &str) {
-    let msg = msg.as_bytes();
-    unsafe {
-        sys_log(msg.as_ptr(), msg.len());
-    }
-}
-
-/// Return a writer for STDOUT.
-pub fn stdout() -> FdWriter<impl for<'a> Fn(&'a [u8])> {
-    FdWriter::new(fileno::STDOUT, |_| {})
-}
-
-/// Return a writer for STDERR.
-pub fn stderr() -> FdWriter<impl for<'a> Fn(&'a [u8])> {
-    FdWriter::new(fileno::STDERR, |_| {})
-}
-
-/// Return a reader for the standard input
-pub fn stdin() -> FdReader {
-    FdReader::new(fileno::STDIN)
-}

@@ -20,18 +20,22 @@
 //! * It includes a panic handler.
 //! * It includes an allocator.
 
-use core::panic::PanicInfo;
+use core::{arch::asm, panic::PanicInfo};
 
 use crate::syscall::sys_panic;
 
 extern crate alloc;
 
-/// panic! implementation for use in no_std guest programs.
-#[cfg_attr(feature = "panic-handler", panic_handler)]
-pub fn panic_fault(panic_info: &PanicInfo) -> ! {
-    let msg = alloc::format!("{}", panic_info);
-    let msg_bytes = msg.as_bytes();
-    unsafe { sys_panic(msg.as_ptr(), msg.len()) }
+pub fn terminate<const ec: u8>() {
+    #[cfg(target_os = "zkvm")]
+    unsafe {
+        asm!(".insn i 0x0b, 0, x0, x0, {ec}", ec = const ec)
+    };
+    #[cfg(not(target_os = "zkvm"))]
+    {
+        core::hint::black_box(());
+        unimplemented!()
+    }
 }
 
 #[cfg(feature = "entrypoint")]
@@ -51,8 +55,7 @@ mod entrypoint {
             main(0, core::ptr::null())
         };
 
-        const EMPTY_OUTPUT: [u32; 8] = [0; 8];
-        sys_halt(exit_code as u8, &EMPTY_OUTPUT);
+        terminate::<0>();
     }
 
     static STACK_TOP: u32 = crate::memory::STACK_TOP;

@@ -1,5 +1,6 @@
 .text
-main:
+.global _start
+_start:
         li a0, 15
         li a1, 0
         li a2, 1
@@ -14,6 +15,4 @@ loop:
 
 exit:
         # Exit program
-        li a7, 10
-        ecall
-
+		.insn i 0x0b, 0, x0, x0, 0

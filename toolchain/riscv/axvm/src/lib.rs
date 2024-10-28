@@ -167,7 +167,7 @@ unsafe extern "C" fn __start() -> ! {
         main()
     }
 
-    env::finalize(true, 0);
+    env::finalize();
     unreachable!();
 }
 
@@ -213,6 +213,7 @@ pub fn memory_barrier<T>(ptr: *const T) {
 // panic handler must not be included.
 #[cfg(all(target_os = "zkvm", not(feature = "std")))]
 #[panic_handler]
-fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
-    axvm_platform::rust_rt::panic_fault(panic_info);
+fn panic_impl(_panic_info: &core::panic::PanicInfo) -> ! {
+    axvm_platform::rust_rt::terminate::<1>();
+    unreachable!()
 }
