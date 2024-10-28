@@ -15,8 +15,6 @@ ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }
 
-axvm-ecc-curves = { workspace = true }
-
 rand.workspace = true
 num-bigint-dig.workspace = true
 num-traits.workspace = true
@@ -28,6 +26,7 @@ ax-circuit-primitives = { path = "../primitives" }
 hex-literal = { workspace = true }
 sha3 = "0.10.8"
 lazy_static.workspace = true
+axvm-ecc-curves = { workspace = true }
 
 [features]
 default = []
