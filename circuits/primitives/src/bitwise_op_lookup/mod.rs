@@ -92,7 +92,7 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
         let local: &BitwiseOperationLookupCols<AB::Var> = (*local).borrow();
 
         self.bus
-            .receive(prep_local.x, prep_local.y, AB::F::neg_one(), AB::F::zero())
+            .receive(prep_local.x, prep_local.y, AB::F::zero(), AB::F::zero())
             .eval(builder, local.mult_range);
         self.bus
             .receive(prep_local.x, prep_local.y, prep_local.z_xor, AB::F::one())
@@ -102,7 +102,7 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
 
 // Lookup chip for operations on size NUM_BITS integers. Currently has pre-processed columns
 // for x ^ y and range check. Interactions are of form [x, y, z] where z is either x ^ y for
-// XOR or -1 for range check.
+// XOR or 0 for range check.
 
 #[derive(Debug)]
 pub struct BitwiseOperationLookupChip<const NUM_BITS: usize> {
@@ -133,15 +133,15 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
 
     pub fn request_range(&self, x: u32, y: u32) {
         let upper_bound = 1 << NUM_BITS;
-        assert!(x < upper_bound, "x out of range: {} >= {}", x, upper_bound);
-        assert!(y < upper_bound, "y out of range: {} >= {}", y, upper_bound);
+        debug_assert!(x < upper_bound, "x out of range: {} >= {}", x, upper_bound);
+        debug_assert!(y < upper_bound, "y out of range: {} >= {}", y, upper_bound);
         self.count_range[Self::idx(x, y)].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn request_xor(&self, x: u32, y: u32) -> u32 {
         let upper_bound = 1 << NUM_BITS;
-        assert!(x < upper_bound, "x out of range: {} >= {}", x, upper_bound);
-        assert!(y < upper_bound, "y out of range: {} >= {}", y, upper_bound);
+        debug_assert!(x < upper_bound, "x out of range: {} >= {}", x, upper_bound);
+        debug_assert!(y < upper_bound, "y out of range: {} >= {}", y, upper_bound);
         self.count_xor[Self::idx(x, y)].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         x ^ y
     }

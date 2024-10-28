@@ -20,7 +20,7 @@ impl BitwiseOperationLookupBus {
     where
         T: AbstractField,
     {
-        self.push(x, y, T::neg_one(), T::zero(), InteractionType::Send)
+        self.push(x, y, T::zero(), T::zero(), InteractionType::Send)
     }
 
     #[must_use]
@@ -43,10 +43,7 @@ impl BitwiseOperationLookupBus {
         y: impl Into<T>,
         z: impl Into<T>,
         op: impl Into<T>,
-    ) -> BitwiseOperationLookupBusInteraction<T>
-    where
-        T: AbstractField,
-    {
+    ) -> BitwiseOperationLookupBusInteraction<T> {
         self.push(x, y, z, op, InteractionType::Receive)
     }
 
