@@ -39,7 +39,6 @@ impl<F> Streams<F> {
     }
 }
 
-/// Parent struct that holds all execution segments, program, config.
 pub struct VmExecutor<F: PrimeField32> {
     pub config: VmConfig,
     _marker: PhantomData<F>,
@@ -57,9 +56,9 @@ pub struct VmExecutorResult<SC: StarkGenericConfig> {
 }
 
 impl<F: PrimeField32> VmExecutor<F> {
-    /// Create a new VM with a given config, program, and input stream.
+    /// Create a new VM executor with a given config.
     ///
-    /// The VM will start with a single segment, which is created from the initial state of the Core.
+    /// The VM will start with a single segment, which is created from the initial state.
     pub fn new(config: VmConfig) -> Self {
         Self {
             config,
