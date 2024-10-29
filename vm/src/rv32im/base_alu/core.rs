@@ -18,8 +18,8 @@ use strum::IntoEnumIterator;
 use crate::{
     arch::{
         instructions::{BaseAluOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, DynArray, MinimalInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip,
     },
     rv32im::adapters::Rv32AluCoreInterface,
 };
@@ -191,7 +191,7 @@ impl<F, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, I>
 where
     F: PrimeField32,
     I: VmAdapterInterface<F>,
-    I::Reads: Into<DynArray<F>>,
+    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
     AdapterRuntimeContext<F, I>: From<AdapterRuntimeContext<F, Rv32AluCoreInterface<F, NUM_LIMBS>>>,
 {
     type Record = BaseAluCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
@@ -207,7 +207,7 @@ where
         let Instruction { opcode, .. } = instruction;
         let local_opcode_index = BaseAluOpcode::from_usize(opcode - self.air.offset);
 
-        let data: [[F; NUM_LIMBS]; 2] = reads.into().into();
+        let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
         let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);

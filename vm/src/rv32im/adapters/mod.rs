@@ -1,5 +1,6 @@
 mod alu;
 mod branch;
+mod heap;
 mod hintstore;
 mod jalr;
 mod loadstore;
@@ -10,6 +11,7 @@ mod vec_heap;
 pub use alu::*;
 pub use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 pub use branch::*;
+pub use heap::*;
 pub use hintstore::*;
 pub use jalr::*;
 pub use loadstore::*;

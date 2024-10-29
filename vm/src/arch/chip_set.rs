@@ -7,6 +7,7 @@ use std::{
     sync::Arc,
 };
 
+use adapters::Rv32HeapAdapterChip;
 use ax_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
@@ -402,7 +403,7 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::Keccak256(chip));
                 }
-                ExecutorName::ArithmeticLogicUnitRv32 => {
+                ExecutorName::BaseAluRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BaseAluChip::new(
                         Rv32BaseAluAdapterChip::new(
                             execution_bus,
@@ -415,13 +416,13 @@ impl VmConfig {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(AxVmChip::ArithmeticLogicUnitRv32(chip));
+                    chips.push(AxVmChip::BaseAluRv32(chip));
                 }
-                ExecutorName::ArithmeticLogicUnit256 => {
+                ExecutorName::BaseAlu256Rv32 => {
                     // We probably must include this chip if we include any modular arithmetic,
                     // not sure if we need to enforce this here.
                     let chip = Rc::new(RefCell::new(Rv32BaseAlu256Chip::new(
-                        Rv32VecHeapAdapterChip::new(
+                        Rv32HeapAdapterChip::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -432,7 +433,7 @@ impl VmConfig {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(AxVmChip::ArithmeticLogicUnit256(chip));
+                    chips.push(AxVmChip::BaseAlu256Rv32(chip));
                 }
                 ExecutorName::LessThanRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LessThanChip::new(
@@ -1210,7 +1211,7 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Keccak256Opcode::COUNT,
             Keccak256Opcode::default_offset(),
         ),
-        ExecutorName::ArithmeticLogicUnitRv32 => (
+        ExecutorName::BaseAluRv32 => (
             BaseAluOpcode::default_offset(),
             BaseAluOpcode::COUNT,
             BaseAluOpcode::default_offset(),
@@ -1247,7 +1248,7 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Rv32AuipcOpcode::COUNT,
             Rv32AuipcOpcode::default_offset(),
         ),
-        ExecutorName::ArithmeticLogicUnit256 => (
+        ExecutorName::BaseAlu256Rv32 => (
             Rv32BaseAlu256Opcode::default_offset(),
             BaseAluOpcode::COUNT,
             Rv32BaseAlu256Opcode::default_offset(),

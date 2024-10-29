@@ -149,7 +149,7 @@ impl VmConfig {
             ..Default::default()
         }
         .add_executor(ExecutorName::Phantom)
-        .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
+        .add_executor(ExecutorName::BaseAluRv32)
         .add_executor(ExecutorName::LessThanRv32)
         .add_executor(ExecutorName::ShiftRv32)
         .add_executor(ExecutorName::LoadStoreRv32)

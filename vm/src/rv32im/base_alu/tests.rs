@@ -26,7 +26,8 @@ use crate::{
     },
     rv32im::{
         adapters::{
-            Rv32BaseAluAdapterChip, Rv32VecHeapAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+            Rv32BaseAluAdapterChip, Rv32HeapAdapterChip, RV32_CELL_BITS, RV32_INT256_NUM_LIMBS,
+            RV32_REGISTER_NUM_LIMBS,
         },
         base_alu::BaseAluCoreCols,
     },
@@ -122,7 +123,7 @@ fn run_rv32_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32BaseAlu256Chip::<F>::new(
-        Rv32VecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
+        Rv32HeapAdapterChip::<F, 2, RV32_INT256_NUM_LIMBS, RV32_INT256_NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
@@ -132,8 +133,8 @@ fn run_rv32_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     );
 
     for _ in 0..num_ops {
-        let b = generate_long_number::<32, RV32_CELL_BITS>(&mut rng);
-        let c = generate_long_number::<32, RV32_CELL_BITS>(&mut rng);
+        let b = generate_long_number::<RV32_INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
+        let c = generate_long_number::<RV32_INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
         let instruction = rv32_write_heap_default(
             &mut tester,
             vec![b.map(F::from_canonical_u32)],
@@ -149,20 +150,24 @@ fn run_rv32_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
 
 #[test]
 fn rv32_alu_256_add_rand_test() {
-    run_rv32_alu_256_rand_test(BaseAluOpcode::ADD, 12);
+    run_rv32_alu_256_rand_test(BaseAluOpcode::ADD, 100);
 }
+
 #[test]
 fn rv32_alu_256_sub_rand_test() {
     run_rv32_alu_256_rand_test(BaseAluOpcode::SUB, 12);
 }
+
 #[test]
 fn rv32_alu_256_xor_rand_test() {
     run_rv32_alu_256_rand_test(BaseAluOpcode::XOR, 12);
 }
+
 #[test]
 fn rv32_alu_256_or_rand_test() {
     run_rv32_alu_256_rand_test(BaseAluOpcode::OR, 12);
 }
+
 #[test]
 fn rv32_alu_256_and_rand_test() {
     run_rv32_alu_256_rand_test(BaseAluOpcode::AND, 12);

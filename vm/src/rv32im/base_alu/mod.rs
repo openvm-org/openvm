@@ -1,5 +1,5 @@
 use super::adapters::{
-    Rv32VecHeapAdapterChip, RV32_CELL_BITS, RV32_INT256_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS,
+    Rv32HeapAdapterChip, RV32_CELL_BITS, RV32_INT256_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS,
 };
 use crate::{arch::VmChipWrapper, rv32im::adapters::Rv32BaseAluAdapterChip};
 
@@ -17,6 +17,6 @@ pub type Rv32BaseAluChip<F> = VmChipWrapper<
 
 pub type Rv32BaseAlu256Chip<F> = VmChipWrapper<
     F,
-    Rv32VecHeapAdapterChip<F, 2, 1, 1, RV32_INT256_NUM_LIMBS, RV32_INT256_NUM_LIMBS>,
+    Rv32HeapAdapterChip<F, 2, RV32_INT256_NUM_LIMBS, RV32_INT256_NUM_LIMBS>,
     BaseAluCoreChip<RV32_INT256_NUM_LIMBS, RV32_CELL_BITS>,
 >;
